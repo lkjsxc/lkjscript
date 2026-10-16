@@ -177,8 +177,8 @@ pub(super) fn execute(
 pub(super) fn boundary(context: &mut Context, export_command: usize) -> Result<(), DevError> {
     let boundary = Boundaries {
         export_command,
-        resource_command_boundary: context.receipt.commands.len(),
-        resource_runner: context.receipt.runners.len(),
+        resource_command_boundary: context.command_index(),
+        resource_runner: context.runner_index(),
     };
     require(
         context

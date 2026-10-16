@@ -25,6 +25,7 @@ fn run(root: &Path, gate: &Gate, inputs: Vec<FileProof>) -> Result<GateReceipt, 
             },
         },
         None,
+        None,
     )
 }
 

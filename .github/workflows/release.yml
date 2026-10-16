@@ -74,21 +74,22 @@ jobs:
           rustup override set 1.98.0
           echo "CARGO_HOME=$RUNNER_TEMP/cargo-home" >> "$GITHUB_ENV"
 
-      - name: Fetch locked dependencies and build immutable host tools
+      - name: Fetch locked dependencies and build shared-target host tools
         shell: bash
         run: |
           set -euo pipefail
           cargo fetch --locked
-          bash tools/bootstrap-verifier.sh --output "$RUNNER_TEMP/trusted-tools" \
-            --expected-source "$GITHUB_SHA" --with-controller
-          echo "VERIFIER=$RUNNER_TEMP/trusted-tools/lkjscript-dev" >> "$GITHUB_ENV"
+          verifier_root=$(bash tools/bootstrap-verifier.sh --output "$RUNNER_TEMP/trusted-tools" \
+            --expected-source "$GITHUB_SHA" --with-controller)
+          echo "VERIFIER=$verifier_root/lkjscript-dev" >> "$GITHUB_ENV"
+          echo "RELEASE_CONTROLLER=$verifier_root/lkjscript-release-controller" >> "$GITHUB_ENV"
 
       - name: Authenticate candidate source and controller
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          "$RUNNER_TEMP/trusted-tools/lkjscript-release-controller" candidate-context \
+          "$RELEASE_CONTROLLER" candidate-context \
             --output "$RUNNER_TEMP/candidate-context"
 
       - name: Retain the exact verifier for source and candidate acceptance
@@ -148,10 +149,7 @@ jobs:
         run: |
           set -euo pipefail
           # Keep workspace tests and release lifecycle Cargo builds from overlapping.
-          # First CHECK8 profile requires a cold governed target; never erase an existing target.
-          test ! -e "$GITHUB_WORKSPACE/target" && test ! -L "$GITHUB_WORKSPACE/target"
-          CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target" \
-            "$VERIFIER" check release-source --fresh --jobs 1 --machine | tee "$RUNNER_TEMP/source-summary.json"
+          "$VERIFIER" check release-source --fresh --retain-archive --jobs 1 --machine | tee "$RUNNER_TEMP/source-summary.json"
           relative=$(jq -er '.receipt' "$RUNNER_TEMP/source-summary.json")
           [[ "$relative" == .artifacts/lkjscript-dev/check/*/receipt.json ]]
           [[ ! "$relative" =~ (^|/)\.\.(/|$) ]]
@@ -179,7 +177,7 @@ jobs:
           set -euo pipefail
           # Re-admit source originals with the same approved environment and
           # exact verifier that produced them; the fixed build above has no override.
-          CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target" "$VERIFIER" release candidate accept \
+          "$VERIFIER" release candidate accept \
             --assets "$RUNNER_TEMP/candidate-assets" \
             --source-receipt "${{ steps.source.outputs.receipt }}" \
             --build-receipt "$RUNNER_TEMP/candidate-build/build-receipt.json" \
@@ -220,7 +218,7 @@ jobs:
           name: candidate-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/candidate-context
-            ${{ runner.temp }}/trusted-tools/evidence
+            ${{ runner.temp }}/trusted-tools/receipt.json
             ${{ runner.temp }}/source-summary.json
             ${{ github.workspace }}/.artifacts/lkjscript-dev/check
             ${{ github.workspace }}/.artifacts/lkjscript-dev/service

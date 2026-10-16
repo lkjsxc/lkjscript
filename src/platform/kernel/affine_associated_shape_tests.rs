@@ -541,7 +541,10 @@ fn owning_read_view_let_binding_preserves_memory_and_resource_authority() {
             {
                 assert_eq!(record.kind, BindingKind::ReadView);
                 assert_eq!(record.header.owner, *key);
-                assert_eq!(record.header.contract_version, 34);
+                assert_eq!(
+                    record.header.contract_version,
+                    crate::platform::canonical_schema::SCHEMA_EPOCH
+                );
                 Some(*key)
             }
             _ => None,

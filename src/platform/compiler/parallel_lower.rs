@@ -377,7 +377,11 @@ fn validate_wrapper(
         let parent = scope
             .and_then(|scope| read.owner(OwnerKey::Declaration(scope)).transpose())
             .transpose()?;
-        if generation < 33 || parent.is_none_or(|parent| parent.header().contract_version < 33) {
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+            || parent.is_none_or(|parent| {
+                parent.header().contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
+            })
+        {
             return Err(compiler_error(
                 DiagnosticClass::Semantic,
                 "kernel_owned_associated_generation",

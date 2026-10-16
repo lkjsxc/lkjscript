@@ -37,8 +37,8 @@ declarations.end
     );
     assert_eq!(native.request_commitment, flat.request_commitment);
     assert_eq!(
-        &bytes[8..40],
-        &crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH
+        &bytes[8..10],
+        &crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes()
     );
 }
 

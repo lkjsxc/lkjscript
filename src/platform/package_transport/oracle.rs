@@ -25,14 +25,113 @@ pub(crate) struct OracleClosure {
     pub snapshots: BTreeMap<PackageId, KernelSnapshot>,
     pub revisions: BTreeMap<PackageId, PackageRevision>,
     pub interfaces: BTreeMap<PackageId, BTreeMap<OwnerKey, PackageInterfaceRecord>>,
+    interface_types: BTreeMap<PackageId, BTreeMap<TypeObjectDigest, TypeObject>>,
     pub objects: usize,
     pub edges: usize,
     pub validation_visits: u64,
     pub validation_read_bytes: u64,
 }
 
+impl OracleClosure {
+    /// A finite copy model, not allocator or RSS accounting. The encoded source bounds
+    /// strings and vector payloads; every retained map record also reserves 256 bytes.
+    pub(crate) fn package_copy_material(
+        &self,
+        package: PackageId,
+        encoded_source_bytes: usize,
+    ) -> Option<(usize, usize)> {
+        let snapshot = self.snapshots.get(&package)?;
+        let interfaces = self.interfaces.get(&package)?;
+        let types = self.interface_types.get(&package)?;
+        let records = [
+            1,
+            snapshot.owners.len(),
+            snapshot.types.len(),
+            snapshot.dependency_interfaces.len(),
+            snapshot.dependency_types.len(),
+            snapshot.representation_dependencies.len(),
+            snapshot.blobs.len(),
+            snapshot.dependencies.len(),
+            snapshot.retirements.len(),
+            interfaces.len(),
+            types.len(),
+        ]
+        .into_iter()
+        .try_fold(0_usize, usize::checked_add)?;
+        let bytes = encoded_source_bytes
+            .checked_mul(4)?
+            .checked_add(records.checked_mul(256)?)?;
+        Some((bytes, records))
+    }
+}
+
+#[cfg(test)]
+std::thread_local! {
+    static FULL_PACKAGE_VALIDATIONS: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn full_package_validations() -> usize {
+    FULL_PACKAGE_VALIDATIONS.with(Cell::get)
+}
+
 fn failure(message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Corrupt, "package_closure_oracle", message)
+}
+
+#[cfg(test)]
+#[test]
+fn shared_builtin_oracle_copy_reservation_is_atomic_and_separate_from_reads() {
+    #![allow(clippy::unwrap_used)]
+    let objects = BTreeMap::new();
+    let reader = Reader {
+        objects: &objects,
+        seen: RefCell::new(BTreeSet::new()),
+        visits: Cell::new(0),
+        bytes: Cell::new(7),
+        copy_bytes: Cell::new(0),
+    };
+    let standard = crate::platform::builtin_standard::BuiltinStandard::load().unwrap();
+    let encoded = standard
+        .admitted_source()
+        .container
+        .objects
+        .values()
+        .map(Vec::len)
+        .sum();
+    let (bytes, records) = standard
+        .independent_source()
+        .package_copy_material(standard.package, encoded)
+        .unwrap();
+    assert!(bytes > encoded);
+    let visits = u64::try_from(records + bytes.div_ceil(64)).unwrap();
+    reader.visits.set(16_000_000 - visits);
+    reader.copy_bytes.set(MAXIMUM_ORACLE_COPY_BYTES - bytes);
+    reader.reserve_copy(bytes, records).unwrap();
+    assert_eq!(reader.visits.get(), 16_000_000);
+    assert_eq!(reader.copy_bytes.get(), MAXIMUM_ORACLE_COPY_BYTES);
+    assert_eq!(reader.bytes.get(), 7);
+
+    reader.visits.set(16_000_000 - visits + 1);
+    reader.copy_bytes.set(0);
+    assert_eq!(
+        reader.reserve_copy(bytes, records).unwrap_err().class,
+        DiagnosticClass::Resource
+    );
+    assert_eq!(reader.visits.get(), 16_000_000 - visits + 1);
+    assert_eq!(reader.copy_bytes.get(), 0);
+    reader.visits.set(0);
+    reader.copy_bytes.set(MAXIMUM_ORACLE_COPY_BYTES - bytes + 1);
+    assert_eq!(
+        reader.reserve_copy(bytes, records).unwrap_err().class,
+        DiagnosticClass::Resource
+    );
+    assert_eq!(reader.visits.get(), 0);
+    assert_eq!(
+        reader.copy_bytes.get(),
+        MAXIMUM_ORACLE_COPY_BYTES - bytes + 1
+    );
+    assert_eq!(reader.bytes.get(), 7);
 }
 
 struct Reader<'a> {
@@ -40,9 +139,37 @@ struct Reader<'a> {
     seen: RefCell<BTreeSet<ObjectKey>>,
     visits: Cell<u64>,
     bytes: Cell<u64>,
+    copy_bytes: Cell<usize>,
 }
 
+const MAXIMUM_ORACLE_COPY_BYTES: usize = 256 * 1_048_576;
+
 impl Reader<'_> {
+    fn reserve_copy(&self, bytes: usize, records: usize) -> Result<(), Diagnostic> {
+        let exhausted = || {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "package_oracle_copy_budget",
+                "independent source reuse exhausted its modeled copy-byte or validation-work bound",
+            )
+        };
+        let total = self
+            .copy_bytes
+            .get()
+            .checked_add(bytes)
+            .filter(|total| *total <= MAXIMUM_ORACLE_COPY_BYTES)
+            .ok_or_else(exhausted)?;
+        let visits = records
+            .checked_add(bytes.div_ceil(64))
+            .and_then(|visits| u64::try_from(visits).ok())
+            .and_then(|visits| self.visits.get().checked_add(visits))
+            .filter(|visits| *visits <= 16_000_000)
+            .ok_or_else(exhausted)?;
+        self.visits.set(visits);
+        self.copy_bytes.set(total);
+        Ok(())
+    }
+
     fn charge(&self, visits: usize) -> Result<(), Diagnostic> {
         let visits = self
             .visits
@@ -145,12 +272,14 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
         seen: RefCell::new(BTreeSet::new()),
         visits: Cell::new(0),
         bytes: Cell::new(0),
+        copy_bytes: Cell::new(0),
     };
     let mut snapshots = BTreeMap::new();
     let mut revisions = BTreeMap::new();
     let mut interfaces = BTreeMap::new();
     let mut digests = BTreeMap::new();
     let mut interface_types = BTreeMap::new();
+    let mut shared_packages = BTreeSet::new();
     let choices = container
         .selections
         .iter()
@@ -214,6 +343,46 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
         )?;
         if transport.package_revision != digest {
             return Err(failure("transport revision mismatch"));
+        }
+        if let Some(standard) = crate::platform::builtin_standard::BuiltinStandard::initialized_for(
+            super::PackageTransportBinding {
+                package_revision: digest,
+                transport: *selected,
+            },
+        ) {
+            // The cached oracle was independently reconstructed from these same original
+            // bytes. Neither a producer witness nor the production snapshot is its proof.
+            // Missing/corrupt physical bytes remain failures even when the local proof exists.
+            for (key, expected) in &standard.admitted_source().container.objects {
+                let actual = reader.object(key.domain, key.digest.bytes())?;
+                if &actual != expected {
+                    return Err(failure("retained builtin oracle source bytes changed"));
+                }
+            }
+            let cached = standard.independent_source();
+            if cached.revisions.get(&revision.package) != Some(&revision) {
+                return Err(failure("retained builtin oracle revision changed"));
+            }
+            let package = revision.package;
+            let source_bytes = standard
+                .admitted_source()
+                .container
+                .objects
+                .values()
+                .try_fold(0_usize, |total, bytes| total.checked_add(bytes.len()))
+                .ok_or_else(|| failure("retained builtin source byte overflow"))?;
+            let (copy_bytes, records) = cached
+                .package_copy_material(package, source_bytes)
+                .ok_or_else(|| failure("retained builtin oracle copy inventory overflow"))?;
+            // Reserve all three deep copies before the first allocation. Physical reads
+            // above remain independently charged; no historical validation work is reused.
+            reader.reserve_copy(copy_bytes, records)?;
+            snapshots.insert(package, cached.snapshots[&package].clone());
+            interfaces.insert(package, cached.interfaces[&package].clone());
+            interface_types.insert(package, cached.interface_types[&package].clone());
+            shared_packages.insert(package);
+            revisions.insert(package, revision);
+            continue;
         }
         let root = decode_root(
             &reader.object(ObjectDomain::SemanticRoot, transport.semantic_root.bytes())?,
@@ -335,44 +504,8 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
             .iter()
             .map(|(owner, record)| {
                 let value = PackageInterfaceOwner {
-                    contract_version: if matches!(
-                        record,
-                        PackageInterfaceRecord::RepresentationDeclaration(_)
-                    ) {
-                        if record.header().contract_version < 33 {
-                            20
-                        } else if record.header().contract_version < 34 {
-                            21
-                        } else {
-                            crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
-                        }
-                    } else if record.header().contract_version == 14 {
-                        10
-                    } else if record.header().contract_version <= 17 {
-                        11
-                    } else if record.header().contract_version < 22 {
-                        12
-                    } else if record.header().contract_version < 26 {
-                        13
-                    } else if record.header().contract_version < 27 {
-                        14
-                    } else if record.header().contract_version < 28 {
-                        15
-                    } else if record.header().contract_version < 29 {
-                        16
-                    } else if record.header().contract_version < 30 {
-                        17
-                    } else if record.header().contract_version < 31 {
-                        18
-                    } else if record.header().contract_version < 32 {
-                        19
-                    } else if record.header().contract_version < 33 {
-                        20
-                    } else if record.header().contract_version < 34 {
-                        21
-                    } else {
-                        crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION
-                    },
+                    contract_version:
+                        crate::platform::package_interface::PACKAGE_INTERFACE_CONTRACT_VERSION,
                     record: record.clone(),
                 };
                 let (digest, _) = value.encode()?;
@@ -562,7 +695,10 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
     if eliminated != revisions.len() {
         return Err(failure("cyclic exact closure"));
     }
-    for snapshot in snapshots.values_mut() {
+    for (package, snapshot) in &mut snapshots {
+        if shared_packages.contains(package) {
+            continue;
+        }
         reader.charge(snapshot.dependencies.len())?;
         let mut pending = snapshot
             .dependencies
@@ -614,6 +750,8 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
             reader.charge(revision.dependencies.len())?;
             pending.extend(revision.dependencies.iter().cloned());
         }
+        #[cfg(test)]
+        FULL_PACKAGE_VALIDATIONS.with(|count| count.set(count.get().saturating_add(1)));
         let validation = crate::platform::kernel::validate_full_with_limit(
             snapshot,
             (16_000_000 - reader.visits.get()) as usize,
@@ -665,6 +803,7 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
         snapshots,
         revisions,
         interfaces,
+        interface_types,
         objects: container.objects.len(),
         edges,
         validation_visits: reader.visits.get(),

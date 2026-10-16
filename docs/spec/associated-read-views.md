@@ -135,7 +135,7 @@ binding category cannot hide a view. Authoring requires an exact positive view
 annotation where it cannot safely infer this distinction. Borrowed descriptors
 use `ReadViewBorrow`; neither category becomes ordinary data through type erasure.
 
-A current Graph34 `BorrowCall` in its exact Graph34 named Function opens its prospective
+A current `BorrowCall` in its exact named Function opens its prospective
 `Lexical(callable,binding)` loan scope before invocation and closes that scope
 after its body. Its destination value is inaccessible until successful adoption.
 An owning view initializer can open that same prospective source scope when its
@@ -146,17 +146,14 @@ After successful initialization, the owning view's `Let` body has its checked
 lexical boundary even when the descriptor carries an already forwarded parent
 scope. Ending this boundary closes only the newly opened scope owner; it cannot
 close a forwarded parent scope or grant source access from the scope identity.
-Descriptor drop and this source validity boundary remain separate events. Frozen
-Graph33 borrowed calls retain their original encoding without these new markers.
-The exact enclosing Function34 supplies this new scope authority. Unchanged
-ordinary loan expressions and bindings may retain their individually valid native
-headers under that function: their existing lexical lifetime is used after exact
-body ownership, source and liveness admission. New view forms/binding kinds and
-scope-argument-bearing expressions themselves require Graph34. A Function33
-rebuilt into compiler unit34 remains marker-free and gains no new scope authority.
+Descriptor drop and this source validity boundary remain separate events.
+The exact enclosing Function supplies the scope authority. Ordinary loan
+expressions and bindings use their lexical lifetime after exact body ownership,
+source and liveness admission. Functions, view forms, binding kinds and scope
+arguments must use the current schema epoch and retain their explicit scope
+metadata; recompilation cannot manufacture missing authority.
 Ordinary Owned loans in Test, Constant and Port roots keep their existing protocol;
-they do not gain view scopes through fabricated callable identities. This narrow
-mixed-source rule does not widen predecessor readers to new payloads or profiles.
+they do not gain view scopes through fabricated callable identities.
 
 Construction produces an affine view handle. Immutable backing owns its ordinary
 field values, reference-field read tokens, an explicit selected-source custody
@@ -393,42 +390,17 @@ fields, cells, leases, seals and cleanup work links. Cancellation remains distin
 failed admission cannot partially publish or poison healthy retry. Ordinary trusted
 execution acquires no invented cumulative instruction budget.
 
-A clean versioned cut may replace predecessor field shapes, including legacy
-result_borrow metadata, with one explicit result contract. There is no requirement
-to preserve feature-free .95 bytes if that obstructs a cleaner authoritative model.
-The selected coordinated encoding and proof owners are:
+Owners, types, interfaces, compiler units, bytecode, artifacts, authored requests
+and validation material share the single current schema epoch 1. View inventories,
+scope parameters and callable result contracts are inline primary-record fields.
+Primitive identities are singular, without contextual primitive profiles.
 
-| Owner | Current selected value |
-| --- | --- |
-| Meaning graph | Graph34 |
-| Closed ordinary base type object | TypeObject10, `LKJTYP10` |
-| Associated read-view extension | capability1, `LKJTAV01` / `LKJOAV01` |
-| Package interface | Interface22 |
-| Compiler unit / bytecode / artifact | 34 / 28 / 41 |
-| Native authored / compact authored | 39 / 42 |
-| Summary / ownership witness / validator | 12 / 10 / 41 |
-| Registry / CLI / function-definition projection | 26 / 47 / 22 |
-
-The ordinary base type fields and variant payloads are unchanged and encoded
-through the strict closed TypeObject10 schema. New view forms use the dedicated
-extension envelope; they are never accepted as additional base discriminants.
-TypeObject11 is unsupported. Primitive identities remain singular across current
-and retained owners; there are no contextual primitive profile constructors.
-The graph and callable-result/scope cut remains explicit. Refuse
-unsupported profiles before decoding new fields; do not erase scope/member/result
-data or patch headers. Rebuild maintained assets through ordinary product owners
-where required. Historical .95 evidence and immutable publication are preserved.
-
-Bootstrap may use bounded version-specific decoding of genuine predecessor
-Graph33/interface21/compiler33/bytecode27/artifact40 records into the single current
-model, with empty historical scope inventories and only historical Value/ReadFrom
-relations. Validate original bytes, identities and historical proof material under
-their exact profiles, then perform complete current semantic admission. This is an
-ordinary reader path for every matching input, never an embedded-asset bypass.
-Rebuild native planner and guide assets through new ordinary authoring/compilation,
-independently load the resulting current artifacts, then remove or narrow the
-transitional reader if the selected clean cut requires it. Header patching, trusted
-graph rewriting and relabeling old proof as new acceptance are forbidden.
+Readers reject foreign epochs before decoding their payloads and require complete
+canonical consumption and re-encoding. Independent source, interface and artifact
+admission preserves every scope, member and result relationship. A matching epoch
+or persisted witness does not establish current proof. Maintained planner, guide
+and consumer assets are rebuilt through ordinary authoring and compilation, then
+independently loaded. No predecessor reader or transitional bootstrap path remains.
 
 ## Cleanup and failure order
 

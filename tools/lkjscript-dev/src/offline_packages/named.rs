@@ -43,7 +43,7 @@ fn run(
     arguments: &str,
     expected: Value,
 ) -> Result<(), DevError> {
-    let command = context.receipt.commands.len();
+    let command = context.command_index();
     let records = context.cli_detached_at(
         cwd,
         &[

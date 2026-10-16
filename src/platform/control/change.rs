@@ -72,8 +72,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::str::FromStr;
 
-pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records-42";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 42;
+pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records";
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change";
 pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];

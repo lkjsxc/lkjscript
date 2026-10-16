@@ -31,12 +31,12 @@ use bincode::error::DecodeError;
 use bincode::{Decode, Encode};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-pub const PACKAGE_REVISION_CONTRACT_IDENTITY: &str = "lkjscript-package-revision-1";
-pub const PACKAGE_REVISION_CONTRACT_VERSION: u16 = 1;
+pub const PACKAGE_REVISION_CONTRACT_IDENTITY: &str = "lkjscript-package-revision";
+pub const PACKAGE_REVISION_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const PACKAGE_REVISION_MAGIC: [u8; 8] = *b"LKJPKR01";
 pub const PACKAGE_REVISION_ENVELOPE_DOMAIN: &str = "lkjscript.package-revision-envelope.v1";
-pub const PACKAGE_TRANSPORT_CONTRACT_IDENTITY: &str = "lkjscript-package-transport-1";
-pub const PACKAGE_TRANSPORT_CONTRACT_VERSION: u16 = 1;
+pub const PACKAGE_TRANSPORT_CONTRACT_IDENTITY: &str = "lkjscript-package-transport";
+pub const PACKAGE_TRANSPORT_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const PACKAGE_TRANSPORT_MAGIC: [u8; 8] = *b"LKJPKT01";
 pub const PACKAGE_TRANSPORT_ENVELOPE_DOMAIN: &str = "lkjscript.package-transport-envelope.v1";
 pub const MAXIMUM_PACKAGE_REVISION_BYTES: usize = 4 * 1_048_576;
@@ -116,14 +116,6 @@ impl PackageRevision {
             MAXIMUM_PACKAGE_REVISION_BYTES,
         )?;
         value.validate()?;
-        let (digest, canonical) = value.encode()?;
-        if digest != expected || canonical != bytes {
-            return Err(package_error(
-                DiagnosticClass::Corrupt,
-                "package_revision_canonical",
-                "package revision is not canonically encoded",
-            ));
-        }
         Ok(value)
     }
 
@@ -157,7 +149,7 @@ impl PackageRevision {
                 "package revision uses a predecessor or foreign contract",
             ));
         }
-        if self.revision.graph_contract_version > self.graph_contract_version {
+        if self.revision.graph_contract_version != self.graph_contract_version {
             return Err(package_error(
                 DiagnosticClass::Corrupt,
                 "package_revision_core_contract",
@@ -214,14 +206,6 @@ impl PackageTransport {
             MAXIMUM_PACKAGE_TRANSPORT_BYTES,
         )?;
         value.validate_local()?;
-        let (digest, canonical) = value.encode()?;
-        if digest != expected || canonical != bytes {
-            return Err(package_error(
-                DiagnosticClass::Corrupt,
-                "package_transport_canonical",
-                "package transport is not canonically encoded",
-            ));
-        }
         Ok(value)
     }
 
@@ -904,7 +888,7 @@ fn bind_transport<S: ImmutableObjectStore + ?Sized>(
         })?;
     let root = decode_root(&root_bytes, transport.semantic_root)?;
     if root.graph_contract_version != revision.revision.graph_contract_version
-        || root.graph_contract_version > transport.graph_contract_version
+        || root.graph_contract_version != transport.graph_contract_version
         || root.repository_id != revision.revision.repository_id
         || root.package_id != revision.package
     {
@@ -1073,31 +1057,31 @@ fn validate_interface_dependencies(
         }
         read_views::validate_revision(&closure, revision, interface, &mut associated)?;
         for ty in interface.type_objects.values() {
-            if revision.graph_contract_version < 25
+            if revision.graph_contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
                 && matches!(ty.form, TypeForm::OwnedSequence { .. })
             {
                 return Err(package_error(
                     DiagnosticClass::Semantic,
                     "kernel_sequence_generation",
-                    "owned sequence package interface requires Graph 25",
+                    "owned sequence package interface requires the current schema epoch",
                 ));
             }
-            if revision.graph_contract_version < 20
+            if revision.graph_contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
                 && matches!(ty.form, TypeForm::OwnedChoice { .. })
             {
                 return Err(package_error(
                     DiagnosticClass::Semantic,
                     "kernel_choice_generation",
-                    "owned choice package interface requires Graph 20",
+                    "owned choice package interface requires the current schema epoch",
                 ));
             }
-            if revision.graph_contract_version < 19
+            if revision.graph_contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
                 && matches!(ty.form, TypeForm::OwnedProduct { .. })
             {
                 return Err(package_error(
                     DiagnosticClass::Semantic,
                     "kernel_product_generation",
-                    "owned product package interface requires Graph 19",
+                    "owned product package interface requires the current schema epoch",
                 ));
             }
             if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } = ty.form
@@ -1125,7 +1109,9 @@ fn validate_interface_dependencies(
                         "interface names a private representation declaration in another package",
                     ));
                 }
-                if nominal.kind() == OwnerKind::OwnedRecord && revision.graph_contract_version < 32
+                if nominal.kind() == OwnerKind::OwnedRecord
+                    && revision.graph_contract_version
+                        != crate::platform::canonical_schema::SCHEMA_EPOCH
                 {
                     return Err(package_error(
                         DiagnosticClass::Semantic,
@@ -2058,7 +2044,7 @@ mod tests {
         .unwrap();
         let mut content =
             fixture.revision_bytes[..crate::platform::packed::CANONICAL_HEADER_BYTES].to_vec();
-        content[40..48].copy_from_slice(&(payload.len() as u64).to_le_bytes());
+        content[10..18].copy_from_slice(&(payload.len() as u64).to_le_bytes());
         content.extend_from_slice(&payload);
         let counterfeit = seal(content);
         assert_eq!(

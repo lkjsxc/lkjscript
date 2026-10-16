@@ -192,8 +192,11 @@ impl Oracle<'_> {
         &self,
         roots: Vec<TypeObjectDigest>,
         generation: u16,
-        package: PackageId,
+        _package: PackageId,
     ) -> bool {
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH {
+            return false;
+        }
         let mut pending = roots;
         let mut visited = BTreeSet::new();
         while let Some(ty) = pending.pop() {
@@ -208,34 +211,7 @@ impl Oracle<'_> {
             else {
                 return false;
             };
-            if object.form.is_associated() && generation < 33
-                || object.form.is_read_view() && generation != 34
-            {
-                return false;
-            }
-            if generation < 32 && self.nominal_owner(ty).is_some() {
-                return false;
-            }
-            if matches!(object.form, TypeForm::OwnedSequence { .. }) && generation < 25
-                || generation < 20 && matches!(object.form, TypeForm::OwnedChoice { .. })
-                || generation < 19 && matches!(object.form, TypeForm::OwnedProduct { .. })
-            {
-                return false;
-            }
-            if let TypeForm::OwnedSequence { item } = object.form
-                && generation < 31
-                && !matches!(
-                    self.form(item),
-                    Some(
-                        TypeForm::ByteBuffer
-                            | TypeForm::OwnedI64Cell
-                            | TypeForm::OwnedProduct { .. }
-                            | TypeForm::OwnedChoice { .. }
-                            | TypeForm::OwnedSequence { .. }
-                    )
-                )
-                && !matches!(self.form(item), Some(TypeForm::TypeParameter { parameter }) if self.type_parameter(package, *parameter).is_some_and(|p| p.constraints.has_owned()))
-            {
+            if object.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH {
                 return false;
             }
             pending.extend(object.child_types());
@@ -529,8 +505,11 @@ impl Oracle<'_> {
             && parameters.iter().any(|p| {
                 p.use_mode == ParameterUse::Borrow
                     && Oracle(self.0, Some(d)).buffer(p.ty)
-                    && (p.header.contract_version < 30
-                        || self.declaration_generation(d).is_none_or(|v| v < 30))
+                    && (p.header.contract_version
+                        != crate::platform::canonical_schema::SCHEMA_EPOCH
+                        || self
+                            .declaration_generation(d)
+                            .is_none_or(|v| v != crate::platform::canonical_schema::SCHEMA_EPOCH))
             })
         {
             return None;
@@ -816,7 +795,7 @@ impl Oracle<'_> {
             self.0.owners.get(&OwnerKey::Binding(id)),
             Some(OwnerRecord::Binding(binding))
                 if binding.header.owner == OwnerKey::Binding(id)
-                    && binding.header.contract_version >= 24
+                    && binding.header.contract_version == crate::platform::canonical_schema::SCHEMA_EPOCH
                     && binding.kind == BindingKind::OwnedBorrow
                     && binding.value.is_none()
                     && binding.declared_type == Some(ty)
@@ -2159,7 +2138,7 @@ impl Oracle<'_> {
                         .header()
                         .contract_version,
                 );
-                if generation < 30
+                if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
                     && [left, right]
                         .into_iter()
                         .any(|child| match self.expression(*child) {
@@ -2520,7 +2499,7 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
             }
         }
     }
-    if snapshot.root.graph_contract_version < 31
+    if snapshot.root.graph_contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
         && snapshot.types.values().any(|object| {
             if let TypeForm::OwnedSequence { item } = object.form {
                 let foreign_parameter = matches!(oracle.form(item), Some(TypeForm::TypeParameter { parameter }) if !snapshot.owners.contains_key(&OwnerKey::TypeParameter(*parameter)));
@@ -2551,7 +2530,7 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                 .root
                 .graph_contract_version
                 .min(owner.header().contract_version);
-            if generation < 30
+            if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
                 && matches!(owner, PackageInterfaceRecord::TypeParameter(p)
                     if p.constraints.requires_share())
             {
@@ -2560,22 +2539,26 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
             if let PackageInterfaceRecord::Declaration(declaration)
             | PackageInterfaceRecord::RepresentationDeclaration(declaration) = owner
                 && match &declaration.payload {
-                    PackageInterfaceDeclarationPayload::OwnedRecord { .. } => generation < 32,
+                    PackageInterfaceDeclarationPayload::OwnedRecord { .. } => {
+                        generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                    }
                     PackageInterfaceDeclarationPayload::OwnedContract(c) => {
                         !oracle.contract_generation(c, generation, *package)
                     }
                     PackageInterfaceDeclarationPayload::OwnedImplementation(i) => {
-                        (generation < 26 && !i.type_arguments.is_empty())
-                            || (generation < 28
+                        (generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                            && !i.type_arguments.is_empty())
+                            || (generation != crate::platform::canonical_schema::SCHEMA_EPOCH
                                 && (!i.type_parameters.is_empty()
                                     || i.methods.iter().any(|m| !m.type_arguments.is_empty())))
-                            || (generation < 29
+                            || (generation != crate::platform::canonical_schema::SCHEMA_EPOCH
                                 && (!i.implementation_parameters.is_empty()
                                     || i.methods.iter().any(|m| !m.implementations.is_empty())))
                     }
                     PackageInterfaceDeclarationPayload::Function(f) => {
-                        (generation < 27 && owned_read_source(&f.result).is_some())
-                            || generation < 26
+                        (generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                            && owned_read_source(&f.result).is_some())
+                            || generation != crate::platform::canonical_schema::SCHEMA_EPOCH
                                 && f.implementation_parameters
                                     .iter()
                                     .any(|p| !p.type_arguments.is_empty())
@@ -2586,7 +2569,7 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                 return false;
             }
             let mut roots = owner.type_roots();
-            if generation < 31
+            if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
                 && let PackageInterfaceRecord::Declaration(declaration) = owner
                 && matches!(
                     declaration.payload,
@@ -2629,7 +2612,8 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
                         PackageInterfaceDeclarationPayload::Function(f)
                             if matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(id))
                                 && (!p.constraints.requires_transfer()
-                                    || p.header.contract_version >= 22) => {}
+                                    || p.header.contract_version
+                                        == crate::platform::canonical_schema::SCHEMA_EPOCH) => {}
                         PackageInterfaceDeclarationPayload::OwnedImplementation(i)
                             if matches!(key, OwnerKey::TypeParameter(id)
                                 if i.type_parameters.contains(id)
@@ -2792,29 +2776,33 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
             .root
             .graph_contract_version
             .min(owner.header().contract_version);
-        if generation < 30
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
             && matches!(owner, OwnerRecord::TypeParameter(p) if p.constraints.requires_share())
         {
             return false;
         }
         if let OwnerRecord::Declaration(declaration) = owner
             && match &declaration.payload {
-                DeclarationPayload::OwnedRecord { .. } => generation < 32,
+                DeclarationPayload::OwnedRecord { .. } => {
+                    generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                }
                 DeclarationPayload::OwnedContract(c) => {
                     !oracle.contract_generation(c, generation, snapshot.root.package_id)
                 }
                 DeclarationPayload::OwnedImplementation(i) => {
-                    (generation < 26 && !i.type_arguments.is_empty())
-                        || (generation < 28
+                    (generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                        && !i.type_arguments.is_empty())
+                        || (generation != crate::platform::canonical_schema::SCHEMA_EPOCH
                             && (!i.type_parameters.is_empty()
                                 || i.methods.iter().any(|m| !m.type_arguments.is_empty())))
-                        || (generation < 29
+                        || (generation != crate::platform::canonical_schema::SCHEMA_EPOCH
                             && (!i.implementation_parameters.is_empty()
                                 || i.methods.iter().any(|m| !m.implementations.is_empty())))
                 }
                 DeclarationPayload::Function(f) => {
-                    (generation < 27 && owned_read_source(&f.result).is_some())
-                        || generation < 26
+                    (generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                        && owned_read_source(&f.result).is_some())
+                        || generation != crate::platform::canonical_schema::SCHEMA_EPOCH
                             && f.implementation_parameters
                                 .iter()
                                 .any(|p| !p.type_arguments.is_empty())
@@ -2824,7 +2812,7 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
         {
             return false;
         }
-        if generation < 33
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
             && let OwnerRecord::Expression(expression) = owner
             && match &expression.operation {
                 ExpressionOperation::ImplementationCall {
@@ -2852,17 +2840,17 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
         {
             return false;
         }
-        if generation < 27
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
             && matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation, ExpressionOperation::BorrowCall { .. }))
         {
             return false;
         }
-        if generation < 31
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
             && matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation, ExpressionOperation::SequenceGet { .. } | ExpressionOperation::SequenceReplace { .. }))
         {
             return false;
         }
-        if generation < 25
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
             && matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation,
                 ExpressionOperation::SequenceEmpty { .. }
                 | ExpressionOperation::SequenceLength { .. }
@@ -2872,24 +2860,24 @@ pub(crate) fn accepts(snapshot: &KernelSnapshot) -> bool {
         {
             return false;
         }
-        if generation < 24
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
             && (matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation,
                 ExpressionOperation::BorrowOwnedField { .. } | ExpressionOperation::MatchBorrowedOwned { .. }))
                 || matches!(owner, OwnerRecord::Binding(b) if b.kind == BindingKind::OwnedBorrow))
         {
             return false;
         }
-        if generation < 21
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
             && matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation, ExpressionOperation::Parallel { .. }))
         {
             return false;
         }
-        if generation < 22
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
             && matches!(owner, OwnerRecord::TypeParameter(p) if p.constraints.requires_transfer())
         {
             return false;
         }
-        if generation < 32
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
             && matches!(owner, OwnerRecord::Expression(e) if matches!(e.operation,
                 ExpressionOperation::PackOwnedRecord { .. }
                 | ExpressionOperation::UnpackOwnedRecord { .. }

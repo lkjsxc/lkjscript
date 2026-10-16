@@ -6,6 +6,9 @@
 #[path = "data_scan.rs"]
 mod scan;
 
+#[path = "data_memory.rs"]
+mod memory;
+
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use fs2::FileExt;
 use rustix::fs::{CWD, RenameFlags, renameat_with};
@@ -18,10 +21,10 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
-pub const DATA_STORE_CONTRACT_VERSION: u16 = 1;
-pub const DATA_BACKUP_CONTRACT_VERSION: u16 = 1;
-pub const DATA_STORE_CONTRACT_IDENTITY: &str = "lkjscript-data-store-1";
-pub const DATA_BACKUP_CONTRACT_IDENTITY: &str = "lkjscript-data-backup-1";
+pub const DATA_STORE_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const DATA_BACKUP_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const DATA_STORE_CONTRACT_IDENTITY: &str = "lkjscript-data-store";
+pub const DATA_BACKUP_CONTRACT_IDENTITY: &str = "lkjscript-data-backup";
 
 pub const MAXIMUM_DATA_SPACE_NAME_BYTES: usize = 128;
 pub const MAXIMUM_DATA_NAMESPACE_BYTES: usize = 128;
@@ -394,6 +397,7 @@ struct Snapshot {
 #[derive(Debug)]
 struct DataStoreInner {
     root: PathBuf,
+    memory: Option<crate::platform::MemProjectStore>,
     store_id: [u8; 32],
     namespace: String,
     limits: DataLimits,
@@ -491,6 +495,7 @@ impl DataStore {
         Ok(Self {
             inner: Arc::new(DataStoreInner {
                 root: root.to_path_buf(),
+                memory: None,
                 store_id,
                 namespace,
                 limits,
@@ -512,16 +517,12 @@ impl DataStore {
     }
 
     pub fn current_revision(&self) -> Result<String, Diagnostic> {
-        read_head(&self.inner.root, self.inner.store_id).map(format_revision)
+        self.inner.head().map(format_revision)
     }
 
     pub fn begin(&self) -> Result<DataTransaction, Diagnostic> {
         reserve_live_transaction(&self.inner)?;
-        let opened = (|| {
-            let base = read_head(&self.inner.root, self.inner.store_id)?;
-            let snapshot = read_revision(&self.inner.root, self.inner.store_id, base)?.0;
-            Ok::<_, Diagnostic>((base, snapshot))
-        })();
+        let opened = self.inner.snapshot();
         let (base, snapshot) = match opened {
             Ok(value) => value,
             Err(error) => {
@@ -544,12 +545,14 @@ impl DataStore {
     }
 
     pub fn verify(&self) -> Result<DataVerifyReceipt, Diagnostic> {
+        if self.inner.memory.is_some() {
+            return self.verify_memory();
+        }
         verify_root(&self.inner.root, self.inner.store_id)
     }
 
     pub fn backup(&self, output: &Path) -> Result<DataBackupReceipt, Diagnostic> {
-        let head = read_head(&self.inner.root, self.inner.store_id)?;
-        let snapshot = read_revision(&self.inner.root, self.inner.store_id, head)?.0;
+        let (head, snapshot) = self.inner.snapshot()?;
         let bytes = encode_backup(head, &snapshot)?;
         publish_create_new_file(output, &bytes, MAXIMUM_DATA_BACKUP_BYTES, "data backup")?;
         let digest = digest(BACKUP_ENVELOPE_DOMAIN, &bytes);
@@ -851,6 +854,9 @@ impl DataTransaction {
             return Ok(DataCommitOutcome::Unchanged {
                 revision: format_revision(self.base),
             });
+        }
+        if self.store.memory.is_some() {
+            return self.commit_memory(hook, maximum_objects);
         }
         let lock_path = self.store.root.join(LOCK_FILE);
         validate_regular_file(&lock_path, "data_lock_type")?;

@@ -197,14 +197,12 @@ binding, element type and surrounding operation identities. Function extraction
 containing an indexed lexical read rejects until extraction can preserve its
 complete borrowing contract.
 
-Ordinary-element sequence closures and the new get/replace operations require
-Graph 31, including unused signatures and annotations. Owned-element sequence
-meanings in Graph 25–30 retain their existing semantics. The sequence type envelope
-stays at version 1 because its shape is unchanged; the graph generation gates its
-expanded element eligibility. Current exports use interface 19, compiler 31,
-bytecode 26 and artifact 38. Maintained derived assets are rebuilt through their
-supported owners. Old derived formats reject clearly; no experimental-format
-migration layer is introduced.
+Owned sequences use the current type record. Owners, types, interfaces, requests,
+compiler units, bytecode and artifacts share schema epoch 1. Complete admission
+applies element eligibility and get/replace rules to every signature and
+annotation, including unused content. A matching epoch cannot establish those
+semantic obligations. Foreign epochs reject; maintained assets are rebuilt
+through supported product owners.
 
 The public `native_owned_sequence_` acceptance family authors and checks a generic
 library before concrete carriers, then stages exact transports into two additional

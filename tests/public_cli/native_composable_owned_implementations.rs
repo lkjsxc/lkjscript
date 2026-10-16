@@ -15,7 +15,7 @@ const APPLICATION: &str =
     include_str!("../../examples/composable-owned-implementations/application.lkjc");
 
 fn evidence_native(template: &str) -> Native {
-    let mut public = Native::template(template);
+    let mut public = Native::memory_project(template);
     if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
         public.root.disable_cleanup(true);
         println!(
@@ -262,12 +262,8 @@ impl Packages {
     }
 
     fn detach(&self) {
-        for project in [
-            &self.library.project,
-            &self.elements.project,
-            &self.consumer.project,
-        ] {
-            std::fs::remove_dir_all(project).unwrap();
+        for public in [&self.library, &self.elements, &self.consumer] {
+            public.remove_project();
         }
         for transport in [
             &self.generic.path,

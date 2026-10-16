@@ -228,6 +228,12 @@ fn admit(
             &root.join(format!("{name}.stdout.log")),
             &process.stdout,
         )?;
+        super::cargo_tests::verify_result(
+            repository,
+            gate,
+            &root.join(format!("{name}.stdout.log")),
+            &observed.inputs,
+        )?;
         let context = if super::cargo_origin::is_producer(gate) {
             Some(super::cargo_origin_context::Context::capture(
                 repository, &current, runtime,
@@ -460,6 +466,7 @@ mod tests {
                 fresh_reason: "release_source_profile_requires_fresh",
                 cache: &cache,
                 origin: None,
+                live: None,
             },
         )
         .expect("actual bounded fixture processes");

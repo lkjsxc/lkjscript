@@ -292,11 +292,17 @@ pub(super) fn start(
     let head = digest_file(&fixture.standalone.join("data/HEAD"), MAXIMUM_OUTPUT_BYTES)?;
     let descriptor = fixture.standalone.join("service.deployment.json");
     let function = fixture.package.symbols["$write"].clone();
+    #[allow(
+        clippy::result_large_err,
+        reason = "direct semantic boundary callbacks preserve complete typed diagnostics"
+    )]
+    let probe =
+        || lkjscript::platform::contributor::recursive_transaction_probe(&descriptor, &function);
     context.receipt.recursive.transaction_cancellation = context.probe_json(
         "recursive-transaction",
         "contributor.recursive_transaction_probe",
         &[descriptor.display().to_string(), function.clone()],
-        || lkjscript::platform::contributor::recursive_transaction_probe(&descriptor, &function),
+        probe,
     )?;
     require(
         persisted(&fixture.standalone)? == fixture.original_bytes

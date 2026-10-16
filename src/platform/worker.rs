@@ -11,7 +11,7 @@ use std::time::Duration;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 
-pub const WORKER_RUNNER_CONTRACT_VERSION: u16 = 1;
+pub const WORKER_RUNNER_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_RESIDENT_WORKERS: usize = 4_096;
 pub const MAXIMUM_IDLE_WAIT_MILLISECONDS: u64 = 60_000;
 

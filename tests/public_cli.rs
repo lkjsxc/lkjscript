@@ -6,6 +6,26 @@
 
 mod support;
 
+// One integration process shares admitted builtins and compiled suppliers. Individual
+// modules retain their semantic, filesystem, process and candidate boundaries.
+mod data_admission_cli;
+mod data_scan_cli;
+mod general_service;
+mod memory_cli;
+mod native_collection_costs;
+// Start the longest complete graph matrices before the many short CLI cases.
+#[path = "native_dependency_components.rs"]
+mod analysis_components;
+#[path = "native_dependency_plan.rs"]
+mod analysis_dependency_plan;
+#[path = "native_dependency_plan_verification.rs"]
+mod analysis_plan_verification;
+mod owned_transfer_model;
+mod structural_cli;
+
+#[path = "native_plan_support/mod.rs"]
+mod plan;
+
 #[path = "public_cli/map_candidate_binding.rs"]
 mod map_candidate_binding;
 #[cfg(unix)]
@@ -13,6 +33,7 @@ mod map_candidate_binding;
 mod native_boundary_smokes;
 #[path = "public_cli/native_map_entries.rs"]
 mod native_map_entries;
+use native_map_entries::support as components;
 
 #[path = "public_cli/native_declarations.rs"]
 mod native_declarations;
@@ -24,6 +45,9 @@ mod native_policy;
 mod parameter_type;
 #[path = "public_cli/repository_recovery.rs"]
 mod repository_recovery;
+#[path = "public_cli/semantic_command.rs"]
+mod semantic_command;
+use semantic_command::ObservedOutput;
 
 use lkjscript::platform::contract::MAXIMUM_CLI_RESPONSE_BYTES;
 use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
@@ -471,11 +495,14 @@ fn binary() -> PathBuf {
     candidate
 }
 
-fn command(arguments: &[&str]) -> Output {
+fn command(arguments: &[&str]) -> ObservedOutput {
     command_at(&binary(), Path::new(env!("CARGO_MANIFEST_DIR")), arguments)
 }
 
-fn command_at(executable: &Path, directory: &Path, arguments: &[&str]) -> Output {
+fn command_at(executable: &Path, directory: &Path, arguments: &[&str]) -> ObservedOutput {
+    if let Some(output) = semantic_command::execute(arguments) {
+        return output;
+    }
     let context = format!(
         "run public CLI '{}' with {arguments:?}",
         executable.display()
@@ -488,6 +515,7 @@ fn command_at(executable: &Path, directory: &Path, arguments: &[&str]) -> Output
             .env("LANG", "C"),
     )
     .expect(&context)
+    .into()
 }
 
 fn compact_success(arguments: &[&str]) -> Vec<CompactRecord> {
@@ -502,7 +530,8 @@ fn compact_success_at(
     compact_success_output(command_at(executable, directory, arguments))
 }
 
-fn compact_success_output(output: Output) -> Vec<CompactRecord> {
+fn compact_success_output(output: impl Into<ObservedOutput>) -> Vec<CompactRecord> {
+    let output = output.into();
     assert!(
         output.status.success(),
         "command failed: {}",
@@ -545,11 +574,15 @@ fn compact_record_values(record: &CompactRecord) -> Vec<(&str, &str)> {
         .collect()
 }
 
-fn compact_failure_output(output: Output) -> Vec<CompactRecord> {
+fn compact_failure_output(output: impl Into<ObservedOutput>) -> Vec<CompactRecord> {
     compact_failure_output_with_status(output, 2)
 }
 
-fn compact_failure_output_with_status(output: Output, expected_status: i32) -> Vec<CompactRecord> {
+fn compact_failure_output_with_status(
+    output: impl Into<ObservedOutput>,
+    expected_status: i32,
+) -> Vec<CompactRecord> {
+    let output = output.into();
     assert_eq!(output.status.code(), Some(expected_status));
     assert!(output.stderr.is_empty());
     assert!(output.stdout.len() < 16 * 1024);
@@ -989,29 +1022,47 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         CLI_CONTRACT_VERSION, ContractKey, FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION,
         REGISTRY_CONTRACT_VERSION, contract_descriptors,
     };
-    assert_eq!(CLI_CONTRACT_VERSION, 47);
-    assert_eq!(REGISTRY_CONTRACT_VERSION, 26);
-    assert_eq!(FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION, 22);
+    assert_eq!(
+        CLI_CONTRACT_VERSION,
+        lkjscript::platform::canonical_schema::SCHEMA_EPOCH
+    );
+    assert_eq!(
+        REGISTRY_CONTRACT_VERSION,
+        lkjscript::platform::canonical_schema::SCHEMA_EPOCH
+    );
+    assert_eq!(
+        FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION,
+        lkjscript::platform::canonical_schema::SCHEMA_EPOCH
+    );
     let base_type = contract_descriptors()
         .iter()
         .find(|descriptor| descriptor.key == ContractKey::TypeObject)
         .expect("singular ordinary type profile");
-    assert_eq!(base_type.identity, "lkjscript-type-object-10");
-    assert_eq!(base_type.version, 10);
+    assert_eq!(base_type.identity, "lkjscript-type-object");
+    assert_eq!(
+        base_type.version,
+        lkjscript::platform::canonical_schema::SCHEMA_EPOCH
+    );
     assert_eq!(base_type.magic_values, &["LKJTYPES"]);
     let witness = contract_descriptors()
         .iter()
         .find(|descriptor| descriptor.key == ContractKey::SemanticFacts)
         .expect("current witness profile");
     assert_eq!(witness.identity, "lkjscript-validation-witness");
-    assert_eq!(witness.version, 10);
+    assert_eq!(
+        witness.version,
+        lkjscript::platform::canonical_schema::SCHEMA_EPOCH
+    );
     assert_eq!(witness.magic_values, &["LKJWITNS"]);
     let summary = contract_descriptors()
         .iter()
         .find(|descriptor| descriptor.key == ContractKey::SemanticSummary)
         .expect("current summary profile");
     assert_eq!(summary.identity, "lkjscript-owner-summary");
-    assert_eq!(summary.version, 12);
+    assert_eq!(
+        summary.version,
+        lkjscript::platform::canonical_schema::SCHEMA_EPOCH
+    );
     assert_eq!(summary.magic_values, &["LKJSUMRY"]);
     let capabilities = compact_success(&["capabilities"]);
     assert_eq!(capabilities[0].operation, "product");
@@ -3550,39 +3601,6 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
         compact_field(compact_record(&inspected, "owner"), "name"),
         Some("application")
     );
-    let command_package = compact_field(compact_record(&application, "project"), "package")
-        .expect("command project package")
-        .to_owned();
-    let command_before_context = content_inventory(&project);
-    let command_oracle = public_context_oracle(
-        &copied_binary,
-        temporary.path(),
-        &project,
-        &command_package,
-        &application_owner,
-        "both",
-        2,
-    );
-    let command_context = all_public_context(
-        &copied_binary,
-        temporary.path(),
-        &project,
-        &application_owner,
-        "both",
-        2,
-    );
-    println!(
-        "copied-context project=command root={application_owner} direction=both depth=2 owners={} relations={} pages={} inventory-blake3={}",
-        command_context.owners.len(),
-        command_context.relations.len(),
-        command_context.pages,
-        content_inventory_digest(&command_before_context),
-    );
-    assert_eq!(command_context.owners, command_oracle.0);
-    assert_eq!(command_context.relations, command_oracle.1);
-    assert!(command_context.pages > 1);
-    assert_eq!(content_inventory(&project), command_before_context);
-
     let head_before_check = std::fs::read(project.join("HEAD")).expect("initial HEAD");
     let checked = compact_success_at(
         &copied_binary,
@@ -3731,15 +3749,123 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
         std::fs::read(project.join("HEAD")).expect("HEAD after run"),
         head_before_run
     );
+}
+
+#[test]
+fn public_context_pages_match_independent_relation_traversal_and_preserve_authority() {
+    let _semantics = semantic_command::Scope::enter();
+    let temporary = tempfile::TempDir::new().expect("isolated binary workspace");
+    let executable =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
+    let project = temporary.path().join("app");
+
+    let created = compact_success_at(
+        &executable,
+        temporary.path(),
+        &[
+            "new",
+            path(&project),
+            "--template",
+            "command",
+            "--name",
+            "sample",
+        ],
+    );
+    let initial_revision = compact_field(compact_record(&created, "revision"), "id")
+        .expect("created revision")
+        .to_owned();
+    let creation_summary = compact_record(&created, "summary");
+    assert_eq!(compact_field(creation_summary, "dependencies"), Some("1"));
+    assert_eq!(compact_field(creation_summary, "targets"), Some("1"));
+    assert_eq!(compact_field(creation_summary, "tests"), Some("1"));
+    assert!(!project.join(".lkjscript").exists());
+    assert!(!temporary.path().join("Cargo.toml").exists());
+
+    let status = compact_success_at(
+        &executable,
+        temporary.path(),
+        &["--project", path(&project), "status"],
+    );
+    assert_eq!(
+        compact_field(compact_record(&status, "revision"), "id"),
+        Some(initial_revision.as_str())
+    );
+    assert_eq!(
+        compact_field(compact_record(&status, "summary"), "dependencies"),
+        Some("1")
+    );
+    let application = compact_success_at(
+        &executable,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "query",
+            "find",
+            "module",
+            "application",
+        ],
+    );
+    let application_owner = compact_field(compact_record(&application, "owner"), "id")
+        .expect("application module")
+        .to_owned();
+    let inspected = compact_success_at(
+        &executable,
+        temporary.path(),
+        &[
+            "--project",
+            path(&project),
+            "inspect",
+            "owner",
+            "module",
+            &application_owner,
+        ],
+    );
+    assert_eq!(
+        compact_field(compact_record(&inspected, "owner"), "name"),
+        Some("application")
+    );
+    let command_package = compact_field(compact_record(&application, "project"), "package")
+        .expect("command project package")
+        .to_owned();
+    let command_before_context = content_inventory(&project);
+    let command_oracle = public_context_oracle(
+        &executable,
+        temporary.path(),
+        &project,
+        &command_package,
+        &application_owner,
+        "both",
+        2,
+    );
+    let command_context = all_public_context(
+        &executable,
+        temporary.path(),
+        &project,
+        &application_owner,
+        "both",
+        2,
+    );
+    println!(
+        "public-context project=command root={application_owner} direction=both depth=2 owners={} relations={} pages={} inventory-blake3={}",
+        command_context.owners.len(),
+        command_context.relations.len(),
+        command_context.pages,
+        content_inventory_digest(&command_before_context),
+    );
+    assert_eq!(command_context.owners, command_oracle.0);
+    assert_eq!(command_context.relations, command_oracle.1);
+    assert!(command_context.pages > 1);
+    assert_eq!(content_inventory(&project), command_before_context);
 
     let maintained_source = Path::new(env!("CARGO_MANIFEST_DIR")).join(APPLICATION);
     let maintained = temporary.path().join("isolated-lkjournal");
     repository_recovery::copy_cold_repository(&maintained_source, &maintained);
     let maintained_revision =
-        repository_recovery::first_status(&copied_binary, temporary.path(), &maintained);
+        repository_recovery::first_status(&executable, temporary.path(), &maintained);
     let maintained_before = content_inventory(&maintained);
     let service = compact_success_at(
-        &copied_binary,
+        &executable,
         temporary.path(),
         &[
             "--project",
@@ -3758,7 +3884,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
         .to_owned();
     for (direction, depth) in [("incoming", 1_u8), ("outgoing", 2_u8), ("both", 2_u8)] {
         let oracle = public_context_oracle(
-            &copied_binary,
+            &executable,
             temporary.path(),
             &maintained,
             &maintained_package,
@@ -3767,7 +3893,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
             depth,
         );
         let context = all_public_context(
-            &copied_binary,
+            &executable,
             temporary.path(),
             &maintained,
             &service_owner,
@@ -3775,7 +3901,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
             depth,
         );
         println!(
-            "copied-context project=lkjournal root={service_owner} direction={direction} depth={depth} owners={} relations={} pages={} inventory-blake3={}",
+            "public-context project=lkjournal root={service_owner} direction={direction} depth={depth} owners={} relations={} pages={} inventory-blake3={}",
             context.owners.len(),
             context.relations.len(),
             context.pages,
@@ -3848,24 +3974,25 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
         ),
     ] {
         let rejected =
-            compact_failure_output(command_at(&copied_binary, temporary.path(), &arguments));
+            compact_failure_output(command_at(&executable, temporary.path(), &arguments));
         assert_eq!(
             compact_field(compact_record(&rejected, "diagnostic"), "code"),
             Some(expected_code)
         );
     }
     assert_eq!(
-        current_revision_at(&copied_binary, temporary.path(), &maintained),
+        current_revision_at(&executable, temporary.path(), &maintained),
         maintained_revision
     );
     assert_eq!(content_inventory(&maintained), maintained_before);
 }
 
 #[test]
-fn copied_binary_authors_and_runs_a_generic_named_function_value() {
+fn public_authors_and_runs_a_generic_named_function_value() {
+    let _semantics = semantic_command::Scope::enter();
     let temporary = tempfile::TempDir::new().expect("isolated higher-order workspace");
-    let copied_binary = temporary.path().join("lkjscript");
-    copy_executable(&binary(), &copied_binary);
+    let copied_binary =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
     let project = temporary.path().join("app");
 
     let created = compact_success_at(
@@ -4280,10 +4407,11 @@ fn copied_binary_authors_and_runs_a_generic_named_function_value() {
 }
 
 #[test]
-fn copied_binary_maps_runtime_values_and_rejects_invalid_mapper_before_publication() {
+fn public_maps_runtime_values_and_rejects_invalid_mapper_before_publication() {
+    let _semantics = semantic_command::Scope::enter();
     let temporary = tempfile::TempDir::new().unwrap();
-    let copied = temporary.path().join("lkjscript");
-    copy_executable(&binary(), &copied);
+    let copied =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
     let project = temporary.path().join("mapping");
     let run = |args: &[&str]| compact_success_at(&copied, temporary.path(), args);
     run(&[
@@ -4512,10 +4640,11 @@ create.target as=$target name=map component=$component port=$port runner=command
 }
 
 #[test]
-fn copied_binary_returns_two_runtime_bound_reducers_after_factory_return() {
+fn public_returns_two_runtime_bound_reducers_after_factory_return() {
+    let _semantics = semantic_command::Scope::enter();
     let temporary = tempfile::TempDir::new().expect("isolated binding workspace");
-    let copied = temporary.path().join("lkjscript");
-    copy_executable(&binary(), &copied);
+    let copied =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
     let project = temporary.path().join("binding");
     let run = |args: &[&str]| compact_success_at(&copied, temporary.path(), args);
     run(&[
@@ -4826,10 +4955,11 @@ create.target as=$command name=configured component=$component port=$port runner
 }
 
 #[test]
-fn copied_binary_rejects_unsafe_binding_meaning_before_publication() {
+fn public_rejects_unsafe_binding_meaning_before_publication() {
+    let _semantics = semantic_command::Scope::enter();
     let temporary = tempfile::TempDir::new().unwrap();
-    let copied = temporary.path().join("lkjscript");
-    copy_executable(&binary(), &copied);
+    let copied =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
     let project = temporary.path().join("binding-rejections");
     compact_success_at(
         &copied,
@@ -4943,12 +5073,13 @@ fn copied_binary_rejects_unsafe_binding_meaning_before_publication() {
 }
 
 #[test]
-fn copied_binary_checks_capture_safe_instantiation_constraints_before_publication() {
+fn public_checks_capture_safe_instantiation_constraints_before_publication() {
+    let _semantics = semantic_command::Scope::enter();
     // Fixed language expectations, independent of production entailment. In particular the
     // constrained parameter is unused, so neither substitution nor binding can supply this check.
     let temporary = tempfile::TempDir::new().unwrap();
-    let copied = temporary.path().join("lkjscript");
-    copy_executable(&binary(), &copied);
+    let copied =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
     let project = temporary.path().join("constraints");
     compact_success_at(
         &copied,
@@ -5187,10 +5318,11 @@ fn copied_binary_checks_capture_safe_instantiation_constraints_before_publicatio
 }
 
 #[test]
-fn copied_binary_rejects_foreign_constraint_assumptions_and_instantiation_arity() {
+fn public_rejects_foreign_constraint_assumptions_and_instantiation_arity() {
+    let _semantics = semantic_command::Scope::enter();
     let temporary = tempfile::TempDir::new().unwrap();
-    let copied = temporary.path().join("lkjscript");
-    copy_executable(&binary(), &copied);
+    let copied =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
     let project = temporary.path().join("constraint-scope");
     compact_success_at(
         &copied,
@@ -5263,10 +5395,11 @@ fn copied_binary_rejects_foreign_constraint_assumptions_and_instantiation_arity(
 }
 
 #[test]
-fn copied_binary_authors_requirement_bound_affine_handoffs_and_rejects_predecessors() {
+fn public_authors_requirement_bound_affine_handoffs_and_rejects_predecessors() {
+    let _semantics = semantic_command::Scope::enter();
     let temporary = tempfile::TempDir::new().expect("isolated affine-resource workspace");
-    let copied_binary = temporary.path().join("lkjscript");
-    copy_executable(&binary(), &copied_binary);
+    let copied_binary =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
     let project = temporary.path().join("app");
 
     let created = compact_success_at(
@@ -6416,10 +6549,11 @@ effect.requirement parent=$bad_right index=0 requirement={requirement}"#
 }
 
 #[test]
-fn copied_binary_tail_fold_crosses_the_former_frame_boundary() {
+fn public_tail_fold_crosses_the_former_frame_boundary() {
+    let _semantics = semantic_command::Scope::enter();
     let temporary = tempfile::TempDir::new().expect("isolated tail fold workspace");
-    let copied_binary = temporary.path().join("lkjscript");
-    copy_executable(&binary(), &copied_binary);
+    let copied_binary =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
     let project = temporary.path().join("app");
     let created = compact_success_at(
         &copied_binary,
@@ -7330,10 +7464,11 @@ fn reviewed_change_plan_body_replacement_exports_exact_owned_relation_closure() 
 }
 
 #[test]
-fn copied_binary_authors_dependency_and_complete_command_topology_from_minimal() {
+fn public_authors_dependency_and_complete_command_topology_from_minimal() {
+    let _semantics = semantic_command::Scope::enter();
     let temporary = tempfile::TempDir::new().expect("isolated topology workspace");
-    let copied_binary = temporary.path().join("lkjscript");
-    copy_executable(&binary(), &copied_binary);
+    let copied_binary =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
     let project = temporary.path().join("application");
 
     let grammar = compact_success_at(
@@ -8995,10 +9130,11 @@ fn reviewed_change_plan_direct_and_record_export_match_and_apply_reprepares() {
 }
 
 #[test]
-fn copied_binary_extracts_one_function_with_stable_identity_and_atomic_failures() {
+fn public_extracts_one_function_with_stable_identity_and_atomic_failures() {
+    let _semantics = semantic_command::Scope::enter();
     let temporary = tempfile::TempDir::new().expect("isolated function-extraction workspace");
-    let copied_binary = temporary.path().join("lkjscript");
-    copy_executable(&binary(), &copied_binary);
+    let copied_binary =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
     let project = temporary.path().join("app");
     let created = compact_success_at(
         &copied_binary,
@@ -11700,10 +11836,11 @@ fn path(value: &Path) -> &str {
 }
 
 #[test]
-fn copied_binary_authors_parametric_nominal_data_and_checks_complete_candidates() {
+fn public_authors_parametric_nominal_data_and_checks_complete_candidates() {
+    let _semantics = semantic_command::Scope::enter();
     let temporary = tempfile::TempDir::new().unwrap();
-    let copied = temporary.path().join("lkjscript");
-    copy_executable(&binary(), &copied);
+    let copied =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
     let project = temporary.path().join("nominal");
     let run = |arguments: &[&str]| compact_success_at(&copied, temporary.path(), arguments);
     run(&[
@@ -12118,10 +12255,11 @@ replace.body function={constructor} body=$new
 }
 
 #[test]
-fn copied_binary_constraint_edits_preserve_identity_and_validate_complete_callers() {
+fn public_constraint_edits_preserve_identity_and_validate_complete_callers() {
+    let _semantics = semantic_command::Scope::enter();
     let temporary = tempfile::TempDir::new().unwrap();
-    let copied = temporary.path().join("lkjscript");
-    copy_executable(&binary(), &copied);
+    let copied =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
     let project = temporary.path().join("project");
     let run = |arguments: &[&str]| compact_success_at(&copied, temporary.path(), arguments);
     run(&[

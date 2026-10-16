@@ -12,6 +12,36 @@ use std::time::{Duration, Instant};
 const ROOT: &str = "LKJSCRIPT_TEST_COMPILER_CACHE_FIFO_ROOT";
 
 #[test]
+fn implementation_changes_expire_disk_and_memory_caches_without_changing_meaning() {
+    for memory in [false, true] {
+        let directory = tempfile::tempdir().unwrap();
+        let snapshot = crate::platform::kernel::tests::transport_snapshot();
+        let repository = if memory {
+            let arena = crate::platform::MemProjectStore::new(64 * 1_048_576).unwrap();
+            GraphRepository::create_memory(&arena, &snapshot, None)
+                .unwrap()
+                .repository
+        } else {
+            GraphRepository::create(&directory.path().join("project"), &snapshot, None)
+                .unwrap()
+                .repository
+        };
+        let authority = repository.current().unwrap().head;
+        let first = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
+        let mut head = read_cache_head(&repository).unwrap().unwrap();
+        head.implementation[0] ^= 1;
+        write_cache_head(&repository, head).unwrap();
+        assert!(load_current_compilation(&repository).unwrap().is_none());
+        assert_eq!(repository.current().unwrap().head, authority);
+        let second = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
+        assert_eq!(first.manifest_bytes, second.manifest_bytes);
+        assert_eq!(first.manifest_digest, second.manifest_digest);
+        assert_eq!(repository.current().unwrap().head, authority);
+        assert!(load_current_compilation(&repository).unwrap().is_some());
+    }
+}
+
+#[test]
 fn regular_missing_and_nonregular_cache_entries_keep_exact_admission() {
     let root = tempfile::tempdir().unwrap();
     let directory = File::open(root.path()).unwrap();
@@ -231,6 +261,7 @@ fn install_derived_manifest(
         repository,
         CompilationCacheHead {
             contract_version: CACHE_HEAD_CONTRACT_VERSION,
+            implementation: crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH,
             repository_id: current.repository_id,
             revision: current.revision,
             manifest: digest,

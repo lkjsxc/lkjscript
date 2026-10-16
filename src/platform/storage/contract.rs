@@ -1,20 +1,20 @@
 //! Immutable-store contract facts used by the current semantic graph.
 
-pub const OBJECT_STORE_CONTRACT_IDENTITY: &str = "lkjscript-immutable-object-store-1";
-pub const PACK_CONTRACT_IDENTITY: &str = "lkjscript-immutable-object-pack-1";
-pub const CATALOG_CONTRACT_IDENTITY: &str = "lkjscript-object-catalog-2";
+pub const OBJECT_STORE_CONTRACT_IDENTITY: &str = "lkjscript-immutable-object-store";
+pub const PACK_CONTRACT_IDENTITY: &str = "lkjscript-immutable-object-pack";
+pub const CATALOG_CONTRACT_IDENTITY: &str = "lkjscript-object-catalog";
 
 pub const PACK_MAGIC: [u8; 8] = *b"LKJPAK01";
 pub const PACK_INDEX_MAGIC: [u8; 8] = *b"LKJIDX01";
 pub const PACK_END_MAGIC: [u8; 8] = *b"LKJEND01";
-pub const PACK_CONTRACT_VERSION: u16 = 1;
+pub const PACK_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 
 pub const CATALOG_MANIFEST_MAGIC: [u8; 8] = *b"LKJCMN02";
 pub const CATALOG_MANIFEST_END_MAGIC: [u8; 8] = *b"LKJCMNE2";
 pub const CATALOG_SEGMENT_MAGIC: [u8; 8] = *b"LKJCSE02";
 pub const CATALOG_SEGMENT_METADATA_MAGIC: [u8; 8] = *b"LKJCSM02";
 pub const CATALOG_SEGMENT_END_MAGIC: [u8; 8] = *b"LKJCSEN2";
-pub const CATALOG_CONTRACT_VERSION: u16 = 2;
+pub const CATALOG_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 
 pub const PACK_NONCE_DOMAIN: &str = "lkjscript.object-pack.nonce.v1";
 pub const PACK_ID_DOMAIN: &str = "lkjscript.object-pack.identity.v1";

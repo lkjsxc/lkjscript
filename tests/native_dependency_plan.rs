@@ -1,24 +1,14 @@
 //! Native dependency-first planning with independent expected results. Host matrices share
 //! admitted code; exact candidates and detached smoke runs retain the executable boundary.
 #![allow(clippy::unwrap_used, clippy::panic)]
-#[path = "native_components_support/mod.rs"]
-mod components;
-#[allow(
-    dead_code,
-    reason = "shared semantic CLI support spans independent integration crates"
-)]
-#[path = "support/semantic_cli.rs"]
-mod semantic_cli;
-use components::copy_executable;
-#[path = "native_plan_support/mod.rs"]
-mod plan;
+use crate::{components, plan};
 use components::matrix::Case;
 use components::{Native, digest, quoted};
 use serde_json::{Value, json};
 
 #[test]
 fn native_plan_condenses_complete_graphs_and_emits_dependency_first_stages() {
-    let public = Native::new();
+    let public = Native::in_memory();
     let executable_hash = digest(&public.root.join("lkjscript"));
     plan::author(&public);
     let artifact = public.root.join("dependency-plan.lkja");

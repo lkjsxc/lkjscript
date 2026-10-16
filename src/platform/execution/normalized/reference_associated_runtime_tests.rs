@@ -213,8 +213,7 @@ fn reference_associated_runtime_rechecks_parameter_and_local_generations_on_cont
     .unwrap();
     for key in keys {
         for changed_generation in [
-            32,
-            crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
+            0,
             crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION + 1,
         ] {

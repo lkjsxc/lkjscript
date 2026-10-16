@@ -70,9 +70,8 @@ body/stream limits and exact per-grant authority remain independently enforced.
 
 New HTTP recipes explicitly set all four cumulative quotas to null. Existing authored
 descriptors keep their previous numeric selections; no configuration file is implicitly
-rewritten. Internal discovery contract 5 introduced the expanded quota choice. Older executables
-reject null fuel or the new fields; selecting this syntax requires a supporting executable,
-while rollback retains the earlier numeric descriptor and its matching executable.
+rewritten. Current discovery exposes the expanded quota choice. Rollback retains
+the selected descriptor and an executable that supports its exact fields.
 No graph, artifact, package or application-data migration is required.
 
 Absent runtime removes only this route's invocation deadline; shutdown and cancellation grace
@@ -122,7 +121,7 @@ requirement's own operations, limits, sharing domain and authority revision. The
 redacted adapter observation is keyed by the supplied canonical selector, preserving
 separate entries for same-name requirements without exposing adapter internals.
 
-`capabilities --section deployment` discovery contract 6 identifies this field as
+`capabilities --section deployment` identifies this field as
 `requirement-selector`; the JSON object shape remains unchanged. Package identity
 is available through `package current export` output and requirement identity through
 public `change draft` output for its containing module/component. An operator can

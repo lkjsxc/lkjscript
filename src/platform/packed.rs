@@ -1,9 +1,9 @@
 //! Canonical integrity envelope for packed semantic objects.
 
-use super::canonical_schema::CANONICAL_SCHEMA_HASH;
+use super::canonical_schema::SCHEMA_EPOCH;
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 pub const MAXIMUM_PACKED_PAYLOAD_BYTES: usize = 128 * 1_048_576;
-pub(crate) const CANONICAL_HEADER_BYTES: usize = 8 + 32 + 8;
+pub(crate) const CANONICAL_HEADER_BYTES: usize = 8 + 2 + 8;
 const HEADER_BYTES: usize = CANONICAL_HEADER_BYTES;
 const CHECKSUM_BYTES: usize = 32;
 pub(crate) const CANONICAL_ENVELOPE_BYTES: usize = HEADER_BYTES + CHECKSUM_BYTES;
@@ -64,7 +64,7 @@ pub fn encode<T: bincode::Encode>(
         })?;
     let mut bytes = Vec::with_capacity(capacity);
     bytes.extend_from_slice(&magic);
-    bytes.extend_from_slice(&CANONICAL_SCHEMA_HASH);
+    bytes.extend_from_slice(&SCHEMA_EPOCH.to_le_bytes());
     bytes.extend_from_slice(&payload_length.to_le_bytes());
     bytes.extend_from_slice(&payload);
     let checksum = digest(digest_domain, &bytes);
@@ -72,6 +72,9 @@ pub fn encode<T: bincode::Encode>(
     Ok(bytes)
 }
 
+/// Checks the complete envelope and compares every re-encoded payload byte.
+/// Callers still validate their domain identity and local meaning, but need no
+/// second encoding or envelope checksum to prove canonical representation.
 pub fn decode<T: bincode::Decode<()> + bincode::Encode>(
     bytes: &[u8],
     expected_magic: [u8; 8],
@@ -100,7 +103,7 @@ pub fn decode<T: bincode::Decode<()> + bincode::Encode>(
             "packed object has an unknown contract identity",
         ));
     }
-    if bytes[8..40] != CANONICAL_SCHEMA_HASH {
+    if bytes[8..10] != SCHEMA_EPOCH.to_le_bytes() {
         return Err(packed_error(
             DiagnosticClass::Source,
             "packed_schema",
@@ -108,7 +111,7 @@ pub fn decode<T: bincode::Decode<()> + bincode::Encode>(
         ));
     }
     let mut length_bytes = [0_u8; 8];
-    length_bytes.copy_from_slice(&bytes[40..48]);
+    length_bytes.copy_from_slice(&bytes[10..18]);
     let payload_length = usize::try_from(u64::from_le_bytes(length_bytes)).map_err(|_| {
         packed_error(
             DiagnosticClass::Resource,
@@ -169,21 +172,46 @@ pub fn decode<T: bincode::Decode<()> + bincode::Encode>(
             "packed object payload has trailing bytes",
         ));
     }
-    let canonical = bincode::encode_to_vec(&value, configuration).map_err(|error| {
-        packed_error(
-            DiagnosticClass::Corrupt,
-            "packed_decode",
-            format!("packed object cannot reproduce its canonical payload: {error}"),
-        )
-    })?;
-    if canonical != payload {
+    let mut canonical = CanonicalPayload {
+        remaining: payload,
+        mismatch: false,
+    };
+    let encoded = bincode::encode_into_writer(&value, &mut canonical, configuration);
+    if canonical.mismatch || encoded.is_ok() && !canonical.remaining.is_empty() {
         return Err(packed_error(
             DiagnosticClass::Corrupt,
             "packed_noncanonical",
             "packed object does not use its canonical binary encoding",
         ));
     }
+    encoded.map_err(|error| {
+        packed_error(
+            DiagnosticClass::Corrupt,
+            "packed_decode",
+            format!("packed object cannot reproduce its canonical payload: {error}"),
+        )
+    })?;
     Ok(value)
+}
+
+// Compare directly with the admitted payload instead of allocating and filling
+// another full payload buffer. Encoding still visits every byte, including map
+// order, duplicate-key collapse and nonminimal integer encodings.
+struct CanonicalPayload<'a> {
+    remaining: &'a [u8],
+    mismatch: bool,
+}
+
+impl bincode::enc::write::Writer for CanonicalPayload<'_> {
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) -> Result<(), bincode::error::EncodeError> {
+        if self.remaining.get(..bytes.len()) != Some(bytes) {
+            self.mismatch = true;
+            return Err(bincode::error::EncodeError::Other("noncanonical payload"));
+        }
+        self.remaining = &self.remaining[bytes.len()..];
+        Ok(())
+    }
 }
 
 fn digest(domain: &str, bytes: &[u8]) -> [u8; 32] {
@@ -213,7 +241,7 @@ mod tests {
         let canonical =
             encode(*b"LKJTEST1", "lkjscript.test.packed.v1", &1_u16, 1024).expect("encode integer");
         let mut nonminimal = canonical[..HEADER_BYTES].to_vec();
-        nonminimal[40..48].copy_from_slice(&3_u64.to_le_bytes());
+        nonminimal[10..18].copy_from_slice(&3_u64.to_le_bytes());
         nonminimal.extend_from_slice(&[251, 1, 0]);
         let checksum = digest("lkjscript.test.packed.v1", &nonminimal);
         nonminimal.extend_from_slice(&checksum);
@@ -222,6 +250,28 @@ mod tests {
                 .expect_err("nonminimal integer with valid checksum")
                 .code,
             "packed_noncanonical"
+        );
+    }
+
+    #[test]
+    fn valid_checksum_does_not_admit_reordered_or_duplicate_map_entries() {
+        type Map = std::collections::BTreeMap<u8, u8>;
+        for entries in [vec![(2_u8, 20_u8), (1, 10)], vec![(1, 10), (1, 20)]] {
+            // A sequence of pairs has the map's length-plus-pairs wire layout.
+            // The decoder must reject normalization even with a valid envelope.
+            let bytes = encode(*b"LKJTEST1", "lkjscript.test.packed.v1", &entries, 1024).unwrap();
+            assert_eq!(
+                decode::<Map>(&bytes, *b"LKJTEST1", "lkjscript.test.packed.v1", 1024)
+                    .unwrap_err()
+                    .code,
+                "packed_noncanonical"
+            );
+        }
+        let map = Map::from([(1, 10), (2, 20)]);
+        let bytes = encode(*b"LKJTEST1", "lkjscript.test.packed.v1", &map, 1024).unwrap();
+        assert_eq!(
+            decode::<Map>(&bytes, *b"LKJTEST1", "lkjscript.test.packed.v1", 1024).unwrap(),
+            map
         );
     }
 

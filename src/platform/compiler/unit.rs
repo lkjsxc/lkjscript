@@ -14,10 +14,10 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
-pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit-34";
-pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = 34;
-pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode-28";
-pub const BYTECODE_CONTRACT_VERSION: u16 = 28;
+pub const COMPILER_UNIT_CONTRACT_IDENTITY: &str = "lkjscript-compiler-unit";
+pub const COMPILER_UNIT_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const BYTECODE_CONTRACT_IDENTITY: &str = "lkjscript-bytecode";
+pub const BYTECODE_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUNIT";
 pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope";
 pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key";
@@ -55,7 +55,7 @@ impl CompilationUnitKey {
             )
         })?;
         let mut hasher = blake3::Hasher::new_derive_key(COMPILER_UNIT_KEY_DOMAIN);
-        hasher.update(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
+        hasher.update(&crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes());
         hasher.update(&(bytes.len() as u64).to_be_bytes());
         hasher.update(&bytes);
         Ok(Self(*hasher.finalize().as_bytes()))
@@ -614,14 +614,6 @@ impl CompilationUnit {
             MAXIMUM_COMPILER_UNIT_BYTES,
         )?;
         unit.validate()?;
-        let (actual, canonical) = unit.encode()?;
-        if actual != expected || canonical != bytes {
-            return Err(unit_error(
-                DiagnosticClass::Corrupt,
-                "compiler_unit_canonical",
-                "compiler unit does not use its canonical current encoding",
-            ));
-        }
         Ok(unit)
     }
 

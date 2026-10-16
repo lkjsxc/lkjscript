@@ -422,7 +422,7 @@ fn inspect(
             && field(&summary, "batch", "passed")? == "110"
             && field(&summary, "batch", "failed")? == "1"
             && field(&summary, "batch", "schema")?
-                == lkjscript::platform::canonical_schema::CANONICAL_SCHEMA_HASH_HEX
+                == lkjscript::platform::canonical_schema::SCHEMA_EPOCH.to_string()
             && field(&summary, "batch", "validator")?
                 == lkjscript::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH
                     .iter()

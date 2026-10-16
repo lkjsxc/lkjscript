@@ -127,7 +127,7 @@ fn author(
         format!("request base={base} idempotency=f64-{name}\n{prelude}{literal}"),
     )?;
     fs::copy(&request, context.evidence.join(format!("f64-{name}.lkjc")))?;
-    let plan_command = context.receipt.commands.len();
+    let plan_command = context.command_index();
     let planned = context.cli(
         Some(&package.path),
         &[
@@ -150,7 +150,7 @@ fn author(
         plan.token == field(&planned, "plan", "token")?,
         "F64 literal review token differs",
     )?;
-    let apply_command = context.receipt.commands.len();
+    let apply_command = context.command_index();
     let applied = context.cli(
         Some(&package.path),
         &[
@@ -182,7 +182,7 @@ fn author(
 }
 
 fn inspect_calibration(context: &mut Context, package: &Package) -> Result<usize, DevError> {
-    let command = context.receipt.commands.len();
+    let command = context.command_index();
     context.cli(
         Some(&package.path),
         &[
@@ -240,7 +240,7 @@ fn invoke(
     } else {
         ("--arguments", arguments)
     };
-    let command = context.receipt.commands.len();
+    let command = context.command_index();
     let result_file = context.root.join(format!("f64-result-{name}.json"));
     let result_path = result_file.display().to_string();
     let to_file = matches!(
@@ -451,7 +451,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     )?;
     context.cli(Some(&producer.path), &["check"], true)?;
     context.export(&mut producer)?;
-    let producer_identity = Identity::of(&producer, context.receipt.inventories.len() - 1);
+    let producer_identity = Identity::of(&producer, context.inventory_index() - 1);
     let mut consumer = context.new_package("f64-consumer")?;
     context.stage(&consumer, &producer)?;
     let prelude = format!(
@@ -469,7 +469,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     )?;
     context.cli(Some(&consumer.path), &["check"], true)?;
     context.export(&mut consumer)?;
-    let before = Identity::of(&consumer, context.receipt.inventories.len() - 1);
+    let before = Identity::of(&consumer, context.inventory_index() - 1);
     let bundle = context.root.join("f64-bundle");
     fs::create_dir(&bundle)?;
     build_artifact(context, &consumer, &bundle, "before")?;
@@ -641,7 +641,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     let inspect_after = inspect_calibration(context, &consumer)?;
     context.cli(Some(&consumer.path), &["check"], true)?;
     context.export(&mut consumer)?;
-    let after = Identity::of(&consumer, context.receipt.inventories.len() - 1);
+    let after = Identity::of(&consumer, context.inventory_index() - 1);
     build_artifact(context, &consumer, &bundle, "after")?;
     for (name, artifact, expected) in [
         ("calibration-after", "after", small_summary(3.25)),

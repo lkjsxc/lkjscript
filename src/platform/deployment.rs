@@ -77,7 +77,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::runtime::Handle;
 
-pub const DEPLOYMENT_CONTRACT_VERSION: u16 = 6;
+pub const DEPLOYMENT_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_DEPLOYMENT_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_DEPLOYMENT_GRANTS: usize = 1_024;
 pub(crate) const STARTER_HTTP_DESCRIPTOR_PATH: &str = "service.deployment.json";

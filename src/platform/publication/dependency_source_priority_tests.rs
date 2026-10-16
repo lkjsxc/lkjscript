@@ -316,7 +316,7 @@ fn dependency_source_priority_never_hides_covered_descendant_source_or_readiness
         StoreReadAdmission, StoreWork,
     };
     struct Hide<'a> {
-        base: &'a PackDirectoryStore,
+        base: &'a StorageBackend,
         key: ObjectKey,
     }
     impl ImmutableObjectStore for Hide<'_> {

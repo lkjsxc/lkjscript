@@ -61,7 +61,7 @@ impl Derivation<'_> {
                 if parameter.declaration != scope.declaration
                     || !parameter.constraints.has_owned()
                     || parameter.header.contract_version
-                        < crate::platform::kernel::contract::OWNED_GRAPH_CONTRACT_VERSION
+                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                 {
                     return Err(reject());
                 }

@@ -131,24 +131,15 @@ identity, argument order, aggregate quota and joined cleanup contracts apply.
 
 ## Encoding and compatibility
 
-Constraint tags 0 (`None`), 1 (`CaptureSafe`) and 2 (`Owned`) retain their bytes.
-Tags 3, 4 and 5 encode transferable, capture-safe transferable and owned transferable
-respectively. Transfer-bearing owners require Graph 22 and requests select authored
-codec 26. Old envelopes cannot acquire new authority by recomputing their digests.
+Transferable, Shareable, CaptureSafe and Owned obligations are explicit constraints
+in current canonical records. Owners, interfaces, requests, compiler units,
+bytecode, artifacts and validation material share schema epoch 1. Child types,
+implementation operands and borrowed task signatures retain complete ordered
+applications through source, code and runtime admission.
 
-Package interface 13 carries the expanded constraint inventory while supported
-predecessor readers retain their original permission. Compiler 22 and artifact 29
-renew derived admission; predecessor units require rebuilding from accepted meaning.
-Bytecode 17 retains its instruction layout: existing child type operands and static
-implementation operands can represent the symbolic applications. Validator 27,
-function projection 12 and compact discovery 30 advertise the changed contracts.
-CLI observations 35 and existing type-object envelopes retain their forms.
-
-The encoding numbers above record the historical Transferable increment. New
-sharing obligations and borrowed task signatures require their advertised current
-owner, request and derived-admission generations. Recomputed hashes cannot turn
-an older constraint tag or task signature into current read permission. Exact
-generations belong to product discovery and the maintained encoding owners.
+Foreign epochs reject. A matching epoch or checksum grants neither transfer nor
+read authority; independent validation establishes each obligation and exact
+invocation relationship. Maintained assets are rebuilt through supported owners.
 
 This extension supplies no task handles, detached tasks, channels, escaping
 borrowing, capability inheritance or user-defined transfer/read certificates. Region

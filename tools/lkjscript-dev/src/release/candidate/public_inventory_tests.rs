@@ -65,15 +65,13 @@ fn full_source_inventory_keeps_semantics_and_selects_only_seven_exact_boundaries
         BOUNDARIES.map(boundary_name).into_iter().collect()
     );
     passed(&success(&checked), &checked).unwrap();
-    // Every required source semantic identity remains mandatory in the source-built
-    // harness, while its complete execution belongs to the original full source proof.
+    // Exact source witnesses remain mandatory. Synthetic family witnesses identify
+    // a required category; another exact case may also satisfy that category.
     for name in checked
         .all
         .iter()
         .filter(|name| name.as_str() != "unrelated_test")
     {
-        let omitted = original.replace(&format!("{name}: test\n"), "");
-        assert!(inventory(&omitted).is_err(), "omitted {name}");
         if ![
             "owned::native_owned_producer",
             "buffers::native_byte_buffer_move",
@@ -85,9 +83,26 @@ fn full_source_inventory_keeps_semantics_and_selects_only_seven_exact_boundaries
         ]
         .contains(&name.as_str())
         {
+            let omitted = original.replace(&format!("{name}: test\n"), "");
+            assert!(inventory(&omitted).is_err(), "omitted {name}");
             let substituted = original.replace(name, &format!("impostor::{name}"));
             assert!(inventory(&substituted).is_err(), "substituted {name}");
         }
+    }
+    inventory(&original.replace("owned::native_owned_producer: test\n", ""))
+        .expect("exact FIFO and nominal witnesses still satisfy the owned family");
+    for (family, namespace) in REQUIRED_FAMILIES {
+        let omitted = original
+            .lines()
+            .filter(|line| {
+                !required_family(line.strip_suffix(": test").unwrap(), family, namespace)
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            inventory(&omitted).is_err(),
+            "omitted source family {family}"
+        );
     }
     let expanded = inventory(
         &(original + "future_source_matrix: test\nnative_boundary_smokes::future_boundary: test\n"),

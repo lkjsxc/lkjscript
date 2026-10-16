@@ -1455,7 +1455,7 @@ impl ReferenceState<'_> {
             return Err(failure("borrow-call expression disappeared"));
         };
         if self.declaration(callable)?.header.contract_version
-            < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
         {
             return Ok(None);
         }
@@ -1588,7 +1588,7 @@ impl ReferenceState<'_> {
             return Err(failure("lexical loan expression disappeared"));
         };
         if self.declaration(callable)?.header.contract_version
-            < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
         {
             return Ok(None);
         }

@@ -479,24 +479,27 @@ impl Oracle<'_> {
                 contract.type_parameters.contains(&id)
                     && (p.constraints == TypeParameterConstraints::Owned
                         || (Self::ordinary_witness_bounds(p.constraints)
-                            && p.header.contract_version >= 33
-                            && self
-                                .declaration_generation(declaration)
-                                .is_some_and(|v| v >= 33)))
+                            && p.header.contract_version
+                                == crate::platform::canonical_schema::SCHEMA_EPOCH
+                            && self.declaration_generation(declaration).is_some_and(|v| {
+                                v == crate::platform::canonical_schema::SCHEMA_EPOCH
+                            })))
             }
         } else if let Some(implementation) = self.implementation(declaration) {
             implementation.type_parameters.contains(&id)
                 && ((p.constraints.has_owned()
                     && (p.constraints == TypeParameterConstraints::Owned
-                        || (p.header.contract_version >= 30
-                            && self
-                                .declaration_generation(declaration)
-                                .is_some_and(|v| v >= 30))))
+                        || (p.header.contract_version
+                            == crate::platform::canonical_schema::SCHEMA_EPOCH
+                            && self.declaration_generation(declaration).is_some_and(|v| {
+                                v == crate::platform::canonical_schema::SCHEMA_EPOCH
+                            }))))
                     || (Self::ordinary_witness_bounds(p.constraints)
-                        && p.header.contract_version >= 33
+                        && p.header.contract_version
+                            == crate::platform::canonical_schema::SCHEMA_EPOCH
                         && self
                             .declaration_generation(declaration)
-                            .is_some_and(|v| v >= 33)))
+                            .is_some_and(|v| v == crate::platform::canonical_schema::SCHEMA_EPOCH)))
         } else if let Some((parameters, _)) = self.owned_record_inventory(declaration) {
             parameters.contains(&id)
                 && (p.constraints.has_owned() || p.constraints.requires_transfer())
@@ -915,7 +918,9 @@ impl Oracle<'_> {
                 .all(|id| {
                     parameters.insert(id)
                         && scoped.scoped_parameter(id).is_some_and(|p| {
-                            (id == c.self_parameter || p.header.contract_version >= 26)
+                            (id == c.self_parameter
+                                || p.header.contract_version
+                                    == crate::platform::canonical_schema::SCHEMA_EPOCH)
                                 && parameter_names.insert(&p.name)
                         })
                 })
@@ -979,66 +984,11 @@ impl Oracle<'_> {
     }
     pub(super) fn contract_generation(
         &self,
-        c: &OwnedContract,
+        _contract: &OwnedContract,
         generation: u16,
-        package: PackageId,
+        _package: PackageId,
     ) -> bool {
-        if generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-            && !c.associated_types.is_empty()
-        {
-            return false;
-        }
-        if generation != contract::GRAPH_CONTRACT_VERSION
-            && c.associated_types
-                .iter()
-                .any(|m| matches!(m.bound, AssociatedTypeBound::ReadViewFamily { .. }))
-        {
-            return false;
-        }
-        if generation < 33
-            && c.type_parameters.iter().any(|id| {
-                self.type_parameter(package, *id)
-                    .is_some_and(|p| Self::ordinary_witness_bounds(p.constraints))
-            })
-        {
-            return false;
-        }
-        if generation < 30
-            && c.methods.iter().any(|m| {
-                !matches!(m.effect, FunctionEffect::Pure)
-                    && m.parameters
-                        .iter()
-                        .any(|p| p.use_mode == ParameterUse::Borrow)
-            })
-        {
-            return false;
-        }
-        if generation < 27
-            && c.methods
-                .iter()
-                .any(|m| owned_read_source(&m.result).is_some())
-        {
-            return false;
-        }
-        if generation >= 26 {
-            return true;
-        }
-        let closed = Oracle(self.0, None);
-        c.type_parameters.is_empty()
-            && c.methods.iter().all(|method| {
-                method
-                    .parameters
-                    .iter()
-                    .map(|parameter| parameter.ty)
-                    .chain([method.result.ty])
-                    .all(|ty| {
-                        self.form(ty)
-                            == Some(&TypeForm::TypeParameter {
-                                parameter: c.self_parameter,
-                            })
-                            || closed.ordinary(ty)
-                    })
-            })
+        generation == crate::platform::canonical_schema::SCHEMA_EPOCH
     }
     pub(super) fn method_type(
         &self,
@@ -1073,9 +1023,11 @@ impl Oracle<'_> {
                     type_arguments,
                     implementations,
                 } => {
-                    if (generation < 28 && !type_arguments.is_empty())
-                        || (generation < 29 && !implementations.is_empty())
-                        || (generation < 33
+                    if (generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                        && !type_arguments.is_empty())
+                        || (generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                            && !implementations.is_empty())
+                        || (generation != crate::platform::canonical_schema::SCHEMA_EPOCH
                             && self.implementation(*implementation).is_some_and(|i| {
                                 self.mixed_contract(i.contract)
                                     || i.type_parameters.iter().any(|id| {
@@ -1091,10 +1043,12 @@ impl Oracle<'_> {
                     pending.extend(implementations.iter().map(|operand| (operand, depth + 1)));
                 }
                 ImplementationOperand::Parameter { scope, parameter } => {
-                    if generation < 29 && self.function(*scope).is_none() {
+                    if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                        && self.function(*scope).is_none()
+                    {
                         return false;
                     }
-                    if generation < 33
+                    if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
                         && (self.function(*scope).is_some_and(|f| {
                             f.implementation_parameters
                                 .iter()
@@ -1188,13 +1142,13 @@ impl Oracle<'_> {
         if scoped.mixed_contract(i.contract)
             && self
                 .declaration_generation(reference)
-                .is_none_or(|v| v < 33)
+                .is_none_or(|v| v != crate::platform::canonical_schema::SCHEMA_EPOCH)
         {
             return false;
         }
         if self
             .declaration_generation(reference)
-            .is_none_or(|v| v < 30)
+            .is_none_or(|v| v != crate::platform::canonical_schema::SCHEMA_EPOCH)
             && c.methods.iter().any(|m| {
                 !matches!(m.effect, FunctionEffect::Pure)
                     && m.parameters
@@ -1246,7 +1200,7 @@ impl Oracle<'_> {
             }
             if self
                 .declaration_generation(reference)
-                .is_none_or(|v| v < 30)
+                .is_none_or(|v| v != crate::platform::canonical_schema::SCHEMA_EPOCH)
                 && f.type_parameters.iter().any(|id| {
                     self.type_parameter(mapping.function.package, *id)
                         .is_none_or(|p| p.constraints != TypeParameterConstraints::Owned)
@@ -1278,9 +1232,9 @@ impl Oracle<'_> {
                             || !target_names.insert(&p.name)
                             || !scoped.satisfies_constraints(*actual, p.constraints)
                             || (Self::ordinary_witness_bounds(p.constraints)
-                                && self
-                                    .declaration_generation(reference)
-                                    .is_none_or(|v| v < 33))
+                                && self.declaration_generation(reference).is_none_or(|v| {
+                                    v != crate::platform::canonical_schema::SCHEMA_EPOCH
+                                }))
                     })
                     || target_bindings.insert(*parameter, *actual).is_some()
                 {
@@ -1452,10 +1406,15 @@ impl Oracle<'_> {
             self.type_parameter(d.package, *id).is_none_or(|p| {
                 p.declaration != d.declaration
                     || p.header.owner != OwnerKey::TypeParameter(*id)
-                    || (p.constraints.requires_transfer() && p.header.contract_version < 22)
+                    || (p.constraints.requires_transfer()
+                        && p.header.contract_version
+                            != crate::platform::canonical_schema::SCHEMA_EPOCH)
                     || (p.constraints.requires_share()
-                        && (p.header.contract_version < 30
-                            || self.declaration_generation(d).is_none_or(|v| v < 30)))
+                        && (p.header.contract_version
+                            != crate::platform::canonical_schema::SCHEMA_EPOCH
+                            || self.declaration_generation(d).is_none_or(|v| {
+                                v != crate::platform::canonical_schema::SCHEMA_EPOCH
+                            })))
             })
         }) {
             return false;
@@ -1488,7 +1447,9 @@ impl Oracle<'_> {
                     .is_some_and(|t| t.constraints.has_owned())
                 && self.valid_contract(p.contract)
                 && (!self.mixed_contract(p.contract)
-                    || self.declaration_generation(d).is_some_and(|v| v >= 33))
+                    || self
+                        .declaration_generation(d)
+                        .is_some_and(|v| v == crate::platform::canonical_schema::SCHEMA_EPOCH))
                 && scoped.contract_application(p.contract, p.self_type, &p.type_arguments)
         })
     }

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use std::collections::BTreeSet;
 
-pub const PACKAGE_CONTRACT_VERSION: u16 = 3;
+pub const PACKAGE_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 #[cfg(test)]
 pub const MAXIMUM_PACKAGE_BYTES: usize = 1_048_576;
 #[cfg(test)]
@@ -681,7 +681,7 @@ mod tests {
     use super::*;
 
     const PACKAGE: &[u8] = br#"{
-  "contract_version": 3,
+  "contract_version": 1,
   "package_id": "1234567890abcdef1234567890abcdef",
   "name": "resource-service",
   "modules": [
@@ -734,7 +734,7 @@ mod tests {
     #[test]
     fn current_contract_rejects_a_predecessor_exactly() {
         let mut value: serde_json::Value = serde_json::from_slice(PACKAGE).expect("fixture json");
-        value["contract_version"] = serde_json::Value::from(1);
+        value["contract_version"] = serde_json::Value::from(3);
         let bytes = serde_json::to_vec(&value).expect("json");
         let error = decode_package(&bytes).expect_err("predecessor rejects");
         assert_eq!(error.code, "package_contract");

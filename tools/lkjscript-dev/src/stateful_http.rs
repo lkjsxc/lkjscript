@@ -1,10 +1,11 @@
-//! Copied-binary stateful HTTP authoring acceptance.
+//! Stateful HTTP acceptance with explicit source-read and copied-candidate evidence.
 
 use crate::authority::{self, AuthorityObservation};
 use crate::error::DevError;
 use crate::evidence::{self, FileProof, VerificationDigest};
 use crate::http_probe;
 use crate::process::{self, ProcessControl, ProcessObservation, ProcessSpec, ProcessStatus};
+use crate::semantic_cli::{self, CallObservation};
 use crate::stateful_http_program::{ProjectReferences, StandardReferences, build_program_request};
 use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
 use serde::{Deserialize, Serialize};
@@ -34,7 +35,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(50);
 const MAXIMUM_CONCURRENT_TASKS: u64 = 8;
 const MAXIMUM_QUEUED_TASKS: u64 = 32;
 pub(crate) const STATEFUL_SCHEMA: &str = "lkjscript-stateful-http-acceptance";
-pub(crate) const STATEFUL_SCHEMA_VERSION: u32 = 6;
+pub(crate) const STATEFUL_SCHEMA_VERSION: u32 = 7;
 const STATEFUL_WORKFLOW: &str = "stateful-http-application";
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
@@ -43,6 +44,7 @@ struct Options {
     binary: PathBuf,
     evidence_root: Option<PathBuf>,
     machine: bool,
+    source_reads: bool,
 }
 
 #[derive(Debug)]
@@ -52,6 +54,7 @@ struct Context {
     observation_root: PathBuf,
     ordinal: u64,
     commands: Vec<CommandEvidence>,
+    source_reads: bool,
 }
 
 #[derive(Debug)]
@@ -64,7 +67,7 @@ struct Output {
 struct CommandEvidence {
     name: String,
     command: Vec<String>,
-    process: ProcessObservation,
+    observation: CallObservation,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -310,6 +313,7 @@ struct StatefulReceipt {
     completed_unix_nanoseconds: u128,
     elapsed_nanoseconds: u64,
     execution_context: String,
+    source_semantic_reads: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     checkout_root: Option<String>,
     evidence_root: String,
@@ -359,7 +363,21 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         MAXIMUM_VERIFIER_BINARY_BYTES,
     )?;
     let (execution_context, checkout_root, binary, evidence_path, observation_root) =
-        if let Some(requested_evidence_root) = &options.evidence_root {
+        if options.source_reads {
+            let repository = repository_root()?;
+            let binary = resolve_binary(Some(&repository), &options.binary)?;
+            let evidence = match &options.evidence_root {
+                Some(path) => create_explicit_evidence_root(path)?,
+                None => new_evidence_directory(&repository)?,
+            };
+            (
+                "source-semantic-reads".to_owned(),
+                Some(repository),
+                binary,
+                evidence.clone(),
+                evidence,
+            )
+        } else if let Some(requested_evidence_root) = &options.evidence_root {
             let binary = resolve_binary(None, &options.binary)?;
             let evidence = create_explicit_evidence_root(requested_evidence_root)?;
             (
@@ -418,6 +436,7 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         observation_root,
         ordinal: 0,
         commands: Vec::new(),
+        source_reads: options.source_reads,
     };
     let mut workflow = if outside_checkout {
         run_authoring(&mut context, &isolated)
@@ -486,6 +505,7 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         completed_unix_nanoseconds: unix_nanoseconds()?,
         elapsed_nanoseconds,
         execution_context,
+        source_semantic_reads: options.source_reads,
         checkout_root: checkout_root.map(|path| path.display().to_string()),
         evidence_root: evidence_path.display().to_string(),
         isolated_root: isolated_text,
@@ -506,6 +526,9 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     };
     let receipt = evidence_path.join("receipt.json");
     let published = evidence::publish_json(&receipt, &receipt_value)?;
+    if options.source_reads && status == StatefulStatus::Passed {
+        read_receipt(&receipt, &binary, &verifier_path, true)?;
+    }
     let receipt_sha256 = sha256_file(&receipt, MAXIMUM_RECEIPT_BYTES)?;
     if options.machine {
         println!(
@@ -542,6 +565,15 @@ pub(crate) fn read_transferred_receipt(
     path: &Path,
     candidate_path: &Path,
     verifier_path: &Path,
+) -> Result<TransferredReceiptBinding, DevError> {
+    read_receipt(path, candidate_path, verifier_path, false)
+}
+
+fn read_receipt(
+    path: &Path,
+    candidate_path: &Path,
+    verifier_path: &Path,
+    source_reads: bool,
 ) -> Result<TransferredReceiptBinding, DevError> {
     let metadata = fs::symlink_metadata(path).map_err(|error| {
         DevError::infrastructure(format!(
@@ -604,13 +636,24 @@ pub(crate) fn read_transferred_receipt(
         && receipt.cleanup.runner_cleanup_complete
         && !receipt.cleanup.raw_secret_values_retained;
     let copied_path = Path::new(&receipt.copied_candidate.file.path);
+    let expected_checkout = if source_reads {
+        Some(repository_root()?.display().to_string())
+    } else {
+        None
+    };
     if canonical_path != expected_path
         || receipt.schema.identity != STATEFUL_SCHEMA
         || receipt.schema.version != STATEFUL_SCHEMA_VERSION
         || receipt.status != StatefulStatus::Passed
         || receipt.workflow != STATEFUL_WORKFLOW
-        || receipt.execution_context != "transferred"
-        || receipt.checkout_root.is_some()
+        || receipt.source_semantic_reads != source_reads
+        || receipt.execution_context
+            != if source_reads {
+                "source-semantic-reads"
+            } else {
+                "transferred"
+            }
+        || receipt.checkout_root != expected_checkout
         || receipt.evidence_root != evidence_root.display().to_string()
         || !receipt.isolated_root_outside_checkout
         || Path::new(&receipt.isolated_root).exists()
@@ -717,11 +760,22 @@ pub(crate) fn read_transferred_receipt(
     if receipt.commands.is_empty() {
         return Err(DevError::corrupt("stateful command evidence missing"));
     }
+    if source_reads
+        && receipt
+            .commands
+            .iter()
+            .all(|command| command.observation.as_semantic().is_none())
+    {
+        return Err(DevError::corrupt("stateful source read evidence missing"));
+    }
     for command in &receipt.commands {
-        evidence::verify_process_files(&evidence_root, &command.process)?;
-        if command.command.first().map(Path::new)
-            != Some(Path::new(&receipt.copied_candidate.file.path))
-        {
+        verify_command_observation(&evidence_root, command, source_reads)?;
+        let expected_executable = if command.observation.as_semantic().is_some() {
+            &receipt.verifier.file.path
+        } else {
+            &receipt.copied_candidate.file.path
+        };
+        if command.command.first().map(Path::new) != Some(Path::new(expected_executable)) {
             return Err(DevError::corrupt("foreign stateful executable"));
         }
     }
@@ -736,6 +790,56 @@ pub(crate) fn read_transferred_receipt(
         data_contract: result.live.data_contract.clone(),
         cleanup_complete,
     })
+}
+
+fn source_read_arguments(command: &[String]) -> bool {
+    matches!(command, [_, project_flag, project, operation, ..]
+        if project_flag == "--project"
+            && Path::new(project).is_absolute()
+            && !has_noncanonical_component(Path::new(project))
+            && matches!(operation.as_str(), "query" | "inspect"))
+        || matches!(command, [_, package, builtin, operation, ..]
+            if package == "package" && builtin == "builtin"
+                && matches!(operation.as_str(), "query" | "inspect"))
+}
+
+fn verify_command_observation(
+    root: &Path,
+    command: &CommandEvidence,
+    source_reads: bool,
+) -> Result<(), DevError> {
+    if let Some(process) = command.observation.as_process() {
+        return evidence::verify_process_files(root, process);
+    }
+    if !source_reads || !source_read_arguments(&command.command) {
+        return Err(DevError::corrupt(
+            "stateful semantic observation cannot certify a candidate or mutable operation",
+        ));
+    }
+    let call = &command.observation;
+    call.require_arguments(&command.command[1..])?;
+    call.require_outcome(call.returned_success())?;
+    if call.elapsed_nanoseconds() > COMMAND_TIMEOUT.as_nanos() as u64 {
+        return Err(DevError::corrupt(
+            "stateful source read exceeded its command time bound",
+        ));
+    }
+    for file in [call.stdout(), call.stderr()] {
+        let path = Path::new(&file.path);
+        if path.components().count() != 1
+            || !matches!(path.components().next(), Some(Component::Normal(_)))
+            || file.kind != evidence::FileKind::File
+            || evidence::proof(&root.join(path), file.path.clone())? != *file
+        {
+            return Err(DevError::corrupt(
+                "stateful source response evidence changed",
+            ));
+        }
+    }
+    call.require_public_response(&records(&process::read_bounded(
+        &root.join(&call.stdout().path),
+        MAXIMUM_OUTPUT_BYTES,
+    )?)?)
 }
 
 fn stateful_topology_is_current(topology: &TopologyObservation) -> bool {
@@ -2646,38 +2750,6 @@ struct ActiveRunner {
     stderr_path: PathBuf,
 }
 
-/// Reuse the maintained HTTP supervision and shutdown checks for another graph-authored
-/// fixture. The offline-package owner retains its requests, exact expectations and receipt.
-pub(crate) fn recursive_round(
-    binary: &Path,
-    standalone: &Path,
-    evidence_root: &Path,
-    label: &str,
-    exercise: impl FnOnce(SocketAddr) -> Result<Value, DevError>,
-) -> Result<Value, DevError> {
-    let mut context = Context {
-        binary: binary.to_path_buf(),
-        evidence: evidence_root.to_path_buf(),
-        observation_root: evidence_root.to_path_buf(),
-        ordinal: 0,
-        commands: Vec::new(),
-    };
-    let (mut runner, address) = ActiveRunner::start(
-        &mut context,
-        label,
-        &standalone.join("service.deployment.json"),
-        standalone,
-        BTreeMap::from([("LANG".into(), "C.UTF-8".into())]),
-    )?;
-    let result = exercise(address);
-    let stopped = runner.stop();
-    let result = result?;
-    let stopped = stopped?;
-    let value = json!({"observations":result,"cleanup_complete":true,"runtime":stopped.runtime,"matcher_nodes":stopped.matcher_nodes});
-    evidence::publish_json(&evidence_root.join(format!("{label}.json")), &value)?;
-    Ok(value)
-}
-
 impl ActiveRunner {
     fn start(
         context: &mut Context,
@@ -3351,7 +3423,7 @@ impl Context {
         let mut command = vec![self.binary.display().to_string()];
         command.extend(arguments.iter().map(|value| value.as_ref().to_owned()));
         let (observation, output) = self.observe_command(name, command, cwd, environment)?;
-        if observation.status == ProcessStatus::Passed {
+        if observation.returned_success() {
             return Err(DevError::corrupt(format!(
                 "stateful HTTP negative step '{name}' unexpectedly succeeded"
             )));
@@ -3374,7 +3446,7 @@ impl Context {
         command: Vec<String>,
         cwd: &Path,
         environment: BTreeMap<String, String>,
-    ) -> Result<(ProcessObservation, Output), DevError> {
+    ) -> Result<(CallObservation, Output), DevError> {
         let recorded_command = command.clone();
         self.observe_command_with_record(name, command, recorded_command, cwd, environment)
     }
@@ -3383,10 +3455,10 @@ impl Context {
         &mut self,
         name: &str,
         command: Vec<String>,
-        recorded_command: Vec<String>,
+        mut recorded_command: Vec<String>,
         cwd: &Path,
         environment: BTreeMap<String, String>,
-    ) -> Result<(ProcessObservation, Output), DevError> {
+    ) -> Result<(CallObservation, Output), DevError> {
         let ordinal = self.ordinal;
         self.ordinal = self.ordinal.saturating_add(1);
         let safe = name
@@ -3405,25 +3477,46 @@ impl Context {
         let stderr_path = self
             .evidence
             .join(format!("{ordinal:03}-{safe}.stderr.log"));
-        let specification = ProcessSpec {
-            command: command.clone(),
-            cwd: cwd.to_path_buf(),
-            environment,
-            timeout: COMMAND_TIMEOUT,
-            maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
-            maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
-            stdout_path: stdout_path.clone(),
-            stderr_path,
-            unavailable_exit_code: None,
+        let observation = if self.source_reads
+            && source_read_arguments(&command)
+            && environment == BTreeMap::from([("LANG".to_owned(), "C".to_owned())])
+        {
+            recorded_command[0] = current_verifier()?.display().to_string();
+            let observed = semantic_cli::execute_with_cancellation(
+                &command[1..],
+                None,
+                &stdout_path,
+                &stderr_path,
+                &self.observation_root,
+                std::future::pending(),
+            )?;
+            if observed.elapsed_nanoseconds() > COMMAND_TIMEOUT.as_nanos() as u64 {
+                return Err(DevError::corrupt(
+                    "stateful source read exceeded its command time bound",
+                ));
+            }
+            observed
+        } else {
+            let specification = ProcessSpec {
+                command: command.clone(),
+                cwd: cwd.to_path_buf(),
+                environment,
+                timeout: COMMAND_TIMEOUT,
+                maximum_stdout_bytes: MAXIMUM_OUTPUT_BYTES,
+                maximum_stderr_bytes: MAXIMUM_OUTPUT_BYTES,
+                stdout_path: stdout_path.clone(),
+                stderr_path,
+                unavailable_exit_code: None,
+            };
+            CallObservation::Process(process::run(&specification, &self.observation_root))
         };
-        let observation = process::run(&specification, &self.observation_root);
         let output = Output {
             bytes: process::read_bounded(&stdout_path, MAXIMUM_OUTPUT_BYTES)?,
         };
         self.commands.push(CommandEvidence {
             name: name.to_owned(),
             command: recorded_command,
-            process: observation.clone(),
+            observation: observation.clone(),
         });
         Ok((observation, output))
     }
@@ -3431,19 +3524,22 @@ impl Context {
     fn require_status(
         &self,
         name: &str,
-        observation: ProcessObservation,
+        observation: CallObservation,
         expected: ProcessStatus,
     ) -> Result<(), DevError> {
-        if observation.status == ProcessStatus::Unavailable {
+        let Some(process) = observation.as_process() else {
+            return observation.require_outcome(expected == ProcessStatus::Passed);
+        };
+        if process.status == ProcessStatus::Unavailable {
             return Err(DevError::unavailable(format!(
                 "stateful HTTP step '{name}' is unavailable; inspect {}",
                 self.evidence.display()
             )));
         }
-        if observation.status != expected {
+        if process.status != expected {
             return Err(DevError::corrupt(format!(
                 "stateful HTTP step '{name}' ended as {:?}; inspect {}",
-                observation.status,
+                process.status,
                 self.evidence.display()
             )));
         }
@@ -3522,6 +3618,7 @@ fn parse_options(arguments: impl Iterator<Item = OsString>) -> Result<Options, D
     let mut binary = None;
     let mut evidence_root = None;
     let mut machine = false;
+    let mut source_reads = false;
     let mut arguments = arguments;
     while let Some(argument) = crate::next_utf8(&mut arguments, "stateful HTTP option")? {
         match argument.as_str() {
@@ -3541,6 +3638,7 @@ fn parse_options(arguments: impl Iterator<Item = OsString>) -> Result<Options, D
             }
             "--machine" if !machine => machine = true,
             "--machine" => return Err(DevError::usage("duplicate --machine option")),
+            "--source-reads" if !source_reads => source_reads = true,
             other => return Err(DevError::usage(format!("unknown option '{other}'"))),
         }
     }
@@ -3548,6 +3646,7 @@ fn parse_options(arguments: impl Iterator<Item = OsString>) -> Result<Options, D
         binary: binary.unwrap_or_else(|| PathBuf::from("target/release/lkjscript")),
         evidence_root,
         machine,
+        source_reads,
     })
 }
 
@@ -3859,7 +3958,7 @@ mod tests {
         };
         assert_eq!(
             serde_json::to_string(&schema).expect("encode stateful schema"),
-            r#"{"identity":"lkjscript-stateful-http-acceptance","version":6}"#
+            r#"{"identity":"lkjscript-stateful-http-acceptance","version":7}"#
         );
         assert_eq!(STATEFUL_WORKFLOW, "stateful-http-application");
     }
@@ -3869,6 +3968,9 @@ mod tests {
         let parsed =
             parse_options([OsString::from("--machine")].into_iter()).expect("stateful options");
         assert!(parsed.machine);
+        assert!(!parsed.source_reads);
+        assert!(options(&["--source-reads"]).unwrap().source_reads);
+        assert!(options(&["--source-reads", "--source-reads"]).is_err());
         assert!(parsed.evidence_root.is_none());
         assert!(parse_options([OsString::from("--unknown")].into_iter()).is_err());
         assert!(options(&["--binary"]).is_err());
@@ -3879,6 +3981,82 @@ mod tests {
         assert!(options(&["--evidence-root", "/tmp/one", "--evidence-root", "/tmp/two"]).is_err());
         assert!(options(&["--machine", "--machine"]).is_err());
         assert!(resolve_binary(None, Path::new("relative-candidate")).is_err());
+    }
+
+    #[test]
+    fn source_reads_bind_authority_and_bytes_without_certifying_candidate_execution() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path();
+        let project = root.join("project");
+        lkjscript::platform::execute_new(&[
+            project.display().to_string(),
+            "--template".into(),
+            "minimal".into(),
+        ])
+        .unwrap();
+        let head = fs::read(project.join("HEAD")).unwrap();
+        let evidence = root.join("evidence");
+        fs::create_dir(&evidence).unwrap();
+        let binary = root.join("absent-candidate");
+        let mut context = Context {
+            binary: binary.clone(),
+            evidence: evidence.clone(),
+            observation_root: evidence.clone(),
+            ordinal: 0,
+            commands: Vec::new(),
+            source_reads: true,
+        };
+        let command = [
+            binary.display().to_string(),
+            "--project".into(),
+            project.display().to_string(),
+            "query".into(),
+            "owners".into(),
+        ];
+        let environment = BTreeMap::from([("LANG".into(), "C".into())]);
+        let (observation, _) = context
+            .observe_command("read", command.to_vec(), root, environment.clone())
+            .unwrap();
+        observation.require_outcome(true).unwrap();
+        assert!(observation.as_semantic().is_some());
+        let recorded = &context.commands[0];
+        verify_command_observation(&evidence, recorded, true).unwrap();
+        assert!(verify_command_observation(&evidence, recorded, false).is_err());
+        let mut substituted = recorded.clone();
+        substituted.command[3] = "change".into();
+        assert!(verify_command_observation(&evidence, &substituted, true).is_err());
+        substituted = recorded.clone();
+        substituted.command[2] = root.join("foreign-project").display().to_string();
+        assert!(verify_command_observation(&evidence, &substituted, true).is_err());
+        let response = evidence.join(&observation.stdout().path);
+        let original = fs::read(&response).unwrap();
+        fs::write(&response, b"substituted response").unwrap();
+        assert!(verify_command_observation(&evidence, recorded, true).is_err());
+        fs::write(&response, original).unwrap();
+        verify_command_observation(&evidence, recorded, true).unwrap();
+
+        for (name, source_reads, operation, environment) in [
+            ("candidate", false, "query", environment.clone()),
+            ("mutation", true, "change", environment.clone()),
+            (
+                "environment",
+                true,
+                "query",
+                BTreeMap::from([("FOREIGN".into(), "value".into())]),
+            ),
+        ] {
+            context.source_reads = source_reads;
+            let mut invocation = command.to_vec();
+            invocation[3] = operation.into();
+            let (observed, _) = context
+                .observe_command(name, invocation, root, environment)
+                .unwrap();
+            assert_eq!(
+                observed.as_process().unwrap().status,
+                ProcessStatus::Unavailable
+            );
+        }
+        assert_eq!(fs::read(project.join("HEAD")).unwrap(), head);
     }
 
     #[test]

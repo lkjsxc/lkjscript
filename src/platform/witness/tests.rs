@@ -51,10 +51,7 @@ fn witness_contract_domains_are_closed_and_unique() {
             "missing obligation {obligation}"
         );
     }
-    assert_ne!(
-        crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH,
-        [0; 32]
-    );
+    assert_eq!(crate::platform::canonical_schema::SCHEMA_EPOCH, 1);
     assert_ne!(
         crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH,
         [0; 32]

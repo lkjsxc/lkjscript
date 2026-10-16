@@ -9,8 +9,7 @@ fn find(public: &Native, class: &str, name: &str, parent: Option<&str>) -> Strin
     compact_field(compact_record(&public.cli(&args, true), "owner"), "id").to_owned()
 }
 
-fn fixture() -> Native {
-    let public = Native::new();
+fn fixture(public: Native) -> Native {
     let input = public.input(
         "create.lkjc",
         &format!("request base={}\n{COMPLETE}", public.revision()),
@@ -30,7 +29,7 @@ fn draft(public: &Native, file: &str, selectors: &[&str]) -> String {
 
 #[test]
 fn named_drafts_equal_exact_selections_and_keep_canonical_order() {
-    let public = fixture();
+    let public = fixture(Native::new());
     let module = find(&public, "module", "app", None);
     let hello = find(&public, "declaration", "hello", Some(&module));
     let target = find(&public, "target", "main", None);
@@ -78,7 +77,7 @@ fn named_drafts_equal_exact_selections_and_keep_canonical_order() {
 
 #[test]
 fn named_drafts_reject_missing_malformed_and_partial_selections_without_output() {
-    let public = fixture();
+    let public = fixture(Native::new());
     let head = std::fs::read(public.project.join("HEAD")).unwrap();
     let output = public.root.path().join("absent.lkjc");
     for selectors in [
@@ -154,7 +153,7 @@ fn named_drafts_reject_missing_malformed_and_partial_selections_without_output()
 
 #[test]
 fn named_drafts_keep_module_target_and_declaration_namespaces_distinct() {
-    let public = fixture();
+    let public = fixture(Native::memory());
     let input = public.input(
         "namespaces.lkjc",
         &format!(
@@ -208,7 +207,7 @@ declarations.end
 
 #[test]
 fn named_drafts_do_not_retarget_an_old_proposal_after_rename() {
-    let public = fixture();
+    let public = fixture(Native::memory());
     let module = find(&public, "module", "app", None);
     let hello = find(&public, "declaration", "hello", Some(&module));
     let original = draft(&public, "old.lkjc", &["--declaration", "app::hello"]);

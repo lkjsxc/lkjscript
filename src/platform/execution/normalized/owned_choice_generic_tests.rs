@@ -141,6 +141,28 @@ fn owned_choice_quota_failure_releases_nested_payloads_in_both_engines() {
     use std::sync::Mutex;
     let source = byte_buffer_tests::author_only(INPUT).unwrap();
     let program = prepare_snapshot(&source);
+    // The immutable borrow keeps the complete independently admitted source fixed
+    // throughout the sweep. Each invocation still charges all schema work and
+    // creates fresh VM/reference state under its selected byte limit.
+    struct PreparedSource<'a> {
+        source: &'a crate::platform::kernel::KernelSnapshot,
+        schema: Arc<super::super::NormalizedReferenceSchema>,
+    }
+    impl NormalizedReferenceRead for PreparedSource<'_> {
+        fn binding(&self) -> Result<NormalizedReferenceBinding, ExecutionError> {
+            self.source.binding()
+        }
+        fn owner(&self, owner: OwnerKey) -> Result<NormalizedReferenceOwnerRead, ExecutionError> {
+            self.source.owner(owner)
+        }
+        fn schema(&self) -> Result<Arc<super::super::NormalizedReferenceSchema>, ExecutionError> {
+            Ok(Arc::clone(&self.schema))
+        }
+    }
+    let authority = PreparedSource {
+        source: &source,
+        schema: source.schema().unwrap(),
+    };
     let entry = declaration_named(&source, "abandoned");
     let control = ExecutionControl::uncancelled();
     for reference in [false, true] {
@@ -153,9 +175,10 @@ fn owned_choice_quota_failure_releases_nested_payloads_in_both_engines() {
             let composites = super::super::owned_product::StorageObservation::start();
             let observer = Mutex::new(None);
             let (result, allocated) = if reference {
-                let result = NormalizedReferenceInterpreter::new(&source, &program, policy)
-                    .observing_checked(&observer)
-                    .invoke(entry, vec![], None, &control);
+                let result =
+                    NormalizedReferenceInterpreter::from_reader(&authority, &program, policy)
+                        .observing_checked(&observer)
+                        .invoke(entry, vec![], None, &control);
                 let observed = observer.into_inner().unwrap().unwrap();
                 assert_eq!(observed.live_call_frames_after, 0);
                 assert_eq!(observed.live_transactions_after, 0);

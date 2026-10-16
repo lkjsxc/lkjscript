@@ -561,7 +561,7 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
     }
 
     fn current_generation(&self, generation: u16) -> Result<(), Diagnostic> {
-        if !matches!(generation, 33 | 34) {
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH {
             return Err(Diagnostic::new(
                 DiagnosticClass::Semantic,
                 "kernel_owned_associated_generation",

@@ -469,8 +469,10 @@ impl<'a> Resolver<'a> {
         let property = occurrence.context == Context::Forbidden
             && matches!(key, OwnerKey::Declaration(id) if occurrence.parameter_scope == Some(DeclarationReference { package, declaration: id }))
             && self.header(package, key, true)?.kind == OwnerKind::ReadView;
-        if self.header(package, key, property)?.contract_version == 34
-            && self.source.root.graph_contract_version == 34
+        if self.header(package, key, property)?.contract_version
+            == crate::platform::canonical_schema::SCHEMA_EPOCH
+            && self.source.root.graph_contract_version
+                == crate::platform::canonical_schema::SCHEMA_EPOCH
         {
             Ok(())
         } else {

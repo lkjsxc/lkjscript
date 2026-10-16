@@ -5,7 +5,7 @@ const ABSTRACT: &str = include_str!("../fixtures/owned-parameters-abstract.lkjc"
 
 #[test]
 fn native_owned_parameters_work_without_concrete_carriers_or_dependencies() {
-    let public = Native::new();
+    let public = Native::memory();
     let input = public.input(
         "abstract.lkjc",
         &format!("request base={}\n{ABSTRACT}", public.revision()),
@@ -59,7 +59,7 @@ fn native_owned_parameters_work_without_concrete_carriers_or_dependencies() {
 
 #[test]
 fn native_owned_parameters_reject_symbolic_copy_loans_aliases_and_containers() {
-    let public = Native::new();
+    let public = Native::memory();
     let before = public.revision();
     const DISCARD: &str = r#"
       (function create discard (visibility private)
@@ -197,7 +197,7 @@ fn native_owned_parameters_reject_symbolic_copy_loans_aliases_and_containers() {
 
 #[test]
 fn native_owned_constraint_change_rechecks_previously_valid_ordinary_body() {
-    let public = Native::new();
+    let public = Native::memory();
     let input = public.input(
         "ordinary.lkjc",
         &format!(

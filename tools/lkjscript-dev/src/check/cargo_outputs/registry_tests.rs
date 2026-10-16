@@ -25,51 +25,33 @@ fn all_declared_cargo_executables_require_machine_records_before_test_arguments(
                     .count(),
                 1
             );
-            let profile = if gate.name == "release_build" {
-                "release"
-            } else {
-                "debug"
-            };
-            assert_eq!(
-                gate.required_outputs,
-                [target.join(profile).join("lkjscript")]
-            );
+            assert_eq!(gate.required_outputs, [target.join("release/lkjscript")]);
         }
     }
-    assert_eq!(producers, ["release_build", "release_command_lifecycle"]);
+    assert_eq!(producers, ["release_build"]);
     let product = registry.gate("release_build")?;
     assert_eq!(
-        &product.command[..9],
+        &product.command[..8],
         [
             "cargo",
             "build",
-            "--package",
-            "lkjscript",
-            "--bin",
-            "lkjscript",
             "--release",
+            "--workspace",
+            "--all-targets",
+            "--all-features",
             "--locked",
             "--message-format=json"
         ]
     );
     let lifecycle = registry.gate("release_command_lifecycle")?;
-    assert!(
+    assert_eq!(lifecycle.command[0], super::super::cargo_tests::COMMAND);
+    assert!(lifecycle.required_outputs.is_empty());
+    assert_eq!(
         lifecycle
-            .command
-            .iter()
-            .any(|argument| argument == "--workspace")
-    );
-    assert!(
-        lifecycle
-            .command
-            .iter()
-            .any(|argument| argument == "--all-features")
-    );
-    assert!(
-        !lifecycle
-            .command
-            .iter()
-            .any(|argument| argument == "--release")
+            .cargo_test
+            .as_ref()
+            .map(|test| test.producer.as_str()),
+        Some("release_build")
     );
     let requested = profile("full").expect("full profile");
     let identity = registry

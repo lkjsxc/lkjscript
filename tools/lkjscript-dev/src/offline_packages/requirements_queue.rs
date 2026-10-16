@@ -62,7 +62,7 @@ pub(super) fn workflow(context: &mut Context, bundle: &Path) -> Result<(), DevEr
                 .evidence
                 .join(format!("requirement-{target}.deployment.json")),
         )?;
-        commands.push(context.receipt.commands.len());
+        commands.push(context.command_index());
         let result = context.cli(
             None,
             &[

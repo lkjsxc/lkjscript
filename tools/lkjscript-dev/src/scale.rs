@@ -1375,8 +1375,8 @@ fn attach_oracle(
     });
     let requested_equal = &observed == requested;
     logical.oracle = Some(oracle_evidence(inventory));
-    let catalog_equal = catalog.identity == "lkjscript-object-catalog-2"
-        && catalog.contract_version == 2
+    let catalog_equal = catalog.identity == "lkjscript-object-catalog"
+        && catalog.contract_version == lkjscript::platform::canonical_schema::SCHEMA_EPOCH
         && catalog.state == "loaded"
         && catalog.segments <= catalog.maximum_live_segments
         && catalog.maximum_lookup_segments == catalog.segments

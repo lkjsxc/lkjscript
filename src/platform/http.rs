@@ -13,7 +13,7 @@ use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-pub const HTTP_ADAPTER_CONTRACT_VERSION: u16 = 3;
+pub const HTTP_ADAPTER_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_HTTP_BODY_BYTES: usize = 64 * 1024 * 1024;
 pub const MAXIMUM_HTTP_HEADER_BYTES: usize = 256 * 1024;
 pub const MAXIMUM_HTTP_HEADERS: usize = 1_024;

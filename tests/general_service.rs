@@ -176,8 +176,12 @@ fn checked_in_service_artifact_uses_current_bundle_contract() {
     let bytes = std::fs::read(repository().join(ARTIFACT)).expect("read maintained artifact");
     assert_eq!(bytes.get(..8), Some(b"LKJARTFC".as_slice()));
     assert_eq!(
-        bytes.get(8..40),
-        Some(lkjscript::platform::canonical_schema::CANONICAL_SCHEMA_HASH.as_slice()),
+        bytes.get(8..10),
+        Some(
+            lkjscript::platform::canonical_schema::SCHEMA_EPOCH
+                .to_le_bytes()
+                .as_slice()
+        ),
     );
     lkjscript::platform::contributor::strict_artifact_admission_probe(&bytes)
         .expect("strict current service artifact admission");

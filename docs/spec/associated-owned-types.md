@@ -182,84 +182,36 @@ The compact counterparts are `owned.associated-member`,
 `type.associated-witness-projection`; their fields belong to the maintained
 discovery registry. Parsing a proposal does not establish semantic admission.
 
-Feature-bearing authored intent selects `LKJACR38`. Nonempty inventories select
-operation tags 100/101 for Create contract/implementation and 102/103 for Set;
-these encode all current fields and the complete inventory. The two authored type
-forms use tags 25/26. Empty inventories with ordinary types keep their existing
-operation tags, traversal and commitment bytes; no empty extension list is
-appended to the frozen encoding.
+Authored intent, owners, types, interfaces, compiler units, bytecode and artifacts
+share the single current schema epoch 1. Contract and implementation records
+always encode their complete associated inventories inline, including empty
+inventories. Associated member and witness-projection types use the ordinary
+current type record. Full consumption and canonical re-encoding are required.
+Member identities retain the `assoc_type_` domain; all-zero remains reserved.
 
-The separate reader capability is lkjscript-owned-associated-types-1, version 1.
-Its supported profile combines the frozen Graph33, Interface21, CompilerUnit33,
-Bytecode27, Artifact40 and Manifest3 base with the added object contracts below.
-Advertisement is discovery, not proof. Every owner/interface consumer of either
-new type form requires Graph33 under complete closure admission, including nested
-and unused digest references; a newer referenced object does not upgrade its owner.
+Exact dependencies bind package, semantic revision and package revision.
+Complete admission checks consuming owners and interfaces, supplier owners,
+contract/member/witness identities, lexical scopes and every referenced type,
+including unused bindings. Discovery and checksums grant no semantic authority.
+Every encoded participant must use the current epoch.
 
-A DependencyRecord's graph generation describes the binding's encoding, not an
-associated capability grant or the selected supplier's semantic generation. A
-supported earlier dependency encoding may select a current supplier through the
-same exact package, semantic-revision and package-revision bindings. Complete
-associated admission checks the actual consuming owners and interfaces, associated
-supplier owners and their containing semantic revision generations, and exact
-contract/member/witness identities. Merely naming an associated contract in a
-descriptor without consuming a new type form does not itself require Graph33 at
-that naming owner.
+Owner, interface and compiler-unit records retain complete headers, declaration
+metadata, ordered fields and inline inventories. Type records retain all authority
+coordinates above. Current owner 4 MiB, interface 1 MiB, unit 8 MiB, type 1 MiB
+and depth/work limits remain. All binding RHS roots enter source/interface
+admission and lowering tables. Summaries and compiler keys bind the complete
+inventory; inventory-only changes invalidate downstream reuse.
 
-| Object | Extension magic | Checksum domain |
-| --- | --- | --- |
-| Parent contract/implementation | LKJOAT01 | lkjscript.kernel.owned-associated-owner-envelope.v1 |
-| Associated type | LKJTAT01 | lkjscript.kernel.owned-associated-type-envelope.v1 |
-| Public interface parent | LKJPAT01 | lkjscript.package-interface-associated-owner-envelope.v1 |
-| Compiler unit parent | LKJCAU01 | lkjscript.compiler-unit-associated-envelope.v1 |
+Kernel, interface and compiler readers independently check inventories, roots,
+scope and canonical/interface/compiled correspondence. Rehashed inventory loss,
+foreign epochs, member/scope swaps, hidden projections, invalid unused bindings
+and missing/extra imported objects reject.
 
-Each uses packed envelope version 1 and a canonical extension body beginning with
-u16 version 1 and an explicit u8 tag: 1 contract, 2 implementation; type tags are
-1 contract member, 2 lexical projection. Parent bodies retain exact header/module/
-name/visibility, frozen base fields and inventory; interface bodies retain base
-version21, header/name, base fields and inventory; unit bodies retain the current
-prefix through optimization, exact tables, base fields and inventory. Type bodies
-retain the complete authority coordinates shown above. Full consumption and exact
-canonical re-encoding are required. Existing enum ordinals remain unchanged;
-TypeForm appends member25/projection26 with form generation1. Member ids use
-assoc_type_, allocation domain owned_associated_type and binary domain tag23;
-all-zero remains reserved.
-
-One logical contract/implementation model serves both wire paths. Empty parent
-inventories use exact existing base bytes only; nonempty inventories use extension
-bytes only. Frozen base codecs and historical converters reject nonempty inventory
-rather than erase it. New type forms never use old type envelopes. Ordinary
-function owners/interfaces/units retain their existing shape when their signatures
-reference new type digests. No opcode, artifact flag or object domain is added.
-Current owner4MiB/interface1MiB/unit8MiB/type1MiB and depth/work limits remain.
-
-All binding RHS roots enter source/interface closure admission and lowering tables,
-including unused bindings. New type references retain exact contract relations and
-lexical scope relations without inventing child owners or dependencies. Nonempty
-summary material binds the full extension body and implementation bindings;
-empty base dimensions and ownership aggregation remain byte-identical. Associated
-parent unit keys use lkjscript.compiler-unit-associated-key.v1 over version/tag
-and the existing key core. Select from canonical inventory before lowering and
-recheck from full unit payload; ordinary keys retain their base derivation.
-
-Kernel, public interface and compiler readers independently check inventories,
-roots, scope and exact canonical/interface/compiled correspondence. Consistently
-rehashed inventory loss, wrong tags/versions, empty extensions, member/scope swaps,
-stored hidden projections, invalid unused bindings and missing/extra imported
-objects reject. Inventory-only changes invalidate the appropriate summaries and
-downstream reuse. Integrity hashes cannot authorize unsupported semantics.
-
-Validator39 sealed the earlier associated inventory at
-witness_selected_owned_associated_types version1. Validator40 renews that feature
-at version2 for complete associated semantic admission while retaining
-Graph33/Witness9/Summary11 encodings and their digest domains. A supported
-Validator39 envelope still authenticates historical acceptance; its seal is not
-current proof. Current repository contexts, artifact admission and incremental
-witness reuse require the renewed validator digest. Revalidation rebuilds proof
-without changing accepted HEAD or canonical meaning, and complete source import
-rebuilds its witness independently. Public authoring/discovery selects
-compact41/authored38. The unchanged genuine embedded
-planner must first load through independent artifact admission, then support
-ordinary public rebuilding of feature-bearing assets. No header patch, proof
-relabeling, skipped admission or host-planning fallback is allowed. Feature-free
-base bytes and builtin-standard source-to-artifact equality remain mandatory.
+Persisted acceptance and a matching epoch are not current semantic proof.
+Revalidation rebuilds proof under the current validator without changing accepted
+HEAD or canonical meaning. Complete source import independently rebuilds its
+witness. Process proof reuse binds the implementation, exact source objects and
+used transport selections. The embedded planner and standard artifact undergo
+independent artifact admission and source-to-artifact comparison. Maintained
+assets are rebuilt through ordinary product owners, without header patching,
+proof relabeling, skipped admission or a host-planning fallback.

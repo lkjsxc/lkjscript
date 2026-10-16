@@ -55,7 +55,7 @@ impl Witness {
     ) -> Result<Vec<CompactRecord>, DevError> {
         require(
             self.commands
-                .insert(label.to_owned(), context.receipt.commands.len())
+                .insert(label.to_owned(), context.command_index())
                 .is_none(),
             "duplicate persistent-map command label",
         )?;
@@ -139,7 +139,7 @@ impl Witness {
             package: package.id.clone(),
             revision: package.revision.clone(),
             logical: package.logical.clone(),
-            inventory: context.receipt.inventories.len() - 1,
+            inventory: context.inventory_index() - 1,
         });
         Ok(())
     }

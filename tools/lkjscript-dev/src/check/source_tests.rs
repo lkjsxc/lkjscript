@@ -14,7 +14,7 @@ fn declared_semantic_receipt_paths_cannot_be_selected_by_recorded_output_claims(
     gate.required_outputs = vec![path.clone()];
     let proof = evidence::proof(&path, evidence::relative(&repository, &path)).unwrap();
     assert_eq!(
-        declared_output(&repository, &gate, &[proof.clone()])
+        declared_output(&repository, &gate, std::slice::from_ref(&proof))
             .unwrap()
             .0,
         path

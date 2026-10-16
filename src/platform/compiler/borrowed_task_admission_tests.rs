@@ -229,7 +229,7 @@ fn borrowed_task_artifact_requires_the_current_scoped_child_envelope() {
     for (position, expected) in [
         (0, "artifact_bundle_contract"),
         (8, "artifact_bundle_schema"),
-        (40, "artifact_bundle_flags"),
+        (10, "artifact_bundle_flags"),
     ] {
         let mut invalid = current.clone();
         invalid[position] ^= 1;

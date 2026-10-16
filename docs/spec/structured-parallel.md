@@ -177,32 +177,24 @@ caller. They are invocation totals, not physical thread starts or simultaneous
 workers. Pool observations separately report physical starts, received/handed-off custody,
 active/peak dispatches, completions, inline fallbacks, and remaining/joined workers.
 Before observational counter saturation, started plus received equals joined plus
-handed off plus remaining. Shared-runtime observation 3 and CLI observation 43
-select these added fields; an owner need not join a worker it already handed off. CLI observation 36
-intentionally replaces the former `parallel_workers_spawned` field rather than
-changing its meaning. Allocated bytes model admitted cumulative storage, not RSS
+handed off plus remaining. Current runtime and CLI observations expose these distinct fields; an owner need not
+join a worker it already handed off. Allocated bytes model admitted cumulative storage, not RSS
 or allocator overhead; thread stacks and system scheduling costs are not that metric.
 Admission must check the complete canonical closure before live execution, including
 unused task declarations and untaken expressions. Strict artifact loading also
 reconstructs canonical control, so retargeting or erasing a compiled parallel
 instruction cannot be authorized by recomputing hashes.
 
-The following encoding selections describe the original consuming-child and worker
-increments. Graph 21 introduced the expression; Graph 22 adds explicit transferable constraints.
-Compiler 22, bytecode 17 and artifact 29 carry child type and implementation operands
-alongside the parallel-result type. Strict loaders reconstruct these from canonical
-applications, including unused declarations and untaken branches. Validator 27
-renews admission. Compiler-unit 21 and earlier reject before current payload decoding;
-earlier derived artifacts require rebuilding from accepted meaning. Transfer-bearing
-requests select authored codec 26; compact discovery 30 and function projection 12
-advertise the constraints. Worker reuse changes no semantic, compiler or artifact
-encoding; CLI observations 36 and shared-runtime observations 2 describe its lifecycle.
-Existing nonparallel authored intent retains its bytes. This does not upgrade exact
-package selections, replace running services or publish a new public executable.
-Shareable constraints and borrowed child signatures select their current advertised
-owner and derived-admission generations. Older formats cannot gain scoped read
-authority by rehashing metadata; the exact cut belongs to the encoding owners and
-product discovery.
+Parallel expressions, child type and implementation operands, results, transfer
+and sharing constraints, and borrowed signatures use inline current records.
+Owners, requests, compiler units, bytecode, artifacts and validation material
+share schema epoch 1. Strict loaders reconstruct complete applications, including
+unused declarations and untaken branches. Foreign epochs reject; checksums cannot
+grant scoped read or transfer authority.
+
+Worker reuse changes only process execution state. It does not alter canonical
+meaning, upgrade exact package selections, replace running services or publish a
+new executable. Maintained derived assets are rebuilt through ordinary owners.
 
 Acceptance separates canonical and independent semantic checks, rehashed-artifact
 attacks including erased sharing obligations, forged read/consume modes or result

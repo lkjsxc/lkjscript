@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-pub(crate) const CHECK_CONTRACT_VERSION: u32 = 8;
-pub(crate) const CACHE_CONTRACT_VERSION: u32 = 4;
+pub(crate) const CHECK_CONTRACT_VERSION: u32 = 16;
+pub(crate) const CACHE_CONTRACT_VERSION: u32 = 5;
 pub(crate) const DEFAULT_TIMEOUT: Duration = Duration::from_secs(3_600);
 pub(crate) const DEFAULT_MAXIMUM_STREAM_BYTES: u64 = 64 * 1024 * 1024;
 pub(crate) const MAXIMUM_WORKERS: usize = 8;
@@ -27,6 +27,7 @@ pub(crate) struct Gate {
     pub(crate) cacheable: bool,
     pub(crate) required_outputs: Vec<PathBuf>,
     pub(crate) required_inputs: Vec<GateInput>,
+    pub(crate) cargo_test: Option<CargoTestInput>,
     pub(crate) environment: BTreeMap<String, String>,
     pub(crate) unavailable_exit_code: Option<i32>,
 }
@@ -44,6 +45,7 @@ impl Gate {
             cacheable: true,
             required_outputs: Vec::new(),
             required_inputs: Vec::new(),
+            cargo_test: None,
             environment: BTreeMap::new(),
             unavailable_exit_code: None,
         }
@@ -60,6 +62,14 @@ impl Gate {
 pub(crate) struct GateInput {
     pub(crate) path: PathBuf,
     pub(crate) producer: String,
+}
+
+/// A test executable selected and digested by an admitted Cargo producer.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CargoTestInput {
+    pub(crate) producer: String,
+    pub(crate) target: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -277,6 +287,7 @@ pub(crate) struct DagNode {
     pub(crate) dependencies: Vec<String>,
     pub(crate) command: Vec<String>,
     pub(crate) required_inputs: Vec<GateInput>,
+    pub(crate) cargo_test: Option<CargoTestInput>,
     pub(crate) environment: BTreeMap<String, String>,
     pub(crate) cacheable: bool,
     pub(crate) unavailable_exit_code: Option<i32>,

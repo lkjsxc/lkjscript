@@ -16,7 +16,7 @@ use std::str::FromStr;
 
 const LOCAL_TOKEN_BYTES: usize = 16;
 const LOCAL_TOKEN_HEX_BYTES: usize = LOCAL_TOKEN_BYTES * 2;
-const SCOPED_RECORD_KEY_VERSION: u8 = 1;
+const SCOPED_RECORD_KEY_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 const DECLARATION_SCOPE_TAG: u8 = 1;
 const OPERATION_SCOPE_TAG: u8 = 2;
 const BODY_SCOPE_TAG: u8 = 3;
@@ -707,9 +707,9 @@ impl ExactScopedRecordKey {
     pub(crate) fn encode(self) -> Vec<u8> {
         let local = self.key.encode();
         let mut bytes = Vec::with_capacity(local.len() + LOCAL_TOKEN_BYTES);
-        bytes.push(SCOPED_RECORD_KEY_VERSION);
+        bytes.extend_from_slice(&SCOPED_RECORD_KEY_VERSION.to_le_bytes());
         bytes.extend_from_slice(&self.package.bytes());
-        bytes.extend(local.into_iter().skip(1));
+        bytes.extend(local.into_iter().skip(2));
         bytes
     }
 
@@ -1088,7 +1088,7 @@ fn validate_scope_domain(
 }
 
 fn decode_key_version(cursor: &mut KeyCursor<'_>) -> Result<(), Diagnostic> {
-    let version = cursor.take_byte("version")?;
+    let version = u16::from_le_bytes(cursor.take_array("epoch")?);
     if version == SCOPED_RECORD_KEY_VERSION {
         Ok(())
     } else {
@@ -1135,8 +1135,8 @@ fn encode_scope_prefix(scope: ScopedRecordScope) -> Vec<u8> {
         | ScopedRecordScope::InterfaceOperation { declaration, .. } => declaration,
         ScopedRecordScope::Body(scope) => scope.declaration,
     };
-    let mut bytes = Vec::with_capacity(35);
-    bytes.push(SCOPED_RECORD_KEY_VERSION);
+    let mut bytes = Vec::with_capacity(36);
+    bytes.extend_from_slice(&SCOPED_RECORD_KEY_VERSION.to_le_bytes());
     bytes.extend_from_slice(&declaration.bytes());
     match scope {
         ScopedRecordScope::Declaration { .. } => bytes.push(DECLARATION_SCOPE_TAG),
@@ -1152,9 +1152,9 @@ fn encode_scope_prefix(scope: ScopedRecordScope) -> Vec<u8> {
 fn encode_exact_scope_prefix(scope: ExactScopedRecordScope) -> Vec<u8> {
     let local = encode_scope_prefix(scope.scope);
     let mut bytes = Vec::with_capacity(local.len() + LOCAL_TOKEN_BYTES);
-    bytes.push(SCOPED_RECORD_KEY_VERSION);
+    bytes.extend_from_slice(&SCOPED_RECORD_KEY_VERSION.to_le_bytes());
     bytes.extend_from_slice(&scope.package.bytes());
-    bytes.extend(local.into_iter().skip(1));
+    bytes.extend(local.into_iter().skip(2));
     bytes
 }
 
@@ -1636,7 +1636,7 @@ mod tests {
         );
 
         let mut zero_package = exact_a.encode();
-        zero_package[1..1 + LOCAL_TOKEN_BYTES].fill(0);
+        zero_package[2..2 + LOCAL_TOKEN_BYTES].fill(0);
         assert!(ExactScopedRecordKey::decode(&zero_package).is_err());
         let mut trailing_exact = exact_a.encode();
         trailing_exact.push(0);

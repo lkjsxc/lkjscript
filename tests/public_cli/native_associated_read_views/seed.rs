@@ -1,4 +1,4 @@
-//! Share only completed candidate-authored bytes, never mutable repositories or observations.
+//! Share immutable public-authored bytes, never mutation locks or observations.
 use super::*;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -15,6 +15,7 @@ struct SnapshotFile {
 }
 
 struct Snapshot {
+    memory: Option<lkjscript::platform::MemProjectStore>,
     directories: Vec<PathBuf>,
     files: Vec<SnapshotFile>,
 }
@@ -92,11 +93,42 @@ fn relative(path: &Path) {
 
 impl Snapshot {
     fn capture(root: &Path, bytes: &mut usize, files: &mut usize) -> Self {
+        Self::capture_source(root, None, bytes, files)
+    }
+
+    fn capture_native(native: &Native, bytes: &mut usize, files: &mut usize) -> Self {
+        let memory = native.memory.read().unwrap();
+        Self::capture_source(native.root.path(), memory.as_ref(), bytes, files)
+    }
+
+    fn capture_source(
+        root: &Path,
+        memory: Option<&lkjscript::platform::MemProjectStore>,
+        bytes: &mut usize,
+        files: &mut usize,
+    ) -> Self {
         let mut snapshot = Self {
+            memory: None,
             directories: Vec::new(),
             files: Vec::new(),
         };
-        snapshot.tree(root, Path::new("project"), bytes, files);
+        if let Some(memory) = memory {
+            lkjscript::platform::contributor::visit_memory_project(memory, |name, value| {
+                *bytes = bytes
+                    .checked_add(name.len())
+                    .unwrap()
+                    .checked_add(value.len())
+                    .unwrap();
+                assert!(
+                    *bytes <= MAXIMUM_BYTES,
+                    "read-view authored seed exceeds its byte bound"
+                );
+            })
+            .unwrap();
+            snapshot.memory = Some(memory.fork().unwrap());
+        } else {
+            snapshot.tree(root, Path::new("project"), bytes, files);
+        }
         for entry in fs::read_dir(root).unwrap() {
             let entry = entry.unwrap();
             if source_file(&entry.path()) {
@@ -208,7 +240,7 @@ impl Seed {
             } else {
                 &authored.authors[index]
             };
-            Snapshot::capture(native.root.path(), &mut bytes, &mut files)
+            Snapshot::capture_native(native, &mut bytes, &mut files)
         });
         let exports = std::array::from_fn(|index| {
             let package = &authored.exports[index];
@@ -243,6 +275,10 @@ impl Seed {
                 "seed clone selected another product"
             );
             snapshot.restore(native.root.path());
+            *native.memory.write().unwrap() = snapshot
+                .memory
+                .as_ref()
+                .map(|memory| memory.fork().unwrap());
             // Copied bytes supply no admission result: each restored repository
             // re-enters the selected product's ordinary source owner.
             check(&native);
@@ -287,6 +323,7 @@ impl Seed {
     fn observation(&self, packages: &Packages, authored: bool) {
         archive(&packages.application, "authored-seed.json", &serde_json::to_vec_pretty(&json!({
             "identity": self.key.to_hex().to_string(), "bytes": self.bytes, "files": self.files,
+            "source_backend":if self.snapshots[0].memory.is_some() {"memory"} else {"filesystem"},
             "constructor_executed_here": authored,
             "source": if authored {"ordered public authoring/export/checks"} else {"immutable authored bytes copied into independent repositories"},
             "shared_mutable_repositories": false, "copied_process_observations": false,

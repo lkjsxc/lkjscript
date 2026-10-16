@@ -1,4 +1,5 @@
 use super::*;
+use crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
 use crate::platform::persistent_map::MemoryPageStore;
 
 fn manifest(version: u16) -> ArtifactManifest {
@@ -6,7 +7,11 @@ fn manifest(version: u16) -> ArtifactManifest {
     let empty = PersistentMap::empty(&mut MemoryPageStore::default(), &mut MapWork::default())
         .unwrap()
         .root();
-    let (graph, compiler, bytecode) = (34, 34, 28);
+    let (graph, compiler, bytecode) = (
+        GRAPH_CONTRACT_VERSION,
+        COMPILER_UNIT_CONTRACT_VERSION,
+        BYTECODE_CONTRACT_VERSION,
+    );
     ArtifactManifest {
         contract_version: version,
         graph_contract_version: graph,
@@ -34,7 +39,7 @@ fn manifest(version: u16) -> ArtifactManifest {
 
 #[test]
 fn artifact_manifest_and_bundle_bind_the_current_canonical_schema() {
-    let expected = manifest(41);
+    let expected = manifest(ARTIFACT_CONTRACT_VERSION);
     let (digest, bytes) = expected.encode().unwrap();
     assert_eq!(&bytes[..8], &ARTIFACT_MANIFEST_MAGIC);
     assert_eq!(ArtifactManifest::decode(&bytes, digest).unwrap(), expected);

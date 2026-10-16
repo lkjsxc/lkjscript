@@ -6,7 +6,7 @@ use super::artifact::{
     canonicalize_dependency_artifact_interfaces, closure_facts, encode_artifact,
     runtime_owner_expectations,
 };
-use super::cache::load_exact_current_compilation;
+use super::cache::load_exact_current_compilation_with_view;
 use super::lower::CodeRead;
 use super::manifest::{COMPILATION_MANIFEST_CONTRACT_VERSION, CompilationBinding};
 use super::unit::{
@@ -82,11 +82,21 @@ pub(crate) fn link_artifact_with_control(
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<ArtifactLinkReceipt, Diagnostic> {
     let view = repository.view_current_with_control(control)?;
-    let cached = load_exact_current_compilation(repository, compilation)?;
+    link_artifact_with_view(repository, &view, compilation, dependencies)
+}
+
+pub(crate) fn link_artifact_with_view(
+    repository: &GraphRepository,
+    view: &crate::platform::publication::RepositoryView,
+    compilation: super::manifest::CompilationManifestDigest,
+    dependencies: &[LoadedArtifact],
+) -> Result<ArtifactLinkReceipt, Diagnostic> {
+    view.require_current_validation()?;
+    let cached = load_exact_current_compilation_with_view(repository, view, compilation)?;
     let exported = view.build_package_revision()?;
     let store = repository.object_store()?;
     let (mut linked, recheck_work, read_reuse) = view
-        .with_link_read_reuse(|| link_prepared(&view, &store, &cached, &exported, dependencies))?;
+        .with_link_read_reuse(|| link_prepared(view, &store, &cached, &exported, dependencies))?;
     add_repository_work(&mut linked.work.repository, recheck_work);
     linked.work.read_reuse = read_reuse;
     add_repository_work(&mut linked.work.repository, exported.read_work);

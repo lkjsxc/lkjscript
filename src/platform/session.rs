@@ -16,8 +16,9 @@ use super::runtime::ShutdownReceipt;
 #[path = "session_state.rs"]
 mod state;
 
-pub const STRUCTURED_SESSION_CONTRACT_IDENTITY: &str = "lkjscript-structured-session-1";
-pub const STRUCTURED_SESSION_CONTRACT_VERSION: u16 = 1;
+pub const STRUCTURED_SESSION_CONTRACT_IDENTITY: &str = "lkjscript-structured-session";
+pub const STRUCTURED_SESSION_CONTRACT_VERSION: u16 =
+    crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_ACTIVE_SESSIONS: usize = 4_096;
 pub const MAXIMUM_PENDING_HANDSHAKES: usize = 4_096;
 pub const MAXIMUM_SESSION_MESSAGE_BYTES: usize = 16 * 1_048_576;

@@ -11,11 +11,11 @@ pub(crate) fn reject(message: impl Into<String>) -> Diagnostic {
 }
 
 pub(crate) fn require_generation(generation: u16) -> Result<(), Diagnostic> {
-    if generation != 34 {
+    if generation != crate::platform::canonical_schema::SCHEMA_EPOCH {
         return Err(Diagnostic::new(
             DiagnosticClass::Semantic,
             "kernel_read_view_generation",
-            "read-view meaning requires Graph 34 at its actual consuming owner",
+            "read-view meaning requires the current schema epoch at its actual consuming owner",
         ));
     }
     Ok(())

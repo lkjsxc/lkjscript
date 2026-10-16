@@ -5,6 +5,8 @@ mod cargo_origin;
 mod cargo_origin_context;
 mod cargo_origin_units;
 mod cargo_outputs;
+mod cargo_tests;
+mod compact;
 mod executor;
 mod model;
 mod policy;
@@ -14,6 +16,7 @@ mod self_test;
 mod snapshot;
 mod source;
 mod surface;
+mod workspace_tests;
 
 use crate::error::DevError;
 use crate::evidence::{self, PublishedEvidence, VerificationDigest};
@@ -30,10 +33,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const MAXIMUM_RETAINED_RUNS: usize = 8;
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) use source::{AdmittedSource, SourceOwner, SourceProof};
+pub(crate) use workspace_tests::command as workspace_tests_command;
 pub(crate) const RELEASE_SOURCE_GATE_COUNT: usize = 25;
 
 #[derive(Clone, Debug)]
@@ -42,6 +45,8 @@ struct Options {
     machine: bool,
     details: bool,
     fresh: bool,
+    retain_archive: bool,
+    evidence_root: Option<PathBuf>,
     jobs: usize,
 }
 
@@ -49,6 +54,12 @@ struct RunDirectory {
     path: PathBuf,
     _lease: File,
 }
+
+type ProfileResult = (
+    CheckReceipt,
+    Option<std::sync::Arc<cargo_origin::Run>>,
+    Option<std::sync::Arc<compact::Run>>,
+);
 
 impl RunDirectory {
     fn path(&self) -> &Path {
@@ -61,31 +72,69 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     if options.profile == "self-test" {
         if options.fresh || options.details || options.jobs != default_workers() {
             return Err(DevError::usage(
-                "check self-test accepts only the optional --machine flag",
+                "check self-test accepts --machine, --retain-archive, and --evidence-root",
             ));
         }
-        return self_test::run(options.machine);
+        return self_test::run(
+            options.machine,
+            options.retain_archive,
+            options.evidence_root.as_deref(),
+        );
+    }
+    if options.evidence_root.is_some() {
+        return Err(DevError::usage(
+            "--evidence-root is only supported by check self-test",
+        ));
     }
 
     let repository = repository_root()?;
-    let run = new_run_directory(&repository, "")?;
-    let run_directory = run.path();
+    let archive_run = options
+        .retain_archive
+        .then(|| new_run_directory(&repository, ""))
+        .transpose()?;
+    let scratch = (!options.retain_archive)
+        .then(|| compact::Scratch::new(&repository))
+        .transpose()?;
+    let run_directory = archive_run
+        .as_ref()
+        .map(RunDirectory::path)
+        .or_else(|| scratch.as_ref().map(compact::Scratch::path))
+        .ok_or_else(|| DevError::infrastructure("check run directory is absent"))?;
     let started_wall = unix_nanoseconds()?;
     let started = Instant::now();
-    let (receipt, _origin) =
+    let (mut receipt, _origin, _live) =
         match run_profile(&repository, run_directory, &options, started_wall, started) {
-            Ok((receipt, origin)) => (receipt, Some(origin)),
+            Ok((receipt, origin, live)) => (receipt, origin, live),
             Err(error) => (
                 failure_receipt(&options, started_wall, started, error),
                 None,
+                None,
             ),
         };
-    let receipt_path = run_directory.join("receipt.json");
-    let published = evidence::publish_json(&receipt_path, &receipt)?;
+    let archive = options
+        .retain_archive
+        .then(|| evidence::publish_json(&run_directory.join("receipt.json"), &receipt))
+        .transpose()?;
+    // Capture compact output identities while their scratch records still exist.
+    let mut summary = compact::receipt(&repository, &receipt, archive.as_ref())?;
+    if let Some(scratch) = &scratch
+        && let Err(error) = scratch.cleanup()
+    {
+        receipt.status = AggregateStatus::Failed;
+        receipt.failure = Some(FailureSummary {
+            owner: "scratch_cleanup".to_owned(),
+            status: error.kind().to_owned(),
+            reason: error.message().to_owned(),
+        });
+        summary["status"] = serde_json::to_value(receipt.status)?;
+        summary["failure"] = serde_json::to_value(&receipt.failure)?;
+    }
+    let latest = compact::publish(&repository, summary)?;
+    let published = archive.as_ref().unwrap_or(&latest);
     print_summary(
         &repository,
         &receipt,
-        &published,
+        published,
         options.machine,
         options.details,
     )?;
@@ -150,8 +199,12 @@ fn run_profile(
     options: &Options,
     started_wall: u128,
     started: Instant,
-) -> Result<(CheckReceipt, std::sync::Arc<cargo_origin::Run>), DevError> {
-    let harness_copy = copy_harness(run_directory)?;
+) -> Result<ProfileResult, DevError> {
+    let harness_copy = if options.retain_archive {
+        copy_harness(run_directory)?
+    } else {
+        std::env::current_exe()?.canonicalize()?
+    };
     let registry = registry::base_registry(repository, run_directory, &harness_copy)?;
     let (initial, requested) = snapshot::capture_profile(repository, &options.profile)?;
     let selected = registry.closure(&requested)?;
@@ -166,28 +219,46 @@ fn run_profile(
     )?;
     let command_names = registry.input_commands(&selected)?;
     let runtime = snapshot::runtime_identity(repository, command_names.clone())?;
-    let origin = std::sync::Arc::new(cargo_origin::Run::with_commands_for_run(
-        repository,
-        &cargo_origin_context::Context::target(repository)?,
-        &initial,
-        &runtime,
-        command_names.into_iter().collect(),
-        run_directory,
-    )?);
-    // Origin Run pins its complete prior cold closure before any run rotation.
-    rotate_runs(repository, run_directory, "")?;
+    let origin = options
+        .retain_archive
+        .then(|| {
+            cargo_origin::Run::with_commands_for_run(
+                repository,
+                &cargo_origin_context::Context::target(repository)?,
+                &initial,
+                &runtime,
+                command_names.clone().into_iter().collect(),
+                run_directory,
+            )
+        })
+        .transpose()?
+        .map(std::sync::Arc::new);
+    let live = (!options.retain_archive)
+        .then(|| {
+            compact::Run::new(
+                repository,
+                &initial,
+                &runtime,
+                command_names.into_iter().collect(),
+            )
+        })
+        .transpose()?
+        .map(std::sync::Arc::new);
     let dag_path = run_directory.join("dag.json");
     evidence::publish_json(
         &dag_path,
         &registry.manifest(&requested, &selected, options.jobs)?,
     )?;
-    let fresh_required = requires_fresh(&options.profile) || options.fresh;
+    let fresh_required =
+        !options.retain_archive || requires_fresh(&options.profile) || options.fresh;
     let fresh_reason = if options.profile == "full" {
         "full_profile_requires_fresh"
     } else if options.profile == "release-source" {
         "release_source_profile_requires_fresh"
     } else if options.fresh {
         "explicit_fresh"
+    } else if !options.retain_archive {
+        "transient_run_has_no_evidence_cache"
     } else {
         "exact_input_match"
     };
@@ -207,7 +278,8 @@ fn run_profile(
             allow_reuse: !fresh_required,
             fresh_reason,
             cache: &cache,
-            origin: Some(origin.clone()),
+            origin: origin.clone(),
+            live: live.clone(),
         },
     )?;
 
@@ -218,7 +290,7 @@ fn run_profile(
         }
         Err(error) => (None, false, Some(error)),
     };
-    if input_stable {
+    if input_stable && options.retain_archive {
         for receipt in &mut gates {
             if receipt.status == GateStatus::Passed && receipt.execution == ExecutionKind::Fresh {
                 let gate = registry.gate(&receipt.name)?;
@@ -234,7 +306,7 @@ fn run_profile(
                 }
             }
         }
-    } else {
+    } else if !input_stable {
         for receipt in &mut gates {
             if receipt.status == GateStatus::Passed && receipt.execution == ExecutionKind::Fresh {
                 receipt.cache.write = Some(CacheWriteStatus::WithheldInputChanged);
@@ -321,6 +393,7 @@ fn run_profile(
             failure,
         },
         origin,
+        live,
     ))
 }
 
@@ -352,7 +425,9 @@ fn failure_receipt(
         reused_passed_gates: 0,
         unrun_gates: Vec::new(),
         maximum_workers: options.jobs,
-        fresh_required: options.fresh || requires_fresh(&options.profile),
+        fresh_required: !options.retain_archive
+            || options.fresh
+            || requires_fresh(&options.profile),
         gates: Vec::new(),
         failure: Some(FailureSummary {
             owner: "harness".to_owned(),
@@ -442,12 +517,21 @@ fn parse(mut arguments: impl Iterator<Item = OsString>) -> Result<Options, DevEr
     let mut machine = false;
     let mut details = false;
     let mut fresh = false;
+    let mut retain_archive = false;
+    let mut evidence_root = None;
     let mut jobs = default_workers();
     while let Some(argument) = crate::next_utf8(&mut arguments, "check option")? {
         match argument.as_str() {
             "--machine" if !machine => machine = true,
             "--details" if !details => details = true,
             "--fresh" if !fresh => fresh = true,
+            "--retain-archive" if !retain_archive => retain_archive = true,
+            "--evidence-root" if evidence_root.is_none() => {
+                evidence_root = Some(PathBuf::from(
+                    crate::next_utf8(&mut arguments, "evidence root")?
+                        .ok_or_else(|| DevError::usage("--evidence-root requires a path"))?,
+                ));
+            }
             "--jobs" => {
                 let value = crate::next_utf8(&mut arguments, "worker count")?
                     .ok_or_else(|| DevError::usage("--jobs requires a value"))?;
@@ -480,6 +564,8 @@ fn parse(mut arguments: impl Iterator<Item = OsString>) -> Result<Options, DevEr
         machine,
         details,
         fresh,
+        retain_archive,
+        evidence_root,
         jobs,
     })
 }
@@ -539,145 +625,6 @@ fn new_run_directory(repository: &Path, prefix: &str) -> Result<RunDirectory, De
         path: directory,
         _lease: lease,
     })
-}
-
-fn rotate_runs(repository: &Path, current: &Path, prefix: &str) -> Result<(), DevError> {
-    rotate_runs_with_limit(repository, current, prefix, MAXIMUM_RETAINED_RUNS)
-}
-
-pub(super) fn rotate_runs_with_limit(
-    repository: &Path,
-    current: &Path,
-    prefix: &str,
-    maximum_retained: usize,
-) -> Result<(), DevError> {
-    let root = repository.join(".artifacts/lkjscript-dev/check");
-    let mut runs = Vec::new();
-    let mut managed_count = 0_usize;
-    for entry in fs::read_dir(&root).map_err(|error| {
-        DevError::infrastructure(format!(
-            "read check evidence root '{}': {error}",
-            root.display()
-        ))
-    })? {
-        let entry = entry.map_err(|error| {
-            DevError::infrastructure(format!("read check evidence entry: {error}"))
-        })?;
-        let path = entry.path();
-        if !managed_run(&path, prefix)? {
-            continue;
-        }
-        managed_count = managed_count.saturating_add(1);
-        if path == current {
-            continue;
-        }
-        let Some(lease) = run_deletion_lease(&path)? else {
-            continue;
-        };
-        let modified = entry
-            .metadata()
-            .and_then(|metadata| metadata.modified())
-            .unwrap_or(UNIX_EPOCH);
-        runs.push((modified, path, lease));
-    }
-    runs.sort_by_key(|(modified, _, _)| *modified);
-    let remove = managed_count
-        .saturating_sub(maximum_retained)
-        .min(runs.len());
-    for (_, path, _lease) in runs.into_iter().take(remove) {
-        fs::remove_dir_all(&path).map_err(|error| {
-            DevError::infrastructure(format!(
-                "remove old check evidence '{}': {error}",
-                path.display()
-            ))
-        })?;
-    }
-    Ok(())
-}
-
-fn run_deletion_lease(path: &Path) -> Result<Option<File>, DevError> {
-    let lease_path = path.join("ACTIVE.lock");
-    let metadata = match fs::symlink_metadata(&lease_path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => {
-            return Err(DevError::infrastructure(format!(
-                "inspect check run lease '{}': {error}",
-                lease_path.display()
-            )));
-        }
-    };
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(DevError::infrastructure(format!(
-            "check run lease '{}' is not a regular file",
-            lease_path.display()
-        )));
-    }
-    let lease = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&lease_path)
-        .map_err(|error| {
-            DevError::infrastructure(format!(
-                "open check run lease '{}': {error}",
-                lease_path.display()
-            ))
-        })?;
-    match lease.try_lock_exclusive() {
-        Ok(()) => {
-            let opened = lease.metadata()?;
-            let selected = fs::symlink_metadata(&lease_path)?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::MetadataExt;
-                if selected.file_type().is_symlink()
-                    || !selected.is_file()
-                    || selected.dev() != opened.dev()
-                    || selected.ino() != opened.ino()
-                {
-                    return Err(DevError::infrastructure(
-                        "check run lease changed while selecting deletion",
-                    ));
-                }
-            }
-            // Keep the same exclusive lease through remove_dir_all; a pin cannot
-            // slip between a successful probe and scheduled deletion.
-            Ok(Some(lease))
-        }
-        Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(None),
-        Err(error) => Err(DevError::infrastructure(format!(
-            "probe check run lease '{}': {error}",
-            lease_path.display()
-        ))),
-    }
-}
-
-#[cfg(test)]
-fn run_is_active(path: &Path) -> Result<bool, DevError> {
-    Ok(run_deletion_lease(path)?.is_none())
-}
-
-fn managed_run(path: &Path, prefix: &str) -> Result<bool, DevError> {
-    let metadata = fs::symlink_metadata(path).map_err(|error| {
-        DevError::infrastructure(format!(
-            "inspect check evidence '{}': {error}",
-            path.display()
-        ))
-    })?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Ok(false);
-    }
-    let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
-        return Ok(false);
-    };
-    let Some(suffix) = name.strip_prefix(prefix) else {
-        return Ok(false);
-    };
-    let fields = suffix.split('-').collect::<Vec<_>>();
-    Ok(fields.len() == 3
-        && fields
-            .iter()
-            .all(|field| !field.is_empty() && field.bytes().all(|byte| byte.is_ascii_digit())))
 }
 
 fn copy_harness(run_directory: &Path) -> Result<PathBuf, DevError> {
@@ -758,6 +705,8 @@ mod tests {
             machine: true,
             details: false,
             fresh: false,
+            retain_archive: false,
+            evidence_root: None,
             jobs: 1,
         };
         let receipt = failure_receipt(
@@ -778,21 +727,5 @@ mod tests {
             retained.failure.expect("failure summary").reason,
             "injected aggregate failure"
         );
-    }
-
-    #[test]
-    fn rotation_preserves_another_invocations_locked_run() {
-        let temporary = tempfile::tempdir().expect("temporary rotation repository");
-        let active = new_run_directory(temporary.path(), "").expect("active run");
-        let root = temporary.path().join(".artifacts/lkjscript-dev/check");
-        let completed = root.join("1-1-1");
-        fs::create_dir(&completed).expect("completed run directory");
-        File::create(completed.join("ACTIVE.lock")).expect("completed run lease");
-        let current = new_run_directory(temporary.path(), "").expect("current run");
-        rotate_runs_with_limit(temporary.path(), current.path(), "", 2)
-            .expect("rotate completed runs");
-        assert!(active.path().is_dir());
-        assert!(current.path().is_dir());
-        assert!(!completed.exists());
     }
 }

@@ -16,8 +16,8 @@ use super::semantic_id::{DeclarationId, ModuleId, RepositoryId, RevisionId, Targ
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-pub const REVISION_CONTRACT_VERSION: u16 = 4;
-pub const RECEIPT_CONTRACT_VERSION: u16 = 3;
+pub const REVISION_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const RECEIPT_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_REVISION_BYTES: usize = 256 * 1024;
 pub const MAXIMUM_RECEIPT_BYTES: usize = 4 * 1_048_576;
 

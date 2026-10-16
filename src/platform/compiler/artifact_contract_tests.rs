@@ -34,6 +34,7 @@ fn manifest() -> ArtifactManifest {
 #[test]
 fn artifact_manifest_admits_only_current_profile() {
     let current = manifest();
+    let epoch = crate::platform::canonical_schema::SCHEMA_EPOCH;
     assert_eq!(
         (
             current.contract_version,
@@ -41,7 +42,7 @@ fn artifact_manifest_admits_only_current_profile() {
             current.compiler_contract_version,
             current.bytecode_contract_version
         ),
-        (41, 34, 34, 28)
+        (epoch, epoch, epoch, epoch)
     );
     let (digest, bytes) = current.encode().unwrap();
     assert_eq!(ArtifactManifest::decode(&bytes, digest).unwrap(), current);

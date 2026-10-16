@@ -52,10 +52,7 @@ fn fixture() -> (LoadedArtifact, ObjectKey, CompilationUnit) {
 }
 
 fn artifact_for_source(source: &crate::platform::kernel::KernelSnapshot) -> LoadedArtifact {
-    let directory = tempfile::tempdir().unwrap();
-    let repository = GraphRepository::create(&directory.path().join("parallel"), source, None)
-        .unwrap()
-        .repository;
+    let repository = memory_repository(source).unwrap().repository;
     let compilation = build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();
     let artifact = link_artifact(&repository, compilation.manifest_digest, &[]).unwrap();
     load_artifact(&artifact.artifact.bytes).unwrap()
@@ -174,11 +171,7 @@ fn parallel_inferred_pair_types_are_persisted_even_when_unannotated_and_unused()
             })
             .unwrap();
         assert_eq!(receipt.unit.tables.types[result_type as usize], digest);
-        let directory = tempfile::tempdir().unwrap();
-        let repository =
-            GraphRepository::create(&directory.path().join("inferred-pair"), &source, None)
-                .unwrap()
-                .repository;
+        let repository = memory_repository(&source).unwrap().repository;
         let accepted = repository.view_current().unwrap().current().head;
         let compilation =
             build_clean(&repository, OptimizationPolicy::DeterministicBaseline).unwrap();

@@ -510,7 +510,10 @@ fn artifact_associated_table_helper_current_unit_does_not_upgrade_canonical_owne
             vec![f.unit_type, f.projection]
         };
         let unit = unit(&f, scope, roots);
-        assert_eq!(unit.graph_contract_version, 34);
+        assert_eq!(
+            unit.graph_contract_version,
+            crate::platform::canonical_schema::SCHEMA_EPOCH
+        );
         validate_unit_types(&f.read, &unit, &OwnedAssociatedAdmission::new()).unwrap();
         f.read
             .owners

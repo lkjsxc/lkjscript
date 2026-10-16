@@ -159,7 +159,8 @@ impl Oracle<'_> {
         };
         if header.owner != key
             || header.kind != OwnerKind::OwnedRecord
-            || self.representation_generation(declaration)? < 32
+            || self.representation_generation(declaration)?
+                != crate::platform::canonical_schema::SCHEMA_EPOCH
             || parameters.len() > contract::MAXIMUM_CHILDREN
             || fields.len() > contract::MAXIMUM_CHILDREN
             || parameters.iter().copied().collect::<BTreeSet<_>>().len() != parameters.len()
@@ -173,9 +174,15 @@ impl Oracle<'_> {
             if record.header.owner != OwnerKey::TypeParameter(*parameter)
                 || record.header.kind != OwnerKind::TypeParameter
                 || record.declaration != declaration.declaration
-                || (record.constraints.has_owned() && record.header.contract_version < 18)
-                || (record.constraints.requires_transfer() && record.header.contract_version < 22)
-                || (record.constraints.requires_share() && record.header.contract_version < 30)
+                || (record.constraints.has_owned()
+                    && record.header.contract_version
+                        != crate::platform::canonical_schema::SCHEMA_EPOCH)
+                || (record.constraints.requires_transfer()
+                    && record.header.contract_version
+                        != crate::platform::canonical_schema::SCHEMA_EPOCH)
+                || (record.constraints.requires_share()
+                    && record.header.contract_version
+                        != crate::platform::canonical_schema::SCHEMA_EPOCH)
                 || (!record.constraints.has_owned() && !record.constraints.requires_transfer())
                 || !names.insert(&record.name)
             {

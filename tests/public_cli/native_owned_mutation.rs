@@ -19,7 +19,7 @@ declarations.end
 
 #[test]
 fn native_owned_witness_removal_clears_existing_signature() {
-    let public = Native::new();
+    let public = Native::memory();
     const SOURCE: &str = r#"declarations.begin
 (units
   (module create clearing
@@ -86,7 +86,7 @@ declarations.end
 
 #[test]
 fn native_owned_implementation_edit_reselects_tests_and_invalidates_prepared_results() {
-    let public = Native::new();
+    let public = Native::memory();
     let input = public.input(
         "create.lkjc",
         &format!(

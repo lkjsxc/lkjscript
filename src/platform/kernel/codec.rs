@@ -1,4 +1,6 @@
 //! Current schema-bound canonical codecs and hostile-input admission.
+//! The packed reader proves canonical payload bytes; these owners additionally
+//! bind the raw object digest, identity, kind, and local semantic invariants.
 
 use super::contract::{
     DEPENDENCY_ENVELOPE_DOMAIN, DEPENDENCY_MAGIC, MAXIMUM_DEPENDENCY_BYTES,
@@ -1069,14 +1071,6 @@ pub fn decode_owner(
             "owner map key or binding kind does not match the decoded owner header",
         ));
     }
-    let (digest, canonical) = encode_owner(&record)?;
-    verify_canonical(
-        bytes,
-        &canonical,
-        digest.bytes(),
-        expected_digest.bytes(),
-        "owner",
-    )?;
     Ok(record)
 }
 
@@ -1107,14 +1101,6 @@ pub fn decode_type_object(
         MAXIMUM_TYPE_OBJECT_BYTES,
     )?;
     object.validate_local()?;
-    let (digest, canonical) = encode_type_object(&object)?;
-    verify_canonical(
-        bytes,
-        &canonical,
-        digest.bytes(),
-        expected_digest.bytes(),
-        "type",
-    )?;
     Ok(object)
 }
 
@@ -1137,14 +1123,6 @@ pub fn decode_root(
     let root: SemanticRoot =
         packed::decode_canonical(bytes, ROOT_MAGIC, ROOT_ENVELOPE_DOMAIN, MAXIMUM_ROOT_BYTES)?;
     root.validate_local()?;
-    let (digest, canonical) = encode_root(&root)?;
-    verify_canonical(
-        bytes,
-        &canonical,
-        digest.bytes(),
-        expected_digest.bytes(),
-        "root",
-    )?;
     Ok(root)
 }
 
@@ -1184,14 +1162,6 @@ pub fn decode_dependency(
             "dependency map key does not match the dependency record",
         ));
     }
-    let (digest, canonical) = encode_dependency(&dependency)?;
-    verify_canonical(
-        bytes,
-        &canonical,
-        digest.bytes(),
-        expected_digest.bytes(),
-        "dependency",
-    )?;
     Ok(dependency)
 }
 
@@ -1231,14 +1201,6 @@ pub fn decode_retirement(
             "retirement map key does not match the retirement record",
         ));
     }
-    let (digest, canonical) = encode_retirement(&retirement)?;
-    verify_canonical(
-        bytes,
-        &canonical,
-        digest.bytes(),
-        expected_digest.bytes(),
-        "retirement",
-    )?;
     Ok(retirement)
 }
 
@@ -1247,22 +1209,6 @@ fn verify_digest(expected: [u8; 32], actual: [u8; 32], label: &str) -> Result<()
         return Err(codec_error(
             "kernel_object_digest",
             format!("{label} object digest does not match its requested identity"),
-        ));
-    }
-    Ok(())
-}
-
-fn verify_canonical(
-    input: &[u8],
-    canonical: &[u8],
-    canonical_digest: [u8; 32],
-    expected_digest: [u8; 32],
-    label: &str,
-) -> Result<(), Diagnostic> {
-    if input != canonical || canonical_digest != expected_digest {
-        return Err(codec_error(
-            "kernel_noncanonical_encoding",
-            format!("{label} object does not use the current canonical encoding"),
         ));
     }
     Ok(())

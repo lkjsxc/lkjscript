@@ -19,9 +19,8 @@ const SECOND: Input = Input {
     source: "request base=BASE\ndeclarations.begin\n(units (module create second\n(function create answer (visibility public) (returns Text) (effect pure)\n(body (call first::answer)))))\ndeclarations.end\n",
 };
 
-fn lower(parent: &Path, inputs: &'static [Input]) -> Result<KernelSnapshot, Diagnostic> {
+fn lower(_parent: &Path, inputs: &'static [Input]) -> Result<KernelSnapshot, Diagnostic> {
     lower_recipe(
-        parent,
         RepositoryId::generate().unwrap(),
         PackageId::generate().unwrap(),
         Name::new("native-test").unwrap(),

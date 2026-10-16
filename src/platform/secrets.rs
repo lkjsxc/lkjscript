@@ -7,9 +7,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
 
-pub const SECRET_CATALOG_CONTRACT_VERSION: u16 = 1;
+pub const SECRET_CATALOG_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_SECRET_BYTES: usize = 64 * 1024;
-pub const SECRET_VERIFIER_CONTRACT_VERSION: u16 = 1;
+pub const SECRET_VERIFIER_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

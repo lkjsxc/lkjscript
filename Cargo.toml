@@ -5,6 +5,11 @@ version = "0.1.96"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
+autotests = false
+
+[[test]]
+name = "public_cli"
+path = "tests/public_cli.rs"
 
 [workspace]
 members = [".", "tools/lkjscript-dev", "tools/lkjscript-site"]
@@ -40,6 +45,7 @@ tempfile = "3.23.0"
 
 [build-dependencies]
 blake3 = "1.8.2"
+flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 quote = "=1.0.47"
 syn = { version = "=2.0.119", features = ["full", "visit-mut"] }
 
@@ -53,9 +59,7 @@ unwrap_used = "deny"
 [lints.rust]
 unsafe_code = "forbid"
 
-# Source verification executes native programs and repeatedly copies the product.
-# Keep runtime checks and useful backtraces without full variable/type debug data
-# or a second, large incremental build store. Dev and distribution stay separate.
+# Keep semantic tests optimized and diagnostic builds bounded in the shared target.
 [profile.test]
 opt-level = 2
 debug = "line-tables-only"
@@ -71,8 +75,10 @@ debug = 2
 incremental = true
 
 [profile.release]
-codegen-units = 16
-lto = "thin"
+# Independent test executables share optimized library code without repeating
+# whole-program ThinLTO for every harness and example.
+codegen-units = 256
+lto = false
 strip = "symbols"
 
 # Verification tools need optimized execution, without distribution link costs.

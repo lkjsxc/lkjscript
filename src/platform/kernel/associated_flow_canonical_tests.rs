@@ -1252,11 +1252,11 @@ fn canonical_associated_flow_capacity_cancellation_and_healthy_retry_keep_distin
 /// Direct raw-canonical flow reader controls; these records do not claim whole
 /// source admission, artifact loading, prepared execution, or runtime leases.
 #[test]
-fn canonical_view_type_profiles_remain_distinct_from_owner_generations() {
+fn canonical_view_type_objects_independently_reject_foreign_epochs() {
     use crate::platform::semantic_id::ReadScopeParameterId;
 
     let mut source = super::tests::transport_snapshot();
-    source.root.graph_contract_version = contract::READ_VIEW_GRAPH_CONTRACT_VERSION;
+    source.root.graph_contract_version = contract::GRAPH_CONTRACT_VERSION;
     source.owners.clear();
     source.types.clear();
     source.dependency_types.clear();
@@ -1493,7 +1493,7 @@ fn canonical_view_type_profiles_remain_distinct_from_owner_generations() {
             .types
             .get_mut(&digest)
             .unwrap()
-            .contract_version = contract::READ_VIEW_GRAPH_CONTRACT_VERSION;
+            .contract_version = contract::GRAPH_CONTRACT_VERSION + 1;
         // Full canonical reading independently re-encodes retained objects
         // before either type walker; malformed object profiles refuse there.
         assert_eq!(

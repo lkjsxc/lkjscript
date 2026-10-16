@@ -197,7 +197,7 @@ fn run(
         !consumer.package.path.exists(),
         "foreground authoring checkout still available",
     )?;
-    let command = context.receipt.commands.len();
+    let command = context.command_index();
     let output = context.cli_at(
         &consumer.cwd,
         None,
@@ -314,7 +314,7 @@ fn loops(context: &mut Context, consumer: &Consumer) -> Result<(), DevError> {
             descriptor["execution"] = json!(lkjscript::platform::execution::RunPolicy::default());
         }
         fs::write(&path, evidence::encode_json(&descriptor)?)?;
-        let command = context.receipt.commands.len();
+        let command = context.command_index();
         let records = context.cli_at(
             &consumer.cwd,
             None,
@@ -511,7 +511,7 @@ fn failure(
     let path = consumer.bundle.join("failure.deployment.json");
     fs::write(&path, evidence::encode_json(descriptor)?)?;
     let before = counter(consumer)?;
-    let command = context.receipt.commands.len();
+    let command = context.command_index();
     let arguments = [
         "run",
         "--deployment",
@@ -520,6 +520,7 @@ fn failure(
         arguments,
     ];
     let records = if signal.is_some() {
+        context.require_commands(1)?;
         let public_arguments = arguments
             .iter()
             .map(|value| (*value).to_owned())
@@ -546,6 +547,7 @@ fn failure(
         };
         let observation = semantic_cli::execute_with_cancellation(
             &public_arguments,
+            None,
             &response_path,
             &diagnostic_path,
             &context.evidence,

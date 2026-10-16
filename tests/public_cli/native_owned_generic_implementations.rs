@@ -42,15 +42,7 @@ pub(super) fn pure_batch(
     let source = matches!(&lane, PureLane::Source(_));
     let (cases, expected): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
     let observed = match lane {
-        PureLane::Source(target) => source_batch::execute_in(
-            public.mode,
-            public.root.path(),
-            &public.executable,
-            label,
-            &public.project,
-            target,
-            &cases,
-        ),
+        PureLane::Source(target) => public.source_batch_outputs(label, target, &cases),
         PureLane::Detached(descriptor) => batch::execute_in(
             public.mode,
             public.root.path(),
@@ -119,7 +111,7 @@ pub(super) fn pure_batch(
 }
 
 fn evidence_native(template: &str) -> Native {
-    let mut public = Native::template(template);
+    let mut public = Native::memory_project(template);
     if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
         public.root.disable_cleanup(true);
         println!(
@@ -284,12 +276,8 @@ impl Packages {
     }
 
     fn detach(&self) {
-        for project in [
-            &self.library.project,
-            &self.elements.project,
-            &self.consumer.project,
-        ] {
-            std::fs::remove_dir_all(project).unwrap();
+        for public in [&self.library, &self.elements, &self.consumer] {
+            public.remove_project();
         }
         for transport in [
             &self.generic.path,
@@ -744,10 +732,10 @@ fn native_owned_generic_implementation_schemes_cross_package_expansion_rejects_p
         run_expected(&public, "finite-scheme-flow", &descriptor, false, label, json!([]), &json!(0));
         consumers.push((public, descriptor, label));
     }
-    std::fs::remove_dir_all(&supplier.project).unwrap();
+    supplier.remove_project();
     std::fs::remove_file(&exported.path).unwrap();
     for (public, descriptor, label) in consumers {
-        std::fs::remove_dir_all(&public.project).unwrap();
+        public.remove_project();
         run_expected(
             &public,
             "finite-scheme-flow",

@@ -66,6 +66,7 @@ fn web_editor_starter_is_editable_offline_and_preserves_conditional_saves() {
     copy_executable(&binary(), &executable);
     let project = root.path().join("project");
     let public = Native {
+        memory: std::sync::RwLock::new(None),
         root,
         executable,
         project,

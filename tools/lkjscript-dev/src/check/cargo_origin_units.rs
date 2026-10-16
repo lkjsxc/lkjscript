@@ -118,15 +118,14 @@ pub(super) fn verify_records(
     for unit in units {
         verify_retained(repository, unit)?;
         if unit.build_script.is_some() {
-            let expected = lkjscript::platform::canonical_schema::generated_source().as_bytes();
             for (original, retained) in unit.filenames.iter().zip(&unit.retained) {
-                if schema_source_file(original) {
+                if let Some(expected) = generated_output(original) {
                     let path = retained_path(repository, &retained.path)?;
                     if super::cache::read_bounded(&path, expected.len() as u64)?.as_slice()
                         != expected
                     {
                         return Err(refusal(
-                            "retained generated schema differs from exact source-derived bytes",
+                            "retained generated input differs from exact source-derived bytes",
                         ));
                     }
                 }
@@ -351,12 +350,24 @@ fn custom_build(unit: &Unit) -> bool {
 // rerun the script. Its executable is an observed artifact, not an invented cold
 // compilation origin. The generated semantic input has a stronger independent
 // binding: exact equality with the source compiled into this immutable checker.
+#[cfg(test)]
 pub(super) fn schema_generator(unit: &Unit) -> bool {
     custom_build(unit) && unit.build_script.is_some()
 }
 
 pub(super) fn schema_source_file(proof: &FileProof) -> bool {
-    proof.path.ends_with("/out/canonical_schema.rs")
+    generated_output(proof).is_some()
+}
+
+fn generated_output(proof: &FileProof) -> Option<&'static [u8]> {
+    lkjscript::platform::canonical_schema::generated_outputs()
+        .into_iter()
+        .find_map(|(name, bytes)| {
+            proof
+                .path
+                .ends_with(&format!("/out/{name}"))
+                .then_some(bytes)
+        })
 }
 
 fn bind_schema_outputs(
@@ -462,39 +473,45 @@ fn bind_schema_outputs(
         canonical_directory(out_dir, Some(target))?;
         let names = fs::read_dir(out_dir)?
             .map(|entry| entry.map(|entry| entry.file_name()))
-            .collect::<Result<Vec<_>, _>>()?;
-        if names != [std::ffi::OsString::from("canonical_schema.rs")] {
+            .collect::<Result<BTreeSet<_>, _>>()?;
+        let expected_names = lkjscript::platform::canonical_schema::generated_outputs()
+            .map(|(name, _)| std::ffi::OsString::from(name))
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        if names != expected_names {
             return Err(refusal(
                 "schema generator output inventory differs from its source contract",
             ));
         }
     }
-    let generated = out_dir.join("canonical_schema.rs");
     let output = directory.join("output");
     let mut files = Vec::new();
-    for path in [&generated, &output] {
-        let proof = file_proof(path)?;
+    for (name, expected) in lkjscript::platform::canonical_schema::generated_outputs() {
+        let path = out_dir.join(name);
+        let proof = file_proof(&path)?;
         regular_proof(&proof)?;
-        if proof.path != path_string(path)?
-            || proof
-                .bytes
-                .is_none_or(|bytes| bytes > MAXIMUM_UNIT_METADATA_BYTES as u64)
+        if proof.path != path_string(&path)?
+            || proof.bytes != Some(expected.len() as u64)
+            || proof.digest.as_ref() != Some(&VerificationDigest::of(expected))
+            || (live
+                && super::cache::read_bounded(&path, expected.len() as u64)?.as_slice() != expected)
         {
-            return Err(refusal("unsafe or oversized schema generation original"));
+            return Err(refusal(
+                "generated input differs from the immutable checker's exact source-derived bytes",
+            ));
         }
         files.push(proof);
     }
-    let expected = lkjscript::platform::canonical_schema::generated_source().as_bytes();
-    if files[0].bytes != Some(expected.len() as u64)
-        || files[0].digest.as_ref() != Some(&VerificationDigest::of(expected))
-        || (live
-            && super::cache::read_bounded(&generated, expected.len() as u64)?.as_slice()
-                != expected)
+    let proof = file_proof(&output)?;
+    regular_proof(&proof)?;
+    if proof.path != path_string(&output)?
+        || proof
+            .bytes
+            .is_none_or(|bytes| bytes > MAXIMUM_UNIT_METADATA_BYTES as u64)
     {
-        return Err(refusal(
-            "generated schema bytes differ from the immutable checker's source-derived schema",
-        ));
+        return Err(refusal("unsafe or oversized schema generation original"));
     }
+    files.push(proof);
     let record = canonical_value(record)?;
     for unit in units
         .iter_mut()

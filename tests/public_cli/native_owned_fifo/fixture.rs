@@ -1,12 +1,6 @@
 use super::*;
+use crate::plan::literal_sources;
 use std::cell::Cell;
-
-#[path = "../../native_plan_support/literal_sources.rs"]
-#[allow(
-    clippy::panic,
-    reason = "immutable test fixtures must match the shared grouping envelope"
-)]
-mod literal_sources;
 
 const SOURCES: [(&str, &str); 3] = [
     (
@@ -44,7 +38,7 @@ pub(super) struct Fifo {
 }
 
 fn native() -> Native {
-    let mut public = Native::template("command");
+    let mut public = Native::memory_project("command");
     if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
         public.root.disable_cleanup(true);
         println!(
@@ -137,7 +131,7 @@ impl Fifo {
 
     pub fn detach(&self) {
         for public in [&self.supplier, &self.consumer] {
-            std::fs::remove_dir_all(&public.project).unwrap();
+            public.remove_project();
             for entry in std::fs::read_dir(public.root.path()).unwrap() {
                 let file = entry.unwrap().path();
                 if file
@@ -148,7 +142,7 @@ impl Fifo {
                     std::fs::remove_file(file).unwrap();
                 }
             }
-            assert!(!public.project.exists());
+            assert!(!public.has_project());
         }
         assert!(!self.generic.path.exists());
         self.verify_identity();

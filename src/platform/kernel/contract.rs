@@ -1,27 +1,22 @@
 //! Current semantic contracts, canonical object kinds, and hostile-decoder limits.
 
-pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-34";
-pub const GRAPH_CONTRACT_VERSION: u16 = 34;
-pub const READ_VIEW_GRAPH_CONTRACT_VERSION: u16 = 34;
-pub const ASSOCIATED_READ_VIEW_CONTRACT_IDENTITY: &str = "lkjscript-associated-read-views-1";
-pub const ASSOCIATED_READ_VIEW_CONTRACT_VERSION: u16 = 1;
-/// A separately identified additive wire capability; semantic admission remains gated.
-pub const OWNED_ASSOCIATED_CONTRACT_IDENTITY: &str = "lkjscript-owned-associated-types-1";
-pub const OWNED_ASSOCIATED_CONTRACT_VERSION: u16 = 1;
-pub const MIXED_STORAGE_GRAPH_CONTRACT_VERSION: u16 = 33;
-pub const SHARE_GRAPH_CONTRACT_VERSION: u16 = 30;
-pub const TRANSFER_GRAPH_CONTRACT_VERSION: u16 = 22;
-pub const PARALLEL_GRAPH_CONTRACT_VERSION: u16 = 21;
-pub const OWNED_GRAPH_CONTRACT_VERSION: u16 = 18;
-pub const REQUIREMENT_GRAPH_CONTRACT_VERSION: u16 = 15;
+pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph";
+pub const GRAPH_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const ASSOCIATED_READ_VIEW_CONTRACT_IDENTITY: &str = "lkjscript-associated-read-views";
+pub const ASSOCIATED_READ_VIEW_CONTRACT_VERSION: u16 =
+    crate::platform::canonical_schema::SCHEMA_EPOCH;
+/// Associated type inventories are inline in the current declaration schema.
+pub const OWNED_ASSOCIATED_CONTRACT_IDENTITY: &str = "lkjscript-owned-associated-types";
+pub const OWNED_ASSOCIATED_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const fn supported_graph_contract(version: u16) -> bool {
     version == GRAPH_CONTRACT_VERSION
 }
 /// Current type-object semantic profile. Schema identity is bound by canonical framing.
-pub const TYPE_OBJECT_CONTRACT_IDENTITY: &str = "lkjscript-type-object-10";
-pub const TYPE_OBJECT_CONTRACT_VERSION: u16 = 10;
-pub const NOMINAL_APPLICATION_CONTRACT_VERSION: u16 = 1;
-pub const SEMANTIC_STATE_CONTRACT_VERSION: u16 = 1;
+pub const TYPE_OBJECT_CONTRACT_IDENTITY: &str = "lkjscript-type-object";
+pub const TYPE_OBJECT_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const NOMINAL_APPLICATION_CONTRACT_VERSION: u16 =
+    crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const SEMANTIC_STATE_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 
 pub const OWNER_MAGIC: [u8; 8] = *b"LKJOWNER";
 pub const TYPE_OBJECT_MAGIC: [u8; 8] = *b"LKJTYPES";

@@ -1,38 +1,40 @@
 # Current status
 
-Updated 2026-10-15. Main source `507efb03` has local full and candidate acceptance.
-Hosted [Verify](https://github.com/lkjsxc/lkjscript/actions/runs/38762806893) and
-[Release](https://github.com/lkjsxc/lkjscript/actions/runs/38767128052) completion
-remain pending; their live terminals own the outcome. No public promotion has
-completed. The latest published release remains `v0.1.94`.
+Updated 2026-10-16. Integrated source `507efb03` completed hosted
+[Verify](https://github.com/lkjsxc/lkjscript/actions/runs/38762806893) and
+[Release candidate](https://github.com/lkjsxc/lkjscript/actions/runs/38767128052).
+Verify took 128m54s. Candidate success does not establish public promotion.
 
-## Current capabilities
+Phase 1 implements one checkout and one shared Cargo target, bounded copy-on-write
+memory graph/data projects, shared admitted standard packages/programs and one current
+schema epoch. Default checks retain a bounded receipt and remove joined scratch;
+release handoffs explicitly retain originals. Previous formats have no fallback reader.
 
-- Accepted typed meaning, atomic publication and exact offline packages.
-- Affine ownership, generic witnesses, nominal records/sequences, associated owned
-  types, source-tied views, scoped parallel reads and shared multi-instance runtime.
-- Production bytecode checked against an independent canonical interpreter;
-  native dependency validation, component analysis and stage planning.
-- Source-bound canonical schema/current-only codecs and regenerated maintained assets.
-- Immutable supplier/native fixture reuse, pure source/deployment batches, reduced VM
-  admission/copy work, shared verifier bootstrap and compressed guidance.
+## Established capability
 
-## Next milestone
+Accepted typed meaning remains the sole editable authority, with atomic publication,
+exact offline packages, affine ownership, explicit generic witnesses, nominal
+records/sequences, associated owned types, source-tied views, scoped parallel reads
+and shared multi-instance runtime. Production bytecode is checked against an
+independent canonical interpreter. Native dependency validation, component analysis
+and stage planning are maintained consumers.
 
-Complete the source/final-boundary split: admit every actual source semantic case
-from original logs/receipts, then run bounded real processes against final bytes.
-Native boundaries require seven exact smokes; offline and pure-tail retain full
-source semantics and authenticated fixtures for their separate candidate boundaries.
-Fresh follow-up acceptance, normal mainline integration and exact candidate/hosted
-terminals remain required. Two pinned userlands and installation recovery retain
-separate owners; source proof cannot impersonate final execution or publication.
+All five maintained projects passed the same 477 differential tests before and after
+the epoch reset: standard 116, lkjournal 44, planner 176, policy 62 and guides 79.
+Complete closures were re-admitted through ordinary publication without changing
+pinned dependencies, and their transports and artifacts match independent derivation.
 
-The retained baseline was 124.90 minutes. Complete local verification below three
-minutes and hosted completion below ten minutes remain unproven. Focused
-improvements do not establish either SLA.
+## Local verification and next work
 
-Checked atomic changes with symbolic selectors remain the next language increment.
-Regions, compositional effects and native backend/self-hosting expansion follow
-[the roadmap](roadmap.md). [Verification](spec/verification.md) owns proof/gates;
-[release](release.md) owns exact candidate/publication acceptance. Original receipts
-retain execution outcomes outside this dashboard.
+The pre-commit implementation passed all 29 changed gates in 274.15 seconds and all
+29 fresh full gates in 278.61 seconds, with stable inputs and no reused gate results.
+The full compact receipt was 24,656 bytes. Complete workspace harnesses, independent
+semantic expectations and actual process/network lifecycles remain covered. These
+are local results; remote main remains `507efb03` and no new publication is claimed.
+Wall time is measured and reported; acceptance has no three-minute requirement.
+
+Next implement atomic symbolic transactions and repository compaction, followed by
+regions, effect/resource analysis, equality optimization, native ELF and self-hosting.
+Each increment requires independent semantic and boundary checks before normal main
+integration. [Verification](spec/verification.md) owns gates and evidence;
+[release](release.md) owns exact candidate and publication authority.

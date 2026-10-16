@@ -97,7 +97,7 @@ pub(super) fn execute(
     let before = crate::authority::observe_graph_authority(&package.path)?;
     let head_name = filename(label, "head");
     fs::copy(package.path.join("HEAD"), context.evidence.join(&head_name))?;
-    let smoke_index = context.receipt.commands.len();
+    let smoke_index = context.command_index();
     context.cli(
         Some(&package.path),
         &["run", &smoke.target, "--arguments", &smoke.arguments],
@@ -112,7 +112,7 @@ pub(super) fn execute(
         "source batch evidence already exists",
     )?;
     fs::write(&input, requests(cases)?)?;
-    let command = context.receipt.commands.len();
+    let command = context.command_index();
     context.cli(
         Some(&package.path),
         &[
@@ -136,6 +136,7 @@ pub(super) fn execute(
         .position(|source| {
             source.package == package.id && source.semantic_revision == package.revision
         })
+        .map(|index| index + context.receipt.inventory_base)
         .ok_or_else(|| DevError::corrupt("source batch accepted export missing"))?;
     let witness = Witness {
         schema: "lkjscript-offline-source-batch-1".to_owned(),
@@ -256,18 +257,22 @@ pub(super) fn read(
             .to_string(),
     ]);
     let summary = command_output(receipt, root, witness.command, expected_command)?;
+    let inventory_index = witness
+        .inventory
+        .checked_sub(receipt.inventory_base)
+        .ok_or_else(|| DevError::corrupt("source batch inventory precedes its worker range"))?;
     let source = receipt
         .producer_inventories
-        .get(witness.inventory)
+        .get(inventory_index)
         .ok_or_else(|| DevError::corrupt("source batch inventory missing"))?;
     let inventory = receipt
         .inventories
-        .get(witness.inventory)
+        .get(inventory_index)
         .ok_or_else(|| DevError::corrupt("source batch transport inventory missing"))?;
     verify_producer_inventory(source, inventory)?;
     let transport = receipt
         .transport_digests
-        .get(witness.inventory)
+        .get(inventory_index)
         .ok_or_else(|| DevError::corrupt("source batch transport digest missing"))?;
     let bound = lkjscript::platform::contributor::strict_artifact_source_probe(
         &process::read_bounded(&root.join(artifact), MAXIMUM_CONTAINER_BYTES)?,
@@ -298,7 +303,7 @@ pub(super) fn read(
             && field(&summary, "authority", "revision")? == source.semantic_revision
             && field(&summary, "artifact", "bundle")? == bundle
             && field(&summary, "batch", "schema")?
-                == lkjscript::platform::canonical_schema::CANONICAL_SCHEMA_HASH_HEX
+                == lkjscript::platform::canonical_schema::SCHEMA_EPOCH.to_string()
             && field(&summary, "batch", "validator")?
                 == lkjscript::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH
                     .iter()
@@ -347,10 +352,13 @@ fn command_output(
     index: usize,
     expected: Vec<String>,
 ) -> Result<Vec<CompactRecord>, DevError> {
-    let command = receipt
-        .commands
-        .get(index)
-        .ok_or_else(|| DevError::corrupt("source batch actual command missing"))?;
+    let command =
+        receipt
+            .commands
+            .get(index.checked_sub(receipt.command_base).ok_or_else(|| {
+                DevError::corrupt("source batch command precedes its worker range")
+            })?)
+            .ok_or_else(|| DevError::corrupt("source batch actual command missing"))?;
     require(
         command.command == expected
             && command.cwd == receipt.isolated_root

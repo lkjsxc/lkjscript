@@ -62,7 +62,7 @@ const CASES: [(&str, &str, &str); 4] = [
 ];
 
 fn native(template: &str) -> Native {
-    let mut public = Native::template(template);
+    let mut public = Native::memory_project(template);
     if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
         public.root.disable_cleanup(true);
         println!(
@@ -325,7 +325,7 @@ impl Packages {
 
     fn refused(&self, label: &str, body: &str) {
         let before = self.application.revision();
-        let head = std::fs::read(self.application.project.join("HEAD")).unwrap();
+        let head = self.application.head_bytes();
         let request = format!("request base={before}\n{}{body}", self.imports());
         archive(
             &self.application,
@@ -360,10 +360,7 @@ impl Packages {
             format!("{records:#?}").as_bytes(),
         );
         assert_eq!(self.application.revision(), before);
-        assert_eq!(
-            std::fs::read(self.application.project.join("HEAD")).unwrap(),
-            head
-        );
+        assert_eq!(self.application.head_bytes(), head);
         // A refused plan has no reviewed apply token; never fabricate one.
     }
 
@@ -379,8 +376,8 @@ impl Packages {
             .iter()
             .chain(std::iter::once(&self.application))
         {
-            std::fs::remove_dir_all(&public.project).unwrap();
-            assert!(!public.project.exists());
+            public.remove_project();
+            assert!(!public.has_project());
             for entry in std::fs::read_dir(public.root.path()).unwrap() {
                 let file = entry.unwrap().path();
                 if file

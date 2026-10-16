@@ -58,7 +58,7 @@ jobs:
           { uname -a; cat /etc/os-release; git --version; free -h; df -h .; } \
             > "$RUNNER_TEMP/verify-evidence/environment.txt"
 
-      - name: Provision the repository-pinned toolchain and immutable verifier
+      - name: Provision the repository-pinned toolchain and shared-target verifier
         shell: bash
         run: |
           set -euo pipefail
@@ -67,17 +67,15 @@ jobs:
           { rustc --version --verbose; cargo --version; } \
             >> "$RUNNER_TEMP/verify-evidence/environment.txt"
           cargo fetch --locked
-          bash tools/bootstrap-verifier.sh --output "$RUNNER_TEMP/verify-tools" \
-            --expected-source "$GITHUB_SHA"
+          verifier_root=$(bash tools/bootstrap-verifier.sh --output "$RUNNER_TEMP/verify-tools" \
+            --expected-source "$GITHUB_SHA")
+          echo "VERIFIER=$verifier_root/lkjscript-dev" >> "$GITHUB_ENV"
 
       - name: Execute the maintained full profile once with fresh evidence
         shell: bash
         run: |
           set -euo pipefail
-          # First CHECK8 profile requires a cold governed target; never erase an existing target.
-          test ! -e "$GITHUB_WORKSPACE/target" && test ! -L "$GITHUB_WORKSPACE/target"
-          CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target" \
-            "$RUNNER_TEMP/verify-tools/lkjscript-dev" check full --fresh --jobs 2 --machine \
+          "$VERIFIER" check full --fresh --jobs 2 --machine \
             | tee "$RUNNER_TEMP/verify-evidence/summary.json"
 
       - name: Require complete fresh acceptance of this exact source
@@ -89,8 +87,10 @@ jobs:
             and .passed == .selected and .fresh == .selected and .reused == 0
             and .failure == null' "$summary" > /dev/null
           receipt=$(jq -er '.receipt' "$summary")
-          [[ "$receipt" =~ ^\.artifacts/lkjscript-dev/check/[0-9]+-[0-9]+-[0-9]+/receipt\.json$ ]]
+          test "$receipt" = .artifacts/lkjscript-dev/latest-receipt.json
+          test "$(wc -c < "$receipt")" -lt 65536
           jq -e --arg source "$GITHUB_SHA" '.status == "passed" and .profile == "full"
+            and .originals_retained == false
             and .git_head == $source and .input_stable == true and .fresh_required == true
             and (.selected_gates | length) > 0 and (.unrun_gates | length) == 0
             and .passed_gates == (.selected_gates | length)
@@ -106,17 +106,15 @@ jobs:
             printf '\nNo release, deployment, ref update, or automatic merge was performed.\n'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Retain original evidence and failure diagnostics
+      - name: Retain compact verification receipts and diagnostics
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: verify-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/verify-evidence
-            ${{ runner.temp }}/verify-tools/evidence
-            ${{ github.workspace }}/.artifacts/lkjscript-dev/check
-            ${{ github.workspace }}/.artifacts/lkjscript-dev/service
-            ${{ github.workspace }}/.artifacts/offline-packages
+            ${{ runner.temp }}/verify-tools/receipt.json
+            ${{ github.workspace }}/.artifacts/lkjscript-dev/latest-receipt.json
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 14

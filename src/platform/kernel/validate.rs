@@ -456,10 +456,10 @@ impl FullValidator<'_> {
                 return;
             }
             self.capture(record.validate_local());
-            if record.header().contract_version > self.snapshot.root.graph_contract_version {
+            if record.header().contract_version != self.snapshot.root.graph_contract_version {
                 self.error(
                     "kernel_owner_graph_generation",
-                    "owner uses a newer generation than its containing graph",
+                    "owner schema epoch differs from its containing graph",
                 );
             }
             if *key != record.owner() {
@@ -490,7 +490,7 @@ impl FullValidator<'_> {
                 return;
             }
             self.capture(dependency.validate_local());
-            if dependency.graph_contract_version > self.snapshot.root.graph_contract_version {
+            if dependency.graph_contract_version != self.snapshot.root.graph_contract_version {
                 self.error(
                     "kernel_dependency_graph_generation",
                     "dependency encoding is newer than its containing graph",
@@ -508,7 +508,7 @@ impl FullValidator<'_> {
                 return;
             }
             self.capture(retirement.validate_local());
-            if retirement.graph_contract_version > self.snapshot.root.graph_contract_version {
+            if retirement.graph_contract_version != self.snapshot.root.graph_contract_version {
                 self.error(
                     "kernel_retirement_graph_generation",
                     "retirement encoding is newer than its containing graph",
@@ -1753,7 +1753,7 @@ impl FullValidator<'_> {
                     && (source == OwnerKey::Binding(binding) || body_scope
                         || expression.is_some_and(|expression| containers.len() == 1
                             && matches!(self.snapshot.owners.get(&OwnerKey::Expression(containers[0].expression)), Some(OwnerRecord::Expression(parent))
-                                if parent.contract_version >= super::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                                if parent.contract_version == super::contract::GRAPH_CONTRACT_VERSION
                                     && matches!(parent.operation, ExpressionOperation::BorrowCall { call, binding: owner, .. } if call == expression && owner == binding))));
                 if explicit_loan
                     || initializer_scope

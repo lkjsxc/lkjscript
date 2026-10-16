@@ -206,9 +206,9 @@ fn function(
                 && *mode == ParameterUse::Borrow
                 && closure.scoped_owned(*ty, Some(scope))?
                 && (owner.header.contract_version
-                    < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                    != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                     || parameter.header.contract_version
-                        < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION))
+                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION))
         {
             return Err(reject());
         }

@@ -649,8 +649,8 @@ fn admit_signature(
             }
             if !s.pure
                 && p.use_mode == ParameterUse::Borrow
-                && (s.generation < contract::SHARE_GRAPH_CONTRACT_VERSION
-                    || p.header.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION)
+                && (s.generation != contract::GRAPH_CONTRACT_VERSION
+                    || p.header.contract_version != contract::GRAPH_CONTRACT_VERSION)
             {
                 return Err(reject("borrowed task memory parameters require Graph 30"));
             }
@@ -3108,7 +3108,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
                     .iter()
                     .chain(&right.parameters)
                     .any(|parameter| parameter.use_mode == ParameterUse::Borrow)
-                    && e.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION
+                    && e.contract_version != contract::GRAPH_CONTRACT_VERSION
                 {
                     return Err(reject("parallel read captures require Graph 30"));
                 }
@@ -3471,7 +3471,7 @@ pub(crate) fn validate_owner_at(
     record: &OwnerRecord,
     associated: &OwnedAssociatedAdmission,
 ) -> Result<(), Diagnostic> {
-    if record.header().contract_version < 26 {
+    if record.header().contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH {
         let extended = match record {
             OwnerRecord::Declaration(d) => match &d.payload {
                 DeclarationPayload::OwnedContract(c) => {
@@ -3504,7 +3504,7 @@ pub(crate) fn validate_owner_at(
             return Err(Diagnostic::new(
                 DiagnosticClass::Semantic,
                 "kernel_parameterized_contract_generation",
-                "parameterized and structured owned contract meaning requires Graph 26",
+                "parameterized and structured owned contract meaning requires the current schema epoch",
             ));
         }
     }
@@ -3570,7 +3570,7 @@ pub(crate) fn validate_owner_at(
                         matches!(key, OwnerKey::TypeParameter(id) if f.type_parameters.contains(&id))
                     }
                     DeclarationPayload::OwnedImplementation(i) => {
-                        p.header.contract_version >= 28
+                        p.header.contract_version == crate::platform::canonical_schema::SCHEMA_EPOCH
                             && matches!(key, OwnerKey::TypeParameter(id)
                                 if i.type_parameters.contains(&id))
                     }

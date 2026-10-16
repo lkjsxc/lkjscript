@@ -416,10 +416,7 @@ fn sessions(
         &["build", "--output", &artifact.display().to_string()],
         true,
     )?;
-    let mut descriptor: Value = serde_json::from_slice(&process::read_bounded(
-        &context.evidence.join("nominal-session.deployment.json"),
-        MAXIMUM_OUTPUT_BYTES,
-    )?)?;
+    let mut descriptor = super::nominal_session::descriptor();
     descriptor["grants"][0]["sharing_domain"] = json!("recursive-session-streams");
     fs::write(
         standalone.join("session.deployment.json"),
@@ -442,7 +439,7 @@ fn sessions(
     fs::remove_dir_all(&standalone)?;
     let (observation, process) = observed?;
     context.receipt.recursive.session = observation;
-    context.receipt.runners.push(process);
+    context.push_runner(process)?;
     Ok(())
 }
 
@@ -796,16 +793,21 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
     context.receipt.recursive.producers_removed = !library.path.exists() && !consumer.path.exists();
     context.cache_recovery(&receiver_package, "recursive-received")?;
     context.cli(Some(&receiver_package.path), &["check"], true)?;
-    let receiver_export = context.receipt.commands.len();
+    let receiver_export = context.command_index();
     context.export(&mut receiver_package)?;
     batch::execute(context, &receiver_package, true)?;
     batch::boundary(context, receiver_export)?;
     let project = receiver_package.path.clone();
+    #[allow(
+        clippy::result_large_err,
+        reason = "direct semantic boundary callbacks preserve complete typed diagnostics"
+    )]
+    let probe = || lkjscript::platform::contributor::recursive_execution_probe(&project);
     context.receipt.recursive.resources = context.probe_json(
         "recursive-resources",
         "contributor.recursive_execution_probe",
         &[project.display().to_string()],
-        || lkjscript::platform::contributor::recursive_execution_probe(&project),
+        probe,
     )?;
     batch::execute(context, &receiver_package, false)?;
     let original = small();

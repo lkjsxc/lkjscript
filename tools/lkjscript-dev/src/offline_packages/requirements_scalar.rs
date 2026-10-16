@@ -105,7 +105,7 @@ fn author(
     label: &str,
     body: &str,
 ) -> Result<Value, DevError> {
-    let first = context.receipt.commands.len();
+    let first = context.command_index();
     let base = package.revision.clone();
     let accepted = context.apply(package, body)?;
     let input = format!("request-{first}.lkjc");
@@ -234,7 +234,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         let bytes = evidence::encode_json(&descriptor(label, target))?;
         fs::write(&path, &bytes)?;
         fs::write(context.evidence.join(format!("{MATERIAL}-{name}")), bytes)?;
-        commands.push(context.receipt.commands.len());
+        commands.push(context.command_index());
         let output = context.cli(
             None,
             &[

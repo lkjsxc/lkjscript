@@ -90,10 +90,13 @@ mod syntax;
 pub(crate) mod witness;
 pub mod worker;
 
+pub use storage::project::MemProjectStore;
+
 pub use cli::{
     ForegroundRunOptions, execute_build, execute_capabilities, execute_change, execute_check,
-    execute_data, execute_foreground_run, execute_inspect, execute_inspect_owner, execute_new,
-    execute_package_builtin, execute_query, execute_run, execute_status, parse_foreground_run,
+    execute_data, execute_foreground_run, execute_in_memory, execute_inspect,
+    execute_inspect_owner, execute_new, execute_package_builtin, execute_query, execute_run,
+    execute_status, parse_foreground_run,
 };
 pub use configuration::{
     CONFIGURATION_ADAPTER_CONTRACT_VERSION, ConfigurationObservation, ConfigurationValue,
@@ -136,6 +139,7 @@ pub use meaning::{
 };
 pub use object::{OBJECT_ADAPTER_CONTRACT_VERSION, ObjectLimits, S3Config, S3Credentials};
 pub use package::{Dependency, ModuleLocator, PackageDescriptor, PackageId, RunnerKind, Target};
+pub use project_creation::create_memory_project;
 pub use queue::{DURABLE_QUEUE_CONTRACT_VERSION, JobSnapshot, JobState, QueueLimits};
 pub use revision::{
     AffectedOwner, ParentRevision, ReceiptStatus, RevisionCore, RevisionRecord, SemanticHead,

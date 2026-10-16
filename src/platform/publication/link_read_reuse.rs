@@ -141,7 +141,8 @@ impl RepositoryView {
             self.validation_checkpoint()?;
             consume_final_work(&mut reuse)?;
             let reuse = reuse.as_mut().ok_or_else(link_work_error)?;
-            let ready = super::super::repository::read_package_readiness(self.store.root())?;
+            let ready =
+                super::super::repository::read_store_readiness(self.store.persistent_base())?;
             for closure in reuse.entries.values() {
                 for selection in &closure.closure.selections {
                     self.validation_checkpoint()?;

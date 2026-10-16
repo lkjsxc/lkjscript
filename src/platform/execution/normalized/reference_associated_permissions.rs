@@ -1008,8 +1008,7 @@ pub(super) fn discharge(
         };
         if function.occurrences.get(&parent_key) != Some(&parent.contract_version)
             || !matches!(parent.operation, ExpressionOperation::Parallel {left,right} if left==parallel.left && right==parallel.right)
-            || parent.contract_version
-                < crate::platform::kernel::contract::PARALLEL_GRAPH_CONTRACT_VERSION
+            || parent.contract_version != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
         {
             return Err(failure());
         }
@@ -1116,8 +1115,8 @@ pub(super) fn discharge(
                             source.root.graph_contract_version,
                             read_view,
                         )
-                        || parent.contract_version > source.root.graph_contract_version
-                        || expression.contract_version > source.root.graph_contract_version)
+                        || parent.contract_version != source.root.graph_contract_version
+                        || expression.contract_version != source.root.graph_contract_version)
             {
                 return Err(failure());
             }
@@ -1158,9 +1157,9 @@ pub(super) fn discharge(
                 let share = *use_mode == ParameterUse::Borrow;
                 if share
                     && (declaration.header.contract_version
-                        < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                         || parameter.header.contract_version
-                            < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION)
+                            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
                 {
                     return Err(failure());
                 }

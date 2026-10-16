@@ -259,15 +259,7 @@ fn native_forms_encoding_matches_independent_bytes_limits_and_detached_roundtrip
     drop(library);
     assert!(!producer.exists());
     let accepted = public.revision();
-    source_batch::execute_in(
-        public.mode,
-        public.root.path(),
-        &public.executable,
-        "form-encoding-matrix",
-        &public.project,
-        "encode-batch",
-        &matrix,
-    );
+    public.source_batch_outputs("form-encoding-matrix", "encode-batch", &matrix);
     assert_eq!(public.revision(), accepted);
     assert!(
         !public
@@ -490,7 +482,7 @@ fn native_forms_encoding_posts_exact_native_bodies_to_an_independent_detached_re
 
 #[test]
 fn native_forms_encoding_preserves_review_binding_and_native_tests_detect_mutation() {
-    let public = Native::template("command");
+    let public = Native::memory_template("command");
     let before = public.revision();
     let source =
         include_str!("../../docs/guides/examples/form-codec.lkjc").replace("LIBRARY_BASE", &before);

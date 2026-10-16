@@ -2,24 +2,42 @@
     clippy::expect_used,
     clippy::panic,
     clippy::unwrap_used,
-    reason = "public subprocess acceptance reports assertion failures"
+    reason = "public adapter and process acceptance reports assertion failures"
 )]
 
-mod support;
+use crate::support;
 
 use lkjscript::platform::control::{CompactRecord, parse_records};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Command;
+use support::semantic_cli::{self, Response};
 
 struct Public {
     directory: tempfile::TempDir,
     executable: PathBuf,
     project: PathBuf,
+    memory: Option<lkjscript::platform::MemProjectStore>,
 }
 
 impl Public {
+    fn memory(template: &str) -> Self {
+        if semantic_cli::Mode::selected() != semantic_cli::Mode::HostSemantic {
+            return Self::new(template);
+        }
+        let directory = tempfile::tempdir().unwrap();
+        let project = directory.path().join("author");
+        let memory = lkjscript::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+        lkjscript::platform::create_memory_project(&memory, "structural", template).unwrap();
+        Self {
+            directory,
+            executable: PathBuf::from(env!("CARGO_BIN_EXE_lkjscript")),
+            project,
+            memory: Some(memory),
+        }
+    }
+
     fn new(template: &str) -> Self {
         let source = std::env::var_os("LKJSCRIPT_RELEASE_CANDIDATE")
             .map(PathBuf::from)
@@ -37,6 +55,7 @@ impl Public {
             directory,
             executable,
             project,
+            memory: None,
         };
         public.success(&[
             "new",
@@ -49,7 +68,16 @@ impl Public {
         public
     }
 
-    fn output(&self, arguments: &[&str]) -> Output {
+    fn output(&self, arguments: &[&str]) -> Response {
+        if let Some(memory) = &self.memory {
+            let arguments = arguments
+                .strip_prefix(&["--project", path(&self.project)])
+                .unwrap_or(arguments);
+            return semantic_cli::execute_memory(
+                memory,
+                arguments.iter().map(|value| (*value).to_owned()).collect(),
+            );
+        }
         support::output(
             Command::new(&self.executable)
                 .args(arguments)
@@ -58,12 +86,13 @@ impl Public {
                 .env("LANG", "C"),
         )
         .unwrap()
+        .into()
     }
 
     fn success(&self, arguments: &[&str]) -> Vec<CompactRecord> {
         let output = self.output(arguments);
         assert!(
-            output.status.success(),
+            output.success,
             "{arguments:?}: stdout={} stderr={}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
@@ -75,14 +104,11 @@ impl Public {
     fn failure(&self, arguments: &[&str]) -> Vec<CompactRecord> {
         let output = self.output(arguments);
         assert!(
-            output.status.code().is_some(),
+            output.code.is_some(),
             "subprocess crashed: {arguments:?}; stderr={}",
             String::from_utf8_lossy(&output.stderr)
         );
-        assert!(
-            !output.status.success(),
-            "unexpected acceptance: {arguments:?}"
-        );
+        assert!(!output.success, "unexpected acceptance: {arguments:?}");
         assert!(
             output.stderr.is_empty(),
             "process-level failure: {}",
@@ -443,9 +469,9 @@ fn copied_binary_flat_plan_block_apply_and_block_plan_flat_apply_preserve_review
 }
 
 #[test]
-fn copied_binary_structural_pure_map_record_nested_keys_ordered_calls_and_lazy_branch_have_independent_results()
+fn public_structural_pure_map_record_nested_keys_ordered_calls_and_lazy_branch_have_independent_results()
  {
-    let public = Public::new("command");
+    let public = Public::memory("command");
     let request = public.write("map-record.lkjc", &format!(
         "request base={}\n{}",
         public.revision(),
@@ -718,8 +744,8 @@ fn copied_binary_block_scope_and_private_root_rejections_leave_the_complete_requ
 }
 
 #[test]
-fn copied_binary_f64_review_parity_decimal_ingress_and_canonical_observation() {
-    let public = Public::new("minimal");
+fn public_f64_review_parity_decimal_ingress_and_canonical_observation() {
+    let public = Public::memory("minimal");
     let discovery = public.success(&["capabilities", "--section", "change"]);
     assert!(
         discovery

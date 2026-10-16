@@ -32,6 +32,59 @@ fn selection(package: &Package) -> String {
     )
 }
 
+// Cache admission work is an observation, not accepted meaning. Keep every other
+// status value, including current validity and validator identity, in the comparison.
+fn same_accepted_status(
+    before: &[CompactRecord],
+    after: &[CompactRecord],
+) -> Result<bool, DevError> {
+    for records in [before, after] {
+        let validations = records
+            .iter()
+            .filter(|record| record.operation == "current-validation")
+            .collect::<Vec<_>>();
+        let [validation] = validations.as_slice() else {
+            return Err(DevError::corrupt("status has no unique current validation"));
+        };
+        require(
+            record_field(validation, "status")? == "valid"
+                && record_field(validation, "code")? == "none"
+                && matches!(
+                    record_field(validation, "proof")?.as_str(),
+                    "rebuilt" | "reused"
+                )
+                && record_field(validation, "canonical-bytes-read")?
+                    .parse::<u64>()
+                    .is_ok()
+                && record_field(validation, "semantic-work")?
+                    .parse::<u64>()
+                    .is_ok(),
+            "rejected repair status lost current validation",
+        )?;
+    }
+    let values = |records: &[CompactRecord]| {
+        records
+            .iter()
+            .map(|record| {
+                let fields = record
+                    .fields
+                    .iter()
+                    .filter(|field| {
+                        record.operation != "current-validation"
+                            || !matches!(
+                                field.name.as_str(),
+                                "proof" | "canonical-bytes-read" | "semantic-work"
+                            )
+                    })
+                    .map(|field| (field.name.clone(), field.value.clone()))
+                    .collect::<Vec<_>>();
+                (record.operation.clone(), fields)
+            })
+            .collect::<Vec<_>>()
+    };
+    Ok(values(before) == values(after))
+}
+
 impl Evolution {
     fn cli(
         &mut self,
@@ -43,7 +96,7 @@ impl Evolution {
     ) -> Result<Vec<CompactRecord>, DevError> {
         require(
             self.commands
-                .insert(label.to_owned(), context.receipt.commands.len())
+                .insert(label.to_owned(), context.command_index())
                 .is_none(),
             "duplicate parameter-type command label",
         )?;
@@ -153,7 +206,7 @@ impl Evolution {
             package: package.id.clone(),
             revision: package.revision.clone(),
             logical: package.logical.clone(),
-            inventory: context.receipt.inventories.len() - 1,
+            inventory: context.inventory_index() - 1,
         });
         Ok(())
     }
@@ -283,7 +336,7 @@ impl Evolution {
             true,
         )?;
         require(
-            before == after
+            same_accepted_status(&before, &after)?
                 && definition_before == definition_after
                 && crate::authority::observe_graph_authority(&package.path)? == authority,
             "rejected parameter repair changed accepted meaning",
@@ -1035,19 +1088,20 @@ pub(super) fn validate(
         "stale-consumer-port",
     ] {
         require(
-            output(receipt, root, &evolution, &format!("{name}-before"))?
-                == output(receipt, root, &evolution, &format!("{name}-after"))?
-                && output(
-                    receipt,
-                    root,
-                    &evolution,
-                    &format!("{name}-definition-before"),
-                )? == output(
-                    receipt,
-                    root,
-                    &evolution,
-                    &format!("{name}-definition-after"),
-                )?,
+            same_accepted_status(
+                &output(receipt, root, &evolution, &format!("{name}-before"))?,
+                &output(receipt, root, &evolution, &format!("{name}-after"))?,
+            )? && output(
+                receipt,
+                root,
+                &evolution,
+                &format!("{name}-definition-before"),
+            )? == output(
+                receipt,
+                root,
+                &evolution,
+                &format!("{name}-definition-after"),
+            )?,
             "rejected incomplete repair changed public accepted HEAD",
         )?;
         let rejected = output(receipt, root, &evolution, name)?;
@@ -1182,4 +1236,37 @@ pub(super) fn validate(
         )?;
     }
     Ok(copied)
+}
+
+#[cfg(test)]
+mod status_tests {
+    use super::*;
+
+    #[test]
+    fn cache_work_can_change_but_accepted_values_and_validation_cannot() {
+        let before = b"revision id=accepted\ncurrent-validation status=valid proof=rebuilt canonical-bytes-read=100 semantic-work=40 validator=exact code=none\nreceipt digest=original\n";
+        let after = b"revision id=accepted\ncurrent-validation status=valid proof=reused canonical-bytes-read=80 semantic-work=0 validator=exact code=none\nreceipt digest=original\n";
+        let before = parse_records("status", before).unwrap();
+        let after = std::str::from_utf8(after).unwrap();
+        assert!(
+            same_accepted_status(&before, &parse_records("status", after.as_bytes()).unwrap())
+                .unwrap()
+        );
+        for (from, to) in [
+            ("accepted", "changed"),
+            ("original", "changed"),
+            ("validator=exact", "validator=other"),
+        ] {
+            let altered = parse_records("status", after.replace(from, to).as_bytes()).unwrap();
+            assert!(!same_accepted_status(&before, &altered).unwrap());
+        }
+        for (from, to) in [
+            ("status=valid", "status=invalid"),
+            ("proof=reused", "proof=unknown"),
+            ("semantic-work=0", "semantic-work=unknown"),
+        ] {
+            let altered = parse_records("status", after.replace(from, to).as_bytes()).unwrap();
+            assert!(same_accepted_status(&before, &altered).is_err());
+        }
+    }
 }

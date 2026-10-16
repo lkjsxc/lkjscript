@@ -301,7 +301,9 @@ fn native_parallel_work_shared_cpu_service_and_independent_http_join_and_restart
     family.detach();
     std::fs::remove_dir_all(&sibling.project).unwrap();
     for cycle in 0..2 {
-        let group = process::Group::start(&family.application, &descriptors, &[]);
+        // Physical start/reuse counts and OS signals need an isolated process.
+        // A host-semantic group may lend every idle worker to another fixture.
+        let group = process::Group::start_process(&family.application, &descriptors, &[]);
         let independent_address = group.address(1);
         let baseline = http::send(independent_address, "GET", "/", &[], "");
         assert_eq!(baseline.status, 200);

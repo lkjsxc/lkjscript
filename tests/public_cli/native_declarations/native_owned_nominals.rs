@@ -22,7 +22,7 @@ const TARGETS: [&str; 5] = [
 static NEXT_DRAFT: AtomicUsize = AtomicUsize::new(0);
 
 fn native() -> Native {
-    let mut public = Native::template("command");
+    let mut public = Native::memory_project("command");
     if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
         public.root.disable_cleanup(true);
         println!(
@@ -73,7 +73,7 @@ fn unchanged(public: &Native, module: &str) -> String {
 
 fn reject(public: &Native, label: &str, source: &str) -> Vec<CompactRecord> {
     let before = public.revision();
-    let head = std::fs::read(public.project.join("HEAD")).unwrap();
+    let head = public.head_bytes();
     let input = public.input(
         &format!("rejected-{label}.lkjc"),
         &format!("request base={before}\n{source}"),
@@ -89,7 +89,7 @@ fn reject(public: &Native, label: &str, source: &str) -> Vec<CompactRecord> {
         before,
         "rejected {label} changed meaning"
     );
-    assert_eq!(std::fs::read(public.project.join("HEAD")).unwrap(), head);
+    assert_eq!(public.head_bytes(), head);
     records
 }
 
@@ -197,7 +197,7 @@ impl Nominals {
 
     fn detach(&self) {
         for public in [&self.supplier, &self.consumer] {
-            std::fs::remove_dir_all(&public.project).unwrap();
+            public.remove_project();
             for entry in std::fs::read_dir(public.root.path()).unwrap() {
                 let file = entry.unwrap().path();
                 if file
@@ -208,7 +208,7 @@ impl Nominals {
                     std::fs::remove_file(file).unwrap();
                 }
             }
-            assert!(!public.project.exists());
+            assert!(!public.has_project());
         }
         assert!(!self.generic.path.exists());
         self.verify_identity();
@@ -440,7 +440,7 @@ declarations.end
     for detached in [false, true] {
         if detached {
             for public in [&leaf, &wrapper, &consumer] {
-                std::fs::remove_dir_all(&public.project).unwrap();
+                public.remove_project();
                 for entry in std::fs::read_dir(public.root.path()).unwrap() {
                     let file = entry.unwrap().path();
                     if file
@@ -450,7 +450,7 @@ declarations.end
                         std::fs::remove_file(file).unwrap();
                     }
                 }
-                assert!(!public.project.exists());
+                assert!(!public.has_project());
             }
             assert!(!b.path.exists() && !c.path.exists());
         }

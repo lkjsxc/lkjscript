@@ -28,12 +28,12 @@ impl<'a, 'b> Adapter<'a, 'b> {
         self.budget.tick()?;
         let declaration = binder.declaration();
         let record = self.declaration(declaration)?;
-        if record.header.contract_version != 34
+        if record.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
             || self
                 .source(declaration.package)?
                 .root
                 .graph_contract_version
-                != 34
+                != crate::platform::canonical_schema::SCHEMA_EPOCH
         {
             return Err(model::Refusal::Scope);
         }
@@ -106,12 +106,12 @@ impl<'a, 'b> Adapter<'a, 'b> {
 
     pub(super) fn view_scope(&self, argument: ReadScopeArgument, context: Context) -> Result<()> {
         self.budget.tick()?;
-        if context.generation != 34
+        if context.generation != crate::platform::canonical_schema::SCHEMA_EPOCH
             || self
                 .source(context.source.package)?
                 .root
                 .graph_contract_version
-                != 34
+                != crate::platform::canonical_schema::SCHEMA_EPOCH
         {
             return Err(model::Refusal::Scope);
         }
@@ -134,7 +134,9 @@ impl<'a, 'b> Adapter<'a, 'b> {
                 {
                     return Err(model::Refusal::Scope);
                 }
-                if self.declaration(callable)?.header.contract_version != 34 {
+                if self.declaration(callable)?.header.contract_version
+                    != crate::platform::canonical_schema::SCHEMA_EPOCH
+                {
                     return Err(model::Refusal::Scope);
                 }
                 let source = self.source(callable.package)?;
@@ -146,9 +148,13 @@ impl<'a, 'b> Adapter<'a, 'b> {
                     || record.header.kind != OwnerKind::Binding
                     || match record.kind {
                         BindingKind::OwnedBorrow => {
-                            !matches!(record.header.contract_version, 24..=34)
+                            record.header.contract_version
+                                != crate::platform::canonical_schema::SCHEMA_EPOCH
                         }
-                        _ => record.header.contract_version != 34,
+                        _ => {
+                            record.header.contract_version
+                                != crate::platform::canonical_schema::SCHEMA_EPOCH
+                        }
                     }
                     || !matches!(
                         record.kind,
@@ -193,20 +199,8 @@ impl<'a, 'b> Adapter<'a, 'b> {
                         }
                         _ => false,
                     };
-                    if binds {
-                        let minimum = match &expression.operation {
-                            ExpressionOperation::BorrowOwnedField { .. }
-                            | ExpressionOperation::MatchBorrowedOwned { .. } => 24,
-                            ExpressionOperation::BorrowOwnedItem { .. } => 25,
-                            ExpressionOperation::BorrowCall { .. } => 27,
-                            ExpressionOperation::BorrowOwnedRecordField { .. } => 32,
-                            _ => 34,
-                        };
-                        if !contract::supported_graph_contract(expression.contract_version)
-                            || expression.contract_version < minimum
-                        {
-                            return Err(model::Refusal::Scope);
-                        }
+                    if binds && !contract::supported_graph_contract(expression.contract_version) {
+                        return Err(model::Refusal::Scope);
                     }
                     definitions += usize::from(binds);
                     let children = expression.children();
@@ -241,7 +235,7 @@ impl<'a, 'b> Adapter<'a, 'b> {
         member: AssociatedTypeMemberId,
     ) -> Result<()> {
         let record = self.authored(package, contract)?;
-        if record.header.contract_version != 34 {
+        if record.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH {
             return Err(model::Refusal::Scope);
         }
         let DeclarationPayload::OwnedContract(c) = &record.payload else {

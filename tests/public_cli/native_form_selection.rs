@@ -3,7 +3,7 @@ use super::*;
 
 #[test]
 fn native_forms_selection_tests_detect_silent_first_value_wins() {
-    let public = Native::template("command");
+    let public = Native::memory_template("command");
     let before = public.revision();
     let source =
         include_str!("../../docs/guides/examples/form-codec.lkjc").replace("LIBRARY_BASE", &before);

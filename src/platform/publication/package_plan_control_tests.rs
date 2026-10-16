@@ -181,8 +181,10 @@ fn revision_pinned_export_passes_its_control_into_native_planning_and_recovers()
     let before = source.current().unwrap().head;
     let ready_path = source.root().join("PACKAGE-TRANSPORTS/CURRENT");
     let ready_bytes = fs::read(&ready_path).unwrap();
+    // Pin the view before arming the export-specific input admission probe.
+    let view = source.view_current().unwrap();
     let control = ExecutionControl::cancel_after_input_nodes(2);
-    let view = source.view_current_with_control(&control).unwrap();
+    let view = view.with_control(&control);
     assert!(!control.is_cancelled());
     let error = view.export_package_transport().unwrap_err();
     assert_native_input_cancellation(&control, &error);

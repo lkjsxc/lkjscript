@@ -1,6 +1,6 @@
 //! Static witness dispatch derived from canonical source, independently of prepared instances.
 use super::*;
-use crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION;
+use crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
 use crate::platform::kernel::{
     ImplementationOperand, ImplementationParameter, OwnedImplementation, TypeParameterConstraints,
 };
@@ -365,8 +365,8 @@ impl ReferenceState<'_> {
                 || owner.declaration != reference.declaration
                 || !valid_scheme_constraint(owner.constraints)
                 || (!owner.constraints.has_owned()
-                    && (owner.header.contract_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-                        || implementation_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION))
+                    && (owner.header.contract_version != GRAPH_CONTRACT_VERSION
+                        || implementation_version != GRAPH_CONTRACT_VERSION))
                 || !self.closed_method_argument(*actual, owner.constraints)?
                 || scheme_parameters
                     .insert(*parameter, owner.constraints)
@@ -473,11 +473,13 @@ impl ReferenceState<'_> {
                 } else {
                     !valid_contract_constraint(owner.constraints)
                 })
-                || (parameter != contract.self_parameter && owner.header.contract_version < 26)
+                || (parameter != contract.self_parameter
+                    && owner.header.contract_version
+                        != crate::platform::canonical_schema::SCHEMA_EPOCH)
                 || (!owner.constraints.has_owned()
-                    && (owner.header.contract_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-                        || contract_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-                        || implementation_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION))
+                    && (owner.header.contract_version != GRAPH_CONTRACT_VERSION
+                        || contract_version != GRAPH_CONTRACT_VERSION
+                        || implementation_version != GRAPH_CONTRACT_VERSION))
                 || declared.insert(parameter, owner.constraints).is_some()
                 || !parameter_names.insert(owner.name)
                 || !self.closed_method_argument(actual, owner.constraints)?
@@ -545,7 +547,7 @@ impl ReferenceState<'_> {
                                 .declaration(implementation.contract)?
                                 .header
                                 .contract_version
-                                < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION)
+                                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
                     {
                         return Err(reference_type_error(
                             "owned method parameters require scoped borrowing or consumption",
@@ -646,7 +648,7 @@ impl ReferenceState<'_> {
                     || owner.declaration != target.declaration
                     || !valid_scheme_constraint(owner.constraints)
                     || (!owner.constraints.has_owned()
-                        && implementation_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION)
+                        && implementation_version != GRAPH_CONTRACT_VERSION)
                     || !self.closed_method_argument(*actual, owner.constraints)?
                     || target_parameters
                         .insert(*parameter, owner.constraints)
@@ -861,10 +863,9 @@ impl ReferenceState<'_> {
                     || self.owned_method_type(*expected, &declared)?
                         != owner.constraints.has_owned()
                     || (!owner.constraints.has_owned()
-                        && (owner.header.contract_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-                            || contract_version < MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-                            || scope_owner.header.contract_version
-                                < MIXED_STORAGE_GRAPH_CONTRACT_VERSION))
+                        && (owner.header.contract_version != GRAPH_CONTRACT_VERSION
+                            || contract_version != GRAPH_CONTRACT_VERSION
+                            || scope_owner.header.contract_version != GRAPH_CONTRACT_VERSION))
                 {
                     return Err(reference_type_error(
                         "witness template arguments violate their exact contract formal categories",

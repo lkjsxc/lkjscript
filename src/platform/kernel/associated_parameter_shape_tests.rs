@@ -434,8 +434,9 @@ fn full_associated_parameter_shapes_preserve_work_cancellation_and_fresh_retry()
 }
 
 #[test]
-fn full_associated_parameter_shapes_keep_ordinary_historical_unrestricted_parameters() {
-    for generation in [14, 33] {
+fn full_associated_parameter_shapes_keep_current_ordinary_unrestricted_parameters() {
+    {
+        let generation = crate::platform::canonical_schema::SCHEMA_EPOCH;
         let mut f = fixture(ParameterUse::Unrestricted);
         let scalar = ty(&mut f.source, TypeForm::I64);
         let OwnerRecord::Parameter(parameter) =

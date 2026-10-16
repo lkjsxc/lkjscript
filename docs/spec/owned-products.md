@@ -1,6 +1,6 @@
 # Structural owned products
 
-Graph 19 adds explicit affine products with fixed named typed fields. A product is
+Owned products are explicit affine products with fixed named typed fields. A product is
 a distinct type form, `OwnedProduct`, not an ordinary record or a nominal ownership
 annotation. Its ownership does not depend on its instantiated fields. Empty and
 data-only products are invalid: at least one direct field must be ByteBuffer,
@@ -136,30 +136,20 @@ ownership, package closure and exact instruction meaning independently of execut
 
 ## Encodings and admission
 
-The new disjoint `LKJPRD01` type envelope and appended owner-operation/binding tags
-leave ordinary type bytes unchanged. Product-bearing meaning requires Graph 19 even
-when a function body only uses an old Local operation. Owner, package-interface and
-artifact type closures all enforce the generation boundary. Package interface 12
-keeps its existing layout. Old source generations retain their exact readers.
+Products use the current type record with explicit ordered field types,
+operations and binding roles. Owners, types, interfaces, requests, compiler units,
+bytecode, artifacts and witness material share schema epoch 1. Complete source
+and type admission includes product-bearing signatures even when a function body
+contains only ordinary local reads.
 
-Development 0.1.63 uses compiler unit 17, bytecode 13 and artifact
-24 for metadata-read lowering and execution semantics. Graph 19, package interface
-12, authored request 22 and compact request/discovery 26 keep their layouts.
-Predecessor derived artifacts require rebuilding; frozen source acceptance is not
-permission to execute them. Original hostile fixtures remain unchanged. The test-only
-fixture owner can produce current controls from their exact retained source and
-instruction forms. Authored request 22 and compact request/discovery 26 add explicit
-type and operation forms; requests without this extension preserve earlier bytes,
-including empty optional setters. Semantic validator 20 and structural-owned-product
-feature revision 2 invalidate stale ownership proofs for metadata reads. This
-source acceptance does not establish a public binary release.
+Strict loaders independently rederive ownership and metadata-read meaning.
+Persisted acceptance cannot replace current proof; rehashed code cannot change
+field, result or cleanup relationships. Foreign epochs reject, and maintained
+assets are rebuilt through supported product owners.
 
-Development 0.1.64 also admits [owned choices](owned-choices.md) as explicit owned
-product children. Both composite forms share bounded mixed-depth validation and
-iterative cleanup; ordinary record/Option/Result containment remains rejected.
-The choice increment selected compiler/bytecode/artifact cut 18/14/25; the historical 0.1.63
-encoding paragraph above describes that increment's exact source, not current
-permission to execute its derived artifacts.
+[Owned choices](owned-choices.md) can be explicit owned product children.
+Both composite forms share bounded mixed-depth validation and iterative cleanup;
+ordinary record/Option/Result containment remains rejected.
 The [child-borrow contract](owned-borrows.md#encodings-and-evidence) owns subsequent
 scope-operation, borrowed-binding and derived-layout cuts.
 The [parameterized contract](owned-contract-parameters.md#encodings-and-boundaries)

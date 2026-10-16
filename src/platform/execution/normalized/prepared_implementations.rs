@@ -583,8 +583,8 @@ impl Closing<'_, '_> {
             return Err(missing());
         }
         if !contract.associated_types.is_empty()
-            && (!matches!(implementation_generation, 33 | 34)
-                || !matches!(contract_generation, 33 | 34))
+            && (implementation_generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                || contract_generation != crate::platform::canonical_schema::SCHEMA_EPOCH)
         {
             return Err(missing());
         }
@@ -635,7 +635,9 @@ impl Closing<'_, '_> {
                     Some(TypeForm::ReadViewApplied { .. })
                 ) =>
                 {
-                    if implementation_generation != 34 || contract_generation != 34 {
+                    if implementation_generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                        || contract_generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                    {
                         return Err(missing());
                     }
                     self.family_template(

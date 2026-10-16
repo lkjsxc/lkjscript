@@ -720,7 +720,7 @@ pub(super) fn validate(receipt: &BoundaryReceipt, root: &Path) -> Result<(), Dev
                 .as_str()
                 .ok_or_else(|| DevError::corrupt("final consumer package revision missing"))?
             && field(&summary, "batch", "schema")?
-                == lkjscript::platform::canonical_schema::CANONICAL_SCHEMA_HASH_HEX
+                == lkjscript::platform::canonical_schema::SCHEMA_EPOCH.to_string()
             && field(&summary, "batch", "validator")?
                 == lkjscript::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH
                     .iter()

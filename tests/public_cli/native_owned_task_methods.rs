@@ -3,7 +3,7 @@ use super::*;
 
 #[test]
 fn native_owned_task_methods_contract_only_exports_its_private_requirement_closure() {
-    let library = Native::template("command");
+    let library = Native::memory_template("command");
     author(
         &library,
         r#"declarations.begin
@@ -23,7 +23,7 @@ declarations.end
     );
     unchanged(&library, "isolated");
     let package = export(&library);
-    let consumer = Native::new();
+    let consumer = Native::memory();
     stage(&consumer, &package);
     author(&consumer, &dependency(&package));
     consumer.cli(&["check"], true);

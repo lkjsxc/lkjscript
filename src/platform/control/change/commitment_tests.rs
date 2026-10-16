@@ -1,7 +1,7 @@
 //! Independent current authored-byte vectors and request commitment controls.
 
 use super::*;
-use crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH;
+use crate::platform::canonical_schema::SCHEMA_EPOCH;
 use crate::platform::change::{
     AuthoredChangeAdmission, AuthoredLiteralUpdate, AuthoredLiteralValue, CanonicalEditAdmission,
     CanonicalMapUpdateAdmission, CanonicalReadAdmission, ChangeBudget, ImpactAdmission,
@@ -118,7 +118,7 @@ fn unhex(value: &str) -> Vec<u8> {
 fn literal_intent(body: &str) -> Vec<u8> {
     [
         b"LKJACHNG".as_slice(),
-        &CANONICAL_SCHEMA_HASH,
+        &SCHEMA_EPOCH.to_le_bytes(),
         &unhex(concat!(
             "0707070707070707070707070707070707070707070707070707070707070707",
             "00000000000000000000000000000001",
@@ -161,7 +161,7 @@ fn assert_golden(change: AuthoredChange, current_body: &str) {
     };
     let expected_budget = [
         b"LKJABUDG".as_slice(),
-        &CANONICAL_SCHEMA_HASH,
+        &SCHEMA_EPOCH.to_le_bytes(),
         &[0, 0, 0, 0, 0, 0, 0, 100].repeat(46),
     ]
     .concat();

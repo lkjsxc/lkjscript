@@ -123,7 +123,7 @@ fn owned_task_independent_oracle_accepts_loans_and_rejects_escape_and_old_genera
         match fault {
             "unrestricted" => p.use_mode = ParameterUse::Unrestricted,
             "parameter-generation" => {
-                p.header.contract_version = contract::SHARE_GRAPH_CONTRACT_VERSION - 1;
+                p.header.contract_version = contract::GRAPH_CONTRACT_VERSION - 1;
             }
             "function-generation" => {
                 let OwnerRecord::Declaration(d) = invalid
@@ -133,7 +133,7 @@ fn owned_task_independent_oracle_accepts_loans_and_rejects_escape_and_old_genera
                 else {
                     unreachable!()
                 };
-                d.header.contract_version = contract::SHARE_GRAPH_CONTRACT_VERSION - 1;
+                d.header.contract_version = contract::GRAPH_CONTRACT_VERSION - 1;
             }
             _ => unreachable!(),
         }

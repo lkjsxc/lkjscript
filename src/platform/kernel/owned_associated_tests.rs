@@ -5,7 +5,7 @@ use crate::platform::semantic_id::{
 };
 
 const SEED: &[u8] = b"owned-associated-admission-tests";
-const GENERATION: u16 = 33;
+const GENERATION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 static EMPTY_READ_SCOPES: BTreeMap<ReadScopeReference, ReadScopeArgument> = BTreeMap::new();
 
 struct Fixture {
@@ -1894,7 +1894,12 @@ fn owned_associated_nominal_absence_keeps_scope_independent_work_within_shared_s
     };
     let admission = OwnedAssociatedAdmission::with_limits(limits);
     admission
-        .validate_occurrences(&f.source, &[root], AssociatedTypeContext::Forbidden, 34)
+        .validate_occurrences(
+            &f.source,
+            &[root],
+            AssociatedTypeContext::Forbidden,
+            GENERATION,
+        )
         .expect("all256 exact nominal fields fit without unused per-declaration absence scopes");
     assert!(admission.work().1 < limits.maximum_metadata_bytes);
 
@@ -1909,7 +1914,7 @@ fn owned_associated_nominal_absence_keeps_scope_independent_work_within_shared_s
             &f.source,
             &[root, unit],
             AssociatedTypeContext::Forbidden,
-            34,
+            GENERATION,
         )
         .unwrap_err();
     assert_eq!(depth.class, DiagnosticClass::Resource);
@@ -1926,7 +1931,12 @@ fn owned_associated_nominal_absence_keeps_scope_independent_work_within_shared_s
     record.declaration = f.nominal.declaration;
     assert_ne!(record.declaration, nominal.declaration);
     let foreign = OwnedAssociatedAdmission::with_limits(limits)
-        .validate_occurrences(&f.source, &[root], AssociatedTypeContext::Forbidden, 34)
+        .validate_occurrences(
+            &f.source,
+            &[root],
+            AssociatedTypeContext::Forbidden,
+            GENERATION,
+        )
         .unwrap_err();
     assert_eq!(foreign.class, DiagnosticClass::Semantic);
 }
@@ -1970,7 +1980,12 @@ fn owned_associated_projection_free_nominal_fields_keep_exact_formal_authority()
         read: &f.source,
         admission: &admission,
     }
-    .walk(&[root], AssociatedTypeContext::Lexical(f.scheme), 34, true)
+    .walk(
+        &[root],
+        AssociatedTypeContext::Lexical(f.scheme),
+        GENERATION,
+        true,
+    )
     .expect("stored-RHS field formal belongs to its exact raw nominal definition");
 
     let foreign_parameter = f.scheme_parameter;
@@ -1990,7 +2005,12 @@ fn owned_associated_projection_free_nominal_fields_keep_exact_formal_authority()
         read: &f.source,
         admission: &admission,
     }
-    .walk(&[root], AssociatedTypeContext::Lexical(f.scheme), 34, true)
+    .walk(
+        &[root],
+        AssociatedTypeContext::Lexical(f.scheme),
+        GENERATION,
+        true,
+    )
     .unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Semantic);
 }
@@ -1999,8 +2019,8 @@ fn owned_associated_projection_free_nominal_fields_keep_exact_formal_authority()
 fn owned_associated_raw_nominal_field_and_case_generations_remain_exact() {
     for case_form in [false, true] {
         for (generation, expected) in [
-            (33, "kernel_read_view_generation"),
-            (34, "kernel_owned_associated"),
+            (0, "kernel_read_view_generation"),
+            (GENERATION, "kernel_owned_associated"),
         ] {
             let mut f = fixture();
             let module = ModuleId::migrate(SEED, 22000);
@@ -2089,7 +2109,12 @@ fn owned_associated_raw_nominal_field_and_case_generations_remain_exact() {
                 },
             );
             let error = OwnedAssociatedAdmission::new()
-                .validate_occurrences(&f.source, &[root], AssociatedTypeContext::Forbidden, 34)
+                .validate_occurrences(
+                    &f.source,
+                    &[root],
+                    AssociatedTypeContext::Forbidden,
+                    GENERATION,
+                )
                 .unwrap_err();
             assert_eq!(error.class, DiagnosticClass::Semantic);
             assert_eq!(

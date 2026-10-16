@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 const VALUE_MAGIC: &[u8; 8] = b"LKJDVAL1";
-const VALUE_CONTRACT_VERSION: u16 = 1;
+const VALUE_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 const VALUE_CHECKSUM_DOMAIN: &str = "lkjscript.data.typed-value-envelope.v1";
 const LAYOUT_IDENTITY_DOMAIN: &str = "lkjscript.data.typed-layout.v1";
 const MAXIMUM_VALUE_BYTES: usize = 4 * 1_048_576;

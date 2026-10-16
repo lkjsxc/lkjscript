@@ -2,22 +2,22 @@
 
 mod supplier_cache;
 
-#[cfg(test)]
-use super::compiler::link_artifact;
 use super::compiler::{
     ArtifactBundleDigest, ArtifactLinkWork, ArtifactManifestDigest, CompilationBuildProfile,
-    CompilationManifestDigest, OptimizationPolicy, build_clean, load_current_compilation,
+    CompilationManifestDigest, OptimizationPolicy,
 };
+#[cfg(test)]
+use super::compiler::{build_clean, link_artifact};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::ExecutionControl;
 use super::execution::normalized::{
     NormalizedCommandPolicy, NormalizedCommandReceipt, NormalizedProgram, NormalizedTestReceipt,
     run_graph_tests, run_pure_command,
 };
+use super::kernel::Name;
 use super::kernel::{PackageId, SemanticStateDigest};
 use super::publication::GraphRepository;
 use super::semantic_id::{RepositoryId, RevisionId};
-use super::{compiler::load_artifact, kernel::Name};
 #[cfg(test)]
 use std::path::Path;
 
@@ -58,6 +58,7 @@ pub struct PreparedApplication {
     pub link_work: ArtifactLinkWork,
     pub program: std::sync::Arc<NormalizedProgram>,
     pub(crate) reference: PackageReference,
+    source_proof: super::publication::SourceValidationProof,
 }
 
 #[derive(Clone, Debug)]
@@ -133,8 +134,7 @@ impl super::execution::normalized::NormalizedReferenceRead for PackageReference 
 
 impl PreparedApplication {
     pub fn check(&self, control: &ExecutionControl) -> Result<NormalizedTestReceipt, Diagnostic> {
-        let view = self.repository.view_current()?;
-        require_unchanged_authority(self, &view)?;
+        self.check_authority_with_control(control)?;
         run_graph_tests(
             &self.reference,
             &self.program,
@@ -145,8 +145,26 @@ impl PreparedApplication {
     }
 
     pub(crate) fn check_authority(&self) -> Result<(), Diagnostic> {
-        let view = self.repository.view_current()?;
-        require_unchanged_authority(self, &view)
+        self.check_authority_with_control(&ExecutionControl::uncancelled())
+    }
+
+    fn check_authority_with_control(&self, control: &ExecutionControl) -> Result<(), Diagnostic> {
+        let current = self
+            .repository
+            .recheck_source_validation_proof(&self.source_proof, control)?;
+        if !current.is_some_and(|current| {
+            current.head.repository_id == self.repository_id
+                && current.semantic_root.package_id == self.package
+                && current.head.revision == self.revision
+                && current.accepted.semantic_state == self.semantic_state
+        }) {
+            return Err(lifecycle_error(
+                DiagnosticClass::Semantic,
+                "lifecycle_authority_changed",
+                "accepted authority changed after normalized lifecycle preparation",
+            ));
+        }
+        Ok(())
     }
 
     pub(crate) fn run_observed(
@@ -156,7 +174,7 @@ impl PreparedApplication {
         policy: NormalizedCommandPolicy,
         control: &ExecutionControl,
     ) -> Result<super::execution::normalized::NormalizedObservedCommandReceipt, Diagnostic> {
-        self.check_authority()?;
+        self.check_authority_with_control(control)?;
         super::execution::normalized::run_pure_command_observed(
             &self.reference,
             &self.program,
@@ -174,8 +192,7 @@ impl PreparedApplication {
         policy: NormalizedCommandPolicy,
         control: &ExecutionControl,
     ) -> Result<NormalizedCommandReceipt, Diagnostic> {
-        let view = self.repository.view_current()?;
-        require_unchanged_authority(self, &view)?;
+        self.check_authority_with_control(control)?;
         run_pure_command(
             &self.reference,
             &self.program,
@@ -204,17 +221,18 @@ pub(crate) fn prepare_repository_with_control(
     control
         .check()
         .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))?;
-    // Bind authority and source to one observed revision without retaining the store afterward.
-    let (accepted, package_id, closure) = {
-        let view = repository.view_current_with_control(control)?;
-        let closure = view.export_package_container().map_err(|mut error| {
+    // Complete source admission owns one exact native plan and a revision-pinned current proof.
+    // Keep that proof through compilation even when the optional process cache cannot retain it.
+    let (view, closure) = repository
+        .view_current_with_source(control)
+        .map_err(|mut error| {
             error
                 .notes
                 .push("while exporting current accepted package closure".into());
             error
         })?;
-        (view.current().accepted, view.package(), closure)
-    };
+    let accepted = view.current().accepted;
+    let package_id = view.package();
     let oracle = super::package_transport::oracle::reconstruct(&closure.container).map_err(
         |mut error| {
             error
@@ -352,12 +370,18 @@ pub(crate) fn prepare_repository_with_control(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    let cached = load_current_compilation(&repository).and_then(|cached| {
-        if let Some(cached) = &cached {
-            super::compiler::validate_current_compilation(&repository, cached.digest)?;
-        }
-        Ok(cached)
-    });
+    let cached = super::compiler::load_current_compilation_with_view(&repository, &view).and_then(
+        |cached| {
+            if let Some(cached) = &cached {
+                super::compiler::validate_current_compilation_with_view(
+                    &repository,
+                    &view,
+                    cached.digest,
+                )?;
+            }
+            Ok(cached)
+        },
+    );
     // A missing pointer does not imply that disposable objects at the derived keys are sound.
     // Admit a failed clean rebuild to the same source-validated recovery branch as a bad pointer.
     let mut clean_result = None;
@@ -365,7 +389,7 @@ pub(crate) fn prepare_repository_with_control(
     let cached = match cached {
         Ok(None) => {
             clean_attempted = true;
-            match clean_compilation(&repository) {
+            match clean_compilation(&repository, &view) {
                 Ok(receipt) => {
                     clean_result = Some(receipt);
                     Ok(None)
@@ -419,7 +443,7 @@ pub(crate) fn prepare_repository_with_control(
                 // objects remain sound. Only a failed clean persistence attempt needs the
                 // read-only fallback; a bad immutable unit must never be overwritten.
                 if let Some(receipt) = (!clean_attempted)
-                    .then(|| clean_compilation(&repository).ok())
+                    .then(|| clean_compilation(&repository, &view).ok())
                     .flatten()
                 {
                     (
@@ -468,24 +492,30 @@ pub(crate) fn prepare_repository_with_control(
         };
     let linked = match recovered_link {
         Some(linked) => linked,
-        None => super::compiler::link_artifact_with_control(
-            &repository,
-            compilation,
-            &dependencies,
-            control,
-        )
-        .map_err(|mut error| {
-            error
-                .notes
-                .push("while linking the current root compilation".into());
-            error
-        })?,
+        None => {
+            super::compiler::link_artifact_with_view(&repository, &view, compilation, &dependencies)
+                .map_err(|mut error| {
+                    error
+                        .notes
+                        .push("while linking the current root compilation".into());
+                    error
+                })?
+        }
     };
-    let artifact_bytes = linked.artifact.bytes;
-    let artifact = load_artifact(&artifact_bytes)?;
+    let (artifact_bytes, artifact) = linked.artifact.into_admitted()?;
     let artifact_manifest = artifact.manifest_digest;
     let artifact_bundle = artifact.bundle_digest;
-    let program = NormalizedProgram::prepare_with_control(artifact, control)?;
+    let program =
+        super::builtin_standard::prepare_admitted_program(&artifact_bytes, artifact, control)?;
+    let current = repository.recheck_exported_source(&view)?;
+    if current.accepted != accepted {
+        return Err(lifecycle_error(
+            DiagnosticClass::Semantic,
+            "lifecycle_authority_changed",
+            "accepted authority changed during normalized lifecycle preparation",
+        ));
+    }
+    let source_proof = view.into_source_validation_proof()?;
     let prepared = PreparedApplication {
         repository,
         repository_id: accepted.head.repository_id,
@@ -519,18 +549,22 @@ pub(crate) fn prepare_repository_with_control(
         artifact_bundle,
         artifact_bytes,
         link_work: linked.work,
-        program: std::sync::Arc::new(program),
+        program,
         reference,
+        source_proof,
     };
-    let view = prepared.repository.view_current()?;
-    require_unchanged_authority(&prepared, &view)?;
     Ok(prepared)
 }
 
 fn clean_compilation(
     repository: &GraphRepository,
+    view: &super::publication::RepositoryView,
 ) -> Result<super::compiler::CompilationBuildReceipt, Diagnostic> {
-    let receipt = build_clean(repository, OptimizationPolicy::DeterministicBaseline)?;
+    let receipt = super::compiler::build_clean_with_view(
+        repository,
+        view,
+        OptimizationPolicy::DeterministicBaseline,
+    )?;
     if receipt.profile != CompilationBuildProfile::Clean {
         return Err(lifecycle_error(
             DiagnosticClass::Corrupt,
@@ -539,24 +573,6 @@ fn clean_compilation(
         ));
     }
     Ok(receipt)
-}
-
-fn require_unchanged_authority(
-    prepared: &PreparedApplication,
-    view: &super::publication::RepositoryView,
-) -> Result<(), Diagnostic> {
-    if view.current().head.repository_id != prepared.repository_id
-        || view.package() != prepared.package
-        || view.revision() != prepared.revision
-        || view.current().accepted.semantic_state != prepared.semantic_state
-    {
-        return Err(lifecycle_error(
-            DiagnosticClass::Semantic,
-            "lifecycle_authority_changed",
-            "accepted authority changed during normalized lifecycle preparation",
-        ));
-    }
-    Ok(())
 }
 
 fn lifecycle_error(
@@ -758,7 +774,7 @@ mod tests {
         let standard =
             super::super::compiler::compile_immutable(standard, &closure.container.objects, &[])
                 .expect("compile the application's exact standard source");
-        let standard = load_artifact(&standard.artifact.bytes)
+        let standard = crate::platform::compiler::load_artifact(&standard.artifact.bytes)
             .expect("admit the freshly compiled exact standard artifact");
         let linked = link_artifact(
             &repository,

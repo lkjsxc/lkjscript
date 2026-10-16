@@ -691,7 +691,7 @@ pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
                 let fields = builder
                     .read_view_layout(
                         ty,
-                        crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION,
+                        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
                         false,
                     )?
                     .fields;
@@ -1532,7 +1532,7 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
                 let fields = self
                     .read_view_layout(
                         ty,
-                        crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION,
+                        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
                         false,
                     )?
                     .fields;
@@ -4644,7 +4644,7 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         let Some((callable, generation)) = self.function_scope else {
             return Ok(None);
         };
-        if generation < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION {
+        if generation != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION {
             return Ok(None);
         }
         self.unit.with_admission_read(|read, admission| {

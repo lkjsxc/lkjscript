@@ -1,12 +1,16 @@
 //! Strict, bounded public graph-native command projection.
 
 mod history;
+mod memory;
 mod pure_batch;
 mod refresh;
 mod source_batch;
 
+pub use memory::execute_in_memory;
 pub use pure_batch::{PureRunBatchOptions, execute_pure_run_batch, parse_pure_run_batch};
-pub use source_batch::{RunBatchOptions, execute_run_batch, parse_run_batch};
+pub use source_batch::{
+    RunBatchOptions, execute_run_batch, parse_run_batch, parse_run_batch_in_memory,
+};
 
 use super::builtin_discovery::{
     BUILTIN_QUERY_DEFAULT_BYTES, BUILTIN_QUERY_DEFAULT_ITEMS, BUILTIN_QUERY_ORDERING,
@@ -2250,10 +2254,11 @@ pub fn execute_change(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>
     // The adapter admits the full mixed tree before recursive semantic owners run. Keep their
     // supported 1,024-expression / 256-type depth usable on a bounded stack, including debug
     // builds. The request and every partially built tree stay on this worker until it is joined.
+    let project = memory::current();
     std::thread::Builder::new()
         .name("change-request".to_owned())
         .stack_size(64 * 1_048_576)
-        .spawn(move || execute_change_on_stack(arguments))
+        .spawn(move || memory::with_project(project, || execute_change_on_stack(arguments)))
         .map_err(|error| {
             single_diagnostic(internal_error(format!(
                 "cannot start change request worker: {error}"
@@ -2372,17 +2377,19 @@ fn execute_change_draft(
             e,
         ))
     })?;
-    let root = fs::canonicalize(repository.root()).map_err(|e| {
-        single_diagnostic(plan_output_io_error(
-            "change_draft_project",
-            repository.root(),
-            e,
-        ))
-    })?;
-    if absolute_parent.starts_with(root) {
-        return Err(single_diagnostic(usage_error(
-            "draft output must be outside accepted project storage",
-        )));
+    if !repository.is_memory() {
+        let root = fs::canonicalize(repository.root()).map_err(|e| {
+            single_diagnostic(plan_output_io_error(
+                "change_draft_project",
+                repository.root(),
+                e,
+            ))
+        })?;
+        if absolute_parent.starts_with(root) {
+            return Err(single_diagnostic(usage_error(
+                "draft output must be outside accepted project storage",
+            )));
+        }
     }
     let view = repository.view_current().map_err(single_diagnostic)?;
     let bytes = super::control::render_native_draft(
@@ -2817,9 +2824,12 @@ fn execute_normalized_change(
     if action == ChangeAction::Plan {
         let (encoding, plan_output) = match output_file.as_deref() {
             Some(path) => {
-                let (encoding, output) =
-                    write_logical_plan_output(repository.root(), Path::new(path), &logical_plan)
-                        .map_err(single_diagnostic)?;
+                let (encoding, output) = write_logical_plan_output(
+                    (!repository.is_memory()).then_some(repository.root()),
+                    Path::new(path),
+                    &logical_plan,
+                )
+                .map_err(single_diagnostic)?;
                 (encoding, Some(output))
             }
             None => (
@@ -3019,7 +3029,7 @@ struct LogicalPlanOutputPublication {
 }
 
 fn write_logical_plan_output(
-    project_root: &Path,
+    project_root: Option<&Path>,
     requested: &Path,
     plan: &LogicalChangePlan<'_>,
 ) -> Result<(LogicalPlanEncoding, LogicalPlanOutputPublication), Diagnostic> {
@@ -3036,18 +3046,21 @@ fn write_logical_plan_output(
         plan_output_io_error("change_plan_output_parent", requested_parent, error)
     })?;
     let target = parent.join(file_name);
-    let project = fs::canonicalize(project_root)
-        .map_err(|error| plan_output_io_error("change_plan_output_project", project_root, error))?;
-    if target.starts_with(&project) {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Source,
-            "change_plan_output_project_path",
-            format!(
-                "logical plan output '{}' must be outside normalized project root '{}'",
-                target.display(),
-                project.display()
-            ),
-        ));
+    if let Some(project_root) = project_root {
+        let project = fs::canonicalize(project_root).map_err(|error| {
+            plan_output_io_error("change_plan_output_project", project_root, error)
+        })?;
+        if target.starts_with(&project) {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Source,
+                "change_plan_output_project_path",
+                format!(
+                    "logical plan output '{}' must be outside normalized project root '{}'",
+                    target.display(),
+                    project.display()
+                ),
+            ));
+        }
     }
     validate_plan_output_target(&target)?;
 
@@ -4752,8 +4765,10 @@ const FUNCTION_DEFINITION_ORDERING: u8 = 1;
 const FUNCTION_DEFINITION_ORDERING_NAME: &str =
     "header-contract-structural-preorder-reference-fact-v1";
 const FUNCTION_DEFINITION_CONTINUATION_MAGIC: [u8; 8] = *b"LKJICT04";
-const FUNCTION_DEFINITION_CONTINUATION_VERSION: u16 = 4;
-const FUNCTION_DEFINITION_CONTINUATION_ENVELOPE_VERSION: u16 = 4;
+const FUNCTION_DEFINITION_CONTINUATION_VERSION: u16 =
+    crate::platform::canonical_schema::SCHEMA_EPOCH;
+const FUNCTION_DEFINITION_CONTINUATION_ENVELOPE_VERSION: u16 =
+    crate::platform::canonical_schema::SCHEMA_EPOCH;
 const FUNCTION_DEFINITION_CONTINUATION_HEADER_BYTES: usize = 18;
 const FUNCTION_DEFINITION_CONTINUATION_CHECKSUM_BYTES: usize = 32;
 const MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_DECODED_BYTES: usize = 224;
@@ -9094,6 +9109,14 @@ fn classify_definition_read_diagnostic(mut diagnostic: Diagnostic) -> Diagnostic
 }
 
 fn open_normalized_repository(project: Option<PathBuf>) -> Result<GraphRepository, Diagnostic> {
+    if let Some(memory) = memory::current() {
+        if project.is_some() {
+            return Err(usage_error(
+                "an explicit memory project cannot also select --project",
+            ));
+        }
+        return GraphRepository::open_memory(&memory);
+    }
     let start = match project {
         Some(path) => path,
         None => std::env::current_dir().map_err(|error| {
@@ -10733,15 +10756,16 @@ mod tests {
             FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT.as_bytes()
         );
         assert_eq!(&bytes[..8], b"LKJICT04");
-        assert_eq!(u16::from_le_bytes([bytes[8], bytes[9]]), 4);
+        let epoch = crate::platform::canonical_schema::SCHEMA_EPOCH;
+        assert_eq!(u16::from_le_bytes([bytes[8], bytes[9]]), epoch);
         let payload_start = FUNCTION_DEFINITION_CONTINUATION_HEADER_BYTES;
         assert_eq!(
             u16::from_be_bytes([bytes[payload_start], bytes[payload_start + 1]]),
-            4
+            epoch
         );
         assert_eq!(
             u16::from_be_bytes([bytes[payload_start + 2], bytes[payload_start + 3]]),
-            22
+            epoch
         );
         let decoded = decode_definition_continuation(&token).expect("decode continuation");
         assert_eq!(decoded.binding, binding);

@@ -77,6 +77,78 @@ fn apply(root: &Path, request: &str, token: &str) -> Vec<u8> {
 }
 
 #[test]
+fn same_epoch_persisted_witness_requires_a_current_process_proof() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = temporary.path().join("same-epoch");
+    let mut logical = crate::platform::kernel::tests::witness_snapshot();
+    logical.root.repository_id =
+        crate::platform::semantic_id::RepositoryId::migrate(b"same-epoch-current-process-proof", 0);
+    let created = GraphRepository::create(&root, &logical, None).unwrap();
+    let before = inventory(&root);
+    let repository = GraphRepository::open(&root).unwrap();
+    let current = repository.current().unwrap();
+    assert!(current.witness.contract_is_current());
+    assert_eq!(
+        current.witness.graph_contract_version,
+        crate::platform::canonical_schema::SCHEMA_EPOCH
+    );
+    // Matching serialized tags cannot establish that this process ran validation.
+    let unproven = RepositoryView::new(current, repository.object_store().unwrap());
+    assert_eq!(
+        unproven.require_current_validation().unwrap_err().code,
+        "publication_current_validation"
+    );
+    let proven = unproven.reconcile_validation().unwrap();
+    proven.require_current_validation().unwrap();
+    assert_eq!(proven.validation_origin(), "rebuilt");
+    assert!(proven.validation_work().1 > 0);
+    assert_eq!(repository.current().unwrap().head, created.current.head);
+    assert_eq!(inventory(&root), before);
+    repository
+        .view_current()
+        .unwrap()
+        .require_current_validation()
+        .unwrap();
+    assert_eq!(inventory(&root), before);
+}
+
+#[test]
+fn cold_and_reused_process_proofs_produce_identical_candidate_receipts() {
+    let memory = crate::platform::MemProjectStore::new(16 * 1_048_576).unwrap();
+    let mut snapshot = crate::platform::kernel::tests::witness_snapshot();
+    snapshot.root.repository_id =
+        crate::platform::semantic_id::RepositoryId::migrate(b"cold-warm-candidate-receipt", 0);
+    let created = GraphRepository::create_memory(&memory, &snapshot, None).unwrap();
+    let cold = created.repository.view_current().unwrap();
+    let warm = created.repository.view_current().unwrap();
+    assert!(cold.validation_work().1 > 0);
+    assert_eq!(warm.validation_work().1, 0);
+    let original = snapshot
+        .owners
+        .values()
+        .find(|owner| matches!(owner, crate::platform::kernel::OwnerRecord::Module(_)))
+        .unwrap();
+    let mut replacement = original.clone();
+    if let crate::platform::kernel::OwnerRecord::Module(module) = &mut replacement {
+        module.name = crate::platform::kernel::Name::new("same_candidate").unwrap();
+    }
+    let edits = vec![crate::platform::change::PrimitiveEdit::ReplaceOwner {
+        expected: crate::platform::kernel::encode_owner(original).unwrap().0,
+        record: replacement,
+    }];
+    let cold_plan = cold
+        .prepare_change(edits.clone(), PublicationOptions::default())
+        .unwrap();
+    let warm_plan = warm
+        .prepare_change(edits, PublicationOptions::default())
+        .unwrap();
+    assert_eq!(cold_plan.head_bytes, warm_plan.head_bytes);
+    assert_eq!(cold_plan.receipt_bytes, warm_plan.receipt_bytes);
+    assert_eq!(cold_plan.objects, warm_plan.objects);
+    assert_eq!(cold_plan.budget_work, warm_plan.budget_work);
+}
+
+#[test]
 fn current_validation_and_preparation_propagate_cancellation_without_writes() {
     use crate::platform::execution::ExecutionControl;
     let temporary = tempfile::tempdir().unwrap();
@@ -242,6 +314,9 @@ fn accepted_validation_does_not_hide_corrupted_canonical_storage() {
     let head = std::fs::read(root.join("HEAD")).unwrap();
     let warm = repository.view_current().unwrap();
     warm.require_current_validation().unwrap();
+    let (exported, _) = repository
+        .view_current_with_source(&crate::platform::execution::ExecutionControl::uncancelled())
+        .unwrap();
     let location = repository
         .object_store()
         .unwrap()
@@ -262,13 +337,13 @@ fn accepted_validation_does_not_hide_corrupted_canonical_storage() {
     file.write_all(&byte).unwrap();
     file.sync_all().unwrap();
 
-    // Opening an accepted view reads its binding; selected canonical objects are read lazily.
-    // A prior validation result cannot authorize damaged bytes at either owning read boundary.
-    let reopened = repository.view_current().unwrap();
-    for selected in [&warm, &reopened] {
-        let error = selected.owner(owner).unwrap_err();
-        assert_eq!(error.class, DiagnosticClass::Corrupt, "{error:?}");
-    }
+    // Opening rechecks the complete cached read set before exposing current proof.
+    let error = repository.view_current().unwrap_err();
+    assert_eq!(error.class, DiagnosticClass::Corrupt, "{error:?}");
+    let error = warm.owner(owner).unwrap_err();
+    assert_eq!(error.class, DiagnosticClass::Corrupt, "{error:?}");
+    let error = repository.recheck_exported_source(&exported).unwrap_err();
+    assert_eq!(error.class, DiagnosticClass::Corrupt, "{error:?}");
     assert_eq!(std::fs::read(root.join("HEAD")).unwrap(), head);
 }
 

@@ -27,8 +27,8 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-pub const SEMANTIC_FACT_CONTRACT_VERSION: u16 = 3;
-pub const SEMANTIC_FACT_CONTRACT_IDENTITY: &str = "lkjscript-semantic-facts-3";
+pub const SEMANTIC_FACT_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const SEMANTIC_FACT_CONTRACT_IDENTITY: &str = "lkjscript-semantic-facts";
 pub const MAXIMUM_SEMANTIC_FACT_MANIFEST_BYTES: usize = 64 * 1024;
 
 const SUMMARY_KEY_TAG: u8 = 1;

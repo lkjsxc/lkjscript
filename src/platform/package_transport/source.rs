@@ -21,6 +21,7 @@ use crate::platform::storage::page_store::ObjectPageReader;
 use crate::platform::witness::{FullWitness, rebuild_full_witness_checked};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 type EncodedEntries = Vec<(Vec<u8>, Vec<u8>)>;
 type InterfaceProjection = (
@@ -29,10 +30,10 @@ type InterfaceProjection = (
 );
 
 pub const CONTAINER_MAGIC: [u8; 8] = *b"LKJPKC01";
-pub const CONTAINER_CONTRACT_IDENTITY: &str = "lkjscript-package-container-1";
-pub const CONTAINER_CONTRACT_VERSION: u16 = 1;
-pub const READINESS_CONTRACT_IDENTITY: &str = "lkjscript-package-transport-selection-2";
-pub const READINESS_CONTRACT_VERSION: u16 = 2;
+pub const CONTAINER_CONTRACT_IDENTITY: &str = "lkjscript-package-container";
+pub const CONTAINER_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const READINESS_CONTRACT_IDENTITY: &str = "lkjscript-package-transport-selection";
+pub const READINESS_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_CONTAINER_BYTES: usize = 268_435_456;
 pub const MAXIMUM_CONTAINER_OBJECTS: usize = 1_000_000;
 pub const MAXIMUM_VALIDATION_VISITS: u64 = 16_000_000;
@@ -120,7 +121,7 @@ pub struct ImmutablePackage {
 #[derive(Clone, Debug)]
 pub struct AdmittedClosure {
     pub container: PackageContainer,
-    pub packages: BTreeMap<PackageRevisionDigest, ImmutablePackage>,
+    pub packages: BTreeMap<PackageRevisionDigest, Arc<ImmutablePackage>>,
     pub dependency_order: Vec<PackageRevisionDigest>,
     pub(crate) dependency_plan: super::NativePackagePlanEvidence,
     pub validation_visits: u64,
@@ -805,6 +806,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     let mut revisions = BTreeMap::new();
     let mut interfaces = BTreeMap::new();
     let mut transports = BTreeMap::new();
+    let mut shared_packages = BTreeMap::new();
     for binding in selections {
         control.check().map_err(execution_diagnostic)?;
         let revision = read_revision(&store, binding.package_revision, &mut work)?;
@@ -819,10 +821,16 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
                 store.charge_visits(count)
             },
         )?;
-        snapshots.insert(
-            binding.package_revision,
-            reconstruct(&store, &transport, &revision, &mut work)?,
-        );
+        if let Some(package) =
+            shared_builtin::recheck(&store, *binding, &revision, &transport, &mut work, control)?
+        {
+            shared_packages.insert(binding.package_revision, package);
+        } else {
+            snapshots.insert(
+                binding.package_revision,
+                reconstruct(&store, &transport, &revision, &mut work)?,
+            );
+        }
         interfaces.insert(binding.package_revision, interface);
         revisions.insert(binding.package_revision, revision);
         transports.insert(binding.package_revision, transport);
@@ -844,6 +852,10 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     // validation and map traversal. Full type/expression/relation work shares the same remainder.
     for binding in selections {
         control.check().map_err(execution_diagnostic)?;
+        if let Some(package) = shared_packages.remove(&binding.package_revision) {
+            packages.insert(binding.package_revision, package);
+            continue;
+        }
         let mut snapshot = snapshots
             .remove(&binding.package_revision)
             .ok_or_else(|| corrupt("package_source_snapshot", "source snapshot disappeared"))?;
@@ -989,7 +1001,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         }
         packages.insert(
             binding.package_revision,
-            ImmutablePackage {
+            Arc::new(ImmutablePackage {
                 binding: *binding,
                 revision,
                 transport,
@@ -997,7 +1009,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
                 witness,
                 interface_owners,
                 interface_types,
-            },
+            }),
         );
     }
     drop(shared_interfaces);
@@ -1042,6 +1054,8 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     })
 }
 
+#[path = "shared_builtin_source.rs"]
+mod shared_builtin;
 #[path = "source_validation_reuse.rs"]
 mod validation_reuse;
 use validation_reuse::SourceValidationReuse;
@@ -1479,7 +1493,7 @@ mod tests {
         // this certificate. The unknown producer policy cannot certify even unchanged source.
         let core = bincode::encode_to_vec(
             (
-                crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH,
+                crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes(),
                 transport.witness.core(),
             ),
             bincode::config::standard()

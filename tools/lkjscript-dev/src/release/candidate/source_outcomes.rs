@@ -92,10 +92,10 @@ pub(super) fn passed(
     // or provide a second passing observation for the selected source harness.
     let mut counts = BTreeMap::new();
     for line in lines {
-        if let Some((name, _)) = outcome(line) {
-            if inventory.all.contains(name) {
-                *counts.entry(name).or_insert(0) += 1;
-            }
+        if let Some((name, _)) = outcome(line)
+            && inventory.all.contains(name)
+        {
+            *counts.entry(name).or_insert(0) += 1;
         }
     }
     require(

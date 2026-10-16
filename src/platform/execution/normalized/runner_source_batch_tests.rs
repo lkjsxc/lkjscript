@@ -256,3 +256,79 @@ fn reused_source_authority_does_not_follow_a_new_accepted_head() {
         .unwrap();
     assert_eq!(error.code, "lifecycle_authority_changed");
 }
+
+#[test]
+fn retained_source_proof_rechecks_physical_bytes_cancellation_and_public_binding() {
+    use crate::platform::kernel::{OwnerRecord, encode_owner};
+    use crate::platform::storage::object::{ObjectDomain, ObjectKey};
+    use std::io::{Read, Seek, SeekFrom, Write};
+
+    let (_temporary, application) = authored_fixture();
+    healthy(&application, 8, 50);
+    let mut changed = application.clone();
+    changed.revision = crate::platform::semantic_id::RevisionId::from_digest([0; 32]);
+    assert_eq!(
+        changed.check_authority().unwrap_err().code,
+        "lifecycle_authority_changed"
+    );
+    let cancelled = ExecutionControl::uncancelled();
+    cancelled.cancel();
+    let failure = application
+        .run_observed(
+            &Name::new("pure").unwrap(),
+            b"[8]",
+            NormalizedCommandPolicy::default(),
+            &cancelled,
+        )
+        .err()
+        .unwrap();
+    assert_eq!(failure.class, crate::platform::DiagnosticClass::Cancelled);
+
+    let view = application.repository.view_current().unwrap();
+    let snapshot = view.reconstruct_full_oracle().unwrap().value;
+    let module = snapshot
+        .owners
+        .values()
+        .find(|owner| matches!(owner, OwnerRecord::Module(_)))
+        .unwrap();
+    let (digest, _) = encode_owner(module).unwrap();
+    let key = ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes());
+    let store = application.repository.object_store().unwrap();
+    let location = store.catalog_location(key).unwrap().unwrap();
+    let path = application
+        .repository
+        .root()
+        .join("packs")
+        .join(location.pack.file_name());
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)
+        .unwrap();
+    file.seek(SeekFrom::Start(location.offset)).unwrap();
+    let mut original = [0_u8; 1];
+    file.read_exact(&mut original).unwrap();
+    file.seek(SeekFrom::Start(location.offset)).unwrap();
+    file.write_all(&[original[0] ^ 0x80]).unwrap();
+    file.sync_all().unwrap();
+    let failure = application
+        .run_observed(
+            &Name::new("pure").unwrap(),
+            b"[8]",
+            NormalizedCommandPolicy::default(),
+            &ExecutionControl::uncancelled(),
+        )
+        .err()
+        .unwrap();
+    assert_eq!(failure.class, crate::platform::DiagnosticClass::Corrupt);
+    assert!(
+        !failure
+            .notes
+            .iter()
+            .any(|note| note.contains("production-observation"))
+    );
+    file.seek(SeekFrom::Start(location.offset)).unwrap();
+    file.write_all(&original).unwrap();
+    file.sync_all().unwrap();
+    healthy(&application, 8, 50);
+}

@@ -100,7 +100,7 @@ impl RevisionCore {
             ));
         }
         let mut hasher = blake3::Hasher::new_derive_key(REVISION_IDENTITY_DIGEST_DOMAIN);
-        hasher.update(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
+        hasher.update(&crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes());
         hasher.update(&(bytes.len() as u64).to_be_bytes());
         hasher.update(&bytes);
         Ok(RevisionId::from_digest(*hasher.finalize().as_bytes()))

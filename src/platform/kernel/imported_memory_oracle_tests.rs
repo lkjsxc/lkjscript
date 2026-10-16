@@ -348,7 +348,7 @@ fn imported_memory_oracle_rejects_foreign_constraints_modes_and_open_actuals() {
             match fault {
                 "unrestricted" => p.use_mode = ParameterUse::Unrestricted,
                 "parameter-generation" => {
-                    p.header.contract_version = contract::SHARE_GRAPH_CONTRACT_VERSION - 1;
+                    p.header.contract_version = contract::GRAPH_CONTRACT_VERSION - 1;
                 }
                 "borrowed-result" | "function-generation" => {
                     let result = p.ty;
@@ -365,7 +365,7 @@ fn imported_memory_oracle_rejects_foreign_constraints_modes_and_open_actuals() {
                         })
                         .unwrap();
                     if fault == "function-generation" {
-                        d.header.contract_version = contract::SHARE_GRAPH_CONTRACT_VERSION - 1;
+                        d.header.contract_version = contract::GRAPH_CONTRACT_VERSION - 1;
                     } else {
                         let PackageInterfaceDeclarationPayload::Function(f) = &mut d.payload else {
                             unreachable!()

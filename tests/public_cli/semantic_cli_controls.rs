@@ -14,6 +14,7 @@ fn candidate_selection_never_uses_host_semantic_execution() {
     assert_eq!(first.mode, Mode::selected());
     assert_eq!(second.mode, Mode::selected());
     if Mode::selected() == Mode::HostSemantic {
+        assert_eq!(first.executable, binary());
         assert_eq!(first.executable, second.executable);
         assert!(!first.executable.starts_with(first.root.path()));
         assert!(!second.executable.starts_with(second.root.path()));
@@ -194,8 +195,11 @@ declarations.end
 #[tokio::test(flavor = "current_thread")]
 async fn host_foreground_and_batches_join_inside_a_runtime_and_recover_without_sources() {
     // The host adapter must also work when its synchronous caller already owns a runtime.
-    let public = Native::template_in("minimal", Mode::HostSemantic);
-    let source = public.input("host-routes.lkjc", &format!(r#"request base={}
+    for public in [
+        Native::template_in("minimal", Mode::HostSemantic),
+        Native::memory_project_in("minimal", Mode::HostSemantic),
+    ] {
+        let source = public.input("host-routes.lkjc", &format!(r#"request base={}
 declarations.begin
 (units
   (module create host-routes
@@ -213,147 +217,156 @@ declarations.begin
   (target create echo (component host-routes::command) (runner command) (port host-routes::command::echo)))
 declarations.end
 "#, public.revision()));
-    public.apply(&source, &public.plan(&source, true), true);
-    let artifact = public.root.path().join("host-routes.lkja");
-    public.cli(&["build", "--output", path(&artifact)], true);
-    let deployment = public.input("host-routes.deployment.json", &serde_json::json!({
+        public.apply(&source, &public.plan(&source, true), true);
+        let artifact = public.root.path().join("host-routes.lkja");
+        public.cli(&["build", "--output", path(&artifact)], true);
+        let deployment = public.input("host-routes.deployment.json", &serde_json::json!({
         "artifact":"host-routes.lkja", "target":"main", "listen":null,
         "http":null,"session":null,"worker":null,
         "streams":{"maximum_chunk_bytes":65536,"maximum_buffered_chunks":8,"maximum_total_bytes":1048576,"maximum_live_streams":1024},
         "grants":[],"secrets":[],"configuration":{}
     }).to_string());
-    let head = std::fs::read(public.project.join("HEAD")).unwrap();
-    let large = "猫\"\n\\".repeat(20_000);
-    let rows = || {
-        let arguments = serde_json::json!([7]);
-        let mut fuel = BatchCase::failure(
-            "fuel",
-            &arguments,
-            "resource",
-            "normalized_instruction_steps",
-        );
-        fuel.execution = Some(serde_json::json!({
-            "instruction_fuel":1,"maximum_call_depth":4096,"maximum_value_stack":1000000
-        }));
-        let mut deadline =
-            BatchCase::failure("deadline", &arguments, "cancelled", "execution_deadline");
-        deadline.deadline_milliseconds = Some(0);
-        let mut echo = BatchCase::success(
-            "large-target-override",
-            &serde_json::json!([large]),
-            serde_json::json!(large),
-        );
-        echo.target = Some("echo".to_owned());
-        vec![
-            BatchCase::success("first", &arguments, serde_json::json!(49)),
-            BatchCase::failure(
-                "wrong-type",
-                &serde_json::json!([true]),
-                "source",
-                "normalized_json_type",
-            ),
-            fuel,
-            BatchCase::success("after-fuel", &arguments, serde_json::json!(49)),
-            deadline,
-            BatchCase::success("after-deadline", &arguments, serde_json::json!(49)),
-            echo,
-        ]
-    };
-    let source_rows = public.source_batch("host-routes", "main", &rows());
-    assert_eq!(source_rows.len(), 7);
-    assert_eq!(std::fs::read(public.project.join("HEAD")).unwrap(), head);
-    assert!(
-        !public
-            .root
-            .path()
-            .join("source-batch-host-routes.witness.lkjp")
-            .exists()
-    );
-    let source_command: Value = serde_json::from_slice(
-        &std::fs::read(
-            public
+        let head = public.head_bytes();
+        let large = "猫\"\n\\".repeat(20_000);
+        let rows = || {
+            let arguments = serde_json::json!([7]);
+            let mut fuel = BatchCase::failure(
+                "fuel",
+                &arguments,
+                "resource",
+                "normalized_instruction_steps",
+            );
+            fuel.execution = Some(serde_json::json!({
+                "instruction_fuel":1,"maximum_call_depth":4096,"maximum_value_stack":1000000
+            }));
+            let mut deadline =
+                BatchCase::failure("deadline", &arguments, "cancelled", "execution_deadline");
+            deadline.deadline_milliseconds = Some(0);
+            let mut echo = BatchCase::success(
+                "large-target-override",
+                &serde_json::json!([large]),
+                serde_json::json!(large),
+            );
+            echo.target = Some("echo".to_owned());
+            vec![
+                BatchCase::success("first", &arguments, serde_json::json!(49)),
+                BatchCase::failure(
+                    "wrong-type",
+                    &serde_json::json!([true]),
+                    "source",
+                    "normalized_json_type",
+                ),
+                fuel,
+                BatchCase::success("after-fuel", &arguments, serde_json::json!(49)),
+                deadline,
+                BatchCase::success("after-deadline", &arguments, serde_json::json!(49)),
+                echo,
+            ]
+        };
+        let source_rows = public.source_batch("host-routes", "main", &rows());
+        assert_eq!(source_rows.len(), 7);
+        assert_eq!(public.head_bytes(), head);
+        assert!(
+            !public
                 .root
                 .path()
-                .join("batch-source-host-routes.command.json"),
+                .join("source-batch-host-routes.witness.lkjp")
+                .exists()
+        );
+        let source_command: Value = serde_json::from_slice(
+            &std::fs::read(
+                public
+                    .root
+                    .path()
+                    .join("batch-source-host-routes.command.json"),
+            )
+            .unwrap(),
         )
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(source_command["execution_mode"], "host-semantic");
-    assert!(source_command.get("executable").is_none());
-    assert!(source_command.get("environment_cleared").is_none());
+        .unwrap();
+        assert_eq!(source_command["execution_mode"], "host-semantic");
+        assert_eq!(
+            source_command["adapter"],
+            if public.memory.read().unwrap().is_some() {
+                "public-memory"
+            } else {
+                "public-cli"
+            }
+        );
+        assert!(source_command.get("executable").is_none());
+        assert!(source_command.get("environment_cleared").is_none());
 
-    // Only copied current artifact/deployment bytes remain available to detached execution.
-    std::fs::remove_dir_all(&public.project).unwrap();
-    std::fs::remove_file(source).unwrap();
-    let result = public.root.path().join("host-foreground.result.json");
-    let healthy = public.cli(
-        &[
-            "run",
-            "--deployment",
-            path(&deployment),
-            "--arguments",
-            "[7]",
-            "--result-file",
-            path(&result),
-        ],
-        true,
-    );
-    assert_eq!(std::fs::read(&result).unwrap(), b"49");
-    let execution = compact_record(&healthy, "execution");
-    assert_eq!(compact_field(execution, "target"), "main");
-    let refused_result = public.root.path().join("host-refused.result.json");
-    let refused = public.cli(
-        &[
-            "run",
-            "--deployment",
-            path(&deployment),
-            "--arguments",
-            "[true]",
-            "--result-file",
-            path(&refused_result),
-        ],
-        false,
-    );
-    assert_eq!(
-        compact_field(compact_record(&refused, "diagnostic"), "code"),
-        "normalized_json_type"
-    );
-    assert!(!refused_result.exists());
-    let detached = public.batch("host-routes", &deployment, &rows());
-    assert_eq!(detached.len(), 7);
-    let terminal: Value = serde_json::from_slice(
-        &std::fs::read(public.root.path().join("batch-host-routes.terminal.json")).unwrap(),
-    )
-    .unwrap();
-    assert_eq!(terminal["execution_mode"], "host-semantic");
-    assert_eq!(terminal["adapter_status"], 0);
-    assert!(terminal.get("status").is_none());
-
-    // The executable-only entry remains a real, bounded process control even in a host test.
-    batch::execute(
-        public.root.path(),
-        &public.executable,
-        "explicit-process",
-        &deployment,
-        &[BatchCase::success(
-            "selected-process",
-            &serde_json::json!([8]),
-            serde_json::json!(50),
-        )],
-    );
-    let command: Value = serde_json::from_slice(
-        &std::fs::read(
-            public
-                .root
-                .path()
-                .join("batch-explicit-process.command.json"),
+        // Only copied current artifact/deployment bytes remain available to detached execution.
+        public.remove_project();
+        std::fs::remove_file(source).unwrap();
+        let result = public.root.path().join("host-foreground.result.json");
+        let healthy = public.cli(
+            &[
+                "run",
+                "--deployment",
+                path(&deployment),
+                "--arguments",
+                "[7]",
+                "--result-file",
+                path(&result),
+            ],
+            true,
+        );
+        assert_eq!(std::fs::read(&result).unwrap(), b"49");
+        let execution = compact_record(&healthy, "execution");
+        assert_eq!(compact_field(execution, "target"), "main");
+        let refused_result = public.root.path().join("host-refused.result.json");
+        let refused = public.cli(
+            &[
+                "run",
+                "--deployment",
+                path(&deployment),
+                "--arguments",
+                "[true]",
+                "--result-file",
+                path(&refused_result),
+            ],
+            false,
+        );
+        assert_eq!(
+            compact_field(compact_record(&refused, "diagnostic"), "code"),
+            "normalized_json_type"
+        );
+        assert!(!refused_result.exists());
+        let detached = public.batch("host-routes", &deployment, &rows());
+        assert_eq!(detached.len(), 7);
+        let terminal: Value = serde_json::from_slice(
+            &std::fs::read(public.root.path().join("batch-host-routes.terminal.json")).unwrap(),
         )
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(command["execution_mode"], "executable-batch");
-    assert_eq!(command["environment_cleared"], true);
-    assert_eq!(command["executable"], path(&public.executable));
-    tokio::task::yield_now().await;
+        .unwrap();
+        assert_eq!(terminal["execution_mode"], "host-semantic");
+        assert_eq!(terminal["adapter_status"], 0);
+        assert!(terminal.get("status").is_none());
+
+        // The executable-only entry remains a real, bounded process control even in a host test.
+        batch::execute(
+            public.root.path(),
+            &public.executable,
+            "explicit-process",
+            &deployment,
+            &[BatchCase::success(
+                "selected-process",
+                &serde_json::json!([8]),
+                serde_json::json!(50),
+            )],
+        );
+        let command: Value = serde_json::from_slice(
+            &std::fs::read(
+                public
+                    .root
+                    .path()
+                    .join("batch-explicit-process.command.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(command["execution_mode"], "executable-batch");
+        assert_eq!(command["environment_cleared"], true);
+        assert_eq!(command["executable"], path(&public.executable));
+        tokio::task::yield_now().await;
+    }
 }

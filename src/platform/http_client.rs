@@ -18,7 +18,8 @@ use tokio::net::TcpStream;
 use tokio::runtime::Handle;
 use tokio_rustls::TlsConnector;
 
-pub const HTTP_CLIENT_ADAPTER_CONTRACT_VERSION: u16 = 1;
+pub const HTTP_CLIENT_ADAPTER_CONTRACT_VERSION: u16 =
+    crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_HTTP_CLIENT_ENDPOINT_BYTES: usize = 4_096;
 pub const MAXIMUM_HTTP_CLIENT_REQUEST_HEADERS: usize = 256;
 pub const MAXIMUM_HTTP_CLIENT_REQUEST_HEADER_BYTES: usize = 64 * 1_024;

@@ -81,17 +81,12 @@ stream elements and persistence retain their existing boundary restrictions.
 
 Kernel validation, independent source classification, canonical preparation and
 both evaluators enforce the signature and custody rules. Unused parameters,
-unreachable applications and imported signatures are checked. The original
-consuming-task extensions selected the following generations. Semantic validator
-22 invalidated prior proof reuse for the initial same-task extension, without a
-graph, owner/type, request, instruction or artifact format change. The subsequent
-task-method extension uses semantic validator 23 and authored request codec 24;
-the existing graph, instruction and artifact layouts remain unchanged.
-Historical accepted content remains historical; new task-owned meaning is not
-claimed executable by an older validator or host.
-Borrowed task signatures and methods require the current advertised owner and
-admission generations; historical consuming-only formats cannot acquire borrowing
-permission by recomputing their integrity hashes.
+unreachable applications and imported signatures are checked. Owners, signatures,
+requests, compiler units, bytecode, artifacts and validation material share schema
+epoch 1. Borrowed tasks and methods require current proof of exact custody, loan
+and effect obligations. Persisted acceptance or checksums cannot supply invocation
+permission. Foreign epochs reject; maintained artifacts are rebuilt through
+supported product owners.
 
 Literal public examples live in `tests/fixtures/owned-task-library.lkjc` and
 `owned-task-consumer.lkjc`. The public task/resource fixture composes an owned

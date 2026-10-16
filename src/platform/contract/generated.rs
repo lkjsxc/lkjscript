@@ -84,9 +84,8 @@ mod tests {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/generated");
         for document in generated_documents().expect("generated documents") {
             let path = root.join(document.relative_path);
-            assert_eq!(
-                std::fs::read(&path).expect("checked-in generated document"),
-                document.bytes,
+            assert!(
+                std::fs::read(&path).expect("checked-in generated document") == document.bytes,
                 "{} is stale; run {GENERATOR_COMMAND}",
                 path.display()
             );

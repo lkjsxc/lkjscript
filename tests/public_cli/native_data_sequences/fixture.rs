@@ -44,7 +44,7 @@ pub(super) struct DataSequences {
 }
 
 fn native() -> Native {
-    let mut public = Native::template("command");
+    let mut public = Native::memory_project("command");
     if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
         public.root.disable_cleanup(true);
         println!(
@@ -143,7 +143,7 @@ impl DataSequences {
 
     pub fn detach(&self) {
         for public in [&self.supplier, &self.consumer] {
-            std::fs::remove_dir_all(&public.project).unwrap();
+            public.remove_project();
             for entry in std::fs::read_dir(public.root.path()).unwrap() {
                 let file = entry.unwrap().path();
                 if file
@@ -154,7 +154,7 @@ impl DataSequences {
                     std::fs::remove_file(file).unwrap();
                 }
             }
-            assert!(!public.project.exists());
+            assert!(!public.has_project());
         }
         assert!(!self.generic.path.exists());
         self.verify_identity();
@@ -255,8 +255,8 @@ impl DataSequences {
     }
 
     pub fn source_batch(&self, label: &str, cases: &[BatchCase]) {
-        assert!(self.supplier.project.exists());
-        assert!(self.consumer.project.exists());
+        assert!(self.supplier.has_project());
+        assert!(self.consumer.has_project());
         self.verify_identity();
         for row in self.consumer.source_batch(label, "data-trace", cases) {
             if let Some(execution) = row.iter().find(|record| record.operation == "execution") {
@@ -267,8 +267,8 @@ impl DataSequences {
     }
 
     pub fn batch(&self, label: &str, cases: &[BatchCase]) -> Vec<Vec<CompactRecord>> {
-        assert!(!self.supplier.project.exists());
-        assert!(!self.consumer.project.exists());
+        assert!(!self.supplier.has_project());
+        assert!(!self.consumer.has_project());
         assert!(!self.generic.path.exists());
         let descriptor = self.consumer.root.path().join("data-trace.deployment.json");
         let records = self.consumer.batch(label, &descriptor, cases);

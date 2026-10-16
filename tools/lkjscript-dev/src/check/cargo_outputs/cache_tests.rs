@@ -16,10 +16,10 @@ fn cargo_output_cache_requires_original_producer_binding_on_store_and_load() -> 
     let cache = VerificationCache::new(root.path(), &cache_root);
     if receipt.status != GateStatus::Passed || receipt.cargo_origin.is_none() {
         return Err(DevError::corrupt(
-            "genuine fixture lacks its cold Cargo origin",
+            "synthetic fixture lacks its archived Cargo records",
         ));
     }
-    // CHECK8 executable producers must be re-observed even with a genuine origin.
+    // Executable producers must be re-observed even with a genuine origin.
     if cache.store(&gate, &receipt).is_ok() {
         return Err(DevError::corrupt(
             "an executable producer was result-cacheable",

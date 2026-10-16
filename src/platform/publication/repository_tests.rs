@@ -1,4 +1,5 @@
 use super::*;
+use crate::platform::MemProjectStore;
 use crate::platform::change::{
     AuthoredAnnotationValue, AuthoredBindingDefinition, AuthoredCase, AuthoredCaseReference,
     AuthoredChange, AuthoredChangeSet, AuthoredDeclarationReference, AuthoredDeletePolicy,
@@ -16,15 +17,15 @@ use crate::platform::change::{
     plan_impact_and_summaries, prepare_change_analysis, validate_incremental_frontier,
     validate_structural_frontier,
 };
-use crate::platform::diagnostic::DiagnosticClass;
+use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     AnnotationClass, DeclarationPayload, DeclarationRecord, DeclarationVisibility,
     DependencyRecord, DocumentContent, DocumentationClass, DocumentationRecord, ExactOwnerKey,
     ExpressionOperation, ExternalVisibility, FunctionEffect, Idempotency, ImplementationName,
-    LocalValueReference, ModuleRecord, Name, NamespaceClass, OwnerHeader, OwnerKey, OwnerKind,
-    OwnerRecord, PackageId, PackageRevisionDigest, RelationEdge, RelationEndpoint, RelationKind,
-    RequirementReference, ResourceUnit, SemanticRoot, TypeForm, TypeObject, TypeObjectDigest,
-    encode_owner, encode_type_object, extract_relations,
+    KernelSnapshot, LocalValueReference, ModuleRecord, Name, NamespaceClass, OwnerHeader, OwnerKey,
+    OwnerKind, OwnerRecord, PackageId, PackageRevisionDigest, RelationEdge, RelationEndpoint,
+    RelationKind, RequirementReference, ResourceUnit, SemanticRoot, TypeForm, TypeObject,
+    TypeObjectDigest, encode_owner, encode_type_object, extract_relations,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::persistent_map::{MapRoot, PageDigest};
@@ -42,6 +43,32 @@ mod durability_closure_tests;
 
 #[path = "owned_contract_parameter_deletion_tests.rs"]
 mod owned_contract_parameter_deletion_tests;
+
+fn memory_repository(snapshot: &KernelSnapshot) -> Result<CreatedRepository, Diagnostic> {
+    let memory = MemProjectStore::new(128 * 1_048_576)?;
+    GraphRepository::create_memory(&memory, snapshot, None)
+}
+
+fn memory_witness_fixture() -> (KernelSnapshot, CreatedRepository) {
+    static BASE: std::sync::OnceLock<(MemProjectStore, KernelSnapshot, CreatedRepository)> =
+        std::sync::OnceLock::new();
+    let (base, snapshot, created) = BASE.get_or_init(|| {
+        let memory = MemProjectStore::new(128 * 1_048_576).expect("witness fixture capacity");
+        let snapshot = crate::platform::kernel::tests::witness_snapshot();
+        let created = GraphRepository::create_memory(&memory, &snapshot, None)
+            .expect("accepted witness fixture");
+        (memory, snapshot, created)
+    });
+    let memory = base.fork().expect("independent witness fixture");
+    (
+        snapshot.clone(),
+        CreatedRepository {
+            repository: GraphRepository::open_memory(&memory).expect("witness fixture repository"),
+            initial: created.initial.clone(),
+            current: created.current.clone(),
+        },
+    )
+}
 
 fn non_builtin_source_with_standard() -> (ExportedPackageTransport, ExportedPackageTransport) {
     let maintained = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("packages/standard");
@@ -1480,10 +1507,7 @@ fn staged_package_interface_validates_exact_cross_package_task_requirements() {
 
 #[test]
 fn revision_view_reads_exact_canonical_and_witness_records_with_local_work() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let view = created
         .repository
         .view_current()
@@ -1688,10 +1712,7 @@ fn revision_view_reads_exact_canonical_and_witness_records_with_local_work() {
 
 #[test]
 fn canonical_normalization_reads_only_touched_repository_keys() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let view = created.repository.view_current().expect("pinned view");
     let callee = owner_named(&created.initial.snapshot, "callee");
     let mut replacement = created.initial.snapshot.owners[&callee].clone();
@@ -1732,10 +1753,7 @@ fn canonical_normalization_reads_only_touched_repository_keys() {
 
 #[test]
 fn local_derived_delta_reads_only_affected_witness_keys() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let view = created.repository.view_current().expect("pinned view");
     let callee = owner_named(&created.initial.snapshot, "callee");
     let mut replacement = created.initial.snapshot.owners[&callee].clone();
@@ -1777,10 +1795,7 @@ fn local_derived_delta_reads_only_affected_witness_keys() {
 
 #[test]
 fn repository_summary_rebuild_reads_only_selected_witness_closure() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let view = created.repository.view_current().expect("pinned view");
     let callee = owner_named(&created.initial.snapshot, "callee");
     let mut replacement = created.initial.snapshot.owners[&callee].clone();
@@ -1819,10 +1834,7 @@ fn repository_summary_rebuild_reads_only_selected_witness_closure() {
 
 #[test]
 fn repository_impact_plan_matches_full_witness_oracle() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let view = created.repository.view_current().expect("pinned view");
     let binding = binding_named(&created.initial.snapshot, "local");
     let mut replacement = created.initial.snapshot.owners[&binding].clone();
@@ -1898,10 +1910,7 @@ fn repository_impact_plan_matches_full_witness_oracle() {
 
 #[test]
 fn repository_incremental_validation_reads_only_frontier_ownership() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let view = created.repository.view_current().expect("pinned view");
     let binding = binding_named(&created.initial.snapshot, "local");
     let mut replacement = created.initial.snapshot.owners[&binding].clone();
@@ -2000,10 +2009,7 @@ fn repository_incremental_validation_reads_only_frontier_ownership() {
 
 #[test]
 fn repository_test_delta_reads_only_the_affected_test_witness_closure() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let view = created.repository.view_current().expect("pinned view");
     let test = owner_named(&created.initial.snapshot, "caller_test");
     let actual = test_actual(&created.initial.snapshot, "caller_test");
@@ -2053,11 +2059,8 @@ fn repository_test_delta_reads_only_the_affected_test_witness_closure() {
 }
 
 #[test]
-fn repository_path_copies_witness_maps_from_packed_base_pages() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+fn repository_path_copies_witness_maps_from_immutable_base_pages() {
+    let (_logical, created) = memory_witness_fixture();
     let view = created.repository.view_current().expect("pinned view");
     let callee = owner_named(&created.initial.snapshot, "callee");
     let mut replacement = created.initial.snapshot.owners[&callee].clone();
@@ -2152,10 +2155,7 @@ fn repository_path_copies_witness_maps_from_packed_base_pages() {
 
 #[test]
 fn pinned_view_keeps_old_revision_and_namespace_after_head_advances() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let old_view = created.repository.view_current().expect("old pinned view");
     let callee = owner_named(&created.initial.snapshot, "callee");
     let OwnerRecord::Declaration(old_declaration) = &created.initial.snapshot.owners[&callee]
@@ -2242,14 +2242,8 @@ fn revision_view_detects_corruption_in_the_selected_owner_without_full_scan() {
 
 #[test]
 fn authored_allocation_ignores_local_labels_budgets_and_operational_options() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let created = GraphRepository::create(
-        &destination,
-        &empty_snapshot(b"authored-allocation-normalization"),
-        None,
-    )
-    .expect("create repository");
+    let created = memory_repository(&empty_snapshot(b"authored-allocation-normalization"))
+        .expect("create repository");
     let base = created.current.head.revision;
     let request = |first: &str, second: &str, budget| AuthoredChangeSet {
         base,
@@ -2301,10 +2295,7 @@ fn authored_allocation_ignores_local_labels_budgets_and_operational_options() {
 
 #[test]
 fn authored_request_allocates_forward_symbols_and_preserves_exact_uses() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let callee = owner_named(&created.initial.snapshot, "callee");
     let OwnerKey::Declaration(callee_id) = callee else {
         panic!("callee must be a declaration")
@@ -2481,10 +2472,7 @@ fn authored_request_allocates_forward_symbols_and_preserves_exact_uses() {
 
 #[test]
 fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let base = created.current.head.revision;
     let callee = owner_named(&created.initial.snapshot, "callee");
     let body = function_body(&created.initial.snapshot, "callee");
@@ -2611,10 +2599,7 @@ fn authored_request_rejects_invalid_symbols_kinds_and_empty_work() {
 
 #[test]
 fn authored_reject_deletion_never_infers_an_owned_closure() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let base = created.current.head.revision;
     let test = owner_named(&created.initial.snapshot, "caller_test");
     let request = AuthoredChangeSet {
@@ -2639,15 +2624,13 @@ fn authored_reject_deletion_never_infers_an_owned_closure() {
 
 #[test]
 fn authored_owned_closure_leaf_selects_the_same_owner_and_relations_as_reject() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let leaf = logical
         .owners
         .iter()
         .find_map(|(owner, record)| matches!(record, OwnerRecord::Target(_)).then_some(*owner))
         .expect("target leaf");
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let created = memory_repository(&logical).expect("create repository");
     let prepare = |policy| {
         created
             .repository
@@ -3249,14 +3232,8 @@ fn authored_owned_closure_covers_every_owner_kind_with_complete_oracle() {
 
 #[test]
 fn authored_owned_closure_removes_operation_parameters_and_updates_one_surviving_parent() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let created = GraphRepository::create(
-        &destination,
-        &empty_snapshot(b"owned-closure-operation-parent"),
-        None,
-    )
-    .expect("create repository");
+    let created = memory_repository(&empty_snapshot(b"owned-closure-operation-parent"))
+        .expect("create repository");
     let create = AuthoredChangeSet {
         base: created.current.head.revision,
         preconditions: Vec::new(),
@@ -3383,10 +3360,7 @@ fn authored_owned_closure_removes_operation_parameters_and_updates_one_surviving
 
 #[test]
 fn authored_owned_closure_unions_overlap_and_rejects_invalid_roots_and_created_descendants() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (logical, created) = memory_witness_fixture();
     let base = created.current.head.revision;
     let second = logical
         .owners
@@ -3539,14 +3513,8 @@ fn authored_owned_closure_unions_overlap_and_rejects_invalid_roots_and_created_d
 
 #[test]
 fn authored_owned_closure_follows_ownership_without_deleting_referenced_targets() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let created = GraphRepository::create(
-        &destination,
-        &empty_snapshot(b"owned-closure-reference-separation"),
-        None,
-    )
-    .expect("create repository");
+    let created = memory_repository(&empty_snapshot(b"owned-closure-reference-separation"))
+        .expect("create repository");
     let create = AuthoredChangeSet {
         base: created.current.head.revision,
         preconditions: Vec::new(),
@@ -3681,10 +3649,7 @@ fn authored_owned_closure_follows_ownership_without_deleting_referenced_targets(
 
 #[test]
 fn authored_owned_closure_accepts_explicit_same_request_reference_repair() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (logical, created) = memory_witness_fixture();
     let callee = owner_named(&logical, "callee");
     let caller = owner_named(&logical, "caller");
     let expected_callee_closure = complete_ownership_descendants(&created.initial.witness, callee);
@@ -3742,10 +3707,7 @@ fn authored_owned_closure_accepts_explicit_same_request_reference_repair() {
 
 #[test]
 fn authored_owned_closure_charges_independent_selection_admissions() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (logical, created) = memory_witness_fixture();
     let base = created.current.head.revision;
     let root = logical
         .owners
@@ -3824,10 +3786,7 @@ fn authored_owned_closure_charges_independent_selection_admissions() {
 
 #[test]
 fn authored_owned_closure_plan_output_admissions_are_independent_and_nonpublishing() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (logical, created) = memory_witness_fixture();
     let base = created.current.head.revision;
     let root = logical
         .owners
@@ -3885,10 +3844,7 @@ fn authored_owned_closure_plan_output_admissions_are_independent_and_nonpublishi
 
 #[test]
 fn authored_owned_closure_rejects_inconsistent_ownership_and_relation_witnesses() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (logical, created) = memory_witness_fixture();
     let base = created.repository.view_current().expect("open exact base");
     let root = logical
         .owners
@@ -4379,10 +4335,7 @@ fn authored_owned_closure_scale_emits_complete_plan_under_default_admission() {
 
 #[test]
 fn authored_deletion_rejects_untouched_live_references_and_created_owner_erasure() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let base = created.current.head.revision;
     let field = field_named(&created.initial.snapshot, "value");
     let live_reference = AuthoredChangeSet {
@@ -4433,10 +4386,7 @@ fn authored_deletion_rejects_untouched_live_references_and_created_owner_erasure
 
 #[test]
 fn authored_leaf_deletion_accepts_same_request_reference_repair() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let record = owner_named(&created.initial.snapshot, "Payload");
     let OwnerKey::Declaration(record_id) = record else {
         panic!("Payload must have declaration identity")
@@ -4525,10 +4475,7 @@ fn authored_leaf_deletion_accepts_same_request_reference_repair() {
 
 #[test]
 fn reviewed_change_plan_owned_body_closure_matches_complete_before_after_oracle() {
-    let temporary = tempfile::tempdir().expect("temporary reviewed-plan repository");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_, created) = memory_witness_fixture();
     let function = owner_named(&created.initial.snapshot, "with_binding");
     let OwnerKey::Declaration(function) = function else {
         panic!("with_binding must be a function declaration")
@@ -5039,10 +4986,7 @@ fn reviewed_function_extraction_matches_disjoint_oracle_and_preserves_moved_iden
 
 #[test]
 fn authored_member_deletion_detaches_the_exact_parent_and_preserves_siblings() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let create = AuthoredChangeSet {
         base: created.current.head.revision,
         preconditions: Vec::new(),
@@ -5124,10 +5068,7 @@ fn authored_member_deletion_detaches_the_exact_parent_and_preserves_siblings() {
 
 #[test]
 fn authored_preconditions_are_exact_base_point_reads_and_publish_once() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let callee = owner_named(&created.initial.snapshot, "callee");
     let callee_record = created.initial.snapshot.owners[&callee].clone();
     let OwnerRecord::Declaration(callee_declaration) = &callee_record else {
@@ -5213,10 +5154,7 @@ fn authored_preconditions_are_exact_base_point_reads_and_publish_once() {
 
 #[test]
 fn failed_authored_preconditions_publish_nothing_with_stable_codes() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let base = created.current.head.revision;
     let callee = owner_named(&created.initial.snapshot, "callee");
     let body = function_body(&created.initial.snapshot, "callee");
@@ -5298,10 +5236,7 @@ fn failed_authored_preconditions_publish_nothing_with_stable_codes() {
 
 #[test]
 fn semantic_preconditions_reject_derived_entries_that_disagree_with_meaning() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let base = created
         .repository
         .view_current()
@@ -5372,10 +5307,7 @@ fn semantic_preconditions_reject_derived_entries_that_disagree_with_meaning() {
 
 #[test]
 fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let base = created.current.head.revision;
     let callee = owner_named(&created.initial.snapshot, "callee");
     let rename = || AuthoredChange::RenameOwner {
@@ -5513,10 +5445,7 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
 
 #[test]
 fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let base = created.current.head.revision;
     let callee = owner_named(&created.initial.snapshot, "callee");
     let rename = AuthoredChange::RenameOwner {
@@ -5865,10 +5794,7 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
 
 #[test]
 fn authored_request_creates_a_typed_function_and_test_from_forward_references() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let request = AuthoredChangeSet {
         base: created.current.head.revision,
         preconditions: Vec::new(),
@@ -6041,10 +5967,7 @@ fn authored_request_creates_a_typed_function_and_test_from_forward_references() 
 
 #[test]
 fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let package = created.current.semantic_root.package_id;
     let payload =
         authored_exact_declaration(package, owner_named(&created.initial.snapshot, "Payload"));
@@ -6254,10 +6177,7 @@ fn authored_type_builder_interns_every_unrestricted_graph_nine_type_form() {
 
 #[test]
 fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let local_declaration = |symbol: &str| AuthoredDeclarationReference::Local {
         declaration: DeclarationSelector::Symbol {
             symbol: symbol.to_owned(),
@@ -6642,10 +6562,7 @@ fn authored_request_creates_every_foundational_owner_kind_with_forward_symbols()
 
 #[test]
 fn authored_member_and_contract_mutations_share_one_order_independent_pipeline() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (logical, created) = memory_witness_fixture();
     let package = created.current.semantic_root.package_id;
     let declaration_id = |owner| match owner {
         OwnerKey::Declaration(declaration) => declaration,
@@ -7139,10 +7056,7 @@ fn authored_member_and_contract_mutations_share_one_order_independent_pipeline()
 
 #[test]
 fn authored_member_additions_revalidate_exact_reverse_dependents() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let base = created.current.head.revision;
     let declaration_id = |owner| match owner {
         OwnerKey::Declaration(declaration) => declaration,
@@ -7207,10 +7121,7 @@ fn authored_member_additions_revalidate_exact_reverse_dependents() {
 
 #[test]
 fn authored_expression_builder_covers_every_graph_nine_operation() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let package = created.current.semantic_root.package_id;
     let callee = owner_named(&created.initial.snapshot, "callee");
     let constant = owner_named(&created.initial.snapshot, "unit_constant");
@@ -7701,8 +7612,6 @@ fn locked_publication_accepts_once_reconciles_exact_retry_and_rejects_stale() {
 
 #[test]
 fn idempotent_authored_reprepare_ignores_physical_child_type_availability() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let module = logical
         .owners
@@ -7712,7 +7621,7 @@ fn idempotent_authored_reprepare_ignores_physical_child_type_availability() {
             _ => None,
         })
         .expect("fixture module");
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let created = memory_repository(&logical).expect("create repository");
     let structural = AuthoredType::StructuralRecord {
         fields: vec![AuthoredStructuralTypeField {
             name: Name::new("value").unwrap(),
@@ -7810,10 +7719,7 @@ fn idempotent_authored_reprepare_ignores_physical_child_type_availability() {
 
 #[test]
 fn concurrent_readers_observe_only_old_or_new_complete_publications() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let prepared = prepare_body_publication(&created, PublicationOptions::default());
     let old = created.current.head;
     let new = prepared.head;
@@ -7846,10 +7752,7 @@ fn concurrent_readers_observe_only_old_or_new_complete_publications() {
 
 #[test]
 fn idempotency_key_is_exactly_bound_to_base_and_normalized_transaction() {
-    let temporary = tempfile::tempdir().expect("temporary repository parent");
-    let destination = temporary.path().join("meaning");
-    let logical = crate::platform::kernel::tests::witness_snapshot();
-    let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
+    let (_logical, created) = memory_witness_fixture();
     let options = PublicationOptions {
         idempotency_key: Some("request-1".to_owned()),
         intent: None,
@@ -8400,12 +8303,12 @@ fn repository_rejects_missing_accepted_pack() {
 }
 
 #[test]
-fn first_repository_open_rebuilds_disposable_v1_catalog_without_changing_authority() {
+fn first_repository_open_rebuilds_malformed_disposable_catalog_without_changing_authority() {
     let temporary = tempfile::tempdir().expect("temporary repository parent");
     let destination = temporary.path().join("meaning");
     let logical = crate::platform::kernel::tests::witness_snapshot();
     let created = GraphRepository::create(&destination, &logical, None).expect("create repository");
-    let head_before = std::fs::read(destination.join("HEAD")).expect("HEAD before migration");
+    let head_before = std::fs::read(destination.join("HEAD")).expect("HEAD before catalog repair");
     let packs_before = directory_file_digests(&destination.join("packs"));
     std::fs::write(
         destination.join("catalog/current.lkjc"),
@@ -8413,13 +8316,14 @@ fn first_repository_open_rebuilds_disposable_v1_catalog_without_changing_authori
     )
     .expect("install disposable v1 catalog fixture");
 
-    let reopened = GraphRepository::open(&destination).expect("first open rebuilds v1 catalog");
+    let reopened =
+        GraphRepository::open(&destination).expect("first open rebuilds malformed catalog");
     assert_eq!(
         reopened.current().expect("current after migration").head,
         created.current.head
     );
     assert_eq!(
-        std::fs::read(destination.join("HEAD")).expect("HEAD after migration"),
+        std::fs::read(destination.join("HEAD")).expect("HEAD after catalog repair"),
         head_before
     );
     assert_eq!(
@@ -8430,7 +8334,10 @@ fn first_repository_open_rebuilds_disposable_v1_catalog_without_changing_authori
         .object_store()
         .expect("open rebuilt catalog")
         .catalog_observation();
-    assert_eq!(observation.contract_version, 2);
+    assert_eq!(
+        observation.contract_version,
+        crate::platform::storage::contract::CATALOG_CONTRACT_VERSION
+    );
     assert_eq!(observation.history.full_rebuilds, 1);
     assert_eq!(observation.history.full_footer_scan_runs, 1);
     assert!(observation.leftovers.is_empty());

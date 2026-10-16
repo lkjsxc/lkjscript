@@ -5,7 +5,7 @@
 //! exception: their graph-owned set semantics require canonical target/method/selector/port order.
 
 use super::*;
-use crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH;
+use crate::platform::canonical_schema::SCHEMA_EPOCH;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     AnnotationClass, DeclarationVisibility, DocumentationClass, ExternalVisibility,
@@ -31,7 +31,7 @@ pub(super) fn encode_authored_intent(
 ) -> Result<Vec<u8>, Diagnostic> {
     let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
     writer.raw(&INTENT_MAGIC)?;
-    writer.raw(&CANONICAL_SCHEMA_HASH)?;
+    writer.raw(&SCHEMA_EPOCH.to_le_bytes())?;
     writer.raw(&request.base.bytes())?;
     writer.list(&request.preconditions, |writer, precondition| {
         writer.precondition(precondition)
@@ -68,7 +68,7 @@ pub(super) fn authored_http_route_sort_key(
 pub(super) fn encode_budget(budget: ChangeBudget) -> Result<Vec<u8>, Diagnostic> {
     let mut writer = Writer::new(MAXIMUM_BUDGET_BYTES);
     writer.raw(&BUDGET_MAGIC)?;
-    writer.raw(&CANONICAL_SCHEMA_HASH)?;
+    writer.raw(&SCHEMA_EPOCH.to_le_bytes())?;
     for maximum in [
         budget.authored.maximum_operations,
         budget.authored.maximum_preconditions,
@@ -2944,7 +2944,7 @@ mod tests {
         assert_eq!(&first[..8], &INTENT_MAGIC);
         // A literal protocol layout, independent of Writer and the allocation collector.
         let mut expected = b"LKJACHNG".to_vec();
-        expected.extend_from_slice(&CANONICAL_SCHEMA_HASH);
+        expected.extend_from_slice(&SCHEMA_EPOCH.to_le_bytes());
         expected.extend_from_slice(&[9; 32]);
         let count = |bytes: &mut Vec<u8>, value: u64| {
             bytes.extend_from_slice(&value.to_be_bytes());
@@ -2998,11 +2998,11 @@ mod tests {
 
     #[test]
     fn schema_header_counts_toward_exact_authored_byte_admission() {
-        let mut writer = Writer::new(INTENT_MAGIC.len() + CANONICAL_SCHEMA_HASH.len());
+        let mut writer = Writer::new(INTENT_MAGIC.len() + SCHEMA_EPOCH.to_le_bytes().len());
         writer.raw(&INTENT_MAGIC).unwrap();
-        writer.raw(&CANONICAL_SCHEMA_HASH).unwrap();
+        writer.raw(&SCHEMA_EPOCH.to_le_bytes()).unwrap();
         assert_eq!(writer.raw(&[0]).unwrap_err().code, "change_authored_bytes");
-        assert_eq!(writer.finish().len(), 40);
+        assert_eq!(writer.finish().len(), 10);
     }
 
     #[test]

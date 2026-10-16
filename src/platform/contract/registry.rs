@@ -109,9 +109,9 @@ use std::collections::{BTreeMap, BTreeSet};
 #[path = "read_views.rs"]
 mod read_views;
 
-pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry-26";
-pub const REGISTRY_CONTRACT_VERSION: u16 = 26;
-pub const CLI_CONTRACT_VERSION: u16 = 47;
+pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry";
+pub const REGISTRY_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const CLI_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
@@ -249,8 +249,9 @@ const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
 ];
 
 pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY: &str =
-    "lkjscript-function-definition-projection-22";
-pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 = 22;
+    "lkjscript-function-definition-projection";
+pub const FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION: u16 =
+    crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const FUNCTION_DEFINITION_DEFAULT_ITEMS: u64 = 50;
 pub const MAXIMUM_FUNCTION_DEFINITION_ITEMS: u64 = 10_000;
 pub const FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -585,7 +586,7 @@ pub(crate) const MODULE_MAGIC: [u8; 8] = magic_bytes(MODULE_MAGIC_TEXT);
 pub(crate) const MODULE_DIGEST_DOMAIN: &str = "lkjscript.semantic-module-object.v4";
 const MAP_PAGE_MAGIC_TEXT: &str = "LKJPMAP2";
 pub(crate) const MAP_PAGE_MAGIC: [u8; 8] = magic_bytes(MAP_PAGE_MAGIC_TEXT);
-pub(crate) const MAP_PAGE_CONTRACT_VERSION: u16 = 2;
+pub(crate) const MAP_PAGE_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub(crate) const MAP_PAGE_DIGEST_DOMAIN: &str = "lkjscript.persistent-map-page.v2";
 pub(crate) const MAP_PAGE_CHECKSUM_DOMAIN: &str = "lkjscript.persistent-map-checksum.v2";
 pub(crate) const MAP_CONTENT_DIGEST_DOMAIN: &str = "lkjscript.persistent-map-content.v1";
@@ -825,7 +826,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ContractDescriptor {
             key: ContractKey::Cli,
             name: "normalized command line protocol",
-            identity: "lkjscript-cli-47",
+            identity: "lkjscript-cli",
             version: CLI_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
@@ -875,7 +876,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         ContractDescriptor {
             key: ContractKey::NominalApplication,
             name: "positive-arity nominal application encoding",
-            identity: "lkjscript-nominal-application-1",
+            identity: "lkjscript-nominal-application",
             version: super::super::kernel::contract::NOMINAL_APPLICATION_CONTRACT_VERSION,
             stability: CURRENT,
             authority: ContractAuthority::CanonicalMeaning,
@@ -1068,7 +1069,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             key: ContractKey::AuthoredChangeCodec,
             name: "normalized authored change codec",
             identity: AUTHORED_CHANGE_CODEC_IDENTITY,
-            version: 1,
+            version: super::super::canonical_schema::SCHEMA_EPOCH,
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
@@ -1262,14 +1263,14 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         simple_contract(
             ContractKey::Deployment,
             "standalone artifact deployment descriptor",
-            "lkjscript-deployment-1",
+            "lkjscript-deployment",
             DEPLOYMENT_CONTRACT_VERSION,
             ContractAuthority::Deployment,
         ),
         simple_contract(
             ContractKey::SharedRuntime,
             "in-process exact-code service group with private deployment authority",
-            "lkjscript-shared-runtime-3",
+            "lkjscript-shared-runtime",
             SHARED_RUNTIME_CONTRACT_VERSION,
             ContractAuthority::Deployment,
         ),
@@ -1303,56 +1304,56 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         simple_contract(
             ContractKey::ConfigurationAdapter,
             "configuration adapter",
-            "lkjscript-configuration-adapter-1",
+            "lkjscript-configuration-adapter",
             CONFIGURATION_ADAPTER_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
         simple_contract(
             ContractKey::CapabilityGrant,
             "capability grant",
-            "lkjscript-capability-grant-1",
+            "lkjscript-capability-grant",
             CAPABILITY_GRANT_CONTRACT_VERSION,
             ContractAuthority::Deployment,
         ),
         simple_contract(
             ContractKey::HttpAdapter,
             "HTTP adapter",
-            "lkjscript-http-adapter-3",
+            "lkjscript-http-adapter",
             HTTP_ADAPTER_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
         simple_contract(
             ContractKey::HttpClientAdapter,
             "outbound HTTP client adapter",
-            "lkjscript-http-client-adapter-1",
+            "lkjscript-http-client-adapter",
             HTTP_CLIENT_ADAPTER_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
         simple_contract(
             ContractKey::Json,
             "bounded JSON value adapter",
-            "lkjscript-json-1",
+            "lkjscript-json",
             JSON_CONTRACT_VERSION,
             ContractAuthority::PublicProtocol,
         ),
         simple_contract(
             ContractKey::ObjectAdapter,
             "object storage adapter",
-            "lkjscript-object-adapter-1",
+            "lkjscript-object-adapter",
             OBJECT_ADAPTER_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
         simple_contract(
             ContractKey::QueueAdapter,
             "durable queue adapter",
-            "lkjscript-queue-adapter-2",
+            "lkjscript-queue-adapter",
             DURABLE_QUEUE_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
         simple_contract(
             ContractKey::ResidentRuntime,
             "normalized artifact resident runtime",
-            "lkjscript-resident-runtime-3",
+            "lkjscript-resident-runtime",
             RESIDENT_RUNTIME_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
@@ -1366,35 +1367,35 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
         simple_contract(
             ContractKey::SecretCatalog,
             "secret catalog",
-            "lkjscript-secret-catalog-1",
+            "lkjscript-secret-catalog",
             SECRET_CATALOG_CONTRACT_VERSION,
             ContractAuthority::Deployment,
         ),
         simple_contract(
             ContractKey::SecretVerifier,
             "secret verifier",
-            "lkjscript-secret-verifier-1",
+            "lkjscript-secret-verifier",
             SECRET_VERIFIER_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
         simple_contract(
             ContractKey::SecurityAdapter,
             "security adapter",
-            "lkjscript-security-adapter-1",
+            "lkjscript-security-adapter",
             SECURITY_ADAPTER_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
         simple_contract(
             ContractKey::Stream,
             "stream",
-            "lkjscript-stream-1",
+            "lkjscript-stream",
             STREAM_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
         simple_contract(
             ContractKey::WorkerRunner,
             "worker runner",
-            "lkjscript-worker-runner-1",
+            "lkjscript-worker-runner",
             WORKER_RUNNER_CONTRACT_VERSION,
             ContractAuthority::Runtime,
         ),
@@ -2476,6 +2477,12 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Rebuild current validation with this executable. If the program is newly invalid, inspect it and use change plan / change apply to publish a completely valid repair.",
         ),
         diagnostic(
+            "publication_current_validation_selection_changed",
+            DiagnosticClass::Semantic,
+            "An exact dependency transport selection changed while its current source proof was being built.",
+            "Retry with one stable complete selected source closure; historical acceptance remains unchanged.",
+        ),
+        diagnostic(
             "artifact_current_admission_binding",
             DiagnosticClass::Corrupt,
             "Normalized preparation input differs from its exact current admitted templates, applications, dependencies, or validator.",
@@ -2688,9 +2695,10 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "package_source_owner_contract",
             DiagnosticClass::Source,
-            "Transported canonical owners use an unsupported predecessor or foreign graph contract.",
-            "Retain the export and its matching predecessor executable, or rebuild from supported current meaning; staging does not migrate it.",
+            "Transported canonical owners do not use the current schema epoch.",
+            "Re-export a completely admitted closure through the current product; staging does not convert foreign encodings.",
         ),
+        package_source_diagnostic("package_builtin_source"),
         package_source_diagnostic("package_container_completeness"),
         package_source_diagnostic("package_container_contract"),
         package_source_diagnostic("package_container_object_domain"),
@@ -2719,6 +2727,24 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         package_source_diagnostic("package_source_summary"),
         package_source_diagnostic("package_source_transport"),
         package_source_diagnostic("package_source_validation"),
+        diagnostic(
+            "builtin_standard_program_binding",
+            DiagnosticClass::Corrupt,
+            "The shared builtin program does not match its exact admitted artifact.",
+            "Rebuild the product with matching maintained standard source and artifact assets.",
+        ),
+        diagnostic(
+            "builtin_standard_retention_limit",
+            DiagnosticClass::Resource,
+            "The shared builtin exceeds its aggregate retained-material or inventory bound.",
+            "Reduce the maintained builtin inventory; no caller override increases this process-wide bound.",
+        ),
+        diagnostic(
+            "package_oracle_copy_budget",
+            DiagnosticClass::Resource,
+            "Independent source reuse exhausted its modeled copy-byte or validation-work bound.",
+            "Use a smaller complete closure; the independent oracle has no caller override for this bound.",
+        ),
         diagnostic(
             "package_source_budget",
             DiagnosticClass::Resource,
@@ -4570,7 +4596,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_http_target_universal_port",
             DiagnosticClass::Semantic,
-            "An HTTP target retained a predecessor universal port.",
+            "An HTTP target declares a universal port outside its exact route mapping.",
             "Remove the target port and author every exact method/path route explicitly.",
         ),
         diagnostic(
@@ -4616,18 +4642,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Author a direct pure helper with an explicit memory suffix instead.",
         ),
         diagnostic(
-            "artifact_buffer_generation",
-            DiagnosticClass::Corrupt,
-            "Predecessor compiled control refers to an owned memory contract.",
-            "Rebuild from accepted meaning with compiler unit 16 and bytecode 12.",
-        ),
-        diagnostic(
-            "compiler_unit_buffer_generation",
-            DiagnosticClass::Corrupt,
-            "A predecessor compiler unit contains the ByteBuffer type digest.",
-            "Rebuild from accepted meaning with compiler unit 16 and bytecode 12.",
-        ),
-        diagnostic(
             "kernel_owned_contract",
             DiagnosticClass::Semantic,
             "An owned method contract, implementation map or explicit witness is not exact.",
@@ -4640,22 +4654,10 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Use direct named task calls with exact type and implementation arguments; require shareable for borrowed memory and transferable for consumed inputs and returned values. Keep ordinary data before owned memory, preserve lending guards throughout both children's joined lifetime, and keep resources, secrets and callables outside the child boundary.",
         ),
         diagnostic(
-            "kernel_share_constraint_generation",
-            DiagnosticClass::Semantic,
-            "A shareable type-parameter constraint appears under a predecessor graph generation.",
-            "Author owned shareable or owned transferable shareable bounds under Graph 30 and rebuild derived artifacts.",
-        ),
-        diagnostic(
             "kernel_share_constraint",
             DiagnosticClass::Semantic,
             "An exact supplied type does not prove the required structural or symbolic shared-read obligation.",
             "Declare shareable on the exact owned caller parameter or supply the complete shareable type closure, including inactive cases and nested elements.",
-        ),
-        diagnostic(
-            "kernel_transfer_constraint_generation",
-            DiagnosticClass::Semantic,
-            "A transferable type-parameter constraint appears under a predecessor graph generation.",
-            "Author transferable bounds under Graph 22; preserve predecessor bytes and rebuild derived artifacts.",
         ),
         diagnostic(
             "kernel_transfer_constraint",
@@ -4718,12 +4720,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Reduce the unit's distinct result types; capacity exhaustion does not establish invalid meaning.",
         ),
         diagnostic(
-            "kernel_parallel_generation",
-            DiagnosticClass::Semantic,
-            "A parallel expression is labeled with a predecessor meaning generation.",
-            "Author parallel meaning under Graph 21 or later, with borrowed children under Graph 30, and rebuild derived artifacts from accepted source.",
-        ),
-        diagnostic(
             "kernel_owned_choice",
             DiagnosticClass::Semantic,
             "An owned choice violates its exact payload, case coverage, scope or ownership contract.",
@@ -4738,14 +4734,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_sequence_generation",
             DiagnosticClass::Semantic,
-            "Sequence meaning is labeled with a predecessor source generation.",
-            "Author generalized sequence elements and indexed get/replace under Graph 31 and rebuild derived artifacts from accepted meaning; predecessor sequence meaning retains its original contract.",
-        ),
-        diagnostic(
-            "kernel_sequence_type_tag",
-            DiagnosticClass::Corrupt,
-            "An owned sequence type envelope contains an unsupported tag.",
-            "Preserve the input and regenerate canonical meaning through current authoring.",
+            "An owned sequence type or occurrence does not use the current schema epoch.",
+            "Author the complete sequence type and owner closure through the current product and rebuild derived artifacts.",
         ),
         diagnostic(
             "compiler_sequence_type",
@@ -4780,26 +4770,20 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_choice_generation",
             DiagnosticClass::Semantic,
-            "A predecessor graph, owner or package contains an owned choice in its type closure.",
-            "Author choice meaning under Graph 20 and rebuild derived artifacts from accepted source.",
+            "An owned choice type or occurrence does not use the current schema epoch.",
+            "Author the complete choice type and owner closure through the current product and rebuild derived artifacts.",
         ),
         diagnostic(
             "kernel_choice_binding",
             DiagnosticClass::Semantic,
             "An owned choice payload binding lacks its exact type or current graph authority.",
-            "Use Graph 20 payload bindings with explicit types and body-only scope.",
+            "Use payload bindings with exact types and body-only scope under the current schema epoch.",
         ),
         diagnostic(
             "kernel_choice_arms",
             DiagnosticClass::Semantic,
             "Owned choice arms repeat names or are not in canonical order.",
             "Use each case exactly once and rebuild canonical meaning through native authoring.",
-        ),
-        diagnostic(
-            "kernel_choice_type_tag",
-            DiagnosticClass::Corrupt,
-            "The disjoint owned choice envelope contains an unknown type tag.",
-            "Preserve the input and regenerate canonical meaning through current authoring.",
         ),
         diagnostic(
             "normalized_choice_token",
@@ -4811,7 +4795,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "compiler_choice_type",
             DiagnosticClass::Corrupt,
             "Owned choice compilation cannot resolve its exact choice type.",
-            "Rebuild from accepted Graph 20 meaning and retain disagreement evidence.",
+            "Rebuild from accepted meaning and retain disagreement evidence.",
         ),
         diagnostic(
             "compiler_choice_case",
@@ -4834,8 +4818,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_product_generation",
             DiagnosticClass::Semantic,
-            "A predecessor graph, owner or package contains an owned product in its type closure.",
-            "Author product meaning under Graph 19 and rebuild derived artifacts from that admitted source.",
+            "An owned product type or occurrence does not use the current schema epoch.",
+            "Author the complete product type and owner closure through the current product and rebuild derived artifacts.",
         ),
         diagnostic(
             "normalized_product_depth",
@@ -4847,13 +4831,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_product_binding",
             DiagnosticClass::Semantic,
             "An unpack binding lacks its exact type or current graph authority.",
-            "Use Graph 19 unpack bindings with explicit field types and body-only scope.",
-        ),
-        diagnostic(
-            "kernel_product_type_tag",
-            DiagnosticClass::Corrupt,
-            "The disjoint owned product envelope contains an unknown type tag.",
-            "Preserve the input and regenerate canonical meaning through current authoring.",
+            "Use unpack bindings with exact field types and body-only scope under the current schema epoch.",
         ),
         diagnostic(
             "normalized_product_token",
@@ -4872,18 +4850,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Infrastructure,
             "Independent source derivation found a closed product beyond the structural depth bound.",
             "Use a shallower finite product and preserve any disagreement with production admission.",
-        ),
-        diagnostic(
-            "artifact_product_type",
-            DiagnosticClass::Corrupt,
-            "Artifact generation admission cannot find an exact graph-bound product child type.",
-            "Preserve the artifact and rebuild its complete closure from admitted source.",
-        ),
-        diagnostic(
-            "artifact_product_work",
-            DiagnosticClass::Resource,
-            "Product generation closure exhausted finite artifact admission work.",
-            "Reduce the source closure and rebuild; work exhaustion does not establish invalid meaning.",
         ),
         diagnostic(
             "compiler_product_type",
@@ -4916,12 +4882,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Use owned bounds on an exact graph function or implementation scheme and exact Owned on owned-contract Self; additional contract and scheme parameters may use ordinary transferable bounds. Memory inputs declare borrow or consume and implementation applications supply exact type, effect and requirement operands.",
         ),
         diagnostic(
-            "kernel_mixed_storage_generation",
-            DiagnosticClass::Semantic,
-            "An ordinary storage contract or implementation parameter was assigned predecessor declaration or parameter authority.",
-            "Author mixed declarations and all ordinary parameter owners with Graph 33; export interface 21 and rebuild compiler 33/artifact 40 through their supported owners.",
-        ),
-        diagnostic(
             "normalized_cell_token",
             DiagnosticClass::Resource,
             "A scalar ownership token is stale, foreign, borrowed for consumption or unadmitted.",
@@ -4944,12 +4904,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Semantic,
             "An ordinary generic substitution contains owned memory, including a phantom argument.",
             "Use ordinary data/callback arguments or an explicit Owned parameter; keep memory direct, before any exact resource suffix.",
-        ),
-        diagnostic(
-            "kernel_buffer_type_tag",
-            DiagnosticClass::Corrupt,
-            "The disjoint ByteBuffer type envelope contains an unknown tag.",
-            "Preserve the input and regenerate canonical meaning through current authoring.",
         ),
         diagnostic(
             "normalized_buffer_token",
@@ -5318,12 +5272,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Select none or a compatible set of capture-safe, owned, transferable, and shareable; shareable requires owned and is independent of transferable. Omission is permitted only when adding a parameter.",
         ),
         diagnostic(
-            "kernel_expression_generation",
-            DiagnosticClass::Semantic,
-            "An expression claims a graph generation that cannot represent its meaning.",
-            "Use Graph 17 for F64 literals or Graph 16 and later for transaction outcomes; preserve authentic predecessor bytes.",
-        ),
-        diagnostic(
             "change_authored_read_scope_binding",
             DiagnosticClass::Semantic,
             "A lowered lexical read-scope actual does not name one exact lexical binding.",
@@ -5380,44 +5328,20 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "kernel_read_view_generation",
             DiagnosticClass::Semantic,
-            "A consuming owner or semantic profile predates the source-tied read-view contract.",
-            "Author the complete occurrence under the selected supported owner/profile; supplier generation alone cannot authorize a consumer and headers must not be patched.",
+            "A read-view occurrence or its containing owner does not use the current schema epoch.",
+            "Recreate the complete occurrence through current authoring; preserve exact owner, profile, supplier, and scope bindings.",
         ),
         diagnostic(
             "kernel_type_contract",
             DiagnosticClass::Semantic,
-            "A type object's version disagrees with the canonical envelope for its form.",
-            "Use the disjoint F64 envelope version 1 for F64 and preserve unchanged predecessor type encodings.",
-        ),
-        diagnostic(
-            "kernel_type_graph_generation",
-            DiagnosticClass::Semantic,
-            "A graph contains a type newer than its declared generation, including unused types.",
-            "Author F64 through a Graph 17 product; do not place its type envelope inside an older graph.",
+            "A type object does not use the current schema epoch.",
+            "Recreate the complete canonical type closure through current authoring; every type form uses SCHEMA_EPOCH.",
         ),
         diagnostic(
             "kernel_owner_graph_generation",
             DiagnosticClass::Semantic,
-            "An owner contains meaning newer than its own generation or containing graph.",
-            "Publish the complete validated candidate through the current product instead of relabeling predecessor content.",
-        ),
-        diagnostic(
-            "kernel_f64_type_tag",
-            DiagnosticClass::Corrupt,
-            "The disjoint F64 type envelope contains an unknown scalar tag.",
-            "Reacquire or rebuild the exact canonical type object; F64 envelope version 1 uses tag 1.",
-        ),
-        diagnostic(
-            "compiler_unit_f64_generation",
-            DiagnosticClass::Source,
-            "A compiled F64 literal instruction claims a predecessor compiler or bytecode generation.",
-            "Rebuild from accepted meaning with compiler unit 13 and bytecode 9; preserve predecessor artifacts.",
-        ),
-        diagnostic(
-            "artifact_f64_graph_generation",
-            DiagnosticClass::Corrupt,
-            "An artifact contains F64 meaning in a package, owner or unit claiming an older generation.",
-            "Rebuild the complete exact package closure with Graph 17 support; a newer outer artifact does not authorize older units to contain F64.",
+            "An owner's schema epoch differs from its containing graph.",
+            "Publish complete owner and graph records under the current schema epoch; do not relabel stored content.",
         ),
         diagnostic(
             "kernel_transaction_outcome_identity",
@@ -5442,12 +5366,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Semantic,
             "The selected exact outcome owners have an incompatible nominal declaration shape.",
             "Use a compatible exact supplier revision with the ordinary Committed and Aborted payload contracts.",
-        ),
-        diagnostic(
-            "compiler_unit_transaction_outcome_generation",
-            DiagnosticClass::Source,
-            "A compiled outcome continuation claims an older compiler or bytecode generation.",
-            "Rebuild with compiler unit 12 and bytecode 8 through the current product; preserve predecessor artifacts.",
         ),
         diagnostic(
             "compiler_type_parameter_constraints",
@@ -5514,12 +5432,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Semantic,
             "An applied nominal graph-test value contains an incomparable argument or member, including phantom or inactive positions.",
             "Compare only complete ordinary comparable data; capture safety does not grant equality.",
-        ),
-        diagnostic(
-            "kernel_nominal_application_tag",
-            DiagnosticClass::Corrupt,
-            "The disjoint nominal application envelope contains an unknown kind tag.",
-            "Regenerate the canonical application object; do not reinterpret it as a base TypeObject.",
         ),
         diagnostic(
             "normalized_instantiation_storage",
@@ -5855,7 +5767,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "normalized_queue_signature",
             DiagnosticClass::Capability,
             "A durable-queue artifact operation does not have the exact current resource signature.",
-            "Rebuild from the current standard package and reject predecessor queue interfaces.",
+            "Rebuild from the exact current standard package and admit the complete queue operation signature.",
         ),
         diagnostic(
             "normalized_queue_lease_state_case",
@@ -5968,7 +5880,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         DiagnosticDescriptor {
             code: "predecessor_contract",
             class: DiagnosticClass::Source,
-            meaning: "Input uses a predecessor contract rejected by direct cutover.",
+            meaning: "Input does not use the current supported contract.",
             retry: "Recreate the request or authority under the advertised current contract.",
         },
         diagnostic(
@@ -6748,7 +6660,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "http_client_contract",
             DiagnosticClass::Capability,
-            "Outbound HTTP client limits use a predecessor or foreign adapter contract.",
+            "Outbound HTTP client limits do not use the current adapter schema epoch.",
             "Use the exact current deployment schema and regenerate the descriptor.",
         ),
         diagnostic(
@@ -7292,8 +7204,8 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                         super::super::canonical_schema::CANONICAL_SCHEMA_IDENTITY.to_owned(),
                     ),
                     (
-                        "hash",
-                        super::super::canonical_schema::CANONICAL_SCHEMA_HASH_HEX.to_owned(),
+                        "epoch",
+                        super::super::canonical_schema::SCHEMA_EPOCH.to_string(),
                     ),
                     ("generation-policy", "current-only".to_owned()),
                 ],
@@ -8896,7 +8808,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("numeric", "positive-u64".to_owned()),
                 ("null", "no-cumulative-quota-for-that-field".to_owned()),
                 ("fuel-omitted", "reject".to_owned()),
-                ("added-field-omitted", "preserve-legacy-default".to_owned()),
+                ("added-field-omitted", "use-current-default".to_owned()),
                 ("counter-scope", "one-invocation".to_owned()),
                 ("counter-overflow", "saturated-u64-is-lower-bound".to_owned()),
                 ("new-http-recipe", "four-explicit-nulls".to_owned()),
@@ -9122,7 +9034,7 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         (
             "owned-contract",
             "(owned-contract MODE BINDING (visibility public|private) (self SELF) (type-parameter MODE SELF (constraint owned)) (type-parameter MODE ITEM (constraint owned|transferable|capture-safe transferable))... ASSOCIATED_MEMBER... (method method_HEX NAME (parameters (TYPE unrestricted|borrow|consume)...) (returns TYPE RESULT_RELATION) [(effect pure|(task (requirement REQUIREMENT)...))] [(scope-parameters (scope-parameter read_scope_HEX NAME)...)] [(scope-sources (scope-source ZERO_BASED_PARAMETER_POSITION SCOPE)...)])...)",
-            "Nominal pure or closed-effect task methods with exact Owned Self and ordered additional Owned or ordinary Transferable parameters. Every ordinary actual, including phantom arguments, must be complete first-order data and satisfy its exact bounds; a transferable owner is not ordinary data. Ordinary arguments are unrestricted and precede owned borrow/consume arguments. Value results are ordinary data or independently admitted owners. ReadFrom returns an Owned token from an exact borrowed source; ViewFrom returns a selected read-view handle from an exact borrowed source and explicit scope. View parameters are borrow-only. Complete scope/source/result contracts include unused methods; read-view consumers require Graph34/interface22.",
+            "Nominal pure or closed-effect task methods with exact Owned Self and ordered additional Owned or ordinary Transferable parameters. Every ordinary actual, including phantom arguments, must be complete first-order data and satisfy its exact bounds; a transferable owner is not ordinary data. Ordinary arguments are unrestricted and precede owned borrow/consume arguments. Value results are ordinary data or independently admitted owners. ReadFrom returns an Owned token from an exact borrowed source; ViewFrom returns a selected read-view handle from an exact borrowed source and explicit scope. View parameters are borrow-only. Complete scope/source/result contracts include unused methods; read-view consumers require the current schema epoch at each exact owner and interface.",
         ),
         (
             "owned-implementation",
@@ -9132,7 +9044,7 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         (
             "associated-member",
             "(associated-type assoc_type_HEX NAME (bound owned))|(associated-type assoc_type_HEX NAME (read-view-family (scope-parameter read_scope_HEX NAME)))",
-            "Complete authored-order contract member inventory with distinct exact IDs and names. Owned has arity zero; ReadViewFamily has exactly one owner-qualified scope formal. Member kind defines arity. Every signature occurrence retains exact contract/member identity; read-view consumers require the selected Graph34/interface22 profile. Neither kind implies transfer, sharing or capture rights.",
+            "Complete authored-order contract member inventory with distinct exact IDs and names. Owned has arity zero; ReadViewFamily has exactly one owner-qualified scope formal. Member kind defines arity. Every signature occurrence retains exact contract/member identity; read-view consumers require the current schema epoch at each exact owner and interface. Neither kind implies transfer, sharing or capture rights.",
         ),
         (
             "associated-binding",
@@ -9157,12 +9069,12 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         (
             "associated-contract-member",
             "(associated-contract-member CONTRACT assoc_type_HEX)",
-            "Exact package-qualified contract/member authority, valid only in that contract's signatures under its actual Graph33 owner/interface21 profile. No witness or scope is inferred. The member bound proves Owned only.",
+            "Exact package-qualified contract/member authority, valid only in that contract's signatures under the current schema epoch at its exact owner and interface. No witness or scope is inferred. The member bound proves Owned only.",
         ),
         (
             "associated-witness-projection",
             "(associated-witness-projection SCOPE implparam_HEX CONTRACT assoc_type_HEX)",
-            "Exact function or OwnedImplementation lexical scope, witness parameter, package-qualified contract/member and actual Graph33 owner/interface21 profile. Equal Self types or outputs confer no witness authority; external projections are forbidden. Complete selected bindings and prerequisites are validated; Owned implies no transfer, sharing or capture rights.",
+            "Exact function or OwnedImplementation lexical scope, witness parameter, package-qualified contract/member and current schema epoch at the exact owner and interface. Equal Self types or outputs confer no witness authority; external projections are forbidden. Complete selected bindings and prerequisites are validated; Owned implies no transfer, sharing or capture rights.",
         ),
         (
             "callable-result",
@@ -9987,8 +9899,8 @@ mod tests {
         let contracts = first.section(RegistrySection::Contracts).unwrap();
         let records = std::str::from_utf8(&contracts.bytes).unwrap();
         assert!(records.contains(&format!(
-            "canonical-schema identity=lkjscript-canonical-schema hash={} generation-policy=current-only\n",
-            super::super::super::canonical_schema::CANONICAL_SCHEMA_HASH_HEX
+            "canonical-schema identity=lkjscript-canonical-schema epoch={} generation-policy=current-only\n",
+            super::super::super::canonical_schema::SCHEMA_EPOCH
         )));
         assert!(!records.contains("predecessor=read_historical"));
     }
@@ -10061,9 +9973,12 @@ mod tests {
             .expect("definition projection contract");
         assert_eq!(
             contract.identity,
-            "lkjscript-function-definition-projection-22"
+            "lkjscript-function-definition-projection"
         );
-        assert_eq!(contract.version, 22);
+        assert_eq!(
+            contract.version,
+            crate::platform::canonical_schema::SCHEMA_EPOCH
+        );
         assert_eq!(
             contract_descriptors()
                 .iter()
@@ -10200,7 +10115,7 @@ mod tests {
             .find(|descriptor| descriptor.key == ContractKey::SharedRuntime)
             .expect("shared runtime contract");
         assert_eq!(descriptor.version, SHARED_RUNTIME_CONTRACT_VERSION);
-        assert_eq!(descriptor.identity, "lkjscript-shared-runtime-3");
+        assert_eq!(descriptor.identity, "lkjscript-shared-runtime");
         let records = section_records(RegistrySection::Deployment).unwrap();
         let record = records
             .iter()

@@ -2,28 +2,87 @@
 
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{FullValidationReport, KernelSnapshot};
-use crate::platform::storage::directory::PackDirectoryStore;
+use crate::platform::storage::backend::StorageBackend;
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StageOutcome, StoreError, StoreErrorClass,
     StoreReadAdmission, StoreReadLimits, StoreWork,
 };
+use crate::platform::storage::project::MemoryBytes;
 use crate::platform::witness::{
     CanonicalWitnessFacts, ValidationWitnessDigest, ValidationWitnessManifest,
     bind_witness_manifest, rebuild_canonical_facts,
 };
-use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
-// A process can open the same immutable revision several times during one command. Reuse only
-// proof this validator actually constructed, never an on-disk assertion. One bounded retained
-// context is enough for those views; a new process performs fresh current admission.
+// Retain only proof this implementation constructed. Distinct projects share a bounded LRU;
+// every reuse checks its complete read set against the selected physical store.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct CurrentValidationKey {
     pub root: crate::platform::kernel::SemanticRootDigest,
     pub revision: crate::platform::semantic_id::RevisionId,
+    pub publication: super::RevisionObjectDigest,
     pub validator: crate::platform::witness::ValidatorContractDigest,
+    pub implementation: [u8; 32],
 }
-type ValidationCache = Option<(CurrentValidationKey, Arc<[ObjectKey]>, Arc<RevalidatedBase>)>;
+// A process can interleave dozens of source authorities. The conservative decoded
+// estimate charges raw bytes eightfold, so a small global bound evicts live peers.
+const MAXIMUM_CACHE_BYTES: u64 = 512 * 1_048_576;
+const MAXIMUM_CACHE_ENTRIES: usize = 64;
+
+#[derive(Debug)]
+struct CachedRead {
+    key: ObjectKey,
+    // Weak identity keeps neither the payload nor its arena reservation alive. Its control block
+    // prevents pointer reuse while cached. No address enters a canonical identity or encoding.
+    memory: Option<Weak<MemoryBytes>>,
+}
+
+#[derive(Debug)]
+struct CachedValidation {
+    key: CurrentValidationKey,
+    objects: Box<[CachedRead]>,
+    selections: Box<[crate::platform::package_transport::PackageTransportBinding]>,
+    context: Arc<RevalidatedBase>,
+    retained_bytes: u64,
+}
+
+#[derive(Debug, Default)]
+struct ValidationCache {
+    entries: VecDeque<Arc<CachedValidation>>,
+    retained_bytes: u64,
+}
+
+impl ValidationCache {
+    fn get(&mut self, key: CurrentValidationKey) -> Option<Arc<CachedValidation>> {
+        let position = self.entries.iter().position(|entry| entry.key == key)?;
+        let entry = self.entries.remove(position)?;
+        self.entries.push_back(entry.clone());
+        Some(entry)
+    }
+
+    fn retain(&mut self, entry: Arc<CachedValidation>) {
+        if entry.retained_bytes > MAXIMUM_CACHE_BYTES {
+            return;
+        }
+        if let Some(position) = self.entries.iter().position(|old| old.key == entry.key)
+            && let Some(old) = self.entries.remove(position)
+        {
+            self.retained_bytes -= old.retained_bytes;
+        }
+        while self.entries.len() >= MAXIMUM_CACHE_ENTRIES
+            || self.retained_bytes > MAXIMUM_CACHE_BYTES - entry.retained_bytes
+        {
+            let Some(old) = self.entries.pop_front() else {
+                return;
+            };
+            self.retained_bytes -= old.retained_bytes;
+        }
+        self.retained_bytes += entry.retained_bytes;
+        self.entries.push_back(entry);
+    }
+}
+
 static CURRENT_CONTEXT: OnceLock<Mutex<ValidationCache>> = OnceLock::new();
 
 pub(super) fn cached(
@@ -34,59 +93,194 @@ pub(super) fn cached(
     let entry = CURRENT_CONTEXT
         .get()
         .and_then(|cache| cache.lock().ok())
-        .and_then(|cache| {
-            cache
-                .as_ref()
-                .filter(|(binding, _, _)| *binding == key)
-                .map(|(_, objects, context)| (objects.clone(), context.clone()))
-        });
-    let Some((objects, context)) = entry else {
+        .and_then(|mut cache| cache.get(key));
+    let Some(entry) = entry else {
         return Ok(None);
     };
-    let mut work = StoreWork::default();
-    // A cached proof never substitutes for the canonical bytes in this physical repository.
-    // Recheck its complete original read set, including exact dependency objects, before reuse.
+    if !selections_match(store.persistent_base(), &entry.selections, checkpoint)? {
+        return Ok(None);
+    }
+    let work = recheck(&entry, store, checkpoint, REBUILD_LIMITS)?;
+    Ok(Some((entry.context.clone(), work)))
+}
+
+pub(super) fn dependency_selections(
+    snapshot: &KernelSnapshot,
+    ready: &crate::platform::package_transport::source::PackageReadiness,
+) -> Result<Vec<crate::platform::package_transport::PackageTransportBinding>, Diagnostic> {
+    let mut selections = BTreeMap::new();
+    for dependency in snapshot.representation_dependencies.values() {
+        let transport = ready
+            .bindings
+            .get(&dependency.package_revision)
+            .copied()
+            .ok_or_else(selection_changed)?;
+        selections.insert(dependency.package_revision, transport);
+    }
+    Ok(selections
+        .into_iter()
+        .map(|(package_revision, transport)| {
+            crate::platform::package_transport::PackageTransportBinding {
+                package_revision,
+                transport,
+            }
+        })
+        .collect())
+}
+
+pub(super) fn selections_match(
+    store: &StorageBackend,
+    selections: &[crate::platform::package_transport::PackageTransportBinding],
+    checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+) -> Result<bool, Diagnostic> {
+    if selections.is_empty() {
+        return Ok(true);
+    }
+    checkpoint()?;
+    let ready = super::repository::read_store_readiness(store)?;
+    for selection in selections {
+        checkpoint()?;
+        if ready.bindings.get(&selection.package_revision) != Some(&selection.transport) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+pub(super) fn selection_changed() -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Semantic,
+        "publication_current_validation_selection_changed",
+        "an exact dependency transport selection changed during current validation; retry the selected closure",
+    )
+}
+
+pub(super) fn recheck_selected_objects(
+    store: &StorageBackend,
+    objects: &BTreeSet<ObjectKey>,
+    selections: &[crate::platform::package_transport::PackageTransportBinding],
+    checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+) -> Result<(), Diagnostic> {
+    if !selections_match(store, selections, checkpoint)? {
+        return Err(selection_changed());
+    }
     let mut admission = StoreReadAdmission::new(REBUILD_LIMITS);
-    for key in objects.iter() {
+    let mut work = StoreWork::default();
+    for key in objects {
         checkpoint()?;
         let bytes = store
             .read_admitted(*key, key.domain.maximum_bytes(), &mut admission, &mut work)
-            .map_err(|error| {
-                Diagnostic::new(
-                    match error.class {
-                        StoreErrorClass::Resource => DiagnosticClass::Resource,
-                        _ => DiagnosticClass::Corrupt,
-                    },
-                    error.code,
-                    error.message,
-                )
-            })?
-            .ok_or_else(|| {
-                Diagnostic::new(
-                    DiagnosticClass::Corrupt,
-                    "publication_current_validation_object_missing",
-                    "cached current validation references a missing canonical or dependency object",
-                )
-            })?;
-        key.verify(&bytes).map_err(|error| {
-            Diagnostic::new(DiagnosticClass::Corrupt, error.code, error.message)
-        })?;
+            .map_err(read_error)?
+            .ok_or_else(missing_object)?;
+        key.verify(&bytes).map_err(read_error)?;
     }
-    Ok(Some((context, work)))
+    checkpoint()
+}
+
+fn recheck(
+    entry: &CachedValidation,
+    store: &ViewStore,
+    checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+    limits: StoreReadLimits,
+) -> Result<StoreWork, Diagnostic> {
+    let mut work = StoreWork::default();
+    let mut admission = StoreReadAdmission::new(limits);
+    for object in entry.objects.iter() {
+        checkpoint()?;
+        let key = object.key;
+        if let StorageBackend::Memory(memory) = &store.base
+            && !store.derived.contains_key(&key)
+        {
+            admission.admit_catalog_lookup().map_err(read_error)?;
+            work.catalog_lookups = work.catalog_lookups.saturating_add(1);
+            let value = memory.objects.get(&key).ok_or_else(missing_object)?;
+            let length = value.as_slice().len();
+            if length > key.domain.maximum_bytes() {
+                return Err(Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "publication_validation_object_size",
+                    "cached validation object exceeds its domain read bound",
+                ));
+            }
+            // Identical immutable allocation proves unchanged bytes, but it grants no extra
+            // read capacity. Charge the same complete object/byte allowance before reuse.
+            admission.admit_object(length).map_err(read_error)?;
+            if object
+                .memory
+                .as_ref()
+                .is_some_and(|old| old.as_ptr() == Arc::as_ptr(value))
+            {
+                work.objects_reused = work.objects_reused.saturating_add(1);
+            } else {
+                key.verify(value.as_slice()).map_err(read_error)?;
+                work.objects_read = work.objects_read.saturating_add(1);
+                work.bytes_read = work.bytes_read.saturating_add(length as u64);
+            }
+            continue;
+        }
+        // Disk bytes can change independently of this process; re-read and verify every object.
+        // Derived overlays also require their own content proof, independent of any base identity.
+        let bytes = store
+            .read_admitted(key, key.domain.maximum_bytes(), &mut admission, &mut work)
+            .map_err(read_error)?
+            .ok_or_else(missing_object)?;
+        key.verify(&bytes).map_err(read_error)?;
+    }
+    Ok(work)
+}
+
+fn missing_object() -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Corrupt,
+        "publication_current_validation_object_missing",
+        "cached current validation references a missing canonical or dependency object",
+    )
+}
+
+fn read_error(error: StoreError) -> Diagnostic {
+    Diagnostic::new(
+        match error.class {
+            StoreErrorClass::Resource => DiagnosticClass::Resource,
+            _ => DiagnosticClass::Corrupt,
+        },
+        error.code,
+        error.message,
+    )
 }
 
 pub(super) fn retain(
     key: CurrentValidationKey,
     read_bytes: u64,
     objects: BTreeSet<ObjectKey>,
+    selections: Vec<crate::platform::package_transport::PackageTransportBinding>,
     context: Arc<RevalidatedBase>,
+    store: &ViewStore,
 ) {
+    let Some(entry) = cache_entry(key, read_bytes, objects, selections, context, store) else {
+        return;
+    };
+    if let Ok(mut cache) = CURRENT_CONTEXT
+        .get_or_init(|| Mutex::new(ValidationCache::default()))
+        .lock()
+    {
+        cache.retain(Arc::new(entry));
+    }
+}
+
+fn cache_entry(
+    key: CurrentValidationKey,
+    read_bytes: u64,
+    objects: BTreeSet<ObjectKey>,
+    selections: Vec<crate::platform::package_transport::PackageTransportBinding>,
+    context: Arc<RevalidatedBase>,
+    store: &ViewStore,
+) -> Option<CachedValidation> {
     if context.current.as_ref().err().is_some_and(|errors| {
         errors
             .iter()
             .any(|error| error.class != DiagnosticClass::Semantic)
     }) {
-        return;
+        return None;
     }
     let derived_bytes = context
         .facts
@@ -95,22 +289,49 @@ pub(super) fn retain(
         .map(Vec::len)
         .chain(context.facts.pages.objects().map(|(_, bytes)| bytes.len()))
         .try_fold(0_u64, |total, bytes| total.checked_add(bytes as u64));
+    // Preserve the conservative context estimate and include all retained read-set/control-block
+    // metadata. An oversized proof does not displace unrelated, admissible cached contexts.
+    let object_metadata = (std::mem::size_of::<CachedRead>()
+        + std::mem::size_of::<MemoryBytes>()
+        + 4 * std::mem::size_of::<usize>()) as u64;
     let estimate = derived_bytes
         .and_then(|bytes| bytes.checked_add(read_bytes))
         .and_then(|bytes| bytes.checked_mul(8))
         .and_then(|bytes| {
             bytes.checked_add((context.snapshot.owners.len() as u64).checked_mul(256)?)
-        });
-    if let Ok(mut cache) = CURRENT_CONTEXT.get_or_init(|| Mutex::new(None)).lock() {
-        *cache = estimate.filter(|bytes| *bytes <= 32 * 1_048_576).map(|_| {
-            (
-                key,
-                Arc::from(objects.into_iter().collect::<Vec<_>>()),
-                context,
-            )
-        });
-    }
+        })
+        .and_then(|bytes| bytes.checked_add((objects.len() as u64).checked_mul(object_metadata)?))
+        .and_then(|bytes| {
+            bytes.checked_add((selections.len() as u64).checked_mul(std::mem::size_of::<
+                crate::platform::package_transport::PackageTransportBinding,
+            >() as u64)?)
+        })
+        .and_then(|bytes| bytes.checked_add(256))
+        .filter(|bytes| *bytes <= MAXIMUM_CACHE_BYTES)?;
+    let objects = objects
+        .into_iter()
+        .map(|key| {
+            let memory = match &store.base {
+                StorageBackend::Memory(memory) if !store.derived.contains_key(&key) => {
+                    memory.objects.get(&key).map(Arc::downgrade)
+                }
+                _ => None,
+            };
+            CachedRead { key, memory }
+        })
+        .collect();
+    Some(CachedValidation {
+        key,
+        objects,
+        selections: selections.into_boxed_slice(),
+        context,
+        retained_bytes: estimate,
+    })
 }
+
+#[cfg(test)]
+#[path = "validation_cache_tests.rs"]
+mod tests;
 
 #[derive(Debug)]
 pub(super) struct CurrentValidation {
@@ -185,7 +406,7 @@ impl RevalidatedBase {
 /// publication mutation is needed to inspect or revalidate a compatible historical revision.
 #[derive(Debug)]
 pub(super) struct ViewStore {
-    base: PackDirectoryStore,
+    base: StorageBackend,
     derived: BTreeMap<ObjectKey, Vec<u8>>,
     rebuild_reads: std::cell::Cell<StoreReadAdmission>,
     rebuild_objects: std::cell::RefCell<Option<BTreeSet<ObjectKey>>>,
@@ -206,11 +427,11 @@ const REBUILD_LIMITS: StoreReadLimits = StoreReadLimits {
 };
 
 impl ViewStore {
-    pub(super) fn persistent_base(&self) -> &PackDirectoryStore {
+    pub(super) fn persistent_base(&self) -> &StorageBackend {
         &self.base
     }
 
-    pub const fn new(base: PackDirectoryStore) -> Self {
+    pub const fn new(base: StorageBackend) -> Self {
         Self {
             base,
             derived: BTreeMap::new(),
@@ -347,7 +568,7 @@ impl ViewStore {
 }
 
 impl std::ops::Deref for ViewStore {
-    type Target = PackDirectoryStore;
+    type Target = StorageBackend;
     fn deref(&self) -> &Self::Target {
         &self.base
     }
@@ -443,6 +664,14 @@ impl ViewStore {
         admission: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
+        // Rebuilt facts do not replace equal-key physical authority. Re-read that authority so
+        // later disk corruption cannot be hidden by an immutable in-process reconstruction.
+        if let Some(bytes) = self
+            .base
+            .read_admitted(key, maximum_bytes, admission, work)?
+        {
+            return Ok(Some(bytes));
+        }
         if let Some(bytes) = self.derived.get(&key) {
             admission.admit_catalog_lookup()?;
             admission.admit_object(bytes.len())?;
@@ -459,7 +688,7 @@ impl ViewStore {
             work.bytes_read = work.bytes_read.saturating_add(bytes.len() as u64);
             Ok(Some(bytes.clone()))
         } else {
-            self.base.read_admitted(key, maximum_bytes, admission, work)
+            Ok(None)
         }
     }
 }

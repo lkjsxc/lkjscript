@@ -238,15 +238,12 @@ ownership oracle, reference reader and strict loader admit these relationships
 independently. Recomputed hashes cannot make omitted bounds, substituted witnesses,
 wrong mapped types or forged borrowed-result relationships valid.
 
-Ordinary scheme declarations, their ordinary formals, mixed mapped applications,
-prerequisite scopes and invocation expressions require Graph 33. Supported Graph
-32 declarations remain readable with their original bounds. Current derived
-exports/programs select interface 21, compiler 33, artifact 40 and unchanged
-bytecode 27; authored
-ordinary-parameter requests select codec 37. Unsupported derived predecessors
-reject clearly. Maintained bundles are rebuilt through ordinary public
-check/build, without a migration shim. Original historical and immutable
-publication bytes retain their own meaning and evidence.
+Ordinary schemes, formals, mapped applications, prerequisite scopes and invocation
+expressions use inline current-record fields. Owners, interfaces, requests,
+compiler units, bytecode and artifacts share schema epoch 1. Complete admission
+checks category, scope and substitution obligations even for unused syntax.
+Foreign epochs reject; maintained bundles are rebuilt through ordinary public
+check/build operations without a predecessor reader.
 
 ## Reusable storage witness
 

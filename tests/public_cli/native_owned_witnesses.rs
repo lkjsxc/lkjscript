@@ -137,7 +137,7 @@ fn native_owned_witnesses_three_packages_and_source_free_exact_selection() {
 
 #[test]
 fn native_owned_witness_inspection_and_semantic_rejections_preserve_head() {
-    let public = Native::new();
+    let public = Native::memory();
     let before = public.revision();
     const GOOD: &str = include_str!("../fixtures/owned-witness-cell-consumer.lkjc");
     let contract = &LIBRARY[form_span(LIBRARY, "(owned-contract create Storage")];
@@ -474,7 +474,7 @@ declarations.end
 
 #[test]
 fn native_owned_recursive_signatures_and_witness_composite_closure_execute() {
-    let public = Native::new();
+    let public = Native::memory();
     author(&public, &[
         LIBRARY, CELL,
         include_str!("../fixtures/owned-witness-composite.lkjc"),

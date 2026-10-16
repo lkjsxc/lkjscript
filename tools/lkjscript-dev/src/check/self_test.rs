@@ -34,10 +34,32 @@ struct SelfTestReceipt {
     failure: Option<String>,
 }
 
-pub(crate) fn run(machine: bool) -> Result<u8, DevError> {
+pub(crate) fn run(
+    machine: bool,
+    retain_archive: bool,
+    evidence_root: Option<&Path>,
+) -> Result<u8, DevError> {
     let repository = super::repository_root()?;
-    let run = super::new_run_directory(&repository, "self-test-")?;
-    let directory = run.path();
+    let run = (retain_archive && evidence_root.is_none())
+        .then(|| super::new_run_directory(&repository, "self-test-"))
+        .transpose()?;
+    let scratch = (!retain_archive && evidence_root.is_none())
+        .then(|| super::compact::Scratch::new(&repository))
+        .transpose()?;
+    let directory = match evidence_root {
+        Some(path) => {
+            if !path.is_absolute() {
+                return Err(DevError::usage("self-test evidence root must be absolute"));
+            }
+            fs::create_dir(path)?;
+            path
+        }
+        None => run
+            .as_ref()
+            .map(super::RunDirectory::path)
+            .or_else(|| scratch.as_ref().map(super::compact::Scratch::path))
+            .ok_or_else(|| DevError::infrastructure("self-test scratch is absent"))?,
+    };
     let started = Instant::now();
     let receipt = match run_inner(&repository, directory, started) {
         Ok(receipt) => receipt,
@@ -59,7 +81,12 @@ pub(crate) fn run(machine: bool) -> Result<u8, DevError> {
         },
     };
     let path = directory.join("receipt.json");
-    let published = evidence::publish_json(&path, &receipt)?;
+    let published = if let Some(scratch) = &scratch {
+        scratch.cleanup()?;
+        super::compact::publish(&repository, serde_json::to_value(&receipt)?)?
+    } else {
+        evidence::publish_json(&path, &receipt)?
+    };
     let relative = evidence::relative(&repository, &published.path);
     if machine {
         #[derive(Serialize)]
@@ -97,7 +124,6 @@ fn run_inner(
     directory: &Path,
     started: Instant,
 ) -> Result<SelfTestReceipt, DevError> {
-    super::rotate_runs(repository, directory, "self-test-")?;
     let executable = std::env::current_exe().map_err(|error| {
         DevError::infrastructure(format!("resolve self-test executable: {error}"))
     })?;
@@ -276,6 +302,7 @@ fn dag_test(
             fresh_reason: "self_test",
             cache: &cache,
             origin: None,
+            live: None,
         },
     )?;
     let statuses = receipts
@@ -313,6 +340,7 @@ fn cache_test(
             fresh_reason: "self_test",
             cache: &cache,
             origin: None,
+            live: None,
         },
     )?;
     let first_receipt = first
@@ -340,6 +368,7 @@ fn cache_test(
             fresh_reason: "self_test",
             cache: &cache,
             origin: None,
+            live: None,
         },
     )?;
     let hit_receipt = second

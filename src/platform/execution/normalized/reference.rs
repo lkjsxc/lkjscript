@@ -2536,12 +2536,12 @@ impl ReferenceState<'_> {
                     && parameter.resource_requirement.is_none()
             })
             && (self.declaration(declaration)?.header.contract_version
-                < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                 || parameters.iter().any(|parameter| {
                     parameter.use_mode == ParameterUse::Borrow
                         && parameter.resource_requirement.is_none()
                         && parameter.header.contract_version
-                            < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                 }))
         {
             return Err(reference_type_error(

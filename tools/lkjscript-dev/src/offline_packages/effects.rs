@@ -42,22 +42,33 @@ fn transaction_cancellation(
     function: &str,
 ) -> Result<(), DevError> {
     let descriptor = standalone.join("service.deployment.json");
+    #[allow(
+        clippy::result_large_err,
+        reason = "direct semantic boundary callbacks preserve complete typed diagnostics"
+    )]
+    let probe =
+        || lkjscript::platform::contributor::effect_transaction_probe(&descriptor, function);
     context.receipt.effects.cancellation = context.probe_json(
         "effect-transaction",
         "contributor.effect_transaction_probe",
         &[descriptor.display().to_string(), function.into()],
-        || lkjscript::platform::contributor::effect_transaction_probe(&descriptor, function),
+        probe,
     )?;
     Ok(())
 }
 
 fn resources(context: &mut Context, consumer: &Package) -> Result<(), DevError> {
     let project = consumer.path.clone();
+    #[allow(
+        clippy::result_large_err,
+        reason = "direct semantic boundary callbacks preserve complete typed diagnostics"
+    )]
+    let probe = || lkjscript::platform::contributor::effect_execution_probe(&project);
     context.receipt.effects.resources = context.probe_json(
         "effect-resources",
         "contributor.effect_execution_probe",
         &[project.display().to_string()],
-        || lkjscript::platform::contributor::effect_execution_probe(&project),
+        probe,
     )?;
     Ok(())
 }

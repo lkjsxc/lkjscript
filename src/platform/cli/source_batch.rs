@@ -17,16 +17,45 @@ pub enum RunBatchOptions {
 }
 
 pub struct SourceRunBatchOptions {
-    project: PathBuf,
+    project: SourceProject,
     target: Name,
     requests: Vec<Request>,
     output: PathBuf,
+}
+
+enum SourceProject {
+    Disk(PathBuf),
+    Memory(crate::platform::MemProjectStore),
 }
 
 pub fn parse_run_batch(arguments: &[String]) -> Result<RunBatchOptions, Diagnostic> {
     if arguments.iter().any(|argument| argument == "--deployment") {
         return parse_pure_run_batch(arguments).map(RunBatchOptions::Deployment);
     }
+    parse_source_batch(arguments, None)
+}
+
+/// Select memory authority explicitly before the source preparation worker starts.
+/// The ordinary framing, output, differential execution and cleanup checks still apply.
+pub fn parse_run_batch_in_memory(
+    project: &crate::platform::MemProjectStore,
+    arguments: &[String],
+) -> Result<RunBatchOptions, Diagnostic> {
+    if arguments
+        .iter()
+        .any(|argument| matches!(argument.as_str(), "--project" | "--deployment"))
+    {
+        return Err(usage_error(
+            "an explicit memory source batch cannot select --project or --deployment",
+        ));
+    }
+    parse_source_batch(arguments, Some(project.clone()))
+}
+
+fn parse_source_batch(
+    arguments: &[String],
+    memory: Option<crate::platform::MemProjectStore>,
+) -> Result<RunBatchOptions, Diagnostic> {
     let (arguments, project) = extract_global_project(arguments.to_vec())?;
     if arguments.first().map(String::as_str) != Some("run") {
         return Err(usage_error("source batches require the run operation"));
@@ -41,13 +70,19 @@ pub fn parse_run_batch(arguments: &[String]) -> Result<RunBatchOptions, Diagnost
         &["--batch-input-file", "--batch-result-file"],
         &[],
     )?;
-    let project =
-        project.ok_or_else(|| usage_error("source batches require explicit --project"))?;
-    if !project.is_absolute() {
-        return Err(usage_error(
-            "source batch --project must be an absolute path",
-        ));
-    }
+    let project = match memory {
+        Some(memory) => SourceProject::Memory(memory),
+        None => {
+            let project =
+                project.ok_or_else(|| usage_error("source batches require explicit --project"))?;
+            if !project.is_absolute() {
+                return Err(usage_error(
+                    "source batch --project must be an absolute path",
+                ));
+            }
+            SourceProject::Disk(project)
+        }
+    };
     let input = bounded_path(required_option(&arguments[2..], "--batch-input-file")?)?;
     let output = bounded_path(required_option(&arguments[2..], "--batch-result-file")?)?;
     // Destination and the complete framing precede repository reads, compilation or execution.
@@ -81,7 +116,10 @@ async fn execute_source_run_batch(
     let project = options.project;
     let target = options.target;
     let mut preparing = tokio::task::spawn_blocking(move || {
-        let repository = open_normalized_repository(Some(project))?;
+        let repository = match project {
+            SourceProject::Disk(project) => open_normalized_repository(Some(project))?,
+            SourceProject::Memory(project) => GraphRepository::open_memory(&project)?,
+        };
         let prepared = super::super::normalized_lifecycle::prepare_repository_with_control(
             repository,
             &preparation_control,
@@ -265,7 +303,7 @@ async fn finish_source_batch(
             ("package-revision", root.package_revision.to_string()),
             (
                 "schema",
-                super::super::canonical_schema::CANONICAL_SCHEMA_HASH_HEX.to_owned(),
+                super::super::canonical_schema::SCHEMA_EPOCH.to_string(),
             ),
             (
                 "validator",

@@ -238,7 +238,7 @@ pub(crate) fn admit_call_at_with_scope_authority(
             .type_object(parameter.ty)?
             .ok_or_else(|| reject("missing exact parallel parameter category"))?;
         if super::owned_associated::read_view_admission::direct(&object.form) {
-            if parameter.header.contract_version < contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+            if parameter.header.contract_version != contract::GRAPH_CONTRACT_VERSION
                 || parameter.use_mode != ParameterUse::Borrow
                 || seen_owned
             {
@@ -259,9 +259,7 @@ pub(crate) fn admit_call_at_with_scope_authority(
             true => {
                 match parameter.use_mode {
                     ParameterUse::Borrow => {
-                        if parameter.header.contract_version
-                            < contract::SHARE_GRAPH_CONTRACT_VERSION
-                        {
+                        if parameter.header.contract_version != contract::GRAPH_CONTRACT_VERSION {
                             return Err(reject("parallel borrowed parameters require Graph 30"));
                         }
                         super::share::admit_at(&applied, parameter.ty, occurrence, admission)?;

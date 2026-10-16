@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::io::Write;
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
 const ARTIFACT: &[u8] =
@@ -155,8 +155,11 @@ pub(super) fn plan(
         // concatenation, without a host-dependent length, text or delimiter.
         ordered_identities.update(identity.bytes());
     }
+    // These compiled-in bytes never change during this process. Each plan still
+    // invokes and checks the native producer against its complete current input.
+    static ARTIFACT_SHA256: OnceLock<String> = OnceLock::new();
     let evidence = NativePackagePlanEvidence {
-        artifact_sha256: sha256(ARTIFACT),
+        artifact_sha256: ARTIFACT_SHA256.get_or_init(|| sha256(ARTIFACT)).clone(),
         input_sha256: sha256(&projection.arguments),
         outcome_sha256: sha256(&output),
         order_sha256: encode_hex(&ordered_identities.finalize()),

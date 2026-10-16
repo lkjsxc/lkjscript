@@ -1,18 +1,9 @@
 //! Public cost ceilings permit future proof propagation; they do not require rescanning.
 //! Host runs share admitted programs; explicit candidates execute the selected binary.
 #![allow(clippy::unwrap_used, clippy::panic)]
-#[allow(
-    dead_code,
-    reason = "shared semantic CLI support spans independent integration crates"
-)]
-#[path = "support/semantic_cli.rs"]
-mod semantic_cli;
-#[allow(dead_code)]
-#[path = "native_components_support/mod.rs"]
-mod support;
+use crate::components as support;
 use serde_json::{Value, json};
 use std::fs;
-use support::copy_executable;
 use support::{Native, digest, field, path, quoted};
 
 const SOURCE: &str = include_str!("../examples/owned-metadata-costs/workload.lkjc");

@@ -1828,7 +1828,7 @@ fn owner_codec_rejects_wrong_key_and_current_counterfeit_frames() {
     )
     .unwrap();
     let mut content = bytes[..crate::platform::packed::CANONICAL_HEADER_BYTES].to_vec();
-    content[40..48].copy_from_slice(&(payload.len() as u64).to_le_bytes());
+    content[10..18].copy_from_slice(&(payload.len() as u64).to_le_bytes());
     content.extend_from_slice(&payload);
     let counterfeit = seal(content);
     assert_eq!(

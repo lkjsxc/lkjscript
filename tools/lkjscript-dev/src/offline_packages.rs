@@ -18,6 +18,7 @@ mod maps;
 mod named;
 mod nominal;
 mod nominal_session;
+mod parallel;
 mod parameter_type;
 mod recursive;
 mod recursive_data;
@@ -29,7 +30,9 @@ mod requirements_queue;
 mod runtime_semantic;
 mod source_batch;
 
-pub(crate) use boundary::{BoundaryReceipt, read_transferred_receipt};
+#[cfg(test)]
+pub(crate) use boundary::BoundaryReceipt;
+pub(crate) use boundary::read_transferred_receipt;
 
 use crate::semantic_cli::{self, CallObservation};
 use crate::{error::DevError, evidence, process};
@@ -75,6 +78,12 @@ fn strict_from_str<T: serde::de::DeserializeOwned>(text: &str) -> Result<T, DevE
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Receipt {
+    // Worker-local tables carry global ordinals while executing. Only the joined
+    // complete receipt is serialized; readers always begin at zero.
+    #[serde(skip)]
+    command_base: usize,
+    #[serde(skip)]
+    inventory_base: usize,
     pub schema: String,
     pub status: String,
     pub verifier_sha256: String,
@@ -113,6 +122,10 @@ struct Context {
     evidence: PathBuf,
     binary: PathBuf,
     receipt: Receipt,
+    command_end: usize,
+    inventory_end: usize,
+    runner_base: usize,
+    runner_end: usize,
 }
 
 #[derive(Clone)]
@@ -213,10 +226,16 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
         .tempdir()?;
     let started = Instant::now();
     let mut context = Context {
+        command_end: usize::MAX,
+        inventory_end: usize::MAX,
+        runner_base: 0,
+        runner_end: usize::MAX,
         root: isolated.path().to_path_buf(),
         evidence: output.clone(),
         binary: binary.clone(),
         receipt: Receipt {
+            command_base: 0,
+            inventory_base: 0,
             schema: match selected_case.as_deref() {
                 Some("finite-callable") => "lkjscript-offline-finite-callable-semantic-1",
                 Some("requirement-parameters") => {
@@ -387,6 +406,36 @@ pub(crate) fn recursive_transaction_probe_command(
 }
 
 impl Context {
+    fn runner_index(&self) -> usize {
+        self.runner_base + self.receipt.runners.len()
+    }
+
+    fn push_runner(&mut self, observation: CallObservation) -> Result<(), DevError> {
+        require(
+            self.runner_index() < self.runner_end,
+            "offline fixture exceeded its reserved runner range",
+        )?;
+        self.receipt.runners.push(observation);
+        Ok(())
+    }
+
+    fn command_index(&self) -> usize {
+        self.receipt.command_base + self.receipt.commands.len()
+    }
+
+    fn inventory_index(&self) -> usize {
+        self.receipt.inventory_base + self.receipt.inventories.len()
+    }
+
+    fn require_commands(&self, additional: usize) -> Result<(), DevError> {
+        require(
+            self.command_index()
+                .checked_add(additional)
+                .is_some_and(|end| end <= self.command_end),
+            "offline fixture exceeded its reserved command range",
+        )
+    }
+
     fn probe_json(
         &mut self,
         label: &str,
@@ -407,7 +456,7 @@ impl Context {
         observation.require_outcome(true)?;
         let value =
             serde_json::from_slice(&process::read_bounded(&response, MAXIMUM_OUTPUT_BYTES)?)?;
-        self.receipt.runners.push(observation);
+        self.push_runner(observation)?;
         Ok(value)
     }
 
@@ -453,7 +502,8 @@ impl Context {
         passes: bool,
         executable: String,
     ) -> Result<Vec<CompactRecord>, DevError> {
-        let index = self.receipt.commands.len();
+        self.require_commands(1)?;
+        let index = self.command_index();
         let mut command = vec![executable];
         if let Some(project) = project {
             command.extend(["--project".to_owned(), project.display().to_string()]);
@@ -463,6 +513,7 @@ impl Context {
         let diagnostic_path = self.evidence.join(format!("command-{index:04}.stderr"));
         let observation = semantic_cli::execute_with_cancellation(
             &command[1..],
+            None,
             &response_path,
             &diagnostic_path,
             &self.evidence,
@@ -482,7 +533,7 @@ impl Context {
         });
         let records = parse_records("copied-output", &stdout)
             .map_err(|errors| DevError::corrupt(format!("public compact output: {errors:?}")))?;
-        self.receipt.commands[index]
+        self.receipt.commands[index - self.receipt.command_base]
             .observation
             .require_public_response(&records)?;
         if !passes {
@@ -527,21 +578,22 @@ impl Context {
         package: &mut Package,
         changes: &str,
     ) -> Result<Vec<CompactRecord>, DevError> {
+        self.require_commands(2)?;
         let request = self
             .evidence
-            .join(format!("request-{}.lkjc", self.receipt.commands.len()));
+            .join(format!("request-{}.lkjc", self.command_index()));
         fs::write(
             &request,
             format!(
                 "request base={} idempotency=offline-{}\n{changes}",
                 package.revision,
-                self.receipt.commands.len()
+                self.command_index()
             ),
         )?;
         let path = request.display().to_string();
         let review = self
             .evidence
-            .join(format!("review-{}.lkjplan", self.receipt.commands.len()));
+            .join(format!("review-{}.lkjplan", self.command_index()));
         let plan = self.cli(
             Some(&package.path),
             &[
@@ -591,6 +643,10 @@ impl Context {
     }
 
     fn export(&mut self, package: &mut Package) -> Result<OfflinePackageInventory, DevError> {
+        require(
+            self.inventory_index() < self.inventory_end,
+            "offline fixture exceeded its reserved inventory range",
+        )?;
         let producer = offline_producer_inventory(&package.path)
             .map_err(|error| DevError::corrupt(error.to_string()))?;
         require(
@@ -599,7 +655,7 @@ impl Context {
         )?;
         package.container = self
             .root
-            .join(format!("transport-{}.lkjp", self.receipt.commands.len()));
+            .join(format!("transport-{}.lkjp", self.command_index()));
         let records = self.cli(
             Some(&package.path),
             &[
@@ -627,7 +683,7 @@ impl Context {
         fs::copy(
             &package.container,
             self.evidence
-                .join(format!("transport-{}.lkjp", self.receipt.inventories.len())),
+                .join(format!("transport-{}.lkjp", self.inventory_index())),
         )?;
         Ok(inventory)
     }
@@ -714,9 +770,10 @@ impl Context {
         foreign: &str,
         code: &str,
     ) -> Result<(), DevError> {
+        self.require_commands(1)?;
         let request = self
             .evidence
-            .join(format!("forbidden-{}.lkjc", self.receipt.commands.len()));
+            .join(format!("forbidden-{}.lkjc", self.command_index()));
         fs::write(
             &request,
             format!(
@@ -1599,15 +1656,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     );
     fs::remove_dir_all(&a.path)?;
     standalone_http(context, &d)?;
-    nominal::workflow(context, &mut standard)?;
-    recursive::workflow(context, &mut standard)?;
-    effects::workflow(context, &mut standard)?;
-    named::workflow(context, &standard)?;
-    finite::workflow(context, &standard)?;
-    requirements::workflow(context, &standard)?;
-    f64::workflow(context, &standard)?;
-    parameter_type::workflow(context, &standard)?;
-    maps::workflow(context, &standard)?;
+    parallel::workflow(context, &mut standard)?;
     Ok(())
 }
 
@@ -1733,11 +1782,16 @@ fn standalone_http(context: &mut Context, dependency: &Package) -> Result<(), De
     let server_elapsed = round["elapsed_nanoseconds"]
         .as_u64()
         .ok_or_else(|| DevError::corrupt("linked HTTP elapsed evidence missing"))?;
+    #[allow(
+        clippy::result_large_err,
+        reason = "direct semantic boundary callbacks preserve complete typed diagnostics"
+    )]
+    let probe = || Ok(round);
     context.probe_json(
         "standalone",
         "deployment.http.serve",
         &[descriptor_path.display().to_string()],
-        || Ok(round),
+        probe,
     )?;
     if let Some(CallObservation::Semantic(call)) = context.receipt.runners.last_mut() {
         call.elapsed_nanoseconds = server_elapsed;
@@ -1872,7 +1926,7 @@ pub(crate) fn read_semantic_receipt(path: &Path, verifier: &Path) -> Result<Rece
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
-            && receipt.commands.len() == 886
+            && receipt.commands.len() == 887
             && !Path::new(&receipt.isolated_root).exists()
             && receipt.evidence_root == root.display().to_string()
             && receipt

@@ -8,11 +8,8 @@ use lkjscript::platform::contract::{
 };
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::{self, Diagnostic};
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Output;
-use std::sync::OnceLock;
 
 const RELEASE_CANDIDATE_ENVIRONMENT: &str = "LKJSCRIPT_RELEASE_CANDIDATE";
 
@@ -53,25 +50,15 @@ impl Mode {
     }
 }
 
-/// The shared executable is only used by host process-boundary observations. It is
-/// a closed, verified immutable copy, independent of Cargo replacing its output.
+/// Host fallbacks use Cargo's selected executable under the joined test lifecycle.
+/// Explicit candidate and detached process observations own an isolated copy.
 pub fn executable(root: &Path, mode: Mode, source: &Path) -> PathBuf {
     if mode != Mode::HostSemantic {
         let executable = root.join("lkjscript");
         copy_executable(source, &executable);
         return executable;
     }
-    static HOST: OnceLock<(tempfile::TempDir, PathBuf)> = OnceLock::new();
-    HOST.get_or_init(|| {
-        let root = tempfile::tempdir().unwrap();
-        let executable = root.path().join("lkjscript");
-        copy_executable(Path::new(env!("CARGO_BIN_EXE_lkjscript")), &executable);
-        #[cfg(unix)]
-        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o555)).unwrap();
-        (root, executable)
-    })
-    .1
-    .clone()
+    source.to_path_buf()
 }
 
 pub struct Response {
@@ -79,6 +66,43 @@ pub struct Response {
     pub success: bool,
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
+}
+
+#[allow(
+    clippy::result_large_err,
+    reason = "public memory adapters preserve complete typed diagnostics"
+)]
+pub fn execute_memory(project: &platform::MemProjectStore, arguments: Vec<String>) -> Response {
+    let command = arguments.first().cloned().unwrap_or_default();
+    let result = if command == "run"
+        && arguments.iter().any(|argument| {
+            matches!(
+                argument.as_str(),
+                "--batch-input-file" | "--batch-result-file"
+            )
+        }) {
+        platform::cli::parse_run_batch_in_memory(project, &arguments)
+            .and_then(|options| {
+                owned_runtime(move |runtime| {
+                    runtime.block_on(platform::cli::execute_run_batch(
+                        options,
+                        std::future::pending(),
+                    ))
+                })
+            })
+            .map_err(|error| vec![error])
+    } else {
+        platform::execute_in_memory(project, arguments)
+    };
+    match result {
+        Ok(stdout) => Response {
+            code: Some(0),
+            success: true,
+            stdout,
+            stderr: Vec::new(),
+        },
+        Err(diagnostics) => failure(&command, &diagnostics),
+    }
 }
 
 impl From<Output> for Response {
@@ -145,6 +169,10 @@ pub fn execute(arguments: &[&str], full_arguments: Vec<String>) -> Option<Respon
     })
 }
 
+#[allow(
+    clippy::result_large_err,
+    reason = "public adapter diagnostics remain complete values at the test boundary"
+)]
 fn run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
     // Match the executable's dispatch order: either batch flag selects the batch parser,
     // including malformed batches; deployment otherwise selects the foreground parser.
@@ -174,6 +202,10 @@ fn run(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
     platform::execute_run(arguments)
 }
 
+#[allow(
+    clippy::result_large_err,
+    reason = "joined public adapters preserve the complete typed diagnostic"
+)]
 fn owned_runtime(
     operation: impl FnOnce(tokio::runtime::Runtime) -> Result<Vec<u8>, Diagnostic> + Send,
 ) -> Result<Vec<u8>, Diagnostic> {

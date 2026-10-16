@@ -63,26 +63,6 @@ pub(crate) fn state_probe_command(
     Ok(0)
 }
 
-pub(crate) fn probe(
-    binary: &Path,
-    standalone: &Path,
-    evidence: &Path,
-) -> Result<(Observation, process::ProcessObservation), DevError> {
-    let result = probe_script(
-        binary,
-        standalone,
-        evidence,
-        "nominal-session",
-        1,
-        &[
-            (0, "a", json!({"first":1,"second":"a"})),
-            (0, "b", json!({"first":2,"second":"ab"})),
-        ],
-    )?;
-    validate(&result.0)?;
-    Ok(result)
-}
-
 pub(crate) fn probe_script(
     binary: &Path,
     standalone: &Path,

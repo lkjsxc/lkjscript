@@ -328,7 +328,10 @@ fn scan<R: CallableClosureRead + ?Sized>(
                         .read
                         .type_object(package, annotation)?
                         .ok_or_else(associated::invalid)?;
-                    if binding.header.contract_version < 34 || !object.form.is_read_view() {
+                    if binding.header.contract_version
+                        != crate::platform::canonical_schema::SCHEMA_EPOCH
+                        || !object.form.is_read_view()
+                    {
                         return Err(associated::invalid());
                     }
                 }

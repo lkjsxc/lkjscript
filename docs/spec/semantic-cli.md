@@ -153,7 +153,7 @@ state and is intentionally not part of this normative contract.
 
 ## Native declaration units and editable drafts
 
-Change input contract 24 adds `declarations.begin` / `declarations.end` around a parenthesized
+Current change input uses `declarations.begin` / `declarations.end` around a parenthesized
 `(units ...)` collection. All such blocks in one request are collected before typed resolution.
 The executable's change registry owns the concrete grammar. Complete units cover modules,
 records, variants, functions, constants, tests, interfaces, externals, components, requirements,
@@ -645,15 +645,12 @@ Body replacement preserves the function declaration and unchanged value/type/eff
 parameter owners. Replaced expression and binding owners follow the existing retirement rules.
 A malformed or invalid block rejects its entire request without advancing `HEAD`; stale or changed
 plans, cancellation, idempotent retries and historical-current repair retain their existing rules.
-Requests containing F64 types or literals select authored intent generation 17. Transaction-outcome
-requests without F64 retain generation 16 and its codec-16 commitment; compatible intent 14/15
-retains the codec-15 commitment and original allocation identities. F64 meaning uses Graph 17,
-compiler 13/bytecode 9 and Artifact 21, with a disjoint F64 type envelope. Base TypeObject 10 remains
-unchanged; supported Graph 14/15/16 and Artifact 18/19/20 inputs retain their original meaning.
-Older executables reject unsupported syntax or artifact generations before accepted publication
-or adapter invocation. An older project reader may rebuild its disposable physical catalog before
-reporting an unsupported HEAD; accepted HEAD and immutable pack bytes, and application data, remain
-unchanged. Review tokens remain bound to their executable's capabilities and verifier, so a changed review context
+All requests use the same current schema epoch 1, including F64 literals,
+transaction outcomes, ownership and scope metadata. Types and declarations encode
+their fields inline. Foreign epochs reject before accepted publication or adapter
+invocation. Admission independently checks complete source and executable content;
+an epoch or checksum is not permission.
+Review tokens remain bound to their executable's capabilities and verifier, so a changed review context
 requires a new plan.
 
 Complete input remains bounded at 4 MiB. Outer flat-record bounds remain in force. Structural

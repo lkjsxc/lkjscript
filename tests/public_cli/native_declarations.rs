@@ -17,9 +17,93 @@ struct Native {
     executable: PathBuf,
     project: PathBuf,
     mode: semantic_cli::Mode,
+    memory: std::sync::RwLock<Option<lkjscript::platform::MemProjectStore>>,
 }
 
 impl Native {
+    /// Semantic fixtures use accepted memory authority; candidate verification retains
+    /// the selected executable and disk boundary.
+    fn memory() -> Self {
+        Self::memory_template("minimal")
+    }
+
+    fn memory_template(template: &str) -> Self {
+        if semantic_cli::Mode::selected() != semantic_cli::Mode::HostSemantic {
+            return Self::template(template);
+        }
+        static MINIMAL: std::sync::OnceLock<lkjscript::platform::MemProjectStore> =
+            std::sync::OnceLock::new();
+        static COMMAND: std::sync::OnceLock<lkjscript::platform::MemProjectStore> =
+            std::sync::OnceLock::new();
+        let base = match template {
+            "minimal" => Some(&MINIMAL),
+            "command" => Some(&COMMAND),
+            _ => None,
+        }
+        .expect("supported memory fixture template")
+        .get_or_init(|| {
+            // Each template and all its live forks share this aggregate capacity.
+            // Exhaustion fails the fixture; it never opens an unbounded arena or disk fallback.
+            let store = lkjscript::platform::MemProjectStore::new(256 * 1_048_576).unwrap();
+            lkjscript::platform::create_memory_project(&store, "native", template).unwrap();
+            lkjscript::platform::execute_in_memory(&store, vec!["check".to_owned()]).unwrap();
+            store
+        });
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("project");
+        let mut this = Self::at(root, project, semantic_cli::Mode::HostSemantic);
+        *this.memory.get_mut().unwrap() =
+            Some(base.fork().expect("bounded native memory fixture fork"));
+        this
+    }
+
+    /// Independently authored packages receive distinct identities inside one bounded arena.
+    /// The shared base is empty and cannot retain a detached fixture's accepted authority.
+    fn memory_project(template: &str) -> Self {
+        Self::memory_project_in(template, semantic_cli::Mode::selected())
+    }
+
+    fn memory_project_in(template: &str, mode: semantic_cli::Mode) -> Self {
+        if mode != semantic_cli::Mode::HostSemantic {
+            return Self::template_in(template, mode);
+        }
+        static ARENA: std::sync::OnceLock<lkjscript::platform::MemProjectStore> =
+            std::sync::OnceLock::new();
+        let memory = ARENA
+            .get_or_init(|| lkjscript::platform::MemProjectStore::new(256 * 1_048_576).unwrap())
+            .fork()
+            .expect("bounded independent native memory project");
+        lkjscript::platform::create_memory_project(&memory, "native", template).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("project");
+        let mut this = Self::at(root, project, semantic_cli::Mode::HostSemantic);
+        *this.memory.get_mut().unwrap() = Some(memory);
+        this
+    }
+
+    fn head_bytes(&self) -> Vec<u8> {
+        match self.memory.read().unwrap().as_ref() {
+            Some(memory) => lkjscript::platform::contributor::memory_project_head(memory)
+                .unwrap()
+                .expect("accepted memory fixture HEAD"),
+            None => std::fs::read(self.project.join("HEAD")).unwrap(),
+        }
+    }
+
+    fn has_project(&self) -> bool {
+        self.memory.read().unwrap().is_some() || self.project.exists()
+    }
+
+    fn remove_project(&self) {
+        if self.memory.write().unwrap().take().is_none() {
+            std::fs::remove_dir_all(&self.project).unwrap();
+        }
+        assert!(
+            !self.has_project(),
+            "detached fixture has no source authority"
+        );
+    }
+
     fn new() -> Self {
         Self::template("minimal")
     }
@@ -43,6 +127,7 @@ impl Native {
             executable,
             project,
             mode,
+            memory: std::sync::RwLock::new(None),
         }
     }
 
@@ -75,7 +160,11 @@ impl Native {
         success: bool,
     ) -> (semantic_cli::Mode, Vec<CompactRecord>) {
         let mut command = Command::new(&self.executable);
-        if !arguments.starts_with(&["package", "builtin"])
+        let memory = self.memory.read().unwrap();
+        let project_independent = arguments.starts_with(&["package", "builtin"])
+            || arguments.starts_with(&["run", "--deployment"]);
+        if memory.is_none()
+            && !arguments.starts_with(&["package", "builtin"])
             && !arguments.starts_with(&["run", "--deployment"])
         {
             command.arg("--project").arg(&self.project);
@@ -90,9 +179,13 @@ impl Native {
                     .to_owned()
             })
             .collect::<Vec<_>>();
-        let semantic = (self.mode == semantic_cli::Mode::HostSemantic)
-            .then(|| semantic_cli::execute(arguments, full_arguments.clone()))
-            .flatten();
+        let semantic = if let Some(memory) = memory.as_ref().filter(|_| !project_independent) {
+            Some(semantic_cli::execute_memory(memory, full_arguments.clone()))
+        } else {
+            (self.mode == semantic_cli::Mode::HostSemantic)
+                .then(|| semantic_cli::execute(arguments, full_arguments.clone()))
+                .flatten()
+        };
         let (output, mode) = match semantic {
             Some(output) => (output, semantic_cli::Mode::HostSemantic),
             None => (
@@ -193,18 +286,27 @@ impl Native {
         target: &str,
         cases: &[BatchCase],
     ) -> Vec<Vec<CompactRecord>> {
-        source_batch::execute_in(
+        self.source_batch_outputs(label, target, cases)
+            .iter()
+            .map(|stdout| parse_records("native source batch row", stdout.as_bytes()).unwrap())
+            .collect()
+    }
+
+    fn source_batch_outputs(&self, label: &str, target: &str, cases: &[BatchCase]) -> Vec<String> {
+        let memory = self.memory.read().unwrap();
+        let source = match memory.as_ref() {
+            Some(memory) => source_batch::SourceAuthority::Memory(memory),
+            None => source_batch::SourceAuthority::Disk(&self.project),
+        };
+        source_batch::execute_with_source(
             self.mode,
             self.root.path(),
             &self.executable,
             label,
-            &self.project,
+            source,
             target,
             cases,
         )
-        .iter()
-        .map(|stdout| parse_records("native source batch row", stdout.as_bytes()).unwrap())
-        .collect()
     }
 
     fn input(&self, name: &str, source: &str) -> PathBuf {
@@ -906,7 +1008,7 @@ fn native_draft_preserves_http_routes_and_large_canonical_strings() {
         "unchanged"
     );
 
-    let public = Native::new();
+    let public = Native::memory();
     // Escaped source exceeds the compact physical-line limit while decoded content stays
     // within the existing canonical inline-text contract. Larger content still rejects.
     let too_large = "quoted \\\"value\\\" 日本語 ".repeat(4000);
@@ -947,7 +1049,7 @@ fn native_draft_preserves_http_routes_and_large_canonical_strings() {
 
 #[test]
 fn native_transaction_outcome_preserves_inline_generic_type_through_drafting() {
-    let public = Native::template("command");
+    let public = Native::memory_template("command");
     let input = public.input(
         "transaction-outcome.lkjc",
         &format!(
@@ -1004,7 +1106,7 @@ declarations.end
 
 #[test]
 fn native_draft_aliases_cannot_shadow_signature_or_declaration_names() {
-    let public = Native::new();
+    let public = Native::memory();
     let input = public.input(
         "alias-names.lkjc",
         &format!(
@@ -1059,7 +1161,7 @@ declarations.end
 
 #[test]
 fn native_lexical_names_may_begin_with_exact_owner_prefixes() {
-    let public = Native::new();
+    let public = Native::memory();
     let input = public.input(
         "owner-prefix-names.lkjc",
         &format!(
@@ -1102,7 +1204,7 @@ declarations.end
 
 #[test]
 fn native_input_admission_has_an_exact_boundary_without_publication() {
-    let public = Native::new();
+    let public = Native::memory();
     let before = public.revision();
     let mut source =
         format!("request base={before}\ndeclarations.begin\n(units (module create admitted))\n;");
@@ -1126,7 +1228,7 @@ fn native_input_admission_has_an_exact_boundary_without_publication() {
 
 #[test]
 fn native_scopes_and_task_kind_reject_before_publication() {
-    let public = Native::new();
+    let public = Native::memory();
     let before = public.revision();
     for (case, body, expected) in [
         (
@@ -1162,7 +1264,7 @@ fn native_scopes_and_task_kind_reject_before_publication() {
 
 #[test]
 fn native_declarations_create_resume_edit_and_reject_authority_changes() {
-    let public = Native::new();
+    let public = Native::memory();
     let base = public.revision();
     let input = public.input(
         "create.lkjc",

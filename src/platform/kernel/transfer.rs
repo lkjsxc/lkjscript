@@ -148,9 +148,8 @@ pub(super) fn ordinary_assumptions_in(
         }
         if record.constraints.requires_transfer() && !record.constraints.has_owned() {
             if mixed_scope
-                && (scope_generation < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-                    || record.header.contract_version
-                        < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION)
+                && (scope_generation != contract::GRAPH_CONTRACT_VERSION
+                    || record.header.contract_version != contract::GRAPH_CONTRACT_VERSION)
             {
                 return Err(reject(
                     "ordinary contract and scheme assumptions require exact Graph 33 authority",

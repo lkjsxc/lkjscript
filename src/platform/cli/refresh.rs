@@ -122,9 +122,12 @@ pub(super) fn execute(
     if action == ChangeAction::Refresh {
         let (encoding, plan_output) = match output_file.as_deref() {
             Some(path) => {
-                let (encoding, output) =
-                    write_logical_plan_output(repository.root(), Path::new(path), &logical_plan)
-                        .map_err(single_diagnostic)?;
+                let (encoding, output) = write_logical_plan_output(
+                    (!repository.is_memory()).then_some(repository.root()),
+                    Path::new(path),
+                    &logical_plan,
+                )
+                .map_err(single_diagnostic)?;
                 (encoding, Some(output))
             }
             None => (

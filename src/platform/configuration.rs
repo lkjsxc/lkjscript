@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-pub const CONFIGURATION_ADAPTER_CONTRACT_VERSION: u16 = 1;
+pub const CONFIGURATION_ADAPTER_CONTRACT_VERSION: u16 =
+    crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_CONFIGURATION_FIELDS: usize = 4_096;
 pub const MAXIMUM_CONFIGURATION_VALUE_BYTES: usize = 1024 * 1024;
 

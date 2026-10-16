@@ -8,7 +8,7 @@ use std::fmt;
 mod data;
 use data::DataQueue;
 
-pub const DURABLE_QUEUE_CONTRACT_VERSION: u16 = 2;
+pub const DURABLE_QUEUE_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_QUEUE_PAYLOAD_BYTES: usize = 16 * 1024 * 1024;
 pub const MAXIMUM_QUEUE_LEASE_MILLISECONDS: i64 = 24 * 60 * 60 * 1_000;
 pub const MAXIMUM_QUEUE_ATTEMPTS: u32 = 1_000_000;

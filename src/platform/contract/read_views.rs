@@ -277,7 +277,7 @@ mod tests {
             descriptors[0].version,
             ASSOCIATED_READ_VIEW_CONTRACT_VERSION
         );
-        assert_eq!(descriptors[0].identity, "lkjscript-associated-read-views-1");
+        assert_eq!(descriptors[0].identity, "lkjscript-associated-read-views");
         assert_eq!(descriptors[0].version, 1);
     }
 

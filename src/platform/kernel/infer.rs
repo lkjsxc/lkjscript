@@ -431,10 +431,11 @@ fn infer_function_expression<R: ExpressionRead, T>(
         Some(OwnerRecord::Declaration(record)) => match record.payload {
             DeclarationPayload::Function(function) => (
                 function.body,
-                (record.header.contract_version >= 34).then_some(DeclarationReference {
-                    package: read.package_id(),
-                    declaration,
-                }),
+                (record.header.contract_version == crate::platform::canonical_schema::SCHEMA_EPOCH)
+                    .then_some(DeclarationReference {
+                        package: read.package_id(),
+                        declaration,
+                    }),
             ),
             _ => {
                 return Err(type_error(
@@ -546,7 +547,8 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         let context = ExecutionContext {
                             callable: match declaration.header.owner {
                                 OwnerKey::Declaration(id)
-                                    if declaration.header.contract_version >= 34 =>
+                                    if declaration.header.contract_version
+                                        == crate::platform::canonical_schema::SCHEMA_EPOCH =>
                                 {
                                     Some(DeclarationReference {
                                         package: self.read.package_id(),

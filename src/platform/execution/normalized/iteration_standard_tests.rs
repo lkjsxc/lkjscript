@@ -1,5 +1,6 @@
 //! Current maintained standard behavior through both independent evaluators.
-use super::{NormalizedProgram, NormalizedReferenceInterpreter, NormalizedVm};
+use super::{NormalizedReferenceInterpreter, NormalizedVm};
+use crate::platform::builtin_standard::BuiltinStandard;
 use crate::platform::compiler::load_artifact;
 use crate::platform::execution::ExecutionControl;
 use crate::platform::kernel::{DeclarationPayload, DeclarationReference, OwnerKey, OwnerRecord};
@@ -18,7 +19,11 @@ fn current_standard_executes_every_authored_expected_test_in_both_evaluators() {
         .unwrap()
         .value;
     let artifact = std::fs::read(root.join("generated/standard.lkja")).unwrap();
-    let program = NormalizedProgram::prepare(load_artifact(&artifact).unwrap()).unwrap();
+    let loaded = load_artifact(&artifact).unwrap();
+    let standard = BuiltinStandard::load().unwrap();
+    assert_eq!(artifact.as_slice(), standard.artifact_bytes());
+    assert_eq!(loaded.bundle_digest, standard.artifact.bundle_digest);
+    let program = standard.prepared_program().unwrap();
     let authored = source
         .owners
         .iter()

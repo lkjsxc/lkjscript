@@ -9,7 +9,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 use tokio::sync::Notify;
 
-pub const STREAM_CONTRACT_VERSION: u16 = 1;
+pub const STREAM_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_STREAM_CHUNK_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_STREAM_BUFFERED_CHUNKS: usize = 1_024;
 pub const MAXIMUM_LIVE_STREAMS: usize = 65_536;

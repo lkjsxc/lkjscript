@@ -53,9 +53,9 @@ mod code_admission;
 #[path = "artifact_flow.rs"]
 mod flow_admission;
 
-pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest-41";
-pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle-41";
-pub const ARTIFACT_CONTRACT_VERSION: u16 = 41;
+pub const ARTIFACT_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-artifact-manifest";
+pub const ARTIFACT_BUNDLE_CONTRACT_IDENTITY: &str = "lkjscript-artifact-bundle";
+pub const ARTIFACT_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub(crate) const ARTIFACT_MANIFEST_MAGIC: [u8; 8] = *b"LKJAMNFT";
 pub(crate) const ARTIFACT_BUNDLE_MAGIC: [u8; 8] = *b"LKJARTFC";
 pub(crate) const ARTIFACT_BUNDLE_END_MAGIC: [u8; 8] = *b"LKJAEND!";
@@ -71,7 +71,7 @@ pub(crate) const MAXIMUM_ARTIFACT_SEGMENTS: usize = 1_000_000;
 pub(crate) const MAXIMUM_ARTIFACT_BUNDLE_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 pub(crate) const TARGET_ARTIFACT_SEGMENT_BYTES: usize = 4 * 1024 * 1024;
 
-pub(crate) const BUNDLE_HEADER_BYTES: usize = 8 + 32 + 2 + 8 + 8 + 32;
+pub(crate) const BUNDLE_HEADER_BYTES: usize = 8 + 2 + 2 + 8 + 8 + 32;
 const SEGMENT_HEADER_BYTES: usize = 8 + 32;
 const BUNDLE_FOOTER_BYTES: usize = 32 + 8;
 
@@ -309,14 +309,6 @@ impl ArtifactManifest {
             MAXIMUM_ARTIFACT_MANIFEST_BYTES,
         )?;
         manifest.validate()?;
-        let (digest, canonical) = manifest.encode()?;
-        if digest != expected || canonical != bytes {
-            return Err(artifact_error(
-                DiagnosticClass::Corrupt,
-                "artifact_manifest_canonical",
-                "artifact manifest is not canonically encoded",
-            ));
-        }
         Ok(manifest)
     }
 
@@ -709,6 +701,29 @@ pub struct EncodedArtifact {
     pub bundle_digest: ArtifactBundleDigest,
     pub bytes: Vec<u8>,
     pub segment_count: u64,
+    // Owned only by this result, already strictly loaded from the encoded bytes.
+    // Public fields remain observable/mutable, so consumption rebinds them below.
+    admitted: LoadedArtifact,
+}
+
+impl EncodedArtifact {
+    pub(crate) fn into_admitted(self) -> Result<(Vec<u8>, LoadedArtifact), Diagnostic> {
+        if self.bytes.len() as u64 > MAXIMUM_ARTIFACT_BUNDLE_BYTES
+            || self.manifest != self.admitted.manifest
+            || self.manifest_digest != self.admitted.manifest_digest
+            || self.bundle_digest != self.admitted.bundle_digest
+            || self.segment_count != self.admitted.segment_count
+            || domain_digest(ARTIFACT_BUNDLE_DIGEST_DOMAIN, &self.bytes)
+                != self.admitted.bundle_digest.bytes()
+        {
+            return Err(artifact_error(
+                DiagnosticClass::Corrupt,
+                "artifact_encoded_admission_binding",
+                "encoded artifact changed after its strict standalone admission",
+            ));
+        }
+        Ok((self.bytes, self.admitted))
+    }
 }
 
 pub(crate) fn encode_artifact(
@@ -779,7 +794,7 @@ pub(crate) fn encode_artifact(
     })?;
     let mut bytes = Vec::with_capacity(capacity);
     bytes.extend_from_slice(&ARTIFACT_BUNDLE_MAGIC);
-    bytes.extend_from_slice(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
+    bytes.extend_from_slice(&crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes());
     bytes.extend_from_slice(&0_u16.to_be_bytes());
     bytes.extend_from_slice(&manifest_length.to_be_bytes());
     bytes.extend_from_slice(&segment_count.to_be_bytes());
@@ -819,6 +834,7 @@ pub(crate) fn encode_artifact(
         bundle_digest,
         bytes,
         segment_count,
+        admitted: loaded,
     })
 }
 
@@ -839,8 +855,8 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
             "artifact bundle uses a foreign kind",
         ));
     }
-    if read_array::<32>(bytes, 8, "artifact_bundle_schema")?
-        != crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH
+    if read_array::<2>(bytes, 8, "artifact_bundle_schema")?
+        != crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes()
     {
         return Err(artifact_error(
             DiagnosticClass::Source,
@@ -848,7 +864,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
             "artifact bundle schema differs from the current canonical schema",
         ));
     }
-    let flags = read_u16(bytes, 40, "artifact_bundle_flags")?;
+    let flags = read_u16(bytes, 10, "artifact_bundle_flags")?;
     if flags != 0 {
         return Err(artifact_error(
             DiagnosticClass::Source,
@@ -857,7 +873,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
         ));
     }
     let manifest_length = usize_from_u64(
-        read_u64(bytes, 42, "artifact_bundle_manifest_length")?,
+        read_u64(bytes, 12, "artifact_bundle_manifest_length")?,
         "artifact_bundle_manifest_length",
     )?;
     if manifest_length == 0 || manifest_length > MAXIMUM_ARTIFACT_MANIFEST_BYTES {
@@ -868,7 +884,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
         ));
     }
     let segment_count = usize_from_u64(
-        read_u64(bytes, 50, "artifact_bundle_segment_count")?,
+        read_u64(bytes, 20, "artifact_bundle_segment_count")?,
         "artifact_bundle_segment_count",
     )?;
     if segment_count == 0 || segment_count > MAXIMUM_ARTIFACT_SEGMENTS {
@@ -880,7 +896,7 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
     }
     let manifest_digest = ArtifactManifestDigest::from_bytes(read_array::<32>(
         bytes,
-        58,
+        28,
         "artifact_bundle_manifest_digest",
     )?);
     let manifest_end = BUNDLE_HEADER_BYTES
@@ -1011,6 +1027,7 @@ fn admission_binding(
     let (digest, _) = manifest.encode()?;
     let mut hasher = blake3::Hasher::new_derive_key("lkjscript.current-artifact-admission.v1");
     hasher.update(&crate::platform::witness::contract::validator_contract_digest().bytes());
+    hasher.update(&crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH);
     hasher.update(&digest.bytes());
     let mut visited = 0_u64;
     for (key, bytes) in objects {

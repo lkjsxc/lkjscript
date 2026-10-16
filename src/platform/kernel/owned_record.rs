@@ -239,7 +239,9 @@ pub(crate) fn definition(
     reference: DeclarationReference,
 ) -> Result<(Vec<TypeParameterId>, Vec<FieldId>), Diagnostic> {
     let property = property_definition(read, reference)?;
-    if property.header.kind == OwnerKind::OwnedRecord && property.header.contract_version >= 32 {
+    if property.header.kind == OwnerKind::OwnedRecord
+        && property.header.contract_version == crate::platform::canonical_schema::SCHEMA_EPOCH
+    {
         return Ok((property.parameters, property.fields));
     }
     Err(reject("missing admitted nominal owned record declaration"))
@@ -1224,7 +1226,7 @@ mod read_view_tests {
     }
 
     #[test]
-    fn graph_generation_separates_associated_owned_and_read_view_forms() {
+    fn schema_epoch_admits_owned_and_read_view_forms_together() {
         let mut read = Read::default();
         let view = read.view();
         let reference = DeclarationReference {
@@ -1238,7 +1240,12 @@ mod read_view_tests {
         });
         // This pass checks syntactic generations only. Member inventories are
         // independently admitted by the occurrence proof.
-        super::super::owned_product::require_generation(&read, vec![owned], 33).unwrap();
+        super::super::owned_product::require_generation(
+            &read,
+            vec![owned],
+            crate::platform::canonical_schema::SCHEMA_EPOCH,
+        )
+        .unwrap();
         assert_eq!(
             super::super::owned_product::require_generation(&read, vec![owned], 32)
                 .unwrap_err()
@@ -1263,10 +1270,15 @@ mod read_view_tests {
         });
         for view in [view, member_view, projected_view] {
             let nested = read.ty(TypeForm::Option { item: view });
-            let error = super::super::owned_product::require_generation(&read, vec![nested], 33)
+            let error = super::super::owned_product::require_generation(&read, vec![nested], 0)
                 .unwrap_err();
             assert_eq!(error.code, "kernel_read_view_generation");
-            super::super::owned_product::require_generation(&read, vec![nested], 34).unwrap();
+            super::super::owned_product::require_generation(
+                &read,
+                vec![nested],
+                crate::platform::canonical_schema::SCHEMA_EPOCH,
+            )
+            .unwrap();
         }
     }
 }

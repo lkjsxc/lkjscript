@@ -5,7 +5,7 @@
     reason = "public subprocess acceptance reports assertion failures"
 )]
 
-mod support;
+use crate::support;
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;

@@ -22,14 +22,12 @@ not editable source or an alternate package repository.
 An exported pure factory can return a pure or task function with a runtime bound prefix over its private graph
 helper. Transport and linking include that helper's complete code and type closure; receiving the
 callable does not grant consumers direct authoring visibility of its target. Code may contain `bind`
-expressions, but transports and artifacts never contain evaluated environments or execution grants. Graph 17 retains the supported exact Graph 14, 15 and 16 predecessor decoding described in
-[semantic-storage.md](semantic-storage.md). The unchanged TypeObject 10 codec, magic, digest domains,
-and bytes remain current for all pre-existing type forms. Positive nominal applications use the
-separate version-1 `LKJTAP01` envelope and its own digest domain, binding declaration and ordered
-arguments. Task callable types use their own version-1 `LKJTFN01` envelope and digest domain, binding
-the exact signature and canonical effect row; existing pure type bytes do not change. Unchanged
-monomorphic typed-data layouts retain their exact identities. This cutover does
-not rewrite operational data; the supported predecessor reader authenticates historical bytes.
+expressions, but transports and artifacts never contain evaluated environments or execution grants.
+Owners, types, interfaces, compiler units, bytecode and artifacts share the single current schema
+epoch 1. Nominal applications and task-callable types use the ordinary current type record,
+retaining exact declarations, ordered arguments, signatures and effect rows inline. Typed-data
+layouts bind complete nominal applications independently of physical storage. Foreign epochs
+reject; maintained assets are rebuilt through ordinary product owners.
 
 Function interfaces include exact ordered type/effect/requirement parameters, substituted callable signatures,
 and effect rows. A transported abstract library need not own any concrete consumer requirement:
@@ -39,7 +37,7 @@ signatures and port kinds against canonical owners, even in structurally valid r
 It also reconstructs canonical code under the existing validation work bound and compares ordered
 instructions, operands, locals and all return/transaction continuations before runtime tail
 derivation. A compiled control-flow change is corruption even when its references, stack merges
-and enclosing hashes are valid. Valid unchanged Artifact 18 and 19 bytes remain supported.
+and enclosing hashes are valid. All loaded artifact records must use the current schema epoch.
 Prepared application identity includes target, ordered type/effect/requirement arguments and preparation origin.
 Task ports use closed task-callable types; the predecessor task-as-pure entry representation rejects.
 
@@ -261,27 +259,17 @@ transport preserves private graph bodies and exact closed callable descriptors. 
 remain unavailable to public name lookup. Checksums and compiled metadata cannot override the
 canonical constraints or confer deployment grants.
 
-Current [owned-generic meaning](owned-generics.md) uses graph/owner generation 18,
-compiler unit 15, bytecode 11, artifact 22 and package-interface-owner 12. Canonical
-owner generations 14–17 and frozen interface-owner layouts 10 and 11 remain
-supported source inputs, preserving their exact bytes and identities. Predecessor
-derived artifacts require rebuilding from those supported canonical inputs;
-previous compiler layouts are rejected before interpretation as current units.
-TypeObject 10 and nominal application encodings remain unchanged. F64, ByteBuffer
-and OwnedI64Cell use disjoint version-1 type envelopes. Task-callable rows retain
-their explicit symbolic-requirement envelope. Current package/interface wrappers
-may contain supported old canonical objects and acquire new wrapper identities.
-Artifact 22 binds the current graph/compiler/bytecode tuple; mixed or unsupported
-executable tuples reject before execution. Exact dependency revisions remain
-separate from the bundle's inventory of available symbols.
-The transport/container framing remains unchanged, with explicit contained graph generations.
-A predecessor executable rejects new graph meaning rather than ignoring requirement arguments.
+Current [owned-generic meaning](owned-generics.md), affine carriers and task-callable rows use
+inline primary records under the single current schema epoch. Package and artifact closures
+retain all owners and exact type/application metadata. Strict loaders independently validate
+source, interfaces and code; neither epoch equality nor integrity replaces semantic proof.
+Exact dependencies remain separate from a bundle's inventory of available symbols.
 
-Inspection and current validation do not migrate accepted roots, historical records or application
-data. Ordinary reviewed edits create successor owners/roots, and compatible historical retries
-return the original accepted identities. Derived caches may be rebuilt under current contracts.
-Unchanged TypeObject and monomorphic typed-data bytes, operational stores, queues and backups
-require no data migration. Applied typed-data layout identities include all type arguments before
+Inspection and current validation do not edit accepted roots, historical records or application
+data. Ordinary reviewed edits publish successor roots; keyed retries return their exact accepted
+results. Derived caches may be rebuilt, and maintained bundles are regenerated through supported
+product operations. Foreign epochs reject without a compatibility reader.
+Applied typed-data layout identities include all type arguments before
 substituted members, so phantom changes cannot reuse a layout. Capture-safe remains distinct from
 typed-data eligibility, and closed intrinsically unencodable external entries reject before effects.
 The finite-instantiation rule follows the exact package closure, including private members,

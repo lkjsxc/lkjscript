@@ -15,8 +15,8 @@ use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
-pub const GRAPH_CONTRACT_VERSION: u16 = 4;
-pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph-4";
+pub const GRAPH_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph";
 pub const MAXIMUM_MODULE_SEGMENT_BYTES: usize = 64 * 1_048_576;
 pub const MAXIMUM_MODULE_DECLARATIONS: usize = 100_000;
 pub const MAXIMUM_MODULE_IDENTITIES: usize = 2_000_000;

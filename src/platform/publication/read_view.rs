@@ -46,8 +46,8 @@ use crate::platform::persistent_map::{
     MapAdmission, MapError, MapErrorClass, MapRangeControl, MapRoot, MapWork, PersistentMap,
 };
 use crate::platform::semantic_id::RevisionId;
+use crate::platform::storage::backend::StorageBackend;
 use crate::platform::storage::contract::TARGET_PACK_BYTES;
-use crate::platform::storage::directory::PackDirectoryStore;
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StageOutcome, StoreError,
     StoreErrorClass, StoreReadAdmission, StoreReadLimits, StoreWork,
@@ -492,7 +492,7 @@ pub(crate) struct BuiltPackageRevision {
 /// One operation's fully admitted source and its descriptive public export.
 /// Internal compilation consumes the admitted closure directly; public export
 /// still encodes an independently admissible complete container.
-struct BuiltPackageTransport {
+pub(super) struct BuiltPackageTransport {
     revision: PackageRevision,
     revision_digest: PackageRevisionDigest,
     revision_bytes: Vec<u8>,
@@ -509,7 +509,11 @@ struct BuiltPackageTransport {
 }
 
 impl BuiltPackageTransport {
-    fn into_export(self) -> Result<ExportedPackageTransport, Diagnostic> {
+    pub(super) fn into_source(self) -> crate::platform::package_transport::source::AdmittedClosure {
+        self.admitted
+    }
+
+    pub(super) fn into_export(self) -> Result<ExportedPackageTransport, Diagnostic> {
         let container = self.admitted.container.encode().map_err(|mut error| {
             error
                 .notes
@@ -810,6 +814,16 @@ fn logical_plan_evidence(
     })
 }
 
+/// Private evidence minted by complete source admission. Every later use must
+/// recheck the exact accepted binding, dependency selections and original bytes.
+#[derive(Clone, Debug)]
+pub(crate) struct SourceValidationProof {
+    pub(super) accepted: super::AcceptedBinding,
+    pub(super) objects: std::sync::Arc<BTreeSet<ObjectKey>>,
+    pub(super) selections:
+        std::sync::Arc<[crate::platform::package_transport::PackageTransportBinding]>,
+}
+
 /// One immutable catalog snapshot plus the exact accepted revision it was opened against.
 ///
 /// Packs are append-only in the current Graph 10 store, so a later HEAD publication cannot alter
@@ -824,12 +838,16 @@ pub struct RepositoryView {
     validation_reused: bool,
     validation_read_work: CanonicalReadWork,
     validation_steps: u64,
+    export_read_set: Option<(
+        BTreeSet<ObjectKey>,
+        Vec<crate::platform::package_transport::PackageTransportBinding>,
+    )>,
     idempotent_result: Option<super::HeadRecord>,
     link_transport_reuse: RefCell<Option<LinkTransportReuse>>,
 }
 
 impl RepositoryView {
-    pub(super) fn new(current: CurrentPublication, store: PackDirectoryStore) -> Self {
+    pub(super) fn new(current: CurrentPublication, store: StorageBackend) -> Self {
         Self {
             control: crate::platform::execution::ExecutionControl::uncancelled(),
             current,
@@ -846,6 +864,7 @@ impl RepositoryView {
                 canonical_records_decoded: 0,
             },
             validation_steps: 0,
+            export_read_set: None,
             idempotent_result: None,
             link_transport_reuse: RefCell::new(None),
         }
@@ -853,7 +872,7 @@ impl RepositoryView {
 
     pub(super) fn new_idempotency_base(
         current: CurrentPublication,
-        store: PackDirectoryStore,
+        store: StorageBackend,
         idempotent_result: super::HeadRecord,
     ) -> Self {
         Self {
@@ -872,6 +891,7 @@ impl RepositoryView {
                 canonical_records_decoded: 0,
             },
             validation_steps: 0,
+            export_read_set: None,
             idempotent_result: Some(idempotent_result),
             link_transport_reuse: RefCell::new(None),
         }
@@ -879,11 +899,16 @@ impl RepositoryView {
 
     pub(super) fn reconcile_validation(mut self) -> Result<Self, Diagnostic> {
         self.validation_checkpoint()?;
-        if !self.current.witness.contract_is_current() {
+        // Persisted witness metadata authenticates acceptance, never execution by
+        // this implementation. Reuse only a proof minted in this process after
+        // checking its complete original canonical read set.
+        {
             let key = super::validation::CurrentValidationKey {
                 root: self.current.accepted.semantic_root,
                 revision: self.revision(),
+                publication: self.current.head.record,
                 validator: crate::platform::witness::contract::validator_contract_digest(),
+                implementation: crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH,
             };
             let validation = if let Some((validation, work)) =
                 super::validation::cached(key, &self.store, &|| self.validation_checkpoint())?
@@ -897,6 +922,8 @@ impl RepositoryView {
                 };
                 validation
             } else {
+                let readiness =
+                    super::repository::read_store_readiness(self.store.persistent_base())?;
                 self.store.bound_current_rebuild(true);
                 let snapshot = self.reconstruct_full_oracle();
                 let dependencies = if snapshot.is_ok() {
@@ -913,6 +940,15 @@ impl RepositoryView {
                 let rebuild_work = self.store.rebuild_work();
                 self.store.bound_current_rebuild(false);
                 let snapshot = snapshot?;
+                let selections =
+                    super::validation::dependency_selections(&snapshot.value, &readiness)?;
+                if !super::validation::selections_match(
+                    self.store.persistent_base(),
+                    &selections,
+                    &|| self.validation_checkpoint(),
+                )? {
+                    return Err(super::validation::selection_changed());
+                }
                 let read_bytes = rebuild_work.bytes_read;
                 self.validation_read_work = CanonicalReadWork {
                     point_reads: snapshot.work.items_returned,
@@ -945,7 +981,9 @@ impl RepositoryView {
                     key,
                     read_bytes,
                     self.store.take_rebuild_objects(),
+                    selections,
                     validation.clone(),
+                    &self.store,
                 );
                 validation
             };
@@ -990,9 +1028,14 @@ impl RepositoryView {
     /// Executable and export owners must ask for current validity, independently of the
     /// immutable historical witness exposed by current().
     pub(crate) fn require_current_validation(&self) -> Result<(), Diagnostic> {
-        if let Some(base) = &self.revalidated {
-            base.require_current()?;
-        }
+        let base = self.revalidated.as_ref().ok_or_else(|| {
+            read_error(
+                DiagnosticClass::Semantic,
+                "publication_current_validation",
+                "persisted acceptance requires current process semantic validation",
+            )
+        })?;
+        base.require_current()?;
         if !self.witness_contract_is_current() {
             return Err(read_error(
                 DiagnosticClass::Semantic,
@@ -1037,10 +1080,7 @@ impl RepositoryView {
         self.prepare_change_with_prior_work(
             edits,
             options,
-            AuthoredLoweringWork {
-                canonical: self.validation_read_work,
-                ..AuthoredLoweringWork::default()
-            },
+            AuthoredLoweringWork::default(),
             ChangeBudget::default(),
         )
         .map(|prepared| prepared.publication)
@@ -1087,7 +1127,7 @@ impl RepositoryView {
         let canonical = BudgetedCanonicalBase::new(
             self,
             preparation_budget.canonical_reads,
-            self.validation_read_work,
+            CanonicalReadWork::default(),
         )
         .map_err(|diagnostic| vec![diagnostic])?;
         let witness = BudgetedWitnessBase::new(
@@ -1397,11 +1437,9 @@ impl RepositoryView {
         }
         let mut budget_reads = prior_work;
         budget_reads.canonical = canonical.work();
-        let mut initial_budget_work = budget_reads.budget_work();
-        initial_budget_work.validation.expression_steps = initial_budget_work
-            .validation
-            .expression_steps
-            .saturating_add(self.validation_steps);
+        // Opening this pinned view already admitted its current proof under independent limits.
+        // Candidate preparation charges only its own work, regardless of prior proof cache state.
+        let initial_budget_work = budget_reads.budget_work();
         let mut analysis = if let Some(base) = self
             .revalidated
             .as_ref()
@@ -1722,6 +1760,13 @@ impl RepositoryView {
     /// witness comparison. This is an explicitly broad oracle operation: ordinary reads and
     /// changes continue to use exact point and prefix lookups through this revision-pinned view.
     pub fn reconstruct_full_oracle(&self) -> Result<RevisionRead<KernelSnapshot>, Diagnostic> {
+        self.reconstruct_oracle(true)
+    }
+
+    fn reconstruct_oracle(
+        &self,
+        attach_dependencies: bool,
+    ) -> Result<RevisionRead<KernelSnapshot>, Diagnostic> {
         self.validation_checkpoint()?;
         let declared_records = self
             .current
@@ -1871,7 +1916,7 @@ impl RepositoryView {
         let mut dependency_interfaces = BTreeMap::new();
         let mut dependency_types = BTreeMap::new();
         let mut representation_dependencies = BTreeMap::new();
-        for dependency in dependencies.values() {
+        for dependency in dependencies.values().filter(|_| attach_dependencies) {
             self.validation_checkpoint()?;
             let resolved = self.resolve_package_transport(dependency.package_revision)?;
             work.add(resolved.work);
@@ -2018,6 +2063,15 @@ impl RepositoryView {
 
     pub(crate) fn build_package_revision(&self) -> Result<BuiltPackageRevision, Diagnostic> {
         self.require_current_validation()?;
+        self.project_package_revision(None)
+    }
+
+    // A projection is only proposed source. The private cold export path supplies freshly
+    // reconstructed summaries and independently admits the complete source before returning it.
+    fn project_package_revision(
+        &self,
+        summaries: Option<&BTreeMap<OwnerKey, crate::platform::witness::OwnerSummary>>,
+    ) -> Result<BuiltPackageRevision, Diagnostic> {
         let dependencies = self.package_dependencies()?;
         let mut selection = PackageInterfaceSelection::new(self.package());
         // Views and implementations can seed private nominal representations
@@ -2108,24 +2162,15 @@ impl RepositoryView {
                     "public interface selection names a missing canonical owner",
                 )
             })?;
-            let summary = self.bound_owner_summary(owner)?;
-            read_work.add(summary.work);
-            let summary = summary.value.ok_or_else(|| {
-                read_error(
-                    DiagnosticClass::Corrupt,
-                    "publication_package_interface_summary_missing",
-                    "public interface selection names an owner without a committed summary",
-                )
-            })?;
-            let interface =
-                PackageInterfaceOwner::project(&canonical, &summary.summary, &selection)?
-                    .ok_or_else(|| {
-                        read_error(
-                            DiagnosticClass::Corrupt,
-                            "publication_package_interface_projection",
-                            "selected public owner produced no package-interface record",
-                        )
-                    })?;
+            let summary = self.package_projection_summary(owner, summaries, &mut read_work)?;
+            let interface = PackageInterfaceOwner::project(&canonical, &summary, &selection)?
+                .ok_or_else(|| {
+                    read_error(
+                        DiagnosticClass::Corrupt,
+                        "publication_package_interface_projection",
+                        "selected public owner produced no package-interface record",
+                    )
+                })?;
             type_roots.extend(interface.type_roots());
             interface_owners.insert(owner, interface);
         }
@@ -2169,24 +2214,15 @@ impl RepositoryView {
                     "callable signature requirement is absent",
                 )
             })?;
-            let summary = self.bound_owner_summary(owner)?;
-            read_work.add(summary.work);
-            let summary = summary.value.ok_or_else(|| {
-                read_error(
-                    DiagnosticClass::Corrupt,
-                    "publication_package_interface_summary_missing",
-                    "callable signature requirement has no summary",
-                )
-            })?;
-            let projected =
-                PackageInterfaceOwner::project(&canonical, &summary.summary, &selection)?
-                    .ok_or_else(|| {
-                        read_error(
-                            DiagnosticClass::Corrupt,
-                            "publication_package_interface_projection",
-                            "callable signature requirement cannot be projected",
-                        )
-                    })?;
+            let summary = self.package_projection_summary(owner, summaries, &mut read_work)?;
+            let projected = PackageInterfaceOwner::project(&canonical, &summary, &selection)?
+                .ok_or_else(|| {
+                    read_error(
+                        DiagnosticClass::Corrupt,
+                        "publication_package_interface_projection",
+                        "callable signature requirement cannot be projected",
+                    )
+                })?;
             interface_owners.insert(owner, projected);
         }
         let interface = build_package_interface(&interface_owners, &interface_types)?;
@@ -2212,6 +2248,147 @@ impl RepositoryView {
         })
     }
 
+    fn package_projection_summary(
+        &self,
+        owner: OwnerKey,
+        summaries: Option<&BTreeMap<OwnerKey, crate::platform::witness::OwnerSummary>>,
+        work: &mut RepositoryReadWork,
+    ) -> Result<crate::platform::witness::OwnerSummary, Diagnostic> {
+        let summary = match summaries {
+            Some(summaries) => summaries.get(&owner).cloned(),
+            None => {
+                let read = self.bound_owner_summary(owner)?;
+                work.add(read.work);
+                read.value.map(|bound| bound.summary)
+            }
+        };
+        summary.ok_or_else(|| {
+            read_error(
+                DiagnosticClass::Corrupt,
+                "publication_package_interface_summary_missing",
+                "public interface selection names an owner without a current derived summary",
+            )
+        })
+    }
+
+    /// One owning export admits the complete selected source and produces its current proof.
+    /// The initial local projection has no execution authority; neither historical witness tags
+    /// nor a previously admitted transport can bypass the collector or full root validation.
+    pub(super) fn admit_package_export(
+        mut self,
+    ) -> Result<(Self, BuiltPackageTransport), Diagnostic> {
+        self.validation_checkpoint()?;
+        self.store.bound_current_rebuild(true);
+        let result = (|| {
+            let local = self.reconstruct_oracle(false)?;
+            let facts = crate::platform::witness::rebuild_canonical_facts(&local.value)?;
+            self.validation_checkpoint()?;
+            let proposed = self.project_package_revision(Some(&facts.summaries))?;
+            let built = self.build_projected_package_transport(proposed)?;
+            let package = built
+                .admitted
+                .packages
+                .get(&built.revision_digest)
+                .ok_or_else(|| {
+                    read_error(
+                        DiagnosticClass::Corrupt,
+                        "publication_package_transport_export",
+                        "complete source admission omitted the exact root package",
+                    )
+                })?;
+            if package.snapshot.root != self.current.semantic_root
+                || crate::platform::kernel::semantic_state_digest(&package.snapshot)?
+                    != self.current.accepted.semantic_state
+            {
+                return Err(read_error(
+                    DiagnosticClass::Corrupt,
+                    "publication_package_transport_export",
+                    "admitted source differs from the exact accepted root authority",
+                ));
+            }
+            let validation =
+                std::sync::Arc::new(RevalidatedBase::rebuild(package.snapshot.clone(), &|| {
+                    self.validation_checkpoint()
+                })?);
+            validation.require_current()?;
+            let selections = built
+                .admitted
+                .container
+                .selections
+                .iter()
+                .copied()
+                .filter(|selection| selection.package_revision != built.revision_digest)
+                .collect::<Vec<_>>();
+            if !super::validation::selections_match(
+                self.store.persistent_base(),
+                &selections,
+                &|| self.validation_checkpoint(),
+            )? {
+                return Err(super::validation::selection_changed());
+            }
+            Ok((built, validation, selections, local.work))
+        })();
+        let rebuild_work = self.store.rebuild_work();
+        self.store.bound_current_rebuild(false);
+        let (built, validation, selections, local_work) = result?;
+        self.validation_read_work = CanonicalReadWork {
+            point_reads: local_work.items_returned,
+            map_pages_read: local_work.map.pages_read,
+            map_entries_visited: local_work.map.entries_visited,
+            canonical_records_decoded: local_work.canonical_records_decoded,
+            catalog_lookups: rebuild_work.catalog_lookups,
+            objects_read: rebuild_work.objects_read,
+            bytes_read: rebuild_work.bytes_read,
+        };
+        self.validation_steps = validation
+            .semantic_work
+            .saturating_add(built.admitted.validation_visits);
+        let objects = self.store.take_rebuild_objects();
+        // Export admission owns its private snapshot and dependency maps. Its collector
+        // can also read optional physical objects absent from another repository with
+        // the same semantic revision. Keep this proof with the owning operation instead
+        // of extending those admission-local lifetimes through the global view cache.
+        self.store.install(&validation)?;
+        self.revalidated = Some(validation);
+        self.export_read_set = Some((objects, selections));
+        Ok((self, built))
+    }
+
+    pub(crate) fn into_source_validation_proof(
+        mut self,
+    ) -> Result<SourceValidationProof, Diagnostic> {
+        self.require_current_validation()?;
+        let (objects, selections) = self.export_read_set.take().ok_or_else(|| {
+            read_error(
+                DiagnosticClass::Semantic,
+                "publication_current_validation",
+                "source validation proof requires a complete admitted export read set",
+            )
+        })?;
+        // Move the already bounded collector inventory; retain no repository view,
+        // decoded dependency snapshot or filesystem handle. Clones share metadata.
+        Ok(SourceValidationProof {
+            accepted: self.current.accepted,
+            objects: std::sync::Arc::new(objects),
+            selections: selections.into(),
+        })
+    }
+
+    pub(super) fn recheck_exported_source(&self, store: &StorageBackend) -> Result<(), Diagnostic> {
+        self.require_current_validation()?;
+        let (objects, selections) = self.export_read_set.as_ref().ok_or_else(|| {
+            read_error(
+                DiagnosticClass::Semantic,
+                "publication_current_validation",
+                "current export proof has no complete original physical read set",
+            )
+        })?;
+        super::validation::recheck_selected_objects(store, objects, selections, &|| {
+            self.validation_checkpoint()
+        })
+    }
+
+    #[cfg(test)]
     pub(crate) fn export_package_container(
         &self,
     ) -> Result<crate::platform::package_transport::source::AdmittedClosure, Diagnostic> {
@@ -2225,6 +2402,13 @@ impl RepositoryView {
 
     fn build_package_transport(&self) -> Result<BuiltPackageTransport, Diagnostic> {
         self.require_current_validation()?;
+        self.build_projected_package_transport(self.build_package_revision()?)
+    }
+
+    fn build_projected_package_transport(
+        &self,
+        projected: BuiltPackageRevision,
+    ) -> Result<BuiltPackageTransport, Diagnostic> {
         let BuiltPackageRevision {
             revision,
             revision_digest,
@@ -2233,12 +2417,7 @@ impl RepositoryView {
             interface_owners,
             interface_types,
             read_work,
-        } = self.build_package_revision().map_err(|mut error| {
-            error
-                .notes
-                .push("while projecting the exact public package interface".into());
-            error
-        })?;
+        } = projected;
         let transport = PackageTransport {
             contract_version: PACKAGE_TRANSPORT_CONTRACT_VERSION,
             graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,

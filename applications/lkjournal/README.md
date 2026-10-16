@@ -20,11 +20,11 @@ Current authority and derived artifact identity:
 
 - repository: `repo_95f988c5423fe3eb823c329ef0832d51`;
 - package: `pkg_20000000000000000000000000000001`;
-- semantic revision: `rev_f4b23a41ab20663095eeac65e19b3c0e17258e763b8337437f9c4c44351be4c5`;
-- semantic state: `semantic_state_ee0c46d127bba47f9ae2ae190f209e93ed03a9a57da9467a2241391d3980a46c`;
-- package revision: `package_revision_82e1255dba4dc181c9ffd0fac5ad619ed97ad491a34855c915be13fdd274e83b`;
-- artifact manifest: `artifact_manifest_522703193ccb0e3ddd91a82cae03fea275a572d48862b45820fce7f1d7bb9e26`;
-- artifact bundle: `artifact_bundle_f82a2ebf67a237f0a968788bca146ad5b1a36f5baf220b648a9a1823afd0c27c`;
+- semantic revision: `rev_d9d75fb4c967b2e2a45cdea1d2656d04106bcadd8234b1ce4d27b881581c3fd1`;
+- semantic state: `semantic_state_360f53cdef3ffe8c8ed9988ab1f8474bcecf1bfad7379f295cb268d82ea2a888`;
+- package revision: `package_revision_162850180cbbb2cc2a4cfb694b9e56b5dd7c48d1fb50e8c05ae95afaf1eb2411`;
+- artifact manifest: `artifact_manifest_80007eb7a7444df07a83d10e1d2d062e1085bdfde14839782c6a6669c652d074`;
+- artifact bundle: `artifact_bundle_ff1addbd824d9fb466e7d5a15456a676ce6fb558ffb62fcf15c7b09bae7b640e`;
 - 2,044 live root semantic owners and one exact built-in standard dependency.
 
 The application binds one exact standard supplier. Dependency changes use reviewed
@@ -79,9 +79,9 @@ empty 404 and invokes none of them.
 
 ## Current service, interactive, and worker boundary
 
-All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,500,625-byte
+All three maintained deployment descriptors name `generated/lkjournal.lkja`, the 1,378,045-byte
 current compiled bundle (SHA-256
-`bec643b58e969c2ee518a56dfcb45e3bda329523266d3cefdaa0fa616693987e`). The service descriptor
+`5ee475469c150fa063d57ed5d6ed4898c66f69cb219d7ed1aba2b4a3249858b4`). The service descriptor
 resolves `serve`, the worker descriptor resolves `work`, and `live.deployment.json` resolves
 `lkjournal-live-1`. Preparation strictly loads the standalone bundle,
 validates the runner, route-indexed handler and component requirement closure, grants, secrets, and adapters, and emits

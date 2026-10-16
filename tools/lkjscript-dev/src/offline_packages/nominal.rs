@@ -460,27 +460,7 @@ pub(super) fn validate_batch(receipt: &Receipt, root: &Path) -> Result<(), DevEr
     )
 }
 
-pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
-    // The preceding offline HTTP witness removes all of its own inputs. Obtain the exact
-    // built-in dependency for this independently authored workload through public export.
-    standard.container = context.root.join("nominal-standard.lkjp");
-    let exported = context.cli(
-        None,
-        &[
-            "package",
-            "builtin",
-            "export",
-            "--kind",
-            "transport",
-            "--output",
-            &standard.container.display().to_string(),
-        ],
-        true,
-    )?;
-    require(
-        field(&exported, "package", "transport")? == standard.transport,
-        "nominal standard export changed its exact dependency",
-    )?;
+pub(super) fn discover(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
     for (name, kind) in [
         ("function-constant", "pure_function"),
         ("pair", "record"),
@@ -500,6 +480,29 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
             .symbols
             .insert(name.into(), field(&records, "owner", "reference")?);
     }
+    Ok(())
+}
+
+pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
+    // This independently authored workload retains its ordinary exact public acquisition.
+    standard.container = context.root.join("nominal-standard.lkjp");
+    let exported = context.cli(
+        None,
+        &[
+            "package",
+            "builtin",
+            "export",
+            "--kind",
+            "transport",
+            "--output",
+            &standard.container.display().to_string(),
+        ],
+        true,
+    )?;
+    require(
+        field(&exported, "package", "transport")? == standard.transport,
+        "nominal standard export changed its exact dependency",
+    )?;
     let mut library = context.new_package("nominal-library")?;
     context.stage(&library, standard)?;
     context.apply(

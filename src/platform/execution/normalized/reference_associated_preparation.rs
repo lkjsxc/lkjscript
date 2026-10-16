@@ -397,7 +397,7 @@ impl<'a> Derivation<'a> {
             // establish the source-root coverage that public admission checks.
             for owner in snapshot.owners.values() {
                 result.budget.tick()?;
-                if owner.header().contract_version > snapshot.root.graph_contract_version {
+                if owner.header().contract_version != snapshot.root.graph_contract_version {
                     return Err(reject());
                 }
             }
@@ -514,8 +514,8 @@ impl<'a> Derivation<'a> {
             .root
             .graph_contract_version;
         let owner_generation = self.declaration(scope, None)?.header.contract_version;
-        if generation > root_generation
-            || owner_generation > root_generation
+        if generation != root_generation
+            || owner_generation != root_generation
             || !super::associated_generation_admitted(generation, false)
             || !super::associated_generation_admitted(root_generation, false)
             || !super::associated_generation_admitted(owner_generation, false)
@@ -553,7 +553,7 @@ impl<'a> Derivation<'a> {
             .graph_contract_version;
         if !super::associated_generation_admitted(root, read_view)
             || !super::associated_generation_admitted(caller.generation, read_view)
-            || caller.generation > root
+            || caller.generation != root
         {
             return Err(reject());
         }
@@ -676,7 +676,7 @@ impl<'a> Derivation<'a> {
                     return Err(reject());
                 };
                 if owner.header.contract_version
-                    < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                    != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                     || arguments.len() != view.type_parameters.len()
                 {
                     return Err(reject());
@@ -998,13 +998,13 @@ impl<'a> Derivation<'a> {
                 || names.contains(&owner.name)
                 || (owner.constraints.has_owned()
                     && owner.header.contract_version
-                        < crate::platform::kernel::contract::OWNED_GRAPH_CONTRACT_VERSION)
+                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
                 || (owner.constraints.requires_transfer()
                     && owner.header.contract_version
-                        < crate::platform::kernel::contract::TRANSFER_GRAPH_CONTRACT_VERSION)
+                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
                 || (owner.constraints.requires_share()
                     && owner.header.contract_version
-                        < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION)
+                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
             {
                 return Err(reject());
             }

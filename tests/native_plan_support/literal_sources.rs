@@ -3,6 +3,10 @@ const SUFFIX: &str = ")\ndeclarations.end\n";
 
 /// Author these immutable fixtures in one supported collection, so all new module
 /// names are visible together. Keep every inner byte, including bodies and comments.
+#[allow(
+    clippy::panic,
+    reason = "immutable test fixtures must match the shared grouping envelope"
+)]
 pub fn grouped<'a>(sources: impl IntoIterator<Item = &'a str>) -> String {
     let mut output = PREFIX.to_owned();
     let mut count = 0;

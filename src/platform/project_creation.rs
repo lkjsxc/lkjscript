@@ -10,6 +10,7 @@ use self::recipes::{
     command_recipe, http_recipe, minimal_recipe, nostr_relay_info_recipe, web_editor_recipe,
     web_recipe,
 };
+use super::MemProjectStore;
 use super::change::{AuthoredChange, AuthoredChangeSet, ChangeBudget};
 use super::control::{
     LogicalChangePlan, NormalizedChangeRequest, encode_logical_change_plan,
@@ -36,8 +37,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
-pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation-7";
-pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = 7;
+pub const PROJECT_CREATION_CONTRACT_IDENTITY: &str = "lkjscript-project-creation";
+pub const PROJECT_CREATION_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(crate) enum ProjectTemplate {
@@ -160,6 +161,40 @@ pub(crate) fn create_project(
     create_project_with_hook(destination, package_name, template, |_, _, _| Ok(()))
 }
 
+/// Create accepted command or minimal meaning in a caller-bounded memory arena.
+/// Deployment descriptors are filesystem products and are not part of this authority.
+pub fn create_memory_project(
+    store: &MemProjectStore,
+    package_name: &str,
+    template: &str,
+) -> Result<(), Diagnostic> {
+    let recipe = match template {
+        "minimal" => minimal_recipe(),
+        "command" => command_recipe()?,
+        _ => {
+            return Err(creation_error(
+                DiagnosticClass::Source,
+                "new_memory_template",
+                "memory projects accept minimal or command templates",
+            ));
+        }
+    };
+    let snapshot = lower_recipe(
+        RepositoryId::generate()?,
+        PackageId::generate()?,
+        Name::new(package_name)?,
+        &recipe,
+    )?;
+    validate_recipe_snapshot(&snapshot)?;
+    GraphRepository::create_memory_with_package_transports(
+        store,
+        &snapshot,
+        Some(format!("public {template} memory project bootstrap")),
+        &recipe.transports,
+    )?;
+    Ok(())
+}
+
 pub(crate) fn create_project_with_relay(
     destination: &Path,
     package_name: &str,
@@ -244,7 +279,7 @@ where
         })?),
     }?;
     validate_auxiliary_inventory(recipe.auxiliary.as_ref())?;
-    let snapshot = lower_recipe(parent, repository, package, package_name.clone(), &recipe)?;
+    let snapshot = lower_recipe(repository, package, package_name.clone(), &recipe)?;
     validate_recipe_snapshot(&snapshot)?;
     let owners = snapshot.owners.len() as u64;
     let dependencies = snapshot.dependencies.len() as u64;
@@ -351,11 +386,10 @@ where
 }
 
 /// Lowers every recipe through the same authored-change preparation, allocation, impact,
-/// validation, test-selection, and logical-plan machinery as public plan/apply. The temporary
+/// validation, test-selection, and logical-plan machinery as public plan/apply. The bounded memory
 /// repository supplies only a fresh zero base and exact built-in package transports; its history
 /// is discarded before one fully populated initial revision becomes visible at the destination.
 fn lower_recipe(
-    parent: &Path,
     repository: RepositoryId,
     package: PackageId,
     package_name: Name,
@@ -365,47 +399,42 @@ fn lower_recipe(
     if recipe.changes.is_empty() && recipe.native_inputs.is_empty() {
         return Ok(empty);
     }
-    let lowering = parent.join(format!(".lkjscript-recipe-lowering-{repository}"));
-    ensure_absent_owned_path(&lowering)?;
-    let result = (|| {
-        let created = GraphRepository::create_with_package_transports(
-            &lowering,
-            &empty,
-            Some(format!(
-                "private {} recipe zero base",
-                recipe.template.name()
-            )),
-            &recipe.transports,
+    let lowering = MemProjectStore::new(256 * 1_048_576)?;
+    let created = GraphRepository::create_memory_with_package_transports(
+        &lowering,
+        &empty,
+        Some(format!(
+            "private {} recipe zero base",
+            recipe.template.name()
+        )),
+        &recipe.transports,
+    )?;
+    if !recipe.changes.is_empty() {
+        let semantic = AuthoredChangeSet {
+            base: created.current.head.revision,
+            preconditions: Vec::new(),
+            changes: recipe.changes.clone(),
+            budget: ChangeBudget::default(),
+        };
+        let normalized = normalize_change_request(
+            semantic,
+            PublicationOptions {
+                intent: Some(format!(
+                    "{} recipe authored lowering",
+                    recipe.template.name()
+                )),
+                ..PublicationOptions::default()
+            },
         )?;
-        if !recipe.changes.is_empty() {
-            let semantic = AuthoredChangeSet {
-                base: created.current.head.revision,
-                preconditions: Vec::new(),
-                changes: recipe.changes.clone(),
-                budget: ChangeBudget::default(),
-            };
-            let normalized = normalize_change_request(
-                semantic,
-                PublicationOptions {
-                    intent: Some(format!(
-                        "{} recipe authored lowering",
-                        recipe.template.name()
-                    )),
-                    ..PublicationOptions::default()
-                },
-            )?;
-            publish_recipe_request(&created.repository, normalized)?;
-        }
-        native::apply_inputs(&created.repository, recipe.native_inputs)?;
-        let read = created
-            .repository
-            .view_current()?
-            .reconstruct_full_oracle()?;
-        validate_recipe_snapshot(&read.value)?;
-        Ok(read.value)
-    })();
-    cleanup_owned_directory(&lowering, result.as_ref().err())?;
-    result
+        publish_recipe_request(&created.repository, normalized)?;
+    }
+    native::apply_inputs(&created.repository, recipe.native_inputs)?;
+    let read = created
+        .repository
+        .view_current()?
+        .reconstruct_full_oracle()?;
+    validate_recipe_snapshot(&read.value)?;
+    Ok(read.value)
 }
 
 fn publish_recipe_request(
@@ -756,28 +785,6 @@ fn predecessor_project(path: &Path) -> bool {
         .any(|marker| fs::symlink_metadata(marker).is_ok())
 }
 
-fn ensure_absent_owned_path(path: &Path) -> Result<(), Diagnostic> {
-    match fs::symlink_metadata(path) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Ok(_) => Err(creation_error(
-            DiagnosticClass::Infrastructure,
-            "new_recipe_lowering_path_exists",
-            format!(
-                "private recipe lowering path '{}' already exists",
-                path.display()
-            ),
-        )),
-        Err(error) => Err(creation_error(
-            DiagnosticClass::Infrastructure,
-            "new_recipe_lowering_path_inspect",
-            format!(
-                "private recipe lowering path '{}' could not be inspected: {error}",
-                path.display()
-            ),
-        )),
-    }
-}
-
 fn cleanup_owned_directory(path: &Path, prior: Option<&Diagnostic>) -> Result<(), Diagnostic> {
     match fs::symlink_metadata(path) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -1011,48 +1018,64 @@ mod tests {
 
     #[test]
     fn auxiliary_failure_removes_every_owned_private_path() {
-        for template in [
+        let templates = [
             ProjectTemplate::Http,
             ProjectTemplate::Command,
             ProjectTemplate::Web,
             ProjectTemplate::WebEditor,
-        ] {
-            for failure_point in [
-                CreationPoint::GraphPublished,
-                CreationPoint::BeforeDescriptor,
-                CreationPoint::DescriptorPublished,
-                CreationPoint::GeneratedDirectoryPublished,
-                CreationPoint::BeforeVisibility,
-            ] {
-                let temporary = tempfile::TempDir::new().expect("temporary HTTP parent");
-                let destination = temporary.path().join("http");
-                let error =
-                    create_project_with_hook(&destination, "http", template, |point, _, _| {
-                        if point == failure_point {
-                            Err(creation_error(
-                                DiagnosticClass::Infrastructure,
-                                "test_auxiliary_failure",
-                                "injected auxiliary failure",
-                            ))
-                        } else {
-                            Ok(())
-                        }
-                    })
-                    .expect_err("injected failure");
-                assert_eq!(error.code, "test_auxiliary_failure");
-                assert!(!destination.exists());
-                let private = fs::read_dir(temporary.path())
-                    .expect("parent")
-                    .filter_map(Result::ok)
-                    .filter(|entry| {
-                        entry
-                            .file_name()
-                            .to_string_lossy()
-                            .starts_with(".lkjscript-")
-                    })
-                    .count();
-                assert_eq!(private, 0);
+        ];
+        let failure_points = [
+            CreationPoint::GraphPublished,
+            CreationPoint::BeforeDescriptor,
+            CreationPoint::DescriptorPublished,
+            CreationPoint::GeneratedDirectoryPublished,
+            CreationPoint::BeforeVisibility,
+        ];
+        // All twenty faults have independent filesystem authorities. Distribute
+        // each template's boundaries so the slowest recipe cannot form one tail.
+        std::thread::scope(|scope| {
+            for worker in 0..4 {
+                let templates = &templates;
+                let failure_points = &failure_points;
+                scope.spawn(move || {
+                    for case in (worker..templates.len() * failure_points.len()).step_by(4) {
+                        assert_auxiliary_cleanup(
+                            templates[case / failure_points.len()],
+                            failure_points[case % failure_points.len()],
+                        );
+                    }
+                });
             }
-        }
+        });
+    }
+
+    fn assert_auxiliary_cleanup(template: ProjectTemplate, failure_point: CreationPoint) {
+        let temporary = tempfile::TempDir::new().expect("temporary HTTP parent");
+        let destination = temporary.path().join("http");
+        let error = create_project_with_hook(&destination, "http", template, |point, _, _| {
+            if point == failure_point {
+                Err(creation_error(
+                    DiagnosticClass::Infrastructure,
+                    "test_auxiliary_failure",
+                    "injected auxiliary failure",
+                ))
+            } else {
+                Ok(())
+            }
+        })
+        .expect_err("injected failure");
+        assert_eq!(error.code, "test_auxiliary_failure");
+        assert!(!destination.exists());
+        let private = fs::read_dir(temporary.path())
+            .expect("parent")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".lkjscript-")
+            })
+            .count();
+        assert_eq!(private, 0);
     }
 }

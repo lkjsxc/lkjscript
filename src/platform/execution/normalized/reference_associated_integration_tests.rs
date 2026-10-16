@@ -192,6 +192,17 @@ fn assert_raw_refusal(error: ExecutionError, message: &str) {
     assert_eq!(error.message, message, "{error:?}");
 }
 
+fn assert_epoch_refusal(error: ExecutionError) {
+    // Flat epoch admission rejects foreign owner bytes during preparation,
+    // before any scoped-view flow proof can be constructed.
+    assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+    assert_eq!(error.code, "reference_associated_preparation");
+    assert_eq!(
+        error.message,
+        "canonical associated application has a mismatched scope, inventory, binding, or target"
+    );
+}
+
 fn complete_after_checks(
     fixture: &test_support::Fixture,
     checks: u64,
@@ -630,7 +641,7 @@ fn reference_associated_combined_child_read_keeps_source_identity_without_type_e
 }
 
 #[test]
-fn reference_associated_combined_unused_body_rejects_untaken_source_consume_and_old_wrapper() {
+fn reference_associated_combined_unused_body_rejects_untaken_source_consume_and_foreign_epoch() {
     let mut case = forwarding();
     let scalar = intern(&mut case.fixture.source, TypeForm::I64);
     let parameter = function(&case.fixture.source, case.fixture.consumer).parameters[0];
@@ -720,14 +731,9 @@ fn reference_associated_combined_unused_body_rejects_untaken_source_consume_and_
         .owners
         .get_mut(&OwnerKey::Expression(case.wrapper))
         .unwrap()
-        .set_encoding_for_edit(32);
+        .set_encoding_for_edit(crate::platform::canonical_schema::SCHEMA_EPOCH + 1);
     let error = complete(&case.fixture).unwrap_err();
-    assert_eq!(error.class, ExecutionFailureClass::Trap);
-    assert_eq!(error.code, "kernel_associated_reference_source");
-    assert_eq!(
-        error.message,
-        "independent associated flow refused canonical source: Scope"
-    );
+    assert_epoch_refusal(error);
     case.fixture
         .source
         .owners
@@ -769,14 +775,9 @@ fn reference_associated_combined_unused_body_rejects_untaken_source_consume_and_
         .owners
         .get_mut(&OwnerKey::Expression(case.wrapper))
         .unwrap()
-        .set_encoding_for_edit(32);
+        .set_encoding_for_edit(crate::platform::canonical_schema::SCHEMA_EPOCH + 1);
     let error = complete(&case.fixture).unwrap_err();
-    assert_eq!(error.class, ExecutionFailureClass::Trap);
-    assert_eq!(error.code, "kernel_associated_reference_source");
-    assert_eq!(
-        error.message,
-        "independent associated flow refused canonical source: Scope"
-    );
+    assert_epoch_refusal(error);
     case.fixture
         .source
         .owners

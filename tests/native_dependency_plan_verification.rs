@@ -3,18 +3,7 @@
 //! Host matrices share prepared code; candidate runs and bounded detached smoke runs
 //! execute the copied binary. Execution mode and cache observations remain explicit.
 #![allow(clippy::unwrap_used, clippy::panic)]
-#[path = "native_components_support/mod.rs"]
-mod components;
-#[allow(
-    dead_code,
-    reason = "shared semantic CLI support spans independent integration crates"
-)]
-#[path = "support/semantic_cli.rs"]
-mod semantic_cli;
-use components::copy_executable;
-#[allow(dead_code)]
-#[path = "native_plan_support/mod.rs"]
-mod plan;
+use crate::{components, plan};
 #[path = "native_plan_verify_support/mod.rs"]
 mod verification;
 use components::matrix::Case;
@@ -25,7 +14,7 @@ use std::fs;
 #[test]
 fn native_checker_rejects_false_plans_and_guards_an_independent_producer()
 -> Result<(), Box<dyn std::error::Error>> {
-    let public = Native::new();
+    let public = Native::in_memory();
     let executable_hash = digest(&public.root.join("lkjscript"));
     verification::author(&public);
     let verifier_artifact = public.root.join("dependency-plan-verifier.lkja");
@@ -115,7 +104,7 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer()
         "observation":quoted(&output,"production-observation")}),
     );
     attached_observations.push(outcome_suite.attached_sample(&public));
-    fs::remove_dir_all(public.root.join("verifier")).unwrap();
+    public.remove_project("verifier");
     fs::remove_file(public.root.join("verifier.lkjp")).unwrap();
     plan::detach(&public);
     public.matrix_boundary(

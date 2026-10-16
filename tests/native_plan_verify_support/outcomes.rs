@@ -96,7 +96,7 @@ impl Suite {
 }
 
 pub fn before_producer(public: &Native) {
-    assert!(!public.root.join("application").exists());
+    assert!(!public.has_project("application"));
     assert!(!public.root.join("verified-dependency-plan.lkja").exists());
     let descriptor = public.input("outcome-first.deployment.json", DESCRIPTORS[0].1);
     let proposal = json!({"roots":[90,80],"nodes":[]});

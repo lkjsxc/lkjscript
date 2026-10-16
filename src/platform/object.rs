@@ -18,7 +18,7 @@ use std::path::Path as FilePath;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 
-pub const OBJECT_ADAPTER_CONTRACT_VERSION: u16 = 1;
+pub const OBJECT_ADAPTER_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_OBJECT_KEY_BYTES: usize = 1024;
 pub const MAXIMUM_OBJECT_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 const MULTIPART_PART_BYTES: usize = 5 * 1024 * 1024;

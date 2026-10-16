@@ -17,26 +17,49 @@ fn fixture(root: &Path, name: &str, script: &str) -> ProcessSpec {
 #[test]
 fn inherited_stdout_cannot_outlive_the_deadline_as_a_pass() {
     let root = tempfile::tempdir().expect("owned inherited-output fixture");
-    // Finite even with the old broken implementation: no orphan survives this test.
-    let spec = fixture(root.path(), "inherited", "sleep 0.6 & printf 'parent-done'");
+    // A finite holder stays alive well beyond the deadline. Leave enough startup
+    // allowance for loaded runners, then require the actual timeout and joined child.
+    let mut spec = fixture(
+        root.path(),
+        "inherited",
+        "printf 'parent-done'; sleep 5 & echo $! > inherited-child",
+    );
+    spec.timeout = Duration::from_millis(500);
     let result = run(&spec, root.path());
-    assert_ne!(result.status, ProcessStatus::Passed, "{result:?}");
-    assert!(result.elapsed_nanoseconds < 500_000_000, "{result:?}");
+    assert_eq!(result.status, ProcessStatus::Timeout, "{result:?}");
+    assert_eq!(result.reason.as_deref(), Some("timeout"));
+    assert!(result.elapsed_nanoseconds < 4_000_000_000, "{result:?}");
     assert_eq!(std::fs::read(spec.stdout_path).unwrap(), b"parent-done");
+    assert_stopped(
+        std::fs::read_to_string(root.path().join("inherited-child"))
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap(),
+    );
 }
 
 #[test]
 fn inherited_stderr_cannot_outlive_the_deadline_as_a_pass() {
     let root = tempfile::tempdir().expect("owned inherited-error fixture");
-    let spec = fixture(
+    let mut spec = fixture(
         root.path(),
         "inherited",
-        "sleep 0.6 >/dev/null & printf 'parent-error' >&2",
+        "printf 'parent-error' >&2; sleep 5 >/dev/null & echo $! > inherited-child",
     );
+    spec.timeout = Duration::from_millis(500);
     let result = run(&spec, root.path());
-    assert_ne!(result.status, ProcessStatus::Passed, "{result:?}");
-    assert!(result.elapsed_nanoseconds < 500_000_000, "{result:?}");
+    assert_eq!(result.status, ProcessStatus::Timeout, "{result:?}");
+    assert_eq!(result.reason.as_deref(), Some("timeout"));
+    assert!(result.elapsed_nanoseconds < 4_000_000_000, "{result:?}");
     assert_eq!(std::fs::read(spec.stderr_path).unwrap(), b"parent-error");
+    assert_stopped(
+        std::fs::read_to_string(root.path().join("inherited-child"))
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap(),
+    );
 }
 
 fn assert_stopped(pid: u32) {
@@ -95,7 +118,7 @@ fn all_shared_routes_clean_sampled_separate_groups_and_reap_the_direct_child() {
             format!("setsid sleep 5 & printf '%s %s' $$ $! > ids-{mode}; sleep 0.06; exit 0");
         let mut spec = fixture(root.path(), &format!("route-{mode}"), &script);
         // This witnesses joined cleanup through every shared route, not a startup
-        // scheduling SLO. Keep the inherited-output deadline tests at 80 ms.
+        // scheduling SLO. Inherited-output tests separately require a timeout.
         spec.timeout = Duration::from_secs(2);
         let result = match mode {
             0 => run(&spec, root.path()),
@@ -173,30 +196,28 @@ fn cancellation_remains_observable_after_direct_child_exit() {
 #[test]
 fn silent_sampled_survivor_is_not_a_clean_success() {
     let root = tempfile::tempdir().unwrap();
-    let spec = fixture(
+    let mut spec = fixture(
         root.path(),
         "silent",
-        "setsid sleep 0.8 >/dev/null 2>&1 & echo $! > survivor; sleep 0.04; exit 0",
+        "setsid sleep 5 >/dev/null 2>&1 & echo $! > survivor; sleep 0.2; exit 0",
     );
+    // Admit process startup and sampling before the parent exits. This case must
+    // witness a surviving silent child, not expire before its fixture exists.
+    spec.timeout = Duration::from_secs(2);
     let result = run(&spec, root.path());
-    // The same 80 ms deadline can win before parent exit on a loaded runner.
-    // Preserve that primary timeout; neither outcome permits a pass or survivor.
-    match result.status {
-        ProcessStatus::InfrastructureFailure => {
-            assert!(
-                result
-                    .reason
-                    .as_deref()
-                    .unwrap()
-                    .contains("descendants survived")
-            );
-        }
-        ProcessStatus::Timeout => {
-            assert_eq!(result.reason.as_deref(), Some("timeout"));
-            assert!(u128::from(result.elapsed_nanoseconds) >= spec.timeout.as_nanos());
-        }
-        _ => panic!("silent survivor was not rejected: {result:?}"),
-    }
+    assert_eq!(
+        result.status,
+        ProcessStatus::InfrastructureFailure,
+        "{result:?}"
+    );
+    assert!(
+        result
+            .reason
+            .as_deref()
+            .unwrap()
+            .contains("descendants survived")
+    );
+    assert!(result.elapsed_nanoseconds < 4_000_000_000, "{result:?}");
     assert_stopped(
         std::fs::read_to_string(root.path().join("survivor"))
             .unwrap()
@@ -216,7 +237,7 @@ fn closed_stdout_is_closed_before_even_an_immediate_write() {
             "trap '' PIPE; if printf x; then exit 99; else exit 0; fi",
         );
         // This witnesses pipe closure before spawn, not an 80 ms scheduling SLO.
-        // Keep timeout/descendant tests on their original tight deadlines. A loaded
+        // Timeout/descendant cases retain their own independent deadlines. A loaded
         // runner must still execute all 24 immediate writes, never retry or skip one.
         spec.timeout = Duration::from_secs(2);
         let result = run_closed_stdout(&spec, root.path());

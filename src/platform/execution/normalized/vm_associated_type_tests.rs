@@ -307,14 +307,11 @@ fn associated_runtime_refuses_each_independent_member_scope_and_origin_corruptio
     // they are not rewritten artifacts or substitute source-admission proofs.
     let mut fixture = prepared_fixture(false);
     for (implementation, contract, valid) in [
-        (33, 33, true),
-        (33, 34, true),
-        (34, 33, true),
-        (34, 34, true),
-        (32, 34, false),
-        (34, 32, false),
-        (35, 34, false),
-        (34, 35, false),
+        (1, 1, true),
+        (0, 1, false),
+        (1, 0, false),
+        (2, 1, false),
+        (1, 2, false),
     ] {
         mutate_selected(&mut fixture, |node| {
             node.implementation_generation = implementation;
@@ -398,10 +395,10 @@ fn associated_runtime_hit_work_bound_and_cancellation_preserve_healthy_retry() {
 #[test]
 fn associated_runtime_shared_instruction_body_uses_each_active_function_application() {
     let mut fixture = prepared_fixture(false);
-    for (implementation, contract) in [(33, 33), (33, 34), (34, 33), (34, 34)] {
+    {
         mutate_selected(&mut fixture, |node| {
-            node.implementation_generation = implementation;
-            node.contract_generation = contract;
+            node.implementation_generation = crate::platform::canonical_schema::SCHEMA_EPOCH;
+            node.contract_generation = crate::platform::canonical_schema::SCHEMA_EPOCH;
         });
         let storage =
             crate::platform::execution::normalized::owned_product::StorageObservation::start();

@@ -5,6 +5,25 @@ use lkjscript::platform::PreparedDeployment;
 use serde_json::{Value, json};
 use std::net::SocketAddr;
 
+// One round retains complete observations from many separately admitted requests.
+// The maintained HTTP matrix has 111,911 aggregate items. This evidence-only
+// ceiling leaves request JSON admission and the 4 MiB evidence byte limit intact.
+const MAXIMUM_ROUND_ITEMS: usize = 128 * 1024;
+
+fn decode_round(bytes: &[u8]) -> Result<Value, DevError> {
+    lkjscript::platform::json::decode_strict_with_integer_policy(
+        bytes,
+        lkjscript::platform::json::JsonLimits {
+            maximum_bytes: MAXIMUM_OUTPUT_BYTES as usize,
+            maximum_string_bytes: MAXIMUM_OUTPUT_BYTES as usize,
+            maximum_items: MAXIMUM_ROUND_ITEMS,
+            ..Default::default()
+        },
+        lkjscript::platform::json::JsonIntegerPolicy::SignedOrUnsigned64,
+    )
+    .map_err(|error| DevError::corrupt(error.to_string()))
+}
+
 fn close_executor(
     mut executor: Option<lkjscript::platform::runtime::structured::StructuredExecutor>,
 ) -> Result<Value, DevError> {
@@ -207,6 +226,11 @@ pub(super) fn session_probe(
         &observed,
     )?;
     let response = json!({"server":stopped,"executor":executor,"host_cleanup":host_cleanup,"deployment":deployment.observe_redacted()});
+    #[allow(
+        clippy::result_large_err,
+        reason = "direct semantic boundary callbacks preserve complete typed diagnostics"
+    )]
+    let probe = || Ok(response);
     let mut call = semantic_cli::observe_json(
         "deployment.session.serve",
         &[standalone
@@ -216,7 +240,7 @@ pub(super) fn session_probe(
         &evidence_root.join(format!("{label}.stdout")),
         &evidence_root.join(format!("{label}.stderr")),
         evidence_root,
-        || Ok(response),
+        probe,
     )?;
     if let CallObservation::Semantic(observation) = &mut call {
         observation.elapsed_nanoseconds = u64::try_from(started.elapsed().as_nanos())
@@ -439,10 +463,11 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
     rounds
         .extend((0..9).map(|index| (format!("iteration-config-{index}"), "effect-original.lkja")));
     for (name, artifact) in rounds {
-        let round: Value = strict_from_slice(&process::read_bounded(
+        let round = decode_round(&process::read_bounded(
             &root.join(format!("{name}.json")),
             MAXIMUM_OUTPUT_BYTES,
-        )?)?;
+        )?)
+        .map_err(|error| DevError::corrupt(format!("HTTP round {name}: {error}")))?;
         let value = &round["linked_runtime"];
         closed(value, &identity(root, artifact)?)?;
         require(
@@ -489,7 +514,7 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<(), DevError> {
             )?;
         }
         if name == "standalone-runtime" {
-            let response: Value = strict_from_slice(&process::read_bounded(
+            let response = decode_round(&process::read_bounded(
                 &root.join("standalone.stdout"),
                 MAXIMUM_OUTPUT_BYTES,
             )?)?;
@@ -684,4 +709,30 @@ fn allocated(
         .into_iter()
         .next()
         .ok_or_else(|| DevError::corrupt("source probe helper allocation absent"))
+}
+
+#[cfg(test)]
+mod round_tests {
+    use super::*;
+
+    #[test]
+    fn aggregate_round_preserves_all_items_without_relaxing_request_or_format_limits() {
+        let value = json!(vec![0; MAXIMUM_ROUND_ITEMS]);
+        let bytes = serde_json::to_vec(&value).unwrap();
+        assert!(strict_from_slice::<Value>(&bytes).is_err());
+        assert_eq!(decode_round(&bytes).unwrap(), value);
+        let oversized = serde_json::to_vec(&vec![0; MAXIMUM_ROUND_ITEMS + 1]).unwrap();
+        assert!(decode_round(&oversized).is_err());
+        assert!(decode_round(br#"{"duplicate":1,"duplicate":2}"#).is_err());
+        assert!(decode_round(b"[0.5]").is_err());
+        assert!(decode_round(&vec![b' '; MAXIMUM_OUTPUT_BYTES as usize + 1]).is_err());
+        if let Some(path) = std::env::var_os("LKJSCRIPT_RUNTIME_ROUND_FIXTURE") {
+            let bytes = fs::read(path).unwrap();
+            assert!(strict_from_slice::<Value>(&bytes).is_err());
+            assert_eq!(
+                decode_round(&bytes).unwrap(),
+                serde_json::from_slice::<Value>(&bytes).unwrap()
+            );
+        }
+    }
 }

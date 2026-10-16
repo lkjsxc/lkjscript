@@ -48,8 +48,8 @@ fn selected(
         depth: 0,
         implementation: declaration(u64::from(identity) + 10),
         contract: declaration(1),
-        implementation_generation: 33,
-        contract_generation: 33,
+        implementation_generation: crate::platform::canonical_schema::SCHEMA_EPOCH,
+        contract_generation: crate::platform::canonical_schema::SCHEMA_EPOCH,
         implementation_type_parameters: Arc::from([]),
         implementation_parameter_ids: Arc::from([]),
         implementation_type_arguments: Arc::from([]),
@@ -74,7 +74,7 @@ fn function(
     result: TypeObjectDigest,
 ) -> NormalizedFunction {
     NormalizedFunction {
-        source_generation: 33,
+        source_generation: crate::platform::canonical_schema::SCHEMA_EPOCH,
         implementation_parameters: Arc::from([ImplementationParameter {
             id: ImplementationParameterId::migrate(SEED, 0),
             name: Name::new("reader").unwrap(),

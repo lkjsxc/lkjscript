@@ -1,5 +1,6 @@
 //! Independent full-oracle, bounded-admission and failure proofs for reviewed refresh.
 use super::*;
+use crate::platform::MemProjectStore;
 use crate::platform::change::{
     AuthoredChange, AuthoredChangeSet, AuthoredDeletePolicy, AuthoredReadFootprint, AuthoredType,
     ChangeBudget, OwnerSelector, WitnessBaseRead,
@@ -8,15 +9,25 @@ use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::execution::ExecutionControl;
 use crate::platform::kernel::{KernelSnapshot, Name, OwnerKey, OwnerRecord, RelationKind};
 use crate::platform::semantic_id::RevisionId;
+use crate::platform::storage::project::MemoryProjectInventory;
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
-fn fixture() -> (tempfile::TempDir, CreatedRepository) {
-    let directory = tempfile::tempdir().unwrap();
-    let snapshot = crate::platform::kernel::tests::witness_snapshot();
-    let created =
-        GraphRepository::create(&directory.path().join("meaning"), &snapshot, None).unwrap();
-    (directory, created)
+fn fixture() -> (MemProjectStore, CreatedRepository) {
+    static BASE: OnceLock<(MemProjectStore, CreatedRepository)> = OnceLock::new();
+    let (base, created) = BASE.get_or_init(|| {
+        let memory = MemProjectStore::new(128 * 1_048_576).unwrap();
+        let snapshot = crate::platform::kernel::tests::witness_snapshot();
+        let created = GraphRepository::create_memory(&memory, &snapshot, None).unwrap();
+        (memory, created)
+    });
+    let memory = base.fork().unwrap();
+    let created = CreatedRepository {
+        repository: GraphRepository::open_memory(&memory).unwrap(),
+        initial: created.initial.clone(),
+        current: created.current.clone(),
+    };
+    (memory, created)
 }
 
 fn named(snapshot: &KernelSnapshot, name: &str) -> OwnerKey {
@@ -57,24 +68,8 @@ fn prepare_text(repository: &GraphRepository, body: &str) -> PreparedAuthoredPub
         .unwrap()
 }
 
-fn inventory(repository: &GraphRepository) -> BTreeMap<PathBuf, Vec<u8>> {
-    fn visit(root: &Path, directory: &Path, result: &mut BTreeMap<PathBuf, Vec<u8>>) {
-        for entry in std::fs::read_dir(directory).unwrap() {
-            let entry = entry.unwrap();
-            if entry.file_type().unwrap().is_dir() {
-                visit(root, &entry.path(), result);
-            } else {
-                assert!(entry.file_type().unwrap().is_file());
-                result.insert(
-                    entry.path().strip_prefix(root).unwrap().to_owned(),
-                    std::fs::read(entry.path()).unwrap(),
-                );
-            }
-        }
-    }
-    let mut result = BTreeMap::new();
-    visit(repository.root(), repository.root(), &mut result);
-    result
+fn inventory(repository: &GraphRepository) -> MemoryProjectInventory {
+    repository.test_memory_inventory().unwrap().unwrap()
 }
 
 #[test]

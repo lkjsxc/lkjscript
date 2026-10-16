@@ -32,7 +32,9 @@ privileged writes; contributor.rs observes. Generate assets through supported ow
 and docs/generated via discovery. Status stays below 100 lines: capabilities,
 milestone/source/run/gate/next action. Replace stale state; no temporary/stash/failed
 run histories. Specs/decisions/release/Git own semantics/rationale/delivery/completed
-changes; .artifacts owns logs/binaries.
+changes. Keep one checkout and one Cargo target at `$PWD/target`. Default checks
+overwrite one compact receipt and delete joined scratch; retain originals only
+with explicit `--retain-archive`. Never copy gate executables into .artifacts.
 
 ## Invariants
 
@@ -65,17 +67,18 @@ gates. Never stub checks or relabel failures as passes.
 ## Verify and deliver
 
 Bootstrap clean committed source at canonical root with
-`verifier_root=$(bash tools/bootstrap-verifier.sh)`. The shared owner retains exact
-immutable `$verifier_root/lkjscript-dev` plus original source/context/Cargo evidence
-in a separate cold target. This neither authenticates existing check outputs nor
-authorizes cleanup; checker cwd cannot retarget its compiled checkout.
+`verifier_root=$(bash tools/bootstrap-verifier.sh)`. Bootstrap and check share
+`$PWD/target` under an exclusive lease. Hash the actual Cargo-selected outputs;
+preserve Cargo's fresh/reused observation honestly. No binary copies or separate
+build targets. Checker cwd cannot retarget its compiled checkout.
 
 Use focused checks then fresh full acceptance: check changed --machine;
 check full --fresh --machine; release target. Changed reads Git status, not committed
 ranges. Set checker/Cargo jobs independently. [Verification](docs/spec/verification.md)
 owns proof/gates/complete-context reuse; [release](docs/release.md) owns exact source/
-candidate/authority. Preserve all outcomes/originals and complete matrices while
-sharing immutable fixtures. Public claims need independent expectations/public
+candidate/authority. Preserve complete matrices and honest outcomes while sharing
+immutable fixtures. Release handoffs explicitly retain their originals; default
+checks retain only the bounded latest receipt. Public claims need independent expectations/public
 authoring/detached copies. Digests prove identity, not behavior/permission; scoped
 descendants cannot relabel proof and bytes/time do not measure API billing.
 

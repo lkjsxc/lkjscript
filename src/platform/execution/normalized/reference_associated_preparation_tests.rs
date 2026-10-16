@@ -706,8 +706,8 @@ fn canonical_associated_preparation_rechecks_unused_members_and_exact_owner_occu
     );
 
     // Independent finite reader support and source-root coverage, not a planner proof.
-    for root in [32, 33, 34, 35] {
-        for owners in [32, 33, 34, 35] {
+    for root in [0, crate::platform::canonical_schema::SCHEMA_EPOCH, 2] {
+        for owners in [0, crate::platform::canonical_schema::SCHEMA_EPOCH, 2] {
             let fixture = synthetic_owned_generations(make_fixture(), root, owners);
             let supported = root == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                 && owners == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION;
@@ -724,10 +724,10 @@ fn canonical_associated_preparation_rechecks_unused_members_and_exact_owner_occu
             );
         }
     }
-    // Synthetic independent supplier generations under root 34: neither
+    // Synthetic independent supplier epochs under the current root: neither
     // selected declaration is promoted to its caller or its counterpart.
-    for implementation_generation in [33, 34] {
-        for contract_generation in [33, 34] {
+    for implementation_generation in [0, crate::platform::canonical_schema::SCHEMA_EPOCH, 2] {
+        for contract_generation in [0, crate::platform::canonical_schema::SCHEMA_EPOCH, 2] {
             let mut mixed = make_fixture();
             mixed
                 .source
@@ -780,8 +780,8 @@ fn canonical_associated_preparation_rechecks_unused_members_and_exact_owner_occu
         }
     }
 
-    // An unused scope formal makes the consuming declaration a Graph 34 owner.
-    for generation in [33, 34] {
+    // Unused scope formals also require the current epoch.
+    for generation in [0, crate::platform::canonical_schema::SCHEMA_EPOCH, 2] {
         let mut fixture = synthetic_owned_generations(make_fixture(), generation, generation);
         let DeclarationPayload::Function(function) = payload(&mut fixture.source, fixture.consumer)
         else {
@@ -796,7 +796,7 @@ fn canonical_associated_preparation_rechecks_unused_members_and_exact_owner_occu
             Limits::default(),
             &ExecutionControl::uncancelled(),
         );
-        if generation == 34 {
+        if generation == crate::platform::canonical_schema::SCHEMA_EPOCH {
             let proof = result.unwrap();
             assert!(proof.symbolic[&fixture.consumer].requires_read_view_generation);
         } else {

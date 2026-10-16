@@ -6,9 +6,9 @@ pub(crate) fn author(extra: &str) -> Result<crate::platform::kernel::KernelSnaps
     author_only(&format!("{INPUT}\n{extra}"))
 }
 pub(crate) fn author_only(input: &str) -> Result<crate::platform::kernel::KernelSnapshot, String> {
-    let dir = tempfile::tempdir().unwrap();
     let empty = empty_normalized_snapshot(b"owned-byte-buffer");
-    let repo = GraphRepository::create(&dir.path().join("project"), &empty, None)
+    let memory = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+    let repo = GraphRepository::create_memory(&memory, &empty, None)
         .unwrap()
         .repository;
     let base = repo.view_current().unwrap().revision();

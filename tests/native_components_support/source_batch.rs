@@ -27,6 +27,22 @@ struct Binding {
     artifact: BTreeMap<&'static str, String>,
 }
 
+pub enum SourceAuthority<'a> {
+    Disk(&'a Path),
+    Memory(&'a lkjscript::platform::MemProjectStore),
+}
+
+impl SourceAuthority<'_> {
+    fn head(&self) -> Vec<u8> {
+        match self {
+            Self::Disk(project) => fs::read(project.join("HEAD")).unwrap(),
+            Self::Memory(project) => lkjscript::platform::contributor::memory_project_head(project)
+                .unwrap()
+                .expect("accepted memory source HEAD"),
+        }
+    }
+}
+
 impl Binding {
     fn from_output(stdout: &str) -> Self {
         Self {
@@ -83,21 +99,55 @@ pub fn execute_in(
     cases: &[BatchCase],
 ) -> Vec<String> {
     assert!(project.is_absolute());
+    execute_with_source(
+        mode,
+        root,
+        executable,
+        label,
+        SourceAuthority::Disk(project),
+        target,
+        cases,
+    )
+}
+
+pub fn execute_with_source(
+    mode: semantic_cli::Mode,
+    root: &Path,
+    executable: &Path,
+    label: &str,
+    source: SourceAuthority<'_>,
+    target: &str,
+    cases: &[BatchCase],
+) -> Vec<String> {
     assert!(!cases.is_empty());
-    let head_path = project.join("HEAD");
-    let head = fs::read(&head_path).unwrap();
+    let head = source.head();
     let candidate_digest = digest(executable);
     let stable = || {
-        assert_eq!(
-            fs::read(&head_path).unwrap(),
-            head,
-            "exact source HEAD bytes"
-        );
+        assert_eq!(source.head(), head, "exact source HEAD bytes");
         assert_eq!(
             digest(executable),
             candidate_digest,
             "exact selected executable"
         );
+    };
+    let operation = |label: &str, arguments: &[&str]| match &source {
+        SourceAuthority::Disk(project) => {
+            let mut full = vec!["--project", path(project)];
+            full.extend_from_slice(arguments);
+            batch_operation(mode, root, executable, label, &full, true)
+        }
+        SourceAuthority::Memory(project) => {
+            assert_eq!(mode, semantic_cli::Mode::HostSemantic);
+            host_operation(root, label, arguments, true, "public-memory", || {
+                semantic_cli::execute_memory(
+                    project,
+                    arguments
+                        .iter()
+                        .map(|argument| (*argument).to_owned())
+                        .collect(),
+                )
+            })
+        }
     };
 
     let smoke = cases
@@ -111,14 +161,9 @@ pub fn execute_in(
     let smoke_result = root.join(format!("source-batch-{label}.smoke.result.json"));
     assert!(!arguments_path.exists() && !smoke_result.exists());
     fs::write(&arguments_path, &smoke.arguments_json).unwrap();
-    let ordinary = batch_operation(
-        mode,
-        root,
-        executable,
+    let ordinary = operation(
         &format!("source-{label}-ordinary"),
         &[
-            "--project",
-            path(project),
             "run",
             smoke_target,
             "--arguments-file",
@@ -126,7 +171,6 @@ pub fn execute_in(
             "--result-file",
             path(&smoke_result),
         ],
-        true,
     );
     assert_eq!(field(&ordinary, "result", "command"), "run");
     assert_eq!(field(&ordinary, "execution", "target"), smoke_target);
@@ -147,14 +191,9 @@ pub fn execute_in(
 
     let exported_path = root.join(format!("source-batch-{label}.witness.lkjp"));
     assert!(!exported_path.exists());
-    let exported = batch_operation(
-        mode,
-        root,
-        executable,
+    let exported = operation(
         &format!("source-{label}-package"),
         &[
-            "--project",
-            path(project),
             "package",
             "current",
             "export",
@@ -163,7 +202,6 @@ pub fn execute_in(
             "--output",
             path(&exported_path),
         ],
-        true,
     );
     assert_eq!(
         field(&exported, "package", "id"),
@@ -186,14 +224,9 @@ pub fn execute_in(
         requests.push('\n');
     }
     fs::write(&request_path, &requests).unwrap();
-    let summary = batch_operation(
-        mode,
-        root,
-        executable,
+    let summary = operation(
         &format!("source-{label}"),
         &[
-            "--project",
-            path(project),
             "run",
             target,
             "--batch-input-file",
@@ -201,7 +234,6 @@ pub fn execute_in(
             "--batch-result-file",
             path(&result_path),
         ],
-        true,
     );
     assert_eq!(field(&summary, "result", "status"), "success");
     assert_eq!(field(&summary, "result", "command"), "run.batch");
@@ -214,7 +246,7 @@ pub fn execute_in(
     );
     assert_eq!(
         field(&summary, "batch", "schema"),
-        lkjscript::platform::canonical_schema::CANONICAL_SCHEMA_HASH_HEX
+        lkjscript::platform::canonical_schema::SCHEMA_EPOCH.to_string()
     );
     let validator = lkjscript::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH
         .iter()

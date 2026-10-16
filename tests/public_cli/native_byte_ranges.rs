@@ -280,7 +280,7 @@ fn native_byte_ranges_reject_bad_bounds_and_inputs_without_publishing_results() 
 
 #[test]
 fn native_byte_ranges_reject_foreign_closed_signatures_before_acceptance() {
-    let public = Native::new();
+    let public = Native::memory();
     let before = public.revision();
     for (index, (name, parameters, result)) in [
         ("slice", "(parameter create a (type Text)) (parameter create b (type I64)) (parameter create c (type I64))", "Bytes"),

@@ -1,7 +1,7 @@
 # Parameterized owned contracts and structural method signatures
 
-Graph 26 introduced ordered contract arguments and structural owned method types;
-Graph 33 extends them with ordinary transferable data parameters. The accepted
+Owned contracts retain ordered arguments, structural method types and ordinary
+transferable data parameters. The accepted
 meaning graph remains authoritative. [Status](../status.md) owns exact source
 acceptance and public executable availability; this specification does not confer either.
 
@@ -156,33 +156,18 @@ storage witnesses and checks complete outcomes for all four flat/chunked choices
 
 ## Encodings and boundaries
 
-The original parameterized-contract increment selected graph/owner 26, package
-interface 14, compiler unit 26, bytecode 21 and artifact 33. Authored request 30
-applies when additional contract parameters or application arguments are nonempty;
-empty applications retain their
-predecessor intent bytes and historical commitments. New parameterized-contract
-intent tags encode every method effect explicitly. Contracts, implementations and
-function witnesses carry their full ordered application data through canonical
-drafts, inspection, interfaces, transports, preparation and detached artifacts.
-The derived format cut requires rebuilding maintained bundles through their
-supported product owners. Historical acceptance and immutable published bytes
-retain their original meaning and evidence.
+Contracts, implementations and function witnesses carry full ordered applications
+and explicit effects through drafts, interfaces, transports, preparation and
+artifacts. Empty and nonempty applications use the same inline record shape.
+All encoding owners share schema epoch 1.
 
-The ordinary-parameter extension requires Graph 33 at each mixed declaring scope,
-ordinary contract/scheme formal and invocation expression. This includes mixed
-contracts, implementations, mapped applications and function witness declarations; referring
-to a newer declaration cannot upgrade an older owner. Supported
-Graph 32 meaning remains readable under its original bounds. New exports and
-derived programs select package interface 21, compiler unit 33 and artifact 40;
-bytecode remains 27. Exported package revision/transport identities change with
-the wrapper generation even when accepted semantic revision is unchanged.
-Retained consumers preserve their exact historical selections. Authored requests
-carrying the extension select codec 37.
-Semantic validator 38 binds the new category and scope obligations; predecessor
-proofs do not establish current admission.
-These are explicit admission boundaries, not a reinterpretation of predecessor
-bytes. Regenerate maintained derived assets through supported owners; no migration
-shim is provided. [Verification](verification.md#mixed-storage-contract-obligations)
+Complete admission checks mixed declaring scopes, ordinary formals, mapped
+applications and invocation expressions. A referenced declaration cannot grant
+missing category or scope authority to its consumer. Exact package, semantic
+revision and transport selections remain distinct from current proof. Foreign
+epochs reject; maintained assets are rebuilt through supported product owners
+without predecessor readers or proof relabeling.
+[Verification](verification.md#mixed-storage-contract-obligations)
 owns independent admission and public behavior obligations.
 
 Associated projections, general escaping references,

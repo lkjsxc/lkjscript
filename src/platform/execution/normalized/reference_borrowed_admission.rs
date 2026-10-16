@@ -95,9 +95,9 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                             if parameter.use_mode == ParameterUse::Borrow
                                 && closure.scoped_owned(parameter.ty, Some(reference))?
                                 && (owner.header.contract_version
-                                    < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                                    != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                                     || parameter.header.contract_version
-                                        < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION)
+                                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
                             {
                                 return Err(reject());
                             }
@@ -140,7 +140,7 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                                     || (method.effect != FunctionEffect::Pure
                                         && parameter.use_mode == ParameterUse::Borrow
                                         && owner.header.contract_version
-                                            < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION)
+                                            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
                                 {
                                     return Err(reject());
                                 }

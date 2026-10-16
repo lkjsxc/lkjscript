@@ -69,7 +69,7 @@ fn native_task_owned_order_and_effect_rows_reject_without_publication() {
         ("resource-before-memory", wrong_order),
         ("missing-effect", missing_effect),
     ] {
-        let n = Native::new();
+        let n = Native::memory();
         let before = n.revision();
         let request = n.input(
             &format!("{name}.lkjc"),

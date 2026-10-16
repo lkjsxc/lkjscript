@@ -42,8 +42,9 @@ use std::fmt;
 use std::io::{BufRead, Read};
 use std::str::FromStr;
 
-pub const LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY: &str = "lkjscript-logical-change-plan-6";
-pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 = 6;
+pub const LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY: &str = "lkjscript-logical-change-plan";
+pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 =
+    crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN: &str = "lkjscript.logical-change-plan.v6";
 const INTERNAL_PLAN_BINDING_LABEL: &[u8] = b"lkjscript.logical-change-plan.internal-registry\0";
 

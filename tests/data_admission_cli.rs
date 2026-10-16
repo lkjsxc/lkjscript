@@ -5,7 +5,7 @@
     reason = "public admission fixtures report assertion failures"
 )]
 
-mod support;
+use crate::support;
 
 use lkjscript::platform::control::{CompactRecord, parse_records};
 use std::path::{Path, PathBuf};

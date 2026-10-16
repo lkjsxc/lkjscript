@@ -1,6 +1,6 @@
 # First-order owned parameters and explicit implementations
 
-Graph 18 extends [direct owned memory](owned-byte-buffers.md) with the closed
+Owned generics extend [direct owned memory](owned-byte-buffers.md) with the closed
 `Owned` constraint, the independent `OwnedI64Cell` carrier, and nominal method
 contracts selected by explicit static operands. The accepted graph remains the
 meaning authority. Native notation, package interfaces, specialization and code
@@ -67,7 +67,7 @@ contract. The initial increment excluded nominal owned containers, mutable borro
 escaping captures, memory-bearing indirect function descriptors, cross-task memory
 transfer and generic implementation schemes; later contracts own the admitted
 extensions. Ordinary generic and CaptureSafe contracts retain their meaning.
-Graph 19 adds fixed structural owned products with complete
+Structural owned products provide fixed fields with complete
 consuming decomposition. Ordinary raw-entry structural substitutions remain supported.
 Current artifacts retain all lexical annotation roots; an annotation is never an
 ownership certificate.
@@ -80,8 +80,8 @@ generic-function applications. Structured parallel transfer has its own
 
 ## Independent scalar carrier
 
-OwnedI64Cell has its own canonical type envelope `LKJCEL01` and sealed runtime
-token. It stores one fixed-width signed I64; it is not a byte encoding or a
+OwnedI64Cell is an explicit form in the current canonical type record and has a
+sealed runtime token. It stores one fixed-width signed I64; it is not a byte encoding or a
 ByteBuffer alias. The closed pure external inventory is:
 
 | Implementation | Parameters, in order | Result |
@@ -178,34 +178,18 @@ independently of these prepared instances.
 
 ## Encodings, admission and compatibility
 
-The initial owned-generic increment used graph/owner generation 18. Generation 19
-adds structural products and generation 20 adds owned choices. Frozen canonical
-owner codecs preserve supported predecessors, and ordinary base type identities
-remain unchanged. Task-method effects use the existing canonical method effect
-field; they do not introduce another program representation or owner wire layout.
-Package interface generation 12 changes method/function layout; interface 10 and
-11 have separate frozen representations. In particular, interface-11 function,
-constant and component bytes are not interpreted using generation-12 enum tags.
+Owned types, method effects, products and choices use inline primary records.
+Owners, types, interfaces, compiler units, bytecode, artifacts and authored
+requests share schema epoch 1. Empty and nonempty inventories use the same record
+shape. Foreign epochs reject before payload interpretation. Task-method effects
+retain the pure/task distinction throughout authoring, transport and execution.
 
-The task-method increment selected compiler unit 18, bytecode 14 and artifact 25. Derived
-predecessor artifacts require rebuilding from supported accepted meaning; an old
-proof or compiler artifact does not silently become current permission. Authored
-pure owned-only requests retain codec 21; product-bearing requests select codec 22
-and choice-bearing requests select codec 23. A create/set contract with a task
-method selects authored codec 24, distinct change tags and an encoded effect for
-each method in that contract. Omitted and explicit pure effects retain identical
-predecessor intent bytes. Compact changes use contract 28. Semantic validator 23
-invalidates prior acceptance and summary reuse for task-method effects.
-Public discovery advertises the actual generations.
-Regeneration of maintained artifacts preserves accepted meaning HEADs.
-The [child-borrow contract](owned-borrows.md#encodings-and-evidence) owns subsequent
-scope-operation, borrowed-binding and derived-layout cuts.
-The [parameterized contract](owned-contract-parameters.md#encodings-and-boundaries)
-owns the graph 26/interface 14 application-layout cut, structural method
-substitution and Graph 33 mixed-contract extension. The latter selects interface
-21, compiler 33, artifact 40 and authored request 37, retaining bytecode 27 and
-supported Graph 32 read semantics. The earlier generation paragraphs describe
-their historical increments, not current derived-artifact execution permission.
+The [child-borrow contract](owned-borrows.md#encodings-and-evidence) owns lexical
+scope operations and borrowed bindings. The [parameterized contract](owned-contract-parameters.md#encodings-and-boundaries)
+owns ordered applications, structural substitution and mixed ordinary/Owned
+parameters. These relationships require complete current semantic admission;
+persisted acceptance or a compiler artifact is not permission to execute.
+Maintained artifacts are regenerated through supported product operations.
 
 Complete admission includes unused arguments, methods and unreachable expressions.
 Canonical source, code and runtime metadata must agree, and independent affine

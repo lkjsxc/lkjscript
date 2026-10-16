@@ -55,7 +55,7 @@ pub(crate) fn require_generation(
     roots: Vec<TypeObjectDigest>,
     generation: u16,
 ) -> Result<(), Diagnostic> {
-    if generation >= contract::GRAPH_CONTRACT_VERSION {
+    if generation == contract::GRAPH_CONTRACT_VERSION {
         return Ok(());
     }
     let mut pending = roots;
@@ -71,47 +71,54 @@ pub(crate) fn require_generation(
         if object.form.is_read_view() {
             read_view_admission::require_generation(generation)?;
         }
-        if generation < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-            && object.form.is_owned_associated()
-        {
+        if generation != contract::GRAPH_CONTRACT_VERSION && object.form.is_owned_associated() {
             return Err(Diagnostic::new(
                 DiagnosticClass::Semantic,
                 "kernel_owned_associated_generation",
-                "associated type closure requires Graph 33",
+                "associated type closure requires the current schema epoch",
             ));
         }
-        if generation < 32 && super::owned_record::is_owned(read, read.package_id(), ty)? {
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+            && super::owned_record::is_owned(read, read.package_id(), ty)?
+        {
             return Err(super::owned_record::reject(
-                "nominal owned record type closure requires Graph 32",
+                "nominal owned record type closure requires the current schema epoch",
             ));
         }
-        if generation < 31 && requires_generalized_sequence_generation(read, ty, read.package_id())?
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+            && requires_generalized_sequence_generation(read, ty, read.package_id())?
         {
             return Err(Diagnostic::new(
                 DiagnosticClass::Semantic,
                 "kernel_sequence_generation",
-                "ordinary-element owned sequence type closure requires Graph 31",
+                "ordinary-element owned sequence type closure requires the current schema epoch",
             ));
         }
-        if generation < 25 && matches!(object.form, TypeForm::OwnedSequence { .. }) {
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+            && matches!(object.form, TypeForm::OwnedSequence { .. })
+        {
             return Err(Diagnostic::new(
                 DiagnosticClass::Semantic,
                 "kernel_sequence_generation",
-                "owned sequence type closure requires Graph 25",
+                "owned sequence type closure requires the current schema epoch",
             ));
         }
-        if generation < 20 && matches!(object.form, TypeForm::OwnedChoice { .. }) {
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+            && matches!(object.form, TypeForm::OwnedChoice { .. })
+        {
             return Err(Diagnostic::new(
                 DiagnosticClass::Semantic,
                 "kernel_choice_generation",
-                "owned choice type closure requires Graph 20",
+                "owned choice type closure requires the current schema epoch",
             ));
         }
-        if generation < 19 && matches!(object.form, TypeForm::OwnedProduct { .. }) {
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+            && matches!(object.form, TypeForm::OwnedProduct { .. })
+        {
             return Err(Diagnostic::new(
                 DiagnosticClass::Semantic,
                 "kernel_product_generation",
-                "owned product type closure requires Graph 19",
+                "owned product type closure requires the current schema epoch",
             ));
         }
         pending.extend(object.child_types());

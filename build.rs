@@ -1,27 +1,24 @@
-//! Bind the sole wire schema to the complete normalized production source closure.
+//! Bind validator cache reuse to production source and compress immutable builtin assets.
 
 use quote::ToTokens;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use syn::visit_mut::{self, VisitMut};
 use syn::{Attribute, Item, Meta};
 
 type BuildResult<T> = Result<T, Box<dyn Error>>;
 
-const SCHEMA_ROOTS: &[&str] = &["src/lib.rs"];
-
-const ENCODING_POLICY: &str = "lkjscript.canonical.schema;kind8;schema32;length-le64;blake3-domain-checksum32;bincode2.0.1;little-endian;variable-int;closed-enums;exact-consumption;bounded-payload";
+const IMPLEMENTATION_ROOTS: &[&str] = &["src/lib.rs"];
 
 fn main() -> BuildResult<()> {
-    verify_schema_derivation()?;
+    verify_implementation_derivation()?;
     let mut source = BTreeMap::new();
-    for root in SCHEMA_ROOTS {
+    for root in IMPLEMENTATION_ROOTS {
         read_module(Path::new(root), &mut source)?;
     }
-    let mut schema = blake3::Hasher::new_derive_key("lkjscript.canonical.schema-definition");
-    hash_field(&mut schema, ENCODING_POLICY.as_bytes());
     let mut validator =
         blake3::Hasher::new_derive_key("lkjscript.canonical.validator-implementation");
     for policy in ["Cargo.toml", "Cargo.lock", "build.rs"] {
@@ -34,8 +31,6 @@ fn main() -> BuildResult<()> {
         } else {
             bytes
         };
-        hash_field(&mut schema, policy.as_bytes());
-        hash_field(&mut schema, &bytes);
         hash_field(&mut validator, policy.as_bytes());
         hash_field(&mut validator, &bytes);
     }
@@ -45,30 +40,39 @@ fn main() -> BuildResult<()> {
     }
     for key in &cfg.keys {
         println!("cargo:rerun-if-env-changed={key}");
-        hash_field(&mut schema, key.as_bytes());
+        hash_field(&mut validator, key.as_bytes());
         match std::env::var(key) {
             Ok(value) => {
-                hash_field(&mut schema, b"present");
-                hash_field(&mut schema, value.as_bytes());
+                hash_field(&mut validator, b"present");
+                hash_field(&mut validator, value.as_bytes());
             }
-            Err(std::env::VarError::NotPresent) => hash_field(&mut schema, b"absent"),
+            Err(std::env::VarError::NotPresent) => hash_field(&mut validator, b"absent"),
             Err(error) => return Err(error.into()),
         }
     }
     for (path, file) in &source {
         let tokens = production_tokens(path, file);
-        hash_field(&mut schema, path.as_bytes());
-        hash_field(&mut schema, tokens.as_bytes());
         hash_field(&mut validator, path.as_bytes());
         hash_field(&mut validator, tokens.as_bytes());
     }
     let output = PathBuf::from(std::env::var_os("OUT_DIR").ok_or("missing OUT_DIR")?);
-    let generated = format!(
-        "pub const CANONICAL_SCHEMA_HASH: [u8; 32] = {:?};\npub const CANONICAL_SCHEMA_HASH_HEX: &str = {:?};\npub const VALIDATOR_IMPLEMENTATION_HASH: [u8; 32] = {:?};\n",
-        schema.finalize().as_bytes(),
-        schema.finalize().to_hex().as_str(),
+    let mut generated = format!(
+        "pub const VALIDATOR_IMPLEMENTATION_HASH: [u8; 32] = {:?};\n",
         validator.finalize().as_bytes(),
     );
+    for (name, constant) in [
+        ("standard.lkjp", "STANDARD_TRANSPORT_DECOMPRESSED_BYTES"),
+        ("standard.lkja", "STANDARD_ARTIFACT_DECOMPRESSED_BYTES"),
+    ] {
+        let source = format!("packages/standard/generated/{name}");
+        println!("cargo:rerun-if-changed={source}");
+        let bytes = fs::read(source)?;
+        generated.push_str(&format!("pub const {constant}: usize = {};\n", bytes.len()));
+        let mut compressed =
+            flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::best());
+        compressed.write_all(&bytes)?;
+        fs::write(output.join(format!("{name}.deflate")), compressed.finish()?)?;
+    }
     fs::write(output.join("canonical_schema.rs"), generated)?;
     println!("cargo:rerun-if-changed=build.rs");
     Ok(())
@@ -195,8 +199,8 @@ fn production_tokens(path: &str, file: &syn::File) -> String {
     production.to_token_stream().to_string()
 }
 
-fn schema_fixture(files: &[(&str, &str)]) -> BuildResult<[u8; 32]> {
-    let mut hash = blake3::Hasher::new_derive_key("lkjscript.schema-derivation-control");
+fn implementation_fixture(files: &[(&str, &str)]) -> BuildResult<[u8; 32]> {
+    let mut hash = blake3::Hasher::new_derive_key("lkjscript.implementation-derivation-control");
     for (path, source) in files {
         let mut file = syn::parse_file(source)?;
         StripDocumentation.visit_file_mut(&mut file);
@@ -206,11 +210,11 @@ fn schema_fixture(files: &[(&str, &str)]) -> BuildResult<[u8; 32]> {
     Ok(*hash.finalize().as_bytes())
 }
 
-fn verify_schema_derivation() -> BuildResult<()> {
+fn verify_implementation_derivation() -> BuildResult<()> {
     let root = "use nested::Nested; pub struct Root { pub value: Nested }";
     let nested = "pub struct Nested { pub flag: u32 }";
-    let original = schema_fixture(&[("root.rs", root), ("nested.rs", nested)])?;
-    let documented = schema_fixture(&[
+    let original = implementation_fixture(&[("root.rs", root), ("nested.rs", nested)])?;
+    let documented = implementation_fixture(&[
         (
             "root.rs",
             "// comment\nuse nested::Nested; #[doc = \"documentation\"] pub struct Root { #[doc = \"field\"] pub value: Nested } #[cfg(test)] mod tests { struct Ignored; }",
@@ -219,75 +223,76 @@ fn verify_schema_derivation() -> BuildResult<()> {
     ])?;
     if original != documented {
         return Err(
-            "schema derivation must ignore comments, documentation and test-only types".into(),
+            "implementation derivation must ignore comments, documentation and test-only types"
+                .into(),
         );
     }
-    let changed = schema_fixture(&[
+    let changed = implementation_fixture(&[
         ("root.rs", root),
         ("nested.rs", "pub struct Nested { pub flag: u64 }"),
     ])?;
     if original == changed {
-        return Err("schema derivation must bind imported nested field types".into());
+        return Err("implementation derivation must bind imported nested field types".into());
     }
-    if schema_fixture(&[("enum.rs", "enum Value { First, Second }")])?
-        == schema_fixture(&[("enum.rs", "enum Value { Second, First }")])?
+    if implementation_fixture(&[("enum.rs", "enum Value { First, Second }")])?
+        == implementation_fixture(&[("enum.rs", "enum Value { Second, First }")])?
     {
-        return Err("schema derivation must bind enum variant order".into());
+        return Err("implementation derivation must bind enum variant order".into());
     }
-    if schema_fixture(&[("codec.rs", "fn encode_value() -> u8 { 1 }")])?
-        == schema_fixture(&[("codec.rs", "fn encode_value() -> u8 { 2 }")])?
+    if implementation_fixture(&[("codec.rs", "fn encode_value() -> u8 { 1 }")])?
+        == implementation_fixture(&[("codec.rs", "fn encode_value() -> u8 { 2 }")])?
     {
-        return Err("schema derivation must bind manual codec implementation".into());
+        return Err("implementation derivation must bind manual codec implementation".into());
     }
-    if schema_fixture(&[(
+    if implementation_fixture(&[(
         "codec.rs",
         "const TAG: u8 = 1; fn encode_value() -> u8 { helper() } fn helper() -> u8 { TAG }",
-    )])? == schema_fixture(&[(
+    )])? == implementation_fixture(&[(
         "codec.rs",
         "const TAG: u8 = 2; fn encode_value() -> u8 { helper() } fn helper() -> u8 { TAG }",
     )])? {
-        return Err("schema derivation must bind codec constants and helpers".into());
+        return Err("implementation derivation must bind codec constants and helpers".into());
     }
-    if schema_fixture(&[("fields.rs", "struct Fields { first: u8, second: u32 }")])?
-        == schema_fixture(&[("fields.rs", "struct Fields { second: u32, first: u8 }")])?
+    if implementation_fixture(&[("fields.rs", "struct Fields { first: u8, second: u32 }")])?
+        == implementation_fixture(&[("fields.rs", "struct Fields { second: u32, first: u8 }")])?
     {
-        return Err("schema derivation must bind ordered record fields".into());
+        return Err("implementation derivation must bind ordered record fields".into());
     }
     let tag_reader = "use object::Domain; fn bytes(value: Domain) -> u8 { value.tag() }";
-    if schema_fixture(&[
+    if implementation_fixture(&[
         ("root.rs", tag_reader),
         (
             "object.rs",
             "enum Domain { Owner } impl Domain { fn tag(self) -> u8 { match self { Self::Owner => 1 } } }",
         ),
-    ])? == schema_fixture(&[
+    ])? == implementation_fixture(&[
         ("root.rs", tag_reader),
         (
             "object.rs",
             "enum Domain { Owner } impl Domain { fn tag(self) -> u8 { match self { Self::Owner => 2 } } }",
         ),
     ])? {
-        return Err("schema derivation must bind transitive domain tag mappings".into());
+        return Err("implementation derivation must bind transitive domain tag mappings".into());
     }
-    if schema_fixture(&[
+    if implementation_fixture(&[
         (
             "root.rs",
             "fn bytes() -> &'static [u8] { &contract::PACK_MAGIC }",
         ),
         ("contract.rs", "const PACK_MAGIC: [u8; 8] = *b\"LKJPACK!\";"),
-    ])? == schema_fixture(&[
+    ])? == implementation_fixture(&[
         (
             "root.rs",
             "fn bytes() -> &'static [u8] { &contract::PACK_MAGIC }",
         ),
         ("contract.rs", "const PACK_MAGIC: [u8; 8] = *b\"LKJPAK!!\";"),
     ])? {
-        return Err("schema derivation must bind external wire constants".into());
+        return Err("implementation derivation must bind external wire constants".into());
     }
     let generated_identity = "const STANDARD_PACKAGE_REVISION: &str = \"first\";";
     let regenerated_identity = "const STANDARD_PACKAGE_REVISION: &str = \"second\";";
-    if schema_fixture(&[("src/platform/builtin_standard.rs", generated_identity)])?
-        != schema_fixture(&[("src/platform/builtin_standard.rs", regenerated_identity)])?
+    if implementation_fixture(&[("src/platform/builtin_standard.rs", generated_identity)])?
+        != implementation_fixture(&[("src/platform/builtin_standard.rs", regenerated_identity)])?
     {
         return Err("generated asset identities must not create a fingerprint cycle".into());
     }

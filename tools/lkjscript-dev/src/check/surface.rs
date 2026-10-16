@@ -9,6 +9,14 @@ const MAXIMUM_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const MAXIMUM_OUTPUT_BYTES: usize = 2 * 1024 * 1024;
 const MAXIMUM_DIRECTORY_FILES: usize = 128;
 const MAXIMUM_VIOLATIONS: usize = 64;
+const COMPACT_GUIDANCE: &[&str] = &[
+    "docs/status.md",
+    "docs/release.md",
+    "docs/spec/verification.md",
+];
+// Keep the three frequently read owners comfortably below their prose token budget.
+const MAXIMUM_GUIDANCE_BYTES: usize = 8_000;
+const MAXIMUM_GUIDANCE_WORDS: usize = 1_000;
 
 const CURRENT_FILES: &[&str] = &[
     ".github/workflows/release.yml",
@@ -199,6 +207,7 @@ const FORBIDDEN: &[&str] = &[
 enum ViolationKind {
     TextLeak,
     Protocol,
+    GuidanceSize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -335,6 +344,19 @@ fn read_text(repository: &Path, relative: &str) -> Result<String, DevError> {
 }
 
 fn append_text_violations(path: &str, text: &str, violations: &mut Vec<Violation>) {
+    if COMPACT_GUIDANCE.contains(&path)
+        && (text.len() > MAXIMUM_GUIDANCE_BYTES
+            || text.split_whitespace().count() > MAXIMUM_GUIDANCE_WORDS)
+    {
+        violations.push(violation(
+            path,
+            ViolationKind::GuidanceSize,
+            "current guidance exceeds the 8,000-byte / 1,000-word budget",
+        ));
+        if violations.len() >= MAXIMUM_VIOLATIONS {
+            return;
+        }
+    }
     let lowercase = text.to_ascii_lowercase();
     for needle in FORBIDDEN {
         if let Some(offset) = lowercase.find(needle) {

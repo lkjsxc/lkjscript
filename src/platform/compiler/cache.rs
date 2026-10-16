@@ -37,7 +37,7 @@ const COMPILER_DIRECTORY: &str = "compiler";
 const CACHE_LOCK_FILE: &str = "LOCK";
 const CACHE_HEAD_FILE: &str = "CURRENT";
 const CACHE_HEAD_STAGE_PREFIX: &str = ".CURRENT-stage-";
-const CACHE_HEAD_CONTRACT_VERSION: u16 = 1;
+const CACHE_HEAD_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 const CACHE_HEAD_MAGIC: [u8; 8] = *b"LKJCMHED";
 const CACHE_HEAD_ENVELOPE_DOMAIN: &str = "lkjscript.compilation-cache-head-envelope";
 const MAXIMUM_CACHE_HEAD_BYTES: usize = 4 * 1024;
@@ -45,6 +45,7 @@ const MAXIMUM_CACHE_HEAD_BYTES: usize = 4 * 1024;
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 struct CompilationCacheHead {
     contract_version: u16,
+    implementation: [u8; 32],
     repository_id: RepositoryId,
     revision: RevisionId,
     manifest: CompilationManifestDigest,
@@ -69,13 +70,6 @@ impl CompilationCacheHead {
             MAXIMUM_CACHE_HEAD_BYTES,
         )?;
         head.validate()?;
-        if head.encode()? != bytes {
-            return Err(cache_error(
-                DiagnosticClass::Corrupt,
-                "compilation_cache_head_canonical",
-                "derived compilation cache head is not canonically encoded",
-            ));
-        }
         Ok(head)
     }
 
@@ -144,6 +138,14 @@ pub fn load_current_compilation(
     repository: &GraphRepository,
 ) -> Result<Option<CachedCompilation>, Diagnostic> {
     let view = repository.view_current()?;
+    load_current_compilation_with_view(repository, &view)
+}
+
+pub(crate) fn load_current_compilation_with_view(
+    repository: &GraphRepository,
+    view: &RepositoryView,
+) -> Result<Option<CachedCompilation>, Diagnostic> {
+    view.require_current_validation()?;
     let Some(head) = read_cache_head(repository)? else {
         return Ok(None);
     };
@@ -159,21 +161,31 @@ pub fn load_current_compilation(
     }
     let mut store = repository.object_store()?;
     let manifest = read_manifest(&mut store, head.manifest)?;
-    bind_manifest_to_current(&manifest, &view)?;
+    bind_manifest_to_current(&manifest, view)?;
     Ok(Some(CachedCompilation {
         manifest,
         digest: head.manifest,
     }))
 }
 
+#[cfg(test)]
 pub(crate) fn load_exact_current_compilation(
     repository: &GraphRepository,
     digest: CompilationManifestDigest,
 ) -> Result<CachedCompilation, Diagnostic> {
     let view = repository.view_current()?;
+    load_exact_current_compilation_with_view(repository, &view, digest)
+}
+
+pub(crate) fn load_exact_current_compilation_with_view(
+    repository: &GraphRepository,
+    view: &RepositoryView,
+    digest: CompilationManifestDigest,
+) -> Result<CachedCompilation, Diagnostic> {
+    view.require_current_validation()?;
     let mut store = repository.object_store()?;
     let manifest = read_manifest(&mut store, digest)?;
-    bind_manifest_to_current(&manifest, &view)?;
+    bind_manifest_to_current(&manifest, view)?;
     Ok(CachedCompilation { manifest, digest })
 }
 
@@ -182,6 +194,14 @@ pub fn build_clean(
     optimization: OptimizationPolicy,
 ) -> Result<CompilationBuildReceipt, Diagnostic> {
     let view = repository.view_current()?;
+    build_clean_with_view(repository, &view, optimization)
+}
+
+pub(crate) fn build_clean_with_view(
+    repository: &GraphRepository,
+    view: &RepositoryView,
+    optimization: OptimizationPolicy,
+) -> Result<CompilationBuildReceipt, Diagnostic> {
     view.require_current_validation()?;
     let inventory = view.compilation_unit_owners(MAXIMUM_COMPILATION_UNITS)?;
     let mut work = CompilationBuildWork {
@@ -189,7 +209,7 @@ pub fn build_clean(
         inventory_bindings: inventory.work.witness_records_decoded,
         ..CompilationBuildWork::default()
     };
-    build_clean_for_view(repository, &view, optimization, inventory.value, &mut work)
+    build_clean_for_view(repository, view, optimization, inventory.value, &mut work)
 }
 
 pub fn build_incremental(
@@ -220,6 +240,9 @@ pub fn build_incremental(
     let mut manifest_store = StoreWork::default();
     let base = read_manifest_with_work(&mut store, base_manifest, &mut manifest_store)?;
     validate_incremental_base(&view, &base, publication, &mut store, &mut manifest_store)?;
+    if read_cache_head(repository)?.is_none_or(|head| head.manifest != base_manifest) {
+        return build_clean(repository, base.optimization);
+    }
     let mut work = CompilationBuildWork {
         manifest_store,
         ..CompilationBuildWork::default()
@@ -265,7 +288,7 @@ fn build_clean_for_view(
 fn build_incremental_for_view(
     repository: &GraphRepository,
     view: &RepositoryView,
-    store: &crate::platform::storage::directory::PackDirectoryStore,
+    store: &crate::platform::storage::backend::StorageBackend,
     base: CompilationManifest,
     affected: &BTreeSet<OwnerKey>,
     work: &mut CompilationBuildWork,
@@ -406,6 +429,7 @@ fn finish_build(
         repository,
         CompilationCacheHead {
             contract_version: CACHE_HEAD_CONTRACT_VERSION,
+            implementation: crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH,
             repository_id: manifest.repository_id,
             revision: manifest.revision,
             manifest: manifest_digest,
@@ -479,10 +503,19 @@ pub fn validate_current_compilation(
     digest: CompilationManifestDigest,
 ) -> Result<CompilationValidationReceipt, Diagnostic> {
     let view = repository.view_current()?;
+    validate_current_compilation_with_view(repository, &view, digest)
+}
+
+pub(crate) fn validate_current_compilation_with_view(
+    repository: &GraphRepository,
+    view: &RepositoryView,
+    digest: CompilationManifestDigest,
+) -> Result<CompilationValidationReceipt, Diagnostic> {
+    view.require_current_validation()?;
     let mut store = repository.object_store()?;
     let mut store_work = StoreWork::default();
     let manifest = read_manifest_with_work(&mut store, digest, &mut store_work)?;
-    bind_manifest_to_current(&manifest, &view)?;
+    bind_manifest_to_current(&manifest, view)?;
 
     let reader = ObjectPageReader::new(&store);
     let map = PersistentMap::from_root(manifest.units);
@@ -729,6 +762,16 @@ fn validate_incremental_base(
 fn read_cache_head(
     repository: &GraphRepository,
 ) -> Result<Option<CompilationCacheHead>, Diagnostic> {
+    if repository.is_memory() {
+        let head = repository
+            .memory_compilation_head()?
+            .as_deref()
+            .map(CompilationCacheHead::decode)
+            .transpose()?;
+        return Ok(head.filter(|head| {
+            head.implementation == crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH
+        }));
+    }
     let Some(directory) = open_existing_cache_directory(repository)? else {
         return Ok(None);
     };
@@ -756,13 +799,20 @@ fn read_cache_head(
     let mut bytes = vec![0_u8; length];
     file.read_exact(&mut bytes)
         .map_err(|error| io_diagnostic("compilation_cache_head_read", error))?;
-    CompilationCacheHead::decode(&bytes).map(Some)
+    let head = CompilationCacheHead::decode(&bytes)?;
+    Ok(
+        (head.implementation == crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH)
+            .then_some(head),
+    )
 }
 
 fn write_cache_head(
     repository: &GraphRepository,
     head: CompilationCacheHead,
 ) -> Result<(), Diagnostic> {
+    if repository.is_memory() {
+        return repository.set_memory_compilation_head(&head.encode()?);
+    }
     let directory = ensure_cache_directory(repository)?;
     let lock = open_cache_lock(&directory)?;
     FileExt::lock_exclusive(&lock)

@@ -3,7 +3,7 @@ use super::*;
 use crate::pure_tail_program::Request;
 use serde_json::json;
 
-pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
+pub(super) fn discover(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
     for (name, kind) in [
         ("SessionEvent", "variant"),
         ("SessionDecisionKind", "variant"),
@@ -57,6 +57,10 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
             }
         }
     }
+    Ok(())
+}
+
+pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
     let mut invalid = context.new_package("nominal-session-invalid")?;
     context.stage(&invalid, standard)?;
     context.apply(&mut invalid, &binding("add", standard))?;
@@ -144,10 +148,9 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
         context.receipt.nominal.state_steps.push(actual);
     }
     context.export(&mut package)?;
-    let source = context.evidence.join(format!(
-        "transport-{}.lkjp",
-        context.receipt.inventories.len()
-    ));
+    let source = context
+        .evidence
+        .join(format!("transport-{}.lkjp", context.inventory_index()));
     let standalone = context.root.join("nominal-session-standalone");
     fs::create_dir(&standalone)?;
     let artifact = standalone.join("session.lkja");
@@ -179,10 +182,21 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
         ],
     )?;
     context.receipt.nominal.session = observation;
-    context.receipt.runners.push(call);
+    context.push_runner(call)?;
     let descriptor = standalone.join("session.deployment.json");
     let source_bytes = process::read_bounded(&source, MAXIMUM_CONTAINER_BYTES)?;
     let transport = package.transport;
+    #[allow(
+        clippy::result_large_err,
+        reason = "direct semantic boundary callbacks preserve complete typed diagnostics"
+    )]
+    let probe = || {
+        lkjscript::platform::contributor::nominal_session_state_probe(
+            &descriptor,
+            &source_bytes,
+            &transport,
+        )
+    };
     let states = context.probe_json(
         "nominal-session-state",
         "contributor.nominal_session_state_probe",
@@ -191,13 +205,7 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
             source.display().to_string(),
             transport.clone(),
         ],
-        || {
-            lkjscript::platform::contributor::nominal_session_state_probe(
-                &descriptor,
-                &source_bytes,
-                &transport,
-            )
-        },
+        probe,
     )?;
     fs::remove_dir_all(&standalone)?;
     require(

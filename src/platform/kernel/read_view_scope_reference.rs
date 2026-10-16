@@ -163,9 +163,13 @@ impl Resolver<'_> {
                     )
                     || match record.kind {
                         BindingKind::OwnedBorrow => {
-                            !matches!(record.header.contract_version, 24..=34)
+                            record.header.contract_version
+                                != crate::platform::canonical_schema::SCHEMA_EPOCH
                         }
-                        _ => record.header.contract_version != 34,
+                        _ => {
+                            record.header.contract_version
+                                != crate::platform::canonical_schema::SCHEMA_EPOCH
+                        }
                     }
                 {
                     return Err(Failure::Authority);

@@ -13,7 +13,8 @@ use std::sync::Arc;
 
 const GRANT_AUTHORITY_REVISION_DOMAIN: &str = "lkjscript.normalized-grant-authority-revision.v1";
 const GRANT_DESCRIPTOR_DIGEST_DOMAIN: &str = "lkjscript.normalized-grant-descriptor.v1";
-pub(crate) const CAPABILITY_GRANT_CONTRACT_VERSION: u16 = 1;
+pub(crate) const CAPABILITY_GRANT_CONTRACT_VERSION: u16 =
+    crate::platform::canonical_schema::SCHEMA_EPOCH;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum NormalizedAdapterKind {

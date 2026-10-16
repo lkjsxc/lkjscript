@@ -25,8 +25,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::path::Path;
 
-pub const QUERY_CONTRACT_VERSION: u16 = 7;
-pub const QUERY_CONTRACT_IDENTITY: &str = "lkjscript-query-7";
+pub const QUERY_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const QUERY_CONTRACT_IDENTITY: &str = "lkjscript-query";
 pub const DEFAULT_QUERY_ITEMS: u64 = 50;
 pub const MAXIMUM_QUERY_ITEMS: u64 = 10_000;
 pub const DEFAULT_QUERY_OUTPUT_BYTES: usize = 64 * 1_024;
@@ -38,8 +38,8 @@ const MAXIMUM_QUERY_CONTINUATION_DECODED_BYTES: usize = 224;
 const QUERY_CONTINUATION_PREFIX: &str = "qcont_";
 pub(crate) const QUERY_CONTINUATION_MAGIC_TEXT: &str = "LKJQCT06";
 const QUERY_CONTINUATION_MAGIC: [u8; 8] = *b"LKJQCT06";
-const QUERY_CONTINUATION_VERSION: u16 = 1;
-const QUERY_CONTINUATION_ENVELOPE_VERSION: u16 = 1;
+const QUERY_CONTINUATION_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+const QUERY_CONTINUATION_ENVELOPE_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub(crate) const QUERY_CONTINUATION_INTEGRITY_DOMAIN: &str =
     "lkjscript.normalized-query.continuation-integrity.v1";
 pub(crate) const QUERY_SELECTOR_DIGEST_DOMAIN: &str = "lkjscript.normalized-query.selector.v6";
@@ -3175,7 +3175,34 @@ mod tests {
         )
     }
 
-    fn fixture() -> (tempfile::TempDir, GraphRepository, KernelSnapshot) {
+    fn fixture() -> (
+        crate::platform::MemProjectStore,
+        GraphRepository,
+        KernelSnapshot,
+    ) {
+        static BASE: std::sync::OnceLock<(crate::platform::MemProjectStore, KernelSnapshot)> =
+            std::sync::OnceLock::new();
+        let (base, snapshot) = BASE.get_or_init(|| {
+            let memory = crate::platform::MemProjectStore::new(128 * 1_048_576)
+                .expect("query fixture capacity");
+            let snapshot = crate::platform::kernel::tests::witness_snapshot();
+            GraphRepository::create_memory(&memory, &snapshot, None)
+                .expect("normalized query repository");
+            (memory, snapshot)
+        });
+        let memory = base.fork().expect("independent query fixture");
+        let repository = GraphRepository::open_memory(&memory).expect("query fixture repository");
+        (memory, repository, snapshot.clone())
+    }
+
+    fn memory_repository(
+        snapshot: &KernelSnapshot,
+    ) -> Result<crate::platform::publication::CreatedRepository, Diagnostic> {
+        let memory = crate::platform::MemProjectStore::new(128 * 1_048_576)?;
+        GraphRepository::create_memory(&memory, snapshot, None)
+    }
+
+    fn disk_fixture() -> (tempfile::TempDir, GraphRepository, KernelSnapshot) {
         let temporary = tempfile::tempdir().expect("query fixture parent");
         let destination = temporary.path().join("project");
         let snapshot = crate::platform::kernel::tests::witness_snapshot();
@@ -3613,6 +3640,19 @@ mod tests {
             owner_root.content(),
         );
         (snapshot, module)
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    enum RepositoryInventory {
+        Memory(crate::platform::storage::project::MemoryProjectInventory),
+        Disk(BTreeMap<String, [u8; 32]>),
+    }
+
+    fn repository_inventory(repository: &GraphRepository) -> RepositoryInventory {
+        match repository.test_memory_inventory().expect("query inventory") {
+            Some(inventory) => RepositoryInventory::Memory(inventory),
+            None => RepositoryInventory::Disk(file_inventory(repository.root())),
+        }
     }
 
     fn file_inventory(root: &Path) -> BTreeMap<String, [u8; 32]> {
@@ -4127,8 +4167,8 @@ mod tests {
 
     #[test]
     fn normalized_owner_find_and_relation_pages_match_full_oracles_and_write_nothing() {
-        let (_temporary, repository, snapshot) = fixture();
-        let before = file_inventory(repository.root());
+        let (memory, repository, snapshot) = fixture();
+        let before = repository_inventory(&repository);
         let view = repository.view_current().expect("query view");
 
         let mut owner_request = NormalizedQueryRequest {
@@ -4418,9 +4458,9 @@ mod tests {
             .code,
             "query_owner_not_found"
         );
-        assert_eq!(file_inventory(repository.root()), before);
+        assert_eq!(repository_inventory(&repository), before);
         assert_eq!(
-            GraphRepository::open(repository.root())
+            GraphRepository::open_memory(&memory)
                 .expect("repository after query")
                 .view_current()
                 .expect("view after query")
@@ -4433,7 +4473,7 @@ mod tests {
     fn bounded_context_pages_match_complete_oracle_and_contain_failures_without_writes() {
         let (_temporary, repository, snapshot) = fixture();
         let view = repository.view_current().expect("context query view");
-        let before = file_inventory(repository.root());
+        let before = repository_inventory(&repository);
         let root = named_owner(&snapshot, "caller");
 
         for (direction, depth) in [
@@ -4653,7 +4693,7 @@ mod tests {
             .code,
             "query_context_witness_limit"
         );
-        assert_eq!(file_inventory(repository.root()), before);
+        assert_eq!(repository_inventory(&repository), before);
     }
 
     #[test]
@@ -4678,14 +4718,13 @@ mod tests {
             1,
             owner_root.content(),
         );
-        let temporary = tempfile::tempdir().expect("isolated context parent");
-        let created = GraphRepository::create(&temporary.path().join("project"), &isolated, None)
-            .expect("isolated context repository");
+
+        let created = memory_repository(&isolated).expect("isolated context repository");
         let view = created
             .repository
             .view_current()
             .expect("isolated context view");
-        let before = file_inventory(created.repository.root());
+        let before = repository_inventory(&created.repository);
         let (observed, pages) = collect_context_pages(
             &created.repository,
             &view,
@@ -4698,7 +4737,7 @@ mod tests {
         assert_eq!(observed.expanded_owners, 1);
         assert_eq!(observed.relation_witnesses, 0);
         assert_eq!(pages.len(), 1);
-        assert_eq!(file_inventory(created.repository.root()), before);
+        assert_eq!(repository_inventory(&created.repository), before);
 
         let (_fixture, repository, snapshot) = fixture();
         let root = named_owner(&snapshot, "caller");
@@ -4794,7 +4833,7 @@ mod tests {
 
     #[test]
     fn normalized_query_reports_selected_canonical_object_corruption_without_oracle_rebuild() {
-        let (_temporary, repository, snapshot) = fixture();
+        let (_temporary, repository, snapshot) = disk_fixture();
         let view = repository.view_current().expect("corruption query view");
         let callee = named_owner(&snapshot, "callee");
         let module = match &snapshot.owners[&callee] {
@@ -4806,7 +4845,7 @@ mod tests {
             .0;
         let key = ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes());
         corrupt_repository_object(&repository, key);
-        let after_corruption = file_inventory(repository.root());
+        let after_corruption = repository_inventory(&repository);
 
         let context_error = execute_normalized_query(
             &repository,
@@ -4826,7 +4865,7 @@ mod tests {
         )
         .expect_err("context must reject its corrupt canonical root owner");
         assert_eq!(context_error.class, DiagnosticClass::Corrupt);
-        assert_eq!(file_inventory(repository.root()), after_corruption);
+        assert_eq!(repository_inventory(&repository), after_corruption);
 
         let error = execute_normalized_query(
             &repository,
@@ -4846,13 +4885,13 @@ mod tests {
         )
         .expect_err("selected corrupt canonical owner must reject");
         assert_eq!(error.class, DiagnosticClass::Corrupt);
-        assert_eq!(file_inventory(repository.root()), after_corruption);
+        assert_eq!(repository_inventory(&repository), after_corruption);
     }
 
     #[test]
     fn context_rejects_corrupt_owner_and_relation_map_pages_without_writes() {
         for relation_map in [false, true] {
-            let (_temporary, repository, snapshot) = fixture();
+            let (_temporary, repository, snapshot) = disk_fixture();
             let view = repository
                 .view_current()
                 .expect("context map corruption view");
@@ -4866,7 +4905,7 @@ mod tests {
                 &repository,
                 ObjectKey::from_digest(ObjectDomain::MapPage, page.bytes()),
             );
-            let after_corruption = file_inventory(repository.root());
+            let after_corruption = repository_inventory(&repository);
             let error = execute_normalized_query(
                 &repository,
                 &view,
@@ -4885,7 +4924,7 @@ mod tests {
             )
             .expect_err("context must reject a corrupt selected map page");
             assert_eq!(error.class, DiagnosticClass::Corrupt);
-            assert_eq!(file_inventory(repository.root()), after_corruption);
+            assert_eq!(repository_inventory(&repository), after_corruption);
         }
     }
 
@@ -4893,7 +4932,7 @@ mod tests {
     fn context_rejects_missing_local_endpoints_and_revision_binding_without_writes() {
         let (_temporary, repository, snapshot) = fixture();
         let view = repository.view_current().expect("context binding view");
-        let before = file_inventory(repository.root());
+        let before = repository_inventory(&repository);
         let binding = QueryBinding {
             repository: view.current().head.repository_id,
             package: view.package(),
@@ -4930,7 +4969,7 @@ mod tests {
         .expect_err("mismatched pinned revision must reject");
         assert_eq!(mismatched.class, DiagnosticClass::Corrupt);
         assert_eq!(mismatched.code, "query_revision_binding");
-        assert_eq!(file_inventory(repository.root()), before);
+        assert_eq!(repository_inventory(&repository), before);
     }
 
     #[test]
@@ -5039,16 +5078,13 @@ mod tests {
                 Some("query_context_owner_limit"),
             ),
         ] {
-            let temporary = tempfile::tempdir().expect("owner-limit context parent");
-            let destination = temporary.path().join("project");
             let (snapshot, root) = owner_limit_context_snapshot(neighbors);
-            let created = GraphRepository::create(&destination, &snapshot, None)
-                .expect("owner-limit context repository");
+            let created = memory_repository(&snapshot).expect("owner-limit context repository");
             let view = created
                 .repository
                 .view_current()
                 .expect("owner-limit context view");
-            let before = file_inventory(created.repository.root());
+            let before = repository_inventory(&created.repository);
             let request = NormalizedQueryRequest {
                 selection: QuerySelection::Context {
                     root,
@@ -5086,7 +5122,7 @@ mod tests {
                     assert_eq!(error.code, code);
                 }
             }
-            assert_eq!(file_inventory(created.repository.root()), before);
+            assert_eq!(repository_inventory(&created.repository), before);
         }
     }
 
@@ -5096,16 +5132,13 @@ mod tests {
             (12_289_usize, None),
             (12_290_usize, Some("query_context_relation_limit")),
         ] {
-            let temporary = tempfile::tempdir().expect("maximum context parent");
-            let destination = temporary.path().join("project");
             let (snapshot, root) = maximum_context_snapshot(named_relations);
-            let created = GraphRepository::create(&destination, &snapshot, None)
-                .expect("maximum context repository");
+            let created = memory_repository(&snapshot).expect("maximum context repository");
             let view = created
                 .repository
                 .view_current()
                 .expect("maximum context view");
-            let before = file_inventory(created.repository.root());
+            let before = repository_inventory(&created.repository);
             let request = NormalizedQueryRequest {
                 selection: QuerySelection::Context {
                     root,
@@ -5164,7 +5197,7 @@ mod tests {
                     assert_eq!(error.code, code);
                 }
             }
-            assert_eq!(file_inventory(created.repository.root()), before);
+            assert_eq!(repository_inventory(&created.repository), before);
             println!(
                 "context-maximum named-relations={named_relations} expected-error={} wall-micros={} peak-rss-kib={}",
                 expected_error.unwrap_or("none"),
@@ -5371,8 +5404,6 @@ mod tests {
         let mut baseline = None;
         let mut baseline_work = None;
         for unrelated in [100_u64, 10_000_u64] {
-            let temporary = tempfile::tempdir().expect("context locality parent");
-            let destination = temporary.path().join("project");
             let mut snapshot = crate::platform::kernel::tests::witness_snapshot();
             let root = named_owner(&snapshot, "caller");
             for ordinal in 0..unrelated {
@@ -5398,13 +5429,12 @@ mod tests {
                 u64::try_from(snapshot.owners.len()).expect("locality owner count"),
                 owner_root.content(),
             );
-            let created = GraphRepository::create(&destination, &snapshot, None)
-                .expect("context locality repository");
+            let created = memory_repository(&snapshot).expect("context locality repository");
             let view = created
                 .repository
                 .view_current()
                 .expect("context locality view");
-            let before = file_inventory(created.repository.root());
+            let before = repository_inventory(&created.repository);
             let started = Instant::now();
             let (observed, pages) =
                 collect_context_pages(&created.repository, &view, root, ContextDirection::Both, 3);
@@ -5432,7 +5462,7 @@ mod tests {
                 baseline = Some(observed.clone());
                 baseline_work = Some(logical_work);
             }
-            assert_eq!(file_inventory(created.repository.root()), before);
+            assert_eq!(repository_inventory(&created.repository), before);
             println!(
                 "context-locality unrelated-owners={unrelated} selected-owners={} selected-relations={} expanded-owners={} relation-witnesses={} map-pages-read={} map-bytes-read={} map-entries-visited={} store-objects-read={} store-bytes-read={} wall-micros={} peak-rss-kib={}",
                 observed.owners.len(),
@@ -5453,8 +5483,6 @@ mod tests {
 
     #[test]
     fn ten_thousand_owner_and_high_fanout_relation_pages_remain_logically_local() {
-        let temporary = tempfile::tempdir().expect("scale query parent");
-        let destination = temporary.path().join("project");
         let mut snapshot = crate::platform::kernel::tests::witness_snapshot();
         let module_id = ModuleId::migrate(b"normalized-query-scale", 0);
         let module = OwnerKey::Module(module_id);
@@ -5507,10 +5535,9 @@ mod tests {
             10_000,
             owner_root.content(),
         );
-        let created = GraphRepository::create(&destination, &snapshot, None)
-            .expect("10,000-owner normalized repository");
+        let created = memory_repository(&snapshot).expect("10,000-owner normalized repository");
         let view = created.repository.view_current().expect("scale query view");
-        let before_queries = file_inventory(created.repository.root());
+        let before_queries = repository_inventory(&created.repository);
         let binding = QueryBinding {
             repository: view.current().head.repository_id,
             package: view.package(),
@@ -5808,7 +5835,7 @@ mod tests {
                 .expect("middle relation map entries number")
                 <= 4_101
         );
-        assert_eq!(file_inventory(created.repository.root()), before_queries);
+        assert_eq!(repository_inventory(&created.repository), before_queries);
         println!(
             "query-scale fixture-owners=10000 fixture-relations=9999 repository-bytes-written=0 peak-rss-kib={}",
             process_peak_rss_kib()

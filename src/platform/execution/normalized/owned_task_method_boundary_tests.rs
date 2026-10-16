@@ -104,7 +104,7 @@ fn owned_task_method_unused_contracts_accept_borrow_and_require_closed_rows() {
                         c.methods[0].result.relation = ResultRelation::ReadFrom { source: 0 }
                     }
                     "contract-generation" => {
-                        d.header.contract_version = contract::SHARE_GRAPH_CONTRACT_VERSION - 1;
+                        d.header.contract_version = contract::GRAPH_CONTRACT_VERSION - 1;
                     }
                     _ => unreachable!(),
                 }

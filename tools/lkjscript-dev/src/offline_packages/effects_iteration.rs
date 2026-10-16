@@ -1,7 +1,7 @@
 //! Explicit linked public-operation diagnostics; no acceptance receipt.
 use super::*;
 
-fn context() -> Context {
+fn context() -> (tempfile::TempDir, Context) {
     let evidence = PathBuf::from(
         std::env::var_os("LKJSCRIPT_EFFECTS_EVIDENCE").expect("absent evidence directory"),
     );
@@ -9,14 +9,20 @@ fn context() -> Context {
     let root = tempfile::Builder::new()
         .prefix("lkjscript-effects-")
         .tempdir()
-        .unwrap()
-        .keep();
+        .unwrap();
+    let root_path = root.path().to_path_buf();
     let binary = std::env::current_exe().unwrap().canonicalize().unwrap();
-    Context {
-        root: root.clone(),
+    let context = Context {
+        command_end: usize::MAX,
+        inventory_end: usize::MAX,
+        runner_base: 0,
+        runner_end: usize::MAX,
+        root: root_path.clone(),
         evidence: evidence.clone(),
         binary: binary.clone(),
         receipt: Receipt {
+            command_base: 0,
+            inventory_base: 0,
             schema: "iteration-only".into(),
             status: "not an acceptance receipt".into(),
             verifier_sha256: digest_file(
@@ -29,7 +35,7 @@ fn context() -> Context {
             )
             .unwrap(),
             host_path: binary.display().to_string(),
-            isolated_root: root.display().to_string(),
+            isolated_root: root_path.display().to_string(),
             evidence_root: evidence.display().to_string(),
             environment_names: semantic_cli::environment_names().unwrap(),
             elapsed_nanoseconds: 0,
@@ -46,13 +52,14 @@ fn context() -> Context {
             cleanup_complete: false,
             failure: None,
         },
-    }
+    };
+    (root, context)
 }
 
 #[test]
 #[ignore = "requires an explicitly linked host and a fresh evidence directory"]
 fn linked_named_reference_iteration() {
-    let mut context = context();
+    let (_scratch, mut context) = context();
     let builtin = context
         .cli(None, &["package", "builtin", "inspect"], true)
         .unwrap();
@@ -133,7 +140,7 @@ fn standard(context: &mut Context) -> Package {
 #[test]
 #[ignore = "requires an explicitly selected maintained project, linked host and absent evidence path"]
 fn author_task_standard_through_public_change() {
-    let mut context = context();
+    let (_scratch, mut context) = context();
     let mut standard = standard(&mut context);
     standard.path = PathBuf::from(
         std::env::var_os("LKJSCRIPT_EFFECTS_STANDARD_PROJECT").expect("exact standard project"),
@@ -163,9 +170,9 @@ fn author_task_standard_through_public_change() {
 }
 
 #[test]
-#[ignore = "requires a linked host and absent evidence path; retains its isolated projects"]
+#[ignore = "requires a linked host and absent evidence path"]
 fn author_transported_task_library_through_public_change() {
-    let mut context = context();
+    let (_scratch, mut context) = context();
     let standard = standard(&mut context);
     context
         .cli(
@@ -205,9 +212,9 @@ fn author_transported_task_library_through_public_change() {
 }
 
 #[test]
-#[ignore = "requires linked host and absent evidence path; retains disposable projects for diagnosis"]
+#[ignore = "requires linked host and absent evidence path"]
 fn copied_task_library_foreground_iteration() {
-    let mut context = context();
+    let (_scratch, mut context) = context();
     let mut standard = standard(&mut context);
     let result = (|| -> Result<(), DevError> {
         let (mut library, _) = super::effects::prepare_library(&mut context, &mut standard)?;
@@ -235,9 +242,9 @@ fn copied_task_library_foreground_iteration() {
 }
 
 #[test]
-#[ignore = "requires linked host and absent evidence path; retains disposable projects for diagnosis"]
+#[ignore = "requires linked host and absent evidence path"]
 fn copied_task_library_http_iteration() {
-    let mut context = context();
+    let (_scratch, mut context) = context();
     let mut standard = standard(&mut context);
     let result = super::effects::workflow(&mut context, &mut standard)
         .and_then(|()| super::effects::validate(&context.receipt, &context.evidence));

@@ -410,7 +410,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         if parameters.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
             return Err(associated::invalid());
         }
-        if generation < 34 && !parameters.is_empty() {
+        if generation != crate::platform::canonical_schema::SCHEMA_EPOCH && !parameters.is_empty() {
             return Err(associated::invalid());
         }
         self.reserve::<ReadScopeParameter>(parameters.len())?;
@@ -486,7 +486,8 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                         crate::platform::kernel::OwnerKind::TaskFunction
                     }
                 };
-                if declaration.header.contract_version < 34
+                if declaration.header.contract_version
+                    != crate::platform::canonical_schema::SCHEMA_EPOCH
                     || declaration.header.kind != expected_kind
                 {
                     return Err(associated::invalid());
@@ -500,11 +501,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                 };
                 if record.header.owner != OwnerKey::Binding(binding)
                     || record.header.contract_version
-                        < if record.kind == BindingKind::OwnedBorrow {
-                            24
-                        } else {
-                            34
-                        }
+                        != crate::platform::canonical_schema::SCHEMA_EPOCH
                     || (record.value.is_some() && record.kind != BindingKind::ReadView)
                     || record.header.kind != crate::platform::kernel::OwnerKind::Binding
                     || record.declared_type.is_none()
@@ -530,7 +527,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             return Ok(Vec::new());
         };
         let declaration = self.declaration(binder.declaration())?;
-        if declaration.header.contract_version < 34 {
+        if declaration.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH {
             return Ok(Vec::new());
         }
         let parameters = self.scope_parameters(binder)?;
@@ -932,7 +929,8 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                 let DeclarationPayload::ReadView(view) = nominal.payload else {
                     return Err(associated::invalid());
                 };
-                if nominal.header.contract_version < 34
+                if nominal.header.contract_version
+                    != crate::platform::canonical_schema::SCHEMA_EPOCH
                     || view.type_parameters.len() != arguments.len()
                 {
                     return Err(associated::invalid());
@@ -1936,7 +1934,8 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                     {
                         return Err(associated::invalid());
                     }
-                    if parameter.header.contract_version < 34
+                    if parameter.header.contract_version
+                        != crate::platform::canonical_schema::SCHEMA_EPOCH
                         && self.type_contains_view(owner.package, parameter.ty)?
                     {
                         return Err(associated::invalid());
@@ -2199,7 +2198,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                     "complete callable source is missing body syntax",
                 ));
             };
-            if record.contract_version < 34
+            if record.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
                 && (record.operation.is_read_view_operation()
                     || !record.operation.read_scope_arguments().is_empty())
             {
@@ -2336,8 +2335,10 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                     let value = binding_record.value.ok_or_else(associated::invalid)?;
                     let mut initializer_loans = self.loan_copy(&completed)?;
                     if binding_record.kind == BindingKind::ReadView {
-                        if record.contract_version < 34
-                            || binding_record.header.contract_version < 34
+                        if record.contract_version
+                            != crate::platform::canonical_schema::SCHEMA_EPOCH
+                            || binding_record.header.contract_version
+                                != crate::platform::canonical_schema::SCHEMA_EPOCH
                         {
                             return Err(associated::invalid());
                         }
@@ -2729,6 +2730,24 @@ mod read_view_tests {
         )
     }
 
+    fn assert_foreign_binding_epoch_rejected(read: &mut Read, binding: BindingId) {
+        let key = OwnerKey::Binding(binding);
+        let original = read.owners[&key].clone();
+        let Some(OwnerRecord::Binding(record)) = read.owners.get_mut(&key) else {
+            panic!("scoped binding");
+        };
+        record.header.contract_version = crate::platform::canonical_schema::SCHEMA_EPOCH + 1;
+        for eager in [false, true] {
+            assert_eq!(
+                proof(read, eager)
+                    .expect_err("a foreign binding epoch grants no lexical scope")
+                    .code,
+                "kernel_callable_associated_scope"
+            );
+        }
+        read.owners.insert(key, original);
+    }
+
     fn reference(ordinal: u64) -> DeclarationReference {
         DeclarationReference {
             package: function().package,
@@ -3101,6 +3120,7 @@ mod read_view_tests {
         for eager in [false, true] {
             proof(&read, eager).expect("direct invocation metadata establishes its source scope");
         }
+        assert_foreign_binding_epoch_rejected(&mut read, binding);
         let body = read.expression(ExpressionOperation::Sequence {
             items: vec![borrow, call],
         });
@@ -3114,8 +3134,7 @@ mod read_view_tests {
             );
         }
 
-        // A predecessor OwnedBorrow remains a valid loan coordinate in a current
-        // consuming function. Its scope is introduced by only its exact match arm.
+        // An OwnedBorrow is a valid loan coordinate only in its exact match arm.
         let (mut read, helper, _, binding) = view_fixture();
         let parameter = ParameterId::migrate(SEED, 0);
         let cell = match &read.owners[&OwnerKey::Parameter(parameter)] {
@@ -3143,12 +3162,10 @@ mod read_view_tests {
             binding: arm_binding,
         };
         let key = OwnerKey::Binding(arm_binding);
-        let mut header = OwnerHeader::new(key, OwnerKind::Binding);
-        header.contract_version = 24;
         read.owners.insert(
             key,
             OwnerRecord::Binding(BindingRecord {
-                header,
+                header: OwnerHeader::new(key, OwnerKind::Binding),
                 name: Name::new("item").expect("binding name"),
                 kind: BindingKind::OwnedBorrow,
                 value: None,
@@ -3205,8 +3222,9 @@ mod read_view_tests {
         });
         read.body(matched);
         for eager in [false, true] {
-            proof(&read, eager).expect("exact predecessor loan in its current consuming match arm");
+            proof(&read, eager).expect("exact loan in its consuming match arm");
         }
+        assert_foreign_binding_epoch_rejected(&mut read, arm_binding);
         let body = read.expression(ExpressionOperation::Sequence {
             items: vec![matched, call],
         });
@@ -3254,6 +3272,7 @@ mod read_view_tests {
         for eager in [false, true] {
             proof(&read, eager).expect("owning initializer exact source scope");
         }
+        assert_foreign_binding_epoch_rejected(&mut read, binding);
         let body = read.expression(ExpressionOperation::Sequence {
             items: vec![body, value],
         });

@@ -157,7 +157,7 @@ fn task_tail_chain_has_constant_control_state() {
 
 #[test]
 fn task_tail_contexts_and_bound_mutual_transitions_preserve_pending_work() {
-    for context in [
+    let contexts = [
         "let",
         "sequence",
         "match",
@@ -172,49 +172,59 @@ fn task_tail_contexts_and_bound_mutual_transitions_preserve_pending_work() {
         "condition",
         "constructor-projection",
         "scrutinee",
-    ] {
-        let terminal = matches!(
-            context,
-            "let"
-                | "sequence"
-                | "match"
-                | "invoke"
-                | "partial"
-                | "fully-bound"
-                | "mutual"
-                | "task-to-pure"
-        );
-        let (snapshot, program) = plain_task_program(context);
-        let entry = declaration_named(&snapshot, "plain-task-loop");
-        let policy = NormalizedRunPolicy {
-            maximum_call_depth: if terminal { 64 } else { 16 },
-            ..Default::default()
+    ];
+    std::thread::scope(|scope| {
+        for worker in 0..4 {
+            scope.spawn(move || {
+                for context in contexts.into_iter().skip(worker).step_by(4) {
+                    assert_task_tail_context(context);
+                }
+            });
+        }
+    });
+}
+
+fn assert_task_tail_context(context: &str) {
+    let terminal = matches!(
+        context,
+        "let"
+            | "sequence"
+            | "match"
+            | "invoke"
+            | "partial"
+            | "fully-bound"
+            | "mutual"
+            | "task-to-pure"
+    );
+    let (snapshot, program) = plain_task_program(context);
+    let entry = declaration_named(&snapshot, "plain-task-loop");
+    let policy = NormalizedRunPolicy {
+        maximum_call_depth: if terminal { 64 } else { 16 },
+        ..Default::default()
+    };
+    for reference in [false, true] {
+        println!("control-context={context} reference={reference}");
+        let args = vec![NormalizedValue::I64(8192), NormalizedValue::I64(0)];
+        let control = ExecutionControl::uncancelled();
+        let result = if reference {
+            NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
+                .invoke(entry, args, None, &control)
+                .map(|(v, o)| (v, o.maximum_call_depth))
+        } else {
+            NormalizedVm::for_test(&program, policy)
+                .invoke(entry, args, None, &control)
+                .map(|(v, o)| (v, o.maximum_call_depth))
         };
-        for reference in [false, true] {
-            println!("control-context={context} reference={reference}");
-            let args = vec![NormalizedValue::I64(8192), NormalizedValue::I64(0)];
-            let control = ExecutionControl::uncancelled();
-            let result = if reference {
-                NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
-                    .invoke(entry, args, None, &control)
-                    .map(|(v, o)| (v, o.maximum_call_depth))
-            } else {
-                NormalizedVm::for_test(&program, policy)
-                    .invoke(entry, args, None, &control)
-                    .map(|(v, o)| (v, o.maximum_call_depth))
-            };
-            if terminal {
-                let (value, depth) =
-                    result.unwrap_or_else(|e| panic!("{context}/{reference}: {e:?}"));
-                assert_eq!(value, NormalizedValue::I64(33_558_528));
-                assert!(depth <= 2, "{context}/{reference}: {depth}");
-            } else {
-                let error = result.unwrap_err();
-                assert!(
-                    error.code.ends_with("call_depth"),
-                    "{context}/{reference}: {error:?}"
-                );
-            }
+        if terminal {
+            let (value, depth) = result.unwrap_or_else(|e| panic!("{context}/{reference}: {e:?}"));
+            assert_eq!(value, NormalizedValue::I64(33_558_528));
+            assert!(depth <= 2, "{context}/{reference}: {depth}");
+        } else {
+            let error = result.unwrap_err();
+            assert!(
+                error.code.ends_with("call_depth"),
+                "{context}/{reference}: {error:?}"
+            );
         }
     }
 }

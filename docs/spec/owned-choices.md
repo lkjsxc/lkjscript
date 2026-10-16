@@ -1,6 +1,6 @@
 # Structural owned choices
 
-Graph 20 adds `OwnedChoice`, an explicit affine sum of a fixed nonempty set of
+`OwnedChoice` is an explicit affine sum of a fixed nonempty set of
 named payload types. Exactly one case is selected at runtime. A choice is not an
 ordinary nominal variant, Option or Result, and its ownership does not depend on
 which case is selected. Even a selected Unit or I64 case must be moved, completely
@@ -124,26 +124,21 @@ Strict artifact loading validates retained canonical source, complete type closu
 all lexical bindings, ownership and exact compiled instruction meaning independently
 of executing the program. Consistently rehashing a modified case index, branch
 target, payload local or loan mode does not authorize it. A Local-only function
-whose signature contains a choice still requires Graph 20; absence of a new
-expression tag cannot disguise its generation.
+whose signature contains a choice still requires complete choice admission;
+ordinary expression tags cannot bypass its type or ownership obligations.
 
 ## Encodings and availability
 
-`LKJCHO01` is a disjoint version-1 type envelope. Ordinary and product type bytes
-remain unchanged. Graph 20 appends choice operations, arm metadata and an explicit
-owned-choice payload binding kind; Graph 14–19 readers remain available for their
-retained source generations. Product-bearing source still needs Graph 19 and
-choice-bearing source needs Graph 20 across owner, interface and artifact closures.
-Package-interface layout 12 is unchanged.
+Choices use the current type record. Choice operations, arm metadata and payload
+binding kinds remain explicit inline fields. Owners, types, interfaces, requests,
+compiler units, bytecode, artifacts and witness material share schema epoch 1.
+Every signature and annotation participates in complete closure admission.
 
-The choice increment selected compiler unit 18, bytecode 14, artifact 25, authored request
-23, compact discovery 27 and semantic validator 21. Requests without the new
-extension retain their previous canonical request bytes. Predecessor derived
-artifacts and compiler caches require rebuilding from retained accepted meaning;
-no operational application-data migration or running-service replacement is implied.
-Product version components remain opaque identifiers, not compatibility promises.
-The [child-borrow contract](owned-borrows.md#encodings-and-evidence) owns subsequent
-scope-operation, borrowed-binding and derived-layout cuts.
+Foreign epochs reject; maintained derived artifacts are rebuilt through supported
+product operations. Rebuilding grants no capability or permission to replace a
+running service. Product version components remain opaque identifiers.
+The [child-borrow contract](owned-borrows.md#encodings-and-evidence) owns lexical
+scope operations and borrowed payload bindings.
 
 The [native guide](../guides/native-owned-choices.md) describes ordinary use. The
 [continuation](../campaigns/20261002-owned-choices.md) separates focused tests,

@@ -1,5 +1,8 @@
 //! Exact Graph 10 repository reads and one locked, atomic accepted-HEAD publication point.
 
+#[path = "memory_repository.rs"]
+mod memory_repository;
+
 #[cfg(test)]
 #[path = "recovery_lock_tests.rs"]
 mod recovery_lock_tests;
@@ -44,6 +47,7 @@ use crate::platform::persistent_map::{
     MapAdmission, MapDifference, MapError, MapErrorClass, MapRoot, MapWork, MemoryPageStore,
     OverlayPageStore, PersistentMap,
 };
+use crate::platform::storage::backend::StorageBackend;
 use crate::platform::storage::contract::TARGET_PACK_BYTES;
 #[cfg(test)]
 use crate::platform::storage::directory::SealCheckpoint;
@@ -53,6 +57,9 @@ use crate::platform::storage::object::{
     StoreErrorClass, StoreReadAdmission, StoreReadLimits, StoreWork,
 };
 use crate::platform::storage::page_store::ObjectPageReader;
+use crate::platform::storage::project::{
+    MemProjectStore, MemoryBytes, MemoryGraphState, lock as memory_lock,
+};
 use crate::platform::witness::{ValidationWitnessManifest, encode_witness_manifest};
 use fs2::FileExt;
 use rustix::fs::{AtFlags, Dir, Mode, OFlags};
@@ -72,7 +79,7 @@ const PACKAGE_TRANSPORT_SELECTION_STAGE_PREFIX: &str = ".CURRENT-stage-";
 pub const MAXIMUM_REFRESH_ANCESTOR_REVISIONS: usize = 10_000;
 
 struct AncestorStore<'a> {
-    base: &'a PackDirectoryStore,
+    base: &'a StorageBackend,
     admission: RefCell<StoreReadAdmission>,
     control: &'a crate::platform::execution::ExecutionControl,
 }
@@ -150,6 +157,7 @@ impl ImmutableObjectStore for AncestorStore<'_> {
 #[derive(Clone, Debug)]
 pub struct GraphRepository {
     root: PathBuf,
+    memory: Option<MemProjectStore>,
 }
 
 #[derive(Clone, Debug)]
@@ -353,14 +361,16 @@ impl GraphRepository {
         initialize_unpublished(&stage)?;
         let staged_repository = Self {
             root: stage.clone(),
+            memory: None,
         };
         let result = (|| {
             let root_directory = open_directory(&stage)?;
-            let mut preparation_store =
-                PackDirectoryStore::open(&stage).map_err(store_diagnostic)?;
+            let mut preparation_store = StorageBackend::Disk(Box::new(
+                PackDirectoryStore::open(&stage).map_err(store_diagnostic)?,
+            ));
             for package_transport in package_transports {
                 let _ = install_package_container(
-                    &root_directory,
+                    Some(&root_directory),
                     &mut preparation_store,
                     package_transport.digest,
                     &package_transport.container,
@@ -405,7 +415,10 @@ impl GraphRepository {
                 ),
             )
         })?;
-        let repository = Self { root: destination };
+        let repository = Self {
+            root: destination,
+            memory: None,
+        };
         let current = repository.current()?;
         if current.head != staged_current.head {
             return Err(repository_error(
@@ -446,7 +459,7 @@ impl GraphRepository {
                 "Graph 10 repository has no accepted HEAD",
             )
         })?;
-        let repository = Self { root };
+        let repository = Self { root, memory: None };
         Ok(repository)
     }
 
@@ -454,7 +467,12 @@ impl GraphRepository {
         &self.root
     }
 
-    pub fn object_store(&self) -> Result<PackDirectoryStore, Diagnostic> {
+    pub fn object_store(&self) -> Result<StorageBackend, Diagnostic> {
+        if let Some(memory) = &self.memory {
+            return Ok(StorageBackend::Memory(
+                memory_lock(&memory.graph)?.store.clone(),
+            ));
+        }
         let root_directory = open_directory(&self.root)?;
         let lock = open_lock(&root_directory)?;
         FileExt::lock_shared(&lock).map_err(|error| {
@@ -470,7 +488,9 @@ impl GraphRepository {
     pub fn export_package_transport(
         &self,
     ) -> Result<super::read_view::ExportedPackageTransport, Diagnostic> {
-        self.view_current()?.export_package_transport()
+        self.admit_package_export_with_control(&ExecutionControl::uncancelled())?
+            .1
+            .into_export()
     }
 
     pub(crate) fn export_package_container(
@@ -483,8 +503,63 @@ impl GraphRepository {
         &self,
         control: &ExecutionControl,
     ) -> Result<crate::platform::package_transport::source::AdmittedClosure, Diagnostic> {
-        self.view_current_with_control(control)?
-            .export_package_container()
+        self.view_current_with_source(control)
+            .map(|(_, source)| source)
+    }
+
+    pub(crate) fn view_current_with_source(
+        &self,
+        control: &ExecutionControl,
+    ) -> Result<
+        (
+            RepositoryView,
+            crate::platform::package_transport::source::AdmittedClosure,
+        ),
+        Diagnostic,
+    > {
+        let (view, built) = self.admit_package_export_with_control(control)?;
+        Ok((view, built.into_source()))
+    }
+
+    fn admit_package_export_with_control(
+        &self,
+        control: &ExecutionControl,
+    ) -> Result<(RepositoryView, super::read_view::BuiltPackageTransport), Diagnostic> {
+        control.check().map_err(execution_diagnostic)?;
+        let (current, store) = self.snapshot()?;
+        RepositoryView::new(current.ok_or_else(memory_repository::unpublished)?, store)
+            .with_control(control)
+            .admit_package_export()
+    }
+
+    pub(crate) fn recheck_exported_source(
+        &self,
+        view: &RepositoryView,
+    ) -> Result<CurrentPublication, Diagnostic> {
+        let (current, store) = self.snapshot()?;
+        let current = current.ok_or_else(memory_repository::unpublished)?;
+        view.recheck_exported_source(&store)?;
+        Ok(current)
+    }
+
+    pub(crate) fn recheck_source_validation_proof(
+        &self,
+        proof: &super::SourceValidationProof,
+        control: &ExecutionControl,
+    ) -> Result<Option<CurrentPublication>, Diagnostic> {
+        control.check().map_err(execution_diagnostic)?;
+        let (current, store) = self.snapshot()?;
+        let current = current.ok_or_else(memory_repository::unpublished)?;
+        if current.accepted != proof.accepted {
+            return Ok(None);
+        }
+        super::validation::recheck_selected_objects(
+            &store,
+            &proof.objects,
+            &proof.selections,
+            &|| control.check().map_err(execution_diagnostic),
+        )?;
+        Ok(Some(current))
     }
 
     pub(crate) fn staged_package_source(
@@ -552,6 +627,9 @@ impl GraphRepository {
         control: &ExecutionControl,
     ) -> Result<PackageTransportStageReceipt, Diagnostic> {
         control.check().map_err(execution_diagnostic)?;
+        if self.is_memory() {
+            return self.stage_memory_package(digest, container, fault, control);
+        }
         let root_directory = open_directory(&self.root)?;
         let lock = open_lock(&root_directory)?;
         FileExt::lock_exclusive(&lock)
@@ -566,7 +644,7 @@ impl GraphRepository {
             )
         })?;
         let installed = install_package_container(
-            &root_directory,
+            Some(&root_directory),
             &mut store,
             digest,
             container,
@@ -657,6 +735,9 @@ impl GraphRepository {
             ));
         }
 
+        if self.is_memory() {
+            return self.stage_memory_compilation(expected, objects);
+        }
         let root_directory = open_directory(&self.root)?;
         let lock = open_lock(&root_directory)?;
         FileExt::lock_exclusive(&lock).map_err(|error| {
@@ -718,28 +799,8 @@ impl GraphRepository {
     ) -> Result<super::RepositoryHistory, Diagnostic> {
         super::history::validate_limit(limit)?;
         super::history::checkpoint(control)?;
-        let (head, store) = {
-            let root_directory = open_directory(&self.root)?;
-            let lock = open_lock(&root_directory)?;
-            FileExt::lock_shared(&lock).map_err(|error| {
-                io_diagnostic("publication_repository_read_lock", &self.root, error)
-            })?;
-            let store = open_store_shared(&root_directory, &self.root, &lock)?;
-            let bytes = read_optional_regular_at(
-                &root_directory,
-                HEAD_FILE,
-                MAXIMUM_HEAD_BYTES,
-                "publication_repository_head_read",
-            )?
-            .ok_or_else(|| {
-                repository_error(
-                    DiagnosticClass::Source,
-                    "publication_repository_unpublished",
-                    "Graph 10 repository has no accepted HEAD",
-                )
-            })?;
-            (HeadRecord::decode(&bytes)?, store)
-        };
+        let (head, store) = self.head_snapshot()?;
+        let head = head.ok_or_else(memory_repository::unpublished)?;
         // The repository lock pins the HEAD/catalog pair, not the entire traversal. Immutable
         // append-only packs preserve that view even when another writer advances HEAD.
         super::history::read_history(
@@ -752,19 +813,9 @@ impl GraphRepository {
     }
 
     pub fn current(&self) -> Result<CurrentPublication, Diagnostic> {
-        let root_directory = open_directory(&self.root)?;
-        let lock = open_lock(&root_directory)?;
-        FileExt::lock_shared(&lock).map_err(|error| {
-            io_diagnostic("publication_repository_read_lock", &self.root, error)
-        })?;
-        let store = open_store_shared(&root_directory, &self.root, &lock)?;
-        read_current_optional(&root_directory, &store)?.ok_or_else(|| {
-            repository_error(
-                DiagnosticClass::Source,
-                "publication_repository_unpublished",
-                "Graph 10 repository has no accepted HEAD",
-            )
-        })
+        self.snapshot()?
+            .0
+            .ok_or_else(memory_repository::unpublished)
     }
 
     /// Opens one exact revision-pinned read view. The shared lock protects the HEAD/catalog
@@ -781,19 +832,8 @@ impl GraphRepository {
         control.check().map_err(|error| {
             Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
         })?;
-        let root_directory = open_directory(&self.root)?;
-        let lock = open_lock(&root_directory)?;
-        FileExt::lock_shared(&lock).map_err(|error| {
-            io_diagnostic("publication_repository_view_lock", &self.root, error)
-        })?;
-        let store = open_store_shared(&root_directory, &self.root, &lock)?;
-        let current = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
-            repository_error(
-                DiagnosticClass::Source,
-                "publication_repository_unpublished",
-                "Graph 10 repository has no accepted HEAD",
-            )
-        })?;
+        let (current, store) = self.snapshot()?;
+        let current = current.ok_or_else(memory_repository::unpublished)?;
         RepositoryView::new(current, store)
             .with_control(control)
             .reconcile_validation()
@@ -808,23 +848,8 @@ impl GraphRepository {
         key: &str,
         base: crate::platform::semantic_id::RevisionId,
     ) -> Result<Option<RepositoryView>, Diagnostic> {
-        let root_directory = open_directory(&self.root)?;
-        let lock = open_lock(&root_directory)?;
-        FileExt::lock_shared(&lock).map_err(|error| {
-            io_diagnostic(
-                "publication_repository_idempotency_view_lock",
-                &self.root,
-                error,
-            )
-        })?;
-        let store = open_store_shared(&root_directory, &self.root, &lock)?;
-        let current = read_current_optional(&root_directory, &store)?.ok_or_else(|| {
-            repository_error(
-                DiagnosticClass::Source,
-                "publication_repository_unpublished",
-                "Graph 10 repository has no accepted HEAD",
-            )
-        })?;
+        let (current, store) = self.snapshot()?;
+        let current = current.ok_or_else(memory_repository::unpublished)?;
         let binding = if current.receipt.idempotency_key.as_deref() == Some(key) {
             IdempotencyBinding::from_accepted(current.accepted, &current.receipt)?
         } else {
@@ -919,27 +944,9 @@ impl GraphRepository {
             })
         };
         checkpoint()?;
-        let root_directory = open_directory(&self.root)?;
-        let lock = open_lock(&root_directory)?;
-        FileExt::lock_shared(&lock).map_err(|error| {
-            io_diagnostic("publication_repository_view_lock", &self.root, error)
-        })?;
-        let store = open_store_shared(&root_directory, &self.root, &lock)?;
+        let (observed_head, store) = self.head_snapshot()?;
+        let observed_head = observed_head.ok_or_else(memory_repository::unpublished)?;
         let limits = CanonicalReadAdmission::default();
-        let head_bytes = read_optional_regular_at(
-            &root_directory,
-            HEAD_FILE,
-            MAXIMUM_HEAD_BYTES,
-            "publication_repository_head_read",
-        )?
-        .ok_or_else(|| {
-            repository_error(
-                DiagnosticClass::Source,
-                "publication_repository_unpublished",
-                "repository has no accepted HEAD",
-            )
-        })?;
-        let observed_head = HeadRecord::decode(&head_bytes)?;
         let anchor_head = anchor.current().head;
         if observed_head.repository_id != anchor_head.repository_id {
             return Err(repository_error(
@@ -948,7 +955,6 @@ impl GraphRepository {
                 "authenticated target view belongs to a different repository",
             ));
         }
-        drop(lock);
         let bounded = AncestorStore {
             base: &store,
             admission: RefCell::new(StoreReadAdmission::new(StoreReadLimits {
@@ -1048,13 +1054,7 @@ impl GraphRepository {
         &self,
         prepared: &PreparedPublication,
     ) -> Result<ReconciliationResult, Diagnostic> {
-        let root_directory = open_directory(&self.root)?;
-        let lock = open_lock(&root_directory)?;
-        FileExt::lock_shared(&lock).map_err(|error| {
-            io_diagnostic("publication_repository_reconcile_lock", &self.root, error)
-        })?;
-        let store = open_store_shared(&root_directory, &self.root, &lock)?;
-        let current = read_current_optional(&root_directory, &store)?;
+        let (current, store) = self.snapshot()?;
         validate_prepared_repository(prepared)?;
         let mut work = ReconciliationWork::default();
         if let Some(current) = current.as_ref() {
@@ -1110,6 +1110,9 @@ impl GraphRepository {
         prepared: &PreparedPublication,
         fault: Option<PublicationPoint>,
     ) -> Result<PublicationOutcome, Diagnostic> {
+        if self.is_memory() {
+            return self.publish_memory(prepared, fault);
+        }
         let root_directory = open_directory(&self.root)?;
         let lock = open_lock(&root_directory)?;
         FileExt::lock_exclusive(&lock).map_err(|error| {
@@ -1215,6 +1218,9 @@ impl GraphRepository {
     }
 
     pub fn head_staging_leftovers(&self) -> Result<Vec<String>, Diagnostic> {
+        if self.is_memory() {
+            return Ok(Vec::new());
+        }
         let mut names = Vec::new();
         for entry in fs::read_dir(&self.root).map_err(|error| {
             io_diagnostic("publication_repository_stage_enumerate", &self.root, error)
@@ -1248,11 +1254,10 @@ impl GraphRepository {
     }
 }
 
-fn open_validated_store(
-    root_directory: &File,
-    root: &Path,
-) -> Result<PackDirectoryStore, Diagnostic> {
-    let store = PackDirectoryStore::open(root).map_err(store_diagnostic)?;
+fn open_validated_store(root_directory: &File, root: &Path) -> Result<StorageBackend, Diagnostic> {
+    let store = StorageBackend::Disk(Box::new(
+        PackDirectoryStore::open(root).map_err(store_diagnostic)?,
+    ));
     let _ = read_current_optional(root_directory, &store)?;
     Ok(store)
 }
@@ -1261,12 +1266,14 @@ fn recover_validated_store(
     root_directory: &File,
     root: &Path,
     initial: &Diagnostic,
-) -> Result<PackDirectoryStore, Diagnostic> {
+) -> Result<StorageBackend, Diagnostic> {
     let reason = format!(
         "exclusive catalog recovery after {}: {}",
         initial.code, initial.message
     );
-    let store = PackDirectoryStore::recover_catalog(root, reason).map_err(store_diagnostic)?;
+    let store = StorageBackend::Disk(Box::new(
+        PackDirectoryStore::recover_catalog(root, reason).map_err(store_diagnostic)?,
+    ));
     let _ = read_current_optional(root_directory, &store)?;
     Ok(store)
 }
@@ -1279,7 +1286,7 @@ fn open_store_shared(
     root_directory: &File,
     root: &Path,
     lock: &File,
-) -> Result<PackDirectoryStore, Diagnostic> {
+) -> Result<StorageBackend, Diagnostic> {
     let initial = match open_validated_store(root_directory, root) {
         Ok(store) => return Ok(store),
         Err(error) => error,
@@ -1306,10 +1313,7 @@ fn open_store_shared(
 }
 
 /// Opens and validates one catalog snapshot while the caller already owns the exclusive lock.
-fn open_store_exclusive(
-    root_directory: &File,
-    root: &Path,
-) -> Result<PackDirectoryStore, Diagnostic> {
+fn open_store_exclusive(root_directory: &File, root: &Path) -> Result<StorageBackend, Diagnostic> {
     match open_validated_store(root_directory, root) {
         Ok(store) => Ok(store),
         Err(error) => recover_validated_store(root_directory, root, &error),
@@ -1317,7 +1321,7 @@ fn open_store_exclusive(
 }
 
 fn classify_publication(
-    store: &PackDirectoryStore,
+    store: &StorageBackend,
     current: Option<&CurrentPublication>,
     prepared: &PreparedPublication,
 ) -> Result<(PublicationDecision, ReconciliationWork), Diagnostic> {
@@ -1623,7 +1627,7 @@ fn validate_idempotency_transition<S: ImmutableObjectStore + ?Sized>(
 }
 
 fn validate_candidate_idempotency_transition(
-    store: &PackDirectoryStore,
+    store: &StorageBackend,
     observed: crate::platform::persistent_map::MapRoot,
     base: Option<AcceptedBinding>,
     objects: &BTreeMap<ObjectKey, Vec<u8>>,
@@ -1806,7 +1810,7 @@ fn validate_prepared_repository(prepared: &PreparedPublication) -> Result<(), Di
 }
 
 fn verify_prepared_closure(
-    store: &PackDirectoryStore,
+    store: &StorageBackend,
     base: Option<&CurrentPublication>,
     prepared: &PreparedPublication,
     work: &mut StoreWork,
@@ -2126,7 +2130,7 @@ fn admit_candidate_owner_type_roots(
 }
 
 fn verify_candidate_references(
-    store: &PackDirectoryStore,
+    store: &StorageBackend,
     base: Option<&CurrentPublication>,
     prepared: &PreparedPublication,
     work: &mut StoreWork,
@@ -2414,7 +2418,7 @@ fn for_each_new_publication_map_entry<S: ImmutableObjectStore + ?Sized>(
 
 pub(super) fn resolve_package_transport_closure<S: ImmutableObjectStore + ?Sized>(
     store: &S,
-    catalog: &PackDirectoryStore,
+    catalog: &StorageBackend,
     root_revision: crate::platform::kernel::PackageRevisionDigest,
     root_override: Option<PackageTransportBinding>,
     expected: Option<&crate::platform::kernel::DependencyRecord>,
@@ -2433,7 +2437,7 @@ pub(super) fn resolve_package_transport_closure<S: ImmutableObjectStore + ?Sized
 
 pub(super) fn resolve_package_transport_closure_with_control<S: ImmutableObjectStore + ?Sized>(
     store: &S,
-    catalog: &PackDirectoryStore,
+    catalog: &StorageBackend,
     root_revision: crate::platform::kernel::PackageRevisionDigest,
     root_override: Option<PackageTransportBinding>,
     expected: Option<&crate::platform::kernel::DependencyRecord>,
@@ -2460,7 +2464,7 @@ pub(super) fn resolve_package_transport_closure_admitted_with_control<
     S: ImmutableObjectStore + ?Sized,
 >(
     store: &S,
-    catalog: &PackDirectoryStore,
+    catalog: &StorageBackend,
     root_revision: crate::platform::kernel::PackageRevisionDigest,
     root_override: Option<PackageTransportBinding>,
     expected: Option<&crate::platform::kernel::DependencyRecord>,
@@ -2476,7 +2480,7 @@ pub(super) fn resolve_package_transport_closure_admitted_with_control<
         control,
     )?;
     control.check().map_err(execution_diagnostic)?;
-    let readiness = read_package_readiness(catalog.root())?;
+    let readiness = read_store_readiness(catalog)?;
     let mut selections = Vec::with_capacity(logical.revisions().len());
     for revision_digest in logical.revisions().keys() {
         control.check().map_err(execution_diagnostic)?;
@@ -2505,7 +2509,7 @@ pub(super) fn resolve_package_transport_closure_admitted_with_control<
 }
 
 pub(super) fn validate_prepared_dependency_sources(
-    store: &PackDirectoryStore,
+    store: &StorageBackend,
     prepared: &PreparedPublication,
 ) -> Result<(), Diagnostic> {
     validate_prepared_dependency_sources_controlled(
@@ -2517,7 +2521,7 @@ pub(super) fn validate_prepared_dependency_sources(
 }
 
 pub(super) fn validate_prepared_dependency_sources_controlled(
-    store: &PackDirectoryStore,
+    store: &StorageBackend,
     prepared: &PreparedPublication,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
     control: &ExecutionControl,
@@ -2544,7 +2548,7 @@ pub(super) fn validate_prepared_dependency_sources_controlled(
 
 pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?Sized>(
     source: &S,
-    store: &PackDirectoryStore,
+    store: &StorageBackend,
     root: &crate::platform::kernel::SemanticRoot,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
     control: &ExecutionControl,
@@ -2582,7 +2586,7 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
         )?;
         direct.push(decode_dependency(&bytes, &package, binding.object)?);
     }
-    let readiness = read_package_readiness(store.root())?;
+    let readiness = read_store_readiness(store)?;
     let mut pending = std::collections::VecDeque::from(direct.clone());
     let mut union = BTreeMap::new();
     let mut edge_count = direct.len();
@@ -2711,7 +2715,7 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
             checkpoint()?;
             snapshots
                 .entry(package.snapshot.root.package_id)
-                .or_insert(package.snapshot);
+                .or_insert_with(|| package.snapshot.clone());
         }
     }
     super::callable_composition::validate(&overlay, root, &snapshots, semantic_visits, checkpoint)
@@ -2815,6 +2819,21 @@ pub(super) fn read_package_readiness(
     read_package_readiness_at(&directory)
 }
 
+pub(super) fn read_store_readiness(
+    store: &StorageBackend,
+) -> Result<crate::platform::package_transport::source::PackageReadiness, Diagnostic> {
+    use crate::platform::package_transport::source::PackageReadiness;
+    match store {
+        StorageBackend::Disk(store) => read_package_readiness(store.root()),
+        StorageBackend::Memory(store) => store
+            .readiness
+            .as_ref()
+            .map(|bytes| PackageReadiness::decode(bytes.as_slice()))
+            .transpose()
+            .map(Option::unwrap_or_default),
+    }
+}
+
 fn read_package_readiness_at(
     directory: &File,
 ) -> Result<crate::platform::package_transport::source::PackageReadiness, Diagnostic> {
@@ -2831,8 +2850,8 @@ fn read_package_readiness_at(
 }
 
 fn install_package_container(
-    root: &File,
-    store: &mut PackDirectoryStore,
+    root: Option<&File>,
+    store: &mut StorageBackend,
     digest: crate::platform::kernel::PackageTransportDigest,
     bytes: &[u8],
     fault: Option<PackageStagePoint>,
@@ -2877,13 +2896,20 @@ fn install_package_container(
                 "validated container lost its root",
             )
         })?;
-    let directory = ensure_child_directory_at(
-        root,
-        PACKAGE_TRANSPORT_DIRECTORY,
-        "publication_package_transport_directory_create",
-        "publication_package_transport_directory_open",
-    )?;
-    let mut readiness = read_package_readiness_at(&directory)?;
+    let directory = root
+        .map(|root| {
+            ensure_child_directory_at(
+                root,
+                PACKAGE_TRANSPORT_DIRECTORY,
+                "publication_package_transport_directory_create",
+                "publication_package_transport_directory_open",
+            )
+        })
+        .transpose()?;
+    let mut readiness = match directory.as_ref() {
+        Some(directory) => read_package_readiness_at(directory)?,
+        None => read_store_readiness(store)?,
+    };
     let previous_transport = readiness
         .bindings
         .get(&container.root.package_revision)
@@ -2951,7 +2977,14 @@ fn install_package_container(
             ));
         }
     }
-    publish_package_readiness(&directory, &ready_bytes, fault, control)?;
+    if let Some(directory) = directory {
+        publish_package_readiness(&directory, &ready_bytes, fault, control)?;
+    } else if let StorageBackend::Memory(memory) = store {
+        control.check().map_err(execution_diagnostic)?;
+        let readiness = MemoryBytes::copy(&memory.arena, &ready_bytes).map_err(store_diagnostic)?;
+        package_stage_checkpoint(fault, PackageStagePoint::ReadinessSynced)?;
+        memory.readiness = Some(readiness);
+    }
     Ok(InstalledPackageTransport {
         revision: package.revision.clone(),
         transport: package.transport.clone(),

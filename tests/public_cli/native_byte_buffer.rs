@@ -185,7 +185,7 @@ fn native_byte_buffer_generic_three_packages_roundtrip_draft_and_detached_bytes(
 }
 #[test]
 fn native_byte_buffer_rejects_closed_modes_and_unrestricted_phantom_without_publication() {
-    let public = Native::new();
+    let public = Native::memory();
     let before = public.revision();
     for (index, body) in [
         "(external create get (visibility public) (implementation core.buffer.get) (parameter create index (type I64)) (parameter create b (type ByteBuffer) (use consume)) (returns I64))",

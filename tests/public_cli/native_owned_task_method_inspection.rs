@@ -3,7 +3,7 @@ use super::*;
 
 #[test]
 fn native_owned_task_methods_inspection_reports_task_kind_and_exact_requirement() {
-    let public = Native::template("command");
+    let public = Native::memory_template("command");
     author(
         &public,
         include_str!("../fixtures/owned-task-method-library.lkjc"),

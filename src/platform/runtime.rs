@@ -20,7 +20,7 @@ pub mod structured;
 )]
 mod admission_tests;
 
-pub const RESIDENT_RUNTIME_CONTRACT_VERSION: u16 = 3;
+pub const RESIDENT_RUNTIME_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_CONCURRENT_TASKS: usize = 4_096;
 pub const MAXIMUM_QUEUED_TASKS: usize = 65_536;
 pub const MAXIMUM_OPERATIONAL_MILLISECONDS: u64 = 3_600_000;

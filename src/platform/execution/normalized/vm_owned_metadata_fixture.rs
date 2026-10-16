@@ -20,7 +20,7 @@ declarations.end"#;
 
 fn source_key(source: &str) -> [u8; 32] {
     let mut hasher = blake3::Hasher::new_derive_key("lkjscript.checked-value-test-fixture");
-    hasher.update(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
+    hasher.update(&crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes());
     hasher.update(&crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH);
     for part in ["owned-byte-buffer", "DeterministicBaseline", source] {
         hasher.update(&(part.len() as u64).to_be_bytes());

@@ -128,7 +128,7 @@ fn encode(change: AuthoredChange) -> Vec<u8> {
 
 fn expected(create: bool, contract: bool, associated: bool) -> Vec<u8> {
     let mut bytes = b"LKJACHNG".to_vec();
-    bytes.extend_from_slice(&CANONICAL_SCHEMA_HASH);
+    bytes.extend_from_slice(&SCHEMA_EPOCH.to_le_bytes());
     bytes.extend_from_slice(&[9; 32]);
     count(&mut bytes, 0); // Preconditions.
     count(&mut bytes, 1); // Operations.
@@ -245,7 +245,9 @@ fn associated_projection_commitment_retains_every_authority_coordinate_and_neste
         };
         let encoded = encode(change);
         assert_eq!(&encoded[..8], b"LKJACHNG");
-        assert_eq!(encoded[88], 102); // Complete layout also includes the empty member inventory.
+        assert_eq!(&encoded[8..10], &SCHEMA_EPOCH.to_le_bytes());
+        // Magic, epoch, base revision, empty precondition count, and one change count.
+        assert_eq!(encoded[8 + 2 + 32 + 8 + 8], 102);
     }
     let mut mutations = vec![types[1].clone(); 4];
     if let AuthoredType::AssociatedWitnessProjection { scope, .. } = &mut mutations[0] {

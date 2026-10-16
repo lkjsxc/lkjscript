@@ -94,8 +94,10 @@ impl Context<'_> {
         };
         if source.header.owner != key
             || source.header.kind != kind
-            || !matches!(source.header.contract_version, 33 | 34)
-            || (family && source.header.contract_version != 34)
+            || source.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
+            || (family
+                && source.header.contract_version
+                    != crate::platform::canonical_schema::SCHEMA_EPOCH)
             || function.parameters.len() != self.parameters.len()
         {
             return Err(invalid());
@@ -121,8 +123,10 @@ impl Context<'_> {
             };
             if source.header.owner != key
                 || source.header.kind != OwnerKind::Parameter
-                || !matches!(source.header.contract_version, 33 | 34)
-                || (family && source.header.contract_version != 34)
+                || source.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
+                || (family
+                    && source.header.contract_version
+                        != crate::platform::canonical_schema::SCHEMA_EPOCH)
                 || source.parent != ParameterParent::Function(self.declaration.declaration)
                 || source.ty != ty
             {
@@ -165,8 +169,10 @@ impl Context<'_> {
         };
         if source.header.owner != key
             || source.header.kind != OwnerKind::OwnedContract
-            || !matches!(source.header.contract_version, 33 | 34)
-            || (family && source.header.contract_version != 34)
+            || source.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
+            || (family
+                && source.header.contract_version
+                    != crate::platform::canonical_schema::SCHEMA_EPOCH)
             || selected.type_arguments.len() != definition.type_parameters.len()
         {
             return Err(invalid());

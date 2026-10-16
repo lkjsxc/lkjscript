@@ -26,6 +26,7 @@ pub(crate) struct ExecutionOptions<'a> {
     pub(crate) fresh_reason: &'a str,
     pub(crate) cache: &'a VerificationCache,
     pub(super) origin: Option<Arc<cargo_origin::Run>>,
+    pub(super) live: Option<Arc<super::compact::Run>>,
 }
 
 // An early scheduler error must not detach still-running gate owners. Normal completion removes
@@ -38,6 +39,32 @@ impl Drop for RemainingWorkers {
         for (_, worker) in std::mem::take(&mut self.0) {
             let _ = worker.join();
         }
+    }
+}
+
+// Readers of live target outputs must not acquire their long-lived read lease
+// ahead of a pending Cargo writer. Keep prerequisite readers eligible so a
+// selected writer can always reach its own declared inputs without deadlock.
+struct CargoSchedule {
+    writers: BTreeSet<String>,
+    prerequisites: BTreeSet<String>,
+}
+
+impl CargoSchedule {
+    fn new(registry: &GateRegistry, names: &[String]) -> Result<Self, DevError> {
+        let writers: Vec<_> = names
+            .iter()
+            .filter(|name| registry.gate(name).is_ok_and(cargo_origin::is_writer))
+            .cloned()
+            .collect();
+        Ok(Self {
+            prerequisites: registry.closure(&writers)?.into_iter().collect(),
+            writers: writers.into_iter().collect(),
+        })
+    }
+
+    fn allows(&self, name: &str, complete: impl Fn(&str) -> bool) -> bool {
+        self.prerequisites.contains(name) || self.writers.iter().all(|writer| complete(writer))
     }
 }
 
@@ -54,9 +81,10 @@ pub(crate) fn execute_dag(
     }
     let origin = match &options.origin {
         Some(origin) => Some(origin.clone()),
-        None if names
-            .iter()
-            .any(|name| registry.gate(name).is_ok_and(cargo_origin::is_writer)) =>
+        None if options.live.is_none()
+            && names
+                .iter()
+                .any(|name| registry.gate(name).is_ok_and(cargo_origin::is_writer)) =>
         {
             let commands = registry.input_commands(names)?;
             Some(Arc::new(cargo_origin::Run::with_commands_for_run(
@@ -75,6 +103,11 @@ pub(crate) fn execute_dag(
         .enumerate()
         .map(|(index, name)| (name.clone(), index))
         .collect();
+    let cargo_schedule = options
+        .live
+        .as_ref()
+        .map(|_| CargoSchedule::new(registry, names))
+        .transpose()?;
     let mut pending: BTreeSet<String> = names.iter().cloned().collect();
     let mut completed: BTreeMap<String, GateReceipt> = BTreeMap::new();
     let (sender, receiver) = mpsc::channel();
@@ -83,8 +116,13 @@ pub(crate) fn execute_dag(
 
     while !pending.is_empty() || running > 0 {
         let mut progressed = false;
-        let candidates: Vec<String> = pending
+        let mut candidates: Vec<String> = pending
             .iter()
+            .filter(|name| {
+                cargo_schedule.as_ref().is_none_or(|schedule| {
+                    schedule.allows(name, |writer| completed.contains_key(writer))
+                })
+            })
             .filter(|name| {
                 registry.gate(name).is_ok_and(|gate| {
                     gate.dependencies
@@ -94,6 +132,15 @@ pub(crate) fn execute_dag(
             })
             .cloned()
             .collect();
+        // Ready long-running owners start first; dependencies and complete coverage
+        // are unchanged. Alphabetical order otherwise delays service lifecycles.
+        candidates.sort_by_key(|name| match name.as_str() {
+            "workspace_tests" | "offline_packages" => 0,
+            "release_command_lifecycle" => 1,
+            "service_acceptance" | "stateful_http_application" => 2,
+            "pure_tail" => 3,
+            _ => 4,
+        });
         for name in candidates {
             if running >= options.maximum_workers {
                 break;
@@ -133,6 +180,7 @@ pub(crate) fn execute_dag(
             let fresh_reason = options.fresh_reason.to_owned();
             let worker_gate = gate.clone();
             let origin = origin.clone();
+            let live = options.live.clone();
             let worker = thread::Builder::new()
                 .name(format!("check-{}", gate.name))
                 .spawn(move || {
@@ -148,6 +196,7 @@ pub(crate) fn execute_dag(
                             &fresh_reason,
                             &cache,
                             origin.as_deref(),
+                            live.as_deref(),
                         )
                     }))
                     .unwrap_or_else(|_| {
@@ -209,6 +258,45 @@ pub(crate) fn execute_dag(
     Ok(results)
 }
 
+#[cfg(test)]
+mod scheduling_tests {
+    use super::*;
+
+    #[test]
+    fn live_output_readers_wait_for_all_selected_writers_but_not_their_prerequisites() {
+        let gate = |name: &str, command: &[&str], dependencies: &[&str]| {
+            let mut gate = Gate::new(name, command.iter().map(|value| (*value).into()).collect());
+            gate.dependencies = dependencies.iter().map(|value| (*value).into()).collect();
+            gate
+        };
+        let registry = GateRegistry::new(vec![
+            gate("fmt", &["cargo", "fmt"], &[]),
+            gate("source", &["source-export"], &["fmt"]),
+            gate("build", &["cargo", "build"], &["source"]),
+            gate("lint", &["cargo", "clippy"], &["fmt"]),
+            gate("slow", &["semantic-fixtures"], &["fmt"]),
+        ])
+        .unwrap();
+        let names = registry
+            .closure(&["build".into(), "lint".into(), "slow".into()])
+            .unwrap();
+        let schedule = CargoSchedule::new(&registry, &names).unwrap();
+        for completed in [vec![], vec!["fmt"], vec!["fmt", "source", "build"]] {
+            let complete = |name: &str| completed.contains(&name);
+            assert!(schedule.allows("fmt", complete));
+            assert!(schedule.allows("source", complete));
+            assert!(schedule.allows("build", complete));
+            assert!(schedule.allows("lint", complete));
+            assert!(!schedule.allows("slow", complete));
+        }
+        assert!(schedule.allows("slow", |name| ["build", "lint"].contains(&name)));
+        // An unselected Cargo gate cannot delay a standalone reader profile.
+        let standalone = registry.closure(&["slow".into()]).unwrap();
+        let schedule = CargoSchedule::new(&registry, &standalone).unwrap();
+        assert!(schedule.allows("slow", |_| false));
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn execute_gate(
     repository: &Path,
@@ -221,10 +309,12 @@ fn execute_gate(
     fresh_reason: &str,
     verification_cache: &VerificationCache,
     origin: Option<&cargo_origin::Run>,
+    live: Option<&super::compact::Run>,
 ) -> Result<GateReceipt, DevError> {
     let started_wall = unix_nanoseconds()?;
     let started = Instant::now();
-    let mut transaction = if cargo_origin::is_writer(gate) {
+    let _access = live.map(|run| run.enter(gate)).transpose()?;
+    let mut transaction = if live.is_none() && cargo_origin::is_writer(gate) {
         Some(
             origin
                 .ok_or_else(|| DevError::infrastructure("Cargo target owner is absent"))?
@@ -235,7 +325,8 @@ fn execute_gate(
     };
     let inputs = expected_input_proofs(repository, gate, dependencies)?;
     verify_live_inputs(repository, gate, &inputs)?;
-    let selected = snapshot::observe_executable(repository, &gate.command[0])?;
+    let command = selected_command(repository, gate, &inputs)?;
+    let selected = snapshot::observe_executable(repository, &command)?;
     let fingerprint = fingerprint_with_executable(
         repository,
         gate,
@@ -246,7 +337,7 @@ fn execute_gate(
     )?;
     let stdout_path = run_directory.join(format!("{}.stdout.log", gate.name));
     let stderr_path = run_directory.join(format!("{}.stderr.log", gate.name));
-    if allow_reuse && gate.cacheable {
+    if allow_reuse && gate.cacheable && live.is_none() {
         let load = verification_cache.load(gate, &fingerprint, &stdout_path, &stderr_path);
         if let Some(cached) = load.cached {
             if let Some(transaction) = &mut transaction {
@@ -306,6 +397,7 @@ fn execute_gate(
                 },
             },
             transaction,
+            live,
         );
     }
     execute_fresh_inner(
@@ -332,6 +424,7 @@ fn execute_gate(
             },
         },
         transaction,
+        live,
     )
 }
 
@@ -353,7 +446,8 @@ pub(super) fn expected_input_proofs(
     gate: &Gate,
     dependencies: &BTreeMap<String, GateReceipt>,
 ) -> Result<Vec<FileProof>, DevError> {
-    gate.required_inputs
+    let mut inputs = gate
+        .required_inputs
         .iter()
         .map(|input| {
             let producer = dependencies.get(&input.producer).ok_or_else(|| {
@@ -379,7 +473,30 @@ pub(super) fn expected_input_proofs(
             }
             Ok(proof.clone())
         })
-        .collect()
+        .collect::<Result<Vec<_>, DevError>>()?;
+    if let Some(test) = &gate.cargo_test {
+        inputs.extend(super::cargo_tests::input_proofs(
+            repository,
+            test,
+            dependencies,
+        )?);
+    }
+    Ok(inputs)
+}
+
+fn selected_command(
+    repository: &Path,
+    gate: &Gate,
+    inputs: &[FileProof],
+) -> Result<String, DevError> {
+    if gate.cargo_test.is_some() && !super::workspace_tests::selected(gate) {
+        let proof = inputs
+            .last()
+            .ok_or_else(|| DevError::corrupt("selected test input is absent"))?;
+        Ok(repository.join(&proof.path).to_string_lossy().into_owned())
+    } else {
+        Ok(gate.command[0].clone())
+    }
 }
 
 fn verify_live_inputs(
@@ -387,11 +504,25 @@ fn verify_live_inputs(
     gate: &Gate,
     inputs: &[FileProof],
 ) -> Result<(), DevError> {
-    if inputs.len() != gate.required_inputs.len() {
+    let test_inputs = if super::workspace_tests::selected(gate) {
+        super::workspace_tests::TARGET_COUNT
+    } else {
+        usize::from(gate.cargo_test.is_some())
+    };
+    if inputs.len() != gate.required_inputs.len() + test_inputs {
         return Err(DevError::corrupt("declared input evidence is incomplete"));
     }
-    for (input, expected) in gate.required_inputs.iter().zip(inputs) {
-        let observed = evidence::proof(&input.path, evidence::relative(repository, &input.path))?;
+    if gate
+        .required_inputs
+        .iter()
+        .zip(inputs)
+        .any(|(input, proof)| proof.path != evidence::relative(repository, &input.path))
+    {
+        return Err(DevError::corrupt("declared input path was substituted"));
+    }
+    for expected in inputs {
+        let path = repository.join(&expected.path);
+        let observed = evidence::proof(&path, expected.path.clone())?;
         if observed != *expected {
             return Err(DevError::corrupt(
                 "declared input differs from its admitted producer output",
@@ -411,12 +542,13 @@ pub(super) fn execute_fresh_with_origin(
     } else {
         None
     };
-    execute_fresh_inner(input, transaction)
+    execute_fresh_inner(input, transaction, None)
 }
 
 fn execute_fresh_inner(
     input: FreshInput<'_>,
     mut transaction: Option<cargo_origin::Transaction<'_>>,
+    live: Option<&super::compact::Run>,
 ) -> Result<GateReceipt, DevError> {
     let FreshInput {
         repository,
@@ -433,9 +565,17 @@ fn execute_fresh_inner(
     verify_live_inputs(repository, gate, &inputs)?;
     let mut environment = process::environment();
     environment.extend(gate.environment.clone());
+    let mut command = gate.command.clone();
+    if super::workspace_tests::selected(gate) {
+        command.push(super::workspace_tests::request(
+            repository,
+            &stdout_path,
+            &inputs,
+        )?);
+    }
     let process = process::run_selected(
         &ProcessSpec {
-            command: gate.command.clone(),
+            command,
             cwd: repository.to_path_buf(),
             environment,
             timeout: gate.timeout,
@@ -452,7 +592,11 @@ fn execute_fresh_inner(
     let run_directory = stdout_path
         .parent()
         .ok_or_else(|| DevError::infrastructure("gate stdout has no parent"))?;
-    let retained_outputs = retain_outputs(repository, run_directory, gate, &outputs)?;
+    let retained_outputs = if live.is_none() {
+        retain_outputs(repository, run_directory, gate, &outputs)?
+    } else {
+        Vec::new()
+    };
     let mut status = map_status(process.status);
     let mut reason = process.reason.clone();
     if status == GateStatus::Passed
@@ -472,7 +616,25 @@ fn execute_fresh_inner(
         status = GateStatus::Failed;
         reason = Some(format!("cargo_output_binding:{}", error.message()));
     }
+    if status == GateStatus::Passed
+        && let Err(error) =
+            super::cargo_tests::verify_result(repository, gate, &stdout_path, &inputs)
+    {
+        status = GateStatus::Failed;
+        reason = Some(format!("cargo_test_result:{}", error.message()));
+    }
     let mut cargo_origin = None;
+    if status == GateStatus::Passed
+        && let Some(live) = live
+    {
+        match live.finish(gate, &process, run_directory) {
+            Ok(proof) => cargo_origin = proof,
+            Err(error) => {
+                status = GateStatus::Failed;
+                reason = Some(format!("cargo_output_binding:{}", error.message()));
+            }
+        }
+    }
     if status == GateStatus::Passed
         && let Some(transaction) = &mut transaction
     {
@@ -658,13 +820,22 @@ pub(super) fn gate_fingerprint(
     runtime: &RuntimeIdentity,
     dependencies: &BTreeMap<String, GateReceipt>,
 ) -> Result<VerificationDigest, DevError> {
+    let command = if gate.cargo_test.is_some() && dependencies.values().all(GateReceipt::passed) {
+        selected_command(
+            repository,
+            gate,
+            &expected_input_proofs(repository, gate, dependencies)?,
+        )?
+    } else {
+        gate.command[0].clone()
+    };
     fingerprint_with_executable(
         repository,
         gate,
         snapshot,
         runtime,
         dependencies,
-        snapshot::executable_proof(repository, &gate.command[0])?,
+        snapshot::executable_proof(repository, &command)?,
     )
 }
 
@@ -695,6 +866,7 @@ fn fingerprint_with_executable(
         maximum_stderr_bytes: u64,
         required_outputs: Vec<String>,
         required_inputs: &'a [super::model::GateInput],
+        cargo_test: &'a Option<super::model::CargoTestInput>,
         environment: &'a BTreeMap<String, String>,
         worktree_input_digest: &'a VerificationDigest,
         cargo_lock_digest: &'a VerificationDigest,
@@ -728,6 +900,7 @@ fn fingerprint_with_executable(
         maximum_stdout_bytes: gate.maximum_stdout_bytes,
         maximum_stderr_bytes: gate.maximum_stderr_bytes,
         required_inputs: &gate.required_inputs,
+        cargo_test: &gate.cargo_test,
         environment: &gate.environment,
         required_outputs: gate
             .required_outputs

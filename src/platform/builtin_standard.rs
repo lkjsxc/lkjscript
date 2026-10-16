@@ -14,6 +14,8 @@ use super::kernel::{
     TypeObjectInterner,
 };
 use super::package_interface::PackageInterfaceOwner;
+use super::package_transport::PackageTransportBinding;
+use super::package_transport::source::AdmittedClosure;
 use super::package_transport::validate_package_transport_closure;
 use super::persistent_map::MapWork;
 use super::publication::InitialPackageTransport;
@@ -24,19 +26,24 @@ use super::session::{
 };
 use super::storage::object::StoreWork;
 use std::collections::BTreeMap;
+use std::io::Read;
 use std::str::FromStr;
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock, TryLockError};
 
-const STANDARD_TRANSPORT_CONTAINER: &[u8] =
-    include_bytes!("../../packages/standard/generated/standard.lkjp");
-const STANDARD_ARTIFACT: &[u8] = include_bytes!("../../packages/standard/generated/standard.lkja");
+#[path = "builtin_standard_retention.rs"]
+mod retention;
+
+const STANDARD_TRANSPORT_COMPRESSED: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/standard.lkjp.deflate"));
+const STANDARD_ARTIFACT_COMPRESSED: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/standard.lkja.deflate"));
 const STANDARD_PACKAGE: &str = "pkg_10000000000000000000000000000001";
 const STANDARD_SEMANTIC_REVISION: &str =
-    "rev_17a9ce13f8ac2dfb3e458cf876fadb76882958da8614cbee9213d50445614903";
+    "rev_2c307fbdefe23a178a2762148447fdac853f8e9b198b53294da8302f28270ced";
 const STANDARD_PACKAGE_REVISION: &str =
-    "package_revision_aebfc42f9c09ec0ba23a38c8d82873183f87f8b835eae232d2d877aa1f51f7a0";
+    "package_revision_438773e160af5a00bdd72e4c576286d9add6bf5e9948e7b013f37b3228f9b591";
 const STANDARD_PACKAGE_TRANSPORT: &str =
-    "package_transport_4c34e7a7b849e8f48917e124693d8cc27db2aa8c81d4eae3328142d2e539c9d0";
+    "package_transport_a0646e9a61973a84b9b29bebf2d3f520a5cb981921b5637e3a38f3956b93bbc7";
 const COMMAND_TEXT_FROM_STATIC: &str = "text-from-static";
 const COMMAND_TEXT_FROM_STATIC_IMPLEMENTATION: &str = "core.text.from-static";
 const HTTP_BYTES_FROM_TEXT: &str = "bytes-from-text";
@@ -47,6 +54,25 @@ const HTTP_BYTE_STREAM_INTERFACE: &str = "ByteStream";
 const HTTP_CLIENT_INTERFACE: &str = "HttpClient";
 
 static BUILTIN_STANDARD: OnceLock<Result<BuiltinStandard, Diagnostic>> = OnceLock::new();
+const MAXIMUM_RETAINED_BUILTIN_BYTES: usize = 64 * 1_048_576;
+const MAXIMUM_RETAINED_BUILTIN_OBJECTS: usize = 100_000;
+
+#[cfg(test)]
+std::thread_local! {
+    static SHARED_SOURCE_DISABLED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(crate) fn without_shared_source<T>(run: impl FnOnce() -> T) -> T {
+    struct Reset(bool);
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            SHARED_SOURCE_DISABLED.with(|disabled| disabled.set(self.0));
+        }
+    }
+    let _reset = Reset(SHARED_SOURCE_DISABLED.with(|disabled| disabled.replace(true)));
+    run()
+}
 
 pub(crate) fn builtin_standard_package() -> Result<PackageId, Diagnostic> {
     PackageId::from_str(STANDARD_PACKAGE)
@@ -54,6 +80,15 @@ pub(crate) fn builtin_standard_package() -> Result<PackageId, Diagnostic> {
 
 #[derive(Clone, Debug)]
 pub struct BuiltinStandard {
+    transport_bytes: Arc<[u8]>,
+    artifact_bytes: Arc<[u8]>,
+    admitted_source: Arc<AdmittedClosure>,
+    independent_source: Arc<super::package_transport::oracle::OracleClosure>,
+    source_epoch: u16,
+    source_implementation: [u8; 32],
+    artifact_admission: [u8; 32],
+    program: Arc<Mutex<Option<Arc<super::execution::normalized::NormalizedProgram>>>>,
+    retained_material: retention::RetainedMaterial,
     pub package: PackageId,
     pub semantic_revision: RevisionId,
     pub package_revision: PackageRevisionDigest,
@@ -97,16 +132,121 @@ impl BuiltinStandard {
     pub fn transport(&self) -> InitialPackageTransport {
         InitialPackageTransport {
             digest: self.package_transport,
-            container: STANDARD_TRANSPORT_CONTAINER.to_vec(),
+            container: self.transport_bytes.to_vec(),
         }
     }
 
-    pub const fn transport_bytes(&self) -> &'static [u8] {
-        STANDARD_TRANSPORT_CONTAINER
+    pub fn transport_bytes(&self) -> &[u8] {
+        &self.transport_bytes
     }
 
-    pub const fn artifact_bytes(&self) -> &'static [u8] {
-        STANDARD_ARTIFACT
+    pub fn artifact_bytes(&self) -> &[u8] {
+        &self.artifact_bytes
+    }
+
+    /// A nonblocking lookup: source admission also runs inside builtin initialization.
+    /// Exact historical transports never resolve to the current embedded package.
+    pub(crate) fn initialized_for(binding: PackageTransportBinding) -> Option<&'static Self> {
+        #[cfg(test)]
+        if SHARED_SOURCE_DISABLED.with(std::cell::Cell::get) {
+            return None;
+        }
+        let standard = BUILTIN_STANDARD.get()?.as_ref().ok()?;
+        standard
+            .matches_source(
+                binding,
+                super::canonical_schema::SCHEMA_EPOCH,
+                super::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH,
+            )
+            .then_some(standard)
+    }
+
+    fn matches_source(
+        &self,
+        binding: PackageTransportBinding,
+        epoch: u16,
+        implementation: [u8; 32],
+    ) -> bool {
+        binding == self.admitted_source.container.root
+            && self.source_epoch == epoch
+            && self.source_implementation == implementation
+    }
+
+    pub(crate) fn admitted_source(&self) -> &Arc<AdmittedClosure> {
+        &self.admitted_source
+    }
+
+    pub(crate) fn independent_source(
+        &self,
+    ) -> &Arc<super::package_transport::oracle::OracleClosure> {
+        &self.independent_source
+    }
+
+    /// The builtin has one immutable dense program per process. Invocation resources,
+    /// policies, grants and cancellation remain with each caller, never in this cache.
+    #[cfg(test)]
+    pub(crate) fn prepared_program(
+        &self,
+    ) -> Result<Arc<super::execution::normalized::NormalizedProgram>, Diagnostic> {
+        self.prepared_program_with_control(&super::execution::ExecutionControl::uncancelled())
+    }
+
+    fn prepared_program_with_control(
+        &self,
+        control: &super::execution::ExecutionControl,
+    ) -> Result<Arc<super::execution::normalized::NormalizedProgram>, Diagnostic> {
+        let checkpoint = || {
+            control
+                .check()
+                .map_err(super::execution::normalized::execution_diagnostic)
+        };
+        checkpoint()?;
+        self.retained_material.require_within(
+            MAXIMUM_RETAINED_BUILTIN_BYTES,
+            MAXIMUM_RETAINED_BUILTIN_OBJECTS,
+        )?;
+        if self.artifact.admitted_content_digest(checkpoint)? != self.artifact_admission {
+            return Err(builtin_error(
+                DiagnosticClass::Corrupt,
+                "builtin_standard_program_binding",
+                "builtin program requires its exact independently compiled artifact",
+            ));
+        }
+        let mut retained = loop {
+            checkpoint()?;
+            match self.program.try_lock() {
+                Ok(retained) => break retained,
+                Err(TryLockError::WouldBlock) => {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+                Err(TryLockError::Poisoned(_)) => {
+                    return Err(builtin_error(
+                        DiagnosticClass::Corrupt,
+                        "builtin_standard_program_binding",
+                        "shared builtin program preparation was interrupted by an internal panic",
+                    ));
+                }
+            }
+        };
+        if let Some(program) = retained.as_ref() {
+            return Ok(Arc::clone(program));
+        }
+        let program = super::execution::normalized::NormalizedProgram::prepare_with_control(
+            self.artifact.clone(),
+            control,
+        )?;
+        retention::program_material(self.artifact_bytes.len(), &program)
+            .ok_or_else(builtin_retention_limit)?
+            .require_within(
+                retention::PROGRAM_MATERIAL_RESERVATION,
+                MAXIMUM_RETAINED_BUILTIN_OBJECTS
+                    .checked_sub(self.retained_material.records)
+                    .ok_or_else(builtin_retention_limit)?,
+            )?;
+        checkpoint()?;
+        let program = Arc::new(program);
+        *retained = Some(Arc::clone(&program));
+        Ok(program)
     }
 
     pub(crate) fn session_contract(&self) -> Result<SessionStandardDeclarations, Diagnostic> {
@@ -809,16 +949,39 @@ impl BuiltinStandard {
     }
 
     fn validate_embedded() -> Result<Self, Diagnostic> {
+        let transport_bytes = inflate_embedded(
+            STANDARD_TRANSPORT_COMPRESSED,
+            super::canonical_schema::STANDARD_TRANSPORT_DECOMPRESSED_BYTES,
+        )?;
+        let artifact_bytes = inflate_embedded(
+            STANDARD_ARTIFACT_COMPRESSED,
+            super::canonical_schema::STANDARD_ARTIFACT_DECOMPRESSED_BYTES,
+        )?;
+        if transport_bytes.len() > MAXIMUM_RETAINED_BUILTIN_BYTES
+            || artifact_bytes.len() > MAXIMUM_RETAINED_BUILTIN_BYTES
+        {
+            return Err(builtin_retention_limit());
+        }
         let package = PackageId::from_str(STANDARD_PACKAGE)?;
         let semantic_revision = RevisionId::from_str(STANDARD_SEMANTIC_REVISION)?;
         let package_revision = PackageRevisionDigest::from_str(STANDARD_PACKAGE_REVISION)?;
         let package_transport = PackageTransportDigest::from_str(STANDARD_PACKAGE_TRANSPORT)?;
 
         let container = crate::platform::package_transport::source::PackageContainer::decode(
-            STANDARD_TRANSPORT_CONTAINER,
+            &transport_bytes,
             package_transport,
         )?;
-        let admitted = container.admit()?;
+        if container.objects.len() > MAXIMUM_RETAINED_BUILTIN_OBJECTS {
+            return Err(builtin_retention_limit());
+        }
+        let admitted = Arc::new(container.admit()?);
+        // This independent decoder never consumes the production admission verdict. Its
+        // own complete read set and private-body checks prove the same original input.
+        let independent_source =
+            Arc::new(super::package_transport::oracle::reconstruct(&container)?);
+        if admitted.packages.len() != 1 || independent_source.snapshots.len() != 1 {
+            return Err(builtin_retention_limit());
+        }
         let mut work = StoreWork::default();
         let validated = validate_package_transport_closure(
             &container.objects,
@@ -835,7 +998,7 @@ impl BuiltinStandard {
             )
         })?;
         let clean = super::compiler::compile_immutable(source, &container.objects, &[])?;
-        if clean.artifact.bytes != STANDARD_ARTIFACT {
+        if clean.artifact.bytes.as_slice() != artifact_bytes.as_ref() {
             return Err(builtin_error(
                 DiagnosticClass::Corrupt,
                 "builtin_standard_source_artifact",
@@ -856,7 +1019,8 @@ impl BuiltinStandard {
             ));
         }
 
-        let artifact = load_artifact(STANDARD_ARTIFACT)?;
+        let artifact = load_artifact(&artifact_bytes)?;
+        let artifact_admission = artifact.admitted_content_digest(|| Ok(()))?;
         let root = artifact.root_package().ok_or_else(|| {
             builtin_error(
                 DiagnosticClass::Corrupt,
@@ -875,7 +1039,35 @@ impl BuiltinStandard {
                 "built-in standard artifact disagrees with its validated package transport",
             ));
         }
+        let public_interface_records = validated
+            .root_interface
+            .owners
+            .len()
+            .checked_add(validated.root_interface.type_objects.len())
+            .ok_or_else(builtin_retention_limit)?;
+        let retained_material = retention::retained_material(
+            transport_bytes.len(),
+            artifact_bytes.len(),
+            &admitted,
+            &independent_source,
+            &artifact,
+            public_interface_records,
+        )
+        .ok_or_else(builtin_retention_limit)?
+        .require_within(
+            MAXIMUM_RETAINED_BUILTIN_BYTES,
+            MAXIMUM_RETAINED_BUILTIN_OBJECTS,
+        )?;
         let value = Self {
+            transport_bytes,
+            artifact_bytes,
+            admitted_source: admitted,
+            independent_source,
+            source_epoch: super::canonical_schema::SCHEMA_EPOCH,
+            source_implementation: super::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH,
+            artifact_admission,
+            program: Arc::new(Mutex::new(None)),
+            retained_material,
             package,
             semantic_revision,
             package_revision,
@@ -890,6 +1082,43 @@ impl BuiltinStandard {
     }
 }
 
+fn builtin_retention_limit() -> Diagnostic {
+    builtin_error(
+        DiagnosticClass::Resource,
+        "builtin_standard_retention_limit",
+        "shared builtin exceeds its single-package, 100000-record or aggregate 64 MiB modeled retained-material bounds",
+    )
+}
+
+/// Called only after strict fresh artifact admission. Exact bytes, implementation and
+/// the private admitted-content binding must agree before sharing the embedded program.
+pub(crate) fn prepare_admitted_program(
+    bytes: &[u8],
+    artifact: LoadedArtifact,
+    control: &super::execution::ExecutionControl,
+) -> Result<Arc<super::execution::normalized::NormalizedProgram>, Diagnostic> {
+    control
+        .check()
+        .map_err(super::execution::normalized::execution_diagnostic)?;
+    if let Some(Ok(standard)) = BUILTIN_STANDARD.get()
+        && standard.artifact_bytes() == bytes
+        && BuiltinStandard::initialized_for(standard.admitted_source.container.root).is_some()
+        && artifact.admitted_content_digest(|| {
+            control
+                .check()
+                .map_err(super::execution::normalized::execution_diagnostic)
+        })? == standard.artifact_admission
+    {
+        return standard.prepared_program_with_control(control);
+    }
+    super::execution::normalized::NormalizedProgram::prepare_with_control(artifact, control)
+        .map(Arc::new)
+}
+
+#[cfg(test)]
+#[path = "builtin_standard_shared_tests.rs"]
+mod shared_source_tests;
+
 struct ByteStreamContract {
     interface: DeclarationReference,
     read: OperationReference,
@@ -901,6 +1130,37 @@ struct ByteStreamContract {
 struct HttpClientContract {
     interface: DeclarationReference,
     get: OperationReference,
+}
+
+fn inflate_embedded(bytes: &[u8], expected: usize) -> Result<Arc<[u8]>, Diagnostic> {
+    if expected > super::packed::MAXIMUM_PACKED_PAYLOAD_BYTES {
+        return Err(builtin_error(
+            DiagnosticClass::Resource,
+            "builtin_standard_compressed_limit",
+            "embedded standard exceeds its decompressed byte bound",
+        ));
+    }
+    let mut decoder = flate2::bufread::DeflateDecoder::new(bytes);
+    let mut decoded = Vec::with_capacity(expected);
+    decoder
+        .by_ref()
+        .take(expected as u64 + 1)
+        .read_to_end(&mut decoded)
+        .map_err(|error| {
+            builtin_error(
+                DiagnosticClass::Corrupt,
+                "builtin_standard_compressed_decode",
+                format!("embedded standard decompression failed: {error}"),
+            )
+        })?;
+    if decoded.len() != expected || decoder.total_in() != bytes.len() as u64 {
+        return Err(builtin_error(
+            DiagnosticClass::Corrupt,
+            "builtin_standard_compressed_length",
+            "embedded standard has a foreign decompressed length or trailing compressed bytes",
+        ));
+    }
+    Ok(decoded.into())
 }
 
 fn builtin_error(
@@ -949,8 +1209,45 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
+    fn embedded_compression_preserves_bytes_and_rejects_wrong_length_or_trailing_data() {
+        use std::io::Write;
+        let original = b"exact standard artifact bytes, repeated repeated repeated";
+        let mut encoder =
+            flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::best());
+        encoder.write_all(original).unwrap();
+        let compressed = encoder.finish().unwrap();
+        assert_eq!(
+            inflate_embedded(&compressed, original.len())
+                .unwrap()
+                .as_ref(),
+            original
+        );
+        assert!(inflate_embedded(&compressed, original.len() - 1).is_err());
+        assert!(inflate_embedded(&compressed, original.len() + 1).is_err());
+        let mut trailing = compressed.clone();
+        trailing.push(0);
+        assert!(inflate_embedded(&trailing, original.len()).is_err());
+        assert!(
+            inflate_embedded(
+                &compressed,
+                super::super::packed::MAXIMUM_PACKED_PAYLOAD_BYTES + 1
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn embedded_standard_transport_and_artifact_bind_one_exact_package() {
         let standard = BuiltinStandard::load().expect("validate embedded standard");
+        let repeated = BuiltinStandard::load().unwrap();
+        assert!(Arc::ptr_eq(
+            &standard.transport_bytes,
+            &repeated.transport_bytes
+        ));
+        assert!(Arc::ptr_eq(
+            &standard.artifact_bytes,
+            &repeated.artifact_bytes
+        ));
         assert_eq!(standard.package.to_string(), STANDARD_PACKAGE);
         assert_eq!(
             standard.semantic_revision.to_string(),
@@ -1042,7 +1339,8 @@ mod tests {
         let exported = repository
             .export_package_transport()
             .expect("export maintained standard transport");
-        assert_eq!(exported.container.as_slice(), STANDARD_TRANSPORT_CONTAINER);
+        let embedded = BuiltinStandard::load().expect("admit compressed builtin");
+        assert_eq!(exported.container.as_slice(), embedded.transport_bytes());
         assert_eq!(
             exported.transport_digest.to_string(),
             STANDARD_PACKAGE_TRANSPORT
@@ -1052,6 +1350,6 @@ mod tests {
             .expect("clean compile maintained standard");
         let linked = link_artifact(&repository, compilation.manifest_digest, &[])
             .expect("link maintained standard");
-        assert_eq!(linked.artifact.bytes.as_slice(), STANDARD_ARTIFACT);
+        assert_eq!(linked.artifact.bytes.as_slice(), embedded.artifact_bytes());
     }
 }

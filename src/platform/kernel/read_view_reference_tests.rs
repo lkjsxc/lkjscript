@@ -263,10 +263,10 @@ fn view_reference_complete_unused_scope_maps_precede_cache_and_bind_owner() {
         Resolver::new(&old_root).substitute_view(ty, &good, 0),
         Err(Failure::Generation)
     );
-    // A Graph generation cannot be substituted for the type-object profile.
+    // Type objects independently reject a foreign epoch.
     let mut wrong_profile = source.clone();
     wrong_profile.types.get_mut(&ty).unwrap().contract_version =
-        contract::READ_VIEW_GRAPH_CONTRACT_VERSION;
+        contract::GRAPH_CONTRACT_VERSION + 1;
     assert_eq!(
         Resolver::new(&wrong_profile).substitute_view(ty, &good, 0),
         Err(Failure::Generation)

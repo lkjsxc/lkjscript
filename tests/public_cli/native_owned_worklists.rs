@@ -45,7 +45,7 @@ pub(super) fn standard(public: &Native) -> Export {
 
 impl Packages {
     fn stage() -> Self {
-        let library = Native::new();
+        let library = Native::memory_project("minimal");
         let library_standard = standard(&library);
         author(
             &library,
@@ -101,7 +101,7 @@ impl Packages {
         );
         // Admission and export happen before either concrete element/storage witness exists.
         let generic = export(&library);
-        let carriers = Native::new();
+        let carriers = Native::memory_project("minimal");
         stage(&carriers, &generic);
         let carrier_standard = standard(&carriers);
         author(
@@ -116,7 +116,7 @@ impl Packages {
         );
         unchanged(&carriers, "worklist-carriers");
         let concrete = export(&carriers);
-        let consumer = Native::template("command");
+        let consumer = Native::memory_project("command");
         stage(&consumer, &generic);
         stage(&consumer, &concrete);
         Self {
@@ -142,12 +142,8 @@ impl Packages {
     }
 
     fn detach(&self) {
-        for project in [
-            &self.library.project,
-            &self.carriers.project,
-            &self.consumer.project,
-        ] {
-            std::fs::remove_dir_all(project).unwrap();
+        for public in [&self.library, &self.carriers, &self.consumer] {
+            public.remove_project();
         }
         for package in [
             &self.generic.path,
@@ -336,15 +332,7 @@ pub(super) fn run_matrix(
             &requests,
         )
     } else {
-        source_batch::execute_in(
-            public.mode,
-            public.root.path(),
-            &public.executable,
-            label,
-            &public.project,
-            cases[0].target,
-            &requests,
-        )
+        public.source_batch_outputs(label, cases[0].target, &requests)
     };
     assert_eq!(
         outputs.len(),
@@ -399,7 +387,7 @@ pub(super) fn detached_canary(
     arguments: Value,
     expected: &Value,
 ) {
-    assert!(!public.project.exists());
+    assert!(!public.has_project());
     let mut root = tempfile::tempdir().unwrap();
     if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
         root.disable_cleanup(true);
@@ -410,6 +398,7 @@ pub(super) fn detached_canary(
     let project = root.path().join("absent-project");
     assert!(!project.exists());
     let canary = Native {
+        memory: std::sync::RwLock::new(None),
         root,
         executable,
         project,
@@ -428,7 +417,7 @@ pub(super) fn detached_canary(
         arguments,
         expected,
     );
-    assert!(!canary.project.exists());
+    assert!(!canary.has_project());
 }
 
 fn worklist_expected(inputs: &[i64]) -> Value {
@@ -838,7 +827,7 @@ fn replaced(source: &str, from: &str, to: &str) -> String {
 #[test]
 fn native_owned_parameterized_contracts_reject_wrong_arguments_modes_and_witnesses_without_publication()
  {
-    let public = Native::new();
+    let public = Native::memory();
     let before = public.revision();
     let cases = [
         (

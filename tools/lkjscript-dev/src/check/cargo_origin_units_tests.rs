@@ -29,10 +29,9 @@ impl Fixture {
         fs::write(repository.join("build.rs"), "fn main() {}\n")?;
         fs::write(repository.join("src/lib.rs"), "pub fn value() {}\n")?;
         fs::write(&builder, "observed generator executable")?;
-        fs::write(
-            out_dir.join("canonical_schema.rs"),
-            lkjscript::platform::canonical_schema::generated_source(),
-        )?;
+        for (name, bytes) in lkjscript::platform::canonical_schema::generated_outputs() {
+            fs::write(out_dir.join(name), bytes)?;
+        }
         fs::write(
             out_dir.parent().expect("output parent").join("output"),
             "cargo:rerun-if-changed=build.rs\n",

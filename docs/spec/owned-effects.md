@@ -52,18 +52,16 @@ capability operation. No retry or live-effect replay is introduced.
 
 ## Compatibility and evidence
 
-Graph 23 adds the application operands. Frozen predecessor owner decoders preserve
-supported older meaning with empty argument lists; nonempty operands cannot be
-encoded under an older graph. Semantic validator 28 independently rechecks the new
-signature combinations. Authored request 27 selects a new application encoding
-only for nonempty new operands, retaining predecessor empty-application intent.
-Compact change 31 exposes both operands through executable discovery and drafting.
-Function-definition projection 13 includes their counts and exact references;
-continuations from predecessor projections are rejected.
+Effect and implementation applications are ordered inline fields in current
+owners, interfaces, requests and compiler metadata. These records, bytecode and
+artifacts share schema epoch 1. Empty applications use the same record shape as
+nonempty applications. Discovery, drafts and definitions expose complete operand
+counts and exact references.
 
-Compiler 23, bytecode 18 and artifact 30 require rebuilt derived programs. Package
-interface 13 already represents function schemes and retains its layout, as does
-type-object 10. Installation does not rebuild existing bundles or migrate data.
+Independent admission checks every signature combination; strict loading compares
+canonical applications with executable operands. Foreign epochs reject, and
+maintained bundles are rebuilt through supported product owners. Installation
+does not authorize data migration or execution.
 
 The [maintained example](../../examples/owned-effects/README.md) checks the generic
 library before concrete implementations exist, exports three exact packages and

@@ -15,8 +15,9 @@ use crate::platform::storage::object::{ObjectDomain, ObjectKey};
 use bincode::{Decode, Encode};
 use std::fmt;
 
-pub const COMPILATION_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-compilation-manifest-3";
-pub const COMPILATION_MANIFEST_CONTRACT_VERSION: u16 = 3;
+pub const COMPILATION_MANIFEST_CONTRACT_IDENTITY: &str = "lkjscript-compilation-manifest";
+pub const COMPILATION_MANIFEST_CONTRACT_VERSION: u16 =
+    crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub(crate) const COMPILATION_MANIFEST_MAGIC: [u8; 8] = *b"LKJCMNFT";
 pub(crate) const COMPILATION_MANIFEST_ENVELOPE_DOMAIN: &str =
     "lkjscript.compilation-manifest-envelope";
@@ -175,13 +176,6 @@ impl CompilationManifest {
             MAXIMUM_COMPILATION_MANIFEST_BYTES,
         )?;
         value.validate()?;
-        if value.encode()?.1 != bytes {
-            return Err(manifest_error(
-                DiagnosticClass::Corrupt,
-                "compilation_manifest_canonical",
-                "compilation manifest does not use its canonical current encoding",
-            ));
-        }
         Ok(value)
     }
 
@@ -262,7 +256,7 @@ mod tests {
             .unwrap()
             .root();
         let mut manifest = CompilationManifest {
-            contract_version: 3,
+            contract_version: COMPILATION_MANIFEST_CONTRACT_VERSION,
             graph_contract_version: crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
             compiler_contract_version: COMPILER_UNIT_CONTRACT_VERSION,
             bytecode_contract_version: BYTECODE_CONTRACT_VERSION,

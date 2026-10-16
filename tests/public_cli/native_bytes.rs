@@ -185,7 +185,7 @@ fn native_byte_bounds_and_input_rejection_publish_no_result() {
 
 #[test]
 fn malformed_byte_intrinsic_declarations_reject_before_acceptance() {
-    let public = Native::new();
+    let public = Native::memory();
     let before = public.revision();
     for (index, parameters, result) in [
         (

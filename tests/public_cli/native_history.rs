@@ -125,7 +125,7 @@ fn history_native_edit_records_intent_and_never_turns_selected_tests_into_execut
 
 #[test]
 fn history_rejects_invalid_or_foreign_grammar_and_advertises_its_scope() {
-    let public = Native::new();
+    let public = Native::memory();
     let before = public.cli(&["inspect", "history"], true);
     for options in [
         vec!["--limit", "0"],
@@ -188,7 +188,7 @@ fn history_rejects_invalid_or_foreign_grammar_and_advertises_its_scope() {
 
 #[test]
 fn history_default_truncates_twenty_and_explicit_larger_window_completes() {
-    let public = Native::new();
+    let public = Native::memory();
     let module = populate(&public);
     let mut revisions = vec![public.revision()];
     for index in 0..20 {

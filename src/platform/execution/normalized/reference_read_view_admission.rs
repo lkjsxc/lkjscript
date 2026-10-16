@@ -300,8 +300,7 @@ impl Proof {
         };
         for snapshot in snapshots {
             budget.step(0)?;
-            if snapshot.root.graph_contract_version
-                < kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+            if snapshot.root.graph_contract_version != kernel::contract::GRAPH_CONTRACT_VERSION
                 && (snapshot
                     .types
                     .values()
@@ -309,7 +308,7 @@ impl Proof {
                     || snapshot.owners.values().any(raw_view_metadata))
             {
                 return Err(invalid(
-                    "containing canonical revision advertises a predecessor view profile",
+                    "containing canonical revision requires the current schema epoch",
                 ));
             }
             if proof.dependencies.contains_key(&snapshot.root.package_id) {
@@ -335,11 +334,10 @@ impl Proof {
             for (key, record) in &snapshot.owners {
                 budget.step(0)?;
                 if raw_view_metadata(record)
-                    && record.header().contract_version
-                        < kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                    && record.header().contract_version != kernel::contract::GRAPH_CONTRACT_VERSION
                 {
                     return Err(invalid(
-                        "new view metadata or binding uses a predecessor owner generation",
+                        "view metadata or binding requires the current schema epoch",
                     ));
                 }
                 if record.header().owner != *key {
@@ -967,7 +965,7 @@ impl Resolver<'_, '_> {
                     .declaration(reference.binder.declaration())?
                     .header
                     .contract_version
-                    < kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                    != kernel::contract::GRAPH_CONTRACT_VERSION
                 {
                     return Err(invalid(
                         "formal read scope is owned by a predecessor declaration generation",
@@ -1029,8 +1027,7 @@ impl Resolver<'_, '_> {
             .ok_or_else(|| invalid("view scope has no named function owner"))?;
         let declaration = self.proof.declaration(owner)?;
         if !matches!(declaration.payload, DeclarationPayload::Function(_))
-            || declaration.header.contract_version
-                < kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+            || declaration.header.contract_version != kernel::contract::GRAPH_CONTRACT_VERSION
         {
             return Err(invalid(
                 "view lexical authority requires the exact enclosing Function34",
@@ -1206,8 +1203,7 @@ impl Resolver<'_, '_> {
                 if reference.package != owner.package
                     || record.declaration != owner.declaration
                     || record.header.kind != OwnerKind::RequirementParameter
-                    || record.header.contract_version
-                        < kernel::contract::REQUIREMENT_GRAPH_CONTRACT_VERSION
+                    || record.header.contract_version != kernel::contract::GRAPH_CONTRACT_VERSION
                     || !matches!(&declaration.payload, DeclarationPayload::Function(f) if f.requirement_parameters.contains(&reference.parameter))
                 {
                     return Err(invalid(
@@ -1373,7 +1369,7 @@ impl Resolver<'_, '_> {
     ) -> Result<()> {
         if !function.requirement_parameters.is_empty()
             && self.declaration(reference)?.header.contract_version
-                < kernel::contract::REQUIREMENT_GRAPH_CONTRACT_VERSION
+                != kernel::contract::GRAPH_CONTRACT_VERSION
         {
             return Err(invalid(
                 "requirement binder uses a predecessor function generation",
@@ -2516,7 +2512,7 @@ impl Resolver<'_, '_> {
             return Err(invalid("view instance changes declaration kind"));
         };
         if record.header.kind != OwnerKind::ReadView
-            || record.header.contract_version < kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+            || record.header.contract_version != kernel::contract::GRAPH_CONTRACT_VERSION
         {
             return Err(invalid(
                 "nominal view declaration uses unsupported category/generation",
@@ -3147,10 +3143,10 @@ impl Resolver<'_, '_> {
                         .owner
                         .ok_or_else(|| invalid("view signature has no exact owner"))?;
                     if self.proof.declaration(owner)?.header.contract_version
-                        < kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                        != kernel::contract::GRAPH_CONTRACT_VERSION
                     {
                         return Err(invalid(
-                            "view signature requires its exact owner generation34",
+                            "view signature requires its exact owner current schema epoch",
                         ));
                     }
                     if capability_suffix {
@@ -3209,10 +3205,10 @@ impl Resolver<'_, '_> {
                 .owner
                 .ok_or_else(|| invalid("view result signature owner absent"))?;
             if self.proof.declaration(owner)?.header.contract_version
-                < kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                != kernel::contract::GRAPH_CONTRACT_VERSION
             {
                 return Err(invalid(
-                    "view result signature requires its exact owner generation34",
+                    "view result signature requires its exact owner current schema epoch",
                 ));
             }
         }
@@ -4658,8 +4654,8 @@ impl Resolver<'_, '_> {
             record.kind,
             BindingKind::ReadView | BindingKind::ReadViewBorrow
         ) {
-            if record.header.contract_version < kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION {
-                return Err(invalid("new view binding requires generation34"));
+            if record.header.contract_version != kernel::contract::GRAPH_CONTRACT_VERSION {
+                return Err(invalid("new view binding requires current schema epoch"));
             }
             self.named_view_function(context)?;
         }
@@ -4830,7 +4826,7 @@ impl Resolver<'_, '_> {
                 None
             };
         if (operation.is_read_view_operation() || !operation.read_scope_arguments().is_empty())
-            && record.contract_version < kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+            && record.contract_version != kernel::contract::GRAPH_CONTRACT_VERSION
         {
             return Err(invalid("new view syntax uses a predecessor graph profile"));
         }
@@ -7371,7 +7367,7 @@ impl Resolver<'_, '_> {
                         let declaration = self.declaration(owner)?;
                         if matches!(declaration.payload, DeclarationPayload::Function(_))
                             && declaration.header.contract_version
-                                >= kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                                == kernel::contract::GRAPH_CONTRACT_VERSION
                         {
                             scopes.insert(ReadScopeArgument::Lexical {
                                 callable: owner,
@@ -7695,8 +7691,7 @@ impl Resolver<'_, '_> {
             .ok_or_else(|| invalid("loan callable absent"))?;
         let declaration = self.proof.declaration(callable)?;
         if matches!(declaration.payload, DeclarationPayload::Function(_))
-            && declaration.header.contract_version
-                >= kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+            && declaration.header.contract_version == kernel::contract::GRAPH_CONTRACT_VERSION
         {
             scopes.insert(ReadScopeArgument::Lexical { callable, binding });
         }

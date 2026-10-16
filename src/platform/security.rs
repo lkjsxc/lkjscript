@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const SECURITY_ADAPTER_CONTRACT_VERSION: u16 = 1;
+pub const SECURITY_ADAPTER_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_RANDOM_BYTES: usize = 1024 * 1024;
 pub const MAXIMUM_PASSWORD_BYTES: usize = 1024;
 

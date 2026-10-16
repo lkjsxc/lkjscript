@@ -258,14 +258,8 @@ fn reference_associated_invocations_reject_changed_ordered_children_and_generati
         healthy(&case, &schema, tail);
         for mutation in 0..8 {
             let mut changed = case.fixture.source.clone();
-            let other_admitted_generation = if generation
-                == crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-            {
-                crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-            } else {
-                crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-            };
-            assert_ne!(other_admitted_generation, generation);
+            let foreign_generation = 0;
+            assert_ne!(foreign_generation, generation);
             let invocation = expression(&mut changed, case.invocation);
             let ExpressionOperation::Invoke { callee, arguments } = &mut invocation.operation
             else {
@@ -278,7 +272,7 @@ fn reference_associated_invocations_reject_changed_ordered_children_and_generati
                     arguments.swap(0, 1); // Both arguments remain well-typed I64.
                 }
                 2 => invocation.contract_version = 32,
-                3 => invocation.contract_version = other_admitted_generation,
+                3 => invocation.contract_version = foreign_generation,
                 4 | 5 | 7 => {
                     let OwnerRecord::Declaration(target) = changed
                         .owners
@@ -289,7 +283,7 @@ fn reference_associated_invocations_reject_changed_ordered_children_and_generati
                     };
                     target.header.contract_version = match mutation {
                         4 => 32,
-                        5 => other_admitted_generation,
+                        5 => foreign_generation,
                         7 => crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION + 1,
                         _ => unreachable!(),
                     };

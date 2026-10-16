@@ -515,7 +515,7 @@ fn wide_value_result_retains_complete_view_exclusion_without_an_unused_owned_que
         })
         .collect::<Vec<_>>();
     let result = ty(&mut source, TypeForm::StructuralRecord { fields });
-    let occurrence = OwnedTypeOccurrence::authored(None, 34);
+    let occurrence = OwnedTypeOccurrence::authored(None, contract::GRAPH_CONTRACT_VERSION);
     let limits = AssociatedAdmissionLimits {
         maximum_metadata_bytes: 192 * 1024,
         ..AssociatedAdmissionLimits::default()

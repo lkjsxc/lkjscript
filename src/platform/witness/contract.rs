@@ -4,11 +4,11 @@ use super::ValidatorContractDigest;
 use crate::platform::kernel::{NamespaceClass, OwnerKind, RelationKind};
 
 pub const WITNESS_CONTRACT_IDENTITY: &str = "lkjscript-validation-witness";
-pub const WITNESS_CONTRACT_VERSION: u16 = 10;
+pub const WITNESS_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const OWNER_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-owner-summary";
-pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = 12;
+pub const OWNER_SUMMARY_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator";
-pub const VALIDATOR_CONTRACT_VERSION: u16 = 41;
+pub const VALIDATOR_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 
 pub const WITNESS_MAGIC: [u8; 8] = *b"LKJWITNS";
 pub const OWNER_SUMMARY_MAGIC: [u8; 8] = *b"LKJSUMRY";
@@ -38,7 +38,7 @@ pub const MAXIMUM_RELATION_PREFIX_ITEMS: usize = 10_000;
 pub const MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS: usize = 10_000;
 
 /// Semantic obligations owned by the current validator implementation.
-/// Its generated implementation hash invalidates proof reuse when their code changes.
+/// This stable contract describes meaning; implementation identity is a cache binding.
 pub const VALIDATOR_FEATURES: [&str; 44] = [
     "opaque_nominal_owned_records",
     "scoped_shareable_owned_inputs",
@@ -88,8 +88,7 @@ pub const VALIDATOR_FEATURES: [&str; 44] = [
 
 pub fn validator_contract_digest() -> ValidatorContractDigest {
     let mut bytes = Vec::new();
-    bytes.extend_from_slice(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
-    bytes.extend_from_slice(&crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH);
+    bytes.extend_from_slice(&crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes());
     push_text(&mut bytes, VALIDATOR_CONTRACT_IDENTITY);
     push_text(
         &mut bytes,

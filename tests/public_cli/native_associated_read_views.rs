@@ -39,9 +39,10 @@ fn cli(public: &Native, arguments: &[&str], success: bool) -> Vec<CompactRecord>
     let serial = SERIAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let evidence = public.root.path().join("cli-evidence");
     let mut command = Command::new(&public.executable);
-    if !arguments.starts_with(&["package", "builtin"])
-        && !arguments.starts_with(&["run", "--deployment"])
-    {
+    let memory = public.memory.read().unwrap();
+    let independent = arguments.starts_with(&["package", "builtin"])
+        || arguments.starts_with(&["run", "--deployment"]);
+    if memory.is_none() && !independent {
         command.arg("--project").arg(&public.project);
     }
     command
@@ -57,9 +58,13 @@ fn cli(public: &Native, arguments: &[&str], success: bool) -> Vec<CompactRecord>
         .get_args()
         .map(|v| v.to_str().unwrap().to_owned())
         .collect::<Vec<_>>();
-    let semantic = (public.mode == semantic_cli::Mode::HostSemantic)
-        .then(|| semantic_cli::execute(arguments, full_arguments.clone()))
-        .flatten();
+    let semantic = if let Some(memory) = memory.as_ref().filter(|_| !independent) {
+        Some(semantic_cli::execute_memory(memory, full_arguments.clone()))
+    } else {
+        (public.mode == semantic_cli::Mode::HostSemantic)
+            .then(|| semantic_cli::execute(arguments, full_arguments.clone()))
+            .flatten()
+    };
     let mode = if semantic.is_some() {
         semantic_cli::Mode::HostSemantic
     } else if public.mode == semantic_cli::Mode::CandidateProcess {
@@ -127,7 +132,7 @@ fn native_shell() -> Native {
     let mode = semantic_cli::Mode::selected();
     let executable = semantic_cli::executable(root.path(), mode, &selected);
     #[cfg(unix)]
-    {
+    if mode != semantic_cli::Mode::HostSemantic {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o555)).unwrap();
         assert_eq!(
@@ -136,6 +141,7 @@ fn native_shell() -> Native {
         );
     }
     let public = Native {
+        memory: std::sync::RwLock::new(None),
         project: root.path().join("project"),
         root,
         executable,
@@ -152,6 +158,18 @@ fn native_shell() -> Native {
 
 fn native(template: &str) -> Native {
     let public = native_shell();
+    if public.mode == semantic_cli::Mode::HostSemantic {
+        static ARENA: std::sync::OnceLock<lkjscript::platform::MemProjectStore> =
+            std::sync::OnceLock::new();
+        let memory = ARENA
+            .get_or_init(|| lkjscript::platform::MemProjectStore::new(256 * 1_048_576).unwrap())
+            .fork()
+            .unwrap();
+        lkjscript::platform::create_memory_project(&memory, "associated-read-views", template)
+            .unwrap();
+        *public.memory.write().unwrap() = Some(memory);
+        return public;
+    }
     cli(
         &public,
         &[
@@ -690,7 +708,7 @@ impl Packages {
         private: bool,
     ) {
         let before = revision(public);
-        let head = std::fs::read(public.project.join("HEAD")).unwrap();
+        let head = public.head_bytes();
         let request = format!(
             "request base={before}\n{}{literal}",
             if with_imports {
@@ -726,7 +744,7 @@ impl Packages {
             );
         }
         assert_eq!(revision(public), before);
-        assert_eq!(std::fs::read(public.project.join("HEAD")).unwrap(), head);
+        assert_eq!(public.head_bytes(), head);
     }
 
     fn build(&mut self) -> [PathBuf; 3] {
@@ -778,11 +796,17 @@ impl Packages {
         {
             let archive_root = self.source_archive.path().join(index.to_string());
             std::fs::create_dir_all(&archive_root).unwrap();
-            let copied = archive_root.join("project");
-            copy_source_tree(&public.project, &copied);
-            compare_source_tree(&public.project, &copied);
-            std::fs::remove_dir_all(&public.project).unwrap();
-            assert!(!public.project.exists());
+            {
+                let memory = public.memory.read().unwrap();
+                if let Some(memory) = memory.as_ref() {
+                    copy_memory_source(memory, &archive_root.join("memory-source.records"));
+                } else {
+                    let copied = archive_root.join("project");
+                    copy_source_tree(&public.project, &copied);
+                    compare_source_tree(&public.project, &copied);
+                }
+            }
+            public.remove_project();
             for entry in std::fs::read_dir(public.root.path()).unwrap() {
                 let file = entry.unwrap().path();
                 if source_file(&file) {
@@ -846,6 +870,35 @@ fn copy_source_tree(source: &Path, destination: &Path) {
             std::fs::copy(entry.path(), target).unwrap();
         }
     }
+}
+
+fn copy_memory_source(memory: &lkjscript::platform::MemProjectStore, destination: &Path) {
+    use std::io::{BufReader, BufWriter, Read, Write};
+    let mut output = BufWriter::new(std::fs::File::create(destination).unwrap());
+    lkjscript::platform::contributor::visit_memory_project(memory, |name, bytes| {
+        for field in [name.as_bytes(), bytes] {
+            output
+                .write_all(&(field.len() as u64).to_le_bytes())
+                .unwrap();
+            output.write_all(field).unwrap();
+        }
+    })
+    .unwrap();
+    output.flush().unwrap();
+    drop(output);
+    let mut input = BufReader::new(std::fs::File::open(destination).unwrap());
+    lkjscript::platform::contributor::visit_memory_project(memory, |name, bytes| {
+        for field in [name.as_bytes(), bytes] {
+            let mut length = [0_u8; 8];
+            input.read_exact(&mut length).unwrap();
+            assert_eq!(u64::from_le_bytes(length), field.len() as u64);
+            let mut copied = vec![0_u8; field.len()];
+            input.read_exact(&mut copied).unwrap();
+            assert_eq!(copied, field);
+        }
+    })
+    .unwrap();
+    assert_eq!(input.read(&mut [0_u8; 1]).unwrap(), 0);
 }
 
 fn compare_source_tree(source: &Path, destination: &Path) {

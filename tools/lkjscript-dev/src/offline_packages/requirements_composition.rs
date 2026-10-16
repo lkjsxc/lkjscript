@@ -31,7 +31,7 @@ fn apply_input(
     let input = context.evidence.join(format!("{MATERIAL}-{name}.lkjc"));
     let review = context.evidence.join(format!("{MATERIAL}-{name}.lkjplan"));
     fs::write(&input, source)?;
-    let first = context.receipt.commands.len();
+    let first = context.command_index();
     let plan = context.cli(
         Some(&package.path),
         &[
@@ -118,7 +118,7 @@ fn invoke(
                 .ok_or_else(|| DevError::corrupt("composition bundle name"))?
         )),
     )?;
-    let index = context.receipt.commands.len();
+    let index = context.command_index();
     context.cli(
         None,
         &[
@@ -344,7 +344,7 @@ fn edited_draft(source: &str) -> Result<String, DevError> {
 }
 
 pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), DevError> {
-    let discovery = context.receipt.commands.len();
+    let discovery = context.command_index();
     context.cli(None, &["capabilities", "--section", "change"], true)?;
     context.cli(None, &["package", "builtin", "inspect"], true)?;
     for (kind, name) in CONTRACTS {
@@ -369,7 +369,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         )?;
     }
     let mut authored = BTreeMap::new();
-    let inventory_start = context.receipt.inventories.len();
+    let inventory_start = context.inventory_index();
     let mut credit = context.new_package("composition-credit")?;
     context.stage(&credit, standard)?;
     authored.insert(
@@ -417,7 +417,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         "consumer",
         author(context, &mut consumer, "consumer", &prelude, CONSUMER)?,
     );
-    let schema_index = context.receipt.commands.len();
+    let schema_index = context.command_index();
     let schema_path = context
         .evidence
         .join(format!("{MATERIAL}-stock-schema.lkjc"));
@@ -440,11 +440,11 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     )?;
     context.cli(Some(&consumer.path), &["check"], true)?;
     let old_revision = consumer.revision.clone();
-    let old_build = context.receipt.commands.len();
+    let old_build = context.command_index();
     context.build(&consumer, &format!("{MATERIAL}-old"))?;
 
     let draft_path = context.evidence.join(format!("{MATERIAL}-draft.lkjc"));
-    let draft_index = context.receipt.commands.len();
+    let draft_index = context.command_index();
     context.cli(
         Some(&credit.path),
         &[
@@ -499,7 +499,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         )?,
     );
     context.cli(Some(&consumer.path), &["check"], true)?;
-    let new_build = context.receipt.commands.len();
+    let new_build = context.command_index();
     context.build(&consumer, &format!("{MATERIAL}-new"))?;
     for package in [&credit, &stock, &consumer] {
         fs::remove_dir_all(&package.path)?;

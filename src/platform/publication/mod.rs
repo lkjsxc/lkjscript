@@ -41,6 +41,7 @@ pub(crate) use read_view::LinkReadReuseObservation;
 pub(crate) use read_view::{
     BuiltPackageRevision, RepositoryDefinitionAdmission, RepositoryDefinitionReader,
     RepositoryQueryAdmission, RepositoryQueryRangeRead, RepositoryRelationQueryRange,
+    SourceValidationProof,
 };
 pub use read_view::{
     ExportedPackageTransport, MAXIMUM_RELATION_READ_ITEMS, MAXIMUM_TEST_DEPENDENCY_READ_ITEMS,

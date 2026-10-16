@@ -23,6 +23,7 @@ pub(crate) enum CallObservation {
 #[serde(deny_unknown_fields)]
 pub(crate) struct SemanticObservation {
     pub(crate) schema: String,
+    pub(crate) backend: SemanticBackend,
     pub(crate) operation: String,
     pub(crate) arguments: Vec<String>,
     pub(crate) returned_success: bool,
@@ -31,6 +32,13 @@ pub(crate) struct SemanticObservation {
     pub(crate) elapsed_nanoseconds: u64,
     pub(crate) response: evidence::FileProof,
     pub(crate) diagnostics: evidence::FileProof,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SemanticBackend {
+    Filesystem,
+    Memory,
 }
 
 impl CallObservation {
@@ -80,7 +88,7 @@ impl CallObservation {
     pub(crate) fn require_outcome(&self, expected_success: bool) -> Result<(), DevError> {
         let valid = match self {
             Self::Semantic(call) => {
-                call.schema == "lkjscript-linked-semantic-call-1"
+                call.schema == "lkjscript-linked-semantic-call-2"
                     && !call.operation.is_empty()
                     && call.returned_success == expected_success
                     && (call.protocol_code == 0) == expected_success
@@ -106,8 +114,10 @@ impl CallObservation {
     pub(crate) fn require_arguments(&self, arguments: &[String]) -> Result<(), DevError> {
         match self {
             Self::Semantic(call) => require(
-                call.arguments == arguments && call.operation == operation(arguments)?.0,
-                "linked public operation arguments changed",
+                call.backend == SemanticBackend::Filesystem
+                    && call.arguments == arguments
+                    && call.operation == operation(arguments)?.0,
+                "filesystem public operation backend or arguments changed",
             ),
             Self::Process(_) => Ok(()),
         }
@@ -163,13 +173,17 @@ impl CallObservation {
                 proof.path == format!("{label}.{suffix}")
                     && proof.kind == evidence::FileKind::File
                     && files.iter().filter(|file| *file == proof).count() == 1,
-                "operation response or diagnostic evidence is missing or substituted",
+                &format!(
+                    "operation evidence is missing or substituted: expected {label}.{suffix}, observed {}",
+                    proof.path
+                ),
             )?;
         }
         Ok(())
     }
 }
 
+#[cfg(test)]
 pub(crate) fn execute(
     arguments: &[String],
     response_path: &Path,
@@ -178,6 +192,7 @@ pub(crate) fn execute(
 ) -> Result<CallObservation, DevError> {
     execute_with_cancellation(
         arguments,
+        None,
         response_path,
         diagnostic_path,
         evidence_root,
@@ -185,53 +200,67 @@ pub(crate) fn execute(
     )
 }
 
+/// Memory authority is explicit and produces a distinct backend tag. Disk receipt
+/// readers cannot admit it as an observation of their retained project paths.
 pub(crate) fn execute_with_cancellation(
     arguments: &[String],
+    memory_project: Option<&platform::MemProjectStore>,
     response_path: &Path,
     diagnostic_path: &Path,
     evidence_root: &Path,
     cancellation: impl Future<Output = ()> + Send,
 ) -> Result<CallObservation, DevError> {
-    require_explicit_paths(arguments)?;
+    require_explicit_paths(arguments, memory_project.is_some())?;
     let (operation, local) = operation(arguments)?;
     let started = Instant::now();
     let single = |result: Result<Vec<u8>, Diagnostic>| result.map_err(|error| vec![error]);
-    let result = match operation {
-        "new" => single(platform::execute_new(&local[1..])),
-        "capabilities" => single(platform::execute_capabilities(&local[1..])),
-        "status" => single(platform::execute_status(arguments.to_vec())),
-        "inspect" => single(platform::execute_inspect(arguments.to_vec())),
-        "query" => single(platform::execute_query(arguments.to_vec())),
-        "change" => platform::execute_change(arguments.to_vec()),
-        "check" => single(platform::execute_check(arguments.to_vec())),
-        "build" => single(platform::execute_build(arguments.to_vec())),
-        "package" => single(platform::execute_package_builtin(arguments.to_vec())),
-        "data" => single(platform::execute_data(&local[1..])),
-        "run"
-            if local.iter().any(|value| {
-                matches!(value.as_str(), "--batch-input-file" | "--batch-result-file")
-            }) =>
-        {
-            match platform::cli::parse_run_batch(arguments) {
-                Ok(options) => single(
-                    runtime()?.block_on(platform::cli::execute_run_batch(options, cancellation)),
-                ),
-                Err(error) => Err(vec![error]),
+    let backend = if memory_project.is_some() {
+        SemanticBackend::Memory
+    } else {
+        SemanticBackend::Filesystem
+    };
+    let result = if let Some(project) = memory_project {
+        platform::execute_in_memory(project, arguments.to_vec())
+    } else {
+        match operation {
+            "new" => single(platform::execute_new(&local[1..])),
+            "capabilities" => single(platform::execute_capabilities(&local[1..])),
+            "status" => single(platform::execute_status(arguments.to_vec())),
+            "inspect" => single(platform::execute_inspect(arguments.to_vec())),
+            "query" => single(platform::execute_query(arguments.to_vec())),
+            "change" => platform::execute_change(arguments.to_vec()),
+            "check" => single(platform::execute_check(arguments.to_vec())),
+            "build" => single(platform::execute_build(arguments.to_vec())),
+            "package" => single(platform::execute_package_builtin(arguments.to_vec())),
+            "data" => single(platform::execute_data(&local[1..])),
+            "run"
+                if local.iter().any(|value| {
+                    matches!(value.as_str(), "--batch-input-file" | "--batch-result-file")
+                }) =>
+            {
+                match platform::cli::parse_run_batch(arguments) {
+                    Ok(options) => single(
+                        runtime()?
+                            .block_on(platform::cli::execute_run_batch(options, cancellation)),
+                    ),
+                    Err(error) => Err(vec![error]),
+                }
             }
-        }
-        "run" if local.iter().any(|value| value == "--deployment") => {
-            match platform::parse_foreground_run(arguments) {
-                Ok(options) => single(
-                    runtime()?.block_on(platform::execute_foreground_run(options, cancellation)),
-                ),
-                Err(error) => Err(vec![error]),
+            "run" if local.iter().any(|value| value == "--deployment") => {
+                match platform::parse_foreground_run(arguments) {
+                    Ok(options) => single(
+                        runtime()?
+                            .block_on(platform::execute_foreground_run(options, cancellation)),
+                    ),
+                    Err(error) => Err(vec![error]),
+                }
             }
-        }
-        "run" => single(platform::execute_run(arguments.to_vec())),
-        _ => {
-            return Err(DevError::usage(format!(
-                "linked semantic owner does not expose {operation}"
-            )));
+            "run" => single(platform::execute_run(arguments.to_vec())),
+            _ => {
+                return Err(DevError::usage(format!(
+                    "linked semantic owner does not expose {operation}"
+                )));
+            }
         }
     };
     let (returned_success, protocol_code, response) = match result {
@@ -255,6 +284,7 @@ pub(crate) fn execute_with_cancellation(
         }
     };
     publish_call(
+        backend,
         operation,
         arguments,
         returned_success,
@@ -277,7 +307,13 @@ pub(crate) fn observe_json(
 ) -> Result<CallObservation, DevError> {
     let started = Instant::now();
     let (success, code, bytes) = match run() {
-        Ok(value) => (true, 0, evidence::encode_json(&value)?),
+        Ok(value) => {
+            // Probe commands emit compact JSON. Preserve every value without
+            // spending their response budget on evidence-file indentation.
+            let mut bytes = serde_json::to_vec(&value)?;
+            bytes.push(b'\n');
+            (true, 0, bytes)
+        }
         Err(error) => (
             false,
             exit_status_for(error.class),
@@ -285,6 +321,7 @@ pub(crate) fn observe_json(
         ),
     };
     publish_call(
+        SemanticBackend::Filesystem,
         operation,
         arguments,
         success,
@@ -335,7 +372,7 @@ fn operation(arguments: &[String]) -> Result<(&str, &[String]), DevError> {
     Ok((operation, local))
 }
 
-fn require_explicit_paths(arguments: &[String]) -> Result<(), DevError> {
+fn require_explicit_paths(arguments: &[String], memory_project: bool) -> Result<(), DevError> {
     let (operation, local) = operation(arguments)?;
     require(
         operation != "new"
@@ -367,7 +404,9 @@ fn require_explicit_paths(arguments: &[String]) -> Result<(), DevError> {
         || local.starts_with(&["package".to_owned(), "builtin".to_owned()])
         || (operation == "run" && local.iter().any(|value| value == "--deployment"));
     require(
-        independent || arguments.first().is_some_and(|value| value == "--project"),
+        memory_project
+            || independent
+            || arguments.first().is_some_and(|value| value == "--project"),
         "linked operation cannot use implicit project discovery",
     )
 }
@@ -377,6 +416,7 @@ fn require_explicit_paths(arguments: &[String]) -> Result<(), DevError> {
     reason = "one returned call binds its complete evidence destinations"
 )]
 fn publish_call(
+    backend: SemanticBackend,
     operation: &str,
     arguments: &[String],
     returned_success: bool,
@@ -389,7 +429,11 @@ fn publish_call(
 ) -> Result<CallObservation, DevError> {
     require(
         response.len() <= MAXIMUM_CLI_RESPONSE_BYTES,
-        "linked public response exceeds its format bound",
+        &format!(
+            "linked {operation} response has {} bytes, exceeding its {} byte format bound",
+            response.len(),
+            MAXIMUM_CLI_RESPONSE_BYTES,
+        ),
     )?;
     require(
         response_path.parent() == Some(evidence_root)
@@ -407,7 +451,8 @@ fn publish_call(
         .and_then(|name| name.to_str())
         .ok_or_else(|| DevError::corrupt("linked diagnostic evidence filename"))?;
     Ok(CallObservation::Semantic(SemanticObservation {
-        schema: "lkjscript-linked-semantic-call-1".into(),
+        schema: "lkjscript-linked-semantic-call-2".into(),
+        backend,
         operation: operation.into(),
         arguments: arguments.to_vec(),
         returned_success,
@@ -481,6 +526,52 @@ mod tests {
     use super::*;
     use platform::control::{CompactRecord, parse_records};
 
+    #[test]
+    #[allow(
+        clippy::result_large_err,
+        reason = "probe callbacks preserve the public typed diagnostic boundary"
+    )]
+    fn json_probe_keeps_complete_compact_values_within_the_unchanged_response_bound() {
+        let root = tempfile::tempdir().unwrap();
+        let value = serde_json::Value::Array(vec![
+            serde_json::Value::Null;
+            MAXIMUM_CLI_RESPONSE_BYTES / 8 + 1
+        ]);
+        assert!(evidence::encode_json(&value).unwrap().len() > MAXIMUM_CLI_RESPONSE_BYTES);
+        let mut expected = serde_json::to_vec(&value).unwrap();
+        expected.push(b'\n');
+        let response = root.path().join("probe.stdout");
+        let diagnostic = root.path().join("probe.stderr");
+        let observed = observe_json(
+            "contributor.probe",
+            &[],
+            &response,
+            &diagnostic,
+            root.path(),
+            || Ok(value),
+        )
+        .unwrap();
+        observed.require_outcome(true).unwrap();
+        assert_eq!(std::fs::read(&response).unwrap(), expected);
+        assert!(expected.len() <= MAXIMUM_CLI_RESPONSE_BYTES);
+
+        let rejected = root.path().join("oversized.stdout");
+        assert!(
+            observe_json(
+                "contributor.probe",
+                &[],
+                &rejected,
+                &root.path().join("oversized.stderr"),
+                root.path(),
+                || Ok(serde_json::Value::String(
+                    "x".repeat(MAXIMUM_CLI_RESPONSE_BYTES)
+                )),
+            )
+            .is_err()
+        );
+        assert!(!rejected.exists());
+    }
+
     fn field(records: &[CompactRecord], name: &str) -> String {
         records
             .iter()
@@ -531,16 +622,54 @@ mod tests {
     }
 
     #[test]
+    fn memory_authority_rejects_a_filesystem_project_selector() {
+        let root = tempfile::tempdir().unwrap();
+        let project = platform::MemProjectStore::new(1024 * 1024).unwrap();
+        let forbidden = root.path().join("unselected-project");
+        let arguments = vec![
+            "--project".into(),
+            forbidden.display().to_string(),
+            "status".into(),
+        ];
+        let call = execute_with_cancellation(
+            &arguments,
+            Some(&project),
+            &root.path().join("response"),
+            &root.path().join("diagnostics"),
+            root.path(),
+            std::future::pending(),
+        )
+        .unwrap();
+        call.require_outcome(false).unwrap();
+        assert!(!forbidden.exists());
+        let records = parse_records(
+            "memory rejection",
+            &std::fs::read(root.path().join("response")).unwrap(),
+        )
+        .unwrap();
+        call.require_public_response(&records).unwrap();
+        assert!(call.require_arguments(&arguments).is_err());
+        assert_eq!(
+            serde_json::to_value(&call).unwrap()["observation"]["backend"],
+            "memory"
+        );
+    }
+
+    #[test]
     fn reviewed_current_request_retains_stale_base_protocol_seven() {
         let root = tempfile::tempdir().unwrap();
-        let project = root.path().join("project");
+        let project = platform::MemProjectStore::new(16 * 1024 * 1024).unwrap();
+        platform::create_memory_project(&project, "current-review", "minimal").unwrap();
+        let sibling = project.fork().unwrap();
         let mut index = 0;
-        let mut invoke = |args: Vec<String>| {
-            let call = execute(
+        let mut invoke = |project: &platform::MemProjectStore, args: Vec<String>| {
+            let call = execute_with_cancellation(
                 &args,
+                Some(project),
                 &root.path().join(format!("call-{index}.stdout")),
                 &root.path().join(format!("call-{index}.stderr")),
                 root.path(),
+                std::future::pending(),
             )
             .unwrap();
             let records = parse_records(
@@ -550,16 +679,13 @@ mod tests {
             .unwrap();
             index += 1;
             call.require_public_response(&records).unwrap();
+            let observed = call.as_semantic().unwrap();
+            assert_eq!(observed.backend, SemanticBackend::Memory);
+            assert_eq!(observed.arguments, args);
+            assert!(call.require_arguments(&args).is_err());
             (call, records)
         };
-        let (_, created) = invoke(vec![
-            "new".into(),
-            project.display().to_string(),
-            "--template".into(),
-            "minimal".into(),
-            "--name".into(),
-            "current-review".into(),
-        ]);
+        let (_, created) = invoke(&project, vec!["status".into()]);
         let base = created
             .iter()
             .find(|record| record.operation == "revision")
@@ -570,26 +696,15 @@ mod tests {
             .unwrap()
             .value
             .clone();
-        let request = root.path().join("request.lkjc");
-        std::fs::write(
-            &request,
-            format!("request base={base}\ncreate.module as=$module name=current-review\n"),
-        )
-        .unwrap();
-        let prefix = vec![
-            "--project".into(),
-            project.display().to_string(),
-            "change".into(),
-        ];
+        let request =
+            format!("request base={base}\ncreate.module as=$module name=current-review\n");
+        let prefix = vec!["change".into()];
         let (_, planned) = invoke(
+            &project,
             prefix
                 .iter()
                 .cloned()
-                .chain([
-                    "plan".into(),
-                    "--input-file".into(),
-                    request.display().to_string(),
-                ])
+                .chain(["plan".into(), "--input".into(), request.clone()])
                 .collect(),
         );
         let token = planned
@@ -603,13 +718,14 @@ mod tests {
             .value
             .clone();
         let (applied, _) = invoke(
+            &project,
             prefix
                 .iter()
                 .cloned()
                 .chain([
                     "apply".into(),
-                    "--input-file".into(),
-                    request.display().to_string(),
+                    "--input".into(),
+                    request.clone(),
                     "--plan".into(),
                     token,
                 ])
@@ -617,17 +733,28 @@ mod tests {
         );
         applied.require_outcome(true).unwrap();
         let (stale, records) = invoke(
+            &project,
             prefix
-                .into_iter()
-                .chain([
-                    "plan".into(),
-                    "--input-file".into(),
-                    request.display().to_string(),
-                ])
+                .iter()
+                .cloned()
+                .chain(["plan".into(), "--input".into(), request.clone()])
                 .collect(),
         );
         assert_eq!(field(&records, "code"), "change_authored_stale_base");
         assert_eq!(stale.reported_code(), Some(7));
         stale.require_outcome(false).unwrap();
+        let (unchanged, _) = invoke(
+            &sibling,
+            prefix
+                .into_iter()
+                .chain(["plan".into(), "--input".into(), request])
+                .collect(),
+        );
+        unchanged.require_outcome(true).unwrap();
+        assert!(std::fs::read_dir(root.path()).unwrap().all(|entry| {
+            let entry = entry.unwrap();
+            entry.file_type().unwrap().is_file()
+                && entry.file_name().to_string_lossy().starts_with("call-")
+        }));
     }
 }

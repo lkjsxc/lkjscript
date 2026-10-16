@@ -149,24 +149,17 @@ by their existing exact allowances; parallel child rows remain closed and empty.
 
 ## Encodings and evidence
 
-The following identifiers describe the original lexical child-read increment.
-Graph/owner generation 24 adds child-scope operations and borrowed lexical binding
-roles. Ordinary type forms, callable signatures, package-interface layout 13 and
-witness manifest contract 9 remain unchanged. Scope-bearing authored intent selects
-codec 28, `LKJACR28`; requests without these expressions retain their existing
-canonical generation. Compact change contract 32, discovery registry 20 and CLI
-observation 38 advertise the new surface. Function-definition projection 14 binds
-the new expression and binding records, including continuation selection.
+Child-scope operations, borrowed binding roles, callable signatures and cleanup
+relationships are explicit inline current-record fields. Owners, types,
+interfaces, requests, compiler units, bytecode, artifacts and witness material
+share schema epoch 1. Drafts and definitions retain exact source, binding and
+continuation selection.
 
-Compiler unit 24, bytecode 19 and artifact 31 select the new instruction and cleanup
-contracts. Semantic validator 29 invalidates old derived acceptance for this
-feature. Owner summary contract 10 uses `LKJSUM15` to retain the new borrowed roles.
-Unsupported formats reject clearly; maintained derived assets are rebuilt through
-their supported owners. No migration layer is added. Original source/publication
-evidence keeps its original identity and obligations.
-Borrowed task inputs and Shareable joined reads require their current advertised
-signature, constraint and derived-admission generations. These older identifiers
-do not confer new invocation read rights.
+Independent semantic and artifact admission rechecks borrowed roles and cleanup
+against complete source. Borrowed task inputs and Shareable joined reads require
+exact signature, constraint and invocation permissions; checksums or a matching
+epoch cannot confer them. Foreign epochs reject. Maintained assets are rebuilt
+through ordinary product owners without a predecessor reader.
 
 The [native guide](../guides/native-owned-borrows.md) and
 [maintained example](../../examples/owned-borrows/README.md) explain ordinary use.

@@ -18,7 +18,9 @@ fn compiled(closure: &AdmittedClosure, dependencies: &[LoadedArtifact]) -> Prepa
     let package = &closure.packages[&closure.container.root.package_revision];
     let linked = compile_immutable(package, &closure.container.objects, dependencies).unwrap();
     PreparedSupplier {
-        artifact: Arc::new(load_artifact(&linked.artifact.bytes).unwrap()),
+        artifact: Arc::new(
+            crate::platform::compiler::load_artifact(&linked.artifact.bytes).unwrap(),
+        ),
         reused: false,
     }
 }
@@ -115,10 +117,7 @@ fn a_warm_supplier_cannot_hide_new_source_or_dependency_corruption() {
     assert!(damaged_source.admit().is_err());
 
     let mut damaged_binding = closure.clone();
-    damaged_binding
-        .packages
-        .get_mut(&revision)
-        .unwrap()
+    Arc::make_mut(damaged_binding.packages.get_mut(&revision).unwrap())
         .revision
         .interface = crate::platform::kernel::PackageInterfaceDigest::from_bytes([0; 32]);
     assert_eq!(
@@ -209,13 +208,15 @@ fn forged_dependency_digest_labels_cannot_replace_verified_artifact_content() {
 }
 
 #[test]
-fn schema_validator_transport_and_ordered_dependencies_partition_compiler_reuse() {
+fn schema_implementation_validator_transport_and_dependencies_partition_compiler_reuse() {
     let (_temporary, closure) = fixture("supplier-key-context");
     let base = key(&closure);
     let mut schema = base.clone();
-    schema.schema[0] ^= 1;
+    schema.schema ^= 1;
     let mut validator = base.clone();
     validator.validator[0] ^= 1;
+    let mut implementation = base.clone();
+    implementation.implementation[0] ^= 1;
     let mut transport = base.clone();
     transport.transport[0] ^= 1;
     let mut left = base.clone();
@@ -236,7 +237,15 @@ fn schema_validator_transport_and_ordered_dependencies_partition_compiler_reuse(
     let pool = Pool::new(8, MAXIMUM_RETAINED_BYTES);
     let artifact = compiled(&closure, &[]).artifact;
     let calls = Cell::new(0);
-    for binding in [base, schema, validator, transport, left, right] {
+    for binding in [
+        base,
+        schema,
+        implementation,
+        validator,
+        transport,
+        left,
+        right,
+    ] {
         let first = pool
             .prepare(binding.clone(), &ExecutionControl::uncancelled(), || {
                 calls.set(calls.get() + 1);
@@ -252,7 +261,7 @@ fn schema_validator_transport_and_ordered_dependencies_partition_compiler_reuse(
             .unwrap();
         assert!(second.reused);
     }
-    assert_eq!(calls.get(), 6);
+    assert_eq!(calls.get(), 7);
 }
 
 #[test]
@@ -343,9 +352,9 @@ fn bounded_capacity_evicts_or_bypasses_without_rejecting_valid_compilation() {
     let artifact = compiled(&closure, &[]).artifact;
     let bytes = retained_bytes(&binding, &artifact).unwrap();
     let pool = Pool::new(1, bytes);
-    for ordinal in 0..4 {
+    for ordinal in 0u16..4 {
         let mut next = binding.clone();
-        next.schema[0] ^= ordinal;
+        next.schema ^= ordinal;
         let result = pool
             .prepare(next, &ExecutionControl::uncancelled(), || {
                 Ok(PreparedSupplier {

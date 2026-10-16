@@ -101,7 +101,7 @@ fn byte_conversions_run_from_copied_product_and_after_source_removal() {
 
 #[test]
 fn byte_construction_bad_octets_and_foreign_inputs_publish_no_result() {
-    let public = Native::template("command");
+    let public = Native::memory_template("command");
     let source = public.input(
         "conversion.lkjc",
         &format!("request base={}\n{PROGRAM}", public.revision()),
@@ -147,7 +147,7 @@ fn byte_construction_bad_octets_and_foreign_inputs_publish_no_result() {
 
 #[test]
 fn byte_conversion_foreign_signatures_reject_before_publication() {
-    let public = Native::new();
+    let public = Native::memory();
     let before = public.revision();
     for (index, (name, parameters, result)) in [
         (

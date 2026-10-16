@@ -13,7 +13,7 @@ use support::{Native, digest, path, quoted};
 
 #[test]
 fn native_map_entries_preserve_results_and_linear_projection_work_after_detachment() {
-    let candidate = if std::env::var_os(super::RELEASE_CANDIDATE_ENVIRONMENT).is_some() {
+    let candidate = if std::env::var_os("LKJSCRIPT_RELEASE_CANDIDATE").is_some() {
         Some(super::binary())
     } else {
         std::env::var_os("LKJSCRIPT_COMPONENT_CANDIDATE").map(std::path::PathBuf::from)
@@ -191,7 +191,7 @@ fn native_map_entries_preserve_results_and_linear_projection_work_after_detachme
             "execution":public.execution_evidence(),
             "matrix_adapter":if mode == Mode::HostSemantic { "public-cli" } else { "selected-executable" },
             "source_identity":{
-                "canonical_schema":lkjscript::platform::canonical_schema::CANONICAL_SCHEMA_HASH_HEX,
+                "canonical_schema":lkjscript::platform::canonical_schema::SCHEMA_EPOCH.to_string(),
                 "validator_implementation":validator,
             },
             "selected_candidate":candidate.as_ref().map(|candidate| json!({

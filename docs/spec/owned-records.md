@@ -30,8 +30,8 @@ An ordinary formal cannot receive an owned actual merely because that actual is
 transferable. Callables, streams, secrets and capability resources cannot be hidden
 in stored fields or unused owned-record arguments. An unconstrained ordinary
 function or ordinary nominal parameter cannot receive an owned record, including
-when that parameter is unused. Existing parameter envelopes retain their original
-bound meanings; the new nominal declaration itself requires Graph 32.
+when that parameter is unused. Every parameter and nominal declaration retains its exact bounds under complete
+current semantic admission.
 
 Finite nesting composes with structural products, choices and sequences. Direct
 and mutual recursive owned-record representations, including recursion through
@@ -126,15 +126,12 @@ discard functions retain their behavior. Pop returns the queue in both outcomes;
 front returns the original element view tied to the queue. The representation
 operations stay in the defining module.
 
-The nominal-owned increment requires Graph 32 and selected interface 20,
-compiler 32, bytecode 27 and artifact 39. Its authored requests select codec 36;
-discovery exposes the complete declaration and expression forms. Named/applied
-type-object envelopes retain their existing shape. Rebuild experimental derived
-assets; this increment adds no predecessor migration layer.
-The mixed-contract extension selects Graph 33, interface 21, compiler 33,
-artifact 40 and authored request 37 while retaining bytecode 27. Graph 32 meaning
-remains readable; mixed contract/implementation scopes, their ordinary formals and
-mixed invocation expressions require 33.
+Nominal owned declarations, ordered applications and mixed contract scopes are
+inline current-record fields. Owners, types, interfaces, requests, compiler units,
+bytecode and artifacts share schema epoch 1. Discovery exposes complete
+declarations and expressions. Every formal and application satisfies its exact
+category and scope obligations. Foreign epochs reject; maintained derived assets
+are regenerated through supported product owners.
 
 Public acceptance authors a generic supplier before consumers, imports exact
 transports, and executes detached artifacts after source deletion. It includes

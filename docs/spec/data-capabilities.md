@@ -126,7 +126,7 @@ is Bool, I64, Text, Bytes; values use `false < true`, signed numeric order, vali
 order, and unsigned byte order; a strict prefix precedes its extension. One static graph-owned
 space name plus one key selects a record.
 
-Pure `data-encode<T>` and `data-decode-or<T>` use canonical typed-value contract 1. The envelope
+Pure `data-encode<T>` and `data-decode-or<T>` use the current canonical typed-value schema epoch 1. The envelope
 binds the complete nominal/runtime layout identity and checksum. Decoding rejects a foreign type or
 layout, malformed or noncanonical values, invalid UTF-8, duplicate/out-of-order map keys, trailing
 bytes, and item/depth/byte exhaustion. `decode-or` returns its exact typed fallback on rejected
@@ -138,9 +138,9 @@ authority. Production and canonical-reference codecs are separate implementation
 F64 uses layout tag 10 and exactly eight little-endian binary64 payload bytes. Finite values,
 subnormals, signed zeros, infinities and canonical NaN round-trip, including nested nominal/list
 values. Readers reject noncanonical NaNs; writers normalize them through the scalar representation.
-Existing layout tags, envelope 1, integer big-endian payloads and all predecessor bytes remain exact.
-Only an F64-containing schema gains the new layout description; there is no migration of integer
-data or the physical engine. F64 is excluded from map keys and `DataKeyPart`, including empty maps.
+Integer payloads remain big-endian; every layout and value uses the current schema epoch.
+An F64-containing schema retains its complete layout description. F64 is excluded from map keys
+and `DataKeyPart`, including empty maps. Foreign epochs reject without data migration.
 
 Applied nominal records and variants use layout tag 9, followed by every ordered argument's complete
 type description and the substituted declaration/member layout. Tag 5 and all unchanged monomorphic

@@ -39,20 +39,18 @@ impl Scopes {
             Some(OwnerRecord::Expression(e)) => e,
             _ => return Err(Failure::Missing),
         };
-        let minimum = match &record.operation {
+        match &record.operation {
             ExpressionOperation::BorrowOwnedField { .. }
-            | ExpressionOperation::MatchBorrowedOwned { .. } => 24,
-            ExpressionOperation::BorrowOwnedItem { .. } => 25,
-            ExpressionOperation::BorrowCall { .. } => 27,
-            ExpressionOperation::BorrowOwnedRecordField { .. } => 32,
-            ExpressionOperation::BorrowReadView { .. }
+            | ExpressionOperation::MatchBorrowedOwned { .. }
+            | ExpressionOperation::BorrowOwnedItem { .. }
+            | ExpressionOperation::BorrowCall { .. }
+            | ExpressionOperation::BorrowOwnedRecordField { .. }
+            | ExpressionOperation::BorrowReadView { .. }
             | ExpressionOperation::BorrowReadViewField { .. }
-            | ExpressionOperation::Let { .. } => 34,
+            | ExpressionOperation::Let { .. } => {}
             _ => return Err(Failure::Authority),
         };
-        if !contract::supported_graph_contract(record.contract_version)
-            || record.contract_version < minimum
-        {
+        if !contract::supported_graph_contract(record.contract_version) {
             return Err(Failure::Generation);
         }
         Ok(())

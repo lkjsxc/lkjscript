@@ -289,7 +289,10 @@ fn nominal_reference_rejects_recursive_sequence_layouts_and_old_generation() {
 
     let mut changed = baseline;
     changed.root.graph_contract_version = 31;
-    assert!(!accepts(&changed), "nominal custody requires Graph 32");
+    assert!(
+        !accepts(&changed),
+        "nominal custody requires the current schema epoch"
+    );
 }
 
 #[test]

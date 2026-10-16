@@ -4,7 +4,7 @@ use super::*;
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-const MAXIMUM_WORKERS: usize = 4;
+const MAXIMUM_WORKERS: usize = 16;
 const MAXIMUM_CANDIDATE_ROWS: usize = 16;
 
 pub struct Case {

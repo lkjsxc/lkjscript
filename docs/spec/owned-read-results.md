@@ -121,6 +121,6 @@ selection externally distinguishable without changing storage.
 
 [Verification](verification.md#source-tied-borrowed-result-obligations) owns the
 required proof, and [status](../status.md) owns accepted source and binary
-availability. Encoding generations advance together at their maintained owners;
-unsupported predecessors reject clearly and maintained bundles are rebuilt
-through supported product operations. No migration layer is required.
+availability. Encoding owners share the single current schema epoch 1; foreign
+epochs reject and maintained bundles are rebuilt through supported product
+operations. Current proof remains separate from persisted acceptance.

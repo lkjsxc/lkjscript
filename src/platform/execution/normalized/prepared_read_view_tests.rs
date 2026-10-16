@@ -224,7 +224,7 @@ fn scope_sources_admit_the_complete_inventory_before_execution() {
     let unit = TypeObjectDigest::from_bytes([83; 32]);
     let parameter = ParameterId::migrate(SEED, 0);
     let mut function = super::super::prepare::NormalizedFunction {
-        source_generation: 34,
+        source_generation: crate::platform::canonical_schema::SCHEMA_EPOCH,
         declaration: declaration(1),
         graph_function: true,
         implementation_parameters: Arc::from([]),

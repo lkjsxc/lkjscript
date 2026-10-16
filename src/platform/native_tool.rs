@@ -38,8 +38,9 @@ impl PureTool {
     /// Independently admit a complete ordinary bundle before preparing any target.
     pub fn load(artifact: &[u8], control: &ExecutionControl) -> Result<Self, Diagnostic> {
         control.check().map_err(execution_diagnostic)?;
-        let artifact = load_artifact(artifact)?;
-        let program = Arc::new(NormalizedProgram::prepare_with_control(artifact, control)?);
+        let admitted = load_artifact(artifact)?;
+        let program =
+            super::builtin_standard::prepare_admitted_program(artifact, admitted, control)?;
         Ok(Self { program })
     }
 

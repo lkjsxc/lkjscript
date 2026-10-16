@@ -17,7 +17,7 @@ pub(super) fn hostile_bundle(
     let segments = builder.seal_targeted(4 * 1024 * 1024).unwrap();
     let mut bytes = Vec::new();
     bytes.extend_from_slice(&ARTIFACT_BUNDLE_MAGIC);
-    bytes.extend_from_slice(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
+    bytes.extend_from_slice(&crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes());
     bytes.extend_from_slice(&0_u16.to_be_bytes());
     bytes.extend_from_slice(&(manifest_bytes.len() as u64).to_be_bytes());
     bytes.extend_from_slice(&(segments.len() as u64).to_be_bytes());

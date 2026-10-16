@@ -573,10 +573,9 @@ impl ReferenceState<'_> {
                     != crate::platform::kernel::ValueCategory::ReadView
                     || !proof.prepared_read_shareable(parameter.ty)?
                     || parameter.use_mode != ParameterUse::Borrow
-                    || contract_version
-                        < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                    || contract_version != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                     || parameter.header.contract_version
-                        < crate::platform::kernel::contract::READ_VIEW_GRAPH_CONTRACT_VERSION
+                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                 {
                     return Err(reference_type_error(
                         "parallel view input requires an independently ReadShareable exact descriptor",
@@ -612,10 +611,9 @@ impl ReferenceState<'_> {
                 // The positive category and accessible reference closure above
                 // grant only joined read input, never transfer or capture.
             } else if parameter.use_mode == ParameterUse::Borrow {
-                if contract_version
-                    < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                if contract_version != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                     || parameter.header.contract_version
-                        < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                     || !self.schema.shareable_types.contains(&parameter.ty)
                 {
                     return Err(reference_type_error(

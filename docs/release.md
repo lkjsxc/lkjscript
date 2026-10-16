@@ -1,31 +1,72 @@
 # Release procedure
 
-Authenticate accepted source and exact producer run/attempt; promote finalized
-archive/checksum/bootstrap unchanged. Content, behavior and authority differ.
-[Status](status.md) owns availability; root Cargo owns opaque vA.B.C identity.
-Preserve immutable publications/outcomes. Before freeze, native-check maintained
-projects and prove tracked-source cold reproduction of required packs; missing
-inputs/source drift cannot pass through exclusions or raised limits.
+Authenticate accepted source and the exact producer run/attempt. Promote finalized
+archive/checksum/bootstrap unchanged. Content, behavior and publication authority
+are separate claims. [Status](status.md) owns availability; root Cargo owns product
+identity. Preserve immutable publications and unrelated resources.
 
-## Coverage and admission
+## Source and candidate acceptance
 
-[Verification](spec/verification.md) owns all gates, inventories and original-reader
-requirements: standalone full is 29 gates; release requires 25 fresh source gates,
-full semantic receipts and final six target owners/seven native smokes/ELF/two
-userlands/installation. A fresh full original supplies the 25 under identical
-context: re-admit all 29, preserving original bytes/profile. Source matrices and
-actual final processes retain separate proof.
-Transfer and anonymous exact/latest require small installed lifecycles without broad
-replay or rebuild. Every source case/final boundary needs admitted outcomes;
-uploads/skipped stages prove no terminal. [Bootstrap](../tools/bootstrap-verifier.sh) retains immutable tools;
---with-controller includes controller. Honor producer dependencies/output copies
-and separate Cargo/checker concurrency. release target owns pinned musl policy;
-static linkage grants no hostile-code sandbox.
+Use the primary clean committed checkout and its single `$PWD/target`. Bootstrap
+and checks lease shared outputs; do not create another clone or Cargo target.
+Before packaging, check maintained projects and reproduce required assets through
+supported product owners. Missing inputs and source drift cannot pass by exclusion.
 
-## Build and accept a candidate
+[Verification](spec/verification.md) owns coverage: full has 29 gates; release needs
+25 fresh source gates and final acceptance of six target owners, seven native
+smokes, ELF policy, two pinned userlands and installation recovery. Complete source
+semantic outcomes and actual final processes remain distinct. A retained fresh
+full receipt can supply the required source subset under identical context; re-admit
+all original gates without rewriting their profile or bytes.
 
-Inspect/reuse healthy work before Release workflow_dispatch on main. Tag/PR/workflow-run
-events trigger no automatic build/publication. Record exact event source and attempt.
+Default compact check receipts are insufficient for transfer. Explicitly request
+`--retain-archive` for source acceptance. The release verifier handoff is a deliberate
+publication boundary, not a per-gate executable copy. Keep selected source,
+environment and verifier stable through acceptance. Set Cargo/checker concurrency
+independently and join readers before any shared-target writer.
+
+```sh
+verifier_root=$(bash tools/bootstrap-verifier.sh --with-controller --retain-archive)
+BOOTSTRAP_VERIFIER="$verifier_root/lkjscript-dev"
+SOURCE_SHA=$(git rev-parse HEAD)
+TAG=vA.B.C
+"$BOOTSTRAP_VERIFIER" release verifier prepare --executable "$BOOTSTRAP_VERIFIER" \
+  --output /absolute/new/verifier --tag "$TAG" --commit "$SOURCE_SHA"
+VERIFIER=/absolute/new/verifier/lkjscript-dev
+"$VERIFIER" check release-source --fresh --retain-archive --machine \
+  > /absolute/new/source-summary.json
+SOURCE_RECEIPT="$PWD/$(jq -er '.receipt' /absolute/new/source-summary.json)"
+"$VERIFIER" release build \
+  --output /absolute/new/lkjscript --receipt /absolute/new/build.json
+"$VERIFIER" release prepare --candidate /absolute/new/lkjscript \
+  --cargo-about /absolute/pinned/cargo-about \
+  --cargo-about-archive /absolute/pinned/cargo-about.tar.gz \
+  --output /absolute/new/assets --tag "$TAG"
+"$VERIFIER" release candidate accept \
+  --assets /absolute/new/assets --source-receipt "$SOURCE_RECEIPT" \
+  --build-receipt /absolute/new/build.json \
+  --verifier-identity /absolute/new/verifier/verifier-identity.json \
+  --evidence-root /absolute/new/acceptance --output /absolute/new/release-receipt.json
+```
+
+Use absent owned output paths. Fixed-target construction rejects unsupported
+configuration and checks pinned cargo-about. Preparation finalizes notices and
+packaging; construction alone is not acceptance. Acceptance extracts unchanged
+bytes, independently checks packaging, runs boundary owners and joins cleanup.
+Source semantics cannot replace final processes. Keep explicit handoff originals
+until their consumer completes; delete incidental scratch after joined verification.
+
+Exactly `lkjscript-x86_64-unknown-linux-musl.tar.gz`, `SHA256SUMS` and `install.sh`
+are published. Readers enforce complete ordered inventories, modes, hashes, ELF and
+identity. Reject unsafe links, traversal, extra/ambiguous/conflicting content.
+Bootstrap binds immutable URL, length and hash and runs the extracted manager
+without Cargo, Python or source. Static linkage grants no hostile-code sandbox;
+installation grants no authority, migration or implicit runtime fallback.
+
+## Hosted workflow and authority
+
+Inspect and reuse healthy jobs before dispatch. Tags, PRs and workflow-run events
+do not automatically build or publish. Record exact event source and attempt.
 
 ```sh
 gh workflow run release.yml --repo lkjsxc/lkjscript --ref main -f operation=candidate
@@ -33,118 +74,55 @@ gh run view --repo lkjsxc/lkjscript RUN_ID --json headSha,status,conclusion,jobs
 gh api repos/lkjsxc/lkjscript/actions/runs/RUN_ID --jq '{id,run_attempt,head_sha,status,conclusion}'
 ```
 
-For local execution, use a standalone clean committed clone with a real `.git`
-directory, complete history, canonical origin and config-free ancestry/Cargo home.
-Bootstrap in that clone: a check command remains bound to its compiled checkout.
-Retain the exact 0755 verifier handoff before changed/full/source checks, preserving
-the original 0555 bootstrap executable and evidence. Source admission later compares
-verifier bytes/mode and the approved environment, including `CARGO_TARGET_DIR`.
-Use absent owned outputs and keep source, environment and tools stable.
+Optional read-only consume selects `operation=consume`, `producer_run=RUN_ID` and
+`producer_attempt=ATTEMPT`. The integrated controller independently authenticates
+repository/head repository, event/workflow/source/run/attempt, mandatory jobs,
+terminal identities, artifact IDs, service ZIP digests and exact verifier/assets.
+Product source must reach current main; controller source is separately bound.
+Names, hashes and self-declared success grant no authority. Transfer includes joined
+small installed lifecycles. Malformed, contradictory or incomplete results reject.
+Only consume may terminate with a classified authority rejection.
 
-After fresh full with identical source/verifier/environment, pass its original
-receipt; skip release-source. Otherwise run release-source below, as hosted Release
-does. Source semantics cannot replace mandatory final process boundaries.
+Local proof cannot supply hosted provenance. Never fabricate GitHub context or
+execute a candidate/verifier with publication credentials. Publisher alone receives
+write authority and runs no candidate, verifier or build.
 
-```sh
-BOOTSTRAP_VERIFIER=/absolute/immutable/lkjscript-dev
-SOURCE_SHA=$(git rev-parse HEAD)
-TAG=vA.B.C
-"$BOOTSTRAP_VERIFIER" release verifier prepare --executable "$BOOTSTRAP_VERIFIER" \
-  --output /absolute/new/verifier --tag "$TAG" --commit "$SOURCE_SHA"
-VERIFIER=/absolute/new/verifier/lkjscript-dev
-CARGO_TARGET_DIR="$PWD/target" "$VERIFIER" check release-source --fresh --jobs 1 --machine \
-  > /absolute/new/source-summary.json
-SOURCE_RECEIPT="$PWD/$(jq -er '.receipt' /absolute/new/source-summary.json)"
-env -u CARGO_TARGET_DIR "$VERIFIER" release build \
-  --output /absolute/new/lkjscript --receipt /absolute/new/build.json
-"$VERIFIER" release prepare --candidate /absolute/new/lkjscript \
-  --cargo-about /absolute/pinned/cargo-about \
-  --cargo-about-archive /absolute/pinned/cargo-about.tar.gz \
-  --output /absolute/new/assets --tag "$TAG"
-CARGO_TARGET_DIR="$PWD/target" "$VERIFIER" release candidate accept \
-  --assets /absolute/new/assets --source-receipt "$SOURCE_RECEIPT" \
-  --build-receipt /absolute/new/build.json \
-  --verifier-identity /absolute/new/verifier/verifier-identity.json \
-  --evidence-root /absolute/new/acceptance --output /absolute/new/release-receipt.json
-```
+Prepare release notes and an annotated tag on accepted product source. Compare
+intended annotation and local/remote identity. Refresh main, branch protections,
+active jobs, occupancy and immutability before promotion. Explicit owner authority
+is required for tag publication or binding the immutable tag-object variable; this
+must not alter credentials, access or protections. Reconcile/read back any authorized
+binding and account for jobs retaining earlier values. Then dispatch `operation=promote`
+with the same producer run and attempt.
 
-Fixed-target construction rejects unbound overrides and checks pinned cargo-about.
-Prepare repeats notices/finalizes packaging; constructed is not accepted. Accept
-extracts unchanged bytes, compares packaging without rebuild, runs owners/readers
-and joins cleanup before candidate_accepted. Keep failures; never rewrite bytes to
-pass. Local proof grants no hosted provenance/publication authority; fabricated
-GitHub context cannot supply it. Release separately authenticates mainline source,
-controller and actual run/attempt.
+Publisher rechecks tag/source/version, scoped authority, ownership, notes, complete
+inventory and exact bytes before publishing. Existing-tag creation omits
+`target_commitish`. Existing immutable content is never replaced, deleted or retagged.
+Attestations establish provenance, not behavior or permission.
 
-Exactly lkjscript-x86_64-unknown-linux-musl.tar.gz, SHA256SUMS and install.sh are
-published. Native readers enforce exact ordered inventory/modes/hashes/ELF/identity/
-slots, rejecting unsafe/extra/ambiguous/link/traversal/conflicting content. Content
-binds source/build/license, never permission/tag object/consumer attempt. Bootstrap
-binds immutable URL/length/hash and runs extracted manager without Cargo/Python/source.
-Installation grants no authority, migration or implicit runtime fallback.
+## Recovery, retention and terminals
 
-## Select, promote and resume
+`resume-publication` retries only publication/API failure against the same producer
+and fresh authority. A matching publication is idempotent. An owned partial draft
+may receive only missing matching assets; foreign or conflicting content rejects.
+Pre-transfer failures require a new promote attempt.
 
-Optional read-only consume selects the original run/attempt:
+`resume-public` retries acquisition/check only. Exact tag resolves a nonzero immutable
+release ID; independent ID lookup must admit the complete inventory. Conflicting tag
+or incomplete responses reject. Selected publication requires the candidate as
+latest. Later rechecks may classify a superseded latest check as inapplicable; never
+execute different bytes as the selected candidate. Defects need corrected candidates.
 
-```sh
-gh workflow run release.yml --repo lkjsxc/lkjscript --ref main \
-  -f operation=consume -f producer_run=RUN_ID -f producer_attempt=ATTEMPT
-```
+Request 14-day retention for explicit assets/verifier/handoff, recording actual IDs,
+digests and expiry. Missing/ambiguous/expired originals are unavailable; obtain a new
+candidate or explicitly trusted recovery, never silently rebuild or relabel reuse.
+Changes to source, bytes, configuration, verifier, workloads, environment or trust
+invalidate affected evidence. Descendants receive scoped checks; public rechecks
+cannot manufacture lost acceptance.
 
-Current integrated controller independently authenticates repository/head repository,
-event/workflow/source/run/attempt/mandatory jobs, terminal identities, artifact IDs,
-service ZIP digests/inventories and exact asset/verifier bytes. Product must reach
-freshly resolved main; controller source is separate. Names/hashes/self-declared
-passed supply no authority. Transfer requires joined small lifecycles. Only consume
-may finish with classified rejected authority; malformed/contradictory/incomplete
-results cannot pass. Rejection grants no publication permission.
-
-Prepare notes and annotated tag on accepted product source:
-`git tag --annotate --cleanup=verbatim TAG SOURCE_COMMIT --file /absolute/notes.md`.
-Compare local/remote annotation to intended Markdown. Refresh main/protections,
-jobs/occupancy/immutability. Existing explicit operator authority is required to
-push tags or bind LKJSCRIPT_IMMUTABLE_RELEASE_TAG_OBJECT_SHA to that exact object.
-Reconcile prior owner/value, compare before write/read back before dispatch; this
-is not atomic CAS, and running jobs may retain earlier values. Never alter access,
-credentials, protections or immutable history to pass. Then dispatch:
-
-```sh
-gh workflow run release.yml --repo lkjsxc/lkjscript --ref main \
-  -f operation=promote -f producer_run=RUN_ID -f producer_attempt=ATTEMPT
-```
-
-Publisher independently checks tag/source/version, scoped authority, ownership/bot,
-notes/inventory/occupancy and exact bytes before upload/publication. Existing-tag
-creation omits target_commitish. Publisher alone receives write permission; it runs
-no candidate/verifier/handoff, builds nothing and verifies unchanged immutable
-publication. Attestations prove provenance, never behavior or permission.
-
-resume-publication retries only failed publication/API with same producer/fresh
-authority. Matching immutable publication is idempotent; owned partial drafts may
-receive only missing matching assets. Foreign/conflicting/published mismatches
-reject without deletion/replacement/retagging. Pre-transfer failures need fresh promote.
-resume-public retries only public acquisition/check. Exact tag resolves nonzero
-immutable release ID; independent ID lookup admits complete inventory. Conflicting
-tag/incomplete ID responses reject. Selected publication requires candidate as latest;
-later exact recheck may label independently superseded latest inapplicable, never
-execute other bytes as this candidate. Defects require corrected candidates;
-transient acquisition repeats only its boundary.
-
-Reruns preserve event source/ref: newer fixed controllers require new consumers.
-Separate producer/consumer attempts; serialize promotion/public-latest through shared
-workflow concurrency. Candidate jobs have independent concurrency.
-
-## Retention and terminal results
-
-Request 14-day asset/verifier/handoff retention; record actual IDs/digests/expiry.
-Missing/ambiguous/expired originals are unavailable: obtain new candidate or explicit
-trusted recovery, never silent rebuild/relabelled reuse. Preserve failures; execute
-no transferred bytes with publishing credentials. Changed source/version/config/bytes/
-verifier/workload/environment/trust invalidates affected proof. Descendants receive
-scoped checks; public rechecks cannot manufacture lost acceptance.
-
-Candidate/authority/publication/public-check terminals remain distinct. Integrate and
-verify remote ancestry separately from release waiting. External waits report exact
-source/run/attempt/gate/state/originals/action and reuse healthy jobs, without promises
-of unattended monitoring. Git/campaigns retain history, not recurring task diaries.
+Reruns preserve original event source/ref, so new controllers need new consumer
+runs. Keep producer and consumer attempts distinct. Serialize promotion/public-latest
+through workflow concurrency; candidate jobs have independent concurrency.
+Candidate, authority, publication and public-check terminals remain distinct.
+Integrate and independently verify remote ancestry separately from release waiting.
+Report exact source/run/attempt/gate/state and next action at external waits.

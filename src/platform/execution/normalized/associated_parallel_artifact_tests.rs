@@ -23,7 +23,7 @@ static FIXTURE_BUILDS: AtomicU64 = AtomicU64::new(0);
 
 fn fixture_key(sources: [&str; 4]) -> [u8; 32] {
     let mut hasher = blake3::Hasher::new_derive_key("lkjscript.associated-parallel-test-fixture");
-    hasher.update(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
+    hasher.update(&crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes());
     hasher.update(&crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH);
     for part in [
         "DeterministicBaseline",

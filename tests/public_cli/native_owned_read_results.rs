@@ -14,7 +14,7 @@ const CARRIERS: &str = include_str!("../../examples/owned-read-results/carriers.
 const APPLICATION: &str = include_str!("../../examples/owned-read-results/application.lkjc");
 
 fn evidence_native(template: &str) -> Native {
-    let mut public = Native::template(template);
+    let mut public = Native::memory_project(template);
     if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
         public.root.disable_cleanup(true);
         println!(
@@ -108,12 +108,8 @@ impl Packages {
     }
 
     fn detach(&self) {
-        for project in [
-            &self.library.project,
-            &self.carriers.project,
-            &self.consumer.project,
-        ] {
-            std::fs::remove_dir_all(project).unwrap();
+        for public in [&self.library, &self.carriers, &self.consumer] {
+            public.remove_project();
         }
         for transport in [
             &self.generic.path,
@@ -372,7 +368,7 @@ fn native_owned_read_results_forward_root_and_sibling_reads_then_consume() {
         json!([]),
         &json!(42),
     );
-    std::fs::remove_dir_all(&public.project).unwrap();
+    public.remove_project();
     run_expected(
         &public,
         "read-root",
@@ -542,7 +538,7 @@ fn native_owned_read_results_match_exact_method_source_positions_before_publicat
         json!([]),
         &json!(42),
     );
-    std::fs::remove_dir_all(&public.project).unwrap();
+    public.remove_project();
     run_expected(
         &public,
         "read-method",

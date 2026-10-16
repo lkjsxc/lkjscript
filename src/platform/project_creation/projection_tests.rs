@@ -690,7 +690,7 @@ fn sort_json_array(value: Option<&mut Value>) {
 fn recipe_projection_retains_every_current_field_and_ordered_operand() {
     use serde_json::json;
     let current = json!({
-        "kind":"function", "contract_version":34,
+        "kind":"function", "contract_version":crate::platform::canonical_schema::SCHEMA_EPOCH,
         "result":{"ty":"T","relation":{"kind":"value"}},
         "read_scope_parameters":[], "read_scope_sources":[],
         "implementation_parameters":[], "effect_parameters":[],
@@ -762,7 +762,7 @@ fn recipe_projection_retains_every_current_field_and_ordered_operand() {
         .unwrap()
         .reverse();
     assert_ne!(observe(&current), observe(&reversed));
-    let dependency = json!({"graph_contract_version":34, "package":"supplier",
+    let dependency = json!({"graph_contract_version":crate::platform::canonical_schema::SCHEMA_EPOCH, "package":"supplier",
         "semantic_revision":"revision-a", "package_revision":"package-a"});
     for field in [
         "graph_contract_version",

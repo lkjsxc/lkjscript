@@ -2585,12 +2585,12 @@ fn project_function_definition(
         )?;
         require_exact(
             required_field(projection, "contract")?,
-            "lkjscript-function-definition-projection-22",
+            "lkjscript-function-definition-projection",
             "definition contract",
         )?;
         require_exact(
             required_field(projection, "version")?,
-            "22",
+            "1",
             "definition version",
         )?;
         let digest = required_field(projection, "digest")?.to_owned();
@@ -2861,7 +2861,7 @@ fn validate_definition_scope_inventory(
     let package = field(header, "package")?;
     if !definition_static_id(package, "pkg_")
         || field(header, "function")? != function
-        || field(header, "contract")? != "lkjscript-function-definition-projection-22"
+        || field(header, "contract")? != "lkjscript-function-definition-projection"
     {
         return Err(fail(
             "definition header omits its exact package or function binder",
@@ -3900,7 +3900,7 @@ mod tests {
     use super::*;
 
     fn scoped_definition_fixture() -> Vec<DefinitionRecord> {
-        let bytes = b"definition.header repository=repository package=pkg_77777777777777777777777777777777 revision=revision function=decl_11111111111111111111111111111111 contract=lkjscript-function-definition-projection-22 ordering=ordering\n\
+        let bytes = b"definition.header repository=repository package=pkg_77777777777777777777777777777777 revision=revision function=decl_11111111111111111111111111111111 contract=lkjscript-function-definition-projection ordering=ordering\n\
 definition.function id=decl_11111111111111111111111111111111 kind=pure_function module=module name=reader visibility=public type-parameters=0 implementation-parameters=0 effect-parameters=0 requirement-parameters=0 effect-row-parameters=0 parameters=1 result=type result-kind=view-from result-source=param_33333333333333333333333333333333 result-scope=parameter:declaration:pkg_77777777777777777777777777777777/decl_11111111111111111111111111111111:read_scope_44444444444444444444444444444444 read-scope-parameters=2 read-scope-sources=1 effect=pure requirements=0 body=expr_55555555555555555555555555555555\n\
 definition.read-scope-parameter id=read_scope_44444444444444444444444444444444 parent=decl_11111111111111111111111111111111 index=0 name=loan\n\
 definition.read-scope-parameter id=read_scope_88888888888888888888888888888888 parent=decl_11111111111111111111111111111111 index=1 name=unused\n\

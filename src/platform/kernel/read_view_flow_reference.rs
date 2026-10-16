@@ -341,7 +341,7 @@ impl Engine<'_, '_> {
         };
         if record.id != id
             || record.contract_version != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-            || (record.contract_version < 34
+            || (record.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
                 && (record.operation.is_read_view_operation()
                     || !record.operation.read_scope_arguments().is_empty()))
         {
@@ -407,7 +407,7 @@ impl Engine<'_, '_> {
             || b.header.kind != OwnerKind::Binding
             || b.header.contract_version
                 != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
-            || (b.header.contract_version < 34
+            || (b.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
                 && matches!(kind, BindingKind::ReadView | BindingKind::ReadViewBorrow))
             || b.kind != kind
             || b.value.is_some() != initialized

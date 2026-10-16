@@ -96,12 +96,12 @@ Current identity:
 
 - repository: `repo_c1358d64c351873b51c954b69d1ac988`;
 - package: `pkg_10000000000000000000000000000001`;
-- semantic revision: `rev_17a9ce13f8ac2dfb3e458cf876fadb76882958da8614cbee9213d50445614903`;
-- package revision: `package_revision_aebfc42f9c09ec0ba23a38c8d82873183f87f8b835eae232d2d877aa1f51f7a0`;
-- package transport: `package_transport_4c34e7a7b849e8f48917e124693d8cc27db2aa8c81d4eae3328142d2e539c9d0`;
-- artifact manifest: `artifact_manifest_2fda9238eeea6882503877771ebbcc9e6558a799051f2bfaa61e46f7ab2666ce`;
-- artifact bundle: `artifact_bundle_ea1f4ed73e574549a3e002f47b9d76becfb279470f179326508fc87a0ef3f017`;
-- artifact bundle size: 1,395,603 bytes;
+- semantic revision: `rev_2c307fbdefe23a178a2762148447fdac853f8e9b198b53294da8302f28270ced`;
+- package revision: `package_revision_438773e160af5a00bdd72e4c576286d9add6bf5e9948e7b013f37b3228f9b591`;
+- package transport: `package_transport_a0646e9a61973a84b9b29bebf2d3f520a5cb981921b5637e3a38f3956b93bbc7`;
+- artifact manifest: `artifact_manifest_2e7c931f77bae42d3eb538aa69d1d1b8c057411154cd92747b13c440a1cec6c5`;
+- artifact bundle: `artifact_bundle_cdd6d3d95261b1304c49bbf69591eb9fcf60571e281cc0b1eb5cfda9974d086e`;
+- artifact bundle size: 1,278,543 bytes;
 - 2,800 live semantic owners, 291 compiler units, and 116 graph tests.
 
 The public check requires agreement between production and reference execution for
@@ -268,10 +268,10 @@ externals and twelve fixed graph tests, without changing graph or data encodings
 ## Derived assets
 
 Public check/build/export regenerate the maintained bundle and transport from
-accepted meaning. Only the current canonical schema is admitted. Its conservative
-fingerprint binds the complete normalized production source closure, manifests,
-lockfile and derivation policy, rather than type layouts alone; see
-[the schema owner](../../build.rs). Regenerate affected assets after a schema change.
+accepted meaning. All canonical formats admit only `SCHEMA_EPOCH = 1`; see
+[the schema owner](../../build.rs). Source changes bind validation and compiler
+caches to the current implementation without changing the schema epoch.
+Regenerate affected assets after a schema change.
 Rebuilding derives new bytes without changing semantic HEAD, running deployments
 or operational data. [Status](../../docs/status.md) owns actual acceptance and
 publication; graph tests alone do not establish either.

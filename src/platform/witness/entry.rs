@@ -190,13 +190,6 @@ pub fn decode_ownership(bytes: &[u8]) -> Result<OwnershipEntry, Diagnostic> {
             "ownership entry uses a foreign witness contract",
         ));
     }
-    let canonical = encode_ownership(&entry)?;
-    if canonical != bytes {
-        return Err(entry_error(
-            "witness_ownership_canonical",
-            "ownership entry is not canonically encoded",
-        ));
-    }
     Ok(entry)
 }
 

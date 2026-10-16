@@ -94,8 +94,8 @@ fn associated_surface_native_intent_matches_literal_compact_complete_coordinates
     );
     assert_eq!(compact.request_commitment, native.request_commitment);
     assert_eq!(
-        &bytes[8..40],
-        &crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH
+        &bytes[8..10],
+        &crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes()
     );
     let AuthoredChange::CreateOwnedContract {
         associated_types,

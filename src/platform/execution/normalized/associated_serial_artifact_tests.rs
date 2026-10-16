@@ -25,7 +25,7 @@ static FIXTURE_BUILDS: AtomicU64 = AtomicU64::new(0);
 
 fn fixture_key(sources: [&str; 3], transport: &[u8], artifact: &[u8]) -> [u8; 32] {
     let mut hasher = blake3::Hasher::new_derive_key("lkjscript.associated-serial-test-fixture");
-    hasher.update(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
+    hasher.update(&crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes());
     hasher.update(&crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH);
     for part in [
         "DeterministicBaseline",
@@ -114,21 +114,21 @@ pub(in crate::platform) fn fixture() -> Arc<SerialArtifactFixture> {
 
 fn build_fixture(standard: &BuiltinStandard) -> SerialArtifactFixture {
     FIXTURE_BUILDS.fetch_add(1, Ordering::Relaxed);
-    let temporary = tempfile::tempdir().unwrap();
-    let create = |directory: &str, seed: &[u8]| {
-        GraphRepository::create(
-            &temporary.path().join(directory),
+    let arena = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+    let create = |seed: &[u8]| {
+        GraphRepository::create_memory(
+            &arena.fork().unwrap(),
             &empty_normalized_snapshot(seed),
             None,
         )
         .unwrap()
         .repository
     };
-    let consumer = create("consumer", b"associated-serial-consumer");
+    let consumer = create(b"associated-serial-consumer");
     publish_native(&consumer, "", CONSUMER);
     let consumer_export = consumer.export_package_transport().unwrap();
 
-    let supplier = create("supplier", b"associated-serial-supplier");
+    let supplier = create(b"associated-serial-supplier");
     stage(&supplier, &consumer_export);
     let before_stage = supplier.view_current().unwrap().revision();
     supplier
@@ -145,7 +145,7 @@ fn build_fixture(standard: &BuiltinStandard) -> SerialArtifactFixture {
     publish_native(&supplier, &supplier_selections, SUPPLIER);
     let supplier_export = supplier.export_package_transport().unwrap();
 
-    let application = create("application", b"associated-serial-application");
+    let application = create(b"associated-serial-application");
     stage(&application, &consumer_export);
     stage(&application, &supplier_export);
     let application_selections = format!(
@@ -252,7 +252,7 @@ fn build_fixture(standard: &BuiltinStandard) -> SerialArtifactFixture {
         reference: Arc::new(prepared.reference),
         binding,
     };
-    temporary.close().unwrap();
+    drop((consumer, supplier, application));
     fixture
 }
 

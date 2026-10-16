@@ -171,7 +171,7 @@ pub(super) fn associated_generation_admitted(version: u16, _read_view: bool) -> 
 fn associated_owner_generation_admitted(root: u16, owner: u16, read_view: bool) -> bool {
     associated_generation_admitted(root, read_view)
         && associated_generation_admitted(owner, read_view)
-        && owner <= root
+        && owner == root
 }
 
 // Derive historical bound admission here, independently of canonical owner
@@ -181,11 +181,11 @@ fn admit_parameter_generation(owner: &OwnerRecord) -> Result<(), ExecutionError>
     if let OwnerRecord::TypeParameter(record) = owner {
         let version = record.header.contract_version;
         if (record.constraints.has_owned()
-            && version < crate::platform::kernel::contract::OWNED_GRAPH_CONTRACT_VERSION)
+            && version != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
             || (record.constraints.requires_transfer()
-                && version < crate::platform::kernel::contract::TRANSFER_GRAPH_CONTRACT_VERSION)
+                && version != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
             || (record.constraints.requires_share()
-                && version < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION)
+                && version != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
         {
             return Err(failure());
         }
@@ -225,7 +225,9 @@ impl<'source> Closure<'source, '_> {
                 else {
                     continue;
                 };
-                if owner.header.contract_version < 32 || owner.header.owner != *key {
+                if owner.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
+                    || owner.header.owner != *key
+                {
                     return Err(failure());
                 }
                 let reference = DeclarationReference {
@@ -659,11 +661,13 @@ impl<'source> Closure<'source, '_> {
                 || (ordinary
                     && !matches!(declaration.payload, DeclarationPayload::Function(_))
                     && (owner.header.contract_version
-                        < crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                         || declaration.header.contract_version
-                            < crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-                        || self.snapshots[&reference.package].root.graph_contract_version
-                            < crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION))
+                            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+                        || self.snapshots[&reference.package]
+                            .root
+                            .graph_contract_version
+                            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION))
                 || !names.insert(&owner.name)
             {
                 return Err(failure());
@@ -727,12 +731,12 @@ impl<'source> Closure<'source, '_> {
                     }
                     _ => false,
                 };
-                if requires_generation && (
-                    caller.header.contract_version
-                        < crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-                    || self.snapshots[&scope.package].root.graph_contract_version
-                        < crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-                ) {
+                if requires_generation
+                    && (caller.header.contract_version
+                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
+                        || self.snapshots[&scope.package].root.graph_contract_version
+                            != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION)
+                {
                     return Err(failure());
                 }
             }
@@ -875,9 +879,7 @@ impl<'source> Closure<'source, '_> {
         &mut self,
         record: &crate::platform::kernel::ExpressionRecord,
     ) -> Result<(), ExecutionError> {
-        if record.contract_version
-            >= crate::platform::kernel::contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
-        {
+        if record.contract_version == crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION {
             return Ok(());
         }
         let mixed = match &record.operation {
@@ -2026,7 +2028,7 @@ impl<'source> Closure<'source, '_> {
         // directly so temporary declaration clones cannot escape allocation accounting.
         let snapshot = *self.snapshots.get(&package).ok_or_else(failure)?;
         let owner = snapshot.owners.get(&key).ok_or_else(failure)?;
-        if owner.header().contract_version > snapshot.root.graph_contract_version {
+        if owner.header().contract_version != snapshot.root.graph_contract_version {
             return Err(failure());
         }
         admit_parameter_generation(owner)?;
@@ -2469,7 +2471,7 @@ impl<'source> Closure<'source, '_> {
                             self.identity(parameter.ty, &child_bindings, 0)?;
                             if parameter.use_mode == crate::platform::kernel::ParameterUse::Borrow
                                 && record.contract_version
-                                    < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                                    != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                             {
                                 return Err(failure());
                             }
@@ -3630,9 +3632,9 @@ pub(super) fn complete(
             }
             if parameter.use_mode == crate::platform::kernel::ParameterUse::Borrow {
                 if declaration.header.contract_version
-                    < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                    != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                     || parameter.header.contract_version
-                        < crate::platform::kernel::contract::SHARE_GRAPH_CONTRACT_VERSION
+                        != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
                 {
                     return Err(failure());
                 }
@@ -3679,7 +3681,7 @@ fn canonical_owner<'a>(
         .find(|snapshot| snapshot.root.package_id == declaration.package)
         .ok_or_else(failure)?;
     let owner = snapshot.owners.get(&key).ok_or_else(failure)?;
-    if owner.header().contract_version > snapshot.root.graph_contract_version {
+    if owner.header().contract_version != snapshot.root.graph_contract_version {
         return Err(failure());
     }
     admit_parameter_generation(owner)?;
@@ -3696,7 +3698,7 @@ fn indexed_owner<'a>(
     if owner.header().owner != key {
         return Err(failure());
     }
-    if owner.header().contract_version > snapshot.root.graph_contract_version {
+    if owner.header().contract_version != snapshot.root.graph_contract_version {
         return Err(failure());
     }
     admit_parameter_generation(owner)?;

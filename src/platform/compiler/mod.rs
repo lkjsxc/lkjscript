@@ -34,9 +34,13 @@ pub use cache::{
     CompilationValidationReceipt, build_clean, build_incremental, load_current_compilation,
     validate_current_compilation,
 };
+pub(crate) use cache::{
+    build_clean_with_view, load_current_compilation_with_view,
+    validate_current_compilation_with_view,
+};
 pub(crate) use immutable::compile_immutable;
-pub(crate) use link::link_artifact_with_control;
 pub use link::{ArtifactLinkReceipt, ArtifactLinkWork, link_artifact};
+pub(crate) use link::{link_artifact_with_control, link_artifact_with_view};
 pub use lower::{CompilationReceipt, CompilationWork, compile_unit};
 pub use manifest::{
     COMPILATION_MANIFEST_CONTRACT_IDENTITY, COMPILATION_MANIFEST_CONTRACT_VERSION,

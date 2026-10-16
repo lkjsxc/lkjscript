@@ -1,4 +1,4 @@
-//! Share completed authored inputs, never repositories, command observations or progress.
+//! Share immutable authored bytes; every restored project has independent mutation locks.
 use super::*;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -92,6 +92,7 @@ struct SnapshotDirectory {
 }
 
 struct Snapshot {
+    memory: Option<lkjscript::platform::MemProjectStore>,
     directories: Vec<SnapshotDirectory>,
     files: Vec<SnapshotFile>,
 }
@@ -181,11 +182,34 @@ fn relative(path: &Path) {
 
 impl Snapshot {
     fn capture(root: &Path, inputs: &[&str], budget: &mut Budget) -> Self {
+        Self::capture_source(root, None, inputs, budget)
+    }
+
+    fn capture_native(native: &Native, inputs: &[&str], budget: &mut Budget) -> Self {
+        let memory = native.memory.read().unwrap();
+        Self::capture_source(native.root.path(), memory.as_ref(), inputs, budget)
+    }
+
+    fn capture_source(
+        root: &Path,
+        memory: Option<&lkjscript::platform::MemProjectStore>,
+        inputs: &[&str],
+        budget: &mut Budget,
+    ) -> Self {
         let mut snapshot = Self {
+            memory: None,
             directories: Vec::new(),
             files: Vec::new(),
         };
-        snapshot.tree(root, Path::new("project"), budget);
+        if let Some(memory) = memory {
+            lkjscript::platform::contributor::visit_memory_project(memory, |name, bytes| {
+                budget.payload(name.len().checked_add(bytes.len()).unwrap());
+            })
+            .unwrap();
+            snapshot.memory = Some(memory.fork().unwrap());
+        } else {
+            snapshot.tree(root, Path::new("project"), budget);
+        }
         // The fixed allowlist contains inputs and artifacts, never *.json,
         // operation logs, command terminals, plan responses or progress.
         for input in inputs {
@@ -290,13 +314,9 @@ impl Seed {
         let previous = *budget;
         let snapshots = std::array::from_fn(|index| {
             if index == 4 {
-                Snapshot::capture(authored.consumer.root.path(), &CONSUMER_INPUTS, budget)
+                Snapshot::capture_native(&authored.consumer, &CONSUMER_INPUTS, budget)
             } else {
-                Snapshot::capture(
-                    authored.authors[index].root.path(),
-                    &AUTHOR_INPUTS[index],
-                    budget,
-                )
+                Snapshot::capture_native(&authored.authors[index], &AUTHOR_INPUTS[index], budget)
             }
         });
         let exports = std::array::from_fn(|index| {
@@ -348,6 +368,10 @@ impl Seed {
                 "restored fixture selected another product"
             );
             snapshot.restore(native.root.path());
+            *native.memory.write().unwrap() = snapshot
+                .memory
+                .as_ref()
+                .map(|memory| memory.fork().unwrap());
             // Copied bytes confer no admission result, even for unused suppliers.
             admit(&native);
             natives.push(native);
@@ -412,6 +436,7 @@ impl Seed {
                 "constructor_executed_here":authored,
                 "bytes":self.budget.bytes, "files":self.budget.files,
                 "directories":self.budget.directories,
+                "source_backend":if self.snapshots[0].memory.is_some() {"memory"} else {"filesystem"},
                 "copied_process_observations":false,
             })
             .to_string(),

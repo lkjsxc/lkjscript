@@ -194,7 +194,8 @@ pub(super) fn workflow(context: &mut Context, source_bundle: &Path) -> Result<()
         &descriptor,
         context.evidence.join(format!("{MATERIAL}.deployment.json")),
     )?;
-    let first_index = context.receipt.commands.len();
+    let first_index = context.command_index();
+    context.require_commands(REQUESTS.len())?;
     let specs = REQUESTS
         .iter()
         .enumerate()
@@ -229,6 +230,7 @@ pub(super) fn workflow(context: &mut Context, source_bundle: &Path) -> Result<()
                 .spawn_scoped(scope, move || {
                     semantic_cli::execute_with_cancellation(
                         &spec.command[1..],
+                        None,
                         &spec.stdout_path,
                         &spec.stderr_path,
                         evidence_root,
@@ -274,7 +276,7 @@ pub(super) fn workflow(context: &mut Context, source_bundle: &Path) -> Result<()
     let mut values = Vec::new();
     for (offset, spec) in specs.iter().enumerate() {
         require(
-            context.receipt.commands[first_index + offset]
+            context.receipt.commands[first_index + offset - context.receipt.command_base]
                 .observation
                 .returned_success(),
             "public conflict invocation failed instead of returning a normal outcome",

@@ -60,7 +60,13 @@ impl Context {
             }
             None => repository.join("target"),
         };
-        physical_target(&repository, &target)
+        let target = physical_target(&repository, &target)?;
+        if target != repository.join("target") {
+            return Err(DevError::usage(
+                "checks require the single repository target directory",
+            ));
+        }
+        Ok(target)
     }
 
     pub(super) fn capture_at(
@@ -113,9 +119,23 @@ impl Context {
                 normalize_absolute(&Path::new(home).join(".cargo"))?
             }
         };
-        let configs = capture_configs(&repository, &cargo_home)?;
+        let (configs, configured_mold) = capture_configs(&repository, &cargo_home)?;
         let workspace_manifests = capture_workspace(&repository, snapshot)?;
-        let compiler_files = capture_compiler(&repository)?;
+        let mut compiler_files = capture_compiler(&repository)?;
+        let environment_mold = environment.get("RUSTFLAGS").is_some_and(|flags| {
+            flags
+                .split_ascii_whitespace()
+                .any(|flag| flag == "link-arg=-fuse-ld=mold")
+        }) || environment.get("CARGO_ENCODED_RUSTFLAGS").is_some_and(
+            |flags| {
+                flags
+                    .split('\u{1f}')
+                    .any(|flag| flag == "link-arg=-fuse-ld=mold")
+            },
+        );
+        if configured_mold || environment_mold {
+            compiler_files.extend(capture_linker_pair(&repository, ["mold", "ld.mold"])?);
+        }
         Ok(Self {
             repository: path_text(&repository)?,
             target: path_text(&target)?,
@@ -143,17 +163,6 @@ impl Context {
         }
         Ok(())
     }
-
-    pub(super) fn ledger_path(&self) -> Result<PathBuf, DevError> {
-        let target = Path::new(&self.target);
-        let parent = target
-            .parent()
-            .ok_or_else(|| DevError::corrupt("Cargo compilation origin target has no parent"))?;
-        let key = VerificationDigest::of(self.target.as_bytes());
-        Ok(parent
-            .join(".artifacts/lkjscript-dev/cargo-origin-target-locks")
-            .join(format!("{}.json", key.as_str())))
-    }
 }
 
 #[derive(Debug)]
@@ -175,16 +184,9 @@ impl TargetLease {
                     "Cargo target identity changed before lease",
                 ));
             }
-            let parent = target.parent().ok_or_else(|| {
-                DevError::infrastructure("Cargo physical target has no stable parent")
-            })?;
-            let mut directory = parent.to_path_buf();
-            for component in [".artifacts", "lkjscript-dev", "cargo-origin-target-locks"] {
-                directory.push(component);
-                create_owned_directory(&directory)?;
-            }
-            let key = VerificationDigest::of(context.target.as_bytes());
-            let path = directory.join(format!("{}.lock", key.as_str()));
+            create_owned_directory(&target)?;
+            let directory = target.clone();
+            let path = directory.join(".lkjscript-check.lock");
             match fs::symlink_metadata(&path) {
                 Ok(metadata) => validate_lock_metadata(&metadata)?,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -234,7 +236,10 @@ impl TargetLease {
     }
 }
 
-fn capture_configs(repository: &Path, cargo_home: &Path) -> Result<Vec<FileProof>, DevError> {
+fn capture_configs(
+    repository: &Path,
+    cargo_home: &Path,
+) -> Result<(Vec<FileProof>, bool), DevError> {
     let mut paths = BTreeSet::new();
     for (index, ancestor) in repository.ancestors().enumerate() {
         if index >= MAXIMUM_ANCESTORS {
@@ -256,11 +261,12 @@ fn capture_configs(repository: &Path, cargo_home: &Path) -> Result<Vec<FileProof
     }
     let mut proofs = Vec::with_capacity(paths.len());
     let mut total = 0_u64;
+    let mut needs_mold = false;
     for path in paths {
         let proof = bounded_proof(&path, path_text(&path)?, MAXIMUM_CONFIG_BYTES)?;
         if proof.kind == FileKind::File {
             let text = bounded_text(&path, MAXIMUM_CONFIG_BYTES)?;
-            validate_config(&text)?;
+            needs_mold |= validate_config(&text)?;
             if proof != bounded_proof(&path, path_text(&path)?, MAXIMUM_CONFIG_BYTES)? {
                 return Err(DevError::corrupt("Cargo config changed during capture"));
             }
@@ -273,6 +279,53 @@ fn capture_configs(repository: &Path, cargo_home: &Path) -> Result<Vec<FileProof
             return Err(DevError::infrastructure("Cargo config bytes exceed limit"));
         }
         proofs.push(proof);
+    }
+    Ok((proofs, needs_mold))
+}
+
+fn capture_linker_pair(repository: &Path, commands: [&str; 2]) -> Result<Vec<FileProof>, DevError> {
+    let mut first = capture_linker(repository, commands[0])?;
+    let second = capture_linker(repository, commands[1])?;
+    if first.last() != second.last() {
+        return Err(DevError::infrastructure(
+            "mold and ld.mold resolve to different executables",
+        ));
+    }
+    first.extend(second);
+    Ok(first)
+}
+
+fn capture_linker(repository: &Path, command: &str) -> Result<Vec<FileProof>, DevError> {
+    let selected = super::snapshot::observe_executable(repository, command)?;
+    let selected_path = selected
+        .path
+        .as_ref()
+        .ok_or_else(|| DevError::infrastructure("configured mold linker is unavailable"))?;
+    let resolved_path = fs::canonicalize(selected_path)?;
+    let resolved = bounded_proof(
+        &resolved_path,
+        path_text(&resolved_path)?,
+        MAXIMUM_COMPILER_BYTES,
+    )?;
+    let expected = selected
+        .proof
+        .resolved
+        .as_ref()
+        .unwrap_or(&selected.proof.entry);
+    let mut comparison = resolved.clone();
+    comparison.path.clone_from(&expected.path);
+    if resolved.kind != FileKind::File
+        || !resolved.mode.is_some_and(|mode| mode & 0o111 != 0)
+        || comparison != *expected
+        || selected.proof != super::snapshot::executable_proof(repository, command)?
+    {
+        return Err(DevError::corrupt(
+            "configured mold linker changed during capture",
+        ));
+    }
+    let mut proofs = vec![selected.proof.entry];
+    if proofs[0] != resolved {
+        proofs.push(resolved);
     }
     Ok(proofs)
 }
@@ -532,8 +585,9 @@ fn validate_dependency(label: &str, key: &str, value: &str) -> Result<(), DevErr
     Ok(())
 }
 
-fn validate_config(text: &str) -> Result<(), DevError> {
+fn validate_config(text: &str) -> Result<bool, DevError> {
     let mut table = String::new();
+    let mut needs_mold = false;
     for raw in text.lines() {
         let line = compact_line(raw)?;
         if line.is_empty() {
@@ -581,8 +635,9 @@ fn validate_config(text: &str) -> Result<(), DevError> {
                 "unsupported Cargo config include or dynamic routing",
             ));
         }
+        needs_mold |= key == "rustflags" && value.contains("link-arg=-fuse-ld=mold");
     }
-    Ok(())
+    Ok(needs_mold)
 }
 
 fn table_name(line: &str) -> Result<&str, DevError> {
@@ -1042,4 +1097,68 @@ fn validate_lock_metadata(metadata: &Metadata) -> Result<(), DevError> {
         ));
     }
     Ok(())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::{PermissionsExt, symlink};
+
+    #[test]
+    fn supported_mold_flags_select_linker_evidence() -> Result<(), DevError> {
+        assert!(validate_config(
+            "# native only\n[target.x86_64-unknown-linux-gnu]\nrustflags = [\"-C\", \"link-arg=-fuse-ld=mold\"] # selection\n"
+        )?);
+        assert!(!validate_config("[build]\njobs=2\n")?);
+        for unsupported in [
+            "[target.x86_64-unknown-linux-gnu]\nrustflags=[\"-C\",\"link-arg=-fuse-ld=other\"]",
+            "[target.x86_64-unknown-linux-gnu]\nlinker=\"arbitrary\"",
+            "[env]\nRUSTFLAGS=\"arbitrary\"",
+        ] {
+            assert!(validate_config(unsupported).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn selected_linker_proofs_bind_bytes_and_symlink_resolution() -> Result<(), DevError> {
+        let temporary = tempfile::tempdir()?;
+        let root = temporary.path().canonicalize()?;
+        let first = root.join("first");
+        let second = root.join("second");
+        let selected = root.join("mold");
+        let driver = root.join("ld.mold");
+        for path in [&first, &second] {
+            fs::write(path, b"synthetic executable")?;
+            fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+        }
+        symlink(&first, &selected)?;
+        symlink(&first, &driver)?;
+        let command = path_text(&selected)?;
+        let driver_command = path_text(&driver)?;
+        let pair = capture_linker_pair(&root, [&command, &driver_command])?;
+        assert_eq!(pair.len(), 4);
+        let before = capture_linker(&root, &command)?;
+        assert_eq!(before.len(), 2);
+        assert_eq!(before[1].path, path_text(&first)?);
+        fs::write(&first, b"changed executable")?;
+        assert_ne!(before, capture_linker(&root, &command)?);
+        fs::remove_file(&selected)?;
+        symlink(&second, &selected)?;
+        let redirected = capture_linker(&root, &command)?;
+        assert_ne!(before, redirected);
+        assert_eq!(redirected[1].path, path_text(&second)?);
+        assert!(capture_linker_pair(&root, [&command, &driver_command]).is_err());
+        fs::remove_file(&driver)?;
+        symlink(&second, &driver)?;
+        assert_ne!(
+            pair,
+            capture_linker_pair(&root, [&command, &driver_command])?
+        );
+        fs::set_permissions(&second, fs::Permissions::from_mode(0o600))?;
+        assert!(capture_linker(&root, &command).is_err());
+        fs::remove_file(&selected)?;
+        assert!(capture_linker(&root, &command).is_err());
+        Ok(())
+    }
 }

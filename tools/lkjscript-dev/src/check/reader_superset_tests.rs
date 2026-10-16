@@ -125,6 +125,7 @@ impl Fixture {
                 fresh_reason: "full_profile_requires_fresh",
                 cache: &cache,
                 origin: None,
+                live: None,
             },
         )
         .expect("actual fresh bounded processes");

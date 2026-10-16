@@ -274,9 +274,9 @@ canonical full reconstruction validates all owner records, types, scopes, effect
 relations, components, ports, targets, tests, dependency interfaces, and reachability. Sparse
 change preparation and point reads retain that complete reconstruction as an independent oracle.
 
-On disk, immutable typed objects and persistent-map pages are sealed into bounded pack contract 1
-files.
-Catalog contract 2 is a disposable physical index: one atomic manifest selects a bounded set of
+On disk, immutable typed objects and persistent-map pages are sealed into bounded packs
+under the single current schema epoch 1. The catalog is a disposable physical index:
+one atomic manifest selects a bounded set of
 content-addressed sorted segments, and each segment binds bounded blocks plus exact pack
 descriptors. Healthy open and lookup read only the manifest, selected segment metadata, candidate
 blocks, and targeted pack footers; sealing adds one delta and performs deterministic streaming
@@ -285,7 +285,7 @@ catalog.
 
 `HEAD` binds one exact repository, revision record, semantic state, root, witness, and acceptance
 evidence. New packs and catalog segments become durable, then the catalog manifest becomes durable,
-before the separately atomic `HEAD` visibility change. Missing, predecessor, malformed, stale, or
+before the separately atomic `HEAD` visibility change. Missing, foreign-epoch, malformed, stale, or
 current-closure-incomplete catalog state is rechecked and rebuilt once from immutable pack footers
 under the exclusive repository lock. That independent recovery path does not call the healthy
 segment lookup or merge implementation. Missing or inconsistent accepted packs, objects, or
@@ -558,8 +558,9 @@ signatures are leaves for capture safety, allowing generic composition; a stored
 parameter remains rejected. Runtime environments have neither semantic equality nor external or
 durable encoding.
 
-Graph 14 adds function-owned effect parameters and exact finite rows. Pure and task callable kinds
-remain distinct; only task types use the new `LKJTFN01` envelope. Effect substitution traverses
+Function-owned effect parameters and exact finite rows are inline current-schema fields. Pure and
+task callable kinds remain distinct; task types retain their exact signature and effect row.
+Effect substitution traverses
 nested callable and nominal types before ordinary type arguments are installed. Compiler operands
 retain exact ordered applications, and strict artifact loading compares executable contents with
 canonical owners before preparation. Production closes effect applications under checked work and
@@ -579,13 +580,12 @@ source-bound neutral-grant probes measure logarithmic additional range frames se
 callback work and indexed list access. This fresh workload is distinct from the maintained standard
 and lkjournal encoding/dependency/port cutover.
 
-Graph 13 adds ordered nominal parameters and explicit applications. Existing TypeObject 10 magic,
-digest domains and bytes remain stable; a separate application envelope binds the exact declaration
-and ordered arguments. Unchanged monomorphic typed-data identities remain stable. Applied typed-data
-layouts describe all arguments and substituted members, including phantom and inactive types.
+Nominal types retain ordered parameters and explicit applications in the ordinary current type
+record. Applications bind exact declarations and ordered arguments. Applied typed-data layouts
+describe all arguments and substituted members, including phantom and inactive types.
 Maintained standard and application graphs are materialized through the accepted repository writer
-with stable existing owner identities and exact successor dependency bindings; predecessor graph
-and artifact inputs reject.
+with stable owner identities and exact dependency bindings. Foreign schema epochs reject;
+maintained derived artifacts are regenerated through ordinary product owners.
 
 Production preparation closes concrete compiled roots over nominal members and generic calls;
 canonical reference preparation derives its closure independently from accepted owners. Layout keys
@@ -606,15 +606,15 @@ Private preparation worklists use complete applications, including finite parame
 Production property analysis propagates disqualifying leaves backwards through exact dependencies;
 the canonical reference independently eliminates unsafe candidates. Session state substitution
 uses fresh declaration bindings and the same exact-instance distinction. Neither a type back-edge
-nor a preparation cache substitutes for admission of separate raw values. The existing recursive
-typed-layout marker and value bytes remain current. Nominal/session feature proof 2, semantic
-validator identity 4 and compiler-unit contract 9 retire stale admission certificates.
+nor a preparation cache substitutes for admission of separate raw values. Recursive typed-layout
+markers remain explicit. Nominal/session proofs bind the current validator
+and complete source; persisted acceptance alone cannot establish current admission.
 
 Pure graph tail calls replace the current activation in both execution tiers. Preparation derives
 terminal-only continuations once by an iterative linear traversal of strictly loaded Return/Jump
 edges, then combines them with exact canonical pure-function signatures. Only process-local
-dispatch changes during preparation; the binding cutover independently advances stored bytecode,
-compiler-unit, graph, and artifact representations.
+dispatch changes during preparation; stored bytecode, compiler units, graph and artifact records
+all use the current schema epoch.
 The canonical reference separately follows if/let/sequence/match tail contexts and unwinds lexical
 maps and substitutions before its activation loop installs the next callee. Neither tier retains
 a per-transfer continuation. Arguments retain their evaluation order and cumulative work/allocation

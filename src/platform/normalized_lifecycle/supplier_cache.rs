@@ -4,9 +4,7 @@
 //! first exports and admits its physical source closure and independently reconstructs the
 //! reference oracle. Only the resulting immutable compiler/linker output is shared here.
 
-use crate::platform::compiler::{
-    LoadedArtifact, OptimizationPolicy, compile_immutable, load_artifact,
-};
+use crate::platform::compiler::{LoadedArtifact, OptimizationPolicy, compile_immutable};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionControl;
 use crate::platform::execution::normalized::execution_diagnostic;
@@ -34,8 +32,9 @@ struct Key {
     revision: [u8; 32],
     transport: [u8; 32],
     witness: [u8; 32],
-    schema: [u8; 32],
+    schema: u16,
     validator: [u8; 32],
+    implementation: [u8; 32],
     optimization: OptimizationPolicy,
     dependencies: Vec<DependencyKey>,
 }
@@ -74,8 +73,9 @@ impl Key {
             revision: package.binding.package_revision.bytes(),
             transport: package.binding.transport.bytes(),
             witness: package.witness.manifest_digest.bytes(),
-            schema: crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH,
+            schema: crate::platform::canonical_schema::SCHEMA_EPOCH,
             validator: validator.bytes(),
+            implementation: crate::platform::canonical_schema::VALIDATOR_IMPLEMENTATION_HASH,
             optimization: OptimizationPolicy::DeterministicBaseline,
             dependencies: bindings,
         })
@@ -115,7 +115,7 @@ pub(super) fn prepare(
             checkpoint(control)?;
             let linked = compile_immutable(package, &closure.container.objects, dependencies)?;
             checkpoint(control)?;
-            let artifact = load_artifact(&linked.artifact.bytes)?;
+            let (_, artifact) = linked.artifact.into_admitted()?;
             checkpoint(control)?;
             Ok(PreparedSupplier {
                 artifact: Arc::new(artifact),

@@ -1,17 +1,9 @@
 //! Native compiler-tooling witness with an independent oracle. Host matrices share admitted
 //! code; exact candidates and one detached smoke per artifact retain the executable boundary.
 #![allow(clippy::unwrap_used, clippy::panic)]
-#[allow(
-    dead_code,
-    reason = "shared semantic CLI support spans independent integration crates"
-)]
-#[path = "support/semantic_cli.rs"]
-mod semantic_cli;
-#[path = "native_components_support/mod.rs"]
-mod support;
+use crate::components as support;
 use serde_json::{Value, json};
 use std::fs;
-use support::copy_executable;
 use support::{Native, cases, digest, field, oracle, path, quoted};
 
 const LIBRARY: &str = include_str!("../examples/owned-worklists/library.lkjc");
@@ -60,7 +52,7 @@ const DESCRIPTORS: [(&str, &str); 4] = [
 
 #[test]
 fn native_components_partition_complete_candidates_across_storage_and_detachment() {
-    let public = Native::new();
+    let public = Native::in_memory();
     let executable_hash = digest(&public.root.join("lkjscript"));
     let standard = public.export(None, "standard");
     let library = public.project("library");

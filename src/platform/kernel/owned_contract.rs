@@ -593,7 +593,7 @@ fn require_share_generation_at(
     scope: DeclarationReference,
     subject: &str,
 ) -> Result<(), Diagnostic> {
-    require_generation_at(read, scope, contract::SHARE_GRAPH_CONTRACT_VERSION, subject)
+    require_generation_at(read, scope, contract::GRAPH_CONTRACT_VERSION, subject)
 }
 
 fn require_generation_at(
@@ -620,7 +620,7 @@ fn require_generation_at(
             }
         }
     };
-    if header.owner != key || header.contract_version < generation {
+    if header.owner != key || header.contract_version != generation {
         return Err(reject(format!(
             "{subject} requires exact Graph {generation} authority"
         )));
@@ -676,17 +676,17 @@ pub(crate) fn contract_record(
             read.owner(OwnerKey::Declaration(reference.declaration))?
             && let DeclarationPayload::OwnedContract(c) = d.payload
         {
-            if d.header.contract_version < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+            if d.header.contract_version != contract::GRAPH_CONTRACT_VERSION
                 && requires_mixed_generation(read, reference, &c.type_parameters)?
             {
                 return Err(reject("ordinary contract parameters require Graph 33"));
             }
-            if d.header.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION
+            if d.header.contract_version != contract::GRAPH_CONTRACT_VERSION
                 && requires_task_borrow_generation(read, &c)?
             {
                 return Err(reject("borrowed task methods require Graph 30"));
             }
-            if d.header.contract_version < 26
+            if d.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
                 && requires_parameterized_generation(read, reference.package, &c)?
             {
                 return Err(reject("structured owned contracts require Graph 26"));
@@ -698,19 +698,19 @@ pub(crate) fn contract_record(
         OwnerKey::Declaration(reference.declaration),
     )? && let PackageInterfaceDeclarationPayload::OwnedContract(c) = d.payload
     {
-        if d.header.contract_version < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+        if d.header.contract_version != contract::GRAPH_CONTRACT_VERSION
             && requires_mixed_generation(read, reference, &c.type_parameters)?
         {
             return Err(reject(
                 "imported ordinary contract parameters require Graph 33",
             ));
         }
-        if d.header.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION
+        if d.header.contract_version != contract::GRAPH_CONTRACT_VERSION
             && requires_task_borrow_generation(read, &c)?
         {
             return Err(reject("imported borrowed task methods require Graph 30"));
         }
-        if d.header.contract_version < 26
+        if d.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
             && requires_parameterized_generation(read, reference.package, &c)?
         {
             return Err(reject(
@@ -733,12 +733,14 @@ pub(crate) fn implementation_record(
             read.owner(OwnerKey::Declaration(reference.declaration))?
             && let DeclarationPayload::OwnedImplementation(i) = d.payload
         {
-            if d.header.contract_version < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+            if d.header.contract_version != contract::GRAPH_CONTRACT_VERSION
                 && requires_mixed_generation(read, reference, &i.type_parameters)?
             {
                 return Err(reject("ordinary implementation schemes require Graph 33"));
             }
-            if d.header.contract_version < 29 && i.requires_prerequisite_generation() {
+            if d.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
+                && i.requires_prerequisite_generation()
+            {
                 return Err(reject("implementation prerequisites require Graph 29"));
             }
             return Ok(i);
@@ -748,14 +750,16 @@ pub(crate) fn implementation_record(
         OwnerKey::Declaration(reference.declaration),
     )? && let PackageInterfaceDeclarationPayload::OwnedImplementation(i) = d.payload
     {
-        if d.header.contract_version < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+        if d.header.contract_version != contract::GRAPH_CONTRACT_VERSION
             && requires_mixed_generation(read, reference, &i.type_parameters)?
         {
             return Err(reject(
                 "imported ordinary implementation schemes require Graph 33",
             ));
         }
-        if d.header.contract_version < 29 && i.requires_prerequisite_generation() {
+        if d.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
+            && i.requires_prerequisite_generation()
+        {
             return Err(reject(
                 "imported implementation prerequisites require Graph 29",
             ));
@@ -786,8 +790,8 @@ fn validate_function_borrow_generation(
         let parameter = parameter(read, package, *id)?;
         if parameter.use_mode == ParameterUse::Borrow
             && super::memory::direct_in(read, package, parameter.ty)?
-            && (generation < contract::SHARE_GRAPH_CONTRACT_VERSION
-                || parameter.header.contract_version < contract::SHARE_GRAPH_CONTRACT_VERSION)
+            && (generation != contract::GRAPH_CONTRACT_VERSION
+                || parameter.header.contract_version != contract::GRAPH_CONTRACT_VERSION)
         {
             return Err(reject(
                 "borrowed task memory parameters and functions require Graph 30",
@@ -1188,12 +1192,7 @@ fn require_mixed_generation_at(
     scope: DeclarationReference,
     subject: &str,
 ) -> Result<(), Diagnostic> {
-    require_generation_at(
-        read,
-        scope,
-        contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION,
-        subject,
-    )
+    require_generation_at(read, scope, contract::GRAPH_CONTRACT_VERSION, subject)
 }
 
 fn mixed_contract_at(
@@ -1239,7 +1238,7 @@ pub(crate) fn require_expression_generation(
     read: &(impl ExpressionRead + ?Sized),
     expression: &ExpressionRecord,
 ) -> Result<(), Diagnostic> {
-    if expression.contract_version >= contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION {
+    if expression.contract_version == contract::GRAPH_CONTRACT_VERSION {
         return Ok(());
     }
     let mixed = match &expression.operation {
@@ -1537,14 +1536,16 @@ fn validate_imported_definition_identity(
             }
         }
     }
-    if generation < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION
+    if generation != contract::GRAPH_CONTRACT_VERSION
         && requires_mixed_generation(read, scope, &actual.type_parameters)?
     {
         return Err(reject(
             "imported ordinary implementation schemes require Graph 33",
         ));
     }
-    if generation < 29 && actual.requires_prerequisite_generation() {
+    if generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+        && actual.requires_prerequisite_generation()
+    {
         return Err(reject(
             "imported implementation prerequisites require Graph 29",
         ));
@@ -1716,7 +1717,7 @@ fn validate_implementation_definition(
         let p = type_parameter_at(read, scope, *id)?;
         admission.associated.reserve_bytes(p.name.as_str().len())?;
         if (!p.constraints.has_owned() && !ordinary_constraint(p.constraints))
-            || p.header.contract_version < 28
+            || p.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH
             || !names.insert(p.name)
         {
             return Err(reject(
@@ -1727,7 +1728,7 @@ fn validate_implementation_definition(
             validate_owned_parameter(read, *id, Some(scope))?;
         }
         if ordinary_constraint(p.constraints) {
-            if p.header.contract_version < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION {
+            if p.header.contract_version != contract::GRAPH_CONTRACT_VERSION {
                 return Err(reject(
                     "ordinary implementation parameters require Graph 33",
                 ));
@@ -2705,7 +2706,8 @@ pub(crate) fn validate_contract_at_with(
                 p.constraints != TypeParameterConstraints::Owned
                     && !ordinary_constraint(p.constraints)
             }
-            || (id != c.self_parameter && p.header.contract_version < 26)
+            || (id != c.self_parameter
+                && p.header.contract_version != crate::platform::canonical_schema::SCHEMA_EPOCH)
             || !names.insert(p.name)
         {
             return Err(reject(
@@ -2713,7 +2715,7 @@ pub(crate) fn validate_contract_at_with(
             ));
         }
         if ordinary_constraint(p.constraints) {
-            if p.header.contract_version < contract::MIXED_STORAGE_GRAPH_CONTRACT_VERSION {
+            if p.header.contract_version != contract::GRAPH_CONTRACT_VERSION {
                 return Err(reject("ordinary contract parameters require Graph 33"));
             }
             require_mixed_generation_at(read, reference, "mixed storage contracts")?;

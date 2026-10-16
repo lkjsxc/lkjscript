@@ -645,9 +645,9 @@ impl<'a> ClosedTypeEnvironment<'a> {
             ),
             _ => return Ok(None),
         };
-        if !matches!(self.generation, 33 | 34)
-            || !matches!(selected.contract_generation, 33 | 34)
-            || !matches!(selected.implementation_generation, 33 | 34)
+        if self.generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+            || selected.contract_generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+            || selected.implementation_generation != crate::platform::canonical_schema::SCHEMA_EPOCH
             || selected.contract != contract
         {
             return Err(closed_context_error());
@@ -670,9 +670,10 @@ impl<'a> ClosedTypeEnvironment<'a> {
             return Err(closed_context_error());
         }
         if binding.scope_parameter.is_some()
-            && (self.generation != 34
-                || selected.contract_generation != 34
-                || selected.implementation_generation != 34)
+            && (self.generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                || selected.contract_generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                || selected.implementation_generation
+                    != crate::platform::canonical_schema::SCHEMA_EPOCH)
         {
             return Err(closed_context_error());
         }
@@ -1993,15 +1994,13 @@ fn prepare_operations(
     finish_dense(operations, "operation")
 }
 
-// The current artifact seal separately admits the complete producer profile and
-// canonical source. Recompilation may use a newer producer without changing the
-// exact source generation or granting that source newer lexical authority.
+// Producer and canonical source independently bind the same current epoch.
 pub(super) fn producer_covers_source_generation(
     unit: &CompilationUnit,
     source_generation: u16,
 ) -> bool {
-    matches!(unit.graph_contract_version, 33 | 34)
-        && source_generation <= unit.graph_contract_version
+    unit.graph_contract_version == crate::platform::canonical_schema::SCHEMA_EPOCH
+        && source_generation == unit.graph_contract_version
 }
 
 fn prepare_functions(

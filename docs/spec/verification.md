@@ -1,531 +1,126 @@
 # Verification and evidence
 
-Status: normative. Verify claims at their actual boundary with independent
-expectations, complete admission and honest terminal outcomes. Only current HEAD
-formats are supported; regenerate affected maintained inputs after format cuts.
+Verify boundaries with independent expectations and complete admission. Support only
+current formats; regenerate maintained inputs after format changes without fallback readers.
 
-## Verification profiles and receipts
+## Execution and storage
 
-At the canonical root of clean committed source:
+Use one checkout and one leased Cargo target, `$PWD/target`. Record actual selected
+outputs and Cargo's rebuilt/reused observations. Readers must finish before writers
+replace shared outputs.
 
 ```sh
 verifier_root=$(bash tools/bootstrap-verifier.sh)
-CARGO_TARGET_DIR="$PWD/target" "$verifier_root/lkjscript-dev" check changed --machine
-CARGO_TARGET_DIR="$PWD/target" "$verifier_root/lkjscript-dev" check full --fresh --machine
+"$verifier_root/lkjscript-dev" check changed --machine
+"$verifier_root/lkjscript-dev" check full --fresh --machine
 "$verifier_root/lkjscript-dev" release target
 ```
 
-[Bootstrap](../../tools/bootstrap-verifier.sh) retains exact immutable checker plus
-original source/context/Cargo evidence in a separate cold target. The explicit
-bootstrap profile uses opt-level 2 without LTO or debug data. Options:
---output ABSENT_ABSOLUTE_ROOT, --expected-source COMMIT, --with-controller.
-Unsupported effective Cargo configs/compiler/flags/environment overrides refuse
-without revealing secrets. Bootstrap neither certifies existing check outputs nor
-authorizes cleanup. The checker remains bound to its compiled checkout. Set checker
---jobs and CARGO_BUILD_JOBS separately; join target owners before cleanup.
+Bootstrap returns the shared executable directory, using its optimized profile without
+LTO/debug data. `--output` selects an absent receipt directory; `--expected-source`
+binds a commit; `--with-controller` builds the release controller. Reject unsupported
+Cargo configuration/environment. Bind checker identity to its compiled checkout.
 
-| Profile | Boundary |
+Default checks atomically replace `.artifacts/lkjscript-dev/latest-receipt.json`
+with a receipt smaller than 64 KiB. It records selected gates, execution outcomes,
+input stability, elapsed times and output identities. Joined transient logs and
+fixtures are deleted, including failed runs. No gate executable is copied.
+`--retain-archive` explicitly retains complete originals for a release handoff or
+investigation. A compact receipt cannot substitute for missing release originals.
+Bootstrap has the same explicit archive option. Do not retain incidental test trees.
+
+Set checker `--jobs` and `CARGO_BUILD_JOBS` independently. Join workers and child
+processes before cleanup. Failures, unavailable dependencies, cancellation, input
+drift, missing outputs and cleanup failures remain failures. Fresh means gates ran
+in this invocation; it does not mean Cargo rebuilt unchanged dependencies.
+
+## Required coverage
+
+| Profile | Required boundary |
 | --- | --- |
-| focused | Narrow format/library/public CLI/service development proof |
-| changed | Current Git status and complete dependencies, not committed ranges |
-| product | Release CLI/copied product/packages/maintained assets/discovery |
-| service | Distributed/stateful/outbound HTTP and lkjournal service |
-| full --fresh | Complete standalone 29-gate acceptance |
-| release-source --fresh | 25 source gates plus required final-candidate union below |
-
-[Registry](../../tools/lkjscript-dev/src/check/registry.rs) and
-[selection](../../tools/lkjscript-dev/src/check/snapshot.rs) own exact commands, DAG,
-bounds and changed-path widening. Preserve all gates: safe Rust/lints, workspace
-all-target/all-feature/reference tests, checker/default release lifecycle, policy,
-guides, maintained assets and native planner. Full source semantic matrices and
-final-byte boundaries have separate receipts; six target owners remain mandatory.
-Counts/labels never replace outcomes.
-
-Selection covers every Git path state and mixed unions. Product/executable/example/
-unclassified tool inputs widen to full; catalog prose includes site tests, checker
-edits include library tests and other prose retains policy/diff. Preserve no-fail-fast
-and optimized test guards; test-debug remains separate interactive evidence.
-See [development verification](../development-verification.md).
-
-release_build owns optimized bytes; lifecycle uses the source-profile harness with
-a separately admitted release candidate, not its Cargo debug output. Checker/site
-retain workspace Clippy/tests.
-
-Receipts bind complete source/input/DAG/command/toolchain/environment/dependency/
-verifier originals, bounded logs and immutable outputs. Honor producers: later Cargo
-features may replace shared paths. Reuse needs identical complete context and a
-permitting profile; final full/source evidence is fresh. Source admission accepts
-only maintained full or release-source originals: re-admit every producer gate
-under identical input/DAG/runtime bindings, then count the required 25-gate closure.
-Never rerun source after full or rewrite its receipt; final-byte proof stays mandatory.
-Drift, absent originals, skipped/unrun/failed/cancelled/unavailable work or unjoined
-cleanup cannot pass.
-Reporting descendants get actual scoped checks without relabelling product proof.
-Keep logs/binaries in .artifacts, not tracked diaries.
-
-## Independent correctness mechanisms
-
-Complete typed meaning reconstruction checks sparse reads/changes/interfaces/
-compiler impact/queries. Normalize only nonsemantic layout/cache/request spelling.
-Production uses normalized bytecode; reference derives signatures/layouts/types/
-targets/tests/blobs from canonical owners, independently of compiler/resolver tables.
-Compiled-table removal must leave reference behavior intact; omitted compiled tests
-cause inventory disagreement. Pure commands/graph tests need VM/reference equality
-and independent expectations. Differential effects use neutral adapters; live effects
-execute once.
-
-| Mechanism | Independent oracle |
-| --- | --- |
-| Affinity/ownership | Finite provenance/borrow/consume/branch/recursion model |
-| Effects/grants | Finite-bitset rows, scripted traces and exact requirement tables |
-| Packages | Complete graph/transport owners/types/private bodies/edges/interfaces |
-| Queries/extraction | Typed preorder/relations/captures/movable-owner derivation |
-| HTTP routes | Segment language/overlap/specificity/capture model and raw TCP |
-| Lists/maps | Vec/BTreeMap histories, physical identities and reservation arithmetic |
-| Catalog | Strict pack-footer enumeration and packing-independent commitment |
-| Recursive proof | Simultaneous substitution/weighted closure, not production SCC |
-| Native planner | Complete outcome checker, fixed graphs and false-plan controls |
-
-Neutral decoding/digests may be shared; production algorithms cannot generate their
-own oracle. Required faults must fail discriminating tests, then restored controls
-pass. Consistent rehashing cannot launder semantic/authority/source-code violations.
-The following rules apply to every feature and existing case indexed below:
-
-- Admit full closures, including unused/untaken/phantom/inactive/last-invalid inputs.
-  Preserve scope/order/types/witnesses/provenance/requirements/identity through every
-  canonical/package/compiler/artifact/runtime boundary.
-- Raw inputs/results/captures reject before callbacks/effects/secrets. Types alone
-  certify no values. Strict independent loaders check canonical/code metadata and
-  cleanup; neutral valid reconstructions remain accepted beside hostile controls.
-- Reserve before growth/mutation. Exact fit passes, N-1 refuses. Semantic invalidity,
-  preparation capacity, quotas, cancellation, deadlines and saturation differ. No
-  refunds/resets/limit increases may hide missing accounting.
-- Rejections preserve accepted authority. Progress-triggered trap/cancel/refusal and
-  healthy reuse release children/loans before ancestors, join work, retain unrelated
-  custody, expose no partial success and preserve primary plus cleanup errors.
-- Public claims need literal ordinary authoring, drafts/reviewed edits, exact
-  transports and complete independently expected detached results after removing
-  sources. In-process public APIs may prove semantics, never actual CLI processes.
-- Observe live effects once. Missing output/cancel/cleanup/encoding failure proves
-  neither rollback nor retry safety; receipt checking never replays effects.
-
-Checked forwarding/binding keeps N={1,256,4096}, K={1,64,1024}, direct/imported paths
-in both evaluators. Input admission is K-independent, internal guard-descendants
-zero and fixed-K classification N-independent. For W=input/raw-result/capture
-nodes+constructor-child visits+guard descendants:
-`W(N,K)-W(1,K)=W(N,1)-W(1,1)`. Moving scans elsewhere cannot evade W. Restored scans/
-bad classification fail independent cost/value oracles. Count rejecting/repeated
-shared nodes and metadata honestly; observers cannot alter limits/authority.
-Cumulative modeled bytes/charges/items, reference source/type/expression work, live
-memory, allocator work and RSS are distinct dimensions.
-
-## Reviewed concurrent change obligations
-
-[Concurrent changes](concurrent-changes.md) retain two same-base literal candidates:
-publish first, reject stale second, refresh unchanged intent and apply complete
-expected result/created identities, then detach. Cover disjoint same-module/shared
-type edits and full positive/negative name/dependency/retirement/ownership/relation
-guards including initially empty ranges. Renew full target validation/impact/tests.
-Races accept one; accepted keyed retries preserve originals after descendants.
-Changed tokens/requests/origins, corrupt/disconnected ancestry, incomplete footprints,
-combined budget/cancel and staging/exposure interruptions cannot partly publish.
-Strict plan round-trips bind authored reads and refresh origin. Every native_refresh
-semantic case remains required in the original source outcome inventory.
-
-## Structured parallel ownership
-
-[Parallel](structured-parallel.md) independently checks callable kind, allowances,
-grants, generic bounds and separate Transferable/Shareable. Ordinary results use
-ordinary records; mixed/owned results use owned products. Joined reads require
-Shareable/source custody and cannot return loans. Rehashed bounds/target/witness/
-result/instruction attacks reject. Observe actual distinct production threads and
-original allocation identity through generic/mixed/nested parent-child return;
-scheduler fixtures/serial equality alone do not prove physical handoff.
-
-Zero/one/full workers, inline fallback, nesting, exact resource bounds and all
-prepare/adopt/result/trap/cancel/deadline/unwind paths join descendants before
-capacity/completion/lender reclamation. No lock spans user code. Reusable workers
-start lazily within demand/ceiling, retain physical identity and private job state.
-Idle handoff requires result destruction, one join owner, bounded slots/balanced
-custody counts and shutdown/recipient races. Former owners cannot cancel transferred
-work/retain roots; destructor failure is no successful shutdown. Complete generic
-library/worker/consumer, source-deleted capacity-one and shared-service witnesses
-retain independent payloads, HTTP siblings, repeated dispatch/cancel/restart.
-Custody observations prove no speedup/fairness/cross-process sharing.
-
-## Command lifecycle requirements
-
-Copied-product lifecycle outside source: discover/create→status/inspect/query→reviewed
-plan/apply→check→deterministic build→pure run, with exact standard/test selection and
-no Cargo/checkout/network/template semantic helpers. Read-only/failure routes preserve
-HEAD. Clean/current/incremental builds match; bad caches select no wrong meaning;
-post-acceptance derived failure remains distinct. Cold maintained copies omit only
-LOCK/catalog: first recovery preserves preexisting bytes, creates only allowed lock/
-catalog files; steady-state inventory stays unchanged. Each read entry has cold proof.
-
-[Public CLI](../../tests/public_cli.rs) and offline owners retain every strict input,
-output and filesystem boundary case. Argument files share inline JSON/types, exact
-1 MiB/one-over, large Text, UTF-8/duplicates/trailing/selectors and regular-file
-admission before context/secrets. Result files retain exact typed JSON, Unicode/F64/
-large/limit cases, create-new/late-conflict ownership and no partial output/debris.
-Completed effects survive output failure; broken stdout preserves published files.
-Retain detached 33,333-key/99,999-item success versus next-key item refusal.
-
-Discovery/native authoring covers resources, sessions, routes, complete paginated
-definitions and extract.function. Independent digests/captures/effects/requirements/
-movable identities, direct/file parity, reviewed body edits and invalid/stale tokens
-remain required. Raw HTTP proves precedence/ordered captures/no-effect 404/restart.
-Foreground transported iteration/bound callbacks retain recursive reports, exact
-N(N-1)/2 results, once-only counters, old/new detached bundles, grants, rollback
-versus committed prefixes, signals/deadlines/quotas/output faults. Trusted unmetered
-312,499-step scalar execution exceeds ten million instructions; quota policy stays
-separate. Live effects are never replayed.
-
-## Maintained consumers and service boundary
-
-Standard/lkjournal differential checks/deterministic builds match maintained assets
-and exact dependency/interface/target/test inventories. Built-in product exports
-match separately generated standard artifact/transport bytes. Prove tracked-source
-cold reproduction of required packs through supported owners.
-
-[Service owner](../../tools/lkjscript-dev/src/service.rs) runs copied bundle/descriptors
-with isolated data, serve and two workers, never repository authority or external DB.
-Retain complete auth/actor/resource/queue/recovery/failure/cleanup matrices and
-independent raw transitions. Copied entry/consume/borrow/largest definitions preserve
-exact provenance, single consumption, pagination and ≤40 helper body records.
-
-## Exact release-target admission
-
-[Target policy](../../tools/lkjscript-dev/src/release/target.rs) owns
-x86_64-unknown-linux-musl pins/images/bounds. Independently admit regular non-symlink
-little-endian ELF64 x86-64 without PT_INTERP/DT_NEEDED/GLIBC requirements; malformed/
-trailing/dynamic/foreign/contradictory bytes reject without ldd. Extracted final bytes
-pass both pinned musl/older-glibc Linux/amd64 userlands without network/host library
-mounts, plus six target owners and seven native boundary smokes. Bind source/policy/
-bytes/mode/outcomes/cleanup. Source semantics cannot impersonate final execution;
-this proves neither universal portability nor sandboxing.
-
-## Transferable application evidence
-
-`offline-packages --evidence-root ABSENTDIR --machine` records full source semantics
-through public APIs with real files/owned loopbacks: every language/closure/repair matrix and
-independent oracle remains. Its 3,600-second allowance includes cleanup/evidence/
-self-admission; original-reader admission is additional. Focused --case is not full.
-`offline-packages --binary PATH --source-receipt ORIGINAL --evidence-root ABSENTDIR --machine`
-resolves the source owner via admitted GateReceipt proof, rechecks receipt/file
-digests and copies exact artifacts. The closed manifest binds actual candidate
-argv/SHA/results/join/cleanup outside source; source rows grant no process credit.
-
-Six owners remain independently required: distributed-http, outbound-http,
-offline-packages, pure-tail, stateful-http, service. Transferred roots are absent
-absolute paths outside checkouts, without source discovery/helpers; bind verifier/
-candidate/copy/context/commands/logs/cleanup and label source-only probes.
-Stateful native authoring cannot use fixture topology. Independent raw HTTP/WebSocket/
-TLS clients retain complete existing protocol/effect/authority/bounds/recovery
-matrices, never application policy, live relays or automatic GET replay.
-Contributor-only PostgreSQL 16.15 comparison remains separate: warm-up/three samples,
->5x wall/>2x RSS/>4x durable bytes reject; it is no product/release dependency.
-
-`pure-tail --evidence-root ABSENTDIR` proves full source semantics: all 111 batch
-rows, ordinary differential smoke and existing admission/type/task/cache/resource/
-tail/cancel/fault matrices, including 8,192-item transactional HTTP. Its isolated
-2 MiB stack probe remains an actual verifier child. Candidate
-`pure-tail --binary PATH --source-receipt ORIGINAL --evidence-root ABSENTDIR`
-authenticates that receipt and five exact fixture files, then starts exactly two
-copied-candidate children: source-free Command sum(8192)=33558528 and HTTP serve with
-four bounded requests covering success/trap/recovery/configured behavior. Require
-independent nominal bytes, rollback/revisions, signal shutdown and joined cleanup.
-Candidate execution is production-only; source matrix results are not final processes.
-
-## Package and public-release evidence
-
-Native planning must own real cycle refusal/compilation order; keep independent
-artifact host topology checks and nonrecursive bootstrap. Complete 4,635 outcomes,
-false plans, unreachable invalid input, ordered cycles/frontiers/chains and inclusive
-10,000 nodes/roots/100,000 edges remain. Large JSON uses explicit bounded embedding,
-never raised CLI defaults. Native input cancel, concurrent preparation/init/encoding/
-cleanup failures recover. Reuse rereads complete private context under current bounds;
-fresh/reused inventories/bytes/work/exact-N-1 agree, invalid entries cannot publish.
-Separate operations/containers plan fresh. Native source check/build/exact asset and
-public detached diamonds prove actual compiler adoption.
-
-### Source and finalized-byte coverage
-
-Fresh release-source plus full semantic owner receipts and exact-final-byte
-boundaries constitute release acceptance. Full remains standalone complete;
-mainline readiness and hosted/public completion remain distinct.
-
-| Claim | Required owner |
-| --- | --- |
-| Source gates | Fresh DAG and original reader |
-| Full semantic matrices | Original workspace_tests public_cli outcomes and full offline/pure-tail receipts |
-| Final process boundaries | Six target owners and exactly seven native smokes |
-| Static target/userlands | Independent ELF and both pins |
-| Installation/transfer/publication | Separate recovery, authenticated exact/latest readers and trusted terminal |
-
-[Public inventory](../../tools/lkjscript-dev/src/release/candidate/public_inventory.rs)
-owns all source test identities and seven exact smoke identities. Source admission
-requires one actual `ok` for every ordinary enumerated public_cli case from original
-workspace_tests stdout, never aggregate counts/notices or reconstructed summaries.
-Only `reviewed_change_plan_scale_streams_detail_beyond_stdout_envelope` may remain
-ignored. Missing/substituted/
-duplicate/newly ignored/failed/unrun cases reject. Original stderr must select one
-public_cli executable matching current Cargo JSON. Bind original source receipt,
-verifier and stdout/stderr FileProofs under the admitted source context.
-
-Final native proof runs exactly native_boundary_smokes::{review_refresh,
-cache_read_fifo,cache_write_fifo,publication_lock,detached_foreground,
-deployment_batch,shared_parallel_http}. Each marker needs an actual copied-candidate
-child with bound SHA/argv, closed environment, joined process and real cleanup.
-Select/copy the source-matched harness immutably; check source/harness/candidate
-identities before/after. No developer fallback or second semantic-matrix replay.
-The acceptance supplement binds original source semantics; standalone diagnostic
-harness output has no source acceptance or promotion credit. The
-[candidate owner](../../tools/lkjscript-dev/src/release/candidate.rs) owns the sole
-current workload/acceptance pair; mixed identities or a count other than seven reject.
-
-Finalize/extract/admit without rebuilding. [Release](../release.md) owns independent
-producer/source/run/artifact authentication, current authority and unchanged promotion.
-Readers reject omitted/substituted/rehashed false evidence without effect replay;
-required ignored faults count only after execution. Transfer/public rebuild no product
-and replay no broad owners. Installed exact/latest retain literal structural/F64
-review results 42→43, 1.75→2.75, -0.0/hello, wrong-review rejection and detached 43;
-project pure results compare reference. Simulated URLs cannot prove anonymous
-acquisition; exact-only cannot prove latest or execute different bytes.
-
-## Contributor process completion
-
-Direct-child exit and pipe EOF differ. Every contributor/probe/transferred route
-retains nonblocking bounded both-stream reads, deadline/controls through inherited
-writers, exact/one-over/final-burst output admission and preserved exhaustion.
-Keep child waitable through signalling, then reap. Every path attempts descendant
-termination/EOF/log sync with separate five-second cleanup; missing EOF/survivors
-fail while preserving primary/cleanup errors. Track owned PID/start through
-reparenting; observation errors retain ownership, recycled PID grants none and
-signals require identity/pidfd. Unique traversal stays within 4,096 processes/depth 64;
-thread/procfs bounds differ. Unsampled escaped children/blocking kernel calls prove
-no hostile containment/hard host deadline. Git/toolchain probes retain 30 seconds.
-Existing inherited-stream/post-exit/reaping/groups/reparent/log/pre-spawn faults and
-healthy recovery tests remain required.
-
-## Performance evidence
-
-Compare exact meaning/artifact/input/workload, recording source/executable/context/
-warmth and preparation/invocation/encoding/sample order. Retain all required create/
-check/build/current/incremental=clean/run/standard/lkjournal observations, separating
-wall/CPU/RSS/live/cumulative allocation/compiler units/bytes/I/O/publications and
-failures. Current-cache work must decrease; incremental respects impact/locator
-bounds. Measurements prove no API savings and replace no gates. Share immutable
-complete-context fixtures, never effects/grants/quotas. Preserve full matrices and
-real boundary smokes; SLA claims require complete local/hosted measurements.
-
-## Native installation and release bootstrap
-
-Independent current containers exercise public native parser/member/mode/checksum/
-ELF/identity/slot/prefix/lock/symlink/I/O/process faults without release preparation.
-Failures preserve slots/live-runtime selection. Genuine final assets retain deterministic
-bootstrap/both userlands/installed authoring/retained-process recovery. Anonymous
-exact/latest independently admits triple/attestations and runs original script/small
-lifecycle. Original/nested readers retain omission/substitution/rehashed faults and
-restored controls before terminal. Installation grants no authority/migration/fallback;
-published history stays immutable, obsolete readers are no development requirement.
-
-## Language and runtime witnesses
-
-The current feature specs and executable owners below retain their complete
-positive/negative, boundary, independent-oracle and fault-sensitivity matrices.
-This index applies the common obligations above; it does not narrow those matrices.
-
-| Feature | Contract and maintained public owner |
-| --- | --- |
-| Buffers | [Contract](owned-byte-buffers.md), [public tests](../../tests/public_cli/native_byte_buffer.rs): custody, freeze identity, bounded builders and drops |
-| Owned generics | [Contract](owned-generics.md), [public tests](../../tests/public_cli/native_owned_witnesses.rs): symbolic complete admission and exact same-Self witnesses |
-| Parameterized Worklist | [Contract](owned-contract-parameters.md), [parameters](../../tests/public_cli/native_owned_parameters.rs), [worklists](../../tests/public_cli/native_owned_worklists.rs): flat/chunked boundary and graph matrices |
-| Sequences | [Contract](owned-sequences.md), [public tests](../../tests/public_cli/native_owned_sequences.rs): LIFO, bounded control, reservations and disposal |
-| Parallel reads | [Contract](structured-parallel.md), [public tests](../../tests/public_cli/native_parallel_reads.rs): exact leases, symmetric conflicts, joined custody and bounded seals |
-| Structural syntax | [Contract](language.md), [public tests](../../tests/public_cli/native_forms.rs): independent flat/block parity, scope, locations and bounds |
-| F64/effects/requirements | [Language](language.md), [effects](owned-effects.md), [offline owner](../../tools/lkjscript-dev/src/offline_packages.rs): arithmetic, codecs, transactions, grants and visibility |
-
-Transaction completion distinguishes commit, condition abort and conflict. Empty/
-read-only/false-valued success is not an abort. Barrier-synchronized two-writer
-updates from one base yield exactly one commit/conflict, two callbacks and one
-physical revision; only winning bytes remain after reopen. Canonical aliases may
-participate only in their live owner scope; malformed/missing authority rejects
-before callbacks. Failed conditions permit further staging but no publication.
-Other-store completed effects survive parent abort. Credit/stock, DurableQueue,
-exact byte/store observers and reviewed transported old/new bundles remain required.
-
-## Same-invocation task-owned transfer
-
-[Task transfer](owned-task-transfers.md) and [public tests](../../tests/public_cli/native_owned_tasks.rs)
-retain imported/generic custody, resource suffixes and exact witnesses/method contracts.
-Synchronous borrows pass; bad order, unrestricted owners, duplicate moves, wrong
-witnesses and pure→task calls reject, including inactive/raw/rehashing attacks.
-Allowances/grants remain independent; all exits join custody and recover. This
-proves neither asynchronous transfer nor exactly-once effects.
-
-## Generic owned-implementation obligations
-
-[Generic schemes](generic-owned-implementations.md) and [public tests](../../tests/public_cli/native_owned_generic_implementations.rs)
-require full symbolic mapping admission before carriers, without item-specific
-wrappers. Preserve stable ties, distinct same-Self readers, chunk boundaries,
-513-item results and larger aggregate refusal. Growing cycles reject even untaken;
-finite/permuting controls pass. Witnesses grant no effects; forged mappings reject.
-
-## Mixed storage-contract obligations
-
-[Mixed contracts](owned-contract-parameters.md) admit every category/bound/scope/
-phantom actual: ordinary formals cannot conceal owners or borrow/consume them.
-IndexedData exports before suppliers. Retained/displaced values survive disposal;
-evaluation order, signed indices, module privacy and reservations remain exact.
-All four integer/Bool planner combinations retain independent outcomes/capacities.
-Checked indexing cannot scan/copy prefixes. Require complete indexed-data source
-inventory, including category/mode/source forgeries and cleanup.
-
-## Scoped owned-child read obligations
-
-[Lexical reads](owned-borrows.md) independently derive source/ancestor guards and
-complete symbolic/unused admission. Detached results preserve consumable originals.
-Scopes retain activation through reborrow/recursion. Protected consumption, escapes,
-invalid arms/methods and extraction reject, as do rehashed guard/source/cleanup/tail
-mutations. Release youngest loans before custodians without user-code storage locks.
-
-## Source-tied borrowed result obligations
-
-[Borrowed results](owned-read-results.md) and [public tests](../../tests/public_cli/native_owned_read_results.rs)
-retain exact source/method position, mode/type/guard chain. Four flat/chunk32 cell/
-buffer witnesses preserve stable first ties, identity observation, LIFO drain/reuse
-and complete detached boundary results. Wrong-source/owning/escaping/ordinary/codec
-or task-loan results reject. Guard reservation/cancel/adoption failures retain one
-cleanup owner; child loans end before ancestors and activation replacement cannot
-erase cleanup. Empty access traps and healthy reuse remain required.
-
-## Recursive callable proof
-
-[Context proof](../decisions/context-scoped-callable-proof.md),
-[demanded provenance](../decisions/demanded-callable-provenance.md) and
-[operation-local inputs](../decisions/operation-local-callable-inputs.md) retain exact
-SCC/provenance: equal shapes cannot merge authority. Only irrelevant growth edges
-may be omitted. Independent unpruned/eager/weighted, exact/N-1 and cancellation
-controls remain under unchanged limits. Read each demanded mapping once despite
-convergence, never project undemanded inputs or share operation/context entries.
-Reserve first; failed entries cannot publish and final handles reclaim storage.
-Mandatory compact/demanded public witnesses retain generic-first authoring,
-review/edit/restore, unsafe-unused rejection and complete detached behavior.
-
-## Checked Map-entry projection
-
-The exact native_map_entries::native_map_entries_preserve_results_and_linear_projection_work_after_detachment
-matrix and every Map case are mandatory. Explicit admitted candidate selection and
-before/after copy/execution checks exclude fallbacks. Public author/check/build then
-source/transport removal precedes 8 sizes {0,1,31,32,33,256,1024,4096}, 4 insertion/update
-patterns, 3 repetition counts {0,1,8}, enumeration/control routes and 192 complete
-comparisons. Compare every ordered key/payload/replacement, complete overwritten/
-unused raw inputs and independent BTreeMap/work bounds, refusal/recovery/cleanup.
-Cost predicates/similar names cannot substitute.
-
-## Native blocked fold composition and final-byte evidence
-
-Exact native_fold family retains all five scalar/detached, wrong-contract,
-complete-input-before-callback, nested-history and unused-initial-history cases.
-Export supplier before consumer; ordinary graph folds are no intrinsic. Independent
-prefix slicing/standard-fold controls cover empty/seeded state and block/remainder/
-32-way boundaries; later appends preserve old prefixes, empty preserves full seed.
-Malformed unused/deep input rejects even empty; traps expose no partial result.
-Repeat detached matrices with unchanged artifacts after both sources/transport vanish.
-
-## Exact incremental compiler-unit acceptance
-
-Impact is before∪candidate enclosing units, not all checked owners; ports belong
-to components, moved children affect both parents and deleted children keep before
-paths. Retain domain/work/cycle guards and full incremental manifest/artifact=clean
-across add/rebind/move/delete. Public exact counts/updated cache/exact-current checks
-cannot silently clean-recover. Mandatory incremental_units cases cover one/two-port
-Command detached results, malformed port authority/cache preservation/recovery and
-native-planner exact assets/independent detached dependency diamonds.
-
-## Declared Cargo executable origin
-
-[Origin owners](../../tools/lkjscript-dev/src/check/cargo_origin.rs) authenticate complete
-selected workspace units of direct Cargo build/test declared-output producers.
-JSON precedes --; exactly one root non-test binary artifact per output matches
-executable/filenames and successful build-finished. Units bind package/manifest,
-target/kind/profile/test/features/all file proofs. Missing/ambiguous/malformed records
-and unsupported build-script/proc-macro/generated closures refuse. Test stdout
-cannot supply artifacts.
-
-Only actual fresh:false establishes cold origin. Ordinary fresh:true units need exact
-cold originals matching source/lock, checkout/physical target, runtime/compiler,
-profile/features/config and live bytes. Warm references point directly cold; a cold
-binary cannot bless unknown warm libraries. Unknown/changed/foreign/evicted originals
-refuse without automatic cleaning/retry. Bootstrap seeds no check origins.
-
-The root schema generator is a narrow derived-input exception: retain its selected
-executable and literal freshness without minting a cold origin. Require its exact
-source-bound Cargo execution record, empty linker/cfg/environment outputs and one
-canonical_schema.rs in its target-owned OUT_DIR. Compare generated bytes literally
-with the immutable checker's compiled source at capture and replay; retain that file
-and Cargo's original script stdout with every root unit. Missing, foreign, extra or
-tampered inputs refuse. Other workspace generators remain unsupported.
-
-Context binds approved environment, Cargo/compiler entry/resolution/sysroot rustc
-bytes and config/config.toml contents/absence on actual cwd ancestors/Cargo home,
-without exposing secrets. Closed grammar refuses wrappers/custom targets/overrides/
-unsupported routing. All Cargo writers except fmt use canonical owned target;
-external regular targets pass, aliases reject. Physical-target lease outside removable
-tree plus same-run writer mutex span observation→durable dirty→execute/join→retain/
-recheck→commit. Failed/abandoned/drifted/incomplete writers cannot publish clean state.
-Nonproducer Clippy/workspace_tests serialize/recheck but do not admit compiled
-unit origins; empty governed targets supply their final operational cold start.
-
-Pin original runs with shared ACTIVE.lock; deletion needs exclusive lease. Admit
-full independently hashed cold/warm sidecar closure and retained bytes, even when
-live paths were replaced. Bounds: 2 GiB/file, 8 GiB/live, 16 GiB/retained reads, 256 units,
-1,024 history records, 16 MiB sidecar/ledger, 64 MiB closure metadata, 256 originals,
-depth 32, 64 MiB/process stream, 256 MiB closure logs; charge before I/O. These bounds
-prove no adequacy/performance. This cooperating-host contract does not cover
-uncoordinated writers, hostile builds or arbitrary prepopulated compiled tests.
-
-## Generalized sequence storage and exact final-byte families
-
-[Sequences](owned-sequences.md) stay affine with ordinary elements. Old immutable
-values survive storage replacement/disposal/transfer; displaced owners retain exact
-custody. Index runs once, bounds/reservations precede swap, raw mutation invalidates
-admission and checked updates cannot scan prefixes. Independent planner and exact
-FIFO/data-sequence inventory owners retain all outcomes, capacities, negative cases,
-detached results, peek/LIFO adversaries and failure cleanup.
-
-## Nominal owned records and final-byte composition
-
-[Owned records](owned-records.md) retain intrinsic affinity, full/phantom layout and
-depth/cycle admission, exact defining-module privacy and source-independent witnessed
-abstraction. Shape or transported private bytes grant no field rights. FIFO keeps
-exhaustive source interleavings, guarded views, drain/reuse and every family witness.
-Preserve child allocations, one custody envelope, no nominal prefix scan and full
-failure cleanup; count repacking/reversal separately.
-
-## Checked consuming extraction
-
-Extraction requires exact admitted parent program/type/layout/current owner/zero
-loans. Raw/stale/foreign/same-shaped/inert/borrowed/protected/mutation-restored parents
-and interrupted custody reject. Ordinary fields survive parent destruction without
-loans/custody/descendant rescans; owned fields retain exact checks. Partial delivery/
-cancel releases pending children and installed locals; reference admission remains
-independent. Detached mode 2 raw-result work ≤ K*(N+2) with complete inputs must reject
-doubled work and underchecking; pack/drop and borrowed projection are distinct
-controls. Indexed-data witnesses retain full displaced nested values after disposal.
-
-## Associated Owned BlockRead and final-byte coverage
-
-The exact native_declarations::native_associated_blockread::native_associated_blockread_consumer_first_four_literals_three_targets_and_detached_bytes
-case exports contract/consumer before flat/private nominal suppliers. Public
-transport/draft/replan/artifact equality preserves witness identity; 4 literals × 3
-targets × attached/detached require 24 complete results. Protected consume/escape/private
-foreign-field refusals preserve HEAD; detached cleanup leaves no handles/effects.
-Require exact identity and every future namespace case.
-
-The [source inventory](../../tools/lkjscript-dev/src/release/candidate/public_inventory.rs)
-requires all four read-view consumer-first/source-category/joined-read/trap-recovery
-witnesses with exact result-source and ancestor custody. These complete semantic
-matrices use original source outcomes; the seven final native smokes separately
-prove their actual distribution boundaries. Similar names substitute for neither.
+| focused | Narrow development checks |
+| changed | Current Git status and dependency closure |
+| product | CLI, packages, maintained assets and discovery |
+| service | Distributed/stateful/outbound HTTP and lkjournal |
+| full --fresh | All 29 standalone gates |
+| release-source --fresh | 25 source gates plus final candidate acceptance |
+
+The [registry](../../tools/lkjscript-dev/src/check/registry.rs) owns commands, limits
+and dependencies; [selection](../../tools/lkjscript-dev/src/check/snapshot.rs) owns
+changed-path widening. Preserve every workspace/all-target/all-feature/reference
+test, safe-Rust/lint/policy gate, native planner, guide and maintained-asset check.
+Counts cannot replace successful outcomes. Changed selection reads working-tree
+state. Use optimized test profiles; debug tests do not establish full acceptance.
+
+The release build selects all eight workspace test harnesses. Their gate runs two
+at a time with sixteen test threads each, without taking a Cargo writer lease.
+Exact executable proofs, complete named/ignored inventories and terminal outcomes
+remain bound to the producer. Every target runs after a failure. Only the copied
+candidate lifecycle is excluded there because its own dependent gate executes it.
+
+Release source readers require explicitly retained full or release-source originals
+with exact source, toolchain, environment, verifier, commands, dependency outputs
+and Cargo records. Re-admit the whole original receipt before selecting the required
+25 gates. Final acceptance still requires six target owners, seven native smokes,
+ELF policy, two pinned userlands and installation recovery. Source semantic cases
+and final executable behavior retain distinct evidence. See [release](../release.md).
+
+## Semantic and process tests
+
+Run finite public adapters in process. Use bounded `MemProjectStore` projects and
+copy-on-write forks where the test does not exercise filesystem publication.
+Integration modules share `public_cli` and its caches; focus by module or test name.
+Clones share heads; forks have independent graph/data heads and share immutable
+charged bytes. Reuse admitted standard packages and compiled supplier programs
+once per process. Memory storage must retain the same canonical decoding, complete
+validation, idempotency, stale-base and atomic publication rules as disk storage.
+Explicit file, process, signal, deployment, installation and release boundaries
+remain real boundary tests. Never describe host semantic results as execution of
+candidate bytes. Keep complete case inventories while batching equivalent routes.
+
+Stateful/service source checks use `--source-reads` for linked queries and
+inspection. Their receipts bind those calls to the verifier image; mutation, HTTP,
+restart and process observations still bind the copied product. Transferred
+candidate acceptance rejects every source-read receipt and semantic observation.
+Offline composition runs all nine independent fixture families on eight workers,
+after shared public discovery. Reserved command/export/runner ranges prevent collisions;
+all workers join before ordered evidence merge and complete independent admission.
+
+Production executes normalized bytecode. The reference interpreter reconstructs
+meaning independently from canonical owners, including signatures, layouts, types,
+targets, tests and blobs. Removal of compiled tables must not disable reference
+behavior. Missing compiled tests must fail inventory comparison. Pure runs require
+both evaluator equality and independent expected values. Live effects execute once;
+neutral scripted adapters own differential effect tests.
+
+Independent oracles cover ownership/provenance, effect rows and grants, package
+closures, queries/extraction, route overlap, collection histories, catalog reachability,
+recursive proofs and native planning. Neutral codecs/digests may be shared; a
+production algorithm cannot generate its own expected answers. Required fault
+injections must fail discriminating controls, then restored controls must pass.
+
+## Admission and resource invariants
+
+- Validate complete closures, including unused, untaken and final-invalid syntax.
+  Preserve identities, ordering, scope, types, witnesses, provenance and requirements
+  across graph, package, compiler, artifact and runtime boundaries.
+- Reject malformed input/results/captures before callbacks, effects or secrets.
+  Strict independent loaders admit both neutral valid reconstructions and hostile
+  metadata controls. Rehashing cannot repair invalid meaning or authority.
+- Reserve modeled growth before mutation. Exact fit passes; one less refuses.
+  Semantic validity, preparation capacity, quotas, cancellation and deadlines differ.
+  Count raw-result/input nodes, constructor work, repeated nodes and hidden scans.
+  Modeled work, allocator work, live memory and RSS are distinct measurements.
+- Publish under the owning lock after revalidation. Stale, invalid, exhausted or
+  interrupted candidates expose no partial authority. Accepted keyed retries retain
+  original outcomes after descendants. Concurrent same-base writers have one winner.
+- Join children and release loans before ancestors on success, trap, cancellation
+  and refusal. Retain unrelated custody and preserve primary plus cleanup errors.
+  Missing output never proves rollback or safe retry of effects.
+- Maintain public literal authoring, refresh/draft round-trips, exact dependency
+  transports and detached-source tests with independent full expected results.
+  Test both evaluators through direct/imported, empty/exact-bound/oversized cases.
+
+Keep feature matrices in their owning tests/specifications. Report full wall time
+and peak/disk usage separately from correctness. Acceptance has no three-minute
+requirement; complete successful outcomes and bounded storage remain required.

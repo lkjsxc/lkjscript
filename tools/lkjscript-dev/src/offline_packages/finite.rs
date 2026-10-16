@@ -54,7 +54,7 @@ fn reject(context: &mut Context, package: &Package, named: bool) -> Result<(), D
         .evidence
         .join(format!("finite-invalid-{named}.lkjc"));
     fs::write(&path, rejected_request(&package.revision, named))?;
-    let index = context.receipt.commands.len();
+    let index = context.command_index();
     let result = context.cli(
         Some(&package.path),
         &[
@@ -362,7 +362,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
     context.cli(Some(&library.path), &["check"], true)?;
     reject(context, &library, false)?;
     reject(context, &library, true)?;
-    let inventory_index = context.receipt.inventories.len();
+    let inventory_index = context.inventory_index();
     context.export(&mut library)?;
     context.receipt.observations.insert("finite_library".into(), json!({"inventory":inventory_index,"package":library.id,"revision":library.revision,"transport":library.transport}).to_string());
     let mut consumer = context.new_package("finite-consumer")?;
@@ -442,7 +442,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
                 .evidence
                 .join(format!("finite-{label}.deployment.json")),
         )?;
-        let index = context.receipt.commands.len();
+        let index = context.command_index();
         let output = context.cli(
             None,
             &[
@@ -598,13 +598,18 @@ pub(super) fn validate(receipt: &Receipt, root: &Path) -> Result<Vec<usize>, Dev
 }
 
 fn neutral(context: &mut Context, consumer: &Package) -> Result<(), DevError> {
-    let index = context.receipt.runners.len();
+    let index = context.runner_index();
     let project = consumer.path.clone();
+    #[allow(
+        clippy::result_large_err,
+        reason = "direct semantic boundary callbacks preserve complete typed diagnostics"
+    )]
+    let probe = || lkjscript::platform::contributor::finite_callable_execution_probe(&project);
     context.probe_json(
         "finite-neutral",
         "contributor.finite_callable_execution_probe",
         &[project.display().to_string()],
-        || lkjscript::platform::contributor::finite_callable_execution_probe(&project),
+        probe,
     )?;
     context
         .receipt

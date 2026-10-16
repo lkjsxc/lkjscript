@@ -27,6 +27,57 @@ use std::path::Path;
 
 const OWNER_DIGEST_DOMAIN: &str = "lkjscript.contributor.owner-identities.v1";
 
+/// Copy the exact accepted HEAD bytes under the memory publication lock.
+/// This observation neither admits a closure nor grants mutation authority.
+pub fn memory_project_head(
+    project: &super::MemProjectStore,
+) -> Result<Option<Vec<u8>>, Diagnostic> {
+    Ok(super::storage::project::lock(&project.graph)?
+        .head
+        .as_ref()
+        .map(|head| head.as_slice().to_vec()))
+}
+
+/// Visit a read-only snapshot of every retained graph/data record, including history.
+/// Immutable indexes pin the bounded source bytes while callbacks run without locks.
+/// Names identify observations, not an import format or a new source authority.
+pub fn visit_memory_project(
+    project: &super::MemProjectStore,
+    mut visit: impl FnMut(&str, &[u8]),
+) -> Result<(), Diagnostic> {
+    let graph = super::storage::project::lock(&project.graph)?.clone();
+    let data = super::storage::project::lock(&project.data)?.clone();
+    for (name, bytes) in [
+        ("graph/head", &graph.head),
+        ("graph/readiness", &graph.store.readiness),
+        ("graph/compilation-head", &graph.compilation_head),
+    ] {
+        if let Some(bytes) = bytes {
+            visit(name, bytes.as_slice());
+        }
+    }
+    visit("graph/staged", &(graph.store.staged as u64).to_le_bytes());
+    for (key, bytes) in graph.store.objects.iter() {
+        visit(
+            &format!("graph/objects/{}/{}", key.domain.name(), key.digest),
+            bytes.as_slice(),
+        );
+    }
+    if let Some(identity) = data.store_id {
+        visit("data/identity", &identity);
+    }
+    if let Some(head) = data.head {
+        visit("data/head", &head);
+    }
+    for (key, bytes) in data.revisions.iter() {
+        visit(
+            &format!("data/revisions/{}", encode_hex(key)),
+            bytes.as_slice(),
+        );
+    }
+    Ok(())
+}
+
 /// Read-only strict loader observation for independently retained predecessor/hostile bytes.
 /// Successful local construction supplies no admission shortcut.
 pub fn strict_artifact_admission_probe(bytes: &[u8]) -> Result<(), Diagnostic> {
@@ -3649,8 +3700,11 @@ declarations.end"#;
             .expect("create catalog inventory repository");
         let before = std::fs::read(project.join("HEAD")).expect("HEAD before catalog inventory");
         let inventory = catalog_inventory(&project).expect("catalog inventory");
-        assert_eq!(inventory.identity, "lkjscript-object-catalog-2");
-        assert_eq!(inventory.contract_version, 2);
+        assert_eq!(inventory.identity, "lkjscript-object-catalog");
+        assert_eq!(
+            inventory.contract_version,
+            crate::platform::canonical_schema::SCHEMA_EPOCH
+        );
         assert_eq!(inventory.state, "loaded");
         assert!(inventory.entries > 0);
         assert!(inventory.segments <= inventory.maximum_live_segments);
@@ -3849,8 +3903,8 @@ declarations.end"#;
             .parse::<crate::platform::semantic_id::ExpressionId>()
             .expect("maintained handoff expression identity");
         // This fixture checks default-budget authored extraction from a current accepted base.
-        // Historical revalidation is a separate charged admission; the maintained predecessor
-        // must not rely on the process-wide one-entry proof cache remaining warm between views.
+        // Base revalidation has independent admission; candidate receipts and budgets must
+        // remain identical whether the bounded process proof cache is cold or warm.
         let maintained = GraphRepository::open(&project).expect("open maintained repository");
         let maintained_view = maintained
             .view_current()
@@ -3927,8 +3981,13 @@ declarations.end"#;
             .repository
             .view_current()
             .expect("open current accepted extraction base");
-        assert_eq!(view.validation_origin(), "accepted-current");
-        assert_eq!(view.validation_work().1, 0);
+        view.require_current_validation()
+            .expect("the running implementation has admitted this exact source");
+        match view.validation_origin() {
+            "reused" => assert_eq!(view.validation_work().1, 0),
+            "rebuilt" => assert!(view.validation_work().1 > 0),
+            other => panic!("current source lacks an implementation proof: {other}"),
+        }
         assert_eq!(oracle.revision, view.revision().to_string());
         let current = view
             .reconstruct_full_oracle()

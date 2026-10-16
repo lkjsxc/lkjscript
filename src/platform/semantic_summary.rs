@@ -27,9 +27,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-pub const SEMANTIC_SUMMARY_CONTRACT_VERSION: u16 = 3;
-pub const SEMANTIC_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-semantic-summary-3";
-pub const SEMANTIC_VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator-4";
+pub const SEMANTIC_SUMMARY_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const SEMANTIC_SUMMARY_CONTRACT_IDENTITY: &str = "lkjscript-semantic-summary";
+pub const SEMANTIC_VALIDATOR_CONTRACT_IDENTITY: &str = "lkjscript-semantic-validator";
 
 // This is a hostile-decoder and single-object implementation bound, not a semantic project limit.
 const MAXIMUM_MODULE_SUMMARY_PAYLOAD_BYTES: usize = 16 * 1_048_576;
@@ -1008,8 +1008,9 @@ mod tests {
 
         let mut hostile = vec![0_u8; PACKED_ENVELOPE_BYTES];
         hostile[..8].copy_from_slice(&SUMMARY_MAGIC);
-        hostile[8..40].copy_from_slice(&crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH);
-        hostile[40..48].copy_from_slice(
+        hostile[8..10]
+            .copy_from_slice(&crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes());
+        hostile[10..18].copy_from_slice(
             &(u64::try_from(MAXIMUM_MODULE_SUMMARY_PAYLOAD_BYTES).expect("limit") + 1)
                 .to_le_bytes(),
         );

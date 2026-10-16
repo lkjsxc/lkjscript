@@ -1,10 +1,12 @@
 use crate::authority::{self, AuthorityObservation};
 pub(crate) mod nominal;
+mod source_reads;
 use crate::error::DevError;
 use crate::evidence::{self, FileProof, PublishedEvidence, VerificationDigest};
 use crate::http_probe::{self, HttpResponse};
 use crate::process::{self, ProcessControl, ProcessObservation, ProcessSpec, ProcessStatus};
 use crate::raw_websocket::{RawHandshake, RawMessage, RawWebSocket, RawWebSocketError};
+use crate::semantic_cli::{self, CallObservation};
 use lkjscript::platform::contributor::{
     FunctionDefinitionOracle, function_definition_oracle, largest_function_definition_oracle,
 };
@@ -29,7 +31,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const SERVICE_CONTRACT_VERSION: u32 = 12;
+const SERVICE_CONTRACT_VERSION: u32 = 13;
 const HTTP_MAXIMUM_CONCURRENT_TASKS: u64 = 16;
 const HTTP_MAXIMUM_QUEUED_TASKS: u64 = 64;
 pub(crate) const DATA_CONTRACT: &str = "lkjscript-data-store-1";
@@ -148,6 +150,8 @@ static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 struct Options {
     binary: PathBuf,
     machine: bool,
+    evidence_root: Option<PathBuf>,
+    source_reads: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -170,6 +174,7 @@ struct ServiceReceipt {
     elapsed_nanoseconds: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     binary: Option<FileProof>,
+    source_verifier: Option<FileProof>,
     #[serde(skip_serializing_if = "Option::is_none")]
     artifact: Option<FileProof>,
     retained_files: Vec<FileProof>,
@@ -206,7 +211,7 @@ struct Failure {
 struct CommandEvidence {
     name: String,
     command: Vec<String>,
-    process: ProcessObservation,
+    observation: CallObservation,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -824,7 +829,7 @@ impl ServiceFailure {
 }
 
 struct CommandOutput {
-    observation: ProcessObservation,
+    observation: CallObservation,
     stdout: Vec<u8>,
 }
 
@@ -864,6 +869,7 @@ struct ServiceContext {
     repository: PathBuf,
     run_directory: PathBuf,
     command_ordinal: u64,
+    source_verifier: Option<FileProof>,
     commands: Vec<CommandEvidence>,
     runners: Vec<Option<ActiveRunner>>,
     runner_evidence: Vec<RunnerEvidence>,
@@ -899,6 +905,14 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
 }
 
 pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBinding, DevError> {
+    read_receipt_inner(path, candidate, None)
+}
+
+fn read_receipt_inner(
+    path: &Path,
+    candidate: &Path,
+    source_verifier: Option<&FileProof>,
+) -> Result<ReceiptBinding, DevError> {
     let metadata = fs::symlink_metadata(path).map_err(|error| {
         DevError::infrastructure(format!(
             "inspect service receipt '{}': {error}",
@@ -928,6 +942,10 @@ pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBindi
     let repository = repository_root()?.canonicalize().map_err(|error| {
         DevError::infrastructure(format!("resolve service receipt repository: {error}"))
     })?;
+    let evidence_root = path
+        .parent()
+        .ok_or_else(|| DevError::corrupt("service receipt has no evidence root"))?;
+    source_reads::verify(evidence_root, &receipt, source_verifier)?;
     let candidate = candidate
         .canonicalize()
         .map_err(|error| DevError::infrastructure(format!("resolve service candidate: {error}")))?;
@@ -1210,7 +1228,24 @@ fn execute(
     repository: &Path,
     options: &Options,
 ) -> Result<(ServiceReceipt, PublishedEvidence), DevError> {
-    let run_directory = new_run_directory(repository)?;
+    let run_directory = match &options.evidence_root {
+        Some(path) => {
+            if !path.is_absolute() {
+                return Err(DevError::usage("service evidence root must be absolute"));
+            }
+            let parent = path
+                .parent()
+                .ok_or_else(|| DevError::usage("service evidence root has no parent"))?;
+            if parent.canonicalize()? != parent {
+                return Err(DevError::usage(
+                    "service evidence root parent must be canonical",
+                ));
+            }
+            fs::create_dir(path)?;
+            path.clone()
+        }
+        None => new_run_directory(repository)?,
+    };
     let receipt_path = run_directory.join("receipt.json");
     let started_wall = unix_nanoseconds()?;
     let started = Instant::now();
@@ -1222,6 +1257,15 @@ fn execute(
     let workflow = (|| {
         let binary = resolve_input_file(repository, &options.binary, "runner binary")?;
         binary_proof = Some(proof_input(repository, &binary)?);
+        if options.source_reads {
+            let verifier = std::env::current_exe()
+                .and_then(|path| path.canonicalize())
+                .map_err(|error| ServiceFailure::infrastructure("source_verifier", error))?;
+            context.source_verifier = Some(
+                evidence::proof(&verifier, verifier.display().to_string())
+                    .map_err(|error| ServiceFailure::infrastructure("source_verifier", error))?,
+            );
+        }
         let artifact = repository
             .join("applications/lkjournal")
             .join(SERVICE_ARTIFACT_RELATIVE);
@@ -1260,6 +1304,7 @@ fn execute(
         completed_unix_nanoseconds: unix_nanoseconds()?,
         elapsed_nanoseconds: duration_nanoseconds(started.elapsed()),
         binary: binary_proof,
+        source_verifier: context.source_verifier,
         artifact: artifact_proof,
         retained_files: context.retained_files,
         secret_environment_names: vec!["LKJOURNAL_BOOTSTRAP_TOKEN".to_owned()],
@@ -1272,6 +1317,13 @@ fn execute(
         failure,
     };
     let published = evidence::publish_json(&receipt_path, &receipt)?;
+    if options.source_reads && receipt.status == ServiceStatus::Passed {
+        read_receipt_inner(
+            &receipt_path,
+            &options.binary,
+            receipt.source_verifier.as_ref(),
+        )?;
+    }
     Ok((receipt, published))
 }
 
@@ -1281,6 +1333,7 @@ impl ServiceContext {
             repository: repository.to_path_buf(),
             run_directory: run_directory.to_path_buf(),
             command_ordinal: 0,
+            source_verifier: None,
             commands: Vec::new(),
             runners: Vec::new(),
             runner_evidence: Vec::new(),
@@ -1318,20 +1371,49 @@ impl ServiceContext {
             stderr_path: stderr_path.clone(),
             unavailable_exit_code: None,
         };
-        let mut observation = process::run(&specification, &self.repository);
-        redact_process_logs(
-            &self.repository,
-            &stdout_path,
-            &stderr_path,
-            &self.secret_values,
-            &mut observation,
-        )?;
+        let mut command = request.command;
+        let observation = if let Some(verifier) = &self.source_verifier
+            && source_reads::eligible(&command)
+            && specification.environment == process::environment()
+        {
+            command[0] = verifier.path.clone();
+            let timeout = specification.timeout;
+            let observed = semantic_cli::execute_with_cancellation(
+                &command[1..],
+                None,
+                &stdout_path,
+                &stderr_path,
+                &self.run_directory,
+                async move { tokio::time::sleep(timeout).await },
+            )
+            .map_err(|error| ServiceFailure::infrastructure("source_read", error))?;
+            if observed.elapsed_nanoseconds() > duration_nanoseconds(timeout)
+                || observed.stdout().bytes.unwrap_or(u64::MAX) > request.maximum_stdout_bytes
+                || observed.stderr().bytes.unwrap_or(u64::MAX) > request.maximum_stderr_bytes
+            {
+                return Err(ServiceFailure::failed(
+                    "source_read_bound",
+                    "source read exceeded command time or output admission",
+                ));
+            }
+            observed
+        } else {
+            let mut observation = process::run(&specification, &self.run_directory);
+            redact_process_logs(
+                &self.run_directory,
+                &stdout_path,
+                &stderr_path,
+                &self.secret_values,
+                &mut observation,
+            )?;
+            CallObservation::Process(observation)
+        };
         let stdout = process::read_bounded(&stdout_path, request.maximum_stdout_bytes)
             .map_err(|error| ServiceFailure::infrastructure("command_stdout_read", error))?;
         self.commands.push(CommandEvidence {
             name: request.name.to_owned(),
-            command: redact_command(&request.command, &self.secret_values),
-            process: observation.clone(),
+            command: redact_command(&command, &self.secret_values),
+            observation: observation.clone(),
         });
         Ok(CommandOutput {
             observation,
@@ -1342,15 +1424,19 @@ impl ServiceContext {
     fn invoke(&mut self, request: CommandRequest<'_>) -> Result<Vec<u8>, ServiceFailure> {
         let name = request.name.to_owned();
         let output = self.observe_command(request)?;
-        if output.observation.status == ProcessStatus::Passed {
+        if output.observation.returned_success() {
             return Ok(output.stdout);
         }
         let reason = output
             .observation
-            .reason
-            .as_deref()
+            .as_process()
+            .and_then(|process| process.reason.as_deref())
             .unwrap_or("child_failed");
-        if output.observation.status == ProcessStatus::Unavailable {
+        if output
+            .observation
+            .as_process()
+            .is_some_and(|process| process.status == ProcessStatus::Unavailable)
+        {
             return Err(ServiceFailure::unavailable(
                 "required_command_unavailable",
                 format!("{name} is unavailable ({reason})"),
@@ -1721,7 +1807,10 @@ fn run_acceptance(
         .timeout(Duration::from_secs(15)),
     )?;
     require(
-        absent.observation.status == ProcessStatus::Failed
+        absent
+            .observation
+            .as_process()
+            .is_some_and(|process| process.status == ProcessStatus::Failed)
             && !absent
                 .stdout
                 .windows(b"\"event\":\"ready\"".len())
@@ -2785,7 +2874,11 @@ fn run_acceptance(
         ],
     ))?;
     require(
-        rejected.observation.status == ProcessStatus::Failed && !rejected_root.exists(),
+        rejected
+            .observation
+            .as_process()
+            .is_some_and(|process| process.status == ProcessStatus::Failed)
+            && !rejected_root.exists(),
         "corrupt_backup_rejection",
         "corrupt logical backup made a destination visible",
     )?;
@@ -4737,9 +4830,14 @@ fn inspect_http_route_handler_contract(
         &records,
         "projection",
         "contract",
-        "lkjscript-function-definition-projection-22",
+        "lkjscript-function-definition-projection",
     )?;
-    service_require_field(&records, "projection", "version", "22")?;
+    service_require_field(
+        &records,
+        "projection",
+        "version",
+        &lkjscript::platform::canonical_schema::SCHEMA_EPOCH.to_string(),
+    )?;
     service_require_field(&records, "page", "start", "0")?;
     let functions = records
         .iter()
@@ -5990,12 +6088,12 @@ fn run_maintained_definition_pages(
         let projection = service_required_record(&parsed, "projection")?;
         service_require_exact(
             service_required_field(projection, "contract")?,
-            "lkjscript-function-definition-projection-22",
+            "lkjscript-function-definition-projection",
             "definition contract",
         )?;
         service_require_exact(
             service_required_field(projection, "version")?,
-            "22",
+            "1",
             "definition version",
         )?;
         service_require_exact(
@@ -6961,6 +7059,8 @@ fn safe_file_component(value: &str) -> Result<String, ServiceFailure> {
 fn parse(arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError> {
     let mut binary = PathBuf::from("target/release/lkjscript");
     let mut machine = false;
+    let mut evidence_root = None;
+    let mut source_reads = false;
     let mut arguments = arguments;
     while let Some(argument) = crate::next_utf8(&mut arguments, "service option")? {
         match argument.as_str() {
@@ -6970,6 +7070,13 @@ fn parse(arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError>
                 binary = PathBuf::from(value);
             }
             "--machine" if !machine => machine = true,
+            "--source-reads" if !source_reads => source_reads = true,
+            "--evidence-root" if evidence_root.is_none() => {
+                evidence_root = Some(PathBuf::from(
+                    crate::next_utf8(&mut arguments, "--evidence-root")?
+                        .ok_or_else(|| DevError::usage("--evidence-root requires a path"))?,
+                ));
+            }
             value => {
                 return Err(DevError::usage(format!(
                     "unknown or duplicate service option '{value}'"
@@ -6977,7 +7084,12 @@ fn parse(arguments: impl Iterator<Item = OsString>) -> Result<Options, DevError>
             }
         }
     }
-    Ok(Options { binary, machine })
+    Ok(Options {
+        binary,
+        machine,
+        evidence_root,
+        source_reads,
+    })
 }
 
 fn resolve_input_file(
@@ -7255,7 +7367,7 @@ definition.expression id=expr_55555555555555555555555555555555 form=call read-sc
     #[test]
     fn data_contract_is_exact_and_versioned() {
         assert_eq!(DATA_CONTRACT, "lkjscript-data-store-1");
-        assert_eq!(SERVICE_CONTRACT_VERSION, 12);
+        assert_eq!(SERVICE_CONTRACT_VERSION, 13);
     }
 
     #[test]
@@ -7595,6 +7707,8 @@ definition.expression id=expr_55555555555555555555555555555555 form=call read-sc
         let options = Options {
             binary: repository.path().join("absent-lkjscript"),
             machine: true,
+            evidence_root: None,
+            source_reads: false,
         };
         let (receipt, published) =
             execute(repository.path(), &options).expect("publish unavailable receipt");

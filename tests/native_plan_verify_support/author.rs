@@ -55,7 +55,7 @@ pub fn author(public: &Native) {
     let artifact = public.root.join("dependency-plan-verifier.lkja");
     public.cli(&verifier, &["build", "--output", path(&artifact)], true);
     // The public checker is executable before any SCC/planner source or artifact exists.
-    assert!(!public.root.join("application").exists());
+    assert!(!public.has_project("application"));
     assert!(!public.root.join("verified-dependency-plan.lkja").exists());
     let descriptor = public.input("standalone-first.deployment.json", DESCRIPTORS[4].1);
     let arguments = public.input(

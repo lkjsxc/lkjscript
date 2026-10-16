@@ -66,6 +66,13 @@ use crate::platform::storage::page_store::ObjectPageReader;
 use crate::platform::witness::{bind_witness_manifest, rebuild_full_witness};
 use std::collections::{BTreeMap, BTreeSet};
 
+fn memory_repository(
+    snapshot: &crate::platform::kernel::KernelSnapshot,
+) -> Result<crate::platform::publication::CreatedRepository, crate::platform::Diagnostic> {
+    let memory = crate::platform::MemProjectStore::new(128 * 1_048_576)?;
+    GraphRepository::create_memory(&memory, snapshot, None)
+}
+
 fn declaration_named(
     snapshot: &crate::platform::kernel::KernelSnapshot,
     name: &str,
@@ -1055,9 +1062,7 @@ fn body_reorder_changes_unit_key_but_repository_point_lowering_matches_memory() 
     assert_ne!(before.key, after.key);
     assert_ne!(before.bytes, after.bytes);
 
-    let temporary = tempfile::tempdir().expect("compiler repository parent");
-    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 10 repository");
+    let created = memory_repository(&snapshot).expect("Graph 10 repository");
     let view = created
         .repository
         .view_current()
@@ -1179,9 +1184,7 @@ fn clean_compilation_manifest_persists_and_reopens_exactly() {
 #[test]
 fn structurally_empty_package_builds_one_valid_empty_manifest() {
     let snapshot = structurally_empty_snapshot(b"empty-compiler-manifest");
-    let temporary = tempfile::tempdir().expect("empty compiler parent");
-    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("empty Graph 10 repository");
+    let created = memory_repository(&snapshot).expect("empty Graph 10 repository");
 
     let built = build_clean(
         &created.repository,
@@ -1213,13 +1216,8 @@ fn structurally_empty_package_builds_one_valid_empty_manifest() {
 
 #[test]
 fn parameter_type_edit_incremental_manifest_and_artifact_equal_a_clean_rebuild() {
-    let temporary = tempfile::tempdir().unwrap();
-    let created = GraphRepository::create(
-        &temporary.path().join("repository"),
-        &structurally_empty_snapshot(b"parameter-type-incremental"),
-        None,
-    )
-    .unwrap();
+    let created =
+        memory_repository(&structurally_empty_snapshot(b"parameter-type-incremental")).unwrap();
     let initial = format!(
         r#"request base={}
 create.module as=$module name=inputs
@@ -1350,9 +1348,7 @@ fn body_edit_incremental_manifest_equals_a_clean_rebuild() {
         },
         _ => panic!("caller declaration"),
     };
-    let temporary = tempfile::tempdir().expect("incremental manifest parent");
-    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 10 repository");
+    let created = memory_repository(&snapshot).expect("Graph 10 repository");
     let base = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1469,9 +1465,7 @@ fn rename_and_move_reuse_the_complete_compilation_unit_map() {
     let callee = declaration_named(&snapshot, "callee");
     let caller = declaration_named(&snapshot, "caller");
     let destination = module_named(&snapshot, "second");
-    let temporary = tempfile::tempdir().expect("rename manifest parent");
-    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 10 repository");
+    let created = memory_repository(&snapshot).expect("Graph 10 repository");
     let base = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1570,9 +1564,7 @@ fn declaration_deletion_removes_one_unit_and_matches_a_clean_rebuild() {
         },
         _ => panic!("constant owner"),
     };
-    let temporary = tempfile::tempdir().expect("deletion manifest parent");
-    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 10 repository");
+    let created = memory_repository(&snapshot).expect("Graph 10 repository");
     let base = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1693,9 +1685,7 @@ fn missing_and_corrupt_cache_heads_rebuild_without_changing_authority() {
 #[test]
 fn compilation_manifest_rejects_foreign_kind_and_wrong_object_digest() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
-    let temporary = tempfile::tempdir().expect("manifest decoder parent");
-    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("Graph 10 repository");
+    let created = memory_repository(&snapshot).expect("Graph 10 repository");
     let built = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1812,6 +1802,31 @@ fn graph9_artifact_links_deterministically_and_reopens_without_graph4_modules() 
     );
 
     let loaded = load_artifact(&first.artifact.bytes).expect("strict artifact load");
+    let (admitted_bytes, admitted) = first.artifact.clone().into_admitted().unwrap();
+    assert_eq!(admitted_bytes, first.artifact.bytes);
+    assert_eq!(admitted.manifest, loaded.manifest);
+    assert_eq!(admitted.objects, loaded.objects);
+    assert_eq!(
+        admitted.admitted_content_digest(|| Ok(())).unwrap(),
+        loaded.admitted_content_digest(|| Ok(())).unwrap()
+    );
+    for mutation in 0..6 {
+        let mut changed = first.artifact.clone();
+        match mutation {
+            0 => changed.bytes[0] ^= 1,
+            1 => changed.manifest.object_count += 1,
+            2 => changed.manifest_digest = ArtifactManifestDigest::from_bytes([0; 32]),
+            3 => changed.bundle_digest = ArtifactBundleDigest::from_bytes([0; 32]),
+            4 => changed.segment_count += 1,
+            _ => {
+                changed.bytes.pop();
+            }
+        }
+        assert_eq!(
+            changed.into_admitted().unwrap_err().code,
+            "artifact_encoded_admission_binding"
+        );
+    }
     assert_eq!(loaded.manifest_digest, first.artifact.manifest_digest);
     assert_eq!(loaded.bundle_digest, first.artifact.bundle_digest);
     assert_eq!(
@@ -1923,9 +1938,7 @@ fn artifact_manifest_rejects_vector_lengths_before_allocation() {
     }
 
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
-    let temporary = tempfile::tempdir().expect("hostile manifest fixture parent");
-    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("hostile manifest fixture repository");
+    let created = memory_repository(&snapshot).expect("hostile manifest fixture repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -1979,10 +1992,8 @@ fn artifact_manifest_rejects_vector_lengths_before_allocation() {
 
 #[test]
 fn graph9_artifact_links_exact_compiled_dependency_closure() {
-    let temporary = tempfile::tempdir().expect("dependency artifact parent");
     let source_snapshot = crate::platform::kernel::tests::transport_snapshot();
-    let source = GraphRepository::create(&temporary.path().join("source"), &source_snapshot, None)
-        .expect("source Graph 10 repository");
+    let source = memory_repository(&source_snapshot).expect("source Graph 10 repository");
     let source_compilation = build_clean(
         &source.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -2047,8 +2058,7 @@ fn graph9_artifact_links_exact_compiled_dependency_closure() {
     );
 
     let target_snapshot = structurally_empty_snapshot(b"artifact-dependency-target");
-    let target = GraphRepository::create(&temporary.path().join("target"), &target_snapshot, None)
-        .expect("target Graph 10 repository");
+    let target = memory_repository(&target_snapshot).expect("target Graph 10 repository");
     target
         .repository
         .stage_package_transport(exported.transport_digest, &exported.container)
@@ -2184,12 +2194,7 @@ fn graph9_artifact_links_exact_compiled_dependency_closure() {
     );
 
     let unrelated_snapshot = structurally_empty_snapshot(b"artifact-unrelated-package");
-    let unrelated = GraphRepository::create(
-        &temporary.path().join("unrelated"),
-        &unrelated_snapshot,
-        None,
-    )
-    .expect("unrelated Graph 10 repository");
+    let unrelated = memory_repository(&unrelated_snapshot).expect("unrelated Graph 10 repository");
     let unrelated_compilation = build_clean(
         &unrelated.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -2218,9 +2223,7 @@ fn graph9_artifact_links_exact_compiled_dependency_closure() {
 #[test]
 fn artifact_rejects_foreign_kind_schema_corruption_and_inexact_closures() {
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
-    let temporary = tempfile::tempdir().expect("artifact rejection parent");
-    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("current graph repository");
+    let created = memory_repository(&snapshot).expect("current graph repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,
@@ -2384,9 +2387,7 @@ fn artifact_rejects_foreign_kind_schema_corruption_and_inexact_closures() {
 #[test]
 fn artifact_strictly_binds_each_derived_http_route_to_canonical_authority() {
     let snapshot = crate::platform::execution::normalized::tests::normalized_http_snapshot();
-    let temporary = tempfile::tempdir().expect("HTTP route artifact parent");
-    let created = GraphRepository::create(&temporary.path().join("repository"), &snapshot, None)
-        .expect("HTTP route repository");
+    let created = memory_repository(&snapshot).expect("HTTP route repository");
     let compilation = build_clean(
         &created.repository,
         OptimizationPolicy::DeterministicBaseline,

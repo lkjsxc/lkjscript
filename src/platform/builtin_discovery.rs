@@ -65,7 +65,7 @@ pub(crate) const BUILTIN_CONTINUATION_MAXIMUM_BYTES: usize = 320;
 pub(crate) const BUILTIN_QUERY_ORDERING: &str = "package-interface-owner-key-v1";
 pub(crate) const BUILTIN_CONTINUATION_PREFIX: &str = "bcont_";
 const BUILTIN_CONTINUATION_MAGIC: [u8; 8] = *b"LKJBCT01";
-const BUILTIN_CONTINUATION_VERSION: u16 = 1;
+const BUILTIN_CONTINUATION_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 const BUILTIN_SELECTOR_DOMAIN: &str = "lkjscript.builtin-owner-selector.v1";
 const BUILTIN_CONTINUATION_DOMAIN: &str = "lkjscript.builtin-owner-continuation.v1";
 const BUILTIN_CONTINUATION_RAW_BYTES: usize = 8 + 2 + 16 + 32 + 32 + 17 + 32;
@@ -2218,7 +2218,7 @@ mod tests {
                     .insert(
                         owner,
                         super::super::package_interface::PackageInterfaceOwner {
-                            contract_version: 22,
+                            contract_version: crate::platform::canonical_schema::SCHEMA_EPOCH,
                             record,
                         }
                     )

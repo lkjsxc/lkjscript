@@ -74,7 +74,7 @@ fn reject_request(
         ),
     )?;
     let before = crate::authority::observe_graph_authority(&package.path)?;
-    let index = context.receipt.commands.len();
+    let index = context.command_index();
     let output = context.cli(
         Some(&package.path),
         &[
@@ -139,7 +139,7 @@ fn preflight(context: &mut Context, bundle: &Path) -> Result<(), DevError> {
             .evidence
             .join("requirement-unencodable.deployment.json"),
     )?;
-    let index = context.receipt.commands.len();
+    let index = context.command_index();
     let output = context.cli(
         None,
         &[
@@ -427,7 +427,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         ],
         true,
     )?;
-    let definition_before = context.receipt.commands.len();
+    let definition_before = context.command_index();
     let original_update = context.cli(
         Some(&producer.path),
         &[
@@ -444,7 +444,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         ],
         true,
     )?;
-    let factory_before = context.receipt.commands.len();
+    let factory_before = context.command_index();
     let original_factory = structural::inspect_factory(context, &producer)?;
     context.export(&mut producer)?;
     let mut consumer = context.new_package("requirement-consumer")?;
@@ -528,10 +528,10 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
             include_str!("requirements.update-body.structural.lkjc")
         ),
     )?;
-    let factory_after = context.receipt.commands.len();
+    let factory_after = context.command_index();
     let edited_factory = structural::inspect_factory(context, &producer)?;
     context.export(&mut producer)?;
-    let definition_after = context.receipt.commands.len();
+    let definition_after = context.command_index();
     let edited_update = context.cli(
         Some(&producer.path),
         &[
@@ -590,7 +590,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         ),
     )?;
     let before = crate::authority::observe_graph_authority(&consumer.path)?;
-    let replacement_rejection = context.receipt.commands.len();
+    let replacement_rejection = context.command_index();
     let result = context.cli(
         Some(&consumer.path),
         &[
@@ -662,7 +662,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
                 .evidence
                 .join(format!("requirement-{artifact}-{target}.deployment.json")),
         )?;
-        commands.push(context.receipt.commands.len());
+        commands.push(context.command_index());
         let result = context.cli(
             None,
             &[

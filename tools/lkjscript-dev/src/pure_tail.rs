@@ -524,6 +524,7 @@ impl Context {
         let diagnostic = self.output.join(format!("command-{index:04}.stderr"));
         let observation = semantic_cli::execute_with_cancellation(
             &command,
+            None,
             &response,
             &diagnostic,
             &self.output,
@@ -1585,27 +1586,32 @@ fn standalone_http(
     ];
     let response = context.output.join("transaction-cancellation.stdout");
     let diagnostic = context.output.join("transaction-cancellation.stderr");
+    #[allow(
+        clippy::result_large_err,
+        reason = "direct semantic boundary callbacks preserve complete typed diagnostics"
+    )]
+    let probe = || {
+        lkjscript::platform::contributor::pure_tail_transaction_probe(
+            &descriptor_path,
+            &http.symbols["$write-fold"],
+        )
+        .and_then(|value| {
+            serde_json::to_value(value).map_err(|error| {
+                lkjscript::platform::Diagnostic::new(
+                    lkjscript::platform::DiagnosticClass::Corrupt,
+                    "pure_tail_probe_encoding",
+                    error.to_string(),
+                )
+            })
+        })
+    };
     let observation = semantic_cli::observe_json(
         "pure-tail-transaction-probe",
         &command,
         &response,
         &diagnostic,
         &context.output,
-        || {
-            lkjscript::platform::contributor::pure_tail_transaction_probe(
-                &descriptor_path,
-                &http.symbols["$write-fold"],
-            )
-            .and_then(|value| {
-                serde_json::to_value(value).map_err(|error| {
-                    lkjscript::platform::Diagnostic::new(
-                        lkjscript::platform::DiagnosticClass::Corrupt,
-                        "pure_tail_probe_encoding",
-                        error.to_string(),
-                    )
-                })
-            })
-        },
+        probe,
     )?;
     observation.require_outcome(true)?;
     context.receipt.commands.push(CommandEvidence {

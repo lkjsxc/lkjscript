@@ -18,6 +18,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+#[path = "persistent_map_read_cache.rs"]
+mod read_cache;
+
 use super::contract::registry::{
     MAP_CONTENT_DIGEST_DOMAIN as CONTENT_DIGEST_DOMAIN,
     MAP_PAGE_CHECKSUM_DOMAIN as PAGE_CHECKSUM_DOMAIN,
@@ -1804,6 +1807,21 @@ fn load_page<S: PageStore + ?Sized>(
     digest: PageDigest,
     work: &mut MapWork,
 ) -> Result<Page, MapError> {
+    let bytes = read_page_bytes(store, digest, work)?;
+    let page = decode_page_with_admission(&bytes, Some(work))?;
+    add_counter(
+        &mut work.pages_decoded,
+        1,
+        "persistent_map_work_pages_decoded",
+    )?;
+    Ok(page)
+}
+
+fn read_page_bytes<S: PageStore + ?Sized>(
+    store: &S,
+    digest: PageDigest,
+    work: &mut MapWork,
+) -> Result<Vec<u8>, MapError> {
     work.admit_page_read()?;
     let maximum_bytes = work.maximum_next_page_bytes();
     let bytes = store
@@ -1831,13 +1849,7 @@ fn load_page<S: PageStore + ?Sized>(
             format!("referenced page {digest} has foreign bytes"),
         ));
     }
-    let page = decode_page_with_admission(&bytes, Some(work))?;
-    add_counter(
-        &mut work.pages_decoded,
-        1,
-        "persistent_map_work_pages_decoded",
-    )?;
-    Ok(page)
+    Ok(bytes)
 }
 
 fn map_page_read_limit(error: MapError) -> MapError {
@@ -3406,15 +3418,20 @@ impl PersistentMap {
         work: &mut MapWork,
     ) -> Result<Option<Vec<u8>>, MapError> {
         validate_key(key)?;
-        let mut digest = self.root.page;
-        let mut page = load_page(store, digest, work)?;
-        verify_root(self.root, &page)?;
+        let mut page = read_cache::load(store, self.root.page, work)?;
+        if self.root.entries != page.summary.count || self.root.content != page.summary.content {
+            return Err(map_error(
+                MapErrorClass::Corrupt,
+                "persistent_map_root_summary",
+                "map root entry count or logical commitment disagrees with its root page",
+            ));
+        }
         let mut depth = 0;
         loop {
             ensure_depth(depth)?;
-            match page {
+            match &page.page {
                 Page::Leaf { entries, .. } => {
-                    return match search_entries(&entries, key, work)? {
+                    return match search_entries(entries, key, work)? {
                         Ok(index) => Ok(Some(entries[index].value.clone())),
                         Err(_) => Ok(None),
                     };
@@ -3426,19 +3443,19 @@ impl PersistentMap {
                     ..
                 } => {
                     if key == prefix {
-                        return Ok(terminal);
+                        return Ok(terminal.clone());
                     }
-                    if !key.starts_with(&prefix) || key.len() <= prefix.len() {
+                    if !key.starts_with(prefix) || key.len() <= prefix.len() {
                         return Ok(None);
                     }
                     let edge = key[prefix.len()];
-                    let Ok(index) = search_children(&children, edge, work)? else {
+                    let Ok(index) = search_children(children, edge, work)? else {
                         return Ok(None);
                     };
                     let child = &children[index];
-                    digest = child.digest;
-                    page = load_page(store, digest, work)?;
-                    verify_child_link(&prefix, child, &page)?;
+                    let next = read_cache::load(store, child.digest, work)?;
+                    verify_child_summary(prefix, child, &next.summary)?;
+                    page = next;
                     depth += 1;
                 }
             }

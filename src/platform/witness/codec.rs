@@ -42,13 +42,6 @@ pub fn decode_owner_summary(
         MAXIMUM_OWNER_SUMMARY_BYTES,
     )?;
     validate_summary(&summary)?;
-    let (digest, canonical) = encode_owner_summary(&summary)?;
-    if digest != expected_digest || canonical != bytes {
-        return Err(codec_error(
-            "witness_summary_canonical",
-            "owner summary is not canonically encoded",
-        ));
-    }
     Ok(summary)
 }
 
@@ -82,13 +75,6 @@ pub fn decode_witness_manifest(
         MAXIMUM_WITNESS_MANIFEST_BYTES,
     )?;
     validate_manifest(&manifest)?;
-    let (digest, canonical) = encode_witness_manifest(&manifest)?;
-    if digest != expected_digest || canonical != bytes {
-        return Err(codec_error(
-            "witness_manifest_canonical",
-            "validation witness is not canonically encoded",
-        ));
-    }
     Ok(manifest)
 }
 
@@ -130,7 +116,7 @@ pub(crate) fn certificate_digest(
         .with_variable_int_encoding();
     let bytes = bincode::encode_to_vec(
         (
-            crate::platform::canonical_schema::CANONICAL_SCHEMA_HASH,
+            crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes(),
             core,
         ),
         configuration,

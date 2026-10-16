@@ -33,8 +33,8 @@ use std::fmt;
 
 pub(crate) mod read_views;
 
-pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner-22";
-pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = 22;
+pub const PACKAGE_INTERFACE_CONTRACT_IDENTITY: &str = "lkjscript-package-interface-owner";
+pub const PACKAGE_INTERFACE_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const PACKAGE_INTERFACE_MAGIC: [u8; 8] = *b"LKJPIF22";
 pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
     "lkjscript.package-interface-owner-envelope.v22";
@@ -239,14 +239,6 @@ impl PackageInterfaceOwner {
                 "package-interface map key disagrees with the decoded owner identity",
             ));
         }
-        let (digest, canonical) = value.encode()?;
-        if digest != expected_digest || canonical != bytes {
-            return Err(interface_error(
-                DiagnosticClass::Corrupt,
-                "package_interface_canonical",
-                "package-interface owner is not canonically encoded",
-            ));
-        }
         Ok(value)
     }
 
@@ -306,7 +298,7 @@ pub fn package_interface_digest_for_graph(
         ));
     }
     let identity = PackageInterfaceIdentity {
-        contract_version: 1,
+        contract_version: crate::platform::canonical_schema::SCHEMA_EPOCH,
         graph_contract_version,
         package,
         owners,

@@ -222,7 +222,11 @@ fn declaration_named(
 }
 
 fn prepare_snapshot(snapshot: &crate::platform::kernel::KernelSnapshot) -> NormalizedProgram {
-    prepare_repository(snapshot).2
+    let memory = crate::platform::MemProjectStore::new(128 * 1_048_576)
+        .expect("bounded runtime fixture arena");
+    let created = GraphRepository::create_memory(&memory, snapshot, None)
+        .expect("accepted memory runtime fixture");
+    prepare_from_repository(&created.repository)
 }
 
 // Mutable fault fixtures remain local; production preparation wraps once and
@@ -695,16 +699,17 @@ fn prepare_repository(
     let temporary = tempfile::tempdir().expect("normalized runtime parent");
     let created = GraphRepository::create(&temporary.path().join("repository"), snapshot, None)
         .expect("Graph 10 repository");
-    let compilation = build_clean(
-        &created.repository,
-        OptimizationPolicy::DeterministicBaseline,
-    )
-    .expect("normalized compilation");
-    let linked = link_artifact(&created.repository, compilation.manifest_digest, &[])
-        .expect("Graph 10 artifact");
-    let loaded = load_artifact(&linked.artifact.bytes).expect("strict Graph 10 artifact");
-    let program = NormalizedProgram::prepare(loaded).expect("dense runtime preparation");
+    let program = prepare_from_repository(&created.repository);
     (temporary, created.repository, program)
+}
+
+fn prepare_from_repository(repository: &GraphRepository) -> NormalizedProgram {
+    let compilation = build_clean(repository, OptimizationPolicy::DeterministicBaseline)
+        .expect("normalized compilation");
+    let linked =
+        link_artifact(repository, compilation.manifest_digest, &[]).expect("Graph 10 artifact");
+    let loaded = load_artifact(&linked.artifact.bytes).expect("strict Graph 10 artifact");
+    NormalizedProgram::prepare(loaded).expect("dense runtime preparation")
 }
 
 fn empty_normalized_snapshot(seed: &[u8]) -> crate::platform::kernel::KernelSnapshot {

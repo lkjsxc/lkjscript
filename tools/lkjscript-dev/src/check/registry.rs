@@ -1,4 +1,4 @@
-use super::model::{CHECK_CONTRACT_VERSION, DagManifest, DagNode, Gate, GateInput};
+use super::model::{CHECK_CONTRACT_VERSION, CargoTestInput, DagManifest, DagNode, Gate, GateInput};
 use crate::error::DevError;
 use crate::evidence::VerificationDigest;
 use serde::Serialize;
@@ -59,6 +59,14 @@ impl GateRegistry {
         for name in requested {
             self.add_dependencies(name, &mut selected)?;
         }
+        // The standalone lifecycle supplies the one excluded public test. Coverage
+        // requires both owners, but neither reads the other's output or must wait.
+        if selected
+            .iter()
+            .any(|name| self.gate(name).is_ok_and(super::workspace_tests::selected))
+        {
+            self.add_dependencies("release_command_lifecycle", &mut selected)?;
+        }
         Ok(self
             .gates
             .iter()
@@ -87,7 +95,9 @@ impl GateRegistry {
                 .ok_or_else(|| DevError::infrastructure("empty gate command"))?;
             // A built executable is bound by its producing gate and each consuming
             // fingerprint, not by unrelated/missing bytes before that build runs.
-            if !produced.contains(command) {
+            if (gate.cargo_test.is_none() || super::workspace_tests::selected(gate))
+                && !produced.contains(command)
+            {
                 commands.insert((command.clone(), gate.identity_command()[0].clone()));
             }
         }
@@ -108,6 +118,7 @@ impl GateRegistry {
                 dependencies: gate.dependencies.clone(),
                 command: gate.identity_command().to_vec(),
                 required_inputs: gate.required_inputs.clone(),
+                cargo_test: gate.cargo_test.clone(),
                 environment: gate.environment.clone(),
                 cacheable: gate.cacheable,
                 unavailable_exit_code: gate.unavailable_exit_code,
@@ -146,6 +157,7 @@ impl GateRegistry {
             unavailable_exit_code: Option<i32>,
             required_outputs: Vec<String>,
             required_inputs: &'a [GateInput],
+            cargo_test: &'a Option<CargoTestInput>,
             environment: &'a BTreeMap<String, String>,
         }
         let gates = self
@@ -161,6 +173,7 @@ impl GateRegistry {
                 cacheable: gate.cacheable,
                 unavailable_exit_code: gate.unavailable_exit_code,
                 required_inputs: &gate.required_inputs,
+                cargo_test: &gate.cargo_test,
                 environment: &gate.environment,
                 required_outputs: gate
                     .required_outputs
@@ -211,6 +224,40 @@ impl GateRegistry {
                 }
             }
             let mut inputs = BTreeSet::new();
+            if let Some(test) = &gate.cargo_test {
+                let exact_selection = if super::workspace_tests::selected(gate) {
+                    gate.command.len() == 3
+                        && gate.command.get(1).map(String::as_str) == Some("__workspace-tests")
+                        && gate.command.get(2).map(String::as_str) == Some("--no-fail-fast")
+                        && self.indices.contains_key("release_command_lifecycle")
+                        && gate.environment.is_empty()
+                } else {
+                    gate.command.first().map(String::as_str) == Some(super::cargo_tests::COMMAND)
+                        && test.target == "public_cli"
+                        && gate.command.get(1).map(String::as_str)
+                            == Some(super::cargo_tests::LIFECYCLE)
+                        && gate.command.get(2).map(String::as_str) == Some("--exact")
+                        && gate.command.len() == 3
+                        && gate.environment.contains_key("LKJSCRIPT_RELEASE_CANDIDATE")
+                };
+                if gate.cacheable
+                    || !exact_selection
+                    || !gate.dependencies.contains(&test.producer)
+                    || !super::cargo_origin::is_producer(self.gate(&test.producer)?)
+                    || gate.required_inputs.len() != 1
+                    || gate.required_inputs[0].producer != test.producer
+                {
+                    return Err(DevError::infrastructure(
+                        "selected Cargo tests are not bound to their producer and complete selection",
+                    ));
+                }
+            } else if gate.command.first().map(String::as_str) == Some(super::cargo_tests::COMMAND)
+                || gate.command.get(1).map(String::as_str) == Some("__workspace-tests")
+            {
+                return Err(DevError::infrastructure(
+                    "selected Cargo test has no producer",
+                ));
+            }
             for input in &gate.required_inputs {
                 if gate.cacheable
                     || !gate.dependencies.contains(&input.producer)
@@ -260,6 +307,7 @@ impl GateRegistry {
             maximum_stderr_bytes: u64,
             outputs: Vec<String>,
             inputs: &'a [GateInput],
+            cargo_test: &'a Option<CargoTestInput>,
             environment: &'a BTreeMap<String, String>,
         }
         let mut owners: BTreeMap<Vec<u8>, String> = BTreeMap::new();
@@ -270,6 +318,7 @@ impl GateRegistry {
                 maximum_stdout_bytes: gate.maximum_stdout_bytes,
                 maximum_stderr_bytes: gate.maximum_stderr_bytes,
                 inputs: &gate.required_inputs,
+                cargo_test: &gate.cargo_test,
                 environment: &gate.environment,
                 outputs: gate
                     .required_outputs
@@ -351,20 +400,25 @@ pub(crate) fn base_registry(
     let builtin_transport = outputs.join("builtin-standard.lkjp");
     let application = outputs.join("lkjournal.lkja");
     let package_plan = outputs.join("package-plan.lkja");
-    let mut workspace_tests = cargo_gate(
+    let mut workspace_tests = gate(
         "workspace_tests",
-        &[
-            "test",
-            "--workspace",
-            "--all-targets",
-            "--all-features",
-            "--locked",
-            "--no-fail-fast",
+        vec![
+            path_string(self_test_executable),
+            "__workspace-tests".into(),
+            "--no-fail-fast".into(),
         ],
         &["clippy", "release_build"],
     );
-    // One public case remained unfinished at the hosted two-hour deadline.
-    // This finite diagnostic allowance preserves coverage; adequacy is unproven.
+    workspace_tests.cargo_test = Some(CargoTestInput {
+        producer: "release_build".into(),
+        target: super::workspace_tests::TARGET.into(),
+    });
+    workspace_tests.required_inputs.push(GateInput {
+        path: binary.clone(),
+        producer: "release_build".into(),
+    });
+    workspace_tests.cacheable = false;
+    // Preserve the finite diagnostic allowance while measuring the parallel run.
     workspace_tests.timeout = std::time::Duration::from_secs(9_600);
     let mut gates = vec![
         cargo_gate("fmt", &["fmt", "--all", "--", "--check"], &[]),
@@ -372,6 +426,7 @@ pub(crate) fn base_registry(
             "clippy",
             &[
                 "clippy",
+                "--release",
                 "--workspace",
                 "--all-targets",
                 "--all-features",
@@ -382,15 +437,28 @@ pub(crate) fn base_registry(
             ],
             &["fmt"],
         ),
-        cargo_gate("library_tests", &["test", "--lib", "--locked"], &["fmt"]),
+        cargo_gate(
+            "library_tests",
+            &["test", "--release", "--lib", "--locked"],
+            &["fmt"],
+        ),
         cargo_gate(
             "general_service_tests",
-            &["test", "--test", "general_service", "--locked"],
+            &[
+                "test",
+                "--release",
+                "--workspace",
+                "--all-features",
+                "--test",
+                "public_cli",
+                "general_service::",
+                "--locked",
+            ],
             &["fmt"],
         ),
         cargo_gate(
             "public_cli_tests",
-            &["test", "--test", "public_cli", "--locked"],
+            &["test", "--release", "--test", "public_cli", "--locked"],
             &["library_tests", "general_service_tests"],
         ),
         workspace_tests,
@@ -442,44 +510,33 @@ pub(crate) fn base_registry(
         "release_build",
         &[
             "build",
-            "--package",
-            "lkjscript",
-            "--bin",
-            "lkjscript",
             "--release",
+            "--workspace",
+            "--all-targets",
+            "--all-features",
             "--locked",
             "--message-format=json",
         ],
         &["fmt"],
     );
     release.required_outputs.push(binary.clone());
-    // Workspace tools are covered by source tests and built by the immutable
-    // bootstrap. This gate produces only the optimized executable it declares.
-    // Re-observe Cargo selection; its own compilation cache remains enabled.
+    // Match the test invocation's workspace feature union and release profile.
+    // Cargo records select the product, tool binaries and test harnesses once.
     release.cacheable = false;
     gates.push(release);
-    let mut release_lifecycle = cargo_gate(
+    let mut release_lifecycle = gate(
         "release_command_lifecycle",
-        &[
-            "test",
-            "--workspace",
-            "--all-features",
-            "--locked",
-            "--message-format=json",
-            "--test",
-            "public_cli",
-            "copied_binary_completes_normalized_standard_dependent_command_lifecycle",
-            "--",
-            "--exact",
+        vec![
+            super::cargo_tests::COMMAND.to_owned(),
+            super::cargo_tests::LIFECYCLE.to_owned(),
+            "--exact".to_owned(),
         ],
         &["release_build"],
     );
-    // Reuse the source test profile. Its Cargo outputs retain their own cold-origin
-    // proof; the optimized candidate is a separately bound input, never a claimed
-    // output of this test-profile compilation.
-    release_lifecycle
-        .required_outputs
-        .push(cargo_target.join("debug/lkjscript"));
+    release_lifecycle.cargo_test = Some(CargoTestInput {
+        producer: "release_build".to_owned(),
+        target: "public_cli".to_owned(),
+    });
     release_lifecycle.required_inputs.push(GateInput {
         path: binary.clone(),
         producer: "release_build".to_owned(),
@@ -574,6 +631,7 @@ pub(crate) fn base_registry(
         vec![
             path_string(self_test_executable),
             "stateful-http".to_owned(),
+            "--source-reads".to_owned(),
             "--binary".to_owned(),
             path_string(&binary),
             "--machine".to_owned(),
@@ -583,6 +641,7 @@ pub(crate) fn base_registry(
     stateful_http.identity_command = Some(vec![
         "$HARNESS".to_owned(),
         "stateful-http".to_owned(),
+        "--source-reads".to_owned(),
         "--binary".to_owned(),
         path_string(&binary),
         "--machine".to_owned(),
@@ -823,6 +882,7 @@ pub(crate) fn base_registry(
             "--binary".to_owned(),
             path_string(&binary),
             "--machine".to_owned(),
+            "--source-reads".to_owned(),
         ],
         &["release_command_lifecycle"],
     );
@@ -832,6 +892,7 @@ pub(crate) fn base_registry(
         "--binary".to_owned(),
         path_string(&binary),
         "--machine".to_owned(),
+        "--source-reads".to_owned(),
     ]);
     service.cacheable = false;
     service.unavailable_exit_code = Some(2);
@@ -850,6 +911,27 @@ pub(crate) fn base_registry(
     for gate in &mut gates {
         if super::cargo_origin::is_writer(gate) {
             super::cargo_origin::bind_target(gate, &cargo_target)?;
+        }
+        // Gate-owned logs and fixtures live under the enclosing run. The caller
+        // either removes that tree or explicitly retains it as an archive.
+        if matches!(
+            gate.name.as_str(),
+            "distributed_http_application"
+                | "outbound_http_application"
+                | "stateful_http_application"
+                | "service_acceptance"
+                | "checker_self_test"
+        ) {
+            gate.command.extend([
+                "--evidence-root".to_owned(),
+                path_string(&outputs.join(&gate.name)),
+            ]);
+            if let Some(identity) = &mut gate.identity_command {
+                identity.extend([
+                    "--evidence-root".to_owned(),
+                    format!("$OUTPUT/{}", gate.name),
+                ]);
+            }
         }
     }
     GateRegistry::new(gates)
@@ -1050,6 +1132,21 @@ mod tests {
             .expect("maintained registry");
         let cases: &[(&str, &[&str], &[&str])] = &[
             (
+                "general_service_tests",
+                &[
+                    "cargo",
+                    "test",
+                    "--release",
+                    "--workspace",
+                    "--all-features",
+                    "--test",
+                    "public_cli",
+                    "general_service::",
+                    "--locked",
+                ],
+                &["fmt"],
+            ),
+            (
                 "site_clippy",
                 &[
                     "cargo",
@@ -1207,7 +1304,6 @@ mod tests {
     fn workspace_test_gate_collects_all_target_results_without_reusing_fail_fast_identity()
     -> Result<(), DevError> {
         let temporary = tempfile::tempdir().expect("temporary registry repository");
-        let target = super::super::cargo_origin_context::Context::target(temporary.path())?;
         let mut registry =
             base_registry(temporary.path(), temporary.path(), Path::new("/bin/true"))
                 .expect("maintained registry");
@@ -1220,20 +1316,27 @@ mod tests {
                 .timeout,
             super::super::model::DEFAULT_TIMEOUT
         );
-        let mut expected: Vec<String> = [
-            "cargo",
-            "test",
-            "--workspace",
-            "--all-targets",
-            "--all-features",
-            "--locked",
-            "--no-fail-fast",
-        ]
-        .into_iter()
-        .map(str::to_owned)
-        .collect();
-        expected.push(format!("--target-dir={}", path_string(&target)));
-        assert_eq!(workspace.command, expected);
+        assert_eq!(
+            workspace.command,
+            ["/bin/true", "__workspace-tests", "--no-fail-fast"]
+        );
+        assert!(super::super::workspace_tests::selected(workspace));
+        assert!(!super::super::cargo_origin::is_writer(workspace));
+        assert!(!workspace.cacheable);
+        assert!(
+            !workspace
+                .dependencies
+                .iter()
+                .any(|name| name == "release_command_lifecycle"),
+            "independent lifecycle coverage must not serialize workspace execution"
+        );
+        let standalone = registry.closure(&["workspace_tests".to_owned()])?;
+        for required in ["clippy", "release_build", "release_command_lifecycle"] {
+            assert!(
+                standalone.iter().any(|name| name == required),
+                "missing {required}"
+            );
+        }
         for name in ["full", "release-source"] {
             assert!(
                 registry
@@ -1381,12 +1484,21 @@ mod tests {
         let lifecycle = registry
             .gate("release_command_lifecycle")
             .expect("release lifecycle");
-        assert_eq!(lifecycle.required_outputs, [target.join("debug/lkjscript")]);
-        assert!(
-            !lifecycle
-                .command
-                .iter()
-                .any(|argument| argument == "--release")
+        assert!(lifecycle.required_outputs.is_empty());
+        assert_eq!(
+            lifecycle.cargo_test,
+            Some(CargoTestInput {
+                producer: "release_build".to_owned(),
+                target: "public_cli".to_owned(),
+            })
+        );
+        assert_eq!(
+            lifecycle.command,
+            [
+                super::super::cargo_tests::COMMAND,
+                super::super::cargo_tests::LIFECYCLE,
+                "--exact"
+            ]
         );
         assert_eq!(
             lifecycle.required_inputs,
@@ -1473,6 +1585,35 @@ mod tests {
                     &profile("release-source").expect("source")
                 )
                 .expect("source identity")
+        );
+    }
+
+    #[test]
+    fn selected_lifecycle_requires_exact_producer_target_selector_and_candidate_binding() {
+        let temporary = tempfile::tempdir().unwrap();
+        let registry =
+            base_registry(temporary.path(), temporary.path(), Path::new("/bin/true")).unwrap();
+        let lifecycle_index = registry.indices["release_command_lifecycle"];
+        for alter in [0, 1, 2, 3, 4, 5] {
+            let mut gates = registry.gates.clone();
+            let lifecycle = &mut gates[lifecycle_index];
+            match alter {
+                0 => lifecycle.cargo_test.as_mut().unwrap().producer = "fmt".into(),
+                1 => lifecycle.cargo_test.as_mut().unwrap().target = "foreign".into(),
+                2 => lifecycle.command[1] = "missing_test".into(),
+                3 => lifecycle.cargo_test = None,
+                4 => lifecycle.environment.clear(),
+                _ => lifecycle.required_inputs.clear(),
+            }
+            assert!(GateRegistry::new(gates).is_err(), "alteration {alter}");
+        }
+        let commands = registry
+            .input_commands(&registry.closure(&profile("full").unwrap()).unwrap())
+            .unwrap();
+        assert!(
+            !commands
+                .iter()
+                .any(|(command, _)| command == super::super::cargo_tests::COMMAND)
         );
     }
 }

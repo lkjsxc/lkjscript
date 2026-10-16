@@ -76,12 +76,22 @@ pub struct Native {
     serial: Cell<usize>,
     mode: semantic_cli::Mode,
     memory: RefCell<BTreeMap<PathBuf, Arc<[u8]>>>,
+    projects: Option<RefCell<BTreeMap<PathBuf, lkjscript::platform::MemProjectStore>>>,
     artifacts: fixture_pool::ArtifactPool,
     detached: Cell<bool>,
     detached_smokes: RefCell<BTreeSet<[u8; 32]>>,
     matrix_evidence: RefCell<Vec<Value>>,
 }
 impl Native {
+    /// Semantic authoring uses one bounded arena; explicit candidates retain disk publication.
+    pub fn in_memory() -> Self {
+        let mut public = Self::new();
+        if public.mode == semantic_cli::Mode::HostSemantic {
+            public.projects = Some(RefCell::new(BTreeMap::new()));
+        }
+        public
+    }
+
     pub fn new() -> Self {
         if let Some(candidate) = std::env::var_os("LKJSCRIPT_COMPONENT_CANDIDATE") {
             return Self::from_candidate(Path::new(&candidate));
@@ -116,6 +126,7 @@ impl Native {
             serial: Cell::new(0),
             mode,
             memory: RefCell::new(BTreeMap::new()),
+            projects: None,
             artifacts: fixture_pool::ArtifactPool::default(),
             detached: Cell::new(false),
             detached_smokes: RefCell::new(BTreeSet::new()),
@@ -161,6 +172,15 @@ impl Native {
         if self.mode == semantic_cli::Mode::HostSemantic {
             let response = if args.first() == Some(&"run") && args.contains(&"--deployment") {
                 Some(self.run_prepared(args))
+            } else if let Some(store) = self
+                .projects
+                .as_ref()
+                .and_then(|projects| projects.borrow().get(project).cloned())
+            {
+                Some(semantic_cli::execute_memory(
+                    &store,
+                    args.iter().map(|arg| (*arg).to_owned()).collect(),
+                ))
             } else {
                 let mut arguments = args.iter().map(|arg| (*arg).to_owned()).collect::<Vec<_>>();
                 if !matches!(args.first(), Some(&"new" | &"capabilities"))
@@ -286,6 +306,23 @@ impl Native {
     }
     pub fn project(&self, name: &str) -> PathBuf {
         let project = self.root.join(name);
+        assert!(!self.has_project(name));
+        if let Some(projects) = &self.projects {
+            static ARENA: std::sync::OnceLock<lkjscript::platform::MemProjectStore> =
+                std::sync::OnceLock::new();
+            let store = ARENA
+                .get_or_init(|| lkjscript::platform::MemProjectStore::new(256 * 1_048_576).unwrap())
+                .fork()
+                .unwrap();
+            lkjscript::platform::create_memory_project(&store, name, "minimal").unwrap();
+            assert!(
+                projects
+                    .borrow_mut()
+                    .insert(project.clone(), store)
+                    .is_none()
+            );
+            return project;
+        }
         self.cli(
             &self.root,
             &[
@@ -299,6 +336,25 @@ impl Native {
             true,
         );
         project
+    }
+
+    pub fn has_project(&self, name: &str) -> bool {
+        let project = self.root.join(name);
+        project.exists()
+            || self
+                .projects
+                .as_ref()
+                .is_some_and(|projects| projects.borrow().contains_key(&project))
+    }
+
+    pub fn remove_project(&self, name: &str) {
+        let project = self.root.join(name);
+        if let Some(projects) = &self.projects {
+            assert!(projects.borrow_mut().remove(&project).is_some());
+        } else {
+            fs::remove_dir_all(&project).unwrap();
+        }
+        assert!(!self.has_project(name));
     }
     pub fn revision(&self, project: &Path) -> String {
         field(&self.cli(project, &["status"], true), "revision", "id").to_owned()
@@ -530,11 +586,17 @@ impl Native {
         self.detached_smokes.borrow_mut().insert(binding.digest);
     }
     pub fn sources_detached(&self) {
+        if let Some(projects) = &self.projects {
+            assert!(
+                projects.borrow().is_empty(),
+                "detachment must release every source project"
+            );
+        }
         self.detached.set(true);
     }
     pub fn detach(&self) {
         for name in ["library", "carriers", "application"] {
-            fs::remove_dir_all(self.root.join(name)).unwrap();
+            self.remove_project(name);
         }
         for name in ["standard", "library", "carriers"] {
             fs::remove_file(self.root.join(format!("{name}.lkjp"))).unwrap();
@@ -544,9 +606,8 @@ impl Native {
 }
 impl Drop for Native {
     fn drop(&mut self) {
-        if std::thread::panicking()
-            || std::env::var_os("LKJSCRIPT_KEEP_COMPONENT_PROOF").as_deref()
-                == Some(std::ffi::OsStr::new("1"))
+        if std::env::var_os("LKJSCRIPT_KEEP_COMPONENT_PROOF").as_deref()
+            == Some(std::ffi::OsStr::new("1"))
         {
             for (file, bytes) in self.memory.get_mut().iter() {
                 if !file.exists() {

@@ -149,7 +149,7 @@ pub fn author_storage(public: &Native, standard: &Dependency) -> [Dependency; 3]
 
 pub fn detach(public: &Native) {
     for name in ["storage-library", "storage-flat", "storage-chunked"] {
-        std::fs::remove_dir_all(public.root.join(name)).unwrap();
+        public.remove_project(name);
         std::fs::remove_file(public.root.join(format!("{name}.lkjp"))).unwrap();
     }
     public.detach();
@@ -161,7 +161,7 @@ pub fn detach(public: &Native) {
         "carriers",
         "application",
     ] {
-        assert!(!public.root.join(name).exists());
+        assert!(!public.has_project(name));
         assert!(!public.root.join(format!("{name}.lkjp")).exists());
     }
     assert!(!public.root.join("standard.lkjp").exists());

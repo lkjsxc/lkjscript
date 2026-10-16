@@ -159,7 +159,7 @@ fn native() -> Native {
 }
 
 fn native_template(template: &str) -> Native {
-    let mut public = Native::template(template);
+    let mut public = Native::memory_project(template);
     if std::env::var_os("LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE").is_some() {
         public.root.disable_cleanup(true);
         println!(
@@ -374,7 +374,7 @@ impl Packages {
 
     fn detach(&self) {
         for public in self.authors.iter().chain(std::iter::once(&self.consumer)) {
-            std::fs::remove_dir_all(&public.project).unwrap();
+            public.remove_project();
             for entry in std::fs::read_dir(public.root.path()).unwrap() {
                 let file = entry.unwrap().path();
                 if file
@@ -464,14 +464,6 @@ impl Packages {
             }
             (records, None)
         }
-    }
-
-    fn rejected_input(&self, target: &str, input: &Value, detached: bool) {
-        let (records, result) = self.run_with_records(target, input, detached, false);
-        assert!(result.is_none());
-        let diagnostic = compact_record(&records, "diagnostic");
-        assert_eq!(compact_field(diagnostic, "class"), "source");
-        assert_eq!(compact_field(diagnostic, "code"), "normalized_json_type");
     }
 
     fn expected(&self, target: &str, input: &Value, expected: &Value, detached: bool) {
@@ -969,119 +961,181 @@ fn native_indexed_data_rejects_wrong_categories_modes_scopes_and_phantom_actuals
 fn native_indexed_data_traps_refusals_cleanup_and_recovery() {
     let packages = Packages::stage();
     let healthy = vec![json!(7), json!(9), json!(11)];
+    let mut cases = Vec::new();
+    let failure = |cases: &mut Vec<BatchCase>, target: &str, input: Value, class, code| {
+        let mut case = BatchCase::failure(
+            format!("indexed-refusal-{}-{target}", cases.len()),
+            &input,
+            class,
+            code,
+        );
+        case.target = Some(target.to_owned());
+        cases.push(case);
+    };
+    let success = |cases: &mut Vec<BatchCase>, target: &str, input: Value, expected| {
+        let mut case = BatchCase::success(
+            format!("indexed-recovery-{}-{target}", cases.len()),
+            &input,
+            expected,
+        );
+        case.target = Some(target.to_owned());
+        cases.push(case);
+    };
+    for index in [i64::MIN, -33, -32, -1, 3, 32, 33, i64::MAX] {
+        for target in ["indexed-integers", "indexed-scalar-chunked"] {
+            failure(
+                &mut cases,
+                target,
+                json!([healthy, index, 13]),
+                "semantic",
+                "normalized_sequence_index",
+            );
+        }
+        success(
+            &mut cases,
+            "indexed-integers",
+            json!([healthy, 1, 17]),
+            scalar_expected(&healthy, 1, json!(17)),
+        );
+    }
+    for target in ["indexed-integers", "indexed-scalar-chunked"] {
+        failure(
+            &mut cases,
+            target,
+            json!([[], 0, 1]),
+            "semantic",
+            "normalized_sequence_index",
+        );
+    }
+    // Complete raw-value admission inspects the invalid final value before an index trap.
+    failure(
+        &mut cases,
+        "indexed-integers",
+        json!([[7, "invalid"], -1, 1]),
+        "source",
+        "normalized_json_type",
+    );
+    let nested: Vec<_> = (0..33).map(item).collect();
+    for target in ["indexed-item-flat", "indexed-item-chunked"] {
+        for index in [-1, 33] {
+            failure(
+                &mut cases,
+                target,
+                json!([nested, index, item(-9)]),
+                "semantic",
+                "normalized_sequence_index",
+            );
+        }
+        for path in ["/rows/0/values/2", "/lookup/2/1/values/1", "/meta/flags/2"] {
+            let mut invalid = nested.clone();
+            let replacement = if path.ends_with("flags/2") {
+                json!(0)
+            } else {
+                json!(false)
+            };
+            *invalid[32].pointer_mut(path).unwrap() = replacement;
+            // Invalid unused final input and replacement both precede the index -1 trap.
+            failure(
+                &mut cases,
+                target,
+                json!([invalid, -1, item(-9)]),
+                "source",
+                "normalized_json_type",
+            );
+            let mut invalid_replacement = item(-9);
+            *invalid_replacement.pointer_mut(path).unwrap() = json!("wrong");
+            failure(
+                &mut cases,
+                target,
+                json!([nested, -1, invalid_replacement]),
+                "source",
+                "normalized_json_type",
+            );
+        }
+        success(
+            &mut cases,
+            target,
+            json!([nested, 32, item(-9)]),
+            item_expected(&nested[32]),
+        );
+    }
+    let mut invalid_nominal = item(9);
+    invalid_nominal["lookup"][2][1]["values"][1] = json!(false);
+    failure(
+        &mut cases,
+        "indexed-item-nominal",
+        json!([invalid_nominal]),
+        "source",
+        "normalized_json_type",
+    );
+    let mut empty_rows = item(9);
+    empty_rows["rows"] = json!([]);
+    failure(
+        &mut cases,
+        "indexed-item-nominal",
+        json!([empty_rows]),
+        "semantic",
+        "normalized_list_index",
+    );
+    success(
+        &mut cases,
+        "indexed-item-nominal",
+        json!([item(9)]),
+        item_expected(&item(9)),
+    );
+    assert_eq!(
+        cases.len(),
+        48,
+        "every trap, ingress refusal and recovery row"
+    );
     for detached in [false, true] {
         if detached {
             packages.detach();
         }
-        for index in [i64::MIN, -33, -32, -1, 3, 32, 33, i64::MAX] {
-            assert!(
-                packages
-                    .run(
-                        "indexed-integers",
-                        &json!([healthy, index, 13]),
-                        detached,
-                        false
-                    )
-                    .is_none()
-            );
-            assert!(
-                packages
-                    .run(
-                        "indexed-scalar-chunked",
-                        &json!([healthy, index, 13]),
-                        detached,
-                        false
-                    )
-                    .is_none()
-            );
-            packages.expected(
-                "indexed-integers",
-                &json!([healthy, 1, 17]),
-                &scalar_expected(&healthy, 1, json!(17)),
-                detached,
-            );
-        }
-        assert!(
+        let rows = if detached {
+            packages.consumer.batch(
+                "indexed-refusals",
+                &packages
+                    .consumer
+                    .root
+                    .path()
+                    .join("indexed-integers.deployment.json"),
+                &cases,
+            )
+        } else {
             packages
-                .run("indexed-integers", &json!([[], 0, 1]), detached, false)
-                .is_none()
-        );
-        assert!(
-            packages
-                .run(
-                    "indexed-scalar-chunked",
-                    &json!([[], 0, 1]),
-                    detached,
-                    false
-                )
-                .is_none()
-        );
-        // Complete raw-value admission must inspect the invalid final value before an index trap.
-        assert!(
-            packages
-                .run(
-                    "indexed-integers",
-                    &json!([[7, "invalid"], -1, 1]),
-                    detached,
-                    false
-                )
-                .is_none()
-        );
-        let nested: Vec<_> = (0..33).map(item).collect();
-        for target in ["indexed-item-flat", "indexed-item-chunked"] {
-            for index in [-1, 33] {
-                assert!(
-                    packages
-                        .run(target, &json!([nested, index, item(-9)]), detached, false)
-                        .is_none()
-                );
-            }
-            for path in ["/rows/0/values/2", "/lookup/2/1/values/1", "/meta/flags/2"] {
-                let mut invalid = nested.clone();
-                let replacement = if path.ends_with("flags/2") {
-                    json!(0)
+                .consumer
+                .source_batch("indexed-refusals", "indexed-integers", &cases)
+        };
+        assert_eq!(rows.len(), cases.len());
+        for records in &rows {
+            let result = compact_record(records, "result");
+            if compact_field(result, "status") == "success" {
+                let execution = compact_record(records, "execution");
+                if detached {
+                    joined(execution);
                 } else {
-                    json!(false)
-                };
-                *invalid[32].pointer_mut(path).unwrap() = replacement;
-                // Invalid unused final input must be rejected before index -1 traps.
-                packages.rejected_input(target, &json!([invalid, -1, item(-9)]), detached);
-                let mut invalid_replacement = item(-9);
-                *invalid_replacement.pointer_mut(path).unwrap() = json!("wrong");
-                packages.rejected_input(
-                    target,
-                    &json!([nested, -1, invalid_replacement]),
-                    detached,
-                );
+                    assert_eq!(compact_field(execution, "differential"), "equal");
+                }
+            } else {
+                let diagnostic = compact_record(records, "diagnostic");
+                if detached && compact_field(diagnostic, "class") != "source" {
+                    failed_join(diagnostic);
+                }
             }
-            packages.expected(
-                target,
-                &json!([nested, 32, item(-9)]),
-                &item_expected(&nested[32]),
-                detached,
-            );
         }
-        let mut invalid_nominal = item(9);
-        invalid_nominal["lookup"][2][1]["values"][1] = json!(false);
-        packages.rejected_input("indexed-item-nominal", &json!([invalid_nominal]), detached);
-        let mut empty_rows = item(9);
-        empty_rows["rows"] = json!([]);
-        assert!(
-            packages
-                .run(
-                    "indexed-item-nominal",
-                    &json!([empty_rows]),
-                    detached,
-                    false
-                )
-                .is_none()
-        );
-        packages.expected(
-            "indexed-item-nominal",
-            &json!([item(9)]),
-            &item_expected(&item(9)),
+        // Ordinary publication remains covered independently of the batch's per-row
+        // result_json=None contract, in both source and detached modes.
+        let (records, result) = packages.run_with_records(
+            "indexed-integers",
+            &json!([[7, "invalid"], -1, 1]),
             detached,
+            false,
         );
+        assert!(result.is_none());
+        let diagnostic = compact_record(&records, "diagnostic");
+        assert_eq!(compact_field(diagnostic, "class"), "source");
+        assert_eq!(compact_field(diagnostic, "code"), "normalized_json_type");
         packages.verify_identity();
     }
     let original = packages

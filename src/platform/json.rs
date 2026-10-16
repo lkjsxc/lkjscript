@@ -6,7 +6,7 @@ use serde::de::{DeserializeSeed, Error as _, MapAccess, SeqAccess, Visitor};
 use serde_json::{Map, Number};
 use std::fmt;
 
-pub const JSON_CONTRACT_VERSION: u16 = 1;
+pub const JSON_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 
 // The pinned serde_json reader admits 127 nested arrays/objects before its
 // independent stack guard rejects. Typed output must fit the same reader even

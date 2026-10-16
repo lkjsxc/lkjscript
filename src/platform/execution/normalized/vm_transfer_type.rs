@@ -324,8 +324,8 @@ pub(super) fn validate_associated_bindings_in(
     work: &mut Work<'_>,
 ) -> Result<(), ExecutionError> {
     catalogued(program, selected, 0, work)?;
-    if !matches!(selected.implementation_generation, 33 | 34)
-        || !matches!(selected.contract_generation, 33 | 34)
+    if selected.implementation_generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+        || selected.contract_generation != crate::platform::canonical_schema::SCHEMA_EPOCH
     {
         return Err(reject());
     }
@@ -339,7 +339,9 @@ pub(super) fn validate_associated_bindings_in(
             }
         }
         let valid_category = if let Some(parameter) = &binding.scope_parameter {
-            if selected.implementation_generation != 34 || selected.contract_generation != 34 {
+            if selected.implementation_generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+                || selected.contract_generation != crate::platform::canonical_schema::SCHEMA_EPOCH
+            {
                 return Err(reject());
             }
             let scope = crate::platform::kernel::ReadScopeArgument::Parameter(

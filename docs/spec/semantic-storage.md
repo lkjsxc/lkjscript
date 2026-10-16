@@ -3,6 +3,25 @@
 Status: normative for the current typed meaning graph repository. Internal storage compatibility
 identities and hostile decoder bounds remain at their typed source owners.
 
+## Current schema epoch
+
+`canonical_schema::SCHEMA_EPOCH: u16 = 1` is the sole product encoding epoch. Graph,
+type, package, compiler, bytecode, artifact, publication, storage and data contract constants
+alias it. Every reader admits exactly that epoch; numeric ordering grants no feature support.
+Canonical object framing stores the kind, a two-byte little-endian epoch and payload length.
+Associated-owned inventories and source-tied read views are inline in declaration and type
+records; no optional legacy sidecar or predecessor reader exists.
+
+Source edits do not change the schema epoch or canonical meaning identities. Generated validator
+implementation commitments partition process admission and compiler caches only. Independent
+content digests, closure checks, canonical re-encoding and complete semantic revalidation still
+admit every artifact and source closure. Changing validation code cannot make an old cached proof
+current, and a digest alone never supplies semantic acceptance.
+
+The standard transport and artifact are compressed with deflate during the build, decoded once
+into shared immutable process storage, and then fully admitted. Public exports are the exact
+original uncompressed bytes and retain their normal transport and artifact identities.
+
 ## Project root
 
 A current project root is the typed meaning graph repository itself. Its owned entries are:
@@ -25,30 +44,41 @@ recreated only after the accepted `HEAD` and its immutable closure validate; a n
 nonempty, or symlinked lock rejects. Missing or inconsistent accepted `HEAD`, pack, object,
 revision, receipt, root, or witness bindings are corruption.
 
-Compatible historical acceptance and current validation are separate claims. A supported canonical
+Historical acceptance within the current epoch and current validation are separate claims. A canonical
 historical witness authenticates its original envelope, certificate, semantic root, revision,
 parents and idempotency receipt even when its validator differs. Opening it must not replace HEAD,
-rewrite history, or invoke catalog repair merely for that difference. Unknown graph/witness schemas
-and structural corruption retain explicit rejection and matching-executable recovery.
+rewrite history, or invoke catalog repair merely for that difference. Foreign epochs and structural
+corruption reject explicitly.
 
 Current execution, semantic export and incremental proof require a current validation context bound
-to the same exact root, dependency closure and validator. Rebuilding that context uses full canonical
+to the same exact root, publication record, dependency closure and validator. Rebuilding that context uses full canonical
 validation and does not mint a semantic revision. Derived facts and current proof are distinct: an
 invalid historical body may still have authenticated, newly reconstructed names and ownership for
 read-only inspection and request resolution. A failed current proof never authorizes execution.
+
+Process proof reuse is limited to 64 entries and 512 MiB of conservatively modeled retained storage.
+Every hit rechecks the complete original object read set and exact used dependency transport
+selections; a changed selection requires fresh admission. Disk objects are reread and verified.
+Weak identities may establish unchanged immutable memory bytes without retaining their project
+arena, while charging the same object and byte admission limits. Oversized proofs are not cached.
+One owning export shares its complete admitted source and current proof through compilation without
+retaining its private dependency maps in the global cache. Prepared execution retains the bounded
+read-set metadata and exact acceptance binding. Every invocation rereads and verifies the complete
+physical source and used selections, checks cancellation and rejects changed acceptance. This proof
+does not depend on global cache capacity or replace independent reference execution.
 
 When no valid current base proof exists, ordinary reviewed edits use complete post-change validation
 and fresh witness maps within the existing publication owner. Only the valid candidate can publish;
 the lock rechecks the exact historical parent before visibility. Earlier history and idempotency
 bindings remain intact. A historical retry returns its original result when it can be revalidated;
-otherwise it reports targeted incompatibility with that original result, without freeing its key.
+otherwise it reports current-validation rejection of that original result, without freeing its key.
 
 A predecessor `.lkjscript` marker is not a storage edition. Project discovery rejects it before
 opening derived state or mutating the destination. A root containing both current and predecessor
 markers is rejected as ambiguous; it never selects a fallback.
 
 Operational application data is not stored in this root and does not reuse any repository,
-revision, pack, object, map, or digest identity. A deployment-selected `lkjscript-data-store-1`
+revision, pack, object, map, or digest identity. A deployment-selected `lkjscript-data-store`
 root has its own physical identity and atomic head as specified in
 [data-capabilities.md](data-capabilities.md). Runtime data writes cannot author, select, or advance
 semantic `HEAD`; semantic publication cannot silently mutate operational data.
@@ -60,12 +90,17 @@ pages, roots, witnesses, transactions, diffs, receipts, revisions, idempotency r
 interfaces/transports, compiler units/manifests, and other exact contracts. Object keys verify
 domain-separated content bytes. A digest from one domain cannot authorize another.
 
+Packed decoding checks canonical payload bytes directly against the encoder output;
+domain owners separately check identity and local meaning. Encoding an artifact
+retains its strict standalone admission within that result. Consuming it checks the
+complete encoded digest and metadata again; mutated results cannot reuse admission.
+
 Packs are immutable, bounded, canonical collections of keyed objects with checked headers,
 footers, order, offsets, lengths, checksums, and closure. Duplicate physical definitions,
 noncanonical order, truncation, trailing input, foreign domains, overflow, and digest mismatch
 reject. Pack filenames are locators and never semantic identity.
 
-Catalog contract 2 is the sole healthy physical locator. `catalog/current.lkjc` is an atomically
+The current-epoch catalog is the sole healthy physical locator. `catalog/current.lkjc` is an atomically
 replaced manifest selecting at most 32 immutable, content-addressed, sorted segments under
 `catalog/segments/`, with at most one segment at each level. The manifest binds the ordered segment
 identities, generations, key ranges, entry and pack totals, cumulative physical work, and one
@@ -97,12 +132,11 @@ batch. New segment files and their directory are durable before the manifest sel
 manifest is durable before a new `HEAD` may require the objects. Only after manifest durability may
 exact unselected segment and owned staging paths be removed.
 
-Missing, predecessor-contract, malformed, current-closure-incomplete, or lookup-inconsistent
+Missing, foreign-epoch, malformed, current-closure-incomplete, or lookup-inconsistent
 catalog state is rechecked under the repository's exclusive publication lock and reconstructed at
 most once from strict immutable pack footers. Reconstruction uses a disjoint sorted footer oracle,
-atomically publishes only contract 2, then retries current-closure validation. Pack or accepted
-object corruption rejects with `HEAD` unchanged. Contract 1 has no healthy reader or writer; its
-bytes are merely one disposable recovery trigger.
+atomically publishes only the current schema epoch, then retries current-closure validation. Pack
+or accepted object corruption rejects with `HEAD` unchanged. No foreign catalog reader is retained.
 
 A healthy read retains its shared publication lock through the catalog/HEAD observation.
 If recovery required exclusive ownership, that stronger lock remains owned until the caller
@@ -121,6 +155,13 @@ Persistent maps use canonical typed keys and bounded values over immutable conte
 Equal logical maps have equal logical content commitments independent of page splits. Sparse path
 copies can share accepted-base subtrees, but full logical reconstruction remains the independent
 semantic oracle.
+
+Point lookups may retain 4,096 decoded pages within a 64 MiB modeled process bound.
+Every hit reads current store bytes, verifies their digest and exact equality, charges
+the original page/byte/entry admission, and rechecks parent summaries. Only actual
+decodes increment `pages_decoded`; independent full traversal bypasses this cache.
+Private immutable memory payloads retain their verified object key; replacements
+start unverified and every caller still pays its object and byte admission.
 
 ## Accepted revision and publication
 
@@ -209,67 +250,19 @@ contract does not provide encrypted storage, signatures/provenance, hostile-code
 multi-tenant isolation, distributed consensus, leases, garbage collection, live packing, memory
 mapping, or cross-filesystem atomic visibility.
 
-## Transaction outcomes and supported predecessor bytes
+## Scalar and transaction encoding
 
-The current semantic model is Graph 17 and strictly admits authentic Graph 14, 15 and 16 content.
-`LKJOWN14` owners decode through the exact predecessor wire layout; `LKJOWN15` carries requirement
-parameters, typed operands and explicit applications. `LKJOWN16` adds the exact lexical transaction
-outcome expression. Older generations cannot encode newer extensions. Canonical re-encoding uses
-each admitted object's generation.
-Unchanged objects retain their stored bytes and IDs. Actual reviewed edits produce successor owner
-objects and a current root; read, inspection and current revalidation do not migrate accepted HEAD,
-historical records or application data.
+All current owner, type, compiler and artifact records use schema epoch 1, including transaction
+outcomes, symbolic requirements and binary64 values. These forms are ordinary inline tagged
+variants; no content-dependent predecessor envelope or feature-generation dispatch remains.
+Canonical re-encoding, bounded lengths, exact dependency selections and independent full source/code
+validation admit the entire closure, including unused types and untaken expressions.
 
-TypeObject 10 and `LKJTFN01` version 1 retain their exact encodings. A task-function row containing a
-requirement parameter uses `LKJTFN02` version 2; closing the row uses the canonical form appropriate
-to its resulting content. Concrete-only rows retain the preceding whole-requirement encoding.
-The base type and typed-data encodings do not acquire new fields.
+F64 literal payloads are exactly eight little-endian binary64 bytes. Canonical writers normalize
+NaN to `0x7ff8000000000000`; strict scalar readers reject other NaN bit patterns. Decimal formatting
+and equivalent proposal spellings do not enter numeric identity. Source and artifact readers
+independently check scalar types, expression kinds and instruction correspondence.
 
-Package interface owner 10 retains its exact predecessor layout; owner 11 represents the extension.
-Package revision and transport envelope 1 retain explicit graph-generation fields. Current wrappers
-may contain admitted older meaning; an older root cannot contain newer owner meaning.
-Compiler unit 10 / bytecode 6 / Graph 14 remain strictly decodable through their exact old layouts;
-compiler unit 11 / bytecode 7 / Graph 15 carry requirement applications and symbolic operation targets.
-Compiler unit 12 / bytecode 8 / Graph 16 add exact paired outcome continuations and result authority.
-Compiler-unit keys and canonical bytes use the admitted compiler generation. Compilation manifest 3
-retains its layout and explicitly binds these supported graph/compiler/bytecode combinations.
-Artifact 20 extends the transaction-containing envelope; strict Artifact 18 and 19 decoding preserves their
-original supported tuples, including Graph 15 / compiler 11 / bytecode 7 in Artifact 19.
-A containing older generation cannot admit newer meaning. The predecessor executable
-rejects the unsupported generation before execution, rather than ignoring application operands.
-
-Historical witnesses and acceptance records authenticate their original bytes and identities;
-they do not authorize execution or incremental proof under a changed validator. The current
-checker validates the complete supported closure and may rebuild derived validation/cache data.
-It remains possible to inspect and repair authentic historically accepted invalid meaning through
-a completely valid reviewed candidate. Accepted retries return their original receipt and record
-identities. There is one editable accepted authority and no predecessor execution engine. Retirement
-of this predecessor decoder requires an explicit future support/migration decision; installation
-and runtime selection perform no graph or application-data migration.
-
-## Binary64 encodings and consumers
-
-F64 type objects use the disjoint `LKJF6401` envelope, version 1 and scalar tag 1. Base
-TypeObject 10, nominal application and task-function bytes/digests stay unchanged. Graph 17
-`LKJOWN17` appends a floating literal; its payload is exactly eight normalized binary64 bytes in
-little-endian order. Canonical writers normalize NaN to `0x7ff8000000000000`; strict scalar readers
-reject all other NaN bit patterns. The type envelope's canonical re-encoding rejects an F64 form
-placed under the base type envelope. Complete graph validation rejects F64 even in unused types
-or unreachable expressions under an older graph generation.
-
-Compiler unit 13 / bytecode 9 appends the corresponding fixed-width literal instruction.
-Artifact 21 admits this combination and retains complete Artifact 18/19/20 readers. Unit keys,
-headers, domains and predecessor bytes use their original generations. Independent package and
-artifact readers revalidate the full source/type/code closure, including each package's generation
-inside a newer outer artifact. Rehashed F64 instructions or nested signatures under predecessor
-units reject. Existing compilation-manifest, package/interface/transport and physical data-store
-envelopes need no scalar-specific fields: their exact type identities and graph-generation
-bindings identify the extension. These boundaries do not infer compatibility from a successful
-producer check or checksum.
-
-Authored-intent bytes select `LKJACR17` only when an F64 type/literal occurs, with explicit type tag
-19 and expression tag 27 plus eight little-endian bytes. Existing integer requests retain their
-original generation, commitments and allocated identities. Floating formatting and equivalent
-decimal spellings do not enter numeric identity. Old products reject the new type/graph/artifact
-generation before execution or accepted writes; inspection and current revalidation preserve
-genuine predecessor source and application data.
+A changed implementation may revalidate accepted history within the current epoch without changing
+its identities. A foreign epoch rejects before execution or accepted writes. Installation does not
+migrate graph authority or operational data.

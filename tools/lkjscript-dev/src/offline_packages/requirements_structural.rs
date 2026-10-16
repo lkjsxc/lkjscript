@@ -40,7 +40,7 @@ pub(super) fn apply(
             .evidence
             .join(format!("requirement-{name}-{notation}.lkjplan"));
         fs::write(&input, format!("{header}{literal}"))?;
-        commands.push(context.receipt.commands.len());
+        commands.push(context.command_index());
         let output = context.cli(
             Some(&package.path),
             &[
@@ -75,7 +75,7 @@ pub(super) fn apply(
             "structural"
         }
     ));
-    commands.push(context.receipt.commands.len());
+    commands.push(context.command_index());
     let applied = context.cli(
         Some(&package.path),
         &[
