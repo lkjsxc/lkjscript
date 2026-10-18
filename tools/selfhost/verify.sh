@@ -8,12 +8,17 @@ exec {selfhost_lease}> "$CARGO_TARGET_DIR/.lkjscript-check.lock"
 flock --exclusive "$selfhost_lease"
 mkdir -p .artifacts/selfhost
 sha256sum src/platform/compiler/selfhost_input.rs \
+  src/platform/compiler/selfhost_artifact_input.rs \
   tests/support/selfhost_proposals.rs \
   src/platform/execution/normalized/selfhost_tests.rs \
   src/platform/execution/normalized/selfhost_bytes_tests.rs \
   src/platform/execution/normalized/selfhost_admission_tests.rs \
+  src/platform/execution/normalized/selfhost_artifact_tests.rs \
   src/platform/execution/normalized/selfhost_closure_tests.rs \
   tests/fixtures/selfhost-closure.lkjc \
+  tests/fixtures/selfhost-artifact-probes.lkjc \
+  tests/fixtures/selfhost-artifact-empty-runtime.lkjc \
+  tests/fixtures/selfhost-artifact-object-scan.lkjc \
   tests/fixtures/selfhost-generic-list.lkjc \
   tests/fixtures/selfhost-aggregates.lkjc \
   tests/fixtures/selfhost-buffer-borrow-tail.lkjc \

@@ -31,6 +31,24 @@ pub const SOURCE: &str = concat!(
     "\n",
     include_str!("../../tools/selfhost/aggregate.lkjc"),
     "\n",
+    include_str!("../../tools/selfhost/wire.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/pack.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/unit-map.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/unit-wire.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/artifact-order.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/artifact-manifest.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/artifact.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/artifact-input.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/artifact-check.lkjc"),
+    "\n",
 );
 
 #[derive(Clone)]
@@ -150,6 +168,27 @@ fn stub(function: &mut [Form]) -> Result<(), String> {
             "(field image (call ci::text-bytes (text \"\"))))"
         )
         .to_owned(),
+        _ if result[1].head() == Some("record") => {
+            let Form::List(fields) = &result[1] else {
+                unreachable!()
+            };
+            let fields = fields[1..]
+                .iter()
+                .map(|field| {
+                    let Form::List(field) = field else {
+                        return Err("invalid bootstrap record field".to_owned());
+                    };
+                    if field.len() != 2 || field[1].text() != "Bytes" {
+                        return Err("bootstrap record field requires Bytes".to_owned());
+                    }
+                    Ok(format!(
+                        "(field {} (call ci::text-bytes (text \"\")))",
+                        field[0].text()
+                    ))
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            format!("(record structural {})", fields.join(" "))
+        }
         other => return Err(format!("unsupported test bootstrap result {other}")),
     };
     let original = function
@@ -166,7 +205,16 @@ fn upsert(form: &Form, module: &str) -> Form {
     let mut result = items.clone();
     if matches!(
         form.head(),
-        Some("function" | "parameter" | "type-parameter")
+        Some(
+            "module"
+                | "function"
+                | "external"
+                | "parameter"
+                | "type-parameter"
+                | "component"
+                | "port"
+                | "target"
+        )
     ) && items[1].text() == "create"
     {
         result.remove(1);
@@ -178,8 +226,8 @@ fn upsert(form: &Form, module: &str) -> Form {
     Form::List(result.iter().map(|x| upsert(x, module)).collect())
 }
 
-/// First declare typed interfaces with trivial valid bodies; then replace each body
-/// through tx. Every intermediate graph is admitted under the default request bounds.
+/// Declare typed interfaces one module at a time, then replace small groups of
+/// bodies through tx. Every intermediate graph uses the default request bounds.
 pub fn steps(source: &str) -> Result<(String, Vec<String>), String> {
     let mut units = vec![];
     for form in parse(source) {
@@ -191,7 +239,7 @@ pub fn steps(source: &str) -> Result<(String, Vec<String>), String> {
         }
     }
     let mut headers = units.clone();
-    let mut changes = vec![];
+    let mut bodies = vec![];
     for (unit, header) in units.iter().zip(headers.iter_mut()) {
         if unit.head() != Some("module") {
             continue;
@@ -200,6 +248,7 @@ pub fn steps(source: &str) -> Result<(String, Vec<String>), String> {
             unreachable!()
         };
         let name = module[2].text();
+        let mut members = vec![];
         for (member, head) in module.iter().skip(3).zip(header.iter_mut().skip(3)) {
             if member.head() != Some("function") {
                 continue;
@@ -208,20 +257,32 @@ pub fn steps(source: &str) -> Result<(String, Vec<String>), String> {
                 unreachable!()
             };
             stub(head)?;
-            changes.push(format!(
+            members.push(upsert(member, &name).text());
+        }
+        for group in members.chunks(4) {
+            bodies.push(format!(
                 "(tx (base @head) (upsert-module {name} {}))",
-                upsert(member, &name).text()
+                group.join(" ")
             ));
         }
     }
+    let first = headers.first().ok_or("empty compiler proposal")?;
+    let mut changes = headers
+        .iter()
+        .skip(1)
+        .map(|header| {
+            let Form::List(items) = header else {
+                unreachable!()
+            };
+            let name = items[2].text();
+            format!("(tx (base @head) {})", upsert(header, &name).text())
+        })
+        .collect::<Vec<_>>();
+    changes.extend(bodies);
     Ok((
         format!(
             "declarations.begin\n(units {})\ndeclarations.end\n",
-            headers
-                .iter()
-                .map(Form::text)
-                .collect::<Vec<_>>()
-                .join("\n")
+            first.text()
         ),
         changes,
     ))

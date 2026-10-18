@@ -1,0 +1,676 @@
+declarations.begin
+(units
+  (module create unit-wire
+    (function create identities
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create stride (type I64))
+      (parameter create tag (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding a (type ByteBuffer) (call ci::push (local tag) (local out)))
+            (binding b
+              (type ByteBuffer)
+              (call wire::range
+                (local data)
+                (local at)
+                (call ci::add (local at) (local stride))
+                (local a)))
+            (in
+              (call identities
+                (local data)
+                (call ci::add (local at) (local stride))
+                (local end)
+                (local stride)
+                (local tag)
+                (local b)))))))
+    (function create references
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create tag (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding a (type ByteBuffer) (call ci::push (i64 18) (local out)))
+            (binding b
+              (type ByteBuffer)
+              (call wire::range
+                (local data)
+                (local at)
+                (call ci::add (local at) (i64 16))
+                (local a)))
+            (binding c (type ByteBuffer) (call ci::push (local tag) (local b)))
+            (binding d
+              (type ByteBuffer)
+              (call wire::range
+                (local data)
+                (call ci::add (local at) (i64 16))
+                (call ci::add (local at) (i64 32))
+                (local c)))
+            (in
+              (call references
+                (local data)
+                (call ci::add (local at) (i64 32))
+                (local end)
+                (local tag)
+                (local d)))))))
+    (function create integer
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding lo (call flow::field (local data) (local at) (i64 0)))
+          (binding hi (call flow::field (local data) (local at) (i64 4)))
+          (in
+            (call ci::add
+              (call ci::mul
+                (if
+                  (call ci::lt (local hi) (i64 2147483648))
+                  (local hi)
+                  (call ci::sub (local hi) (i64 4294967296)))
+                (i64 4294967296))
+              (local lo))))))
+    (function create string
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding offset (call flow::field (local data) (local at) (i64 0)))
+          (binding length (call flow::field (local data) (local at) (i64 4)))
+          (binding a (type ByteBuffer) (call wire::unsigned (local length) (local out)))
+          (in
+            (call wire::range
+              (local data)
+              (local offset)
+              (call ci::add (local offset) (local length))
+              (local a))))))
+    (function create numbers
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create selector (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding a
+              (type ByteBuffer)
+              (if
+                (call ci::eq (local selector) (i64 0))
+                (local out)
+                (call ci::push (i64 1) (local out))))
+            (binding b
+              (type ByteBuffer)
+              (call wire::unsigned (call flow::field (local data) (local at) (i64 0)) (local a)))
+            (in
+              (call numbers
+                (local data)
+                (call ci::add (local at) (i64 4))
+                (local end)
+                (local selector)
+                (local b)))))))
+    (function create strings
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create text (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding a
+              (type ByteBuffer)
+              (if
+                (call ci::eq (local text) (i64 0))
+                (local out)
+                (call ci::push (i64 0) (local out))))
+            (binding b (type ByteBuffer) (call string (local data) (local at) (local a)))
+            (in
+              (call strings
+                (local data)
+                (call ci::add (local at) (i64 8))
+                (local end)
+                (local text)
+                (local b)))))))
+    (function create tables
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create i (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local i) (i64 10))
+          (local out)
+          (let
+            (binding offset (call flow::field (local data) (local at) (i64 0)))
+            (binding count (call flow::field (local data) (local at) (i64 4)))
+            (binding a (type ByteBuffer) (call wire::unsigned (local count) (local out)))
+            (binding b
+              (type ByteBuffer)
+              (if
+                (call ci::lt (local i) (i64 7))
+                (if
+                  (call ci::eq (local i) (i64 6))
+                  (call identities
+                    (local data)
+                    (local offset)
+                    (call ci::add (local offset) (call ci::mul (local count) (i64 32)))
+                    (i64 32)
+                    (i64 2)
+                    (local a))
+                  (call references
+                    (local data)
+                    (local offset)
+                    (call ci::add (local offset) (call ci::mul (local count) (i64 32)))
+                    (if
+                      (call ci::eq (local i) (i64 0))
+                      (i64 3)
+                      (if
+                        (call ci::eq (local i) (i64 1))
+                        (i64 4)
+                        (if
+                          (call ci::eq (local i) (i64 2))
+                          (i64 5)
+                          (if
+                            (call ci::eq (local i) (i64 3))
+                            (i64 10)
+                            (if (call ci::eq (local i) (i64 4)) (i64 6) (i64 11))))))
+                    (local a)))
+                (if
+                  (call ci::eq (local i) (i64 8))
+                  (local a)
+                  (call strings
+                    (local data)
+                    (local offset)
+                    (call ci::add (local offset) (call ci::mul (local count) (i64 8)))
+                    (if (call ci::eq (local i) (i64 9)) (i64 1) (i64 0))
+                    (local a)))))
+            (in
+              (call tables
+                (local data)
+                (call ci::add (local at) (i64 8))
+                (call ci::add (local i) (i64 1))
+                (local b)))))))
+    (function create parameters
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding a
+              (type ByteBuffer)
+              (let
+                (binding wire-temp-0 (call ci::add (local at) (i64 16)))
+                (binding wire-temp-1 (type ByteBuffer) (call ci::push (i64 7) (local out)))
+                (in
+                  (call wire::range (local data) (local at) (local wire-temp-0) (local wire-temp-1)))))
+            (binding b
+              (type ByteBuffer)
+              (call string (local data) (call ci::add (local at) (i64 16)) (local a)))
+            (binding c
+              (type ByteBuffer)
+              (call wire::unsigned (call flow::field (local data) (local at) (i64 24)) (local b)))
+            (binding d
+              (type ByteBuffer)
+              (call wire::unsigned (call flow::field (local data) (local at) (i64 28)) (local c)))
+            (binding e (type ByteBuffer) (call ci::push (i64 0) (local d)))
+            (in
+              (call parameters
+                (local data)
+                (call ci::add (local at) (i64 32))
+                (local end)
+                (local e)))))))
+    (function create signature
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding types (call flow::field (local data) (local at) (i64 0)))
+          (binding type-count (call flow::field (local data) (local at) (i64 4)))
+          (binding params (call flow::field (local data) (local at) (i64 8)))
+          (binding param-count (call flow::field (local data) (local at) (i64 12)))
+          (binding a (type ByteBuffer) (call ci::le (i64 0) (i64 4) (local out)))
+          (binding b
+            (type ByteBuffer)
+            (let
+              (binding wire-temp-2
+                (call ci::add (local types) (call ci::mul (local type-count) (i64 16))))
+              (binding wire-temp-3 (i64 16))
+              (binding wire-temp-4 (i64 17))
+              (binding wire-temp-5
+                (type ByteBuffer)
+                (call wire::unsigned (local type-count) (local a)))
+              (in
+                (call identities
+                  (local data)
+                  (local types)
+                  (local wire-temp-2)
+                  (local wire-temp-3)
+                  (local wire-temp-4)
+                  (local wire-temp-5)))))
+          (binding c (type ByteBuffer) (call wire::unsigned (local type-count) (local b)))
+          (binding d
+            (type ByteBuffer)
+            (call ci::pad
+              (call ci::add (call ci::size (local c)) (local type-count))
+              (i64 0)
+              (local c)))
+          (binding e (type ByteBuffer) (call wire::unsigned (local param-count) (local d)))
+          (binding g
+            (type ByteBuffer)
+            (call parameters
+              (local data)
+              (local params)
+              (call ci::add (local params) (call ci::mul (local param-count) (i64 32)))
+              (local e)))
+          (binding h
+            (type ByteBuffer)
+            (call wire::unsigned (call flow::field (local data) (local at) (i64 16)) (local g)))
+          (in (call ci::le (i64 0) (i64 4) (local h))))))
+    (function create source
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding a
+            (type ByteBuffer)
+            (let
+              (binding wire-temp-8 (call ci::add (local at) (i64 16)))
+              (binding wire-temp-9 (call ci::add (local at) (i64 32)))
+              (binding wire-temp-10
+                (type ByteBuffer)
+                (let
+                  (binding wire-temp-6 (i64 18))
+                  (binding wire-temp-7 (type ByteBuffer) (call ci::empty))
+                  (in (call ci::push (local wire-temp-6) (local wire-temp-7)))))
+              (in
+                (call wire::range
+                  (local data)
+                  (local wire-temp-8)
+                  (local wire-temp-9)
+                  (local wire-temp-10)))))
+          (binding b
+            (type ByteBuffer)
+            (call wire::unsigned (call flow::field (local data) (local at) (i64 0)) (local a)))
+          (binding c
+            (type ByteBuffer)
+            (let
+              (binding wire-temp-11 (call ci::add (local at) (i64 32)))
+              (binding wire-temp-12 (call ci::add (local at) (i64 48)))
+              (binding wire-temp-13
+                (type ByteBuffer)
+                (call ci::push
+                  (if
+                    (call ci::eq (call flow::field (local data) (local at) (i64 0)) (i64 1))
+                    (i64 3)
+                    (i64 12))
+                  (local b)))
+              (in
+                (call wire::range
+                  (local data)
+                  (local wire-temp-11)
+                  (local wire-temp-12)
+                  (local wire-temp-13)))))
+          (binding d
+            (type ByteBuffer)
+            (call wire::unsigned (call flow::field (local data) (local at) (i64 4)) (local c)))
+          (binding e
+            (type ByteBuffer)
+            (call identities
+              (local data)
+              (call ci::add (local at) (i64 48))
+              (call ci::add (local at) (i64 208))
+              (i64 32)
+              (i64 5)
+              (local d)))
+          (binding g (type ByteBuffer) (call ci::push (i64 0) (local e)))
+          (binding h
+            (type ByteBuffer)
+            (let
+              (binding wire-temp-14 (call ci::add (local at) (i64 208)))
+              (binding wire-temp-15 (call ci::add (local at) (i64 240)))
+              (binding wire-temp-16 (type ByteBuffer) (call ci::push (i64 5) (local g)))
+              (in
+                (call wire::range
+                  (local data)
+                  (local wire-temp-14)
+                  (local wire-temp-15)
+                  (local wire-temp-16)))))
+          (in (call ci::freeze (local h))))))
+    (function create instruction
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding tag (call flow::field (local data) (local at) (i64 0)))
+          (binding x (call flow::field (local data) (local at) (i64 4)))
+          (binding y (call flow::field (local data) (local at) (i64 8)))
+          (binding extra (call flow::field (local data) (local at) (i64 24)))
+          (binding count (call flow::field (local data) (local at) (i64 28)))
+          (binding a (type ByteBuffer) (call wire::unsigned (local tag) (local out)))
+          (in
+            (if
+              (call ci::eq (local tag) (i64 4))
+              (call wire::signed
+                (call integer (local data) (call ci::add (local at) (i64 16)))
+                (local a))
+              (if
+                (call ci::eq (local tag) (i64 7))
+                (let
+                  (binding wire-temp-17 (type ByteBuffer) (call wire::unsigned (local x) (local a)))
+                  (in (call wire::unsigned (local y) (local wire-temp-17))))
+                (if
+                  (call ci::eq (local tag) (i64 12))
+                  (let
+                    (binding b (type ByteBuffer) (call ci::le (i64 0) (i64 2) (local a)))
+                    (binding c (type ByteBuffer) (call wire::unsigned (local x) (local b)))
+                    (binding d
+                      (type ByteBuffer)
+                      (let
+                        (binding wire-temp-18
+                          (call ci::add (local extra) (call ci::mul (local count) (i64 4))))
+                        (binding wire-temp-19 (i64 0))
+                        (binding wire-temp-20
+                          (type ByteBuffer)
+                          (call wire::unsigned (local count) (local c)))
+                        (in
+                          (call numbers
+                            (local data)
+                            (local extra)
+                            (local wire-temp-18)
+                            (local wire-temp-19)
+                            (local wire-temp-20)))))
+                    (binding e (type ByteBuffer) (call wire::unsigned (local y) (local d)))
+                    (in (call ci::push (i64 0) (local e))))
+                  (if
+                    (call ci::eq (local tag) (i64 15))
+                    (let
+                      (binding wire-temp-22
+                        (call ci::add (local extra) (call ci::mul (local count) (i64 4))))
+                      (binding wire-temp-23 (i64 1))
+                      (binding wire-temp-24
+                        (type ByteBuffer)
+                        (let
+                          (binding wire-temp-21
+                            (type ByteBuffer)
+                            (call ci::le (i64 0) (i64 2) (local a)))
+                          (in (call wire::unsigned (local count) (local wire-temp-21)))))
+                      (in
+                        (call numbers
+                          (local data)
+                          (local extra)
+                          (local wire-temp-22)
+                          (local wire-temp-23)
+                          (local wire-temp-24))))
+                    (if
+                      (call ci::eq (local tag) (i64 17))
+                      (let
+                        (binding wire-temp-25 (type ByteBuffer) (call ci::push (i64 1) (local a)))
+                        (in (call wire::unsigned (local x) (local wire-temp-25))))
+                      (if
+                        (call ci::eq (local tag) (i64 18))
+                        (let
+                          (binding wire-temp-26
+                            (type ByteBuffer)
+                            (call wire::unsigned (local x) (local a)))
+                          (in (call wire::unsigned (local y) (local wire-temp-26))))
+                        (if
+                          (call ci::either
+                            (call ci::eq (local tag) (i64 2))
+                            (call ci::either
+                              (call ci::eq (local tag) (i64 9))
+                              (call ci::eq (local tag) (i64 27))))
+                          (local a)
+                          (call wire::unsigned (local x) (local a)))))))))))))
+    (function create instructions
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding next (type ByteBuffer) (call instruction (local data) (local at) (local out)))
+            (in
+              (call instructions
+                (local data)
+                (call ci::add (local at) (i64 32))
+                (local end)
+                (local next)))))))
+    (function create code
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding offset (call flow::field (local data) (local at) (i64 8)))
+          (binding count (call flow::field (local data) (local at) (i64 12)))
+          (binding a
+            (type ByteBuffer)
+            (call wire::unsigned (call flow::field (local data) (local at) (i64 0)) (local out)))
+          (binding b
+            (type ByteBuffer)
+            (call wire::unsigned (call flow::field (local data) (local at) (i64 4)) (local a)))
+          (binding c (type ByteBuffer) (call wire::unsigned (local count) (local b)))
+          (in
+            (call instructions
+              (local data)
+              (local offset)
+              (call ci::add (local offset) (call ci::mul (local count) (i64 32)))
+              (local c))))))
+    (function create ports
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding a
+              (type ByteBuffer)
+              (call wire::unsigned (call flow::field (local data) (local at) (i64 0)) (local out)))
+            (binding b
+              (type ByteBuffer)
+              (call wire::unsigned (call flow::field (local data) (local at) (i64 4)) (local a)))
+            (binding c (type ByteBuffer) (call ci::push (i64 0) (local b)))
+            (binding d
+              (type ByteBuffer)
+              (call wire::unsigned (call flow::field (local data) (local at) (i64 12)) (local c)))
+            (in (call ports (local data) (call ci::add (local at) (i64 16)) (local end) (local d)))))))
+    (function create payload
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding tag (call flow::field (local data) (local at) (i64 248)))
+          (binding payload (call flow::field (local data) (local at) (i64 252)))
+          (binding a (type ByteBuffer) (call wire::unsigned (local tag) (local out)))
+          (in
+            (if
+              (call ci::either (call ci::eq (local tag) (i64 6)) (call ci::eq (local tag) (i64 7)))
+              (let
+                (binding b
+                  (type ByteBuffer)
+                  (call signature
+                    (local data)
+                    (call flow::field (local data) (local at) (i64 244))
+                    (local a)))
+                (in
+                  (if
+                    (call ci::eq (local tag) (i64 6))
+                    (call string (local data) (local payload) (local b))
+                    (call code (local data) (local payload) (local b)))))
+              (if
+                (call ci::eq (local tag) (i64 9))
+                (let
+                  (binding offset (call flow::field (local data) (local payload) (i64 0)))
+                  (binding count (call flow::field (local data) (local payload) (i64 4)))
+                  (binding b
+                    (type ByteBuffer)
+                    (let
+                      (binding wire-temp-27 (type ByteBuffer) (call ci::push (i64 0) (local a)))
+                      (in (call wire::unsigned (local count) (local wire-temp-27)))))
+                  (in
+                    (call ports
+                      (local data)
+                      (local offset)
+                      (call ci::add (local offset) (call ci::mul (local count) (i64 16)))
+                      (local b))))
+                (let
+                  (binding b
+                    (type ByteBuffer)
+                    (call wire::unsigned
+                      (call flow::field (local data) (local payload) (i64 0))
+                      (local a)))
+                  (binding c
+                    (type ByteBuffer)
+                    (call ci::push
+                      (call flow::field (local data) (local payload) (i64 4))
+                      (local b)))
+                  (binding d
+                    (type ByteBuffer)
+                    (if
+                      (call ci::eq (call flow::field (local data) (local payload) (i64 4)) (i64 0))
+                      (local c)
+                      (call wire::unsigned
+                        (call flow::field (local data) (local payload) (i64 8))
+                        (local c))))
+                  (binding e (type ByteBuffer) (call ci::push (i64 0) (local d)))
+                  (in
+                    (call wire::unsigned
+                      (call flow::field (local data) (local payload) (i64 12))
+                      (local e))))))))))
+    (function create encode-unit
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns (record (digest Bytes) (image Bytes) (key Bytes)))
+      (body
+        (let
+          (binding source (call source (local data) (local at)))
+          (binding a
+            (type ByteBuffer)
+            (let
+              (binding wire-temp-28 (i64 65793))
+              (binding wire-temp-29 (i64 3))
+              (binding wire-temp-30 (type ByteBuffer) (call ci::empty))
+              (in (call ci::le (local wire-temp-28) (local wire-temp-29) (local wire-temp-30)))))
+          (binding b (type ByteBuffer) (call ci::append (local source) (i64 0) (local a)))
+          (binding key-core
+            (let
+              (binding wire-temp-31 (type ByteBuffer) (call ci::push (i64 0) (local b)))
+              (in (call ci::freeze (local wire-temp-31)))))
+          (binding c
+            (type ByteBuffer)
+            (let
+              (binding wire-temp-32 (i64 1))
+              (binding wire-temp-33 (i64 2))
+              (binding wire-temp-34 (type ByteBuffer) (call ci::empty))
+              (in (call ci::le (local wire-temp-32) (local wire-temp-33) (local wire-temp-34)))))
+          (binding d
+            (type ByteBuffer)
+            (call wire::be (call ci::length (local key-core)) (i64 8) (local c)))
+          (binding key
+            (call ci::derive
+              (text "lkjscript.compiler-unit-key")
+              (call ci::concat (call ci::freeze (local d)) (local key-core))))
+          (binding e
+            (type ByteBuffer)
+            (let
+              (binding wire-temp-35 (i64 65793))
+              (binding wire-temp-36 (i64 3))
+              (binding wire-temp-37 (type ByteBuffer) (call ci::empty))
+              (in (call ci::le (local wire-temp-35) (local wire-temp-36) (local wire-temp-37)))))
+          (binding g (type ByteBuffer) (call ci::append (local key) (i64 0) (local e)))
+          (binding h (type ByteBuffer) (call ci::append (local source) (i64 0) (local g)))
+          (binding i (type ByteBuffer) (call ci::push (i64 0) (local h)))
+          (binding j
+            (type ByteBuffer)
+            (call tables
+              (local data)
+              (call flow::field (local data) (local at) (i64 240))
+              (i64 0)
+              (local i)))
+          (binding k (type ByteBuffer) (call payload (local data) (local at) (local j)))
+          (binding image
+            (call wire::envelope
+              (text "LKJCUNIT")
+              (text "lkjscript.compiler-unit-envelope")
+              (call ci::freeze (local k))))
+          (in
+            (record structural
+              (field digest (call wire::digest (text "lkjscript.compiler-unit.v1") (local image)))
+              (field image (local image))
+              (field key (local key)))))))))
+declarations.end

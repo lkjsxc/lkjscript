@@ -1,0 +1,236 @@
+declarations.begin
+(units
+  (module create artifact
+    (function create unit-pool
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create i (type I64))
+      (parameter create count (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local i) (local count))
+          (local out)
+          (let
+            (binding at
+              (call ci::add (call ci::u32 (local data) (i64 72)) (call ci::mul (local i) (i64 8))))
+            (binding offset (call ci::u32 (local data) (local at)))
+            (binding size (call flow::field (local data) (local at) (i64 4)))
+            (binding unit
+              (call ci::slice
+                (local data)
+                (local offset)
+                (call ci::add (local offset) (local size))))
+            (binding image (field (call unit-wire::encode-unit (local unit) (i64 0)) (name image)))
+            (binding a
+              (type ByteBuffer)
+              (call ci::le (call ci::length (local image)) (i64 4) (local out)))
+            (binding b (type ByteBuffer) (call ci::append (local image) (i64 0) (local a)))
+            (in
+              (call unit-pool (local data) (call ci::add (local i) (i64 1)) (local count) (local b)))))))
+    (function create unit-facts
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create pool (type Bytes))
+      (parameter create i (type I64))
+      (parameter create at (type I64))
+      (parameter create count (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local i) (local count))
+          (local out)
+          (let
+            (binding unit
+              (call ci::u32
+                (local data)
+                (call ci::add (call ci::u32 (local data) (i64 72)) (call ci::mul (local i) (i64 8)))))
+            (binding size (call ci::u32 (local pool) (local at)))
+            (binding offset (call ci::add (local at) (i64 4)))
+            (binding end (call ci::add (local offset) (local size)))
+            (binding digest
+              (call wire::digest
+                (text "lkjscript.compiler-unit.v1")
+                (call ci::slice (local pool) (local offset) (local end))))
+            (binding a
+              (type ByteBuffer)
+              (call object-row (i64 13) (local offset) (local size) (local digest) (local out)))
+            (binding b
+              (type ByteBuffer)
+              (call ci::push
+                (call ci::add (call ci::u32 (local data) (local unit)) (i64 1))
+                (local a)))
+            (binding c
+              (type ByteBuffer)
+              (call wire::range
+                (local data)
+                (call ci::add (local unit) (i64 32))
+                (call ci::add (local unit) (i64 48))
+                (local b)))
+            (binding d
+              (type ByteBuffer)
+              (call ci::push (call flow::field (local data) (local unit) (i64 8)) (local c)))
+            (binding e
+              (type ByteBuffer)
+              (call wire::range
+                (local pool)
+                (call ci::add (local offset) (i64 21))
+                (call ci::add (local offset) (i64 53))
+                (local d)))
+            (binding f (type ByteBuffer) (call ci::append (local digest) (i64 0) (local e)))
+            (in
+              (call unit-facts
+                (local data)
+                (local pool)
+                (call ci::add (local i) (i64 1))
+                (local end)
+                (local count)
+                (local f)))))))
+    (function create pluck
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create stride (type I64))
+      (parameter create start (type I64))
+      (parameter create length (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local data)))
+          (local out)
+          (let
+            (binding offset (call ci::add (local at) (local start)))
+            (binding next
+              (type ByteBuffer)
+              (call wire::range
+                (local data)
+                (local offset)
+                (call ci::add (local offset) (local length))
+                (local out)))
+            (in
+              (call pluck
+                (local data)
+                (call ci::add (local at) (local stride))
+                (local stride)
+                (local start)
+                (local length)
+                (local next)))))))
+    (function create object-row
+      (visibility private)
+      (effect pure)
+      (parameter create domain (type I64))
+      (parameter create offset (type I64))
+      (parameter create size (type I64))
+      (parameter create digest (type Bytes))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::le (local domain) (i64 4) (local out)))
+          (binding b (type ByteBuffer) (call ci::le (i64 1) (i64 4) (local a)))
+          (binding c (type ByteBuffer) (call ci::le (local offset) (i64 4) (local b)))
+          (binding d (type ByteBuffer) (call ci::le (local size) (i64 4) (local c)))
+          (in (call ci::append (local digest) (i64 0) (local d))))))
+    (function create compile-admitted
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding count (call ci::u32 (local data) (i64 76)))
+          (binding meta-offset (call ci::u32 (local data) (i64 88)))
+          (binding meta
+            (call ci::slice
+              (local data)
+              (local meta-offset)
+              (call ci::add (local meta-offset) (call ci::u32 (local data) (i64 92)))))
+          (binding a (type ByteBuffer) (call ci::empty))
+          (binding b
+            (type ByteBuffer)
+            (call unit-pool (local data) (i64 0) (local count) (local a)))
+          (binding pool (call ci::freeze (local b)))
+          (binding c (type ByteBuffer) (call ci::empty))
+          (binding d
+            (type ByteBuffer)
+            (call unit-facts (local data) (local pool) (i64 0) (i64 0) (local count) (local c)))
+          (binding facts (call ci::freeze (local d)))
+          (binding e (type ByteBuffer) (call ci::empty))
+          (binding f
+            (type ByteBuffer)
+            (call pluck (local facts) (i64 0) (i64 130) (i64 48) (i64 82) (local e)))
+          (binding bindings (call ci::freeze (local f)))
+          (binding map (call unit-map::encode (local bindings)))
+          (binding map-image (field (local map) (name image)))
+          (binding compilation
+            (call artifact-manifest::compilation
+              (local meta)
+              (field (local map) (name digest))
+              (field (local map) (name content))
+              (local count)))
+          (binding compilation-digest
+            (call wire::digest
+              (text "lkjscript.compilation-manifest-object.v1")
+              (local compilation)))
+          (binding generated
+            (call ci::concat (call ci::concat (local pool) (local map-image)) (local compilation)))
+          (binding g (type ByteBuffer) (call ci::empty))
+          (binding h
+            (type ByteBuffer)
+            (call pluck (local facts) (i64 0) (i64 130) (i64 0) (i64 48) (local g)))
+          (binding i
+            (type ByteBuffer)
+            (call object-row
+              (i64 5)
+              (call ci::length (local pool))
+              (call ci::length (local map-image))
+              (field (local map) (name digest))
+              (local h)))
+          (binding j
+            (type ByteBuffer)
+            (call object-row
+              (i64 24)
+              (call ci::add (call ci::length (local pool)) (call ci::length (local map-image)))
+              (call ci::length (local compilation))
+              (local compilation-digest)
+              (local i)))
+          (binding derived (call ci::freeze (local j)))
+          (binding k (type ByteBuffer) (call ci::empty))
+          (binding l
+            (type ByteBuffer)
+            (call artifact-order::sorted (local derived) (i64 -1) (local k)))
+          (binding sorted (call ci::freeze (local l)))
+          (binding source-offset (call ci::u32 (local data) (i64 80)))
+          (binding source
+            (call ci::slice
+              (local data)
+              (local source-offset)
+              (call ci::add
+                (local source-offset)
+                (call ci::mul (call ci::u32 (local data) (i64 84)) (i64 48)))))
+          (binding m (type ByteBuffer) (call ci::empty))
+          (binding n
+            (type ByteBuffer)
+            (call artifact-order::merge (local source) (i64 0) (local sorted) (i64 0) (local m)))
+          (binding rows (call ci::freeze (local n)))
+          (binding manifest
+            (call artifact-manifest::artifact
+              (local meta)
+              (local compilation-digest)
+              (call artifact-order::closure (local rows))
+              (call ci::div (call ci::length (local rows)) (i64 48))
+              (call artifact-order::byte-count (local rows) (i64 0) (i64 0))))
+          (binding packed (call pack::encode (local data) (local generated) (local rows)))
+          (binding image
+            (call artifact-manifest::container
+              (local manifest)
+              (field (local packed) (name digest))
+              (field (local packed) (name image))))
+          (in (record structural (field diagnostic (i64 0)) (field image (local image)))))))))
+declarations.end

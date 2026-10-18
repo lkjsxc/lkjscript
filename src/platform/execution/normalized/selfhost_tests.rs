@@ -9,6 +9,8 @@ use std::sync::OnceLock;
 
 #[path = "selfhost_admission_tests.rs"]
 mod admission;
+#[path = "selfhost_artifact_tests.rs"]
+mod artifact;
 #[path = "selfhost_bytes_tests.rs"]
 mod bytes;
 #[path = "selfhost_closure_tests.rs"]
@@ -24,7 +26,7 @@ fn selfhost_normalized_byte_inventory_exports_current_compiler() {
         .unwrap()
         .0 as usize;
     let payload = input::export(program, entry).unwrap();
-    assert_eq!(u32_at(&payload, 8), 3);
+    assert_eq!(u32_at(&payload, 8), 4);
     eprintln!(
         "selfhost byte inventory functions={} nodes={} input_bytes={} types={}",
         u32_at(&payload, 92),
@@ -168,7 +170,17 @@ fn proposed_compiler(
         };
         let (initial, changes) = proposals::steps(&proposal).unwrap();
         let initial = byte_buffer_tests::author_only(&initial).unwrap();
-        let source = apply_proposals(&initial, changes);
+        // Full reconstruction retains its accepted authoring history. Use the
+        // ordinary disk repository instead of exhausting a finite memory arena.
+        let directory = tempfile::tempdir().unwrap();
+        let repository = GraphRepository::create(
+            &directory.path().join("compiler-reconstruction"),
+            &initial,
+            None,
+        )
+        .unwrap()
+        .repository;
+        let source = publish_proposals(&repository, changes);
         let program = prepare_snapshot(&source);
         (source, program)
     })
@@ -416,6 +428,13 @@ fn selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines() 
     proposal.push_str("))\ndeclarations.end\n");
     let source = byte_buffer_tests::author_only(&proposal).unwrap();
     let program = prepare_snapshot(&source);
+    let artifact_input =
+        crate::platform::compiler::selfhost_artifact_input::bundle(program.artifact()).unwrap();
+    let emitted_artifact = artifact::image("compile-elf", &artifact_input);
+    let artifact_program = NormalizedProgram::prepare(
+        crate::platform::compiler::load_artifact(&emitted_artifact).unwrap(),
+    )
+    .unwrap();
     for (name, _, expected, trap) in cases {
         let declaration = declaration_named(&source, name);
         let index = program.function(declaration).unwrap().0 as usize;
@@ -425,7 +444,7 @@ fn selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines() 
         assert_eq!(code, 0, "{name}");
         let output = execute(&image, &[]);
         eprintln!(
-            "selfhost profile=3 tier=backend case={name} input_sha256={} elf_sha256={} elf_bytes={} exit={:?}",
+            "selfhost profile=4 tier=backend case={name} input_sha256={} elf_sha256={} elf_bytes={} exit={:?}",
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&bytes)),
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&image)),
             image.len(),
@@ -448,6 +467,18 @@ fn selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines() 
             None,
             &control,
         );
+        let artifact_vm = NormalizedVm::for_test(&artifact_program, policy).invoke(
+            declaration,
+            vec![],
+            None,
+            &control,
+        );
+        let artifact_reference = NormalizedReferenceInterpreter::new(
+            &source,
+            &artifact_program,
+            policy,
+        )
+        .invoke(declaration, vec![], None, &control);
         if let Some(expected) = expected {
             assert_eq!(output.status.code(), Some(0), "{name}");
             assert_eq!(output.stdout, expected.as_bytes(), "{name}");
@@ -455,6 +486,8 @@ fn selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines() 
             let value = NormalizedValue::I64(expected.parse().unwrap());
             assert_eq!(vm.unwrap().0, value, "{name}");
             assert_eq!(reference.unwrap().0, value, "{name}");
+            assert_eq!(artifact_vm.unwrap().0, value, "{name}");
+            assert_eq!(artifact_reference.unwrap().0, value, "{name}");
         } else {
             assert_eq!(output.status.code(), Some(70), "{name}");
             assert!(output.stdout.is_empty(), "{name}");
@@ -465,6 +498,11 @@ fn selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines() 
             );
             assert_eq!(vm.unwrap_err().code, format!("normalized_{trap}"));
             assert_eq!(reference.unwrap_err().code, format!("reference_{trap}"));
+            assert_eq!(artifact_vm.unwrap_err().code, format!("normalized_{trap}"));
+            assert_eq!(
+                artifact_reference.unwrap_err().code,
+                format!("reference_{trap}")
+            );
         }
     }
 }
@@ -495,7 +533,8 @@ fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
         (100, 0, 3),
         (104, 0, 5),
         (108, 0, 5),
-        (112, 1, 5),
+        (112, 1, 10),
+        (112, 2, 2),
         (116, 0, 5),
         (120, 1, 5),
         (128, 99, 5),

@@ -1,0 +1,5 @@
+declarations.begin
+(units (module create independent
+  (function create entry (visibility public) (effect pure) (returns I64)
+    (body (i64 42)))))
+declarations.end

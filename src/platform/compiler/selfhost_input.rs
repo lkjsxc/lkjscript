@@ -23,7 +23,7 @@ fn unsupported() -> Diagnostic {
         DiagnosticClass::Source,
         "compiler_input_unsupported",
         format!(
-            "LKJCI1 profile 3 requires a bounded closed pure byte/aggregate function closure with forward branches (exporter precondition at {})",
+            "LKJCI1 profile 4 requires a bounded closed pure byte/aggregate function closure with forward branches (exporter precondition at {})",
             std::panic::Location::caller()
         ),
     )
@@ -706,7 +706,7 @@ pub(crate) fn encode_records(
         return Err(unsupported());
     }
     bytes[..8].copy_from_slice(b"LKJCI001");
-    word(&mut bytes, 8, 3);
+    word(&mut bytes, 8, 4);
     word(&mut bytes, 12, entry);
     let length = bytes.len() as u64;
     bytes[16..24].copy_from_slice(&length.to_le_bytes());
@@ -752,7 +752,7 @@ pub(crate) fn rechecksum(bytes: &mut [u8]) {
 }
 
 /// Small independent test builder. Arithmetic operation IDs are test notation,
-/// not a second wire reader; only profile 3 is emitted.
+/// not a second wire reader; only profile 4 is emitted.
 pub(crate) fn arithmetic(operations: &[(u32, i64)]) -> Result<Vec<u8>, Diagnostic> {
     let mut root = Function {
         result: 1,

@@ -1,4 +1,4 @@
-//! Raw profile-3 certificates are hostile input, even when their digest is valid.
+//! Raw profile-4 certificates are hostile input, even when their digest is valid.
 use super::*;
 
 fn node(tag: u32, a: u32, b: u32, initialized: &[u8], stack: &[u8]) -> input::Node {

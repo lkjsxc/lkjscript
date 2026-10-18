@@ -44,26 +44,25 @@ Linux x86_64 ELF emission with direct three-way execution checks. Native lowerin
 leaves metered bytecode unchanged. The [native backend contract](spec/native-elf.md)
 states its supported instructions, I64 argument boundary and quota distinction.
 The self-hosting contract targets Tier 2 semantic compiler closure. The Tier 1
-backend validates LKJCI1 profile 3 normalized byte/aggregate closures and emits ELF
-on both evaluators and natively. Rust source admission/export remain required.
+backend validates LKJCI1 profile 4 byte/aggregate and canonical-unit projections,
+emitting ELF or `.lkja`. Rust source admission/export remain required.
 The maintained meaning graph and [schema/dependency inventory](spec/selfhosting.md)
 identify the current boundary. Focused native backend reproduction has identical
-C2/C3 bytes; semantic source-graph reproduction and `.lkja` emission remain next.
+C2/C3 ELF and A1/A2/A3 artifact bytes, including changed-source behavior.
 
-Latest Attempt: not_run — official acceptance of domain hashing for `.lkja` identities.
-Published vectors, context boundaries, signature rejection, proposal replay and
-C2/C3 reproduction passed focused checks; public hash execution and Clippy passed.
-Current artifact serialization remains next, with Rust admission/export retained.
-Last Accepted Commit: `45c088f9` (native backend closure, integrated on origin/main).
-All 22 compiler and eight native runtime tests passed inside official full;
-two public CLI focused tests and source mutation/reproduction passed too.
+Latest Attempt: running — official acceptance of profile-4 backend closure.
+All 34 compiler cases passed across the focused suite and targeted retries;
+strict artifact loading/execution, public CLI, native runtime and Clippy passed.
+Last Accepted Commit: `b2aaa22e` (domain hashing, integrated on origin/main).
+All 24 compiler and ten native runtime tests passed inside official full;
+published derive-key vectors, public execution and native reproduction passed too.
 The clean candidate changed check selected two gates; fresh full passed all 29
 gates, all freshly executed with stable input, and release-target policy passed.
-`.artifacts/selfhost/accepted-d-native/receipt.json` binds source and limitations.
-Known Limitations: no self-produced `.lkja` or source-graph semantic checker.
+`.artifacts/selfhost/accepted-d-domain/receipt.json` binds source and limitations.
+Known Limitations: artifact closure awaits official acceptance; no source semantic checker.
 Native allocation is process-owned, with no lexical region reclamation or RSS
 claim. Broader types, witnesses, regions and source-graph C2/C3 proof remain required
-for Tier 2; native reproduction from normalized input does not complete Milestone D.
+for Tier 2; these byte fixed points still consume Rust-admitted input.
 Git records integration; local acceptance does not establish hosted release or
 public promotion. [Verification](spec/verification.md) owns proof and gates;
 [release](release.md) owns candidate and publication authority.

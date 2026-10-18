@@ -1,0 +1,27 @@
+declarations.begin
+(units (module create artifact-probes
+  (function create probe-signed (visibility public) (effect pure)
+    (parameter create data (type Bytes)) (returns (record (diagnostic I64) (image Bytes)))
+    (body (let
+      (binding out (type ByteBuffer) (call ci::empty))
+      (binding encoded (type ByteBuffer) (call wire::signed (call unit-wire::integer (local data) (i64 0)) (local out)))
+      (in (record structural (field diagnostic (i64 0)) (field image (call ci::freeze (local encoded))))))))
+  (function create probe-unit (visibility public) (effect pure)
+    (parameter create data (type Bytes)) (returns (record (diagnostic I64) (image Bytes)))
+    (body (let (binding accepted (call artifact-check::unit (local data)))
+      (in (record structural (field diagnostic (if (local accepted) (i64 0) (i64 10)))
+        (field image (if (local accepted)
+          (field (call unit-wire::encode-unit (local data) (i64 0)) (name image))
+          (call ci::text-bytes (text "")))))))))
+  (function create probe-map (visibility public) (effect pure)
+    (parameter create data (type Bytes)) (returns (record (diagnostic I64) (image Bytes)))
+    (body (record structural (field diagnostic (i64 0))
+      (field image (field (call unit-map::encode (local data)) (name image))))))
+  (function create probe-pack (visibility public) (effect pure)
+    (parameter create data (type Bytes)) (returns (record (diagnostic I64) (image Bytes)))
+    (body (let
+      (binding rows (call ci::slice (local data) (i64 4) (call ci::add (i64 4) (call ci::u32 (local data) (i64 0)))))
+      (in (record structural (field diagnostic (i64 0))
+        (field image (field (call pack::encode (local data) (call ci::text-bytes (text "")) (local rows)) (name image))))))))
+))
+declarations.end

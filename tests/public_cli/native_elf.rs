@@ -174,14 +174,14 @@ fn native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter() {
         "compile-elf",
     ]);
 
-    // Independently encode profile 3: a main function calls checked add(1, 41).
+    // Independently encode profile 4: a main function calls checked add(1, 41).
     // No exporter/code generator is used to construct this input.
     let mut payload = vec![0u8; 2390];
     payload[..8].copy_from_slice(b"LKJCI001");
     fn put(bytes: &mut [u8], at: usize, value: u32) {
         bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
     }
-    put(&mut payload, 8, 3);
+    put(&mut payload, 8, 4);
     for (at, value) in [(16, 2390u64), (24, 2), (32, 5890)] {
         payload[at..at + 8].copy_from_slice(&value.to_le_bytes());
     }

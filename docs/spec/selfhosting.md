@@ -25,22 +25,26 @@ retain compact evidence before removing task-owned stage binaries.
 
 ## Current canonical input: LKJCI1
 
-All integers are little-endian. Magic is `LKJCI001`; only profile `3` is
-admitted. Earlier profile readers are removed. This is a Rust-admitted normalized
-byte/aggregate function closure for Tier 1, not the final semantic graph profile.
+All integers are little-endian. Magic is `LKJCI001`; only profile `4` is
+admitted. Earlier profile readers are removed. The u32 at offset 112 selects
+ELF (0) or artifact (1) emission. Both modes retain Rust semantic admission and
+IR export as Tier 1 boundaries. The ELF layout follows; the
+[artifact layout](selfhosting-artifact-input.md) supplies canonical unit fields
+and source objects. Neither is the final semantic graph profile.
 
 | Header offset | Width | Meaning |
 | --- | --- | --- |
 | 0 | 8 | Magic |
-| 8 | 4 | Profile and flags, exactly 3 |
+| 8 | 4 | Profile and flags, exactly 4 |
 | 12 | 4 | Root function index |
 | 16 | 8 | Actual complete input byte length |
 | 24 | 8 | Function count F, 1 through 1024 |
 | 32 | 8 | Traversal fuel |
 | 40 | 32 | BLAKE3 of bytes `[0,40)` concatenated with `[72,length)` |
 
-The decoder bounds actual input to 2248 through 8,388,608 bytes before hashing or
-table access. Header lengths, counts and fuel require zero high words. There are
+The common decoder bounds actual input to 160 through 8,388,608 bytes before
+hashing or table access; ELF mode additionally requires at least 2248 bytes.
+Header lengths, counts and fuel require zero high words. In ELF mode there are
 1 through 32768 instructions; locals, operand depth and record fields are each
 bounded by 128. The root is either `() -> I64` or the exact binary-filter
 signature `(Bytes) -> {diagnostic: I64, image: Bytes}`; other signatures reject
@@ -156,8 +160,12 @@ authoring proposals admitted through ordinary public operations. `ci`, `flow`,
 `types`, `custody`, `profile` and `values` validate and decode input. `asm`,
 `machine` and `aggregate` select native instructions; `heap`, `objects`, `hash`,
 `stream`, `runtime` and `elf` emit the runtime and executable framing.
+`artifact-input` and `artifact-check` validate artifact projection structure;
+`wire`, `unit-wire`, `unit-map`, `pack`, `artifact-order`, `artifact-manifest` and
+`artifact` construct current units, maps, manifests, packs and the container.
 `elf::compile-elf` returns `{diagnostic: I64, image: Bytes}`. Zero means success;
-all rejections return empty bytes before the binary filter writes stdout.
+the explicit input selector chooses ELF or `.lkja` output. All rejections return
+empty bytes before the binary filter writes stdout.
 
 | Code | Rejection |
 | --- | --- |
@@ -170,12 +178,14 @@ all rejections return empty bytes before the binary filter writes stdout.
 | 7 | Unsupported/malformed instruction form |
 | 8 | Invalid types, UTF-8 literal, stack, custody, primitive signature, call or edge |
 | 9 | Unsupported root signature |
+| 10 | Artifact projection layout, unit form, owner metadata or required reference |
+| 11 | Artifact source-object domain, order, extent or digest |
 
-Validation order is outer extent, magic, profile, header lengths/counts, digest,
+ELF validation order is outer extent, magic, profile/selector, header lengths/counts, digest,
 directory/module extents and root index, fuel, types and complete layout, root
 signature, then every function's
 entry and instruction transfers. Offsets use checked I64 arithmetic over bounded
-counts. Output is exactly `65536 + 512*F + 128*N + B` bytes. A ByteBuffer owns
+counts. ELF output is exactly `65536 + 512*F + 128*N + B` bytes. A ByteBuffer owns
 it until freeze. Header/data padding is zero and code padding is NOP. It contains
 no paths, timestamps, random IDs or host addresses. Literal bytes and record
 permutations are copied from the canonical blob as read-only data; this is data,
@@ -210,16 +220,26 @@ Compiler workload measurements use the existing trusted foreground evaluator
 policy where needed. Cumulative modeled allocation charges measure work, not
 live heap or RSS. No runtime quota or verifier policy is raised for these tests.
 
-A focused run with domain-derived hashing exported 156 functions and 9,443
-instructions in 483,030 bytes. VM, reference and Rust-built native compiler execution
-emitted the same 1,526,550-byte ELF, and that output reproduced itself byte for byte. Both
-native stages compiled independent programs, rejected malformed ownership input
-and compiled changed compiler source with an observable diagnostic change.
-Both stages also emitted hash programs matching 35 published derivation vectors.
-The run observed 64,861,502 VM instructions and 36,165,064 reference expressions;
-cumulative modeled allocation was 6,260,847,693 and 8,141,362,558 bytes respectively.
-This is Tier 1 native backend reproduction from Rust-normalized input. It does
-not establish `.lkja` closure, region-native compiler storage or semantic self-hosting.
+Focused profile-4 execution exported 244 reachable functions and 16,111
+instructions in 794,236 bytes. VM, reference and Rust-built native compiler execution
+emitted the same 2,519,420-byte ELF; C2 and C3 are byte-identical. Artifact projection
+contains 247 canonical units and 4,126,413 input bytes. A1, A2 and A3 are identical
+4,349,511-byte bundles, also matching VM/reference emission. Every unit matches
+the current canonical encoding; the unchanged strict loader admits the complete
+artifact and both evaluators execute its compiler. Independent programs cover
+branches, recursion, tail calls, integer limits, overflow, division by zero and
+trap order. Native stages also emit hash programs matching 35 published vectors.
+Both stages compile a source mutation into ELF and artifact; the resulting
+compiler emits programs with the deliberately changed argument diagnostic.
+
+ELF emission observed 105,866,005 VM instructions and 59,048,940 reference
+expressions, with cumulative modeled allocation of 10,275,753,351 and
+13,326,093,983 bytes. Artifact emission observed 296,112,311 VM instructions and
+153,493,373 reference expressions, with cumulative modeled allocation of
+31,909,160,503 and 36,294,774,728 bytes. Artifact scans use tail calls; the complete
+compiler run has maximum call depth 19 on VM and 20 on reference. These are
+work and call-depth observations, not live heap or RSS measurements. This is
+Tier 1 reproduction from Rust-admitted input, not semantic self-hosting.
 
 ## Dependency inventory and next cutover
 
@@ -232,17 +252,18 @@ not establish `.lkja` closure, region-native compiler storage or semantic self-h
 | List literals/length/get and result records | VM, reference, native ELF | Covered by the complete current compiler closure |
 | Bounded binary input and atomic output staging | Native stdin/stdout filter; external staging harness | Native reproduction is a Tier 1 verification obligation |
 
-This first component has no phase-local graph arena: it makes one linear bounded
-pass over immutable input and emits into owned buffers. Region-native compiler
-tables become necessary as source decoding, type environments, normalization and
+This component has no phase-local graph arena: it scans immutable input and
+constructs derived rows and output in owned buffers. Artifact emission also sorts
+derived object rows and builds the compilation map's logical radix digest.
+Region-native compiler tables become necessary as source decoding, type environments, normalization and
 relocations grow. It does not claim region-exclusive execution or reduced RSS.
 The host can now build this lkjscript component as a standalone native compiler.
 Select its `compile-elf` command target. The exact binary-filter signature and
 16 MiB transport bound are specified in [native ELF](native-elf.md). Native output
 must equal VM/reference output for positive, malformed and mutated-source cases.
-Milestone C and the scalar closure step are accepted. The current byte/aggregate
-extension targets complete native backend closure. Milestone D additionally
-requires current `.lkja` emission; E/F require semantic admission, phase-local
+Milestone C and the earlier native backend closure are accepted. Both-output
+closure has focused evidence; official acceptance is recorded separately.
+E/F require semantic admission, phase-local
 regions and the native source-graph fixed point. Optimizers and parallel compilation
 remain deferred.
 
@@ -253,7 +274,7 @@ standard declarations, plus independent programs exercising I64 traps, Bool,
 Unit, Text, Bytes, structural/nominal records and choices, sequences/buffers,
 lexical region allocation/read/write/freeze, recursion, self-tail calls, closures
 and explicit contract/implementation witnesses. Missing features remain known
-limitations; profile 3 does not reduce these final requirements. Unsupported
+limitations; profile 4 does not reduce these final requirements. Unsupported
 broader constructs, including F64 and service capabilities, must reject before
 publication with deterministic diagnostics.
 
@@ -272,7 +293,8 @@ framing/tables/fuel/opcodes/states, signed limits, arithmetic trap order, calls,
 branches, recursive and self-tail calls, initialization and stack alignment,
 deterministic compilation and a changed compiler diagnostic. Those are Tier 1
 tests. Native reproduction from normalized input is a Tier 1 fixed point; it does
-not establish the required semantic source-graph fixed point or `.lkja` closure.
+not establish the required semantic source-graph fixed point. Artifact closure
+additionally requires strict loading and A2/A3 byte equality.
 
 Final acceptance additionally requires complete source S and mutated S' runs,
 negative type/affine/borrow/region/effect admission, both output formats, region

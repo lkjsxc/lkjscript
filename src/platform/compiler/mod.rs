@@ -19,6 +19,8 @@ mod link;
 mod lower;
 pub(crate) mod manifest;
 #[cfg(test)]
+pub(crate) mod selfhost_artifact_input;
+#[cfg(test)]
 pub(crate) mod selfhost_input;
 pub(crate) mod unit;
 

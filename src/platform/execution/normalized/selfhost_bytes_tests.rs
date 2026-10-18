@@ -428,6 +428,79 @@ fn selfhost_byte_backend_reproduces_its_complete_native_closure() {
         c2.len(),
         crate::platform::semantic_id::encode_hex(&Sha256::digest(&c2))
     );
+    let (artifact_input, artifact_expected) = artifact::complete_compiler();
+    let independent_artifact_source = byte_buffer_tests::author_only(
+        &include_str!("../../../../tests/fixtures/selfhost-artifact-empty-runtime.lkjc")
+            .replace("(i64 42)", "(i64 -91)"),
+    )
+    .unwrap();
+    let independent_artifact_program = prepare_snapshot(&independent_artifact_source);
+    let independent_artifact_input = crate::platform::compiler::selfhost_artifact_input::bundle(
+        independent_artifact_program.artifact(),
+    )
+    .unwrap();
+    let independent_artifact_expected = artifact::image("compile-elf", &independent_artifact_input);
+    for (name, stage) in [("C2", &c2), ("C3", &output.stdout)] {
+        let produced = native_filter_tests::execute_filter(stage, artifact_input, &[], 4093);
+        assert_eq!(
+            produced.status.code(),
+            Some(0),
+            "{name}: {:?}",
+            produced.stderr
+        );
+        assert!(produced.stderr.is_empty());
+        assert!(
+            produced.stdout == *artifact_expected,
+            "{name} artifact differs"
+        );
+        crate::platform::compiler::load_artifact(&produced.stdout).unwrap();
+        eprintln!(
+            "selfhost tier=backend stage={name} artifact_input_bytes={} artifact_input_sha256={} artifact_bytes={} artifact_sha256={}",
+            artifact_input.len(),
+            crate::platform::semantic_id::encode_hex(&Sha256::digest(artifact_input)),
+            produced.stdout.len(),
+            crate::platform::semantic_id::encode_hex(&Sha256::digest(&produced.stdout))
+        );
+        let mut malformed = artifact_input.clone();
+        malformed[40] ^= 1;
+        let rejected = native_filter_tests::execute_filter(stage, &malformed, &[], 127);
+        assert_eq!(rejected.status.code(), Some(65));
+        assert!(rejected.stdout.is_empty());
+        assert_eq!(rejected.stderr, b"compiler_rejected:4\n");
+        for offset in [72, 80] {
+            let mut malformed = artifact_input.clone();
+            malformed[offset..offset + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+            input::rechecksum(&mut malformed);
+            let rejected = native_filter_tests::execute_filter(stage, &malformed, &[], 127);
+            assert_eq!(rejected.status.code(), Some(65));
+            assert!(rejected.stdout.is_empty());
+            assert_eq!(rejected.stderr, b"compiler_rejected:10\n");
+        }
+        let produced =
+            native_filter_tests::execute_filter(stage, &independent_artifact_input, &[], 13);
+        assert_eq!(produced.status.code(), Some(0));
+        assert!(produced.stderr.is_empty());
+        assert!(produced.stdout == independent_artifact_expected);
+        let loaded = crate::platform::compiler::load_artifact(&produced.stdout).unwrap();
+        let prepared = NormalizedProgram::prepare(loaded).unwrap();
+        let entry = declaration_named(&independent_artifact_source, "entry");
+        let control = ExecutionControl::uncancelled();
+        let policy = NormalizedRunPolicy::foreground();
+        assert_eq!(
+            NormalizedVm::for_test(&prepared, policy)
+                .invoke(entry, vec![], None, &control)
+                .unwrap()
+                .0,
+            NormalizedValue::I64(-91)
+        );
+        assert_eq!(
+            NormalizedReferenceInterpreter::new(&independent_artifact_source, &prepared, policy)
+                .invoke(entry, vec![], None, &control)
+                .unwrap()
+                .0,
+            NormalizedValue::I64(-91)
+        );
+    }
     let independent = input::arithmetic(&[(1, 6), (1, 7), (4, 0), (6, 0)]).unwrap();
     let buffer_source = byte_buffer_tests::author_only(&format!("{}\ndeclarations.begin\n(units (module create standalone (function create entry (visibility public) (effect pure) (returns I64) (body (call native-bytes::buffer-growth (i64 4097) (i64 4096))))))\ndeclarations.end\n", include_str!("../../../../tests/fixtures/native-bytes.lkjc"))).unwrap();
     let buffer_program = prepare_snapshot(&buffer_source);
@@ -506,7 +579,27 @@ fn selfhost_byte_backend_reproduces_its_complete_native_closure() {
         NormalizedRunPolicy::foreground(),
     );
     assert_eq!(code, 0);
+    let mutant_artifact_input =
+        crate::platform::compiler::selfhost_artifact_input::bundle(mutant_program.artifact())
+            .unwrap();
+    let mutant_artifact_expected = artifact::image("compile-elf", &mutant_artifact_input);
+    assert!(mutant_artifact_expected != *artifact_expected);
     for stage in [&c2, &output.stdout] {
+        let produced =
+            native_filter_tests::execute_filter(stage, &mutant_artifact_input, &[], 4093);
+        assert_eq!(produced.status.code(), Some(0), "{:?}", produced.stderr);
+        assert!(produced.stderr.is_empty());
+        assert!(produced.stdout == mutant_artifact_expected);
+        let loaded = crate::platform::compiler::load_artifact(&produced.stdout).unwrap();
+        let prepared = NormalizedProgram::prepare(loaded).unwrap();
+        let (code, changed_artifact_output) = compile_with_policy(
+            mutant_source,
+            &prepared,
+            &independent,
+            NormalizedRunPolicy::foreground(),
+        );
+        assert_eq!(code, 0);
+        assert!(changed_artifact_output == changed_expected);
         let mutant = native_filter_tests::execute_filter(stage, &mutant_input, &[], 4093);
         assert_eq!(mutant.status.code(), Some(0), "stderr={:?}", mutant.stderr);
         assert!(mutant.stderr.is_empty());
@@ -527,6 +620,13 @@ fn selfhost_byte_backend_reproduces_its_complete_native_closure() {
         assert!(usage.stdout.is_empty());
         assert_eq!(usage.stderr, b"mutant_argument\n");
     }
+    eprintln!(
+        "selfhost tier=backend mutated_artifact input_bytes={} input_sha256={} artifact_bytes={} artifact_sha256={}; C2/C3 bytes and mutated compiler behavior passed",
+        mutant_artifact_input.len(),
+        crate::platform::semantic_id::encode_hex(&Sha256::digest(&mutant_artifact_input)),
+        mutant_artifact_expected.len(),
+        crate::platform::semantic_id::encode_hex(&Sha256::digest(&mutant_artifact_expected))
+    );
     eprintln!(
         "selfhost tier=backend mutated_source_input_sha256={} mutated_compiler_sha256={} mutated_compiler_bytes={}",
         crate::platform::semantic_id::encode_hex(&Sha256::digest(&mutant_input)),
