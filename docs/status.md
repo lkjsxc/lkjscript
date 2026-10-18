@@ -1,6 +1,6 @@
 # Current status
 
-Updated 2026-10-16. Accepted typed meaning remains the sole editable authority.
+Updated 2026-10-18. Accepted typed meaning remains the sole editable authority.
 Production bytecode is checked against an independent canonical interpreter.
 Verification has no three-minute requirement; elapsed time is an observation.
 
@@ -43,7 +43,21 @@ Phase 4 adds bounded trap-preserving native algebraic optimization and standalon
 Linux x86_64 ELF emission with direct three-way execution checks. Native lowering
 leaves metered bytecode unchanged. The [native backend contract](spec/native-elf.md)
 states its supported instructions, I64 argument boundary and quota distinction.
-Effect/resource analysis and self-hosting remain subsequent work.
+The self-hosting contract now targets Tier 2 semantic compiler closure; the first
+Tier 1 backend component validates LKJCI1 normalized I64 input and emits ELF on
+both evaluators. Rust source admission/export remain required. The maintained
+meaning graph and [schema/dependency inventory](spec/selfhosting.md) identify the
+current boundary. Native byte/buffer execution and binary I/O are next, followed
+by backend closure, semantic admission, both formats and C2/C3 fixed-point proof.
+
+Latest Attempt: passed — five focused tests cover both compiler evaluators,
+independent ELF execution, malformed inputs, exact limits and source mutation.
+Changed acceptance passed all 29 discovered gates freshly with stable inputs.
+The final fresh-full outcome and exact-tree digest belong to the latest receipt.
+Last Accepted Commit before this candidate: `b83b6dd5` (native backend).
+Known Limitations: no native compiler execution, self-produced `.lkja`, complete
+compiler closure, semantic checker or C2/C3 proof. Required broader types,
+ownership, witnesses and regions remain in the Tier 2 acceptance profile.
 Git records integration; local acceptance does not establish hosted release or
 public promotion. [Verification](spec/verification.md) owns proof and gates;
 [release](release.md) owns candidate and publication authority.

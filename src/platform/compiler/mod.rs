@@ -18,6 +18,8 @@ mod immutable;
 mod link;
 mod lower;
 pub(crate) mod manifest;
+#[cfg(test)]
+pub(crate) mod selfhost_input;
 pub(crate) mod unit;
 
 pub(crate) use artifact::{

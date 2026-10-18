@@ -4,6 +4,10 @@
 #[path = "native_elf_tests.rs"]
 mod native_elf_tests;
 
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "selfhost_tests.rs"]
+mod selfhost_tests;
+
 #[path = "region_persistence_tests.rs"]
 mod region_persistence_tests;
 #[path = "region_types_tests.rs"]
