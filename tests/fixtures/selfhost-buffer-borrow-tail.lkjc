@@ -1,0 +1,12 @@
+declarations.begin
+(units (module create borrow_tail
+  (external create empty (visibility private) (implementation core.buffer.empty) (returns ByteBuffer))
+  (external create length (visibility private) (implementation core.buffer.length)
+    (parameter create value (type ByteBuffer) (use borrow)) (returns I64))
+  (function create read (visibility private) (effect pure)
+    (parameter create value (type ByteBuffer) (use borrow)) (returns I64)
+    (body (call length (local value))))
+  (function create entry (visibility public) (effect pure) (returns I64)
+    (body (let (binding owned (type ByteBuffer) (call empty))
+      (in (call read (local owned))))))))
+declarations.end

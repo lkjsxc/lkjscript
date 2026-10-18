@@ -2,24 +2,30 @@
 //! No expression evaluation, native instruction selection, or runtime templates.
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::normalized::prepare::{
-    NormalizedFunctionBody, NormalizedInstruction as I, NormalizedProgram,
+    NormalizedFieldSelector, NormalizedFunctionBody, NormalizedInstruction as I, NormalizedProgram,
 };
-use crate::platform::kernel::{FunctionEffect, ParameterUse, TypeForm};
+use crate::platform::kernel::{
+    FunctionEffect, ParameterUse, ResultRelation, TypeForm, TypeObjectDigest,
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) const HEADER: usize = 72;
-pub(crate) const DECLARATIONS: usize = 176;
-pub(crate) const MAX_FUNCTIONS: usize = 256;
-pub(crate) const MAX_NODES: usize = 4096;
+pub(crate) const DECLARATIONS: usize = 2176;
+pub(crate) const MAX_FUNCTIONS: usize = 1024;
+pub(crate) const MAX_NODES: usize = 32768;
 pub(crate) const MAX_LOCALS: usize = 128;
 pub(crate) const MAX_STACK: usize = 128;
-pub(crate) const MAX_INPUT: usize = 2 * 1024 * 1024;
+pub(crate) const MAX_INPUT: usize = 8 * 1024 * 1024;
 
+#[track_caller]
 fn unsupported() -> Diagnostic {
     Diagnostic::new(
         DiagnosticClass::Source,
         "compiler_input_unsupported",
-        "LKJCI1 profile 2 requires a bounded pure scalar function closure with forward branches",
+        format!(
+            "LKJCI1 profile 3 requires a bounded closed pure byte/aggregate function closure with forward branches (exporter precondition at {})",
+            std::panic::Location::caller()
+        ),
     )
 }
 
@@ -32,6 +38,7 @@ pub(crate) struct Node {
     pub immediate: i64,
     pub initialized: Vec<u8>,
     pub stack: Vec<u8>,
+    pub data: Vec<u8>,
 }
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Function {
@@ -47,15 +54,91 @@ struct State {
     stack: Vec<u8>,
 }
 
-fn scalar(
-    program: &NormalizedProgram,
-    ty: crate::platform::kernel::TypeObjectDigest,
-) -> Result<u8, Diagnostic> {
-    match program.types.get(&ty).map(|ty| &ty.form) {
-        Some(TypeForm::I64) => Ok(1),
-        Some(TypeForm::Bool) => Ok(2),
-        Some(TypeForm::Unit) => Ok(3),
-        _ => Err(unsupported()),
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct Record {
+    pub fields: Vec<(String, u8)>,
+}
+
+#[derive(Default)]
+struct Types {
+    records: Vec<Record>,
+    known: BTreeMap<TypeObjectDigest, u8>,
+    active: BTreeSet<TypeObjectDigest>,
+}
+
+impl Types {
+    fn record(&mut self, mut fields: Vec<(String, u8)>) -> Result<u8, Diagnostic> {
+        fields.sort();
+        if fields.len() > MAX_STACK
+            || fields
+                .iter()
+                .any(|(name, ty)| name.is_empty() || *ty == 6 || *ty == 134)
+            || fields.windows(2).any(|w| w[0].0 == w[1].0)
+        {
+            return Err(unsupported());
+        }
+        let record = Record { fields };
+        if let Some(index) = self.records.iter().position(|r| r == &record) {
+            return Ok(index as u8 + 8);
+        }
+        if self.records.len() >= 120 {
+            return Err(unsupported());
+        }
+        let ty = self.records.len() as u8 + 8;
+        self.records.push(record);
+        Ok(ty)
+    }
+
+    fn code(
+        &mut self,
+        program: &NormalizedProgram,
+        ty: TypeObjectDigest,
+    ) -> Result<u8, Diagnostic> {
+        if let Some(code) = self.known.get(&ty) {
+            return Ok(*code);
+        }
+        if !self.active.insert(ty) || self.active.len() > 127 {
+            return Err(unsupported());
+        }
+        let code = match program.types.get(&ty).map(|ty| &ty.form) {
+            Some(TypeForm::I64) => 1,
+            Some(TypeForm::Bool) => 2,
+            Some(TypeForm::Unit) => 3,
+            Some(TypeForm::Text) => 4,
+            Some(TypeForm::Bytes) => 5,
+            Some(TypeForm::ByteBuffer) => 6,
+            Some(TypeForm::List { item }) if self.code(program, *item)? == 1 => 7,
+            Some(TypeForm::StructuralRecord { fields }) => {
+                let mut mapped = vec![];
+                for field in fields {
+                    mapped.push((
+                        field.name.as_str().to_owned(),
+                        self.code(program, field.ty)?,
+                    ));
+                }
+                self.record(mapped)?
+            }
+            _ => return Err(unsupported()),
+        };
+        self.active.remove(&ty);
+        self.known.insert(ty, code);
+        Ok(code)
+    }
+
+    fn parameter(
+        &mut self,
+        program: &NormalizedProgram,
+        ty: TypeObjectDigest,
+        mode: ParameterUse,
+    ) -> Result<u8, Diagnostic> {
+        let code = self.code(program, ty)?;
+        match (code, mode) {
+            (6, ParameterUse::Consume) => Ok(6),
+            (6, ParameterUse::Borrow) => Ok(134),
+            (6, ParameterUse::Unrestricted) => Err(unsupported()),
+            (_, ParameterUse::Unrestricted) => Ok(code),
+            _ => Err(unsupported()),
+        }
     }
 }
 fn primitive(name: &str) -> Result<u32, Diagnostic> {
@@ -70,24 +153,56 @@ fn primitive(name: &str) -> Result<u32, Diagnostic> {
         "core.bool.not" => 8,
         "core.bool.and" => 9,
         "core.bool.or" => 10,
+        "core.bytes.length" => 11,
+        "core.bytes.get" => 12,
+        "core.bytes.from-list" => 13,
+        "core.bytes.from-text" => 14,
+        "core.bytes.copy" => 15,
+        "core.bytes.slice" => 16,
+        "core.bytes.concat" => 17,
+        "core.bytes.equal" => 18,
+        "core.bytes.blake3" => 19,
+        "core.buffer.empty" => 20,
+        "core.buffer.push" => 21,
+        "core.buffer.length" => 22,
+        "core.buffer.get" => 23,
+        "core.buffer.freeze" => 24,
+        "core.buffer.discard" => 25,
+        "core.list.length" => 26,
+        "core.list.get" => 27,
         _ => return Err(unsupported()),
     })
 }
 
 pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8>, Diagnostic> {
+    let mut types = Types::default();
     let mut reachable = BTreeSet::new();
-    let mut pending = vec![entry];
-    while let Some(index) = pending.pop() {
+    let mut instances = BTreeMap::new();
+    let mut pending = vec![(entry, Vec::new())];
+    while let Some((index, arguments)) = pending.pop() {
+        let function = program.functions.get(index).ok_or_else(unsupported)?;
+        if function.type_parameters.len() != arguments.len()
+            || (!function.type_arguments.is_empty()
+                && function.type_arguments.as_ref() != arguments)
+        {
+            return Err(unsupported());
+        }
+        let substitutions: BTreeMap<_, _> = function
+            .type_parameters
+            .iter()
+            .copied()
+            .zip(arguments)
+            .collect();
         if !reachable.insert(index) {
+            if instances.get(&index) != Some(&substitutions) {
+                return Err(unsupported());
+            }
             continue;
         }
         if reachable.len() > MAX_FUNCTIONS {
             return Err(unsupported());
         }
-        let function = program.functions.get(index).ok_or_else(unsupported)?;
         if function.effect != FunctionEffect::Pure
-            || !function.type_parameters.is_empty()
-            || !function.type_arguments.is_empty()
             || !function.implementation_parameters.is_empty()
             || !function.implementation_arguments.is_empty()
             || !function.requirement_parameters.is_empty()
@@ -97,23 +212,46 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
             || !function.read_scope_parameters.is_empty()
             || !function.read_scope_arguments.is_empty()
             || !function.task_requirements.is_empty()
+            || !matches!(function.result.relation, ResultRelation::Value)
         {
             return Err(unsupported());
         }
-        scalar(program, function.result.ty)?;
+        let resolve = |ty| {
+            program
+                .substitute_type(ty, &substitutions, 0)
+                .ok_or_else(unsupported)
+        };
+        types.code(program, resolve(function.result.ty)?)?;
         for parameter in function.parameters.iter() {
-            scalar(program, parameter.ty)?;
-            if parameter.use_mode != ParameterUse::Unrestricted {
+            types.parameter(program, resolve(parameter.ty)?, parameter.use_mode)?;
+            if parameter.resource_requirement.is_some() {
                 return Err(unsupported());
             }
         }
         if let NormalizedFunctionBody::Code(code) = &function.body {
             for instruction in code.instructions.iter() {
-                if let I::Call { function, .. } | I::TailCall { function, .. } = instruction {
-                    pending.push(function.0 as usize);
+                if let I::Call {
+                    function,
+                    type_arguments,
+                    ..
+                }
+                | I::TailCall {
+                    function,
+                    type_arguments,
+                    ..
+                } = instruction
+                {
+                    pending.push((
+                        function.0 as usize,
+                        type_arguments
+                            .iter()
+                            .map(|ty| resolve(*ty))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    ));
                 }
             }
         }
+        instances.insert(index, substitutions);
     }
     let indices: BTreeMap<_, _> = reachable
         .iter()
@@ -123,13 +261,18 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
     let mut functions = Vec::new();
     for &index in &reachable {
         let function = &program.functions[index];
+        let resolve = |ty| {
+            program
+                .substitute_type(ty, &instances[&index], 0)
+                .ok_or_else(unsupported)
+        };
         let locals = function
             .parameters
             .iter()
-            .map(|p| scalar(program, p.ty))
+            .map(|p| types.parameter(program, resolve(p.ty)?, p.use_mode))
             .collect::<Result<Vec<_>, _>>()?;
         functions.push(Function {
-            result: u32::from(scalar(program, function.result.ty)?),
+            result: u32::from(types.code(program, resolve(function.result.ty)?)?),
             parameters: function.parameter_count,
             locals,
             external: 0,
@@ -183,11 +326,78 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                             node.tag = 3;
                             after.stack.push(3);
                         }
-                        I::LoadLocal {
-                            local,
-                            use_mode: ParameterUse::Unrestricted,
+                        I::Text(value) | I::StaticText(value) => {
+                            node.tag = 12;
+                            node.b = value.len() as u32;
+                            node.data = value.as_bytes().to_vec();
+                            after.stack.push(4);
                         }
-                        | I::MoveLocal(local) => {
+                        I::List { items } => {
+                            let start = after
+                                .stack
+                                .len()
+                                .checked_sub(*items as usize)
+                                .ok_or_else(unsupported)?;
+                            if after.stack[start..].iter().any(|ty| *ty != 1) {
+                                return Err(unsupported());
+                            }
+                            after.stack.truncate(start);
+                            after.stack.push(7);
+                            node.tag = 13;
+                            node.a = 7;
+                            node.b = *items;
+                        }
+                        I::Record {
+                            layout: None,
+                            type_arguments,
+                            fields,
+                        } if type_arguments.is_empty() => {
+                            let start = after
+                                .stack
+                                .len()
+                                .checked_sub(fields.len())
+                                .ok_or_else(unsupported)?;
+                            let mut shape = vec![];
+                            for (field, ty) in fields.iter().zip(&after.stack[start..]) {
+                                let NormalizedFieldSelector::Structural(name) = field else {
+                                    return Err(unsupported());
+                                };
+                                shape.push((name.as_str().to_owned(), *ty));
+                            }
+                            let ty = types.record(shape.clone())?;
+                            let canonical = &types.records[ty as usize - 8].fields;
+                            for field in &shape {
+                                node.data.push(
+                                    canonical
+                                        .iter()
+                                        .position(|f| f == field)
+                                        .ok_or_else(unsupported)?
+                                        as u8,
+                                );
+                            }
+                            node.tag = 14;
+                            node.a = u32::from(ty);
+                            node.b = fields.len() as u32;
+                            after.stack.truncate(start);
+                            after.stack.push(ty);
+                        }
+                        I::Field(NormalizedFieldSelector::Structural(name)) => {
+                            let ty = after.stack.pop().ok_or_else(unsupported)?;
+                            let record = types
+                                .records
+                                .get(usize::from(ty).checked_sub(8).ok_or_else(unsupported)?)
+                                .ok_or_else(unsupported)?;
+                            let index = record
+                                .fields
+                                .iter()
+                                .position(|(field, _)| field == name.as_str())
+                                .ok_or_else(unsupported)?;
+                            after.stack.push(record.fields[index].1);
+                            node.tag = 15;
+                            node.a = u32::from(ty);
+                            node.b = index as u32;
+                        }
+                        I::LoadLocal { local, .. } | I::MoveLocal(local) => {
                             node.tag = 4;
                             node.a = *local;
                             if after.initialized.get(*local as usize) != Some(&1) {
@@ -198,7 +408,27 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                                 .get(*local as usize)
                                 .filter(|&&ty| ty != 0)
                                 .ok_or_else(unsupported)?;
-                            after.stack.push(ty);
+                            let mode = match instruction {
+                                I::LoadLocal { use_mode, .. } => *use_mode,
+                                _ => ParameterUse::Unrestricted,
+                            };
+                            match (ty, mode) {
+                                (6 | 134, ParameterUse::Borrow) => {
+                                    node.b = 1;
+                                    after.stack.push(134);
+                                }
+                                (6, ParameterUse::Consume) => {
+                                    if after.stack.contains(&134) {
+                                        return Err(unsupported());
+                                    }
+                                    node.tag = 16;
+                                    after.initialized[*local as usize] = 0;
+                                    after.stack.push(6);
+                                }
+                                (6 | 134, _) => return Err(unsupported()),
+                                (_, ParameterUse::Unrestricted) => after.stack.push(ty),
+                                _ => return Err(unsupported()),
+                            }
                         }
                         I::StoreLocal(local) => {
                             node.tag = 5;
@@ -208,6 +438,13 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                                 .locals
                                 .get_mut(*local as usize)
                                 .ok_or_else(unsupported)?;
+                            if ty == 134
+                                || (*slot == 6
+                                    && after.initialized[*local as usize] == 1
+                                    && (ty != 3 || after.stack.contains(&134)))
+                            {
+                                return Err(unsupported());
+                            }
                             if ty == 3 && *slot != 0 && *slot != 3 {
                                 after.initialized[*local as usize] = 0;
                             } else {
@@ -220,7 +457,11 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                         }
                         I::Drop => {
                             node.tag = 6;
-                            after.stack.pop().ok_or_else(unsupported)?;
+                            if after.stack.pop().ok_or_else(unsupported)? == 6
+                                && after.stack.contains(&134)
+                            {
+                                return Err(unsupported());
+                            }
                         }
                         I::Jump(target) | I::JumpIfFalse(target) => {
                             node.a = *target;
@@ -241,7 +482,7 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                         I::Call {
                             function: target,
                             arguments,
-                            type_arguments,
+                            type_arguments: _,
                             requirement_arguments,
                             effect_arguments,
                             read_scope_arguments,
@@ -249,13 +490,14 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                         | I::TailCall {
                             function: target,
                             arguments,
-                            type_arguments,
+                            type_arguments: _,
                             requirement_arguments,
                             effect_arguments,
                             read_scope_arguments,
                         } => {
-                            if !type_arguments.is_empty()
-                                || !requirement_arguments.is_empty()
+                            // Every call's closed arguments were checked while collecting
+                            // the complete closure, including untaken instructions.
+                            if !requirement_arguments.is_empty()
                                 || !effect_arguments.is_empty()
                                 || !read_scope_arguments.is_empty()
                             {
@@ -275,7 +517,12 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                             }
                             after.stack.truncate(start);
                             after.stack.push(signature.result as u8);
-                            node.tag = if matches!(instruction, I::TailCall { .. }) {
+                            // TailCall is a derived dispatch hint. Keep its original
+                            // continuation when an owned local needs lexical cleanup
+                            // after a borrowed call, as the VM's fallback does.
+                            node.tag = if matches!(instruction, I::TailCall { .. })
+                                && !live_buffers(function, &after)
+                            {
                                 10
                             } else {
                                 9
@@ -283,7 +530,10 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                             node.a = callee;
                             node.b = *arguments;
                             if node.tag == 10 {
-                                if start != 0 || signature.result != function.result {
+                                if start != 0
+                                    || signature.result != function.result
+                                    || live_buffers(function, &after)
+                                {
                                     return Err(unsupported());
                                 }
                                 successors.clear();
@@ -291,7 +541,9 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                         }
                         I::Return => {
                             node.tag = 11;
-                            if after.stack != [function.result as u8] {
+                            if after.stack != [function.result as u8]
+                                || live_buffers(function, &after)
+                            {
                                 return Err(unsupported());
                             }
                             successors.clear();
@@ -307,9 +559,15 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                             if state.stack != after.stack {
                                 return Err(unsupported());
                             }
-                            for (current, other) in
-                                state.initialized.iter_mut().zip(&after.initialized)
+                            for ((current, other), ty) in state
+                                .initialized
+                                .iter_mut()
+                                .zip(&after.initialized)
+                                .zip(&function.locals)
                             {
+                                if *ty == 6 && current != other {
+                                    return Err(unsupported());
+                                }
                                 *current &= *other;
                             }
                         } else {
@@ -329,21 +587,65 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
         }
     }
     let root = *indices.get(&entry).ok_or_else(unsupported)?;
-    if functions[root as usize].parameters != 0 || functions[root as usize].result != 1 {
+    let root_function = &functions[root as usize];
+    let filter = root_function.parameters == 1
+        && root_function.locals.first() == Some(&5)
+        && types
+            .records
+            .get((root_function.result as usize).wrapping_sub(8))
+            .is_some_and(|r| r.fields == [("diagnostic".to_owned(), 1), ("image".to_owned(), 5)]);
+    if !filter && (root_function.parameters != 0 || root_function.result != 1) {
         return Err(unsupported());
     }
-    encode(&functions, root)
+    encode_records(&functions, &types.records, root)
+}
+
+fn live_buffers(function: &Function, state: &State) -> bool {
+    function
+        .locals
+        .iter()
+        .zip(&state.initialized)
+        .any(|(ty, initialized)| *ty == 6 && *initialized != 0)
 }
 
 pub(crate) fn encode(functions: &[Function], entry: u32) -> Result<Vec<u8>, Diagnostic> {
+    encode_records(functions, &[], entry)
+}
+
+pub(crate) fn encode_records(
+    functions: &[Function],
+    records: &[Record],
+    entry: u32,
+) -> Result<Vec<u8>, Diagnostic> {
     let count = functions.len();
     let node_count: usize = functions.iter().map(|f| f.nodes.len()).sum();
-    if count == 0 || count > MAX_FUNCTIONS || node_count == 0 || node_count > MAX_NODES {
+    if count == 0
+        || count > MAX_FUNCTIONS
+        || node_count == 0
+        || node_count > MAX_NODES
+        || records.len() > 120
+    {
         return Err(unsupported());
     }
     let node_offset = DECLARATIONS + count * 40;
     let blob_offset = node_offset + node_count * 32;
     let mut bytes = vec![0u8; blob_offset];
+    for (i, record) in records.iter().enumerate() {
+        let row = 128 + (7 + i) * 16;
+        let offset = bytes.len();
+        word(&mut bytes, row, 8);
+        word(&mut bytes, row + 4, record.fields.len() as u32);
+        word(&mut bytes, row + 8, offset as u32);
+        bytes.resize(offset + record.fields.len() * 16, 0);
+        for (f, (name, ty)) in record.fields.iter().enumerate() {
+            let field = offset + f * 16;
+            let name_offset = bytes.len();
+            word(&mut bytes, field, u32::from(*ty));
+            word(&mut bytes, field + 4, name_offset as u32);
+            word(&mut bytes, field + 8, name.len() as u32);
+            bytes.extend_from_slice(name.as_bytes());
+        }
+    }
     let mut node_index = 0;
     for (index, function) in functions.iter().enumerate() {
         if function.locals.len() > MAX_LOCALS {
@@ -374,9 +676,17 @@ pub(crate) fn encode(functions: &[Function], entry: u32) -> Result<Vec<u8>, Diag
                 return Err(unsupported());
             }
             let at = node_offset + node_index * 32;
+            let payload_offset = bytes.len();
+            bytes.extend_from_slice(&node.data);
             let state_offset = bytes.len();
             for (i, value) in [node.tag, node.a, node.b, node.c].into_iter().enumerate() {
                 word(&mut bytes, at + i * 4, value);
+            }
+            if node.tag == 12 {
+                word(&mut bytes, at + 4, payload_offset as u32);
+            }
+            if node.tag == 14 {
+                word(&mut bytes, at + 12, payload_offset as u32);
             }
             bytes[at + 16..at + 24].copy_from_slice(&node.immediate.to_le_bytes());
             word(&mut bytes, at + 24, state_offset as u32);
@@ -390,9 +700,12 @@ pub(crate) fn encode(functions: &[Function], entry: u32) -> Result<Vec<u8>, Diag
         return Err(unsupported());
     }
     let blob_size = bytes.len() - blob_offset;
-    let fuel = 6 * blob_size + 32 * node_count + count + 3;
+    let fuel = 256 * blob_size + 64 * node_count + count + 4096;
+    if fuel > 2_147_483_647 {
+        return Err(unsupported());
+    }
     bytes[..8].copy_from_slice(b"LKJCI001");
-    word(&mut bytes, 8, 2);
+    word(&mut bytes, 8, 3);
     word(&mut bytes, 12, entry);
     let length = bytes.len() as u64;
     bytes[16..24].copy_from_slice(&length.to_le_bytes());
@@ -402,7 +715,7 @@ pub(crate) fn encode(functions: &[Function], entry: u32) -> Result<Vec<u8>, Diag
         112,
         1,
         128,
-        3,
+        7 + records.len() as u32,
         DECLARATIONS as u32,
         count as u32,
         node_offset as u32,
@@ -413,24 +726,16 @@ pub(crate) fn encode(functions: &[Function], entry: u32) -> Result<Vec<u8>, Diag
         count as u32,
         0,
         0,
-        1,
-        0,
-        0,
-        0,
-        2,
-        0,
-        0,
-        0,
-        3,
-        0,
-        0,
-        0,
     ]
     .into_iter()
     .enumerate()
     {
         word(&mut bytes, HEADER + i * 4, value);
     }
+    for tag in 1..=7 {
+        word(&mut bytes, 128 + (tag - 1) * 16, tag as u32);
+    }
+    word(&mut bytes, 128 + 6 * 16 + 4, 1);
     rechecksum(&mut bytes);
     Ok(bytes)
 }
@@ -446,7 +751,7 @@ pub(crate) fn rechecksum(bytes: &mut [u8]) {
 }
 
 /// Small independent test builder. Arithmetic operation IDs are test notation,
-/// not a second wire reader; only profile 2 is emitted.
+/// not a second wire reader; only profile 3 is emitted.
 pub(crate) fn arithmetic(operations: &[(u32, i64)]) -> Result<Vec<u8>, Diagnostic> {
     let mut root = Function {
         result: 1,

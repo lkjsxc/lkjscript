@@ -1,0 +1,31 @@
+declarations.begin
+(units (module create aggregates
+  (external create add (visibility private) (implementation core.i64.add)
+    (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+  (external create divide (visibility private) (implementation core.i64.divide)
+    (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+  (external create count (visibility private) (implementation core.list.length)
+    (type-parameter create T) (parameter create values (type (list T))) (returns I64))
+  (external create get (visibility private) (implementation core.list.get)
+    (type-parameter create T) (parameter create values (type (list T)))
+    (parameter create index (type I64)) (returns T))
+  (function create reordered-fields (visibility public) (effect pure) (returns I64)
+    (body (field (record structural (field z (i64 99)) (field a (i64 42))) (name a))))
+  (function create nested-fields (visibility public) (effect pure) (returns I64)
+    (body (field (field (record structural
+      (field z (text "unchosen"))
+      (field a (record structural (field value (i64 42)) (field active (bool true))))) (name a)) (name value))))
+  (function create list-value (visibility public) (effect pure) (returns I64)
+    (body (call get (types I64) (list I64 (i64 -9223372036854775808) (i64 42) (i64 9223372036854775807)) (i64 1))))
+  (function create list-empty (visibility public) (effect pure) (returns I64)
+    (body (call count (types I64) (list I64))))
+  (function create list-end (visibility public) (effect pure) (returns I64)
+    (body (call get (types I64) (list I64 (i64 42)) (i64 1))))
+  (function create list-negative (visibility public) (effect pure) (returns I64)
+    (body (call get (types I64) (list I64 (i64 42)) (i64 -1))))
+  (function create field-evaluation-order (visibility public) (effect pure) (returns I64)
+    (body (field (record structural
+      (field z (call add (i64 9223372036854775807) (i64 1)))
+      (field a (call divide (i64 1) (i64 0)))) (name a))))
+))
+declarations.end

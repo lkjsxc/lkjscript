@@ -1,0 +1,7 @@
+declarations.begin
+(units (module create list_instance
+  (external create size (visibility private) (implementation core.list.length)
+    (type-parameter create T) (parameter create items (type (list T))) (returns I64))
+  (function create entry (visibility public) (effect pure) (returns I64)
+    (body (call size (types I64) (list I64 (i64 10) (i64 20) (i64 30)))))))
+declarations.end

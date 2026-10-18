@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Focused two-level compiler slice verification; not a self-hosting claim.
+# Focused two-level backend verification; not a Tier 2 semantic self-hosting claim.
 set -euo pipefail
 [[ $(git rev-parse --show-toplevel) == "$PWD" ]]
 export CARGO_TARGET_DIR="$PWD/target"
@@ -7,15 +7,20 @@ mkdir -p "$CARGO_TARGET_DIR"
 exec {selfhost_lease}> "$CARGO_TARGET_DIR/.lkjscript-check.lock"
 flock --exclusive "$selfhost_lease"
 mkdir -p .artifacts/selfhost
-sha256sum tools/selfhost/input.lkjc tools/selfhost/elf.lkjc \
-  tools/selfhost/flow.lkjc tools/selfhost/machine.lkjc \
-  src/platform/compiler/selfhost_input.rs \
+sha256sum src/platform/compiler/selfhost_input.rs \
+  tests/support/selfhost_proposals.rs \
   src/platform/execution/normalized/selfhost_tests.rs \
+  src/platform/execution/normalized/selfhost_bytes_tests.rs \
+  src/platform/execution/normalized/selfhost_admission_tests.rs \
   src/platform/execution/normalized/selfhost_closure_tests.rs \
   tests/fixtures/selfhost-closure.lkjc \
+  tests/fixtures/selfhost-generic-list.lkjc \
+  tests/fixtures/selfhost-aggregates.lkjc \
+  tests/fixtures/selfhost-buffer-borrow-tail.lkjc \
+  tests/fixtures/selfhost-forgotten-buffer.json \
   tests/fixtures/selfhost-unregistered-intrinsic.lkjc \
   tests/fixtures/selfhost-untaken-unsupported.lkjc > .artifacts/selfhost/inputs.sha256
-rg --files tools/selfhost/project src/platform/compiler/elf_x86_64 \
+rg --files tools/selfhost src/platform/compiler/elf_x86_64 \
   src/platform/compiler/elf_x86_64.rs \
   src/platform/execution/normalized/native_elf_tests.rs \
   src/platform/execution/normalized/native_filter_tests.rs \

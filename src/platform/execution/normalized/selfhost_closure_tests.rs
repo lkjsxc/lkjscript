@@ -207,7 +207,7 @@ declarations.end"#)).unwrap();
             })
             .unwrap();
         let first = u32_at(&payload, input::DECLARATIONS + probe * 40 + 16) as usize;
-        let address = 5120 + (probe + first) * 128;
+        let address = 65536 + probe * 512 + first * 128;
         let probe_code = [0x48, 0x89, 0xe0, 0x48, 0x83, 0xe0, 0x0f, 0xc3];
         bytes[address..address + probe_code.len()].copy_from_slice(&probe_code);
         let result = execute(&bytes, &[]);
@@ -238,15 +238,6 @@ fn selfhost_closure_rejects_unsupported_untaken_syntax_and_unregistered_intrinsi
         .0 as usize;
     assert_eq!(
         input::export(&program, entry).unwrap_err().code,
-        "compiler_input_unsupported"
-    );
-    let (source, program) = compiler();
-    let entry = program
-        .function(declaration_named(source, "compile-elf"))
-        .unwrap()
-        .0 as usize;
-    assert_eq!(
-        input::export(program, entry).unwrap_err().code,
         "compiler_input_unsupported"
     );
 }

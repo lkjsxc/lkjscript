@@ -43,25 +43,25 @@ Phase 4 adds bounded trap-preserving native algebraic optimization and standalon
 Linux x86_64 ELF emission with direct three-way execution checks. Native lowering
 leaves metered bytecode unchanged. The [native backend contract](spec/native-elf.md)
 states its supported instructions, I64 argument boundary and quota distinction.
-The self-hosting contract now targets Tier 2 semantic compiler closure; the first
-Tier 1 backend component validates LKJCI1 normalized I64 input and emits ELF on
-both evaluators. Rust source admission/export remain required. The maintained
-meaning graph and [schema/dependency inventory](spec/selfhosting.md) identify the
-current boundary. Tier 1 native compiler execution now agrees with both evaluators;
-backend closure, semantic admission, both formats and C2/C3 proof remain next.
+The self-hosting contract targets Tier 2 semantic compiler closure. The Tier 1
+backend validates LKJCI1 profile 3 normalized byte/aggregate closures and emits ELF
+on both evaluators and natively. Rust source admission/export remain required.
+The maintained meaning graph and [schema/dependency inventory](spec/selfhosting.md)
+identify the current boundary. Focused native backend reproduction has identical
+C2/C3 bytes; semantic source-graph reproduction and `.lkja` emission remain next.
 
-Latest Attempt: running — official acceptance of the scalar closure step toward
-Milestone D. LKJCI1 profile 2 replaces profile 1 with functions, typed control-flow
-certificates, locals, branches, recursion and self-tail calls. Nine focused tests
-and two public CLI tests passed. Rust admission/export remain Tier 1 dependencies.
-Last Accepted Commit: `32f0d1dc` (native compiler slice, integrated on origin/main).
-Five compiler, eight native runtime and two public CLI focused tests passed.
+Latest Attempt: not_run — official acceptance of the Tier 1 native backend candidate.
+Focused stage reproduction, compiler-source mutation, proposal-closure agreement
+and both public CLI tests passed. The fresh full matrix remains required.
+Last Accepted Commit: `90e215bf` (scalar closure step, integrated on origin/main).
+Nine compiler, eight native runtime and two public CLI focused tests passed.
 The clean candidate changed check selected two gates; fresh full passed all 29
 gates, all freshly executed with stable input, and release-target policy passed.
-`.artifacts/selfhost/accepted-c/receipt.json` binds source, tree and limitations.
-Known Limitations: no self-produced `.lkja`, complete backend compiler closure,
-semantic checker or C2/C3 proof. Required broader types,
-ownership, witnesses and regions remain in the Tier 2 acceptance profile.
+`.artifacts/selfhost/accepted-d-scalar/receipt.json` binds source and limitations.
+Known Limitations: no self-produced `.lkja` or source-graph semantic checker.
+Native allocation is process-owned, with no lexical region reclamation or RSS
+claim. Broader types, witnesses, regions and source-graph C2/C3 proof remain required
+for Tier 2; native reproduction from normalized input does not complete Milestone D.
 Git records integration; local acceptance does not establish hosted release or
 public promotion. [Verification](spec/verification.md) owns proof and gates;
 [release](release.md) owns candidate and publication authority.
