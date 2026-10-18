@@ -1,5 +1,23 @@
 use super::*;
 use crate::platform::storage::object::ObjectDomain;
+use std::time::{Duration, Instant};
+
+fn open_gc_after_reader_drop(root: &Path) -> PackDirectoryStore {
+    // Other tests spawn children while our reader is open. A fork duplicates
+    // its file description, retaining flock until the child closes it at exec.
+    // These callers hold no local reader or publication lock. Retry only the
+    // explicit reader-contention result; production GC must remain nonblocking.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match PackDirectoryStore::open_for_gc(root) {
+            Ok(store) => return store,
+            Err(error) if error.code == "gc_readers_active" && Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            Err(error) => panic!("GC admission after local readers dropped: {error:?}"),
+        }
+    }
+}
 
 fn fixture(path: &Path) -> BTreeMap<ObjectKey, Vec<u8>> {
     let mut store = PackDirectoryStore::initialize(path).unwrap();
@@ -46,8 +64,15 @@ fn retained_reader_excludes_gc_without_invalidating_its_catalog() {
         fs::read(root.join("catalog/current.lkjc")).unwrap()
     );
     read_all(&old, &keep);
+    let inherited = old.root_directory.try_clone().unwrap();
     drop(old);
-    let mut gc = PackDirectoryStore::open_for_gc(root).unwrap();
+    // Duplicate descriptors share the reader lease even after the store drops.
+    assert_eq!(
+        PackDirectoryStore::open_for_gc(root).unwrap_err().code,
+        "gc_readers_active"
+    );
+    drop(inherited);
+    let mut gc = open_gc_after_reader_drop(root);
     let receipt = gc.compact_reachable(keep.clone()).unwrap();
     assert_eq!((receipt.packs_before, receipt.packs_after), (3, 1));
     assert!(receipt.pack_bytes_after < receipt.pack_bytes_before / 20);
@@ -73,7 +98,7 @@ fn every_compaction_durability_checkpoint_preserves_reachable_objects_and_retry(
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path();
         let keep = fixture(root);
-        let mut gc = PackDirectoryStore::open_for_gc(root).unwrap();
+        let mut gc = open_gc_after_reader_drop(root);
         let mut fired = false;
         let error = gc
             .compact_inner(keep.clone(), &mut |observed| {
@@ -90,7 +115,7 @@ fn every_compaction_durability_checkpoint_preserves_reachable_objects_and_retry(
         let reopened = PackDirectoryStore::open(root).unwrap();
         read_all(&reopened, &keep);
         drop(reopened);
-        let mut retry = PackDirectoryStore::open_for_gc(root).unwrap();
+        let mut retry = open_gc_after_reader_drop(root);
         retry.compact_reachable(keep.clone()).unwrap();
         read_all(&retry, &keep);
         assert_eq!(retry.deep_verify().unwrap().packs, 1);
@@ -110,7 +135,7 @@ fn compaction_preserves_foreign_files_and_rejects_unleased_calls() {
         "gc_lease"
     );
     drop(shared);
-    let mut gc = PackDirectoryStore::open_for_gc(root).unwrap();
+    let mut gc = open_gc_after_reader_drop(root);
     gc.compact_reachable(keep).unwrap();
     assert_eq!(
         fs::read(root.join("packs/notes.txt")).unwrap(),

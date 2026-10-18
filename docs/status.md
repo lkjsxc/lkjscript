@@ -50,11 +50,13 @@ The maintained meaning graph and [schema/dependency inventory](spec/selfhosting.
 identify the current boundary. Focused native backend reproduction has identical
 C2/C3 ELF and A1/A2/A3 artifact bytes, including changed-source behavior.
 
-Latest Attempt: running — official acceptance of source-record decoding.
+Latest Attempt: running — source-record decoder acceptance and GC-test retry.
 Six decoder tests passed across VM, reference and native execution. Maintained
 proposal replay matched all 289 canonical units and the native backend closure.
 The readers cover every current compiler owner/type record; graph and semantic
 admission remain ahead. Fresh full acceptance is pending for this candidate.
+The GC test checks duplicate reader descriptors and bounded retry after local
+readers drop; production compaction still rejects active readers without waiting.
 Last Accepted Commit: `108906b5` (Tier 1 both-output closure, on origin/main).
 All 34 compiler and ten native runtime tests passed inside official full;
 the library passed 2589 tests, with five explicitly ignored.
