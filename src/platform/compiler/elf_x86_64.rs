@@ -10,7 +10,13 @@ use crate::platform::package::RunnerKind;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod asm;
+mod blake3;
+mod buffer;
+mod bytes;
+mod filter;
 mod runtime;
+#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+mod stack_tests;
 use asm::{Asm, Label, R::*, *};
 use runtime::Runtime;
 
@@ -154,7 +160,8 @@ pub(crate) fn compile_function(
     {
         return Err(unsupported("native entry must have a closed signature"));
     }
-    for parameter in function.parameters.iter() {
+    let binary_filter = filter::signature(program, entry);
+    for parameter in function.parameters.iter().filter(|_| !binary_filter) {
         if !matches!(
             program.types.get(&parameter.ty).map(|t| &t.form),
             Some(TypeForm::I64)
@@ -164,7 +171,9 @@ pub(crate) fn compile_function(
             ));
         }
     }
-    admit_result(program, function.result.ty)?;
+    if !binary_filter {
+        admit_result(program, function.result.ty)?;
+    }
     let mut a = Asm::new();
     let runtime = Runtime::new(&mut a);
     let functions = reachable.iter().map(|&index| (index, a.label())).collect();
@@ -177,7 +186,11 @@ pub(crate) fn compile_function(
         data: Vec::new(),
         rewrites: 0,
     };
-    e.start(entry, function.parameters.len())?;
+    if binary_filter {
+        e.start_filter(entry)?;
+    } else {
+        e.start(entry, function.parameters.len())?;
+    }
     for &index in &reachable {
         e.function(index)?;
     }
@@ -207,11 +220,16 @@ pub(crate) fn compile_function(
                 let encoded = serde_json::to_vec(value)
                     .map_err(|_| unsupported("native text encoding failed"))?;
                 let data_label = e.a.label();
+                let raw_label = e.a.label();
                 e.a.bytes(&3_u64.to_le_bytes());
                 e.a.bytes(&(encoded.len() as u64).to_le_bytes());
                 e.a.absolute(data_label);
+                e.a.bytes(&(value.len() as u64).to_le_bytes());
+                e.a.absolute(raw_label);
                 e.a.bind(data_label);
                 e.a.bytes(&encoded);
+                e.a.bind(raw_label);
+                e.a.bytes(value.as_bytes());
             }
             Constant::Function(index) => {
                 e.a.bytes(&6_u64.to_le_bytes());
@@ -379,6 +397,10 @@ impl Emitter<'_> {
         self.a.pop(Bp);
         self.a.ret();
     }
+    fn argument(&mut self, destination: R, offset: u32) {
+        self.a.load(destination, Bp, 24);
+        self.a.load(destination, destination, offset as i32 * 8);
+    }
     fn function(&mut self, index: usize) -> Result<()> {
         self.a.bind(self.label(index)?);
         let function = &self.program.functions[index];
@@ -391,11 +413,7 @@ impl Emitter<'_> {
     fn code(&mut self, function: usize, code: &NormalizedCode) -> Result<()> {
         self.prologue(code.local_count);
         for parameter in 0..code.parameter_count {
-            self.a.load(
-                Ax,
-                Bp,
-                16 + (code.parameter_count - 1 - parameter) as i32 * 8,
-            );
+            self.argument(Ax, code.parameter_count - 1 - parameter);
             self.a.store(Bp, -32 - parameter as i32 * 8, Ax);
         }
         let labels: Vec<_> = (0..code.instructions.len())
@@ -665,10 +683,10 @@ impl Emitter<'_> {
     fn external(&mut self, name: &str, parameters: u32) -> Result<()> {
         self.prologue(0);
         if parameters > 0 {
-            self.a.load(Ax, Bp, 16 + (parameters - 1) as i32 * 8);
+            self.argument(Ax, parameters - 1);
         }
         if parameters > 1 {
-            self.a.load(Cx, Bp, 16 + (parameters - 2) as i32 * 8);
+            self.argument(Cx, parameters - 2);
         }
         match name {
             "core.i64.add"
@@ -796,9 +814,11 @@ impl Emitter<'_> {
                 self.a.mov(Ax, R9);
             }
             _ => {
-                return Err(unsupported(format!(
-                    "native external implementation {name} is not supported"
-                )));
+                if !self.bytes_external(name) {
+                    return Err(unsupported(format!(
+                        "native external implementation {name} is not supported"
+                    )));
+                }
             }
         }
         self.epilogue();

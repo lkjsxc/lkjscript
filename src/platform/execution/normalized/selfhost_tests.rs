@@ -1,4 +1,4 @@
-//! Level 1 runs the lkjscript compiler on VM and independent source evaluation.
+//! Level 1 runs the lkjscript compiler on VM, source evaluation and native ELF.
 //! Level 2 inspects and directly executes its emitted ELF against independent cases.
 use super::super::value::NormalizedRecord;
 use super::*;
@@ -67,6 +67,32 @@ fn compile_with(
     else {
         panic!("image");
     };
+    let index = program.function(declaration).unwrap().0 as usize;
+    let compiler_image = crate::platform::compiler::elf_x86_64::compile_function(program, index)
+        .unwrap()
+        .0;
+    eprintln!(
+        "selfhost stage=C1 tier=backend compiler_sha256={} compiler_bytes={} input_sha256={}",
+        crate::platform::semantic_id::encode_hex(&Sha256::digest(&compiler_image)),
+        compiler_image.len(),
+        crate::platform::semantic_id::encode_hex(&Sha256::digest(bytes)),
+    );
+    let native = native_filter_tests::execute_filter(&compiler_image, bytes, &[], 127);
+    assert_eq!(
+        native.stdout,
+        image.as_ref(),
+        "native compiler output differs"
+    );
+    if *code == 0 {
+        assert_eq!(native.status.code(), Some(0), "{native:?}");
+        assert!(native.stderr.is_empty());
+    } else {
+        assert_eq!(native.status.code(), Some(65), "{native:?}");
+        assert_eq!(
+            native.stderr,
+            format!("compiler_rejected:{code}\n").as_bytes()
+        );
+    }
     (*code, image.to_vec())
 }
 

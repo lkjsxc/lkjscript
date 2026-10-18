@@ -19,7 +19,8 @@ pub(super) enum R {
     R8,
     R9,
     R10,
-    R12 = 12,
+    R11,
+    R12,
     R13,
     R14,
     R15,
@@ -82,6 +83,14 @@ impl Asm {
         self.rex(true, src, dst);
         self.bytes(&[opcode, 0xc0 | ((src as u8 & 7) << 3) | (dst as u8 & 7)]);
     }
+    pub fn bin32(&mut self, opcode: u8, dst: R, src: R) {
+        self.rex(false, src, dst);
+        self.bytes(&[opcode, 0xc0 | ((src as u8 & 7) << 3) | (dst as u8 & 7)]);
+    }
+    pub fn rotate32(&mut self, dst: R, amount: u8) {
+        self.rex(false, R::Ax, dst);
+        self.bytes(&[0xc1, 0xc8 | (dst as u8 & 7), amount]);
+    }
     pub fn imul(&mut self, dst: R, src: R) {
         self.rex(true, dst, src);
         self.bytes(&[0x0f, 0xaf, 0xc0 | ((dst as u8 & 7) << 3) | (src as u8 & 7)]);
@@ -100,7 +109,10 @@ impl Asm {
         self.bytes(&[0xf7, 0xc0 | (group << 3) | (dst as u8 & 7)]);
     }
     fn memory(&mut self, opcode: u8, reg: R, base: R, displacement: i32) {
-        self.rex(true, reg, base);
+        self.memory_width(true, opcode, reg, base, displacement);
+    }
+    fn memory_width(&mut self, wide: bool, opcode: u8, reg: R, base: R, displacement: i32) {
+        self.rex(wide, reg, base);
         self.bytes(&[opcode, 0x80 | ((reg as u8 & 7) << 3) | (base as u8 & 7)]);
         if base as u8 & 7 == 4 {
             self.bytes(&[0x24]);
@@ -112,6 +124,12 @@ impl Asm {
     }
     pub fn store(&mut self, base: R, offset: i32, src: R) {
         self.memory(0x89, src, base, offset);
+    }
+    pub fn load32(&mut self, dst: R, base: R, offset: i32) {
+        self.memory_width(false, 0x8b, dst, base, offset);
+    }
+    pub fn store32(&mut self, base: R, offset: i32, src: R) {
+        self.memory_width(false, 0x89, src, base, offset);
     }
     pub fn lea(&mut self, dst: R, base: R, offset: i32) {
         self.memory(0x8d, dst, base, offset);
@@ -162,12 +180,25 @@ impl Asm {
         self.relocation(label);
     }
     pub fn call(&mut self, label: Label) {
+        self.call_frame();
         self.bytes(&[0xe8]);
         self.relocation(label);
+        self.load(R::Sp, R::Sp, 8);
     }
     pub fn indirect(&mut self, reg: R) {
+        self.call_frame();
         self.rex(true, R::Ax, reg);
         self.bytes(&[0xff, 0xd0 | (reg as u8 & 7)]);
+        self.load(R::Sp, R::Sp, 8);
+    }
+    // Keep the stack 16-byte aligned at every native call, independently of
+    // argument/evaluation-stack depth. The saved original stack is also the
+    // argument base, at [entry rsp + 16] or [frame rbp + 24]. R11 is volatile.
+    fn call_frame(&mut self) {
+        self.mov(R::R11, R::Sp);
+        self.group(4, R::Sp, -16);
+        self.group(5, R::Sp, 16);
+        self.store(R::Sp, 8, R::R11);
     }
     pub fn set(&mut self, condition: u8) {
         self.bytes(&[0x0f, 0x90 | condition, 0xc0, 0x48, 0x0f, 0xb6, 0xc0]);

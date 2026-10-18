@@ -12,6 +12,15 @@ pub(super) struct Runtime {
     pub overflow: Label,
     pub division: Label,
     pub bounds: Label,
+    pub bytes_index: Label,
+    pub bytes_octet: Label,
+    pub bytes_range: Label,
+    pub bytes_capacity: Label,
+    pub buffer_index: Label,
+    pub buffer_octet: Label,
+    pub buffer_capacity: Label,
+    pub blake3: Label,
+    pub input: Label,
     pub capacity: Label,
     pub argument: Label,
 }
@@ -53,6 +62,15 @@ impl Runtime {
             overflow: a.label(),
             division: a.label(),
             bounds: a.label(),
+            bytes_index: a.label(),
+            bytes_octet: a.label(),
+            bytes_range: a.label(),
+            bytes_capacity: a.label(),
+            buffer_index: a.label(),
+            buffer_octet: a.label(),
+            buffer_capacity: a.label(),
+            blake3: a.label(),
+            input: a.label(),
             capacity: a.label(),
             argument: a.label(),
         }
@@ -226,6 +244,12 @@ impl Runtime {
         a.store(R12, 0, Cx);
         a.store(R12, 8, Dx);
         a.store(R12, 16, Bx);
+        // The JSON text bytes and raw UTF-8 view have distinct explicit lengths.
+        // Even i64::MIN leaves the first 40 descriptor bytes clear of the digits.
+        a.group(5, Dx, 2);
+        a.store(R12, 24, Dx);
+        a.lea(Dx, Bx, 1);
+        a.store(R12, 32, Dx);
         a.mov(Ax, R12);
         restore(a);
 
@@ -322,8 +346,16 @@ impl Runtime {
             (self.overflow, "normalized_integer_overflow", 70),
             (self.division, "normalized_integer_division", 70),
             (self.bounds, "normalized_list_index", 70),
-            (self.capacity, "native_allocation", 71),
+            (self.bytes_index, "normalized_bytes_index", 70),
+            (self.bytes_octet, "normalized_bytes_octet", 70),
+            (self.bytes_range, "normalized_bytes_range", 70),
+            (self.bytes_capacity, "normalized_allocation", 70),
+            (self.buffer_index, "normalized_buffer_index", 70),
+            (self.buffer_octet, "normalized_buffer_octet", 70),
+            (self.buffer_capacity, "normalized_buffer_storage", 70),
+            (self.capacity, "native_allocation", 70),
             (self.argument, "native_argument", 64),
+            (self.input, "native_input", 65),
         ] {
             let message = format!("{code}\n");
             let message_label = data(a, pool, message.as_bytes());
@@ -337,5 +369,6 @@ impl Runtime {
             a.syscall();
             a.bytes(&[0x0f, 0x0b]);
         }
+        super::blake3::emit(a, self.blake3);
     }
 }

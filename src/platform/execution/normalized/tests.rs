@@ -3,6 +3,9 @@
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[path = "native_elf_tests.rs"]
 mod native_elf_tests;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "native_filter_tests.rs"]
+mod native_filter_tests;
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[path = "selfhost_tests.rs"]

@@ -51,6 +51,135 @@ fn fixture() -> (crate::platform::kernel::KernelSnapshot, NormalizedProgram) {
 }
 
 #[test]
+fn native_elf_compiler_byte_operations_preserve_octets_text_ranges_and_traps() {
+    let source = byte_buffer_tests::author_only(include_str!(
+        "../../../../tests/fixtures/native-bytes.lkjc"
+    ))
+    .unwrap();
+    let program = prepare_snapshot(&source);
+    for (name, arguments, expected, trap) in [
+        ("octet", vec![0], "0", ""),
+        ("octet", vec![128], "128", ""),
+        ("octet", vec![255], "255", ""),
+        ("index", vec![0], "0", ""),
+        ("index", vec![2], "255", ""),
+        ("empty-length", vec![], "0", ""),
+        ("same-octets", vec![], "true", ""),
+        ("different-octets", vec![], "false", ""),
+        ("different-length", vec![], "false", ""),
+        ("empty-equal", vec![], "true", ""),
+        ("text-octets", vec![0], "0", ""),
+        ("text-octets", vec![1], "10", ""),
+        ("text-octets", vec![2], "34", ""),
+        ("text-octets", vec![3], "92", ""),
+        ("text-octets", vec![4], "231", ""),
+        ("text-octets", vec![5], "140", ""),
+        ("text-octets", vec![6], "171", ""),
+        ("decimal-octets", vec![i64::MIN, 0], "45", ""),
+        ("decimal-octets", vec![i64::MIN, 19], "56", ""),
+        ("decimal-octets", vec![i64::MAX, 18], "55", ""),
+        ("decimal-length", vec![i64::MIN], "20", ""),
+        ("decimal-length", vec![0], "1", ""),
+        ("range-length", vec![0, 3], "3", ""),
+        ("range-length", vec![3, 3], "0", ""),
+        ("range-length", vec![0, 0], "0", ""),
+        ("copied-range", vec![], "true", ""),
+        ("concatenated", vec![], "true", ""),
+        ("empty-concat", vec![], "true", ""),
+        ("copied-empty", vec![], "0", ""),
+        ("buffer-roundtrip", vec![0], "0", ""),
+        ("buffer-roundtrip", vec![128], "128", ""),
+        ("buffer-roundtrip", vec![255], "255", ""),
+        ("buffer-size", vec![0], "0", ""),
+        ("buffer-size", vec![8], "8", ""),
+        ("buffer-size", vec![9], "9", ""),
+        ("buffer-size", vec![16384], "16384", ""),
+        ("buffer-growth", vec![16385, 16384], "255", ""),
+        ("buffer-growth", vec![9, 0], "255", ""),
+        ("buffer-discard", vec![], "null", ""),
+        ("hash-length", vec![], "32", ""),
+        ("buffer-roundtrip", vec![-1], "", "buffer_octet"),
+        ("buffer-roundtrip", vec![256], "", "buffer_octet"),
+        ("buffer-growth", vec![0, 0], "", "buffer_index"),
+        ("buffer-growth", vec![8, 8], "", "buffer_index"),
+        ("buffer-growth", vec![8, -1], "", "buffer_index"),
+        ("octet", vec![-1], "", "bytes_octet"),
+        ("octet", vec![256], "", "bytes_octet"),
+        ("octet", vec![i64::MIN], "", "bytes_octet"),
+        ("octet", vec![i64::MAX], "", "bytes_octet"),
+        ("index", vec![-1], "", "bytes_index"),
+        ("index", vec![3], "", "bytes_index"),
+        ("index", vec![i64::MIN], "", "bytes_index"),
+        ("index", vec![i64::MAX], "", "bytes_index"),
+        ("empty-index", vec![], "", "bytes_index"),
+        ("range-length", vec![-1, 0], "", "bytes_range"),
+        ("range-length", vec![0, -1], "", "bytes_range"),
+        ("range-length", vec![-2, -1], "", "bytes_range"),
+        ("range-length", vec![2, 1], "", "bytes_range"),
+        ("range-length", vec![0, 4], "", "bytes_range"),
+        ("range-length", vec![i64::MIN, i64::MAX], "", "bytes_range"),
+    ] {
+        let declaration = declaration_named(&source, name);
+        let index = program.function(declaration).unwrap().0 as usize;
+        let bytes = elf_x86_64::compile_function(&program, index).unwrap().0;
+        let output = execute(&bytes, &arguments);
+        let values = arguments
+            .iter()
+            .map(|v| NormalizedValue::I64(*v))
+            .collect::<Vec<_>>();
+        let control = ExecutionControl::uncancelled();
+        let policy = NormalizedRunPolicy::default();
+        let vm = NormalizedVm::for_test(&program, policy).invoke(
+            declaration,
+            values.clone(),
+            None,
+            &control,
+        );
+        let reference = NormalizedReferenceInterpreter::new(&source, &program, policy).invoke(
+            declaration,
+            values,
+            None,
+            &control,
+        );
+        if trap.is_empty() {
+            assert!(output.status.success(), "{name} {arguments:?}: {output:?}");
+            assert!(output.stderr.is_empty());
+            assert_eq!(output.stdout, expected.as_bytes(), "{name} {arguments:?}");
+            let vm = vm.unwrap().0;
+            assert_eq!(vm, reference.unwrap().0);
+            assert_eq!(
+                encode_typed(
+                    &program,
+                    &vm,
+                    program.functions[index].result.ty,
+                    JsonLimits::default()
+                )
+                .unwrap(),
+                expected.as_bytes()
+            );
+        } else {
+            assert_eq!(
+                output.status.code(),
+                Some(70),
+                "{name} {arguments:?}: {output:?}"
+            );
+            assert!(output.stdout.is_empty());
+            assert_eq!(output.stderr, format!("normalized_{trap}\n").as_bytes());
+            assert_eq!(vm.unwrap_err().code, format!("normalized_{trap}"));
+            let reference_prefix = if trap.starts_with("buffer_") {
+                "normalized"
+            } else {
+                "reference"
+            };
+            assert_eq!(
+                reference.unwrap_err().code,
+                format!("{reference_prefix}_{trap}")
+            );
+        }
+    }
+}
+
+#[test]
 fn native_elf_executes_runtime_arguments_recursion_closures_and_structured_json() {
     let (source, program) = fixture();
     for (name, arguments, expected) in [

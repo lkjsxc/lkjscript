@@ -113,19 +113,26 @@ are separate from VM instruction/allocation quotas.
 | Required by the existing compiler component | Available execution | Native work still required |
 | --- | --- | --- |
 | I64 arithmetic/comparison, Bool, calls and tail calls | VM, reference, host ELF | Existing native implementation |
-| Bytes length/get/slice/concat/equality/from-list/from-text | VM, reference | Native owned byte representation and checked operations |
-| ByteBuffer empty/push/length/freeze, affine calls and cleanup | VM, reference | Native bounded storage, loans/moves and reclamation |
-| BLAKE3 digest | VM/reference neutral Rust primitive | Native implementation or lkjscript implementation before C1 self-produced stages |
-| List literals/length/get and result records | VM, reference, host ELF | Bytes-bearing result/entry support |
-| Bounded binary input and atomic output staging | Host harness | Native stdin loop; explicit output selector, diagnostics and exits |
+| Bytes length/get/slice/concat/equality/from-list/from-text | VM, reference, native ELF | Covered by native compiler tests |
+| ByteBuffer empty/push/length/freeze and affine calls | VM, reference, native process-owned heap | Phase-local region reclamation for later compiler tables |
+| BLAKE3 digest | VM/reference neutral Rust primitive; native integer implementation | No host hashing during native execution |
+| List literals/length/get and result records | VM, reference, native ELF | Covered by the complete current compiler closure |
+| Bounded binary input and atomic output staging | Native stdin/stdout filter; external staging harness | Self-produced compiler stages still required |
 
 This first component has no phase-local graph arena: it makes one linear bounded
 pass over immutable input and emits into owned buffers. Region-native compiler
 tables become necessary as source decoding, type environments, normalization and
 relocations grow. It does not claim region-exclusive execution or reduced RSS.
-The next dependency-justified slice is native byte/buffer execution and binary
-filter I/O for this exact compiler workload, followed by backend closure and
-semantic admission. Optional optimizers and parallel compilation are deferred.
+The host can now build this lkjscript component as a standalone native compiler.
+Select its `compile-elf` command target. The exact binary-filter signature and
+16 MiB transport bound are specified in [native ELF](native-elf.md); profile 1
+still enforces its tighter 16,552-byte input bound before hashing. Native output
+must equal VM/reference output for positive, malformed and mutated-source cases.
+This is Milestone C of Tier 1: Rust still admits and exports input programs and
+builds the initial compiler. The component cannot compile its own implementation.
+The next dependency-justified slice is complete backend closure and `.lkja`
+emission, followed by semantic admission. Optional optimizers and parallel
+compilation are deferred.
 
 ## Required final profile and proof
 
@@ -146,7 +153,7 @@ native stages may use neither Rust semantic preprocessing nor an external VM.
 The exporter, initial Rust bootstrap and external atomic launcher are separately
 recorded boundaries. Digests prove identity, not universal correctness.
 
-Every slice requires VM/reference compiler output identity, later native identity,
+Every slice requires VM/reference/native compiler output identity,
 strict `.lkja`/ELF admission, and independent execution of produced programs.
 Preserve minimized mismatches before fixes. The current tests cover malformed
 framing/tables/fuel/opcodes/stack states, signed limits and arithmetic trap order,
