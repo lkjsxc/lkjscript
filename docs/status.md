@@ -50,16 +50,18 @@ The maintained meaning graph and [schema/dependency inventory](spec/selfhosting.
 identify the current boundary. Focused native backend reproduction has identical
 C2/C3 ELF and A1/A2/A3 artifact bytes, including changed-source behavior.
 
-Latest Attempt: running — official acceptance of profile-4 backend closure.
-All 34 compiler cases passed across the focused suite and targeted retries;
-strict artifact loading/execution, public CLI, native runtime and Clippy passed.
-Last Accepted Commit: `b2aaa22e` (domain hashing, integrated on origin/main).
-All 24 compiler and ten native runtime tests passed inside official full;
-published derive-key vectors, public execution and native reproduction passed too.
+Latest Attempt: running — official acceptance of source-record decoding.
+Six decoder tests passed across VM, reference and native execution. Maintained
+proposal replay matched all 289 canonical units and the native backend closure.
+The readers cover every current compiler owner/type record; graph and semantic
+admission remain ahead. Fresh full acceptance is pending for this candidate.
+Last Accepted Commit: `108906b5` (Tier 1 both-output closure, on origin/main).
+All 34 compiler and ten native runtime tests passed inside official full;
+the library passed 2589 tests, with five explicitly ignored.
 The clean candidate changed check selected two gates; fresh full passed all 29
 gates, all freshly executed with stable input, and release-target policy passed.
-`.artifacts/selfhost/accepted-d-domain/receipt.json` binds source and limitations.
-Known Limitations: artifact closure awaits official acceptance; no source semantic checker.
+`.artifacts/selfhost/accepted-d-artifact/receipt.json` binds source and limitations.
+Known Limitations: the source decoder has no graph or semantic checker yet.
 Native allocation is process-owned, with no lexical region reclamation or RSS
 claim. Broader types, witnesses, regions and source-graph C2/C3 proof remain required
 for Tier 2; these byte fixed points still consume Rust-admitted input.

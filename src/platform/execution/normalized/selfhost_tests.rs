@@ -15,6 +15,8 @@ mod artifact;
 mod bytes;
 #[path = "selfhost_closure_tests.rs"]
 mod closure;
+#[path = "selfhost_source_tests.rs"]
+mod source;
 
 #[test]
 fn selfhost_normalized_byte_inventory_exports_current_compiler() {
@@ -87,16 +89,42 @@ const SOURCE: &str = proposals::SOURCE;
 #[test]
 fn selfhost_maintained_proposals_match_authoritative_function_bodies() {
     let (source, program) = compiler();
-    let declaration = declaration_named(source, "compile-elf");
-    let before = input::export(program, program.function(declaration).unwrap().0 as usize).unwrap();
     // Replaying a complete compiler retains both old and new accepted bodies.
     // Use ordinary disk history instead of exhausting a finite memory arena.
     let temporary = tempfile::tempdir().unwrap();
     let repository = GraphRepository::create(&temporary.path().join("replay"), source, None)
         .unwrap()
         .repository;
-    let replayed = publish_proposals(&repository, proposals::steps(SOURCE).unwrap().1);
+    let replayed = publish_proposals(&repository, proposals::replay(SOURCE));
     let replayed = prepare_snapshot(&replayed);
+    // Canonical units include helpers with arbitrary parameter/result types;
+    // backend filter exports deliberately restrict their root entry signature.
+    let units = |program: &NormalizedProgram| {
+        program
+            .artifact()
+            .objects
+            .iter()
+            .filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
+            .map(|(key, bytes)| {
+                let unit = crate::platform::compiler::CompilationUnit::decode(bytes, *key).unwrap();
+                (
+                    (unit.source.package, unit.source.owner),
+                    (unit.tables, unit.payload),
+                )
+            })
+            .collect::<BTreeMap<_, _>>()
+    };
+    let before_units = units(program);
+    let after_units = units(&replayed);
+    assert_eq!(before_units.len(), after_units.len());
+    for (owner, before) in &before_units {
+        assert!(
+            after_units.get(owner) == Some(before),
+            "proposal replay changed maintained compiler tables or payload for {owner:?}"
+        );
+    }
+    let declaration = declaration_named(source, "compile-elf");
+    let before = input::export(program, program.function(declaration).unwrap().0 as usize).unwrap();
     let after = input::export(
         &replayed,
         replayed.function(declaration).unwrap().0 as usize,
@@ -104,9 +132,13 @@ fn selfhost_maintained_proposals_match_authoritative_function_bodies() {
     .unwrap();
     assert!(
         before == after,
-        "proposal replay changed the complete normalized compiler closure: before={} after={}",
+        "proposal replay changed a maintained compiler closure {declaration:?}: before={} after={}",
         crate::platform::semantic_id::encode_hex(&Sha256::digest(&before)),
         crate::platform::semantic_id::encode_hex(&Sha256::digest(&after))
+    );
+    eprintln!(
+        "selfhost maintained proposal replay matched {} canonical units and the native backend closure",
+        before_units.len()
     );
 }
 

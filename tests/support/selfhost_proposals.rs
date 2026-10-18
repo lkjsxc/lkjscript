@@ -49,6 +49,16 @@ pub const SOURCE: &str = concat!(
     "\n",
     include_str!("../../tools/selfhost/artifact-check.lkjc"),
     "\n",
+    include_str!("../../tools/selfhost/source-read.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-shape.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-fields.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-expr.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-owner.lkjc"),
+    "\n",
 );
 
 #[derive(Clone)]
@@ -178,13 +188,15 @@ fn stub(function: &mut [Form]) -> Result<(), String> {
                     let Form::List(field) = field else {
                         return Err("invalid bootstrap record field".to_owned());
                     };
-                    if field.len() != 2 || field[1].text() != "Bytes" {
-                        return Err("bootstrap record field requires Bytes".to_owned());
+                    if field.len() != 2 {
+                        return Err("invalid bootstrap record field".to_owned());
                     }
-                    Ok(format!(
-                        "(field {} (call ci::text-bytes (text \"\")))",
-                        field[0].text()
-                    ))
+                    let value = match field[1].text().as_str() {
+                        "Bytes" => "(call ci::text-bytes (text \"\"))",
+                        "I64" => "(i64 0)",
+                        other => return Err(format!("unsupported bootstrap record field {other}")),
+                    };
+                    Ok(format!("(field {} {value})", field[0].text()))
                 })
                 .collect::<Result<Vec<_>, String>>()?;
             format!("(record structural {})", fields.join(" "))
@@ -286,4 +298,68 @@ pub fn steps(source: &str) -> Result<(String, Vec<String>), String> {
         ),
         changes,
     ))
+}
+
+/// Install every fixture header before replacing bodies in an existing project.
+#[allow(
+    dead_code,
+    reason = "shared helper is also compiled by the public CLI test harness"
+)]
+pub fn updates(source: &str) -> Result<Vec<String>, String> {
+    let (initial, mut changes) = steps(source)?;
+    let units = parse(&initial)
+        .into_iter()
+        .find(|form| form.head() == Some("units"))
+        .ok_or("missing proposal units")?;
+    let Form::List(units) = units else {
+        unreachable!()
+    };
+    let Form::List(header) = &units[1] else {
+        return Err("invalid proposal header".to_owned());
+    };
+    changes.insert(
+        0,
+        format!(
+            "(tx (base @head) {})",
+            upsert(&units[1], &header[2].text()).text()
+        ),
+    );
+    Ok(changes)
+}
+
+/// Reapply final definitions to an existing graph in bounded public changes.
+/// Existing interfaces already resolve forward references; installing temporary
+/// stubs would needlessly invalidate the complete caller closure.
+#[allow(
+    dead_code,
+    reason = "shared helper is also compiled by the public CLI test harness"
+)]
+pub fn replay(source: &str) -> Vec<String> {
+    let mut changes = vec![];
+    for form in parse(source) {
+        if form.head() != Some("units") {
+            continue;
+        }
+        let Form::List(units) = form else {
+            unreachable!()
+        };
+        for unit in &units[1..] {
+            let Form::List(items) = unit else {
+                unreachable!()
+            };
+            let name = items[2].text();
+            if unit.head() == Some("module") {
+                for members in items[3..].chunks(4) {
+                    let group = Form::List(items[..3].iter().chain(members).cloned().collect());
+                    changes.push(format!(
+                        "(tx (base @head) {})",
+                        upsert(&group, &name).text()
+                    ));
+                }
+            } else {
+                changes.push(format!("(tx (base @head) {})", upsert(unit, &name).text()));
+            }
+        }
+    }
+    changes
 }

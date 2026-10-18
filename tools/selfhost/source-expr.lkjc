@@ -1,0 +1,441 @@
+declarations.begin
+(units
+  (module create source-expr
+    (function create text
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (returns I64)
+      (body
+        (if
+          (call source-read::range (local data) (local at) (i64 1) (local end))
+          (if
+            (call ci::eq (call ci::get (local data) (local at)) (i64 0))
+            (call source-shape::span-cursor
+              (call source-read::string
+                (local data)
+                (call ci::add (local at) (i64 1))
+                (local end)
+                (i64 0)
+                (i64 65536)))
+            (if
+              (call ci::eq (call ci::get (local data) (local at)) (i64 1))
+              (let
+                (binding cursor-0
+                  (call source-read::typed
+                    (local data)
+                    (call ci::add (local at) (i64 1))
+                    (local end)
+                    (i64 3)
+                    (i64 33)))
+                (in
+                  (if
+                    (call ci::lt (i64 -1) (local cursor-0))
+                    (let
+                      (binding cursor-1
+                        (let
+                          (binding size
+                            (call source-read::integer (local data) (local cursor-0) (local end)))
+                          (in
+                            (if
+                              (if
+                                (call ci::eq (field (local size) (name code)) (i64 0))
+                                (if
+                                  (if
+                                    (call ci::lt (i64 0) (field (local size) (name low)))
+                                    (bool true)
+                                    (if
+                                      (call ci::lt (i64 0) (field (local size) (name high)))
+                                      (bool true)
+                                      (bool false)))
+                                  (bool true)
+                                  (bool false))
+                                (bool false))
+                              (field (local size) (name next))
+                              (i64 -1)))))
+                      (in
+                        (if
+                          (call ci::lt (i64 -1) (local cursor-1))
+                          (local cursor-1)
+                          (local cursor-1))))
+                    (local cursor-0))))
+              (i64 -1)))
+          (i64 -1))))
+    (function create local
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (returns I64)
+      (body
+        (if
+          (call source-read::range (local data) (local at) (i64 1) (local end))
+          (let
+            (binding kind (call ci::get (local data) (local at)))
+            (in
+              (if
+                (call ci::lt (local kind) (i64 5))
+                (call source-read::typed
+                  (local data)
+                  (call ci::add (local at) (i64 1))
+                  (local end)
+                  (if (call ci::lt (local kind) (i64 2)) (i64 7) (i64 8))
+                  (i64 17))
+                (i64 -1))))
+          (i64 -1))))
+    (function create body
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create operation (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local operation) (i64 0))
+          (local at)
+          (if
+            (call ci::eq (local operation) (i64 1))
+            (call source-fields::tag (local data) (local at) (local end) (i64 1))
+            (if
+              (call ci::eq (local operation) (i64 2))
+              (call source-shape::number-cursor
+                (call source-read::signed (local data) (local at) (local end)))
+              (if
+                (if
+                  (call ci::eq (local operation) (i64 3))
+                  (bool true)
+                  (if (call ci::eq (local operation) (i64 4)) (bool true) (bool false)))
+                (call text (local data) (local at) (local end))
+                (if
+                  (call ci::eq (local operation) (i64 5))
+                  (call local (local data) (local at) (local end))
+                  (if
+                    (call ci::eq (local operation) (i64 6))
+                    (call source-read::reference (local data) (local at) (local end) (i64 3))
+                    (if
+                      (call ci::eq (local operation) (i64 7))
+                      (let
+                        (binding cursor-0
+                          (call source-read::typed
+                            (local data)
+                            (local at)
+                            (local end)
+                            (i64 9)
+                            (i64 17)))
+                        (in
+                          (if
+                            (call ci::lt (i64 -1) (local cursor-0))
+                            (let
+                              (binding cursor-1
+                                (call source-read::typed
+                                  (local data)
+                                  (local cursor-0)
+                                  (local end)
+                                  (i64 9)
+                                  (i64 17)))
+                              (in
+                                (if
+                                  (call ci::lt (i64 -1) (local cursor-1))
+                                  (let
+                                    (binding cursor-2
+                                      (call source-read::typed
+                                        (local data)
+                                        (local cursor-1)
+                                        (local end)
+                                        (i64 9)
+                                        (i64 17)))
+                                    (in
+                                      (if
+                                        (call ci::lt (i64 -1) (local cursor-2))
+                                        (local cursor-2)
+                                        (local cursor-2))))
+                                  (local cursor-1))))
+                            (local cursor-0))))
+                      (if
+                        (call ci::eq (local operation) (i64 8))
+                        (let
+                          (binding cursor-0
+                            (call source-fields::nonempty-array
+                              (local data)
+                              (local at)
+                              (local end)
+                              (i64 8)
+                              (i64 17)))
+                          (in
+                            (if
+                              (call ci::lt (i64 -1) (local cursor-0))
+                              (let
+                                (binding cursor-1
+                                  (call source-read::typed
+                                    (local data)
+                                    (local cursor-0)
+                                    (local end)
+                                    (i64 9)
+                                    (i64 17)))
+                                (in
+                                  (if
+                                    (call ci::lt (i64 -1) (local cursor-1))
+                                    (local cursor-1)
+                                    (local cursor-1))))
+                              (local cursor-0))))
+                        (if
+                          (call ci::eq (local operation) (i64 9))
+                          (call source-fields::nonempty-array
+                            (local data)
+                            (local at)
+                            (local end)
+                            (i64 9)
+                            (i64 17))
+                          (if
+                            (call ci::eq (local operation) (i64 10))
+                            (let
+                              (binding cursor-0
+                                (call source-fields::zero (local data) (local at) (local end)))
+                              (in
+                                (if
+                                  (call ci::lt (i64 -1) (local cursor-0))
+                                  (let
+                                    (binding cursor-1
+                                      (call source-fields::zero
+                                        (local data)
+                                        (local cursor-0)
+                                        (local end)))
+                                    (in
+                                      (if
+                                        (call ci::lt (i64 -1) (local cursor-1))
+                                        (let
+                                          (binding cursor-2
+                                            (call source-read::reference
+                                              (local data)
+                                              (local cursor-1)
+                                              (local end)
+                                              (i64 3)))
+                                          (in
+                                            (if
+                                              (call ci::lt (i64 -1) (local cursor-2))
+                                              (let
+                                                (binding cursor-3
+                                                  (call source-shape::span-cursor
+                                                    (call source-read::array
+                                                      (local data)
+                                                      (local cursor-2)
+                                                      (local end)
+                                                      (i64 2)
+                                                      (i64 33))))
+                                                (in
+                                                  (if
+                                                    (call ci::lt (i64 -1) (local cursor-3))
+                                                    (let
+                                                      (binding cursor-4
+                                                        (call source-fields::zero
+                                                          (local data)
+                                                          (local cursor-3)
+                                                          (local end)))
+                                                      (in
+                                                        (if
+                                                          (call ci::lt (i64 -1) (local cursor-4))
+                                                          (let
+                                                            (binding cursor-5
+                                                              (call source-shape::span-cursor
+                                                                (call source-read::array
+                                                                  (local data)
+                                                                  (local cursor-4)
+                                                                  (local end)
+                                                                  (i64 9)
+                                                                  (i64 17))))
+                                                            (in
+                                                              (if
+                                                                (call ci::lt
+                                                                  (i64 -1)
+                                                                  (local cursor-5))
+                                                                (local cursor-5)
+                                                                (local cursor-5))))
+                                                          (local cursor-4))))
+                                                    (local cursor-3))))
+                                              (local cursor-2))))
+                                        (local cursor-1))))
+                                  (local cursor-0))))
+                            (if
+                              (call ci::eq (local operation) (i64 11))
+                              (let
+                                (binding cursor-0
+                                  (call source-fields::zero (local data) (local at) (local end)))
+                                (in
+                                  (if
+                                    (call ci::lt (i64 -1) (local cursor-0))
+                                    (let
+                                      (binding cursor-1
+                                        (call source-fields::zero
+                                          (local data)
+                                          (local cursor-0)
+                                          (local end)))
+                                      (in
+                                        (if
+                                          (call ci::lt (i64 -1) (local cursor-1))
+                                          (let
+                                            (binding cursor-2
+                                              (call source-read::reference
+                                                (local data)
+                                                (local cursor-1)
+                                                (local end)
+                                                (i64 3)))
+                                            (in
+                                              (if
+                                                (call ci::lt (i64 -1) (local cursor-2))
+                                                (let
+                                                  (binding cursor-3
+                                                    (call source-shape::span-cursor
+                                                      (call source-read::array
+                                                        (local data)
+                                                        (local cursor-2)
+                                                        (local end)
+                                                        (i64 2)
+                                                        (i64 33))))
+                                                  (in
+                                                    (if
+                                                      (call ci::lt (i64 -1) (local cursor-3))
+                                                      (let
+                                                        (binding cursor-4
+                                                          (call source-fields::zero
+                                                            (local data)
+                                                            (local cursor-3)
+                                                            (local end)))
+                                                        (in
+                                                          (if
+                                                            (call ci::lt (i64 -1) (local cursor-4))
+                                                            (local cursor-4)
+                                                            (local cursor-4))))
+                                                      (local cursor-3))))
+                                                (local cursor-2))))
+                                          (local cursor-1))))
+                                    (local cursor-0))))
+                              (if
+                                (call ci::eq (local operation) (i64 12))
+                                (let
+                                  (binding cursor-0
+                                    (call source-read::typed
+                                      (local data)
+                                      (local at)
+                                      (local end)
+                                      (i64 9)
+                                      (i64 17)))
+                                  (in
+                                    (if
+                                      (call ci::lt (i64 -1) (local cursor-0))
+                                      (let
+                                        (binding cursor-1
+                                          (call source-shape::span-cursor
+                                            (call source-read::array
+                                              (local data)
+                                              (local cursor-0)
+                                              (local end)
+                                              (i64 9)
+                                              (i64 17))))
+                                        (in
+                                          (if
+                                            (call ci::lt (i64 -1) (local cursor-1))
+                                            (local cursor-1)
+                                            (local cursor-1))))
+                                      (local cursor-0))))
+                                (if
+                                  (call ci::eq (local operation) (i64 13))
+                                  (call source-fields::record (local data) (local at) (local end))
+                                  (if
+                                    (call ci::eq (local operation) (i64 14))
+                                    (let
+                                      (binding cursor-0
+                                        (call source-read::reference
+                                          (local data)
+                                          (local at)
+                                          (local end)
+                                          (i64 5)))
+                                      (in
+                                        (if
+                                          (call ci::lt (i64 -1) (local cursor-0))
+                                          (let
+                                            (binding cursor-1
+                                              (call source-shape::span-cursor
+                                                (call source-read::array
+                                                  (local data)
+                                                  (local cursor-0)
+                                                  (local end)
+                                                  (i64 2)
+                                                  (i64 33))))
+                                            (in
+                                              (if
+                                                (call ci::lt (i64 -1) (local cursor-1))
+                                                (let
+                                                  (binding cursor-2
+                                                    (call source-read::optional
+                                                      (local data)
+                                                      (local cursor-1)
+                                                      (local end)
+                                                      (i64 9)
+                                                      (i64 17)))
+                                                  (in
+                                                    (if
+                                                      (call ci::lt (i64 -1) (local cursor-2))
+                                                      (local cursor-2)
+                                                      (local cursor-2))))
+                                                (local cursor-1))))
+                                          (local cursor-0))))
+                                    (if
+                                      (call ci::eq (local operation) (i64 15))
+                                      (let
+                                        (binding cursor-0
+                                          (call source-read::typed
+                                            (local data)
+                                            (local at)
+                                            (local end)
+                                            (i64 9)
+                                            (i64 17)))
+                                        (in
+                                          (if
+                                            (call ci::lt (i64 -1) (local cursor-0))
+                                            (let
+                                              (binding cursor-1
+                                                (call source-fields::selector
+                                                  (local data)
+                                                  (local cursor-0)
+                                                  (local end)))
+                                              (in
+                                                (if
+                                                  (call ci::lt (i64 -1) (local cursor-1))
+                                                  (local cursor-1)
+                                                  (local cursor-1))))
+                                            (local cursor-0))))
+                                      (if
+                                        (call ci::eq (local operation) (i64 16))
+                                        (let
+                                          (binding cursor-0
+                                            (call source-read::typed
+                                              (local data)
+                                              (local at)
+                                              (local end)
+                                              (i64 2)
+                                              (i64 33)))
+                                          (in
+                                            (if
+                                              (call ci::lt (i64 -1) (local cursor-0))
+                                              (let
+                                                (binding cursor-1
+                                                  (call source-shape::span-cursor
+                                                    (call source-read::array
+                                                      (local data)
+                                                      (local cursor-0)
+                                                      (local end)
+                                                      (i64 9)
+                                                      (i64 17))))
+                                                (in
+                                                  (if
+                                                    (call ci::lt (i64 -1) (local cursor-1))
+                                                    (local cursor-1)
+                                                    (local cursor-1))))
+                                              (local cursor-0))))
+                                        (i64 -2)))))))))))))))))))))
+declarations.end

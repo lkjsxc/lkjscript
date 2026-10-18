@@ -220,8 +220,8 @@ Compiler workload measurements use the existing trusted foreground evaluator
 policy where needed. Cumulative modeled allocation charges measure work, not
 live heap or RSS. No runtime quota or verifier policy is raised for these tests.
 
-Focused profile-4 execution exported 244 reachable functions and 16,111
-instructions in 794,236 bytes. VM, reference and Rust-built native compiler execution
+At accepted commit `108906b5`, profile-4 execution exported 244 reachable functions
+and 16,111 instructions in 794,236 bytes. VM, reference and Rust-built native compiler execution
 emitted the same 2,519,420-byte ELF; C2 and C3 are byte-identical. Artifact projection
 contains 247 canonical units and 4,126,413 input bytes. A1, A2 and A3 are identical
 4,349,511-byte bundles, also matching VM/reference emission. Every unit matches
@@ -261,11 +261,56 @@ The host can now build this lkjscript component as a standalone native compiler.
 Select its `compile-elf` command target. The exact binary-filter signature and
 16 MiB transport bound are specified in [native ELF](native-elf.md). Native output
 must equal VM/reference output for positive, malformed and mutated-source cases.
-Milestone C and the earlier native backend closure are accepted. Both-output
-closure has focused evidence; official acceptance is recorded separately.
+Milestone D both-output backend closure is accepted at `108906b5`; its exact
+official receipt records the fresh gate matrix and remaining Rust boundaries.
 E/F require semantic admission, phase-local
 regions and the native source-graph fixed point. Optimizers and parallel compilation
 remain deferred.
+
+## Source-record decoding groundwork
+
+The source readers consume current kernel object bytes, before a semantic graph
+profile replaces the host-normalized LKJCI1 input. They do not change profile 4 or
+make its `compile-elf` entrypoint a semantic compiler. `source-shape::type` and
+`source-owner::owner` return 0 for supported record shapes, 12 for malformed
+encoding and 13 for a recognized unsupported form. Rejection produces no artifact.
+A supported shape is not permission to execute or a proof of semantic validity.
+
+`source-read` checks ranges before access, minimal bincode integers, complete
+signed I64 zigzag values, typed nonzero 16-byte identities, typed 32-byte digests,
+bounded arrays, UTF-8 strings, canonical names and optional references. Current
+envelopes require exact magic, epoch, length and domain-derived checksum. Type
+payloads have a 1 MiB bound and owner payloads a 4 MiB bound. Array counts are at
+most 100,000, names have 1 through 128 bytes and inline text at most 65,536 bytes.
+Negative indices and overflow-sized extents reject before arithmetic or access.
+
+The type reader covers Unit, Bool, I64, Bytes, Text, StaticText, ByteBuffer, type
+parameters, named/applied types, structural records, lists and function types.
+It checks nonempty strictly ordered structural fields and positive Applied arity.
+The owner reader checks headers and the supported module, declaration, parameter,
+type-parameter, binding, expression, field, case, port and target record shapes.
+It retains package-qualified references and ordered expression operands. Pure
+functions, externals, constants, records/variants, components and tests have
+structural readers; other effects, borrowed results, witness parameters and
+read-scope metadata currently reject explicitly. Expression forms 0 through 16
+cover literals, locals, branches, lets, calls/function values/invocation, records,
+variants, fields and lists. Known broader forms reject with code 13 before their
+unsupported payload is interpreted; this does not classify that payload as valid.
+
+Tests use the current Rust codecs as an independent structural oracle and also
+construct payloads directly, including malformed payloads with valid checksums.
+The test-only batch framing is repeated `(kind:u8, length:u32LE, object:Bytes)`
+rows, where kind 0 means type and 1 means owner. It is not a public compiler-input
+schema. All current source records are tested together on VM, reference and native
+execution, including records outside the backend entrypoint's reachable closure.
+
+These helpers do not establish object-to-map binding, dependency closure,
+reference existence, unique ownership, array identity uniqueness, graph acyclicity,
+expression typing, affine/borrow/region/effect rules or witness summaries. Those
+checks and normalization remain Milestone E work. Decoding currently scans bytes
+and returns scalar cursors; no phase-local graph arena or region-native memory
+claim is made. The final graph profile still needs bounded traversal work and
+lexical Region tables, followed by the Milestone F source-graph fixed point.
 
 ## Required final profile and proof
 

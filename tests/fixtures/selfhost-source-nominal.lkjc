@@ -1,0 +1,26 @@
+declarations.begin
+(units
+  (module create source-nominal
+    (record create Box (visibility public)
+      (type-parameter create T)
+      (field create active (type Bool))
+      (field create value (type T)))
+    (variant create Maybe (visibility public)
+      (type-parameter create T)
+      (case create present (payload T))
+      (case create absent))
+    (function create boxed (visibility public) (effect pure) (returns (Box I64))
+      (body (record Box (types I64)
+        (field Box::active (bool true)) (field Box::value (i64 42)))))
+    (function create present (visibility public) (effect pure) (returns (Maybe I64))
+      (body (variant Maybe::present (types I64) (i64 42))))
+    (function create absent (visibility public) (effect pure) (returns (Maybe I64))
+      (body (variant Maybe::absent (types I64))))
+    (function create identity (visibility public) (effect pure)
+      (parameter create value (type I64)) (returns I64) (body (local value)))
+    (function create apply (visibility public) (effect pure)
+      (parameter create f (type (function (I64) I64))) (returns I64)
+      (body (invoke (local f) (i64 42))))
+    (test create invocation (visibility private)
+      (actual (call apply (function-value identity))) (expected (i64 42)))))
+declarations.end

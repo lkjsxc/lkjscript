@@ -15,8 +15,12 @@ sha256sum src/platform/compiler/selfhost_input.rs \
   src/platform/execution/normalized/selfhost_admission_tests.rs \
   src/platform/execution/normalized/selfhost_artifact_tests.rs \
   src/platform/execution/normalized/selfhost_closure_tests.rs \
+  src/platform/execution/normalized/selfhost_source_tests.rs \
   tests/fixtures/selfhost-closure.lkjc \
   tests/fixtures/selfhost-artifact-probes.lkjc \
+  tests/fixtures/selfhost-source-probes.lkjc \
+  tests/fixtures/selfhost-source-record-probes.lkjc \
+  tests/fixtures/selfhost-source-nominal.lkjc \
   tests/fixtures/selfhost-artifact-empty-runtime.lkjc \
   tests/fixtures/selfhost-artifact-object-scan.lkjc \
   tests/fixtures/selfhost-generic-list.lkjc \
