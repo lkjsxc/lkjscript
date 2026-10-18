@@ -23,9 +23,11 @@ fn native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter() {
     std::fs::write(
         &request,
         format!(
-            "request base={base}\n{}\n{}",
+            "request base={base}\n{}\n{}\n{}\n{}",
             include_str!("../../tools/selfhost/input.lkjc"),
-            include_str!("../../tools/selfhost/elf.lkjc")
+            include_str!("../../tools/selfhost/elf.lkjc"),
+            include_str!("../../tools/selfhost/flow.lkjc"),
+            include_str!("../../tools/selfhost/machine.lkjc")
         ),
     )
     .unwrap();
@@ -61,30 +63,43 @@ fn native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter() {
         "compile-elf",
     ]);
 
-    // Independently encode the documented profile-1 expression 1 + 41.
-    let mut payload = vec![0u8; 168 + 4 * 16];
+    // Independently encode profile 2: a main function calls checked add(1, 41).
+    let mut payload = vec![0u8; 390];
     payload[..8].copy_from_slice(b"LKJCI001");
-    payload[8..12].copy_from_slice(&1u32.to_le_bytes());
-    let length = payload.len() as u64;
-    for (at, value) in [(16, length), (24, 1), (32, 7)] {
+    fn put(bytes: &mut [u8], at: usize, value: u32) {
+        bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
+    }
+    put(&mut payload, 8, 2);
+    for (at, value) in [(16, 390u64), (24, 2), (32, 169)] {
         payload[at..at + 8].copy_from_slice(&value.to_le_bytes());
     }
     for (i, value) in [
-        104u32, 1, 120, 1, 136, 1, 168, 4, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0,
+        112, 1, 128, 3, 176, 2, 256, 4, 384, 6, 0, 2, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0,
+        1, 0, 0, 0, 4, 0, 384, 0, 0, 0, 1, 2, 2, 4, 0, 1, 388, 0, 0,
     ]
     .into_iter()
     .enumerate()
     {
-        payload[72 + i * 4..76 + i * 4].copy_from_slice(&value.to_le_bytes());
+        put(&mut payload, 72 + i * 4, value);
     }
-    for (i, (tag, value)) in [(1u32, 1i64), (1, 41), (2, 0), (6, 0)]
-        .into_iter()
-        .enumerate()
+    for (i, (tag, a, b, immediate, state, depth)) in [
+        (1, 0, 0, 1i64, 384, 0),
+        (1, 0, 0, 41, 384, 1),
+        (9, 1, 2, 0, 385, 2),
+        (11, 0, 0, 0, 387, 1),
+    ]
+    .into_iter()
+    .enumerate()
     {
-        let at = 168 + i * 16;
-        payload[at..at + 4].copy_from_slice(&tag.to_le_bytes());
-        payload[at + 8..at + 16].copy_from_slice(&value.to_le_bytes());
+        let at = 256 + i * 32;
+        put(&mut payload, at, tag);
+        put(&mut payload, at + 4, a);
+        put(&mut payload, at + 8, b);
+        payload[at + 16..at + 24].copy_from_slice(&immediate.to_le_bytes());
+        put(&mut payload, at + 24, state);
+        put(&mut payload, at + 28, depth);
     }
+    payload[384..].fill(1);
     let mut digest = blake3::Hasher::new();
     digest.update(&payload[..40]);
     digest.update(&payload[72..]);

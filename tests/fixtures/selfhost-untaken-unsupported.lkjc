@@ -1,0 +1,6 @@
+declarations.begin
+(units (module create unsupported
+  (function create entry (visibility public) (effect pure) (returns I64)
+    (body (if (bool true) (i64 42)
+      (let (binding hidden (f64 1.25)) (in (i64 0))))))))
+declarations.end

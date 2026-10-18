@@ -7,10 +7,17 @@ use sha2::{Digest, Sha256};
 use std::process::{Command, Output, Stdio};
 use std::sync::OnceLock;
 
+#[path = "selfhost_closure_tests.rs"]
+mod closure;
+
 const SOURCE: &str = concat!(
     include_str!("../../../../tools/selfhost/input.lkjc"),
     "\n",
     include_str!("../../../../tools/selfhost/elf.lkjc"),
+    "\n",
+    include_str!("../../../../tools/selfhost/flow.lkjc"),
+    "\n",
+    include_str!("../../../../tools/selfhost/machine.lkjc"),
 );
 
 fn compiler() -> &'static (crate::platform::kernel::KernelSnapshot, NormalizedProgram) {
@@ -35,9 +42,17 @@ fn compile_with(
     program: &NormalizedProgram,
     bytes: &[u8],
 ) -> (i64, Vec<u8>) {
+    compile_with_policy(source, program, bytes, NormalizedRunPolicy::default())
+}
+
+fn compile_with_policy(
+    source: &crate::platform::kernel::KernelSnapshot,
+    program: &NormalizedProgram,
+    bytes: &[u8],
+    policy: NormalizedRunPolicy,
+) -> (i64, Vec<u8>) {
     let declaration = declaration_named(source, "compile-elf");
     let values = vec![NormalizedValue::bytes(bytes)];
-    let policy = NormalizedRunPolicy::default();
     let control = ExecutionControl::uncancelled();
     let (vm, vm_work) = NormalizedVm::for_test(program, policy)
         .invoke(declaration, values.clone(), None, &control)
@@ -48,6 +63,16 @@ fn compile_with(
     assert_eq!(vm, reference, "compiler engines must emit identical bytes");
     assert_eq!(vm_work.live_call_frames_after, 0);
     assert_eq!(reference_work.live_call_frames_after, 0);
+    if policy.instruction_steps.is_none() {
+        eprintln!(
+            "selfhost foreground input_bytes={} vm_steps={} vm_cumulative_allocation={} ref_expressions={} ref_cumulative_allocation={}",
+            bytes.len(),
+            vm_work.instructions,
+            vm_work.allocated_bytes,
+            reference_work.expressions,
+            reference_work.allocated_bytes
+        );
+    }
     let NormalizedValue::Record(NormalizedRecord::Structural { fields }) = vm else {
         panic!("compiler result");
     };
@@ -108,7 +133,7 @@ fn execute(bytes: &[u8], arguments: &[&str]) -> Output {
     crate::platform::owned_output::publish_executable_create_new(
         &path,
         bytes,
-        128 * 1024,
+        2 * 1024 * 1024,
         "selfhost test ELF",
     )
     .unwrap();
@@ -238,7 +263,7 @@ fn selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines() 
         assert_eq!(code, 0, "{name}");
         let output = execute(&image, &[]);
         eprintln!(
-            "selfhost profile=1 tier=backend case={name} input_sha256={} elf_sha256={} elf_bytes={} exit={:?}",
+            "selfhost profile=2 tier=backend case={name} input_sha256={} elf_sha256={} elf_bytes={} exit={:?}",
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&bytes)),
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&image)),
             image.len(),
@@ -284,51 +309,62 @@ fn selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines() 
 
 #[test]
 fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
-    let valid = input::encode(&[(1, 42), (6, 0)]).unwrap();
-    for length in [0, 7, 39, 40, 71, 72, 167, 183, valid.len() - 1] {
+    let valid = input::arithmetic(&[(1, 42), (6, 0)]).unwrap();
+    for length in [0, 7, 39, 40, 71, 72, 175, 247, valid.len() - 1] {
         assert_eq!(compile(&valid[..length]), (3, vec![]));
     }
     for (offset, value, expected) in [
         (0, 0, 1),
-        (8, 2, 2),
-        (12, 1, 5),
+        (8, 1, 2),
+        (12, 5, 5),
         (16, 0, 3),
         (20, 255, 3),
-        (24, 2, 3),
+        (24, 0, 3),
         (28, 255, 3),
         (32, 0, 6),
         (36, 1, 6),
-        (40, 0, 4),
-        (72, 105, 5),
-        (76, 2, 5),
-        (80, 0, 5),
+        (72, 113, 5),
+        (76, 0, 5),
+        (80, 129, 5),
         (84, 0, 5),
-        (88, 255, 5),
+        (88, 0, 5),
         (92, 0, 5),
         (96, 0, 5),
-        (100, 1, 5),
-        (104, 1, 5),
-        (108, 2, 5),
+        (100, 0, 3),
+        (104, 0, 5),
+        (108, 0, 5),
         (112, 1, 5),
-        (120, 99, 5),
-        (124, 1, 5),
-        (136, 1, 5),
-        (140, 1, 5),
-        (144, 1, 5),
-        (148, 1, 5),
-        (152, 1, 5),
-        (156, 1, 5),
-        (160, 1, 5),
-        (164, 1, 5),
-        (168, 99, 7),
-        (172, 1, 7),
-        (192, 1, 7),
+        (116, 0, 5),
+        (120, 1, 5),
+        (128, 99, 5),
+        (132, 1, 5),
+        (144, 99, 5),
+        (160, 99, 5),
+        (176, 1, 5),
+        (180, 0, 5),
+        (180, 2, 9),
+        (184, 1, 5),
+        (188, 129, 5),
+        (192, 1, 5),
+        (196, 1, 5),
+        (200, 12, 5),
+        (204, 0, 5),
+        (208, 1, 5),
+        (212, 1, 5),
+        (376, 99, 7),
+        (380, 1, 7),
+        (384, 1, 7),
+        (388, 1, 7),
+        (400, 0, 5),
+        (404, 129, 5),
+        (424, 1, 7),
+        (440, 2, 8),
+        (440, 0, 5),
+        (440, 255, 5),
     ] {
         let mut changed = valid.clone();
         changed[offset] = value;
-        if offset != 40 {
-            input::rechecksum(&mut changed);
-        }
+        input::rechecksum(&mut changed);
         assert_eq!(compile(&changed), (expected, vec![]), "byte {offset}");
     }
     for nodes in [
@@ -338,23 +374,21 @@ fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
         vec![(1, 1), (1, 2), (6, 0)],
         vec![(1, 1), (6, 0), (1, 2)],
     ] {
-        assert_eq!(compile(&input::encode(&nodes).unwrap()), (8, vec![]));
+        assert_eq!(compile(&input::arithmetic(&nodes).unwrap()), (8, vec![]));
     }
     let mut corrupt = valid.clone();
-    corrupt[176] ^= 1;
+    corrupt[392] ^= 1;
     assert_eq!(compile(&corrupt), (4, vec![]));
-    let mut excessive_fuel = valid.clone();
-    excessive_fuel[32..40].copy_from_slice(&4097_u64.to_le_bytes());
-    input::rechecksum(&mut excessive_fuel);
-    assert_eq!(compile(&excessive_fuel), (6, vec![]));
-    let mut huge = vec![0; input::NODES + 16 * (input::MAX_NODES + 1)];
-    huge[..valid.len()].copy_from_slice(&valid);
-    assert_eq!(compile(&huge), (3, vec![]));
+    let mut excessive = valid.clone();
+    excessive[32..40].copy_from_slice(&16_777_217_u64.to_le_bytes());
+    input::rechecksum(&mut excessive);
+    assert_eq!(compile(&excessive), (6, vec![]));
+    assert_eq!(compile(&vec![0; input::MAX_INPUT + 1]), (3, vec![]));
 }
 
 #[test]
 fn selfhost_compiler_is_deterministic_and_source_mutation_changes_emitted_behavior() {
-    let payload = input::encode(&[(1, 42), (6, 0)]).unwrap();
+    let payload = input::arithmetic(&[(1, 42), (6, 0)]).unwrap();
     let (code, image) = compile(&payload);
     assert_eq!(code, 0);
     assert_eq!(compile(&payload), (0, image.clone()));
@@ -386,21 +420,24 @@ fn selfhost_compiler_is_deterministic_and_source_mutation_changes_emitted_behavi
 #[test]
 fn selfhost_compiler_accepts_exact_input_and_fuel_limits() {
     let mut nodes = vec![(1, 0)];
-    for _ in 0..511 {
+    for _ in 0..(input::MAX_NODES - 2) / 2 {
         nodes.extend_from_slice(&[(1, 1), (2, 0)]);
     }
     nodes.push((6, 0));
     assert_eq!(nodes.len(), input::MAX_NODES);
-    let mut bytes = input::encode(&nodes).unwrap();
-    assert_eq!(bytes.len(), 16_552);
-    let (code, image) = compile(&bytes);
+    let mut bytes = input::arithmetic(&nodes).unwrap();
+    assert_eq!(bytes.len(), 137_598);
+    let (source, program) = compiler();
+    let (code, image) =
+        compile_with_policy(source, program, &bytes, NormalizedRunPolicy::foreground());
     assert_eq!(code, 0);
-    assert_eq!(image.len(), 70_656);
+    assert_eq!(image.len(), 5120 + (input::MAX_NODES + 5) * 128);
     let output = execute(&image, &[]);
     assert!(output.status.success());
-    assert_eq!(output.stdout, b"511");
+    assert_eq!(output.stdout, b"2047");
     assert!(output.stderr.is_empty());
-    bytes[32..40].copy_from_slice(&1026_u64.to_le_bytes());
+    let fuel = u64::from_le_bytes(bytes[32..40].try_into().unwrap());
+    bytes[32..40].copy_from_slice(&(fuel - 1).to_le_bytes());
     input::rechecksum(&mut bytes);
     assert_eq!(compile(&bytes), (6, vec![]));
 }
@@ -419,7 +456,6 @@ fn selfhost_exporter_rejects_unsupported_complete_function_bodies() {
         "collection",
         "nominal",
         "unsupported",
-        "untaken",
     ] {
         let index = program
             .function(declaration_named(&source, name))

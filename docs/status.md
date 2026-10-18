@@ -50,14 +50,15 @@ meaning graph and [schema/dependency inventory](spec/selfhosting.md) identify th
 current boundary. Tier 1 native compiler execution now agrees with both evaluators;
 backend closure, semantic admission, both formats and C2/C3 proof remain next.
 
-Latest Attempt: running — final Milestone C acceptance requires a clean candidate
-verifier bound to its changed production hash. Five compiler tests, eight native
-runtime tests and two public CLI tests passed, including malformed input and
-source mutation. Final checker receipts establish acceptance before integration.
-Last Accepted Commit: `892b46da` (LKJCI1 backend slice, integrated on origin/main).
-Its five focused tests and both 29-gate changed/fresh-full runs passed; all gates
-executed freshly and their input snapshots stayed stable. The bounded receipt
-`.artifacts/selfhost/acceptance.json` binds its exact source/tree and limitations.
+Latest Attempt: running — official acceptance of the scalar closure step toward
+Milestone D. LKJCI1 profile 2 replaces profile 1 with functions, typed control-flow
+certificates, locals, branches, recursion and self-tail calls. Nine focused tests
+and two public CLI tests passed. Rust admission/export remain Tier 1 dependencies.
+Last Accepted Commit: `32f0d1dc` (native compiler slice, integrated on origin/main).
+Five compiler, eight native runtime and two public CLI focused tests passed.
+The clean candidate changed check selected two gates; fresh full passed all 29
+gates, all freshly executed with stable input, and release-target policy passed.
+`.artifacts/selfhost/accepted-c/receipt.json` binds source, tree and limitations.
 Known Limitations: no self-produced `.lkja`, complete backend compiler closure,
 semantic checker or C2/C3 proof. Required broader types,
 ownership, witnesses and regions remain in the Tier 2 acceptance profile.
