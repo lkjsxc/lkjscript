@@ -6356,6 +6356,17 @@ fn reference_intrinsic(
                 "BLAKE3 hashing received a foreign value",
             )),
         },
+        "core.bytes.blake3-derive-key" => match arguments.as_slice() {
+            [
+                NormalizedValue::Text(context),
+                NormalizedValue::Bytes(material),
+            ] => Ok(NormalizedValue::bytes(
+                blake3::derive_key(context, material).to_vec(),
+            )),
+            _ => Err(reference_type_error(
+                "BLAKE3 derivation received foreign values",
+            )),
+        },
         "core.value.equal" => {
             if type_arguments
                 .iter()

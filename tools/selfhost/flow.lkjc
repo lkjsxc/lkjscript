@@ -64,7 +64,7 @@ declarations.begin
               (if (call ci::both (call ci::eq (call field (local data) (local f) (i64 28)) (local blob))
                     (call ci::word-is (local data) (call ci::add (local f) (i64 32)) (i64 0)))
                 (if (if (call ci::eq (local external) (i64 0)) (call ci::lt (i64 0) (local count))
-                      (call ci::both (call ci::lt (local external) (i64 28))
+                      (call ci::both (call ci::lt (local external) (i64 29))
                         (call ci::both (call ci::eq (local count) (i64 0)) (call ci::eq (local locals) (local parameters)))))
                   (if (call custody::local-types (local data) (local f) (i64 0))
                     (let (binding next (call node-layout (local data) (local f) (i64 0) (local end)))

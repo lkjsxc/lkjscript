@@ -62,12 +62,43 @@ impl Emitter<'_> {
                 self.a.imm(Dx, 0);
                 self.a.imm(Cx, 8);
                 self.a.lea(R8, R13, 24);
+                self.a.imm(R9, 0);
                 self.a.call(self.runtime.blake3);
                 self.a.mov(Ax, R13);
             }
+            "core.bytes.blake3-derive-key" => self.bytes_derive_key(),
             _ => return self.buffer_external(name),
         }
         true
+    }
+
+    fn bytes_derive_key(&mut self) {
+        self.a.mov(R12, Ax);
+        self.a.imm(Bx, 32);
+        self.bytes_allocate();
+        // The intermediate context key has lexical stack storage, outside output.
+        self.a.group(5, Sp, 32);
+        self.a.load(Si, R12, 24);
+        self.a.group(7, Si, 256 * 1024 * 1024 + 1);
+        self.a.when(AE, self.runtime.bytes_capacity);
+        self.a.load(Di, R12, 32);
+        self.a.imm(Dx, 0);
+        self.a.imm(Cx, 32 | 8); // DERIVE_KEY_CONTEXT | ROOT.
+        self.a.mov(R8, Sp);
+        self.a.imm(R9, 0);
+        self.a.call(self.runtime.blake3);
+        self.argument(Ax, 0);
+        self.a.load(Si, Ax, 8);
+        self.a.group(7, Si, 256 * 1024 * 1024 + 1);
+        self.a.when(AE, self.runtime.bytes_capacity);
+        self.a.load(Di, Ax, 16);
+        self.a.imm(Dx, 0);
+        self.a.imm(Cx, 64 | 8); // DERIVE_KEY_MATERIAL | ROOT.
+        self.a.mov(R9, Sp);
+        self.a.lea(R8, R13, 24);
+        self.a.call(self.runtime.blake3);
+        self.a.group(0, Sp, 32);
+        self.a.mov(Ax, R13);
     }
 
     /// Bx is the validated byte length. R13 receives the new object pointer.

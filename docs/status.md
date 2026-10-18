@@ -50,14 +50,16 @@ The maintained meaning graph and [schema/dependency inventory](spec/selfhosting.
 identify the current boundary. Focused native backend reproduction has identical
 C2/C3 bytes; semantic source-graph reproduction and `.lkja` emission remain next.
 
-Latest Attempt: not_run — official acceptance of the Tier 1 native backend candidate.
-Focused stage reproduction, compiler-source mutation, proposal-closure agreement
-and both public CLI tests passed. The fresh full matrix remains required.
-Last Accepted Commit: `90e215bf` (scalar closure step, integrated on origin/main).
-Nine compiler, eight native runtime and two public CLI focused tests passed.
+Latest Attempt: not_run — official acceptance of domain hashing for `.lkja` identities.
+Published vectors, context boundaries, signature rejection, proposal replay and
+C2/C3 reproduction passed focused checks; public hash execution and Clippy passed.
+Current artifact serialization remains next, with Rust admission/export retained.
+Last Accepted Commit: `45c088f9` (native backend closure, integrated on origin/main).
+All 22 compiler and eight native runtime tests passed inside official full;
+two public CLI focused tests and source mutation/reproduction passed too.
 The clean candidate changed check selected two gates; fresh full passed all 29
 gates, all freshly executed with stable input, and release-target policy passed.
-`.artifacts/selfhost/accepted-d-scalar/receipt.json` binds source and limitations.
+`.artifacts/selfhost/accepted-d-native/receipt.json` binds source and limitations.
 Known Limitations: no self-produced `.lkja` or source-graph semantic checker.
 Native allocation is process-owned, with no lexical region reclamation or RSS
 claim. Broader types, witnesses, regions and source-graph C2/C3 proof remain required

@@ -1,4 +1,4 @@
-//! Unkeyed 32-byte BLAKE3, emitted as native integer instructions. The bounded
+//! Unkeyed and derive-key 32-byte BLAKE3 emitted as native integer instructions. The bounded
 //! input is split into the algorithm's left-complete chunk tree; at most 19
 //! frames are live for a 256 MiB value. No host hashing runs in the executable.
 //! Algorithm and independent vectors: https://github.com/BLAKE3-team/BLAKE3
@@ -17,10 +17,28 @@ const RIGHT: i32 = 256;
 const FRAME: i32 = 288;
 
 fn initial_cv(a: &mut Asm) {
+    let iv = a.label();
+    let done = a.label();
+    a.load(R9, R12, 48);
+    a.bin(0x85, R9, R9);
+    a.when(E, iv);
+    for i in 0..4 {
+        a.load(Ax, R9, i * 8);
+        a.store(R12, CV + i * 8, Ax);
+    }
+    a.jump(done);
+    a.bind(iv);
     for (i, word) in IV.into_iter().enumerate() {
         a.imm(Ax, u64::from(word));
         a.store32(R12, CV + i as i32 * 4, Ax);
     }
+    a.bind(done);
+}
+
+fn child_parameters(a: &mut Asm) {
+    a.load(Cx, R12, 24);
+    a.group(4, Cx, !8); // Preserve derivation flags while clearing ROOT.
+    a.load(R9, R12, 48);
 }
 
 pub(super) fn emit(a: &mut Asm, tree: Label) {
@@ -33,8 +51,9 @@ pub(super) fn emit(a: &mut Asm, tree: Label) {
     a.push(R13);
     a.group(5, Sp, FRAME);
     a.mov(R12, Sp);
-    // Inputs: Di data, Si length, Dx chunk counter, Cx root flag, R8 output.
-    for (offset, register) in [(0, Di), (8, Si), (16, Dx), (24, Cx), (32, R8)] {
+    // Di data, Si length, Dx chunk counter, Cx mode/root flags, R8 output.
+    // R9 points to 32 key bytes, or is zero for the IV. It stays live in the caller.
+    for (offset, register) in [(0, Di), (8, Si), (16, Dx), (24, Cx), (32, R8), (48, R9)] {
         a.store(R12, offset, register);
     }
     a.group(7, Si, 1025);
@@ -52,7 +71,7 @@ pub(super) fn emit(a: &mut Asm, tree: Label) {
     a.bind(divided);
     a.store(R12, 40, Bx);
     a.mov(Si, Bx);
-    a.imm(Cx, 0);
+    child_parameters(a);
     a.lea(R8, R12, LEFT);
     a.call(tree);
     a.load(Bx, R12, 40);
@@ -63,7 +82,7 @@ pub(super) fn emit(a: &mut Asm, tree: Label) {
     a.shift(5, Bx, 10);
     a.load(Dx, R12, 16);
     a.bin(0x01, Dx, Bx);
-    a.imm(Cx, 0);
+    child_parameters(a);
     a.lea(R8, R12, RIGHT);
     a.call(tree);
     for i in 0..8 {
@@ -125,6 +144,9 @@ pub(super) fn emit(a: &mut Asm, tree: Label) {
     a.load(Ax, R12, 24);
     a.bin(0x09, R8, Ax);
     a.bind(middle);
+    a.load(Ax, R12, 24);
+    a.group(4, Ax, !8);
+    a.bin(0x09, R8, Ax); // Every chunk block carries the derivation mode.
     a.call(compress);
     a.load(Ax, R12, 8);
     a.group(7, Ax, 65);

@@ -1,0 +1,13 @@
+declarations.begin
+(units
+  (module create domain-hash
+    (external create primitive (visibility private) (implementation core.bytes.blake3-derive-key)
+      (parameter create context (type Text)) (parameter create data (type Bytes)) (returns Bytes))
+    (function create filter (visibility public) (effect pure)
+      (parameter create data (type Bytes)) (returns (record (diagnostic I64) (image Bytes)))
+      (body (record structural (field diagnostic (i64 0))
+        (field image (call primitive (text "BLAKE3 2019-12-27 16:29:52 test vectors context") (local data))))))
+    (component create command (visibility public)
+      (port create hash (type (function (Bytes) (record (diagnostic I64) (image Bytes)))) (function filter))))
+  (target create hash (component domain-hash::command) (runner command) (port domain-hash::command::hash)))
+declarations.end

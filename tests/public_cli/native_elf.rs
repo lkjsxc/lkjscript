@@ -5,6 +5,97 @@ use std::io::Write;
 mod compiler_proposals;
 
 #[test]
+fn native_elf_public_derived_hash_matches_published_vectors() {
+    let _semantics = semantic_command::Scope::enter();
+    let temporary = tempfile::tempdir().unwrap();
+    let copied =
+        semantic_cli::executable(temporary.path(), semantic_cli::Mode::selected(), &binary());
+    let project = temporary.path().join("hash-source");
+    let run = |args: &[&str]| compact_success_at(&copied, temporary.path(), args);
+    run(&[
+        "new",
+        path(&project),
+        "--template",
+        "minimal",
+        "--name",
+        "hash",
+    ]);
+    let base = current_revision_at(&copied, temporary.path(), &project);
+    let request = temporary.path().join("hash.lkjc");
+    std::fs::write(
+        &request,
+        format!(
+            "request base={base}\n{}",
+            include_str!("../fixtures/native-derived-hash.lkjc")
+        ),
+    )
+    .unwrap();
+    let review = temporary.path().join("hash.lkjplan");
+    let plan = run(&[
+        "--project",
+        path(&project),
+        "change",
+        "plan",
+        "--input-file",
+        path(&request),
+        "--output",
+        path(&review),
+    ]);
+    run(&[
+        "--project",
+        path(&project),
+        "change",
+        "apply",
+        "--input-file",
+        path(&request),
+        "--plan",
+        compact_field(compact_record(&plan, "plan"), "token").unwrap(),
+    ]);
+    let executable = temporary.path().join("hash");
+    run(&[
+        "--project",
+        path(&project),
+        "build",
+        "--native-elf",
+        path(&executable),
+        "--target",
+        "hash",
+    ]);
+    let detached = temporary.path().join("detached");
+    std::fs::create_dir(&detached).unwrap();
+    let input = detached.join("material");
+    let vectors: serde_json::Value =
+        serde_json::from_str(include_str!("../fixtures/blake3-derive-vectors.json")).unwrap();
+    for vector in vectors["cases"].as_array().unwrap() {
+        let length = vector["input_len"].as_u64().unwrap() as usize;
+        let material: Vec<_> = (0..length).map(|i| (i % 251) as u8).collect();
+        std::fs::write(&input, material).unwrap();
+        let output = support::spawn(
+            Command::new(&executable)
+                .env_clear()
+                .current_dir(&detached)
+                .stdin(Stdio::from(File::open(&input).unwrap()))
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped()),
+        )
+        .unwrap()
+        .wait_with_output()
+        .unwrap();
+        assert!(output.status.success(), "length {length}: {output:?}");
+        assert!(output.stderr.is_empty());
+        let expected = vector["hash"].as_str().unwrap();
+        assert_eq!(output.stdout.len() * 2, expected.len());
+        for (byte, hex) in output
+            .stdout
+            .iter()
+            .zip(expected.as_bytes().as_chunks::<2>().0)
+        {
+            assert_eq!(format!("{byte:02x}").as_bytes(), hex);
+        }
+    }
+}
+
+#[test]
 fn native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter() {
     let _semantics = semantic_command::Scope::enter();
     let temporary = tempfile::tempdir().unwrap();

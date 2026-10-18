@@ -5411,6 +5411,18 @@ fn call_core_intrinsic_borrowed(
                 blake3::hash(value).as_bytes().to_vec(),
             ))
         }
+        "core.bytes.blake3-derive-key" => {
+            let [
+                NormalizedValue::Text(context),
+                NormalizedValue::Bytes(material),
+            ] = arguments
+            else {
+                return Err(type_error("BLAKE3 derivation received foreign values"));
+            };
+            Ok(NormalizedValue::bytes(
+                blake3::derive_key(context, material).to_vec(),
+            ))
+        }
         "core.value.equal" => {
             if type_arguments.iter().any(|ty| {
                 !program.application_free_types.contains(ty)

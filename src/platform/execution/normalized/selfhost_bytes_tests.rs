@@ -379,6 +379,29 @@ fn selfhost_byte_operations_preserve_independent_values_and_traps() {
 }
 
 #[test]
+fn selfhost_byte_blake3_derivation_preserves_independent_vectors_and_contexts() {
+    let vectors = native_derive_tests::vectors();
+    let (source, program) = native_derive_tests::fixture(vectors["context"].as_str().unwrap());
+    native_derive_tests::check_vectors(&build_named(&source, &program, "filter"));
+    for context in native_derive_tests::contexts() {
+        let (source, program) = native_derive_tests::fixture(&context);
+        let image = build_named(&source, &program, "filter");
+        for length in [0, 65, 2049] {
+            let input: Vec<_> = (0..length).map(|i| (i % 251) as u8).collect();
+            let output = native_filter_tests::execute_filter(&image, &input, &[], 127);
+            assert_eq!(
+                output.status.code(),
+                Some(0),
+                "context length {}: {output:?}",
+                context.len()
+            );
+            assert!(output.stderr.is_empty());
+            assert_eq!(output.stdout, blake3::derive_key(&context, &input));
+        }
+    }
+}
+
+#[test]
 fn selfhost_byte_backend_reproduces_its_complete_native_closure() {
     let (source, program) = compiler();
     let entry = program
@@ -414,7 +437,22 @@ fn selfhost_byte_backend_reproduces_its_complete_native_closure() {
         .0 as usize;
     let buffer_input = input::export(&buffer_program, buffer_entry).unwrap();
     let overflow_input = input::arithmetic(&[(1, i64::MAX), (1, 1), (2, 0), (6, 0)]).unwrap();
+    let vectors = native_derive_tests::vectors();
+    let (derived_source, derived_program) =
+        native_derive_tests::fixture(vectors["context"].as_str().unwrap());
+    let derived_entry = derived_program
+        .function(declaration_named(&derived_source, "filter"))
+        .unwrap()
+        .0 as usize;
+    let derived_input = input::export(&derived_program, derived_entry).unwrap();
+    let (derived_code, derived_expected) = foreground(&derived_input);
+    assert_eq!(derived_code, 0);
     for stage in [&c2, &output.stdout] {
+        let derived = native_filter_tests::execute_filter(stage, &derived_input, &[], 127);
+        assert_eq!(derived.status.code(), Some(0), "{derived:?}");
+        assert!(derived.stderr.is_empty());
+        assert!(derived.stdout == derived_expected);
+        native_derive_tests::check_vectors(&derived.stdout);
         let compiled = native_filter_tests::execute_filter(stage, &independent, &[], 1);
         assert_eq!(
             compiled.status.code(),

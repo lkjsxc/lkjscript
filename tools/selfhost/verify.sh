@@ -24,8 +24,11 @@ rg --files tools/selfhost src/platform/compiler/elf_x86_64 \
   src/platform/compiler/elf_x86_64.rs \
   src/platform/execution/normalized/native_elf_tests.rs \
   src/platform/execution/normalized/native_filter_tests.rs \
+  src/platform/execution/normalized/native_derive_tests.rs \
   tests/fixtures/native-bytes.lkjc tests/fixtures/native-filter.lkjc \
-  tests/fixtures/blake3-unkeyed-vectors.json | LC_ALL=C sort > .artifacts/selfhost/paths
+  tests/fixtures/blake3-unkeyed-vectors.json \
+  tests/fixtures/blake3-context-escaping.json \
+  tests/fixtures/blake3-derive-vectors.json | LC_ALL=C sort > .artifacts/selfhost/paths
 while IFS= read -r selfhost_input; do
   sha256sum "$selfhost_input" >> .artifacts/selfhost/inputs.sha256
 done < .artifacts/selfhost/paths

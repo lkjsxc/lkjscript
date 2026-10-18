@@ -12,6 +12,44 @@ fn node(tag: u32, a: u32, b: u32, initialized: &[u8], stack: &[u8]) -> input::No
     }
 }
 
+#[test]
+fn selfhost_admission_checks_derived_hash_signatures_and_unknown_codes() {
+    let functions = vec![
+        input::Function {
+            result: 1,
+            nodes: vec![node(1, 0, 0, &[], &[]), node(11, 0, 0, &[], &[1])],
+            ..input::Function::default()
+        },
+        input::Function {
+            result: 5,
+            parameters: 2,
+            locals: vec![4, 5],
+            external: 28,
+            ..input::Function::default()
+        },
+    ];
+    let (code, image) = compile(&input::encode(&functions, 0).unwrap());
+    assert_eq!(code, 0);
+    assert_eq!(execute(&image, &[]).stdout, b"0");
+    for (result, locals, external, expected) in [
+        (1, vec![4, 5], 28, 8),
+        (5, vec![5, 4], 28, 8),
+        (5, vec![4], 28, 8),
+        (5, vec![6, 5], 28, 8),
+        (5, vec![4, 134], 28, 8),
+        (5, vec![4, 5], 29, 5),
+    ] {
+        let mut changed = functions.clone();
+        changed[1].result = result;
+        changed[1].parameters = locals.len() as u32;
+        changed[1].locals = locals;
+        changed[1].external = external;
+        let (code, image) = compile(&input::encode(&changed, 0).unwrap());
+        assert_eq!(code, expected);
+        assert!(image.is_empty());
+    }
+}
+
 fn buffer_program() -> Vec<input::Function> {
     let mut nodes = vec![
         node(9, 1, 0, &[0], &[]),

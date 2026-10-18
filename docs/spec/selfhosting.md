@@ -131,6 +131,10 @@ External codes 1–7 are I64 add, subtract, multiply, divide, equal, less and
 less-equal; 8–10 are Bool not, and and or. Codes 11–19 are Bytes length, get,
 from-list, from-text, copy, slice, concat, equal and BLAKE3. Codes 20–25 are buffer
 empty, push, length, get, freeze and discard; 26–27 are List<I64> length and get.
+Code 28 is `core.bytes.blake3-derive-key(Text context, Bytes material) -> Bytes`.
+It returns 32 domain-derived bytes; this is BLAKE3 derive-key mode, not a context
+prefix passed to unkeyed hashing. It supplies the current `.lkja` object, unit and
+container identity dependency. Unknown codes fail layout admission.
 Signatures, consumption and argument order match the registered core primitives.
 Arithmetic traps and operand evaluation order match the existing evaluators.
 
@@ -206,13 +210,14 @@ Compiler workload measurements use the existing trusted foreground evaluator
 policy where needed. Cumulative modeled allocation charges measure work, not
 live heap or RSS. No runtime quota or verifier policy is raised for these tests.
 
-A focused native closure run exported 152 functions and 9,101 instructions in
-463,733 bytes. VM, reference and Rust-built native compiler execution emitted the
-same 1,472,533-byte ELF, and that output reproduced itself byte for byte. Both
+A focused run with domain-derived hashing exported 156 functions and 9,443
+instructions in 483,030 bytes. VM, reference and Rust-built native compiler execution
+emitted the same 1,526,550-byte ELF, and that output reproduced itself byte for byte. Both
 native stages compiled independent programs, rejected malformed ownership input
 and compiled changed compiler source with an observable diagnostic change.
-It observed 62,235,106 VM instructions and 34,695,797 reference expressions;
-cumulative modeled allocation was 6,015,542,995 and 7,817,427,702 bytes respectively.
+Both stages also emitted hash programs matching 35 published derivation vectors.
+The run observed 64,861,502 VM instructions and 36,165,064 reference expressions;
+cumulative modeled allocation was 6,260,847,693 and 8,141,362,558 bytes respectively.
 This is Tier 1 native backend reproduction from Rust-normalized input. It does
 not establish `.lkja` closure, region-native compiler storage or semantic self-hosting.
 
@@ -223,7 +228,7 @@ not establish `.lkja` closure, region-native compiler storage or semantic self-h
 | I64 arithmetic/comparison, Bool, calls and tail calls | VM, reference, host ELF | Existing native implementation |
 | Bytes length/get/slice/concat/equality/from-list/from-text | VM, reference, native ELF | Covered by native compiler tests |
 | ByteBuffer empty/push/length/freeze and affine calls | VM, reference, native process-owned heap | Phase-local region reclamation for later compiler tables |
-| BLAKE3 digest | VM/reference neutral Rust primitive; native integer implementation | No host hashing during native execution |
+| BLAKE3 unkeyed and domain-derived digest | VM/reference neutral Rust primitives; native integer implementation | No host hashing during native execution |
 | List literals/length/get and result records | VM, reference, native ELF | Covered by the complete current compiler closure |
 | Bounded binary input and atomic output staging | Native stdin/stdout filter; external staging harness | Native reproduction is a Tier 1 verification obligation |
 

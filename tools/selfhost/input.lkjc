@@ -33,6 +33,8 @@ declarations.begin
     (parameter create value (type Text)) (returns Bytes))
   (external create digest (visibility public) (implementation core.bytes.blake3)
     (parameter create data (type Bytes)) (returns Bytes))
+  (external create derive (visibility public) (implementation core.bytes.blake3-derive-key)
+    (parameter create context (type Text)) (parameter create data (type Bytes)) (returns Bytes))
   (external create empty (visibility public) (implementation core.buffer.empty) (returns ByteBuffer))
   (external create push (visibility public) (implementation core.buffer.push)
     (parameter create byte (type I64)) (parameter create buffer (type ByteBuffer) (use consume))

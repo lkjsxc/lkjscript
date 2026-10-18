@@ -170,6 +170,7 @@ fn primitive(name: &str) -> Result<u32, Diagnostic> {
         "core.buffer.discard" => 25,
         "core.list.length" => 26,
         "core.list.get" => 27,
+        "core.bytes.blake3-derive-key" => 28,
         _ => return Err(unsupported()),
     })
 }

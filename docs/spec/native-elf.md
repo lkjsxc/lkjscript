@@ -33,8 +33,13 @@ length/get/append. Immutable byte intermediates support length/get/equality,
 construction from octet lists or raw UTF-8 text, copying, slicing and concatenation.
 Byte construction and indexing preserve exact octet/index/range traps. Every byte
 producer allocates independent bounded storage; JSON string encoding is separate
-from the raw UTF-8 view. Unkeyed 32-byte BLAKE3 runs as native integer code, with
-bounded chunk-tree recursion and independent block/chunk/tree test vectors.
+from the raw UTF-8 view. Unkeyed and domain-derived 32-byte BLAKE3 run as native
+integer code, with bounded chunk-tree recursion and independent block/chunk/tree
+test vectors. `core.bytes.blake3-derive-key(Text, Bytes) -> Bytes` hashes the exact
+UTF-8 context with DERIVE_KEY_CONTEXT, then hashes the material with the context
+key and DERIVE_KEY_MATERIAL. The intermediate key uses 32 bytes of lexical stack
+storage; both inputs retain the 256 MiB value bound. This neutral operation is
+required by current artifact and object identities.
 ByteBuffer empty/push/get/length/freeze/discard preserve admitted exclusive
 mutation and scoped read-only borrowing. Growth doubles capacity up to 256 MiB;
 freeze copies into independent immutable bytes. Affine custody is established by

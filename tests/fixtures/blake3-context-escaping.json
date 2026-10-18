@@ -1,0 +1,6 @@
+{
+  "context": "a\u0000b",
+  "rejected_json_literal": "\"a\\u0000b\"",
+  "diagnostic": "control_unicode_escape",
+  "accepted_structural_literal": "\"a\\u{0}b\""
+}

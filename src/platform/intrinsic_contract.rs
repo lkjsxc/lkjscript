@@ -260,6 +260,11 @@ fn validate_shape(
             &IntrinsicType::Bool,
         ),
         "core.bytes.blake3" => exact(signature, &[IntrinsicType::Bytes], &IntrinsicType::Bytes),
+        "core.bytes.blake3-derive-key" => exact(
+            signature,
+            &[IntrinsicType::Text, IntrinsicType::Bytes],
+            &IntrinsicType::Bytes,
+        ),
         "core.value.equal" => {
             signature.parameters.len() == 2
                 && signature.parameters[0] == signature.parameters[1]
@@ -953,6 +958,10 @@ mod byte_contract_tests {
                 vec![IntrinsicType::Bytes, IntrinsicType::I64, IntrinsicType::I64],
             ),
             ("core.bytes.copy", vec![IntrinsicType::Bytes]),
+            (
+                "core.bytes.blake3-derive-key",
+                vec![IntrinsicType::Text, IntrinsicType::Bytes],
+            ),
         ] {
             let mut candidates = vec![
                 required.clone(),

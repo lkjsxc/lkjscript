@@ -1,6 +1,9 @@
 //! Focused normalized artifact-preparation and dense-execution tests.
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "native_derive_tests.rs"]
+mod native_derive_tests;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[path = "native_elf_tests.rs"]
 mod native_elf_tests;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
