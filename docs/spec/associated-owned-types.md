@@ -202,6 +202,12 @@ and depth/work limits remain. All binding RHS roots enter source/interface
 admission and lowering tables. Summaries and compiler keys bind the complete
 inventory; inventory-only changes invalidate downstream reuse.
 
+Occurrence traversal keeps its first authority context and pending node in fixed
+inline storage. Additional contexts, pending capacity and visited entries reserve
+cumulative modeled storage before growth. Every invocation rereads its exact
+authority and retains the same depth, work and metadata limits; inline storage
+does not cache semantic permission across calls or change canonical bytes.
+
 Kernel, interface and compiler readers independently check inventories, roots,
 scope and canonical/interface/compiled correspondence. Rehashed inventory loss,
 foreign epochs, member/scope swaps, hidden projections, invalid unused bindings

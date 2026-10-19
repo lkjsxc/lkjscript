@@ -1,6 +1,6 @@
 # Current status
 
-Updated 2026-10-18. Accepted typed meaning remains the sole editable authority.
+Updated 2026-10-19. Accepted typed meaning remains the sole editable authority.
 Production bytecode is checked against an independent canonical interpreter.
 Verification has no three-minute requirement; elapsed time is an observation.
 
@@ -50,20 +50,24 @@ The maintained meaning graph and [schema/dependency inventory](spec/selfhosting.
 identify the current boundary. Focused native backend reproduction has identical
 C2/C3 ELF and A1/A2/A3 artifact bytes, including changed-source behavior.
 
-Latest Attempt: running — source-record decoder acceptance and GC-test retry.
-Six decoder tests passed across VM, reference and native execution. Maintained
+Latest Attempt: passed — focused logical source roots and exact object bindings.
+Public authoring admitted 18 functions for map/state/revision commitments and
+current dependency/retirement readers. All 14 source cases and 34 associated-type
+regressions passed across focused runs; replay matched all 307 canonical units.
+VM/reference/native comparisons, changed-source behavior and Clippy passed.
+C2/C3 ELF bytes remain identical; A1/A2/A3 match at 5,846,556 bytes for 305 functions.
+Official acceptance for this candidate is pending in the exact-tree receipt.
+The host validator uses inline traversal slots to keep the growing source within
+its unchanged cumulative metadata limit; semantic work and source stay unchanged.
+Last Accepted Commit: `c282cfca` (Milestone E source-record slice, on origin/main).
+Six decoder tests cover every current compiler owner/type record. Maintained
 proposal replay matched all 289 canonical units and the native backend closure.
-The readers cover every current compiler owner/type record; graph and semantic
-admission remain ahead. Fresh full acceptance is pending for this candidate.
-The GC test checks duplicate reader descriptors and bounded retry after local
-readers drop; production compaction still rejects active readers without waiting.
-Last Accepted Commit: `108906b5` (Tier 1 both-output closure, on origin/main).
-All 34 compiler and ten native runtime tests passed inside official full;
-the library passed 2589 tests, with five explicitly ignored.
+All 40 compiler and ten native runtime tests passed inside official full;
+the library passed 2595 tests, with five explicitly ignored.
 The clean candidate changed check selected two gates; fresh full passed all 29
 gates, all freshly executed with stable input, and release-target policy passed.
-`.artifacts/selfhost/accepted-d-artifact/receipt.json` binds source and limitations.
-Known Limitations: the source decoder has no graph or semantic checker yet.
+`.artifacts/selfhost/accepted-e-source-records/receipt.json` binds the exact tree.
+Known Limitations: logical commitments do not establish graph or semantic validity.
 Native allocation is process-owned, with no lexical region reclamation or RSS
 claim. Broader types, witnesses, regions and source-graph C2/C3 proof remain required
 for Tier 2; these byte fixed points still consume Rust-admitted input.

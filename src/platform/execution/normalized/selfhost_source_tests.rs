@@ -2,24 +2,54 @@
 use super::*;
 use crate::platform::kernel::{self, KernelSnapshot, TypeObjectDigest};
 
-fn probes() -> &'static (KernelSnapshot, NormalizedProgram) {
-    static PROBES: OnceLock<(KernelSnapshot, NormalizedProgram)> = OnceLock::new();
-    PROBES.get_or_init(|| {
-        let (source, _) = compiler();
-        let changes = proposals::updates(concat!(
+fn probes(module: &str) -> &'static (KernelSnapshot, NormalizedProgram) {
+    static PROBES: [OnceLock<(KernelSnapshot, NormalizedProgram)>; 6] =
+        [const { OnceLock::new() }; 6];
+    let (index, proposal) = match module {
+        "source-probe" => (
+            0,
             include_str!("../../../../tests/fixtures/selfhost-source-probes.lkjc"),
-            "\n",
+        ),
+        "source-record-probe" => (
+            1,
             include_str!("../../../../tests/fixtures/selfhost-source-record-probes.lkjc"),
-        ))
-        .unwrap();
-        let source = apply_proposals(source, changes);
-        let program = prepare_snapshot(&source);
+        ),
+        "source-map-probe" => (
+            2,
+            include_str!("../../../../tests/fixtures/selfhost-source-map-probes.lkjc"),
+        ),
+        "source-state-probe" => (
+            3,
+            include_str!("../../../../tests/fixtures/selfhost-source-state-probes.lkjc"),
+        ),
+        "source-history-probe" => (
+            4,
+            include_str!("../../../../tests/fixtures/selfhost-source-history-probes.lkjc"),
+        ),
+        "source-object-probe" => (
+            5,
+            include_str!("../../../../tests/fixtures/selfhost-source-object-probes.lkjc"),
+        ),
+        _ => return compiler(),
+    };
+    // Each independent probe graph retains the entire compiler source. Unrelated
+    // test entrypoints do not need to share one finite-admission transaction history.
+    PROBES[index].get_or_init(|| {
+        let changes = proposals::updates(proposal).unwrap();
+        let memory = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+        let repository = GraphRepository::create_memory(&memory, &compiler().0, None)
+            .unwrap()
+            .repository;
+        let source = publish_proposals(&repository, changes);
+        // Compile the public transaction result in its owning repository. A
+        // second import needlessly repeats complete admission and storage.
+        let program = prepare_from_repository(&repository);
         (source, program)
     })
 }
 
 fn function(module: &str, name: &str) -> DeclarationReference {
-    let (source, _) = probes();
+    let (source, _) = probes(module);
     let module = source
         .owners
         .iter()
@@ -51,7 +81,7 @@ fn function(module: &str, name: &str) -> DeclarationReference {
 }
 
 fn invoke(module: &str, name: &str, arguments: Vec<NormalizedValue>) -> NormalizedValue {
-    let (source, program) = probes();
+    let (source, program) = probes(module);
     let declaration = function(module, name);
     let policy = NormalizedRunPolicy::foreground();
     let control = ExecutionControl::uncancelled();
@@ -79,10 +109,15 @@ fn field<'a>(value: &'a NormalizedValue, name: &str) -> &'a NormalizedValue {
 }
 
 fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
-    let module = if matches!(name, "read-owner" | "read-records") {
-        "source-record-probe"
-    } else {
-        "source-probe"
+    let module = match name {
+        "read-owner" | "read-records" => "source-record-probe",
+        "read-map" => "source-map-probe",
+        "read-state" => "source-state-probe",
+        "read-revision" | "read-dependency" | "read-retirement" => "source-history-probe",
+        "bind-type" | "bind-owner" | "bind-dependency" | "bind-retirement" | "read-bindings" => {
+            "source-object-probe"
+        }
+        _ => "source-probe",
     };
     let value = invoke(module, name, vec![NormalizedValue::bytes(bytes)]);
     let NormalizedValue::I64(code) = field(&value, "diagnostic") else {
@@ -98,7 +133,7 @@ fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
         .unwrap()
         .entry(name.to_owned())
         .or_insert_with(|| {
-            let (_, program) = probes();
+            let (_, program) = probes(module);
             let image = crate::platform::compiler::elf_x86_64::compile_function(
                 program,
                 program.function(function(module, name)).unwrap().0 as usize,
@@ -638,3 +673,6 @@ fn selfhost_source_owners_reject_mismatched_headers_and_noncanonical_expressions
     changed[8] = 2;
     assert_eq!(result("read-owner", &changed), (12, vec![]));
 }
+
+#[path = "selfhost_source_binding_tests.rs"]
+mod binding;

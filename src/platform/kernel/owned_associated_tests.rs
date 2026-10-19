@@ -1797,6 +1797,43 @@ fn owned_associated_function_actual_projection_is_owned_without_extra_properties
 }
 
 #[test]
+fn owned_associated_many_scalar_occurrences_fit_without_reusing_authority() {
+    let mut f = fixture();
+    let scalar = ty(&mut f.source, TypeForm::I64);
+    let admission = OwnedAssociatedAdmission::new();
+    // Complete compiler graphs repeatedly classify ordinary scalar parameters,
+    // locals and call results under one cumulative operation budget.
+    for _ in 0..100_000 {
+        admission
+            .validate_occurrences(
+                &f.source,
+                &[scalar],
+                AssociatedTypeContext::Lexical(f.lexical),
+                GENERATION,
+            )
+            .expect("scalar classifications fit the unchanged default budget");
+    }
+    let (steps, bytes) = admission.work();
+    assert!(steps >= 100_000 && bytes > 0);
+    assert!(bytes < AssociatedAdmissionLimits::default().maximum_metadata_bytes);
+
+    // The same digest must still reread canonical content on the next call.
+    f.source.types.get_mut(&scalar).unwrap().contract_version = 0;
+    assert_eq!(
+        admission
+            .validate_occurrences(
+                &f.source,
+                &[scalar],
+                AssociatedTypeContext::Lexical(f.lexical),
+                GENERATION,
+            )
+            .expect_err("changed authority is checked again")
+            .code,
+        "kernel_type_contract"
+    );
+}
+
+#[test]
 fn owned_associated_repeated_deep_walks_reuse_queue_storage_with_exact_contexts() {
     let mut f = fixture();
     let mut root = f.cell;

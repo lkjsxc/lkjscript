@@ -193,18 +193,30 @@ type WalkPending = (TypeObjectDigest, usize, usize);
 /// component while avoiding its repetition in each queue and memo entry.
 struct WalkQueue<'a> {
     admission: &'a OwnedAssociatedAdmission,
+    first_context: WalkContext,
     contexts: Vec<WalkContext>,
     context_ids: BTreeMap<WalkContext, usize>,
+    first_pending: Option<WalkPending>,
     pending: Vec<WalkPending>,
 }
 
 impl<'a> WalkQueue<'a> {
-    fn new(admission: &'a OwnedAssociatedAdmission) -> Self {
+    fn new(admission: &'a OwnedAssociatedAdmission, first_context: WalkContext) -> Self {
         Self {
             admission,
+            first_context,
             contexts: Vec::new(),
             context_ids: BTreeMap::new(),
+            first_pending: None,
             pending: Vec::new(),
+        }
+    }
+
+    fn context(&self, id: usize) -> WalkContext {
+        if id == 0 {
+            self.first_context
+        } else {
+            self.contexts[id - 1]
         }
     }
 
@@ -214,7 +226,12 @@ impl<'a> WalkQueue<'a> {
         depth: usize,
         context: WalkContext,
     ) -> Result<(), Diagnostic> {
-        let context_id = if let Some(id) = self.context_ids.get(&context) {
+        // Most occurrence checks have one authority context and one pending
+        // node. Keep those fixed-size values inline; every spill still reserves
+        // its cumulative modeled growth before allocating.
+        let context_id = if context == self.first_context {
+            0
+        } else if let Some(id) = self.context_ids.get(&context) {
             *id
         } else {
             self.admission.reserve::<(WalkContext, usize)>(1)?;
@@ -229,11 +246,15 @@ impl<'a> WalkQueue<'a> {
                     .try_reserve_exact(growth)
                     .map_err(|_| exhausted("associated context allocation exhausted"))?;
             }
-            let id = self.contexts.len();
+            let id = self.contexts.len() + 1;
             self.contexts.push(context);
             self.context_ids.insert(context, id);
             id
         };
+        if self.first_pending.is_none() {
+            self.first_pending = Some((ty, depth, context_id));
+            return Ok(());
+        }
         if self.pending.len() == self.pending.capacity() {
             let growth = self.pending.capacity().max(1);
             self.pending
@@ -250,7 +271,7 @@ impl<'a> WalkQueue<'a> {
     }
 
     fn pop(&mut self) -> Option<WalkPending> {
-        self.pending.pop()
+        self.pending.pop().or_else(|| self.first_pending.take())
     }
 }
 
@@ -857,25 +878,22 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
         consumer_generation: u16,
         projection_free: bool,
     ) -> Result<(), Diagnostic> {
-        let mut pending = WalkQueue::new(self.admission);
+        let initial_context = (
+            context,
+            context.scope(),
+            consumer_generation,
+            context != AssociatedTypeContext::Forbidden,
+        );
+        let mut pending = WalkQueue::new(self.admission, initial_context);
         for ty in roots {
             self.validation_work()?;
-            pending.push(
-                *ty,
-                0,
-                (
-                    context,
-                    context.scope(),
-                    consumer_generation,
-                    context != AssociatedTypeContext::Forbidden,
-                ),
-            )?;
+            pending.push(*ty, 0, initial_context)?;
         }
         let mut depths = BTreeMap::new();
         let mut expanded_nominals = BTreeSet::new();
         while let Some((ty, depth, context_id)) = pending.pop() {
             self.validation_work()?;
-            let (context, parameter_scope, generation, view_allowed) = pending.contexts[context_id];
+            let (context, parameter_scope, generation, view_allowed) = pending.context(context_id);
             if depth > self.admission.limits.maximum_depth {
                 return Err(exhausted(
                     "associated type traversal exceeds its depth admission",

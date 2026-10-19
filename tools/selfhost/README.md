@@ -20,6 +20,13 @@ type, and reject malformed envelopes and payloads with independently recomputed
 checksums. These readers do not yet resolve the source graph, check types or
 ownership, or normalize source expressions.
 
+`source-map`, `source-state`, `source-history` and `source-object` add the next
+source-identity layer: fixed-width logical map roots, package semantic-state and
+revision digests, current dependency/retirement records, and exact object-to-map
+bindings. The tests compare these with independent current codecs and logical
+root oracles. Matching these commitments does not establish reference resolution,
+type correctness, custody or execution permission.
+
 `project/` owns accepted meaning. The `.lkjc` modules in this directory are
 maintained authoring proposals. Changes pass ordinary graph admission before publication.
 Tests reconstruct the complete compiler with bounded public transactions: first

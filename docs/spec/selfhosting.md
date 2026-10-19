@@ -304,13 +304,46 @@ rows, where kind 0 means type and 1 means owner. It is not a public compiler-inp
 schema. All current source records are tested together on VM, reference and native
 execution, including records outside the backend entrypoint's reachable closure.
 
-These helpers do not establish object-to-map binding, dependency closure,
+Record-shape readers alone do not establish object-to-map binding, dependency closure,
 reference existence, unique ownership, array identity uniqueness, graph acyclicity,
 expression typing, affine/borrow/region/effect rules or witness summaries. Those
-checks and normalization remain Milestone E work. Decoding currently scans bytes
+graph checks and normalization remain Milestone E work. Decoding currently scans bytes
 and returns scalar cursors; no phase-local graph arena or region-native memory
 claim is made. The final graph profile still needs bounded traversal work and
 lexical Region tables, followed by the Milestone F source-graph fixed point.
+
+### Logical source identities and object bindings
+
+The next source helpers recompute current logical identities without relying on
+physical map page locators. `source-map::root` takes sorted fixed-width key/value
+rows, validates their exact partition and strict ordering, and returns the current
+radix-map content digest. Key widths are 1 through 32 bytes and value widths 1
+through 128 bytes; entry count is at most 100,000 and table bytes at most 8 MiB.
+Empty maps are supported. Duplicate and reversed keys reject before hashing.
+Private recursion receives only these checked extents and widths.
+
+`source-state::root` binds the current state/graph versions, nonzero package ID,
+canonical package name and three recomputed logical roots. Owner rows have a
+17-byte key and 33-byte binding; dependency rows use 16/32 bytes and retirement
+rows 17/32 bytes. Repository identity is excluded from semantic-state identity.
+`source-history::revision` separately checks the canonical current revision core,
+including repository identity and zero through two strictly ordered parents,
+then derives its revision digest. It does not import a validation certificate.
+
+The history readers check current dependency and retirement envelopes and their
+canonical typed fields. `source-object` joins each supported owner, type,
+dependency or retirement object to its directory key, kind where applicable, and
+independently recomputed object digest. These functions return diagnostic 12 for
+invalid encoding or binding; supported owner/type shape readers retain diagnostic
+13 for recognized unsupported constructs. Rejection returns no artifact bytes.
+
+Tests compare logical roots and state/revision identities with independent Rust
+oracles, including the full maintained compiler, exact capacity boundaries,
+malformed fields with recomputed checksums, and mismatched keys/kinds/hashes.
+Their binary-filter packets are test framing, not a new LKJCI1 compiler profile.
+No reference, ownership, cycle, type, effect or witness proof follows from a
+matching digest. Source normalization, complete semantic admission and lexical
+Region tables remain required before the Tier 2 source-graph fixed point.
 
 ## Required final profile and proof
 
