@@ -1,0 +1,22 @@
+declarations.begin
+(units
+  (module create source-graph-probe
+    (function create read-carrier (visibility public) (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body (let (binding code (call source-graph::validate (local data)))
+        (in (record structural
+          (field diagnostic (local code))
+          (field image (if (call ci::eq (local code) (i64 0))
+            (call ci::slice (local data) (i64 48) (i64 80))
+            (call ci::text-bytes (text "")))))))))
+    (function create read-graph (visibility public) (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body (let (binding code (call source-links::validate (local data)))
+        (in (record structural
+          (field diagnostic (local code))
+          (field image (if (call ci::eq (local code) (i64 0))
+            (call ci::slice (local data) (i64 48) (i64 80))
+            (call ci::text-bytes (text "")))))))))))
+declarations.end

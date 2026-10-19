@@ -1837,15 +1837,11 @@ fn composed_syntax_scalar_partition_matches_full_occurrence_identity_and_scope()
     let loan_sets = [BTreeSet::new(), BTreeSet::from([a]), BTreeSet::from([a, b])];
     let mut specialized = VisitedSyntax::default();
     let mut original = BTreeSet::new();
+    let mut prepared = 0;
     for expression in expressions {
         for loans in &loan_sets {
             for establishing in [None, Some(a), Some(b)] {
                 let occurrence = (expression, loans.clone(), establishing);
-                assert_eq!(
-                    specialized.contains(&occurrence),
-                    original.contains(&occurrence)
-                );
-                assert!(!specialized.contains(&occurrence));
                 let (width, keys) = specialized.comparison_shape(loans, establishing);
                 if loans.is_empty() && establishing.is_none() {
                     assert_eq!(width, 0);
@@ -1854,12 +1850,22 @@ fn composed_syntax_scalar_partition_matches_full_occurrence_identity_and_scope()
                     assert_eq!(width, loans.len() + 2);
                     assert_eq!(keys, specialized.scoped.len());
                 }
-                specialized.insert(occurrence.clone());
-                original.insert(occurrence.clone());
-                assert!(specialized.contains(&occurrence));
-                assert_eq!(
-                    specialized.contains(&occurrence),
-                    original.contains(&occurrence)
+                let inserted = specialized
+                    .insert_with(occurrence.clone(), |key| {
+                        prepared += 1;
+                        assert_eq!(key, &occurrence);
+                        Ok(key.1.clone())
+                    })
+                    .unwrap();
+                assert_eq!(inserted, Some(loans.clone()));
+                assert!(original.insert(occurrence.clone()));
+                assert!(
+                    specialized
+                        .insert_with(occurrence, |_| {
+                            panic!("a duplicate must not reserve or copy loans");
+                        })
+                        .unwrap()
+                        .is_none()
                 );
                 assert_eq!(
                     specialized.plain.len() + specialized.scoped.len(),
@@ -1869,19 +1875,121 @@ fn composed_syntax_scalar_partition_matches_full_occurrence_identity_and_scope()
         }
     }
     assert_eq!(original.len(), 18);
+    assert_eq!(prepared, 18);
     assert_eq!(specialized.plain.len(), 2);
     assert_eq!(specialized.scoped.len(), 16);
-    // Inserting the same exact occurrence again creates no new key; same syntax
-    // with a changed loan/establishing state above never shares that membership.
-    for occurrence in &original {
-        specialized.insert(occurrence.clone());
-        assert!(specialized.contains(occurrence));
-    }
-    assert_eq!(specialized.plain.len() + specialized.scoped.len(), 18);
-    let fresh_context = VisitedSyntax::default();
+    // Loan insertion order does not change exact occurrence identity.
+    let reversed = (expressions[0], BTreeSet::from([b, a]), Some(a));
     assert!(
-        original
-            .iter()
-            .all(|occurrence| !fresh_context.contains(occurrence))
+        specialized
+            .insert_with(reversed, |_| {
+                panic!("equal loan sets must deduplicate");
+            })
+            .unwrap()
+            .is_none()
     );
+    let mut fresh_context = VisitedSyntax::default();
+    for occurrence in original {
+        assert!(
+            fresh_context
+                .insert_with(occurrence, |key| Ok(key.1.clone()))
+                .unwrap()
+                .is_some()
+        );
+    }
+}
+
+#[test]
+fn composed_syntax_failed_preparation_does_not_publish_membership() {
+    let expression = ExpressionId::migrate(SEED, 730);
+    let binding = BindingId::migrate(SEED, 731);
+    for loans in [BTreeSet::new(), BTreeSet::from([binding])] {
+        for establishing in [None, Some(binding)] {
+            let occurrence = (expression, loans.clone(), establishing);
+            let mut visited = VisitedSyntax::default();
+            for class in [DiagnosticClass::Resource, DiagnosticClass::Cancelled] {
+                let failure = visited
+                    .insert_with(occurrence.clone(), |_| {
+                        Err(Diagnostic::new(
+                            class,
+                            "preparation_failed",
+                            "admission interrupted",
+                        ))
+                    })
+                    .unwrap_err();
+                assert_eq!(failure.code, "preparation_failed");
+                assert_eq!(visited.plain.len() + visited.scoped.len(), 0);
+            }
+            assert_eq!(
+                visited
+                    .insert_with(occurrence.clone(), |key| Ok(key.1.clone()))
+                    .unwrap(),
+                Some(loans.clone())
+            );
+            assert!(
+                visited
+                    .insert_with(occurrence, |_| {
+                        panic!("accepted occurrence must not prepare again");
+                    })
+                    .unwrap()
+                    .is_none()
+            );
+            assert_eq!(visited.plain.len() + visited.scoped.len(), 1);
+        }
+    }
+}
+
+#[test]
+fn composed_duplicate_syntax_still_enforces_work_and_owning_cancellation() {
+    let expression = ExpressionId::migrate(SEED, 740);
+    let binding = BindingId::migrate(SEED, 741);
+    for (loans, establishing) in [
+        (BTreeSet::new(), None),
+        (BTreeSet::from([binding]), Some(binding)),
+    ] {
+        let read = Read::default();
+        let mut work = 0;
+        let mut analysis = root_query_analysis(&read, &mut work, 100_000);
+        let mut visited = VisitedSyntax::default();
+        let occurrence = (expression, loans.clone(), establishing);
+        assert_eq!(
+            analysis
+                .visit_syntax(&mut visited, occurrence.clone())
+                .unwrap(),
+            Some(loans)
+        );
+        let metadata = analysis.observation.metadata_bytes;
+        analysis.maximum_metadata_bytes = metadata;
+        let before_duplicate = *analysis.work;
+        assert!(
+            analysis
+                .visit_syntax(&mut visited, occurrence.clone())
+                .unwrap()
+                .is_none()
+        );
+        assert!(*analysis.work > before_duplicate);
+        assert_eq!(analysis.observation.metadata_bytes, metadata);
+        analysis.maximum_work = *analysis.work;
+        let exhausted = analysis
+            .visit_syntax(&mut visited, occurrence.clone())
+            .unwrap_err();
+        assert_eq!(exhausted.class, DiagnosticClass::Resource);
+        assert_eq!(exhausted.code, "kernel_callable_flow_work");
+        analysis.maximum_work = 100_000;
+        read.cancel_after.set(Some(read.checkpoints.get() + 1));
+        let cancelled = analysis
+            .visit_syntax(&mut visited, occurrence.clone())
+            .unwrap_err();
+        assert_eq!(cancelled.class, DiagnosticClass::Cancelled);
+        assert_eq!(cancelled.code, "test_cancelled");
+        read.cancel_after.set(None);
+        assert!(
+            analysis
+                .visit_syntax(&mut visited, occurrence)
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(analysis.observation.metadata_bytes, metadata);
+        assert_eq!(visited.plain.len() + visited.scoped.len(), 1);
+    }
 }

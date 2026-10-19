@@ -201,9 +201,19 @@ bytes. The reference queue is separately limited to 1,000,000 entries. Exhaustio
 missing/corrupt references and cancellation reject before compaction. This finite
 preparation capacity does not limit semantic validity or truncate history.
 
-Disk GC seals one deduplicated compressed pack, synchronizes it, then durably selects
-one complete catalog segment before unlinking old owned packs/segments. It preserves
-HEAD, publication identities, operational selections and canonical object bytes.
+Disk GC partitions deduplicated objects in deterministic key order using a 32 MiB
+target for raw payload plus pack framing. Compression uses the current deflate codec
+with raw fallback, so a partition cannot grow during encoding. A single admitted
+object larger than the target remains an indivisible singleton under the unchanged
+object-domain and per-pack bounds; the target is physical output policy, not semantic
+capacity. Partitioning happens before per-pack sealing, so retained history does not
+need to fit one pack.
+
+GC installs every replacement pack and synchronizes the pack and staging directories,
+then durably selects one complete catalog segment before unlinking old owned
+packs/segments. Cleanup protects every selected replacement identity, including a
+pack that already existed before this collection. It preserves HEAD, publication
+identities, operational selections and canonical object bytes.
 Interruption before the catalog switch leaves the old selection valid; interruption
 after it leaves a complete new selection and possibly extra files for the next GC.
 Cleanup errors report failure even if the catalog switch already happened. A compact

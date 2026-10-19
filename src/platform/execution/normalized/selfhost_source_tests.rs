@@ -3,8 +3,8 @@ use super::*;
 use crate::platform::kernel::{self, KernelSnapshot, TypeObjectDigest};
 
 fn probes(module: &str) -> &'static (KernelSnapshot, NormalizedProgram) {
-    static PROBES: [OnceLock<(KernelSnapshot, NormalizedProgram)>; 6] =
-        [const { OnceLock::new() }; 6];
+    static PROBES: [OnceLock<(KernelSnapshot, NormalizedProgram)>; 7] =
+        [const { OnceLock::new() }; 7];
     let (index, proposal) = match module {
         "source-probe" => (
             0,
@@ -29,6 +29,10 @@ fn probes(module: &str) -> &'static (KernelSnapshot, NormalizedProgram) {
         "source-object-probe" => (
             5,
             include_str!("../../../../tests/fixtures/selfhost-source-object-probes.lkjc"),
+        ),
+        "source-graph-probe" => (
+            6,
+            include_str!("../../../../tests/fixtures/selfhost-source-graph-probes.lkjc"),
         ),
         _ => return compiler(),
     };
@@ -111,6 +115,7 @@ fn field<'a>(value: &'a NormalizedValue, name: &str) -> &'a NormalizedValue {
 fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
     let module = match name {
         "read-owner" | "read-records" => "source-record-probe",
+        "read-carrier" | "read-graph" => "source-graph-probe",
         "read-map" => "source-map-probe",
         "read-state" => "source-state-probe",
         "read-revision" | "read-dependency" | "read-retirement" => "source-history-probe",
@@ -676,3 +681,6 @@ fn selfhost_source_owners_reject_mismatched_headers_and_noncanonical_expressions
 
 #[path = "selfhost_source_binding_tests.rs"]
 mod binding;
+
+#[path = "selfhost_source_graph_tests.rs"]
+mod graph;

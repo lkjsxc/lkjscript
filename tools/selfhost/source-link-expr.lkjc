@@ -1,0 +1,248 @@
+declarations.begin
+(units
+  (module create source-link-expr
+    (function create read
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (let
+          (binding op (call ci::get (local data) (i64 37)))
+          (binding end (call ci::sub (call ci::length (local data)) (i64 32)))
+          (in
+            (if
+              (call ci::lt (local op) (i64 3))
+              (local end)
+              (if
+                (call ci::eq (local op) (i64 3))
+                (let
+                  (binding text-kind (call ci::get (local data) (i64 38)))
+                  (in
+                    (if
+                      (call ci::eq (local text-kind) (i64 0))
+                      (local end)
+                      (if (call ci::eq (local text-kind) (i64 1)) (i64 -13) (i64 -12)))))
+                (if
+                  (call ci::eq (local op) (i64 4))
+                  (let
+                    (binding text-kind (call ci::get (local data) (i64 38)))
+                    (in
+                      (if
+                        (call ci::eq (local text-kind) (i64 0))
+                        (local end)
+                        (if (call ci::eq (local text-kind) (i64 1)) (i64 -13) (i64 -12)))))
+                  (if
+                    (call ci::eq (local op) (i64 5))
+                    (let
+                      (binding local-kind (call ci::get (local data) (i64 38)))
+                      (in
+                        (if
+                          (call ci::lt (local local-kind) (i64 2))
+                          (call source-link-ref::owner-ref
+                            (local graph)
+                            (local data)
+                            (i64 39)
+                            (i64 7)
+                            (i64 15))
+                          (if
+                            (call ci::lt (local local-kind) (i64 5))
+                            (call source-link-ref::owner-ref
+                              (local graph)
+                              (local data)
+                              (i64 39)
+                              (i64 8)
+                              (i64 16))
+                            (i64 -12)))))
+                    (if
+                      (call ci::eq (local op) (i64 6))
+                      (call source-link-ref::package-ref
+                        (local graph)
+                        (local data)
+                        (i64 38)
+                        (i64 2)
+                        (i64 8))
+                      (if
+                        (call ci::eq (local op) (i64 7))
+                        (call source-link-ref::items
+                          (local graph)
+                          (local data)
+                          (i64 38)
+                          (i64 3)
+                          (i64 9)
+                          (i64 17))
+                        (call read-tail (local graph) (local data) (local op))))))))))))
+    (function create read-tail
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create op (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local op) (i64 8))
+          (call source-link-ref::owner-ref
+            (local graph)
+            (local data)
+            (call source-link-ref::array (local graph) (local data) (i64 38) (i64 8) (i64 16))
+            (i64 9)
+            (i64 17))
+          (if
+            (call ci::eq (local op) (i64 9))
+            (call source-link-ref::array (local graph) (local data) (i64 38) (i64 9) (i64 17))
+            (if
+              (call ci::eq (local op) (i64 10))
+              (call call-value (local graph) (local data) (i64 1))
+              (if
+                (call ci::eq (local op) (i64 11))
+                (call call-value (local graph) (local data) (i64 0))
+                (if
+                  (call ci::eq (local op) (i64 12))
+                  (call source-link-ref::array
+                    (local graph)
+                    (local data)
+                    (call source-link-ref::owner-ref
+                      (local graph)
+                      (local data)
+                      (i64 38)
+                      (i64 9)
+                      (i64 17))
+                    (i64 9)
+                    (i64 17))
+                  (if
+                    (call ci::eq (local op) (i64 13))
+                    (call source-link-ref::fields
+                      (local graph)
+                      (local data)
+                      (call source-link-ref::array
+                        (local graph)
+                        (local data)
+                        (call source-link-ref::optional
+                          (local graph)
+                          (local data)
+                          (i64 38)
+                          (i64 -2)
+                          (i64 2))
+                        (i64 0)
+                        (i64 0))
+                      (i64 1))
+                    (if
+                      (call ci::eq (local op) (i64 14))
+                      (call source-link-ref::optional
+                        (local graph)
+                        (local data)
+                        (call source-link-ref::array
+                          (local graph)
+                          (local data)
+                          (call source-link-ref::package-ref
+                            (local graph)
+                            (local data)
+                            (i64 38)
+                            (i64 5)
+                            (i64 13))
+                          (i64 0)
+                          (i64 0))
+                        (i64 9)
+                        (i64 17))
+                      (if
+                        (call ci::eq (local op) (i64 15))
+                        (call source-link-ref::selector
+                          (local graph)
+                          (local data)
+                          (call source-link-ref::owner-ref
+                            (local graph)
+                            (local data)
+                            (i64 38)
+                            (i64 9)
+                            (i64 17)))
+                        (if
+                          (call ci::eq (local op) (i64 16))
+                          (call source-link-ref::array
+                            (local graph)
+                            (local data)
+                            (call source-link-ref::type-ref (local graph) (local data) (i64 38))
+                            (i64 9)
+                            (i64 17))
+                          (i64 -13))))))))))))
+    (function create call-value
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create with-arguments (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding callee-end
+            (call source-link-ref::package-ref (local graph) (local data) (i64 40) (i64 2) (i64 102)))
+          (binding type-end
+            (call source-link-ref::array (local graph) (local data) (local callee-end) (i64 0) (i64 0)))
+          (binding arguments-at (call source-link-ref::advance (local type-end) (i64 1)))
+          (in
+            (if
+              (call ci::eq (local with-arguments) (i64 1))
+              (call source-link-ref::array
+                (local graph)
+                (local data)
+                (local arguments-at)
+                (i64 9)
+                (i64 17))
+              (local arguments-at))))))
+    (function create read-type
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (let
+          (binding form (call ci::get (local data) (i64 19)))
+          (in
+            (if
+              (call ci::either (call ci::lt (local form) (i64 6)) (call ci::eq (local form) (i64 20)))
+              (i64 20)
+              (if
+                (call ci::eq (local form) (i64 7))
+                (call source-link-ref::owner-ref (local graph) (local data) (i64 20) (i64 3) (i64 11))
+                (if
+                  (call ci::eq (local form) (i64 8))
+                  (call source-link-ref::package-ref
+                    (local graph)
+                    (local data)
+                    (i64 20)
+                    (i64 2)
+                    (i64 101))
+                  (if
+                    (call ci::eq (local form) (i64 10))
+                    (call source-link-ref::fields (local graph) (local data) (i64 20) (i64 0))
+                    (if
+                      (call ci::eq (local form) (i64 11))
+                      (call source-link-ref::type-ref (local graph) (local data) (i64 20))
+                      (if
+                        (call ci::eq (local form) (i64 16))
+                        (call source-link-ref::type-ref
+                          (local graph)
+                          (local data)
+                          (call source-link-ref::array
+                            (local graph)
+                            (local data)
+                            (i64 20)
+                            (i64 0)
+                            (i64 0)))
+                        (if
+                          (call ci::eq (local form) (i64 17))
+                          (call source-link-ref::array
+                            (local graph)
+                            (local data)
+                            (call source-link-ref::package-ref
+                              (local graph)
+                              (local data)
+                              (i64 20)
+                              (i64 2)
+                              (i64 101))
+                            (i64 0)
+                            (i64 0))
+                          (i64 -13))))))))))))))
+declarations.end

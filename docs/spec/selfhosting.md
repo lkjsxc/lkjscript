@@ -304,13 +304,14 @@ rows, where kind 0 means type and 1 means owner. It is not a public compiler-inp
 schema. All current source records are tested together on VM, reference and native
 execution, including records outside the backend entrypoint's reachable closure.
 
-Record-shape readers alone do not establish object-to-map binding, dependency closure,
-reference existence, unique ownership, array identity uniqueness, graph acyclicity,
-expression typing, affine/borrow/region/effect rules or witness summaries. Those
-graph checks and normalization remain Milestone E work. Decoding currently scans bytes
-and returns scalar cursors; no phase-local graph arena or region-native memory
-claim is made. The final graph profile still needs bounded traversal work and
-lexical Region tables, followed by the Milestone F source-graph fixed point.
+Record-shape readers alone do not establish graph or semantic validity. The
+logical binding and reference passes below add exact object bindings and endpoint
+closure. Dependency closure, unique syntax ownership, array identity uniqueness,
+acyclicity, expression typing, affine/borrow/region/effect rules, witnesses and
+normalization remain Milestone E work. Decoding scans bytes and returns scalar
+cursors; no phase-local graph arena or region-native memory claim is made.
+Semantic traversal and lexical Region tables precede the Milestone F source-graph
+fixed point.
 
 ### Logical source identities and object bindings
 
@@ -344,6 +345,33 @@ Their binary-filter packets are test framing, not a new LKJCI1 compiler profile.
 No reference, ownership, cycle, type, effect or witness proof follows from a
 matching digest. Source normalization, complete semantic admission and lexical
 Region tables remain required before the Tier 2 source-graph fixed point.
+
+### Bounded source carrier and endpoint closure
+
+The [canonical source carrier](selfhosting-source-input.md), `LKJSG001`, holds raw
+current owner/type/retirement objects, exact logical directories, span boundaries
+and a claimed semantic state. It contains no host-derived reference inventory or
+normalized IR. `source-graph::validate` bounds the complete input and traversal
+allowance, verifies strict directory ordering and complete object partitioning,
+binds every object and recomputes the logical state. Live and retired identities
+are disjoint. `source-index` supplies bounded binary lookup over admitted rows.
+
+`source-links::validate` first performs that admission, then scans every included
+owner and type. Shared reference helpers and separate owner/expression readers
+resolve exact local domains, type digests, package identities and compatible
+declaration kinds. Foreign packages and blob references reject explicitly.
+Unused declarations, unreachable types, untaken branches and final array elements
+receive the same endpoint checks. The logical state does not separately commit
+to unused type-directory membership; full carrier hashes identify those bytes.
+
+The independent serializer exports canonical object bytes and directory bindings,
+without calling source normalization or producing a validation certificate.
+Positive source fixtures and fully rehashed negative mutations distinguish shape,
+binding, missing endpoints and incompatible kinds on VM, reference and standalone
+native execution. A deliberately ill-typed but reference-closed source establishes
+that this pass does not claim semantic compiler acceptance. Parent membership,
+lexical scope, syntax ownership, cycles, type/effect/custody/witness checks and
+source normalization still precede the Tier 2 fixed point.
 
 ## Required final profile and proof
 

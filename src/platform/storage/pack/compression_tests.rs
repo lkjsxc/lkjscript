@@ -294,3 +294,77 @@ fn unknown_or_mismatched_codecs_reject_before_object_decoding() {
         assert!(PackMetadata::read_footer(&mut Cursor::new(&bytes), bytes.len() as u64).is_err());
     }
 }
+
+#[test]
+fn compressed_targeted_packs_preserve_exact_raw_partitions_and_oversized_singletons() {
+    let mut state = 0x1234_5678_9abc_def0_u64;
+    let noise = (0..4096)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state as u8
+        })
+        .collect::<Vec<_>>();
+    let values = vec![vec![7; 4096], noise];
+    let build = |values: &[Vec<u8>], target| {
+        let mut builder = PackBuilder::default();
+        for value in values {
+            builder
+                .insert(ObjectKey::for_bytes(ObjectDomain::Blob, value), value)
+                .unwrap();
+        }
+        builder.seal_compressed_targeted(target).unwrap()
+    };
+    let exact = MINIMUM_PACK_BYTES + 2 * INDEX_ENTRY_BYTES + 8192;
+    let mut reversed = values.clone();
+    reversed.reverse();
+    for (target, count) in [
+        (exact, 1),
+        (exact - 1, 2),
+        (MINIMUM_PACK_BYTES + INDEX_ENTRY_BYTES, 2),
+    ] {
+        let packs = build(&values, target);
+        assert_eq!(packs.len(), count);
+        assert_eq!(packs, build(&reversed, target));
+        let mut observed = BTreeMap::new();
+        for sealed in &packs {
+            assert_eq!(sealed.metadata.encoding, PackEncoding::Deflate);
+            assert!(sealed.bytes.len() <= target || sealed.metadata.entries.len() == 1);
+            assert_eq!(
+                PackMetadata::decode(&sealed.bytes, true).unwrap(),
+                sealed.metadata
+            );
+            for entry in &sealed.metadata.entries {
+                assert!(entry.encoded_length <= entry.uncompressed_length);
+                let value = sealed
+                    .metadata
+                    .read(&sealed.bytes, entry.key, 4096)
+                    .unwrap()
+                    .unwrap();
+                assert!(observed.insert(entry.key, value).is_none());
+            }
+        }
+        assert_eq!(observed.len(), values.len());
+        for value in &values {
+            assert_eq!(
+                observed.get(&ObjectKey::for_bytes(ObjectDomain::Blob, value)),
+                Some(value)
+            );
+        }
+    }
+    assert_eq!(
+        PackBuilder::default()
+            .seal_compressed_targeted(MINIMUM_PACK_BYTES + INDEX_ENTRY_BYTES - 1)
+            .unwrap_err()
+            .code,
+        "pack_target_size"
+    );
+    assert_eq!(
+        PackBuilder::default()
+            .seal_compressed_targeted(exact)
+            .unwrap_err()
+            .code,
+        "pack_empty"
+    );
+}

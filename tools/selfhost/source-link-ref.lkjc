@@ -1,0 +1,373 @@
+declarations.begin
+(units
+  (module create source-link-ref
+    (function create advance
+      (visibility package)
+      (effect pure)
+      (parameter create at (type I64))
+      (parameter create size (type I64))
+      (returns I64)
+      (body (if (call ci::lt (local at) (i64 0)) (local at) (call ci::add (local at) (local size)))))
+    (function create name-end
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local at) (i64 0))
+          (local at)
+          (let
+            (binding parsed
+              (call source-read::name
+                (local data)
+                (local at)
+                (call ci::sub (call ci::length (local data)) (i64 32))))
+            (in
+              (if
+                (call ci::eq (field (local parsed) (name code)) (i64 0))
+                (field (local parsed) (name next))
+                (i64 -12)))))))
+    (function create owner-ref
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create domain (type I64))
+      (parameter create wanted (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local at) (i64 0))
+          (local at)
+          (let
+            (binding namespace
+              (if
+                (call ci::eq (local domain) (i64 1))
+                (i64 2)
+                (if
+                  (call ci::eq (local domain) (i64 2))
+                  (i64 3)
+                  (if (call ci::eq (local domain) (i64 3)) (i64 17) (local domain)))))
+            (in
+              (if
+                (call ci::eq (call ci::get (local data) (local at)) (local namespace))
+                (let
+                  (binding key
+                    (call ci::concat
+                      (call ci::octets (list I64 (local domain)))
+                      (call ci::slice
+                        (local data)
+                        (call ci::add (local at) (i64 1))
+                        (call ci::add (local at) (i64 17)))))
+                  (binding directory (call ci::u32 (local graph) (i64 80)))
+                  (binding row
+                    (call source-index::lookup
+                      (local graph)
+                      (local directory)
+                      (call ci::u32 (local graph) (i64 12))
+                      (i64 17)
+                      (i64 50)
+                      (local key)))
+                  (in
+                    (if
+                      (call ci::lt (local row) (i64 0))
+                      (if (call ci::eq (local row) (i64 -2)) (i64 -12) (i64 -14))
+                      (let
+                        (binding actual
+                          (call ci::get
+                            (local graph)
+                            (call ci::add
+                              (call ci::add (local directory) (call ci::mul (local row) (i64 50)))
+                              (i64 17))))
+                        (binding nominal
+                          (call ci::either
+                            (call ci::eq (local actual) (i64 2))
+                            (call ci::eq (local actual) (i64 3))))
+                        (binding callable
+                          (call ci::either
+                            (call ci::eq (local actual) (i64 5))
+                            (call ci::eq (local actual) (i64 6))))
+                        (binding accepted
+                          (call ci::either
+                            (call ci::either
+                              (call ci::eq (local wanted) (i64 0))
+                              (call ci::eq (local actual) (local wanted)))
+                            (call ci::either
+                              (call ci::both (call ci::eq (local wanted) (i64 101)) (local nominal))
+                              (call ci::either
+                                (call ci::both (call ci::eq (local wanted) (i64 102)) (local callable))
+                                (call ci::both
+                                  (call ci::eq (local wanted) (i64 103))
+                                  (call ci::either (local nominal) (local callable)))))))
+                        (in (if (local accepted) (call ci::add (local at) (i64 17)) (i64 -14)))))))
+                (i64 -12)))))))
+    (function create package-ref
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create domain (type I64))
+      (parameter create wanted (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local at) (i64 0))
+          (local at)
+          (if
+            (call ci::eq (call ci::get (local data) (local at)) (i64 18))
+            (if
+              (call ci::same
+                (call ci::slice
+                  (local data)
+                  (call ci::add (local at) (i64 1))
+                  (call ci::add (local at) (i64 17)))
+                (call ci::slice (local graph) (i64 32) (i64 48)))
+              (call owner-ref
+                (local graph)
+                (local data)
+                (call ci::add (local at) (i64 17))
+                (local domain)
+                (local wanted))
+              (i64 -13))
+            (i64 -12)))))
+    (function create type-ref
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local at) (i64 0))
+          (local at)
+          (if
+            (call ci::eq (call ci::get (local data) (local at)) (i64 2))
+            (let
+              (binding row
+                (call source-index::lookup
+                  (local graph)
+                  (call ci::u32 (local graph) (i64 84))
+                  (call ci::u32 (local graph) (i64 16))
+                  (i64 32)
+                  (i64 32)
+                  (call ci::slice
+                    (local data)
+                    (call ci::add (local at) (i64 1))
+                    (call ci::add (local at) (i64 33)))))
+              (in
+                (if
+                  (call ci::lt (local row) (i64 0))
+                  (if (call ci::eq (local row) (i64 -2)) (i64 -12) (i64 -14))
+                  (call ci::add (local at) (i64 33)))))
+            (i64 -12)))))
+    (function create edge
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create domain (type I64))
+      (parameter create wanted (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local at) (i64 0))
+          (local at)
+          (if
+            (call ci::eq (local domain) (i64 0))
+            (call type-ref (local graph) (local data) (local at))
+            (if
+              (call ci::lt (local domain) (i64 0))
+              (call package-ref
+                (local graph)
+                (local data)
+                (local at)
+                (call ci::sub (i64 0) (local domain))
+                (local wanted))
+              (call owner-ref (local graph) (local data) (local at) (local domain) (local wanted)))))))
+    (function create array
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create domain (type I64))
+      (parameter create wanted (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local at) (i64 0))
+          (local at)
+          (let
+            (binding count
+              (call source-read::unsigned
+                (local data)
+                (local at)
+                (call ci::sub (call ci::length (local data)) (i64 32))))
+            (in
+              (if
+                (call ci::eq (field (local count) (name code)) (i64 0))
+                (call items
+                  (local graph)
+                  (local data)
+                  (field (local count) (name next))
+                  (field (local count) (name value))
+                  (local domain)
+                  (local wanted))
+                (i64 -12)))))))
+    (function create items
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create remaining (type I64))
+      (parameter create domain (type I64))
+      (parameter create wanted (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local at) (i64 0))
+          (local at)
+          (if
+            (call ci::eq (local remaining) (i64 0))
+            (local at)
+            (if
+              (call ci::either
+                (call ci::lt (local remaining) (i64 0))
+                (call ci::lt (i64 100000) (local remaining)))
+              (i64 -12)
+              (call items
+                (local graph)
+                (local data)
+                (call edge (local graph) (local data) (local at) (local domain) (local wanted))
+                (call ci::sub (local remaining) (i64 1))
+                (local domain)
+                (local wanted)))))))
+    (function create optional
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create domain (type I64))
+      (parameter create wanted (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local at) (i64 0))
+          (local at)
+          (let
+            (binding tag (call ci::get (local data) (local at)))
+            (in
+              (if
+                (call ci::eq (local tag) (i64 0))
+                (call ci::add (local at) (i64 1))
+                (if
+                  (call ci::eq (local tag) (i64 1))
+                  (call edge
+                    (local graph)
+                    (local data)
+                    (call ci::add (local at) (i64 1))
+                    (local domain)
+                    (local wanted))
+                  (i64 -12))))))))
+    (function create selector
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local at) (i64 0))
+          (local at)
+          (let
+            (binding tag (call ci::get (local data) (local at)))
+            (in
+              (if
+                (call ci::eq (local tag) (i64 0))
+                (call package-ref
+                  (local graph)
+                  (local data)
+                  (call ci::add (local at) (i64 1))
+                  (i64 4)
+                  (i64 12))
+                (if
+                  (call ci::eq (local tag) (i64 1))
+                  (call name-end (local data) (call ci::add (local at) (i64 1)))
+                  (i64 -12))))))))
+    (function create fields
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create mode (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local at) (i64 0))
+          (local at)
+          (let
+            (binding count
+              (call source-read::unsigned
+                (local data)
+                (local at)
+                (call ci::sub (call ci::length (local data)) (i64 32))))
+            (in
+              (if
+                (call ci::eq (field (local count) (name code)) (i64 0))
+                (call field-items
+                  (local graph)
+                  (local data)
+                  (field (local count) (name next))
+                  (field (local count) (name value))
+                  (local mode))
+                (i64 -12)))))))
+    (function create field-items
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create remaining (type I64))
+      (parameter create mode (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local at) (i64 0))
+          (local at)
+          (if
+            (call ci::eq (local remaining) (i64 0))
+            (local at)
+            (if
+              (call ci::either
+                (call ci::lt (local remaining) (i64 0))
+                (call ci::lt (i64 100000) (local remaining)))
+              (i64 -12)
+              (let
+                (binding selected
+                  (if
+                    (call ci::eq (local mode) (i64 0))
+                    (call name-end (local data) (local at))
+                    (call selector (local graph) (local data) (local at))))
+                (binding next
+                  (if
+                    (call ci::eq (local mode) (i64 0))
+                    (call type-ref (local graph) (local data) (local selected))
+                    (call owner-ref (local graph) (local data) (local selected) (i64 9) (i64 17))))
+                (in
+                  (call field-items
+                    (local graph)
+                    (local data)
+                    (local next)
+                    (call ci::sub (local remaining) (i64 1))
+                    (local mode)))))))))))
+declarations.end

@@ -235,8 +235,8 @@ type ScopedSyntaxOccurrence = (ExpressionId, BTreeSet<BindingId>, Option<Binding
 
 #[derive(Default)]
 struct VisitedSyntax {
-    plain: BTreeSet<ExpressionId>,
-    scoped: BTreeSet<ScopedSyntaxOccurrence>,
+    plain: BTreeMap<ExpressionId, ()>,
+    scoped: BTreeMap<ScopedSyntaxOccurrence, ()>,
 }
 
 impl VisitedSyntax {
@@ -256,19 +256,33 @@ impl VisitedSyntax {
         }
     }
 
-    fn contains(&self, occurrence: &ScopedSyntaxOccurrence) -> bool {
-        if Self::plain_key(&occurrence.1, occurrence.2) {
-            self.plain.contains(&occurrence.0)
-        } else {
-            self.scoped.contains(occurrence)
-        }
-    }
+    // One tree descent supplies both membership and insertion. Preparation must
+    // reserve the new occurrence and copy its loans before membership is exposed.
+    fn insert_with(
+        &mut self,
+        occurrence: ScopedSyntaxOccurrence,
+        prepare: impl FnOnce(&ScopedSyntaxOccurrence) -> Result<BTreeSet<BindingId>, Diagnostic>,
+    ) -> Result<Option<BTreeSet<BindingId>>, Diagnostic> {
+        use std::collections::btree_map::Entry;
 
-    fn insert(&mut self, occurrence: ScopedSyntaxOccurrence) {
         if Self::plain_key(&occurrence.1, occurrence.2) {
-            self.plain.insert(occurrence.0);
+            match self.plain.entry(occurrence.0) {
+                Entry::Occupied(_) => Ok(None),
+                Entry::Vacant(entry) => {
+                    let loans = prepare(&occurrence)?;
+                    entry.insert(());
+                    Ok(Some(loans))
+                }
+            }
         } else {
-            self.scoped.insert(occurrence);
+            match self.scoped.entry(occurrence) {
+                Entry::Occupied(_) => Ok(None),
+                Entry::Vacant(entry) => {
+                    let loans = prepare(entry.key())?;
+                    entry.insert(());
+                    Ok(Some(loans))
+                }
+            }
         }
     }
 }
@@ -1137,12 +1151,21 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         Ok(())
     }
     fn comparison_work(&mut self, width: usize, keys: usize) -> Result<(), Diagnostic> {
-        // BTreeMap searches/insertions compare flat IDs. Conservatively charge both
-        // traversals before either runs, including linear comparison of a full key.
+        self.comparison_searches(width, keys, 2)
+    }
+    fn comparison_searches(
+        &mut self,
+        width: usize,
+        keys: usize,
+        searches: usize,
+    ) -> Result<(), Diagnostic> {
+        // Conservatively charge each tree descent, including comparison of the
+        // complete key. A vacant Entry inserts without a second key search.
         let levels = (usize::BITS - keys.saturating_add(1).leading_zeros()) as usize;
         let comparisons = levels
-            .checked_mul(24)
-            .and_then(|n| n.checked_add(2))
+            .checked_mul(12)
+            .and_then(|n| n.checked_add(1))
+            .and_then(|n| n.checked_mul(searches))
             .ok_or_else(super::storage_overflow)?;
         self.steps(
             width
@@ -2105,6 +2128,28 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         Ok(loans.clone())
     }
 
+    fn visit_syntax(
+        &mut self,
+        visited: &mut VisitedSyntax,
+        occurrence: ScopedSyntaxOccurrence,
+    ) -> Result<Option<BTreeSet<BindingId>>, Diagnostic> {
+        self.diagnostic_context.phase = "syntax-key comparison";
+        self.diagnostic_context.expression = Some(occurrence.0);
+        self.tick()?;
+        let (width, keys) = visited.comparison_shape(&occurrence.1, occurrence.2);
+        self.comparison_searches(width, keys, 1)?;
+        self.diagnostic_context.phase = "expression admission";
+        visited.insert_with(occurrence, |occurrence| {
+            if VisitedSyntax::plain_key(&occurrence.1, occurrence.2) {
+                self.reserve::<ExpressionId>(1)?;
+            } else {
+                self.reserve::<ScopedSyntaxOccurrence>(1)?;
+            }
+            // Keep loan-copy work/checkpoint even for an empty loan set.
+            self.loan_copy(&occurrence.1)
+        })
+    }
+
     fn scan(&mut self, source: usize) -> Result<(), Diagnostic> {
         self.diagnostic_context = WorkContext {
             phase: "callable scan",
@@ -2162,24 +2207,10 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         let source_binder = self.context_binder(source)?;
         let mut visited = VisitedSyntax::default();
         while let Some((expression, loans, establishing)) = pending.pop() {
-            self.diagnostic_context.phase = "syntax-key comparison";
-            self.diagnostic_context.expression = Some(expression);
-            self.tick()?;
-            let (width, keys) = visited.comparison_shape(&loans, establishing);
-            self.comparison_work(width, keys)?;
-            self.diagnostic_context.phase = "expression admission";
-            let occurrence = (expression, loans, establishing);
-            if visited.contains(&occurrence) {
+            let Some(loans) = self.visit_syntax(&mut visited, (expression, loans, establishing))?
+            else {
                 continue;
-            }
-            if VisitedSyntax::plain_key(&occurrence.1, occurrence.2) {
-                self.reserve::<ExpressionId>(1)?;
-            } else {
-                self.reserve::<ScopedSyntaxOccurrence>(1)?;
-            }
-            // Keep current loan-copy work/checkpoint even for the empty fast path.
-            let loans = self.loan_copy(&occurrence.1)?;
-            visited.insert(occurrence);
+            };
             let Some(OwnerRecord::Expression(record)) = self
                 .read
                 .owner(info.key.owner.package, OwnerKey::Expression(expression))?

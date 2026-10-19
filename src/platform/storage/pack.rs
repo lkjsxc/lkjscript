@@ -792,11 +792,29 @@ impl PackBuilder {
         seal_entries(self.objects.into_iter().collect(), PackEncoding::Raw)
     }
 
+    #[cfg(test)]
     pub fn seal_compressed(self) -> Result<SealedPack, StoreError> {
         seal_entries(self.objects.into_iter().collect(), PackEncoding::Deflate)
     }
 
     pub fn seal_targeted(self, target_bytes: usize) -> Result<Vec<SealedPack>, StoreError> {
+        self.seal_targeted_with_encoding(target_bytes, PackEncoding::Raw)
+    }
+
+    pub fn seal_compressed_targeted(
+        self,
+        target_bytes: usize,
+    ) -> Result<Vec<SealedPack>, StoreError> {
+        self.seal_targeted_with_encoding(target_bytes, PackEncoding::Deflate)
+    }
+
+    fn seal_targeted_with_encoding(
+        self,
+        target_bytes: usize,
+        encoding: PackEncoding,
+    ) -> Result<Vec<SealedPack>, StoreError> {
+        // Partition canonical raw framing before per-pack admission. Deflate has
+        // raw fallback, so compression cannot enlarge these physical partitions.
         if target_bytes < MINIMUM_PACK_BYTES + INDEX_ENTRY_BYTES {
             return Err(pack_error(
                 StoreErrorClass::Input,
@@ -821,7 +839,7 @@ impl PackBuilder {
                 .ok_or_else(|| corrupt("pack_size_overflow", "pack payload size overflows"))?;
             let next_size = encoded_pack_size(next_count, next_payload)?;
             if !current.is_empty() && next_size > target_bytes {
-                packs.push(seal_entries(current, PackEncoding::Raw)?);
+                packs.push(seal_entries(current, encoding)?);
                 current = Vec::new();
                 payload_bytes = 0;
             }
@@ -831,7 +849,7 @@ impl PackBuilder {
             current.push((key, bytes));
         }
         if !current.is_empty() {
-            packs.push(seal_entries(current, PackEncoding::Raw)?);
+            packs.push(seal_entries(current, encoding)?);
         }
         Ok(packs)
     }

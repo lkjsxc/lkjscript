@@ -67,6 +67,18 @@ pub const SOURCE: &str = concat!(
     "\n",
     include_str!("../../tools/selfhost/source-object.lkjc"),
     "\n",
+    include_str!("../../tools/selfhost/source-index.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-graph.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-link-ref.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-link-owner.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-link-expr.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-links.lkjc"),
+    "\n",
 );
 
 #[derive(Clone)]

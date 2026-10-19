@@ -40,12 +40,15 @@ impl PackDirectoryStore {
         &mut self,
         objects: BTreeMap<ObjectKey, Vec<u8>>,
     ) -> Result<PackCompactionReceipt, StoreError> {
-        self.compact_inner(objects, &mut |_| Ok(()))
+        self.compact_inner(objects, contract::COMPACTION_TARGET_PACK_BYTES, &mut |_| {
+            Ok(())
+        })
     }
 
     fn compact_inner(
         &mut self,
         objects: BTreeMap<ObjectKey, Vec<u8>>,
+        target_bytes: usize,
         checkpoint: &mut dyn FnMut(SealCheckpoint) -> Result<(), StoreError>,
     ) -> Result<PackCompactionReceipt, StoreError> {
         if !self.gc_exclusive || !self.staged.is_empty() {
@@ -68,19 +71,28 @@ impl PackDirectoryStore {
         for (key, bytes) in objects {
             builder.insert(key, &bytes)?;
         }
-        let pack = builder.seal_compressed()?;
-        let after = pack.bytes.len() as u64;
-        install_pack(
-            &self.packs_directory,
-            &self.staging_directory,
-            &pack,
-            checkpoint,
-        )?;
+        let packs = builder.seal_compressed_targeted(target_bytes)?;
+        let after = packs.iter().try_fold(0_u64, |total, pack| {
+            total
+                .checked_add(pack.bytes.len() as u64)
+                .ok_or_else(|| resource("gc_pack_bytes", "physical pack byte count overflowed"))
+        })?;
+        for pack in &packs {
+            install_pack(
+                &self.packs_directory,
+                &self.staging_directory,
+                pack,
+                checkpoint,
+            )?;
+        }
         sync_directory(&self.packs_directory, "gc_pack_directory_sync")?;
         checkpoint(SealCheckpoint::PackDirectorySynced)?;
         sync_directory(&self.staging_directory, "gc_staging_directory_sync")?;
         checkpoint(SealCheckpoint::StagingDirectorySynced)?;
-        let metadata = BTreeMap::from([(pack.id, pack.metadata)]);
+        let metadata = packs
+            .into_iter()
+            .map(|pack| (pack.id, pack.metadata))
+            .collect::<BTreeMap<_, _>>();
         let rebuilt = ObjectCatalog::rebuild(metadata.iter().map(|(id, value)| (*id, value)))?;
         let mut work = CatalogWork::default();
         let next = write_rebuilt_catalog(
@@ -98,7 +110,7 @@ impl PackDirectoryStore {
         self.catalog_blocks.get_mut().clear();
         self.metadata.get_mut().clear();
         for (id, name) in &old {
-            if *id != pack.id {
+            if !metadata.contains_key(id) {
                 rustix::fs::unlinkat(&self.packs_directory, name.as_str(), AtFlags::empty())
                     .map_err(|error| {
                         rustix_error(
@@ -133,7 +145,7 @@ impl PackDirectoryStore {
         Ok(PackCompactionReceipt {
             objects_retained: retained,
             packs_before: old.len(),
-            packs_after: 1,
+            packs_after: metadata.len(),
             pack_bytes_before: before,
             pack_bytes_after: after,
             pack_bytes_reclaimed: before.saturating_sub(after),
