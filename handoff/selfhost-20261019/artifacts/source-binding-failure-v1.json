@@ -1,0 +1,12 @@
+{
+  "status": "failed_and_stopped",
+  "source": "c282cfcabcdc4ad41bae1e7ff9652eb63e5d5f6f plus uncommitted source-binding slice",
+  "log": {
+    "path": ".artifacts/selfhost/source-binding-tests-v1.log",
+    "bytes": 3434,
+    "sha256": "e96ae3527624e25607fff3b5c1eb004739485233cf4934827dba6bef25e622e7"
+  },
+  "cause": "Repeated shared fixture initialization failure at proposal 15: source-record-probe three-body replacement exhausted default kernel_affine_work. No new behavioral test reached execution.",
+  "termination": "Owned test process 146765 received SIGTERM after repeated identical setup failures; cargo/session63392 joined with exit101.",
+  "next": "Publish each fixture body separately under unchanged default budgets, then repeat focused checks."
+}

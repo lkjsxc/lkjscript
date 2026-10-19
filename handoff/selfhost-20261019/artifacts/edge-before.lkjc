@@ -1,0 +1,59 @@
+request base=rev_681a729b1afb0778c920d0d21ec17934a95d1258a3e75fcb8191b5e8b3d395d0 repository=repo_55e2a80f37adf01ece7e8f0529fe1f43 package=pkg_3be630861275811679d4b4ee4926199b
+
+declarations.begin
+(units
+  ; Reconstructed from canonical meaning. Original comments, formatting and type aliases are not stored.
+  (reference ref_add_3 declaration pkg_3be630861275811679d4b4ee4926199b/decl_08a72aeb50bf6fe0607630dfb4bbea63)
+  (reference ref_same-range_5 declaration pkg_3be630861275811679d4b4ee4926199b/decl_4cd7088f4ef4c44911f7e86ca674b251)
+  (reference ref_lt_0 declaration pkg_3be630861275811679d4b4ee4926199b/decl_588b0235ae83139292cecfaa9834177d)
+  (reference ref_eq_4 declaration pkg_3be630861275811679d4b4ee4926199b/decl_726df759e8cc23e4ee044a459a5bfea2)
+  (reference ref_node_2 declaration pkg_3be630861275811679d4b4ee4926199b/decl_894e47fe74fd086a2e7307964abb1f3b)
+  (reference ref_get_6 declaration pkg_3be630861275811679d4b4ee4926199b/decl_b7a95eccf6d122b9a3b971572cf64cf2)
+  (reference ref_field_1 declaration pkg_3be630861275811679d4b4ee4926199b/decl_baae3b74be71c69cb19ad81f9cc76e52)
+  (reference ref_init-edge_7 declaration pkg_3be630861275811679d4b4ee4926199b/decl_d499852b888f98fb7f5d68ebc1cf96fc)
+  (module edit mod_f7a0d8245e5151fc127d4fc50440a6d0 flow
+    (function edit decl_dbd40f18f2455b1455b2d91c4b181e42 edge
+      (visibility private)
+      (returns Bool (value))
+      (effect pure)
+      (body (if (call ref_lt_0 (scopes) (local target) (call ref_field_1 (scopes) (local data) (local f)
+              (i64 20))) (let (binding next (as $b_bind_fcb8b453037f43dd11a4ff25a5fe9803) (call ref_node_2
+                (scopes) (local data) (call ref_add_3 (scopes) (call ref_field_1 (scopes) (local data)
+                    (local f) (i64 16)) (local target)))) (binding locals (as $b_bind_2532d961f7ce72abba3008fa7d19ec28)
+              (call ref_field_1 (scopes) (local data) (local f) (i64 12))) (binding before (as $b_bind_d2e4c7f8cddad3e88d6ea445f10c237a)
+              (call ref_field_1 (scopes) (local data) (local at) (i64 24))) (binding after (as $b_bind_5dace651758d528737f6a4d4ccefa075)
+              (call ref_field_1 (scopes) (local data) (local next) (i64 24))) (binding count (as $b_bind_aa5f998aaa03d3da36451dc28b4f76ec)
+              (call ref_add_3 (scopes) (local prefix) (if (call ref_eq_4 (scopes) (local pushed) (i64 0))
+                  (i64 0) (i64 1)))) (in (if (call ref_eq_4 (scopes) (call ref_field_1 (scopes) (local data)
+                    (local next) (i64 28)) (local count)) (if (call ref_same-range_5 (scopes) (local data)
+                    (call ref_add_3 (scopes) (local before) (local locals)) (call ref_add_3 (scopes)
+                      (local after) (local locals)) (local prefix)) (if (if (call ref_eq_4 (scopes) (local pushed)
+                        (i64 0)) (bool true) (call ref_eq_4 (scopes) (local pushed) (call ref_get_6 (scopes)
+                          (local data) (call ref_add_3 (scopes) (local after) (call ref_add_3 (scopes)
+                              (local locals) (local prefix)))))) (call ref_init-edge_7 (scopes) (local data)
+                      (local before) (local after) (local locals) (local store) (i64 0)) (bool false))
+                  (bool false)) (bool false)))) (bool false)))
+      (parameter edit param_edff168c8b5b21163d3321ff95ddf26c data
+        (type Bytes)
+        (use unrestricted))
+      (parameter edit param_1df705642f51759a232eb97b7bfc7343 f
+        (type I64)
+        (use unrestricted))
+      (parameter edit param_e597430fa19a76374f2c084e75240267 at
+        (type I64)
+        (use unrestricted))
+      (parameter edit param_f216e6ad86d42d6b9cefe75aa9f0f2dc target
+        (type I64)
+        (use unrestricted))
+      (parameter edit param_710044e16445445b755d8e7d4c1d4029 prefix
+        (type I64)
+        (use unrestricted))
+      (parameter edit param_01433fae77b69c0949456f336f8df13a pushed
+        (type I64)
+        (use unrestricted))
+      (parameter edit param_eaff880f9c59e33ad5a7bbe2f2410002 store
+        (type I64)
+        (use unrestricted)))
+  )
+)
+declarations.end

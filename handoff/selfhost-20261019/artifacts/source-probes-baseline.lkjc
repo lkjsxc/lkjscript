@@ -1,0 +1,438 @@
+declarations.begin
+(units
+  (module create source-probe
+    (function create read-signed
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding decoded
+            (call source-read::signed (local data) (i64 0) (call ci::length (local data))))
+          (in
+            (record structural
+              (field diagnostic (field (local decoded) (name code)))
+              (field image
+                (if
+                  (call ci::eq (field (local decoded) (name code)) (i64 0))
+                  (let
+                    (binding a (type ByteBuffer) (call ci::empty))
+                    (binding b
+                      (type ByteBuffer)
+                      (call ci::le (field (local decoded) (name next)) (i64 4) (local a)))
+                    (binding c
+                      (type ByteBuffer)
+                      (call wire::signed (field (local decoded) (name value)) (local b)))
+                    (in (call ci::freeze (local c))))
+                  (call ci::octets (list I64)))))))))
+    (function create read-unsigned
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding decoded
+            (call source-read::unsigned (local data) (i64 0) (call ci::length (local data))))
+          (in
+            (record structural
+              (field diagnostic (field (local decoded) (name code)))
+              (field image
+                (if
+                  (call ci::eq (field (local decoded) (name code)) (i64 0))
+                  (let
+                    (binding a (type ByteBuffer) (call ci::empty))
+                    (binding b
+                      (type ByteBuffer)
+                      (call ci::le (field (local decoded) (name next)) (i64 4) (local a)))
+                    (binding c
+                      (type ByteBuffer)
+                      (call wire::unsigned (field (local decoded) (name value)) (local b)))
+                    (in (call ci::freeze (local c))))
+                  (call ci::octets (list I64)))))))))
+    (function create read-type
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (record structural
+          (field diagnostic (call source-shape::type (local data)))
+          (field image (call ci::octets (list I64))))))
+    (function create read-envelope
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding end
+            (call source-read::envelope
+              (local data)
+              (text "LKJTYPES")
+              (text "lkjscript.kernel.type-envelope")
+              (i64 1048576)))
+          (in
+            (record structural
+              (field diagnostic (if (call ci::lt (local end) (i64 0)) (i64 12) (i64 0)))
+              (field image
+                (if
+                  (call ci::lt (local end) (i64 0))
+                  (call ci::octets (list I64))
+                  (call ci::slice (local data) (i64 18) (local end)))))))))
+    (function create observe-fields
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create op (type I64))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create a (type I64))
+      (parameter create b (type I64))
+      (returns Bytes)
+      (body
+        (if
+          (call ci::eq (local op) (i64 0))
+          (let
+            (binding observed-0 (type ByteBuffer) (call ci::empty))
+            (binding observed-1 (type ByteBuffer) (call wire::signed (i64 0) (local observed-0)))
+            (binding observed-2 (type ByteBuffer) (call wire::signed (i64 0) (local observed-1)))
+            (binding observed-3
+              (type ByteBuffer)
+              (call wire::signed
+                (if
+                  (call source-read::range (local data) (local at) (local a) (local end))
+                  (i64 1)
+                  (i64 0))
+                (local observed-2)))
+            (binding observed-4 (type ByteBuffer) (call wire::signed (i64 0) (local observed-3)))
+            (in (call ci::freeze (local observed-4))))
+          (if
+            (call ci::eq (local op) (i64 1))
+            (let
+              (binding value
+                (call source-read::typed (local data) (local at) (local end) (local a) (local b)))
+              (in
+                (let
+                  (binding observed-0 (type ByteBuffer) (call ci::empty))
+                  (binding observed-1
+                    (type ByteBuffer)
+                    (call wire::signed
+                      (if (call ci::lt (local value) (i64 0)) (i64 12) (i64 0))
+                      (local observed-0)))
+                  (binding observed-2
+                    (type ByteBuffer)
+                    (call wire::signed (local value) (local observed-1)))
+                  (binding observed-3
+                    (type ByteBuffer)
+                    (call wire::signed (i64 0) (local observed-2)))
+                  (binding observed-4
+                    (type ByteBuffer)
+                    (call wire::signed (i64 0) (local observed-3)))
+                  (in (call ci::freeze (local observed-4))))))
+            (if
+              (call ci::eq (local op) (i64 2))
+              (let
+                (binding value
+                  (call source-read::array (local data) (local at) (local end) (local a) (local b)))
+                (in
+                  (let
+                    (binding observed-0 (type ByteBuffer) (call ci::empty))
+                    (binding observed-1
+                      (type ByteBuffer)
+                      (call wire::signed (field (local value) (name code)) (local observed-0)))
+                    (binding observed-2
+                      (type ByteBuffer)
+                      (call wire::signed (field (local value) (name next)) (local observed-1)))
+                    (binding observed-3
+                      (type ByteBuffer)
+                      (call wire::signed (field (local value) (name start)) (local observed-2)))
+                    (binding observed-4
+                      (type ByteBuffer)
+                      (call wire::signed (field (local value) (name length)) (local observed-3)))
+                    (in (call ci::freeze (local observed-4))))))
+              (if
+                (call ci::eq (local op) (i64 3))
+                (let
+                  (binding value
+                    (call source-read::string
+                      (local data)
+                      (local at)
+                      (local end)
+                      (local a)
+                      (local b)))
+                  (in
+                    (let
+                      (binding observed-0 (type ByteBuffer) (call ci::empty))
+                      (binding observed-1
+                        (type ByteBuffer)
+                        (call wire::signed (field (local value) (name code)) (local observed-0)))
+                      (binding observed-2
+                        (type ByteBuffer)
+                        (call wire::signed (field (local value) (name next)) (local observed-1)))
+                      (binding observed-3
+                        (type ByteBuffer)
+                        (call wire::signed (field (local value) (name start)) (local observed-2)))
+                      (binding observed-4
+                        (type ByteBuffer)
+                        (call wire::signed (field (local value) (name length)) (local observed-3)))
+                      (in (call ci::freeze (local observed-4))))))
+                (if
+                  (call ci::eq (local op) (i64 4))
+                  (let
+                    (binding value (call source-read::name (local data) (local at) (local end)))
+                    (in
+                      (let
+                        (binding observed-0 (type ByteBuffer) (call ci::empty))
+                        (binding observed-1
+                          (type ByteBuffer)
+                          (call wire::signed (field (local value) (name code)) (local observed-0)))
+                        (binding observed-2
+                          (type ByteBuffer)
+                          (call wire::signed (field (local value) (name next)) (local observed-1)))
+                        (binding observed-3
+                          (type ByteBuffer)
+                          (call wire::signed (field (local value) (name start)) (local observed-2)))
+                        (binding observed-4
+                          (type ByteBuffer)
+                          (call wire::signed (field (local value) (name length)) (local observed-3)))
+                        (in (call ci::freeze (local observed-4))))))
+                  (if
+                    (call ci::eq (local op) (i64 5))
+                    (let
+                      (binding value
+                        (call source-read::reference (local data) (local at) (local end) (local a)))
+                      (in
+                        (let
+                          (binding observed-0 (type ByteBuffer) (call ci::empty))
+                          (binding observed-1
+                            (type ByteBuffer)
+                            (call wire::signed
+                              (if (call ci::lt (local value) (i64 0)) (i64 12) (i64 0))
+                              (local observed-0)))
+                          (binding observed-2
+                            (type ByteBuffer)
+                            (call wire::signed (local value) (local observed-1)))
+                          (binding observed-3
+                            (type ByteBuffer)
+                            (call wire::signed (i64 0) (local observed-2)))
+                          (binding observed-4
+                            (type ByteBuffer)
+                            (call wire::signed (i64 0) (local observed-3)))
+                          (in (call ci::freeze (local observed-4))))))
+                    (if
+                      (call ci::eq (local op) (i64 6))
+                      (let
+                        (binding value
+                          (call source-read::single (local data) (local at) (local end) (local a)))
+                        (in
+                          (let
+                            (binding observed-0 (type ByteBuffer) (call ci::empty))
+                            (binding observed-1
+                              (type ByteBuffer)
+                              (call wire::signed
+                                (if (call ci::lt (local value) (i64 0)) (i64 12) (i64 0))
+                                (local observed-0)))
+                            (binding observed-2
+                              (type ByteBuffer)
+                              (call wire::signed (local value) (local observed-1)))
+                            (binding observed-3
+                              (type ByteBuffer)
+                              (call wire::signed (i64 0) (local observed-2)))
+                            (binding observed-4
+                              (type ByteBuffer)
+                              (call wire::signed (i64 0) (local observed-3)))
+                            (in (call ci::freeze (local observed-4))))))
+                      (if
+                        (call ci::eq (local op) (i64 7))
+                        (let
+                          (binding value
+                            (call source-read::optional
+                              (local data)
+                              (local at)
+                              (local end)
+                              (local a)
+                              (local b)))
+                          (in
+                            (let
+                              (binding observed-0 (type ByteBuffer) (call ci::empty))
+                              (binding observed-1
+                                (type ByteBuffer)
+                                (call wire::signed
+                                  (if (call ci::lt (local value) (i64 0)) (i64 12) (i64 0))
+                                  (local observed-0)))
+                              (binding observed-2
+                                (type ByteBuffer)
+                                (call wire::signed (local value) (local observed-1)))
+                              (binding observed-3
+                                (type ByteBuffer)
+                                (call wire::signed (i64 0) (local observed-2)))
+                              (binding observed-4
+                                (type ByteBuffer)
+                                (call wire::signed (i64 0) (local observed-3)))
+                              (in (call ci::freeze (local observed-4))))))
+                        (if
+                          (call ci::eq (local op) (i64 8))
+                          (let
+                            (binding value
+                              (call source-read::signed (local data) (local at) (local end)))
+                            (in
+                              (let
+                                (binding observed-0 (type ByteBuffer) (call ci::empty))
+                                (binding observed-1
+                                  (type ByteBuffer)
+                                  (call wire::signed
+                                    (field (local value) (name code))
+                                    (local observed-0)))
+                                (binding observed-2
+                                  (type ByteBuffer)
+                                  (call wire::signed
+                                    (field (local value) (name next))
+                                    (local observed-1)))
+                                (binding observed-3
+                                  (type ByteBuffer)
+                                  (call wire::signed
+                                    (field (local value) (name value))
+                                    (local observed-2)))
+                                (binding observed-4
+                                  (type ByteBuffer)
+                                  (call wire::signed (i64 0) (local observed-3)))
+                                (in (call ci::freeze (local observed-4))))))
+                          (if
+                            (call ci::eq (local op) (i64 9))
+                            (let
+                              (binding value
+                                (call source-read::unsigned (local data) (local at) (local end)))
+                              (in
+                                (let
+                                  (binding observed-0 (type ByteBuffer) (call ci::empty))
+                                  (binding observed-1
+                                    (type ByteBuffer)
+                                    (call wire::signed
+                                      (field (local value) (name code))
+                                      (local observed-0)))
+                                  (binding observed-2
+                                    (type ByteBuffer)
+                                    (call wire::signed
+                                      (field (local value) (name next))
+                                      (local observed-1)))
+                                  (binding observed-3
+                                    (type ByteBuffer)
+                                    (call wire::signed
+                                      (field (local value) (name value))
+                                      (local observed-2)))
+                                  (binding observed-4
+                                    (type ByteBuffer)
+                                    (call wire::signed (i64 0) (local observed-3)))
+                                  (in (call ci::freeze (local observed-4))))))
+                            (call ci::octets (list I64))))))))))))))
+    (function create inspect-fields
+      (visibility public)
+      (effect pure)
+      (parameter create packet (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding length (call ci::length (local packet)))
+          (in
+            (let
+              (binding v0 (call source-read::signed (local packet) (i64 0) (local length)))
+              (in
+                (if
+                  (call ci::eq (field (local v0) (name code)) (i64 0))
+                  (let
+                    (binding v1
+                      (call source-read::signed
+                        (local packet)
+                        (field (local v0) (name next))
+                        (local length)))
+                    (in
+                      (if
+                        (call ci::eq (field (local v1) (name code)) (i64 0))
+                        (let
+                          (binding v2
+                            (call source-read::signed
+                              (local packet)
+                              (field (local v1) (name next))
+                              (local length)))
+                          (in
+                            (if
+                              (call ci::eq (field (local v2) (name code)) (i64 0))
+                              (let
+                                (binding v3
+                                  (call source-read::signed
+                                    (local packet)
+                                    (field (local v2) (name next))
+                                    (local length)))
+                                (in
+                                  (if
+                                    (call ci::eq (field (local v3) (name code)) (i64 0))
+                                    (let
+                                      (binding v4
+                                        (call source-read::signed
+                                          (local packet)
+                                          (field (local v3) (name next))
+                                          (local length)))
+                                      (in
+                                        (if
+                                          (call ci::eq (field (local v4) (name code)) (i64 0))
+                                          (record structural
+                                            (field diagnostic (i64 0))
+                                            (field image
+                                              (call observe-fields
+                                                (call ci::slice
+                                                  (local packet)
+                                                  (field (local v4) (name next))
+                                                  (local length))
+                                                (field (local v0) (name value))
+                                                (field (local v1) (name value))
+                                                (field (local v2) (name value))
+                                                (field (local v3) (name value))
+                                                (field (local v4) (name value)))))
+                                          (record structural
+                                            (field diagnostic (i64 12))
+                                            (field image (call ci::octets (list I64)))))))
+                                    (record structural
+                                      (field diagnostic (i64 12))
+                                      (field image (call ci::octets (list I64)))))))
+                              (record structural
+                                (field diagnostic (i64 12))
+                                (field image (call ci::octets (list I64)))))))
+                        (record structural
+                          (field diagnostic (i64 12))
+                          (field image (call ci::octets (list I64)))))))
+                  (record structural
+                    (field diagnostic (i64 12))
+                    (field image (call ci::octets (list I64)))))))))))
+    (component create probes
+      (visibility public)
+      (port create signed
+        (type (function (Bytes) (record (diagnostic I64) (image Bytes))))
+        (function read-signed))
+      (port create unsigned
+        (type (function (Bytes) (record (diagnostic I64) (image Bytes))))
+        (function read-unsigned))
+      (port create type
+        (type (function (Bytes) (record (diagnostic I64) (image Bytes))))
+        (function read-type))
+      (port create envelope
+        (type (function (Bytes) (record (diagnostic I64) (image Bytes))))
+        (function read-envelope))))
+  (target create source-signed
+    (component source-probe::probes)
+    (runner command)
+    (port source-probe::probes::signed))
+  (target create source-unsigned
+    (component source-probe::probes)
+    (runner command)
+    (port source-probe::probes::unsigned))
+  (target create source-type
+    (component source-probe::probes)
+    (runner command)
+    (port source-probe::probes::type))
+  (target create source-envelope
+    (component source-probe::probes)
+    (runner command)
+    (port source-probe::probes::envelope)))
+declarations.end

@@ -1,0 +1,32 @@
+{
+  "status": "Unexecuted next-slice tests; exact current candidate acceptance remains separate",
+  "primitive_integer_cases": [
+    "0,1,-1,125,-125,126,-126,32767,-32768,32768,-32769,2147483647,-2147483648,2147483648,I64::MIN,I64::MAX",
+    "Unsigned boundary values250,251,65535,65536,2^32-1,2^32,I64::MAX; reject above I64::MAX in unsigned reader while signed reader accepts full zigzag domain",
+    "Truncate every prefix length of each multi-byte encoding",
+    "Nonminimal251/252/253 representations, unknown254/255 tags",
+    "Decode one value from an explicit bounded subspan; reject invalid at/end including I64::MIN/MAX without arithmetic traps"
+  ],
+  "typed_fields": [
+    "Exact typed semantic ID tags and nonzero16-byte identities",
+    "Type digest tags with33-byte extents; no identity zero rule falsely applied to digest bytes",
+    "Array count length bounds, invalid element tag, truncated last element; check zero/maximum counts before multiplication",
+    "UTF-8 string boundary and bad encodings; owner Name ASCII rules and empty/129-byte names",
+    "Option tags0/1; reject all others; complete encoded field lengths"
+  ],
+  "type_shape": [
+    "All type objects in complete authoritative S, with independent current Rust canonical codec comparison",
+    "Independent structural record and generic function/list type examples",
+    "Foreign schema/magic, corrected envelope hashes on malformed payloads, nonminimal enum/count fields, trailing payload",
+    "Empty structural record, unordered or duplicate field names, empty Applied arguments",
+    "F64, Secret and Region forms report explicit unsupported status until semantic/compiler support exists",
+    "Do not treat absent references or missing type/ownership/region checks as semantic admission"
+  ],
+  "execution": [
+    "VM/reference scalar field equality to independent expected values",
+    "Native byte-filter probes report parsed fields through encoding, not input copying",
+    "Strict source codecs for structural comparison only, not as a self-hosted admission dependency",
+    "Keep existing complete backend fixed-point and public authoring suites"
+  ],
+  "ownership": "Only public transactions may admit the new source. Current15-function reader and6-function type-shape proposals are unadmitted scratch."
+}

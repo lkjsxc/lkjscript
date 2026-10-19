@@ -1,0 +1,155 @@
+{
+  "source": "352f0997142d9fed279f3964a76102d61f7ac1e6",
+  "scope": "Observed terminal harness output; official full receipt owns overall success and producer identities",
+  "harnesses": [
+    {
+      "file": "2-run.stdout",
+      "terminal_result": "test result: ok. 347 passed; 0 failed; 1 ignored; 0 measured; 1 filtered out; finished in 568.93s",
+      "bytes": 44169,
+      "sha256": "d8876fd3118e963cc1a5572c32fbb46f78aeaee48554b27038281acebc9bba47",
+      "selfhost": [],
+      "native": [],
+      "ignored": [
+        "test reviewed_change_plan_scale_streams_detail_beyond_stdout_envelope ... ignored, release-scale fixture; run explicitly with --ignored --nocapture"
+      ]
+    },
+    {
+      "file": "0-run.stdout",
+      "terminal_result": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 113,
+      "sha256": "df166913f47ff1f04202cae9b31df67ed272d692d99a0023a8117dc3029100dd",
+      "selfhost": [],
+      "native": [],
+      "ignored": []
+    },
+    {
+      "file": "3-run.stdout",
+      "terminal_result": "test result: ok. 334 passed; 0 failed; 16 ignored; 0 measured; 0 filtered out; finished in 9.54s",
+      "bytes": 38206,
+      "sha256": "3d7ab40c40c199fccc1c87cb08fbb8d08f2539ba47eaf8c339b0fdabbb69c55c",
+      "selfhost": [],
+      "native": [],
+      "ignored": [
+        "test offline_packages::effects_iteration::author_task_standard_through_public_change ... ignored, requires an explicitly selected maintained project, linked host and absent evidence path",
+        "test offline_packages::effects_iteration::author_transported_task_library_through_public_change ... ignored, requires a linked host and absent evidence path",
+        "test offline_packages::effects_iteration::copied_task_library_foreground_iteration ... ignored, requires linked host and absent evidence path",
+        "test offline_packages::effects_iteration::copied_task_library_http_iteration ... ignored, requires linked host and absent evidence path",
+        "test offline_packages::effects_iteration::iteration_reader_rejects_consistently_rehashed_false_observations ... ignored, requires authentic LKJSCRIPT_ITERATION_READER_FIXTURE from the public effect workflow",
+        "test offline_packages::effects_iteration::linked_named_reference_iteration ... ignored, requires an explicitly linked host and a fresh evidence directory",
+        "test offline_packages::f64::tests::argument_file_originals_reject_rehashed_substitution ... ignored, requires retained focused F64 receipt and its original verifier",
+        "test offline_packages::maps::tests::window_originals_reject_omission_and_rehashed_substitution ... ignored, requires retained current offline or focused persistent-map receipt and its original verifier",
+        "test offline_packages::recursive::batch::tests::retained_recursive_batches_reject_omission_retargeting_and_probe_reordering ... ignored, requires an authentic current full offline receipt and its exact candidate/verifier",
+        "test offline_packages::requirements::reader_tests::composition_reader_requires_new_evidence_and_exact_invocations ... ignored, requires an authentic retained requirement composition receipt",
+        "test offline_packages::tests::retained_offline_receipt_passes_current_reader ... ignored, requires an authentic retained offline receipt and its exact candidate/verifier",
+        "test pure_tail::boundary::tests::actual_final_receipt_rejects_boundary_relabeling_and_semantic_forgery ... ignored, requires original current source/final receipts and exact candidate/verifier executables",
+        "test pure_tail::measurement_tests::prepared_pure_tool_cold_and_warm_measurements ... ignored, requires exact external pure-tail artifact/N and exclusive bounded measurement execution",
+        "test pure_tail::source_batch::tests::actual_source_batch_rows_reject_missing_results_identity_forgery_and_live_resources ... ignored, requires LKJSCRIPT_PURE_TAIL_BATCH_FIXTURE from an actual completed current pure-tail gate",
+        "test release::admission::nominal_tests::live_nominal_receipt_omissions_reject_at_target_admission ... ignored, requires owned target admission and its authenticated original source fixtures",
+        "test release::transferred::pair::lifecycle::tests::live_small_lifecycle_and_selector_continuity_with_current_container ... ignored, requires current-format archive assets and an owned absent evidence root"
+      ]
+    },
+    {
+      "file": "4-run.stdout",
+      "terminal_result": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 113,
+      "sha256": "df166913f47ff1f04202cae9b31df67ed272d692d99a0023a8117dc3029100dd",
+      "selfhost": [],
+      "native": [],
+      "ignored": []
+    },
+    {
+      "file": "5-run.stdout",
+      "terminal_result": "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 113,
+      "sha256": "df166913f47ff1f04202cae9b31df67ed272d692d99a0023a8117dc3029100dd",
+      "selfhost": [],
+      "native": [],
+      "ignored": []
+    },
+    {
+      "file": "6-run.stdout",
+      "terminal_result": "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 712,
+      "sha256": "3ec77ab65a6e161f34f1b7fedbd4d7748f8e11b59180f82d74192991d1652780",
+      "selfhost": [],
+      "native": [],
+      "ignored": []
+    },
+    {
+      "file": "7-run.stdout",
+      "terminal_result": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "bytes": 172,
+      "sha256": "e99d58895399a09f94c61dcc4377952f201b21fda8c35d4097963c02a49b15d3",
+      "selfhost": [],
+      "native": [],
+      "ignored": []
+    },
+    {
+      "file": "1-run.stdout",
+      "terminal_result": "test result: FAILED. 2594 passed; 1 failed; 5 ignored; 0 measured; 0 filtered out; finished in 856.55s",
+      "bytes": 347389,
+      "sha256": "9a0bce5ad70e6d6352e472b6b55d539c4cb574149295461cc300462f9830c48a",
+      "selfhost": [
+        "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_checks_derived_hash_signatures_and_unknown_codes ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_accepts_empty_and_maximum_width_records ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_rejects_buffer_aliases_loans_and_forgotten_custody ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_rejects_cyclic_affine_or_noncanonical_record_metadata ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_blake3_matches_independent_block_chunk_and_tree_vectors ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_checks_text_utf8_before_native_emission ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_raw_packs_match_current_strict_reader ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_container_executes_independent_and_mutated_programs ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_borrowed_final_call_retains_lexical_cleanup ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_runtime_emits_an_independent_integer_program ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_filter_bounds_usage_raw_octets_and_traps ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::closure::selfhost_closure_rejects_unsupported_untaken_syntax_and_unregistered_intrinsics ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_signed_wire_preserves_independent_boundaries ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_aggregates_preserve_field_order_nesting_and_list_bounds ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_map_pages_match_independent_logical_roots ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_executes_control_flow_and_exact_arithmetic_traps ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::selfhost_exporter_rejects_unsupported_complete_function_bodies ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_object_scans_keep_bounded_call_frames ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_unit_layout_rejects_malformed_and_unsupported_ir ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::closure::selfhost_closure_rejects_uninitialized_reads_types_and_inconsistent_edges ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_blake3_derivation_preserves_independent_vectors_and_contexts ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_input_rejects_malformed_complete_bundles ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::closure::selfhost_closure_executes_calls_branches_recursion_and_lexical_locals ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::closure::selfhost_closure_calls_align_the_machine_stack_at_every_operand_depth ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::selfhost_compiler_rejects_malformed_inputs_before_emission ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::source::selfhost_source_type_shapes_match_current_codec_and_complete_source_types ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_operations_preserve_independent_values_and_traps ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::source::selfhost_source_fields_reject_hostile_ranges_tags_names_and_counts ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::source::selfhost_source_decodes_all_authoritative_records_and_independent_programs ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::source::selfhost_source_type_shapes_reject_rehashed_malformed_payloads_and_foreign_envelopes ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::selfhost_normalized_byte_inventory_exports_current_compiler ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::source::selfhost_source_owners_reject_mismatched_headers_and_noncanonical_expressions ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::source::selfhost_source_integers_decode_values_canonically_on_three_engines ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_units_match_canonical_complete_compiler_ir ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::selfhost_compiler_accepts_exact_input_and_fuel_limits ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::selfhost_compiler_is_deterministic_and_source_mutation_changes_emitted_behavior ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::artifact::selfhost_artifact_container_carries_complete_compiler_and_executes_it ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::selfhost_maintained_proposals_match_authoritative_function_bodies ... ok",
+        "test platform::execution::normalized::tests::selfhost_tests::bytes::selfhost_byte_backend_reproduces_its_complete_native_closure ... ok"
+      ],
+      "native": [
+        "test platform::compiler::elf_x86_64::stack_tests::native_elf_calls_align_stack_and_restore_every_argument_depth ... ok",
+        "test platform::execution::normalized::tests::native_derive_tests::native_elf_blake3_derivation_matches_independent_block_chunk_and_tree_vectors ... ok",
+        "test platform::execution::normalized::tests::native_derive_tests::native_elf_blake3_derivation_preserves_context_bytes_and_tree_boundaries ... ok",
+        "test platform::execution::normalized::tests::native_elf_tests::native_egraph_plan_is_bounded_and_preserves_exact_vm_quota_boundaries ... ok",
+        "test platform::execution::normalized::tests::native_elf_tests::native_elf_checked_traps_and_unsupported_code_never_become_build_time_results ... ok",
+        "test platform::execution::normalized::tests::native_elf_tests::native_egraph_fuses_exact_standard_map_fold_only_after_trap_free_proof ... ok",
+        "test platform::execution::normalized::tests::native_elf_tests::native_elf_executes_runtime_arguments_recursion_closures_and_structured_json ... ok",
+        "test platform::execution::normalized::tests::native_filter_tests::native_elf_binary_filter_bounds_usage_raw_octets_and_traps ... ok",
+        "test platform::execution::normalized::tests::native_filter_tests::native_elf_blake3_matches_independent_block_chunk_and_tree_vectors ... ok",
+        "test platform::execution::normalized::tests::native_elf_tests::native_elf_compiler_byte_operations_preserve_octets_text_ranges_and_traps ... ok"
+      ],
+      "ignored": [
+        "test platform::data::tests::cross_process_writer_helper ... ignored, invoked as a controlled subprocess by the cross-process writer proof",
+        "test platform::execution::normalized::vm::self_tail_locals_tests::call_argument_storage_cost_control ... ignored, matched argument-storage cost control; run explicitly",
+        "test platform::execution::normalized::vm::self_tail_locals_tests::checked_owned_children_nested_cost_control ... ignored, matched nested ordinary-child admission cost control; run explicitly",
+        "test platform::installation::tests::native_crash_child ... ignored, subprocess fixture; native_process_interruption_releases_lock_and_recovers invokes every cut",
+        "test platform::publication::repository_tests::authored_owned_closure_scale_emits_complete_plan_under_default_admission ... ignored, release-scale ownership closure; run explicitly with --ignored --nocapture"
+      ]
+    }
+  ]
+}

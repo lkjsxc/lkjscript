@@ -1,0 +1,176 @@
+{
+  "schema": "lkjscript.selfhost.slice.v1",
+  "status": "running",
+  "tier": 1,
+  "milestone": "D: complete backend closure over native ELF and current .lkja",
+  "profile": 4,
+  "source": "108906b51259f00fae4c4fd1c53d16a05b3df1b5",
+  "tree": "5f9eb4c268c886aa6c60cf7b1d6842233ba57fc2",
+  "parent": "b2aaa22ef2529e531058e09898c1645468fbea9d",
+  "remote_main": "b2aaa22ef2529e531058e09898c1645468fbea9d",
+  "authoritative_revision": "rev_785e128c7c5e53cc35510129cf1d34422597eebcac7260e03f4f55f4e15faccf",
+  "stage": {
+    "source_revision": "rev_785e128c7c5e53cc35510129cf1d34422597eebcac7260e03f4f55f4e15faccf",
+    "normalized_functions": 244,
+    "normalized_instructions": 16111,
+    "normalized_bytes": 794236,
+    "C1_bytes": 322615,
+    "C1_sha256": "45524badcc95fb204a1672e41b09942b29669e76c4d96e7b0a8f91b8f679d0ee",
+    "C2_C3_bytes": 2519420,
+    "C2_C3_sha256": "b1c4371af385bf91421e66dee2a5a7a481c1a2747f34ce786a161354ba0623ce",
+    "artifact_functions": 245,
+    "canonical_units": 247,
+    "artifact_input_bytes": 4126413,
+    "artifact_input_sha256": "1a1d579c2e08e2a984da20b76bcf8baaf9603bdde2a296cf610a4bbd6d8dedae",
+    "A1_A2_A3_bytes": 4349511,
+    "A1_A2_A3_sha256": "e4dc2bd19a308bae2d44a3beda3b13ebda88fc972c17b4358a5014321b5d27e3",
+    "vm_steps": 296112311,
+    "vm_cumulative_allocation": 31909160503,
+    "ref_expressions": 153493373,
+    "ref_cumulative_allocation": 36294774728,
+    "vm_max_call_depth": 19,
+    "ref_max_call_depth": 20,
+    "normalized_sha256": "2d37678274cb7163eb4ba61ed2533fdf5df23c13f14a10131a6a9c206ee0be2b"
+  },
+  "mutation": {
+    "normalized_sha256": "cc2467e82b32b78540c3e3fc4c4167f2ef7c325068f24d7ea52970cf0e340fc6",
+    "native_sha256": "d458ab4a4701259c592afcdc73f343d063a1337cc996df8d5ea9d68d8ffb2b27",
+    "native_bytes": 2519420,
+    "artifact_input_bytes": 4127846,
+    "artifact_input_sha256": "61b0b5f0a8836d471929a98c1e9cfdf23a4e8394f395a49680ee4e3a1db2e92e",
+    "artifact_bytes": 4351190,
+    "artifact_sha256": "f35a28bb8d3283efb12155886575cfe62c9ee20dd5f1f347e0bb3f6ed8bfc4dc",
+    "behavior": "C2/C3 compile changed source; resulting ELF and artifact compilers emit matching program with mutant_argument diagnostic, expected 42 result."
+  },
+  "validation": {
+    "focused": "Initial v3 32 passed/2 failed; both capacity failures resolved by ordinary disk-backed authoring. Targeted retry 2 passed,655.44s. No limit raised.",
+    "public_cli": "3 passed,197.29s",
+    "native_runtime": "10 passed,2.94s",
+    "clippy": "release workspace all targets all features passed",
+    "official_full": "running",
+    "negative": "Malformed headers, checksums, pointers, metadata, object domains/hashes/order, unsupported unit opcodes and untaken code reject with empty output. Existing native type/custody/trap controls retained.",
+    "artifact_reader": "Strict Rust loader and canonical codecs unchanged",
+    "independent": "42/-91, branches, recursion, self-tail calls, checked signed arithmetic limits, division by zero, overflow and trap order"
+  },
+  "compiler_work": {
+    "policy": "Existing trusted foreground evaluator policy; cumulative modeled charges are not live heap or RSS.",
+    "elf_vm_steps": 105866005,
+    "elf_vm_cumulative_allocation": 10275753351,
+    "elf_ref_expressions": 59048940,
+    "elf_ref_cumulative_allocation": 13326093983,
+    "artifact_vm_steps": 296112311,
+    "artifact_vm_cumulative_allocation": 31909160503,
+    "artifact_ref_expressions": 153493373,
+    "artifact_ref_cumulative_allocation": 36294774728
+  },
+  "changed": {
+    "archive": null,
+    "completed_unix_nanoseconds": 1792340528941926000,
+    "elapsed_nanoseconds": 731939783,
+    "failure": null,
+    "final_worktree_input_digest": "verification_3724a5d0ead2d5d966cfe4ed018f529a5ee5d59f28d905856e6aeda7fb825a82",
+    "fresh_passed_gates": 2,
+    "fresh_required": true,
+    "gates": [
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 95471193,
+        "evidence_digest": "verification_d342bfd6367d076a62d960c06ac28e59b03493ebfee6aadbc7a2557540625d17",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_38f07933700126890667d44420291843e7cf080077811254620b95c46590da80",
+        "inputs": [],
+        "name": "rust_only_tooling",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_e79333093501eaa9e7ee0158aecb7ddfbc2079d3d9cbd952c2d58e9ca052599f",
+        "stdout_excerpt": null
+      },
+      {
+        "cargo": null,
+        "elapsed_nanoseconds": 16038129,
+        "evidence_digest": "verification_360863962cc3fd2960b077fd8d09c0b304bcd7e332c495d1faa718c9eec16af2",
+        "execution": "fresh",
+        "exit_code": 0,
+        "input_fingerprint": "verification_36a75d1efdbcf149d201799dfb54917d689bfc97caec931c62a10ff512a0a7ee",
+        "inputs": [],
+        "name": "diff_check",
+        "outputs": [],
+        "reason": null,
+        "signal": null,
+        "status": "passed",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_excerpt": null,
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stdout_excerpt": null
+      }
+    ],
+    "git_head": "108906b51259f00fae4c4fd1c53d16a05b3df1b5",
+    "harness": {
+      "bytes": 126934832,
+      "digest": "verification_7230e80a634f0af81358ab7e652d5e6142e907b64d1323b2ffda5dea0e0201f5",
+      "kind": "file",
+      "mode": 488,
+      "path": "/home/coder/workspace/lkjscript/target/bootstrap/lkjscript-dev"
+    },
+    "input_stable": true,
+    "maximum_workers": 4,
+    "originals_retained": false,
+    "passed_gates": 2,
+    "profile": "changed",
+    "profile_definition_digest": "verification_a1b8afd5d34fd203928ef66ae4f9e5abcda3234c66af94f04adb5af64351f315",
+    "requested_gates": [
+      "rust_only_tooling",
+      "diff_check"
+    ],
+    "reused_passed_gates": 0,
+    "runtime_digest": "verification_b3a946f315fbebe6d8b386848366990bb4137b91c98b3719cf6ce986549e6fd5",
+    "schema": "lkjscript-check-compact-1",
+    "selected_gates": [
+      "rust_only_tooling",
+      "diff_check"
+    ],
+    "started_unix_nanoseconds": 1792340528209985800,
+    "status": "passed",
+    "unrun_gates": [],
+    "worktree_input_digest": "verification_3724a5d0ead2d5d966cfe4ed018f529a5ee5d59f28d905856e6aeda7fb825a82"
+  },
+  "remaining_host_boundaries": [
+    "Rust source semantic admission and normalization",
+    "Rust normalized/native and canonical-unit/artifact input exporters",
+    "Initial Rust native bootstrap",
+    "External atomic file launcher"
+  ],
+  "known_limitations": [
+    "No lkjscript source-graph semantic admission or normalization",
+    "No native lexical region reclamation or RSS claim",
+    "Nominal records/choices, closures, witnesses, regions and broader final profile remain required",
+    "No Tier2 source-graph fixed point"
+  ],
+  "native_memory": "Unmetered process-owned heap; input bounds/traversal fuel are distinct from evaluator quotas.",
+  "disk": {
+    "prior_stale_products_removed_bytes": 509599153,
+    "public_gc": {
+      "operation": "gc",
+      "status": "compacted",
+      "revision": "rev_785e128c7c5e53cc35510129cf1d34422597eebcac7260e03f4f55f4e15faccf",
+      "objects_before": 98543,
+      "objects_retained": 98543,
+      "objects_reclaimed": 0,
+      "canonical_bytes_retained": 103374296,
+      "disk": {
+        "objects_retained": 98543,
+        "packs_before": 198,
+        "packs_after": 1,
+        "pack_bytes_before": 101689265,
+        "pack_bytes_after": 91120504,
+        "pack_bytes_reclaimed": 10568761
+      }
+    }
+  },
+  "publication": "Not pushed; exact candidate official full and release target pending."
+}

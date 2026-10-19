@@ -1,0 +1,6 @@
+{
+  "path": "tests/fixtures/selfhost-source-probes.lkjc",
+  "bytes": 15069,
+  "sha256": "78f217d641295525959a04f470615b64a32b8e4d04c0de12db4680be992e58f3",
+  "status": "Unaccepted output-encoder factoring; public transaction rejected at metadata capacity"
+}

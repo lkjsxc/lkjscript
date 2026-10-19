@@ -1,0 +1,440 @@
+declarations.begin
+(units
+  (module create source-input
+    (function create owner-bindings
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create index (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local index) (call ci::u32 (local data) (i64 76)))
+          (i64 0)
+          (let
+            (binding at
+              (call ci::add
+                (call ci::u32 (local data) (i64 72))
+                (call ci::mul (local index) (i64 50))))
+            (binding object
+              (call artifact-input::object
+                (local data)
+                (i64 1)
+                (call ci::add (local at) (i64 18))
+                (i64 0)
+                (call ci::u32 (local data) (i64 84))))
+            (in
+              (if
+                (call ci::lt (i64 -1) (local object))
+                (let
+                  (binding start (call ci::u32 (local data) (call ci::add (local object) (i64 8))))
+                  (binding end
+                    (call ci::add
+                      (local start)
+                      (call ci::u32 (local data) (call ci::add (local object) (i64 12)))))
+                  (in
+                    (let
+                      (binding code
+                        (call source-object::owner
+                          (call ci::slice (local data) (local start) (local end))
+                          (call ci::slice
+                            (local data)
+                            (local at)
+                            (call ci::add (local at) (i64 50)))))
+                      (in
+                        (if
+                          (call ci::eq (local code) (i64 0))
+                          (call owner-bindings (local data) (call ci::add (local index) (i64 1)))
+                          (local code))))))
+                (i64 12)))))))
+    (function create shapes
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create index (type I64))
+      (parameter create owners (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local index) (call ci::u32 (local data) (i64 84)))
+          (if (call ci::eq (local owners) (call ci::u32 (local data) (i64 76))) (i64 0) (i64 12))
+          (let
+            (binding at
+              (call ci::add
+                (call ci::u32 (local data) (i64 80))
+                (call ci::mul (local index) (i64 48))))
+            (binding domain (call ci::u32 (local data) (local at)))
+            (binding start (call ci::u32 (local data) (call ci::add (local at) (i64 8))))
+            (binding end
+              (call ci::add
+                (local start)
+                (call ci::u32 (local data) (call ci::add (local at) (i64 12)))))
+            (in
+              (if
+                (call ci::eq (local domain) (i64 1))
+                (call shapes
+                  (local data)
+                  (call ci::add (local index) (i64 1))
+                  (call ci::add (local owners) (i64 1)))
+                (if
+                  (call ci::eq (local domain) (i64 2))
+                  (let
+                    (binding code
+                      (call source-shape::type
+                        (call ci::slice (local data) (local start) (local end))))
+                    (in
+                      (if
+                        (call ci::eq (local code) (i64 0))
+                        (call shapes
+                          (local data)
+                          (call ci::add (local index) (i64 1))
+                          (local owners))
+                        (local code))))
+                  (i64 13))))))))
+    (function create identity
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (let
+          (binding meta (call ci::u32 (local data) (i64 88)))
+          (binding meta-end (call ci::add (local meta) (call ci::u32 (local data) (i64 92))))
+          (binding name-size (call ci::u32 (local data) (call ci::add (local meta) (i64 96))))
+          (binding core-size (call ci::u32 (local data) (call ci::add (local meta) (i64 100))))
+          (binding name-at (call ci::add (local meta) (i64 112)))
+          (binding core-at (call ci::add (local name-at) (local name-size)))
+          (in
+            (if
+              (if
+                (call ci::lt (i64 0) (local name-size))
+                (if
+                  (call ci::lt (local name-size) (i64 129))
+                  (if
+                    (call ci::lt (i64 52) (local core-size))
+                    (if
+                      (call ci::lt (local core-size) (i64 120))
+                      (if
+                        (call ci::eq
+                          (call ci::add (local core-at) (local core-size))
+                          (local meta-end))
+                        (if
+                          (call artifact-check::zeros
+                            (local data)
+                            (call ci::add (local meta) (i64 104))
+                            (call ci::add (local meta) (i64 112)))
+                          (bool true)
+                          (bool false))
+                        (bool false))
+                      (bool false))
+                    (bool false))
+                  (bool false))
+                (bool false))
+              (let
+                (binding core (call ci::slice (local data) (local core-at) (local meta-end)))
+                (binding revision (call source-history::revision (local core)))
+                (in
+                  (if
+                    (call ci::eq (field (local revision) (name diagnostic)) (i64 0))
+                    (if
+                      (if
+                        (call ci::same
+                          (field (local revision) (name image))
+                          (call ci::slice
+                            (local data)
+                            (call ci::add (local meta) (i64 64))
+                            (call ci::add (local meta) (i64 96))))
+                        (if
+                          (call ci::same
+                            (call ci::slice (local core) (i64 3) (i64 19))
+                            (call ci::slice
+                              (local data)
+                              (local meta)
+                              (call ci::add (local meta) (i64 16))))
+                          (if
+                            (call ci::same
+                              (call ci::slice
+                                (local core)
+                                (call ci::sub (local core-size) (i64 32))
+                                (local core-size))
+                              (call ci::slice
+                                (local data)
+                                (call ci::add (local meta) (i64 32))
+                                (call ci::add (local meta) (i64 64))))
+                            (bool true)
+                            (bool false))
+                          (bool false))
+                        (bool false))
+                      (let
+                        (binding state
+                          (call source-state::root
+                            (call ci::slice
+                              (local data)
+                              (call ci::add (local meta) (i64 16))
+                              (call ci::add (local meta) (i64 32)))
+                            (call ci::slice (local data) (local name-at) (local core-at))
+                            (call ci::slice
+                              (local data)
+                              (call ci::u32 (local data) (i64 72))
+                              (call ci::add
+                                (call ci::u32 (local data) (i64 72))
+                                (call ci::mul (call ci::u32 (local data) (i64 76)) (i64 50))))
+                            (call ci::slice
+                              (local data)
+                              (call ci::u32 (local data) (i64 96))
+                              (call ci::add
+                                (call ci::u32 (local data) (i64 96))
+                                (call ci::mul (call ci::u32 (local data) (i64 100)) (i64 48))))
+                            (call ci::slice
+                              (local data)
+                              (call ci::u32 (local data) (i64 104))
+                              (call ci::add
+                                (call ci::u32 (local data) (i64 104))
+                                (call ci::mul (call ci::u32 (local data) (i64 108)) (i64 49))))))
+                        (in
+                          (if
+                            (call ci::eq (field (local state) (name diagnostic)) (i64 0))
+                            (if
+                              (call ci::same
+                                (field (local state) (name image))
+                                (call ci::slice
+                                  (local data)
+                                  (call ci::add (local meta) (i64 32))
+                                  (call ci::add (local meta) (i64 64))))
+                              (i64 0)
+                              (i64 12))
+                            (field (local state) (name diagnostic)))))
+                      (i64 12))
+                    (i64 12))))
+              (i64 12))))))
+    (function create tables
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (let
+          (binding owners (call ci::u32 (local data) (i64 76)))
+          (binding objects (call ci::u32 (local data) (i64 84)))
+          (binding dependencies (call ci::u32 (local data) (i64 100)))
+          (binding retirements (call ci::u32 (local data) (i64 108)))
+          (binding owner-end (call ci::add (i64 160) (call ci::mul (local owners) (i64 50))))
+          (binding dependency-end
+            (call ci::add (local owner-end) (call ci::mul (local dependencies) (i64 48))))
+          (binding retirement-end
+            (call ci::add (local dependency-end) (call ci::mul (local retirements) (i64 49))))
+          (binding object-end
+            (call ci::add (local retirement-end) (call ci::mul (local objects) (i64 48))))
+          (binding meta-size (call ci::u32 (local data) (i64 92)))
+          (binding after (call ci::add (local object-end) (local meta-size)))
+          (in
+            (if
+              (if
+                (call ci::lt (i64 0) (local owners))
+                (if
+                  (call ci::lt (local owners) (i64 100001))
+                  (if
+                    (call ci::lt (i64 0) (local objects))
+                    (if
+                      (call ci::lt (local objects) (i64 100001))
+                      (if
+                        (call ci::lt (local dependencies) (i64 100001))
+                        (if
+                          (call ci::lt (local retirements) (i64 100001))
+                          (if
+                            (call ci::eq (call ci::u32 (local data) (i64 24)) (local owners))
+                            (if
+                              (call ci::lt (call ci::u32 (local data) (i64 12)) (local owners))
+                              (if
+                                (call ci::eq (call ci::u32 (local data) (i64 72)) (i64 160))
+                                (if
+                                  (call ci::eq
+                                    (call ci::u32 (local data) (i64 96))
+                                    (local owner-end))
+                                  (if
+                                    (call ci::eq
+                                      (call ci::u32 (local data) (i64 104))
+                                      (local dependency-end))
+                                    (if
+                                      (call ci::eq
+                                        (call ci::u32 (local data) (i64 80))
+                                        (local retirement-end))
+                                      (if
+                                        (call ci::eq
+                                          (call ci::u32 (local data) (i64 88))
+                                          (local object-end))
+                                        (if
+                                          (call ci::lt (i64 111) (local meta-size))
+                                          (if
+                                            (call source-read::range
+                                              (local data)
+                                              (i64 160)
+                                              (call ci::sub (local after) (i64 160))
+                                              (call ci::length (local data)))
+                                            (bool true)
+                                            (bool false))
+                                          (bool false))
+                                        (bool false))
+                                      (bool false))
+                                    (bool false))
+                                  (bool false))
+                                (bool false))
+                              (bool false))
+                            (bool false))
+                          (bool false))
+                        (bool false))
+                      (bool false))
+                    (bool false))
+                  (bool false))
+                (bool false))
+              (if
+                (if
+                  (call ci::eq
+                    (call source-index::validate
+                      (local data)
+                      (call ci::u32 (local data) (i64 72))
+                      (local owners)
+                      (i64 17)
+                      (i64 50))
+                    (i64 0))
+                  (if
+                    (call ci::eq
+                      (call source-index::validate
+                        (local data)
+                        (call ci::u32 (local data) (i64 96))
+                        (local dependencies)
+                        (i64 16)
+                        (i64 48))
+                      (i64 0))
+                    (if
+                      (call ci::eq
+                        (call source-index::validate
+                          (local data)
+                          (call ci::u32 (local data) (i64 104))
+                          (local retirements)
+                          (i64 17)
+                          (i64 49))
+                        (i64 0))
+                      (if
+                        (call ci::eq
+                          (call ci::get
+                            (local data)
+                            (call ci::add
+                              (call ci::u32 (local data) (i64 72))
+                              (call ci::mul (call ci::u32 (local data) (i64 12)) (i64 50))))
+                          (i64 2))
+                        (bool true)
+                        (bool false))
+                      (bool false))
+                    (bool false))
+                  (bool false))
+                (if
+                  (call artifact-input::objects (local data) (i64 0) (local after))
+                  (let
+                    (binding identity-code (call identity (local data)))
+                    (in
+                      (if
+                        (call ci::eq (local identity-code) (i64 0))
+                        (if
+                          (call ci::eq (local dependencies) (i64 0))
+                          (let
+                            (binding shape-code (call shapes (local data) (i64 0) (i64 0)))
+                            (in
+                              (if
+                                (call ci::eq (local shape-code) (i64 0))
+                                (call owner-bindings (local data) (i64 0))
+                                (local shape-code))))
+                          (i64 13))
+                        (local identity-code))))
+                  (i64 12))
+                (i64 12))
+              (i64 12))))))
+    (function create validate
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (if
+          (if
+            (call ci::lt (i64 159) (call ci::length (local data)))
+            (if (call ci::lt (call ci::length (local data)) (i64 8388609)) (bool true) (bool false))
+            (bool false))
+          (if
+            (call ci::same
+              (call ci::slice (local data) (i64 0) (i64 8))
+              (call ci::text-bytes (text "LKJCI001")))
+            (if
+              (call ci::eq (call ci::u32 (local data) (i64 8)) (i64 5))
+              (if
+                (if
+                  (call ci::word-is (local data) (i64 16) (call ci::length (local data)))
+                  (if
+                    (call ci::eq (call ci::u32 (local data) (i64 28)) (i64 0))
+                    (if
+                      (call ci::eq (call ci::u32 (local data) (i64 36)) (i64 0))
+                      (if
+                        (call ci::lt (call ci::u32 (local data) (i64 32)) (i64 2147483648))
+                        (if
+                          (call ci::lt (call ci::u32 (local data) (i64 112)) (i64 2))
+                          (if
+                            (call artifact-check::zeros (local data) (i64 116) (i64 160))
+                            (bool true)
+                            (bool false))
+                          (bool false))
+                        (bool false))
+                      (bool false))
+                    (bool false))
+                  (bool false))
+                (if
+                  (call ci::lt
+                    (call ci::u32 (local data) (i64 32))
+                    (call ci::add
+                      (call ci::add
+                        (i64 4096)
+                        (call ci::mul (i64 128) (call ci::length (local data))))
+                      (call ci::mul
+                        (i64 64)
+                        (call ci::add
+                          (call ci::add
+                            (call ci::u32 (local data) (i64 76))
+                            (call ci::u32 (local data) (i64 84)))
+                          (call ci::add
+                            (call ci::u32 (local data) (i64 100))
+                            (call ci::u32 (local data) (i64 108)))))))
+                  (i64 6)
+                  (if
+                    (call ci::same
+                      (call ci::slice (local data) (i64 40) (i64 72))
+                      (call ci::digest
+                        (call ci::concat
+                          (call ci::slice (local data) (i64 0) (i64 40))
+                          (call ci::slice (local data) (i64 72) (call ci::length (local data))))))
+                    (call tables (local data))
+                    (i64 4)))
+                (i64 3))
+              (i64 2))
+            (i64 1))
+          (i64 3))))
+    (function create inspect
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding code (call validate (local data)))
+          (in
+            (if
+              (call ci::eq (local code) (i64 0))
+              (record structural
+                (field diagnostic (local code))
+                (field image
+                  (call ci::slice
+                    (local data)
+                    (call ci::add (call ci::u32 (local data) (i64 88)) (i64 32))
+                    (call ci::add (call ci::u32 (local data) (i64 88)) (i64 64)))))
+              (record structural
+                (field diagnostic (local code))
+                (field image (call ci::text-bytes (text "")))))))))))
+declarations.end

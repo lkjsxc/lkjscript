@@ -1,0 +1,199 @@
+{
+  "status": "Read-only next-slice research; no semantic implementation or acceptance claimed",
+  "dependencies": [
+    {
+      "owner": "src/platform/kernel/codec.rs:1039",
+      "fact": "Owner/type records use current packed canonical envelopes, then local invariants; owner digest alone does not establish meaning."
+    },
+    {
+      "owner": "src/platform/kernel/owner.rs",
+      "fact": "OwnerRecord separates declaration, expression, binding and parameter records. Decode identity/kind and local fields before following graph references."
+    },
+    {
+      "owner": "src/platform/kernel/type_object.rs",
+      "fact": "Type objects are content-addressed, with structural children and nominal/brand/parameter references. Need bounded graph traversal plus separate semantic admission."
+    },
+    {
+      "owner": "src/platform/compiler/lower.rs:136",
+      "fact": "Artifact CompilationSource uses six source-summary digests from witness summaries. Tier2 must derive/check these from source, not trust projected host IR."
+    },
+    {
+      "owner": "src/platform/witness/summary_build.rs",
+      "next": "Read exact summary construction after current Tier1 candidate is accepted."
+    }
+  ],
+  "next": [
+    "Start with current raw-envelope decoding and complete structural inventory for S, plus truncated/noncanonical/unknown-tag negatives. Keep artifact and native backends tested.",
+    "Choose one documented current semantic graph profile. Preserve complete unused/untaken source, untrusted offsets, explicit rejection, and traversal fuel.",
+    "Move basic function type/custody checking and normalization into S, then expand to required nominal/closure/witness/region corpus. Lexical Region phase tables require native support driven by this workload."
+  ],
+  "draft": {
+    "path": ".artifacts/selfhost/source-reader-draft.lkjc",
+    "generator": ".artifacts/selfhost/draft-source-reader.cjs",
+    "status": "15-function proposal, syntax and AST formatting checked only. No public admission, compilation or execution yet.",
+    "functions": [
+      "checked range",
+      "canonical u64 halves (tags 0..253)",
+      "bounded unsigned I64 range",
+      "full signed I64 zigzag",
+      "current envelope digest/extent",
+      "typed semantic identity/digest",
+      "bounded typed arrays",
+      "bounded UTF-8 strings",
+      "canonical owner names",
+      "package-qualified references",
+      "single tags",
+      "optional typed values"
+    ],
+    "requirements": [
+      "Test truncation, nonminimal forms, wide integer boundaries and hostile indices before integrating",
+      "Envelope checksum uses wire::digest length-prefix context, not raw derive",
+      "All arithmetic before extent proof must avoid overflow; maximum parameter must not use +1",
+      "Public tx authoring only; do not modify accepted project during D acceptance"
+    ],
+    "function_count": 15
+  },
+  "source_wire": {
+    "envelope": {
+      "header": 18,
+      "footer": 32,
+      "epoch": 1,
+      "integer_encoding": "bincode standard LE varints; enum discriminants u32; tags below251 one byte; semantic identity tag is raw u8",
+      "checksum": "derive(context,lengthBE64+header_and_payload)"
+    },
+    "owner": {
+      "file": "src/platform/kernel/owner.rs",
+      "record_variants": {
+        "module": 0,
+        "declaration": 1,
+        "type_parameter": 2,
+        "parameter": 7,
+        "binding": 8,
+        "expression": 9,
+        "port": 11,
+        "target": 12
+      },
+      "header": "record tag; contract1; OwnerKey ordinal; typed ID tag+16nonzero; OwnerKind ordinal. Expression instead has contract1+ExpressionId+operation.",
+      "payload_offsets": {
+        "normal": 39,
+        "expression_operation": 37
+      },
+      "declaration_payloads": {
+        "external": 3,
+        "function": 4,
+        "component": 6
+      },
+      "visibility": [
+        "private",
+        "package",
+        "public"
+      ],
+      "parameter": "parent enum+ID; name; type digest; use_mode; optional requirement",
+      "binding": "name; kind; optional value; optional declared type",
+      "port": "declarationID;name;function type; implementation enum(expression0/function1)",
+      "target": "name;component reference;optional port;runner"
+    },
+    "expression_ops": {
+      "unit": 0,
+      "bool": 1,
+      "i64": 2,
+      "text": 3,
+      "static_text": 4,
+      "local": 5,
+      "constant": 6,
+      "if": 7,
+      "let": 8,
+      "sequence": 9,
+      "call": 10,
+      "function_value": 11,
+      "invoke": 12,
+      "record": 13,
+      "variant": 14,
+      "field": 15,
+      "list": 16
+    },
+    "note": "These mappings were read from current Rust schema, not yet verified by executing a lkjscript decoder. Full unsupported-form and canonicality tests remain necessary.",
+    "type_forms": {
+      "Unit": 0,
+      "Bool": 1,
+      "I64": 2,
+      "Bytes": 3,
+      "Text": 4,
+      "StaticText": 5,
+      "Secret": 6,
+      "TypeParameter": 7,
+      "Named": 8,
+      "CapabilityResource": 9,
+      "StructuralRecord": 10,
+      "List": 11,
+      "Map": 12,
+      "Option": 13,
+      "Result": 14,
+      "Stream": 15,
+      "Function": 16,
+      "Applied": 17,
+      "TaskFunction": 18,
+      "F64": 19,
+      "ByteBuffer": 20,
+      "OwnedI64Cell": 21,
+      "OwnedProduct": 22,
+      "OwnedChoice": 23,
+      "OwnedSequence": 24,
+      "AssociatedContractMember": 25,
+      "AssociatedWitnessProjection": 26,
+      "ReadViewApplied": 27,
+      "AssociatedReadViewMember": 28,
+      "AssociatedReadViewProjection": 29,
+      "RegionBrand": 30,
+      "Region": 31,
+      "RelPtr": 32,
+      "RegionSlice": 33,
+      "RegionCap": 34
+    }
+  },
+  "summary_derivation": {
+    "owner": "src/platform/witness/summary_build.rs",
+    "steps": [
+      "local_summary at1143",
+      "aggregate_semantic_children at506",
+      "derive_validation_dependencies at624",
+      "aggregate_validation_children at744"
+    ],
+    "note": "Six unit source-summary digests derive from records, ownership child aggregation and outgoing relations. Semantic source compiler must derive or independently check their binding; raw unit projections cannot remain Tier2 authority."
+  },
+  "delivery_note": "Current compacted source pack is91120504bytes, below100MiB. Immutable authoring history is retained. Future substantial growth may need public GC pack partitioning; do not trim accepted history or manually edit objects.",
+  "test_dependencies": [
+    "tests/support/selfhost_proposals.rs currently generates only the diagnostic/image result or all-Bytes generic record stubs. Decoder result records use I64 fields; extend neutral typed stubs for I64 without changing authoring limits.",
+    "Use one byte-filter probe over an independent canonical integer corpus; assert decoded scalar values on VM/reference and encoded observed fields from native execution.",
+    "Batch full source-owner/type decoding in one compiler invocation rather than spawning a native process per object.",
+    "Preserve malformed objects in test fixtures and exercise rehashed invalid payloads, not only checksum damage."
+  ],
+  "shape_draft": {
+    "path": ".artifacts/selfhost/source-shape-draft.lkjc",
+    "generator": ".artifacts/selfhost/draft-source-shape.cjs",
+    "functions": 6,
+    "status": "Unadmitted type-envelope and payload-shape prototype. No graph reference resolution, cycle check, semantic checking or execution proof.",
+    "supported_forms": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      10,
+      11,
+      16,
+      17,
+      20
+    ],
+    "notes": [
+      "Nonempty structural fields in strict name order",
+      "Applied type requires positive arity",
+      "Known unsupported forms return13; malformed encoding returns12",
+      "Only current schema epoch1, minimal enum tags and complete payload extent",
+      "Review private helper preconditions before exposing a source compiler input entry"
+    ]
+  }
+}

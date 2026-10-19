@@ -1,0 +1,172 @@
+{
+  "records": [
+    {
+      "path": "artifact-primitives-focused.log",
+      "status": "failed: test harness used nonexistent PackMetadata::parse; fixed to decode(true)+verify_all",
+      "bytes": 1217,
+      "sha256": "f1b92d9ab628db8af6b8e5dff35942fb0bba2711bf10187cf91f037423e577ee"
+    },
+    {
+      "path": "artifact-primitives-focused-v2.log",
+      "status": "failed: 3 primitive tests passed, unit serializer missed current typed identity tags",
+      "bytes": 8521,
+      "sha256": "e42bab81c18400072a497f1ffa6c60519c22129c98c3310c41c31e16691f9d26"
+    },
+    {
+      "path": "artifact-unit-tags-focused.log",
+      "status": "passed:193 current compiler units exact on VM/reference/native",
+      "bytes": 380,
+      "sha256": "1257592b4ec36ca9cb8c0e929c4656640abe591e8648924762896c86deba1e37"
+    },
+    {
+      "path": "artifact-encoding-authoring.log",
+      "status": "failed: nonlocal owned-buffer arguments; rejected atomically",
+      "bytes": 1103,
+      "sha256": "23da6fe9a97a7cf164212af165547077729d531a608e4237390fcba079750bd8"
+    },
+    {
+      "path": "artifact-encoding-authoring-local.log",
+      "status": "accepted: explicit local custody,4 modules",
+      "bytes": 389,
+      "sha256": "0d2718aee04bd459dc821465d004426bc8480cb2334db5d238f20d18880b8fc6"
+    },
+    {
+      "path": "artifact-unit-tags-authoring.log",
+      "status": "accepted: current typed identity tags",
+      "bytes": 390,
+      "sha256": "2e45fa21b98ea4ffaf0612791e974ee68b4f8a349c7f54ff81d35e8fe8784ccb"
+    },
+    {
+      "path": "artifact-container-authoring.log",
+      "status": "accepted: container pipeline,order,manifests",
+      "bytes": 389,
+      "sha256": "a2ff5ec0c724d8c173bbb4aac088fbf66c1e126f2281c26d7044fc322c5e684d"
+    },
+    {
+      "path": "artifact-unit-admission-focused.log",
+      "status": "passed:233 units exact VM/reference/native; malformed unit layouts rejected",
+      "bytes": 1041,
+      "sha256": "5ea4f445cc16bcee58ce2ee0f9bd0d949d82553a7c9054d636480a9f9f3bec78"
+    },
+    {
+      "path": "artifact-check-authoring.log",
+      "status": "failed: Bool passed to I64 equality; rejected before publication",
+      "bytes": 675,
+      "sha256": "a5f3f017e6f411f75446e8964fc2374cef0b654b251afcd6c4bb773f421a80fc"
+    },
+    {
+      "path": "artifact-check-authoring-fixed.log",
+      "status": "accepted: full unit layout checker",
+      "bytes": 389,
+      "sha256": "9bd7286d6d7480fd8bfcba1f36a4a8ef2c43e3e10248053e0bcbae2cc49f4b77"
+    },
+    {
+      "path": "artifact-profile4-authoring.log",
+      "status": "failed: combined transaction witness-byte budget; no publication",
+      "bytes": 147,
+      "sha256": "ca6591510cd5f2c5b060cad82ac5bb4315814d7cf11dc9c900f39b6ddfbdd936"
+    },
+    {
+      "path": "artifact-input-authoring.log",
+      "status": "accepted: bounded artifact input checker transaction",
+      "bytes": 389,
+      "sha256": "6ead9947e35f0594fe482422f63433196c5970c000d6a414e653bbb82f9c5e17"
+    },
+    {
+      "path": "artifact-dispatch-authoring.log",
+      "status": "accepted: one current profile 4 and explicit format selector",
+      "bytes": 388,
+      "sha256": "181e8725583e340b01d185dcfd90716d3e4589d33b8c89a5b26145f5429893d7"
+    },
+    {
+      "path": "artifact-intrinsics-authoring.log",
+      "status": "accepted: complete supported primitive names",
+      "bytes": 388,
+      "sha256": "44d7bd062089af2ad22835d1b89db2165b0e727bd89b01846787e2dcbafaa2f6"
+    },
+    {
+      "path": "artifact-profile4-failure.json",
+      "status": "failed:26passed7failed; preserved compact complete failure reasons/native identity/encoding checks",
+      "bytes": 5616,
+      "sha256": "84e7616f4a0d5346e60a89a53ad0233d3e5c929bc2394eff44243d8a02cdf8bc"
+    },
+    {
+      "path": "artifact-runtime-metadata-fix.log",
+      "status": "accepted: empty runtime metadata and optional unit membership match artifact contract",
+      "bytes": 388,
+      "sha256": "3325962cb1b93998bf35871ce2a9ffc677615495048bf3f17c17dfeb5920529c"
+    },
+    {
+      "path": "artifact-runtime-metadata-focused.log",
+      "status": "failed:layout fixed; source object hash check exposed interface identity/domain confusion",
+      "bytes": 1189,
+      "sha256": "fa1af0fe66d69d7139f845a2ba62166aa88dfb040eba06e686bf1c1bff79cdda"
+    },
+    {
+      "path": "artifact-interface-digest-fix.log",
+      "status": "accepted: current interface owner object context and logical package interface identity",
+      "bytes": 388,
+      "sha256": "bed2b8a54e7ade37e46932f9dde665e2f65efcad7f718ea45a149d81978e1c68"
+    },
+    {
+      "path": "artifact-interface-digest-focused.log",
+      "status": "passed:independent42/-91 strict artifacts VM/reference/native; prior harness/current runtime graph, embedded proposal updates not exercised",
+      "bytes": 1202,
+      "sha256": "dfb2712df0ed24654e535d37145f42e77226592931a775f8faa4fc4d52dcd31d"
+    },
+    {
+      "path": "artifact-profile4-stack-failure.json",
+      "status": "failed:focused v2 process aborted; non-tail object scan exhausted call stack; no complete suite result",
+      "bytes": 2394,
+      "sha256": "4a6593ffe230ab7f7fb62119f167b5989acda8d24c340e9ced41c12c51147b88"
+    },
+    {
+      "path": "artifact-scan-tail-fix.log",
+      "status": "accepted: object and runtime-owner scans now tail-dispatch",
+      "bytes": 388,
+      "sha256": "7494a29fac26e2da3d6dded635ed9466641fd06a51ac472e943dcc449a69bf36"
+    },
+    {
+      "path": "artifact-scan-tail-focused.log",
+      "status": "passed: prior harness on corrected runtime graph; control-flow artifact strict load/execution across VM/reference/native and overflow trap",
+      "bytes": 645,
+      "sha256": "3ba1edb68f8a2086c1ee4db1337a7a47082b6b1eeeff8a4d53329b34188669d6"
+    },
+    {
+      "path": "artifact-profile4-v3-result.json",
+      "status": "failed:32 passed,2 memory-project-capacity failures; both fixed points observed before failed mutant reconstruction",
+      "bytes": 8511,
+      "sha256": "24195d6abc26fdfce765e26a7ccb559f347f1c40e109e991fc139bdbccfa7bfb"
+    },
+    {
+      "path": "artifact-disk-bootstrap-focused.log",
+      "status": "passed:2 reconstruction tests,655.44s; ordinary temporary disk graph, default limits unchanged; complete and mutated native/artifact proofs",
+      "bytes": 6432,
+      "sha256": "cbd0bb98198e60e2951498d925786a5d8fec16bb4eaa179777b14e5506b89d19"
+    },
+    {
+      "path": "artifact-public-cli-focused.log",
+      "status": "passed:3 public native CLI tests,197.29s",
+      "bytes": 731,
+      "sha256": "32a73c749b52403cdf037c8b142646b6814789e0ebdae529d3be251799452fff"
+    },
+    {
+      "path": "artifact-native-runtime-focused.log",
+      "status": "passed:10 native runtime tests,2.94s",
+      "bytes": 1526,
+      "sha256": "8d077aa17f5b48c6f92296fbe32785757ab8bd03b21da787e70301138dd8cb53"
+    },
+    {
+      "path": "artifact-clippy.log",
+      "status": "passed:release workspace all targets all features",
+      "bytes": 306,
+      "sha256": "3121323275184f2655c1d0f0c42375ab47145f8c17eccd9b651c0c881b2d8767"
+    },
+    {
+      "path": "artifact-stale-products-cleanup.json",
+      "status": "completed:509599153 bytes of stale derived release products hashed then removed",
+      "bytes": 1439,
+      "sha256": "877b35a136f9616b57f4629620fdba4a41e20c3181b0b50d26d47ea01f52240f"
+    }
+  ]
+}
