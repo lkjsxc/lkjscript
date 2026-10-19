@@ -1,0 +1,34 @@
+{
+  "schema": "lkjscript.selfhost.slice.v1",
+  "status": "passed",
+  "tier": 1,
+  "profile": 1,
+  "source": "892b46da28c0e7a9dd529e7167dd763defabcc39",
+  "tree": "b5018106a67b3af99858cd29530c0ff2a7852781",
+  "parent": "b83b6dd5dc235daaef0483d10342988f7712085c",
+  "remaining_host_boundaries": [
+    "Rust semantic admission",
+    "Rust normalized exporter",
+    "host VM/reference and BLAKE3 primitive"
+  ],
+  "focused_tests": 5,
+  "changed": {
+    "passed": 29,
+    "fresh": 29,
+    "input_stable": true,
+    "input_digest": "verification_a9583097e1c305db0daf02ef5736055bf100fda6a383423e981581ffedc607bf"
+  },
+  "full": {
+    "passed": 29,
+    "fresh": 29,
+    "input_stable": true,
+    "input_digest": "verification_8bbf1c341cf013248a2b08b69639b6914aed5fbc51991b3148d26188a6f7baa3"
+  },
+  "known_limitations": [
+    "no native compiler execution",
+    "no self-emitted .lkja",
+    "no compiler backend closure",
+    "no semantic admission in lkjscript",
+    "no C2/C3 fixed point"
+  ]
+}

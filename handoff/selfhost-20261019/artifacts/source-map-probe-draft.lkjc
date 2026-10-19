@@ -1,0 +1,28 @@
+declarations.begin
+(units
+  (module create source-map-probe
+    (function create read-map
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (if
+          (call ci::lt (call ci::length (local data)) (i64 8))
+          (record structural
+            (field diagnostic (i64 12))
+            (field image (call ci::text-bytes (text ""))))
+          (call source-map::root
+            (call ci::slice (local data) (i64 8) (call ci::length (local data)))
+            (call ci::u32 (local data) (i64 0))
+            (call ci::u32 (local data) (i64 4))))))
+    (component create probes
+      (visibility public)
+      (port create run
+        (type (function (Bytes) (record (diagnostic I64) (image Bytes))))
+        (function read-map))))
+  (target create source-map-preview
+    (component source-map-probe::probes)
+    (port source-map-probe::probes::run)
+    (runner command)))
+declarations.end

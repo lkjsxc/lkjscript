@@ -1,0 +1,188 @@
+{
+  "schema": "lkjscript.selfhost.slice.v1",
+  "status": "passed",
+  "tier": 1,
+  "milestone": "D dependency: domain hashing for artifact identities; D incomplete",
+  "profile": 3,
+  "source": "b2aaa22ef2529e531058e09898c1645468fbea9d",
+  "tree": "f5af68d39f35d7ac6e198f546d23ab72454ae2f9",
+  "parent": "45c088f9053098fc5aeb50a7e9cc92bcc9f638e2",
+  "remote_main": "b2aaa22ef2529e531058e09898c1645468fbea9d",
+  "authoritative_revision": "rev_110ffe87e38e7c88b653b681fcd736362d65dba8724cf25dcee6e792d2750848",
+  "stage_input": {
+    "format": "LKJCI1 profile 3; host-normalized compiler closure",
+    "functions": 156,
+    "instructions": 9443,
+    "bytes": 483030,
+    "sha256": "de228ba2c0f77eb369a8690def8260cc63d944270b1af8fa336241cd9c352f41"
+  },
+  "native_stages": {
+    "C1": {
+      "bytes": 197071,
+      "sha256": "aaa99d6c953616f1d0482b70f82231d84eec21fce3acedb4216099a00b0ee0c9",
+      "producer": "Rust bootstrap"
+    },
+    "C2": {
+      "bytes": 1526550,
+      "sha256": "3b432458640d552eb4033f43d86caf38b298743cf63e77977982fe6e1872a044",
+      "producer": "C1(normalized S)"
+    },
+    "C3": {
+      "bytes": 1526550,
+      "sha256": "3b432458640d552eb4033f43d86caf38b298743cf63e77977982fe6e1872a044",
+      "producer": "C2(normalized S)"
+    },
+    "comparison": "Exact byte equality after static ELF inspection; no Rust compiler or VM inside native stage processes. Rust admission/export precede these Tier 1 runs."
+  },
+  "mutation": {
+    "normalized_input_sha256": "40405745a8e9eb1c7f97391114103c6bfcdfa499c553ef5943e132194f1ec57e",
+    "compiler_sha256": "a24c3f7839ca5ed1083164148aca8aa4814b55526b56863f35988da0c030f073",
+    "compiler_bytes": 1526550,
+    "behavior": "C2 and C3 compile mutated S; its compiler emits a program that returns 42 and reports mutant_argument for unexpected arguments."
+  },
+  "validation": {
+    "official_compiler_tests": 24,
+    "official_native_tests": 10,
+    "library_result": "test result: ok. 2579 passed; 0 failed; 5 ignored; 0 measured; 0 filtered out; finished in 400.74s",
+    "published_derived_hash_vectors": 35,
+    "additional_contexts": 12,
+    "context_material_lengths": [
+      0,
+      65,
+      2049
+    ],
+    "focused_hash_tests": 5,
+    "focused_admission_tests": 1,
+    "focused_contract_tests": 1,
+    "focused_stage_tests": 1,
+    "focused_replay_tests": 1,
+    "public_execution": "Public derived-hash test passed corrected focused fixture and official workspace harness; prior two public native build/create-new tests passed in initial run and official full. Initial stdin fixture failure remains recorded.",
+    "C2_C3_hash_behavior": "Both native stages compile the hash program and its output passes all 35 independently published vectors."
+  },
+  "compiler_work": {
+    "policy": "Existing trusted foreground evaluator policy; cumulative modeled charges are not live heap or RSS.",
+    "vm_steps": 64861502,
+    "vm_cumulative_allocation": 6260847693,
+    "reference_expressions": 36165064,
+    "reference_cumulative_allocation": 8141362558
+  },
+  "changed": {
+    "status": "passed",
+    "selected": 2,
+    "passed": 2,
+    "fresh": 2,
+    "reused": 0,
+    "input_stable": true,
+    "input_digest": "verification_96d5148abc7a5ce33054023cd0aa08f46b1df8346388886650e0ccbace55a310"
+  },
+  "changed_scope": "Clean candidate selected rust_only_tooling and diff_check; complete coverage is the fresh full matrix.",
+  "full": {
+    "status": "passed",
+    "selected": 29,
+    "passed": 29,
+    "fresh": 29,
+    "reused": 0,
+    "input_stable": true,
+    "input_digest": "verification_96d5148abc7a5ce33054023cd0aa08f46b1df8346388886650e0ccbace55a310"
+  },
+  "workspace_test_executables": 8,
+  "release_target_policy": "passed",
+  "environment": {
+    "platform": "Linux x86_64",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "target": "Standalone static x86_64 ELF; native child environment cleared; no external VM or runtime loader.",
+    "cargo_jobs": 8,
+    "checker_jobs": 4
+  },
+  "remaining_host_boundaries": [
+    "Rust source semantic admission and normalization",
+    "Rust normalized input exporter",
+    "Initial Rust native bootstrap",
+    "External atomic file launcher"
+  ],
+  "known_limitations": [
+    "No self-emitted .lkja",
+    "No lkjscript source-graph semantic admission",
+    "No native lexical region reclamation or RSS claim",
+    "Nominal records/choices, closures, witnesses, regions and broader final profile remain required",
+    "No Tier 2 source-graph C2/C3 proof"
+  ],
+  "native_memory": "Unmetered process-owned heap; input bounds and traversal fuel are distinct from evaluator work quotas.",
+  "disk": {
+    "post_acceptance_target": "6.1 GiB",
+    "post_acceptance_artifacts": "2.3 MiB before bounded receipt copy",
+    "deviation": "An accidental default-profile Clippy build briefly exceeded the 8 GiB combined budget. After its job joined, 2477 exclusively owned development files totaling 1653085796 apparent bytes were hashed and removed through cargo clean --profile dev. Release-profile validation then passed.",
+    "additional_owned_cleanup_bytes": 830503975
+  },
+  "publication": "Accepted and integrated on origin/main after independent fetch and ancestry verification. No hosted release or production deployment.",
+  "evidence": {
+    "full.json": {
+      "bytes": 24658,
+      "sha256": "284b6bf608ea3af8033cb796b18fc722c754239073ee8f1d65529b4edc914e83"
+    },
+    "changed.json": {
+      "bytes": 2425,
+      "sha256": "e36cb930b764f2091893b8db89abc6c6799f37e3fd9f0f757fca12c2ee39e15a"
+    },
+    "release-target.json": {
+      "bytes": 1657,
+      "sha256": "a15a5d8e7edde5fa876d808eb7ffbbaf3a1ac79f788178ff5c8bae4dd0c3557b"
+    },
+    "bootstrap.json": {
+      "bytes": 600,
+      "sha256": "07855f4c72d50a504f6312f9cf954a50958fa5ef31e0b6f65f28407a0a810a46"
+    },
+    "stage.log": {
+      "bytes": 2292,
+      "sha256": "9fa67135b362aea5c942424c589be2c83e9e467963c4ff289aa6a91fe1726646"
+    },
+    "proposal-replay.log": {
+      "bytes": 415,
+      "sha256": "b03468c7c8a50df44bca6c95816225276062ba5e5129ca8669e95d6fd96498f9"
+    },
+    "hash-focused.log": {
+      "bytes": 6100,
+      "sha256": "44e0a6f7fac9c0c0d2175b768358ee6bddec7dc4a5be1789b99bcf25dbf36a7f"
+    },
+    "admission.log": {
+      "bytes": 1891,
+      "sha256": "731dc7558c21440e6460dc47f657fc23f73daec6668f3ce91b02b4289a0196a8"
+    },
+    "contract.log": {
+      "bytes": 239,
+      "sha256": "c0d339967edd36fb2d08da2cc3df7ca661aac0fcd7d8d1bd1be42f5199d9519b"
+    },
+    "public-final.log": {
+      "bytes": 406,
+      "sha256": "dda2b8140378d995324a6e06ee780e7e029761a03525c49bfbcc773df3a2fcb5"
+    },
+    "public-initial-failed.log": {
+      "bytes": 1172,
+      "sha256": "65098c49b04713f6dd5f25aa70e96b61b24933ff950dbd9eb552e291ad30653c"
+    },
+    "clippy.log": {
+      "bytes": 306,
+      "sha256": "f7161280a2d07b3057ca154f0c29c6945ef06341bde541c21f1a386623c4f786"
+    },
+    "official-library.json": {
+      "bytes": 6344,
+      "sha256": "a6479aaed4d5f677eab6cf404d60b12470c00e19594867f1d15c2ac66486ea3e"
+    },
+    "development-attempts.json": {
+      "bytes": 1175,
+      "sha256": "a2f2d04dde7c19f5684158458e9cda82b0751d4491ed37893617eb89cfbbab9f"
+    },
+    "gc.log": {
+      "bytes": 383,
+      "sha256": "ac83a3eebb5dc4676e61eff5953d8c5ad677dbde2c2daa1c9c50702d682c8da1"
+    },
+    "executable-cleanup.json": {
+      "bytes": 1138,
+      "sha256": "7d475822b351192299e4c1a83e96fa817459cf391e1a69ee56025a10c37fec9e"
+    },
+    "../derive-debug-cleanup.json": {
+      "bytes": 426128,
+      "sha256": "ec326221c4caffbd6d40cae780db9eeb3fce6a13f4de8e0d25e1a3f5aa8696b0"
+    }
+  }
+}

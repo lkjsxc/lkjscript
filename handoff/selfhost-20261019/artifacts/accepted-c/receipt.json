@@ -1,0 +1,110 @@
+{
+  "schema": "lkjscript.selfhost.slice.v1",
+  "status": "passed",
+  "tier": 1,
+  "milestone": "C",
+  "profile": 1,
+  "source": "32f0d1dc27c39cf7ddc607ea4929ee6da6d00fce",
+  "tree": "017427eb547a6119b70130575d22c6aeefe9a360",
+  "parent": "892b46da28c0e7a9dd529e7167dd763defabcc39",
+  "remote_main": "32f0d1dc27c39cf7ddc607ea4929ee6da6d00fce",
+  "focused": {
+    "compiler_tests": 5,
+    "native_tests": 8,
+    "public_cli_tests": 2,
+    "published_blake3_vectors": 35
+  },
+  "compiler_variants": [
+    {
+      "sha256": "e19941aabae841a7d87739c969e4a0f8a07eb9e9788a4ef96fa11647a2eabc39",
+      "bytes": 48435
+    },
+    {
+      "sha256": "0e3440640c3e8251104d831cf0933b900ea1a8e7bd2758ac768bc81f462bfc37",
+      "bytes": 48435
+    },
+    {
+      "sha256": "f15d4cb8cfc200d5ce16204c5e48a072d05b96a1a9688570b82b7e3cd969f1de",
+      "bytes": 48435
+    }
+  ],
+  "changed": {
+    "status": "passed",
+    "selected": 2,
+    "passed": 2,
+    "fresh": 2,
+    "reused": 0,
+    "input_stable": true,
+    "input_digest": "verification_fd8312b8a62da859c7dcd437453f6fc10411ec3fe593f62836671e52d1219457"
+  },
+  "changed_scope": "Clean candidate: two Git-status-selected gates; full coverage below.",
+  "full": {
+    "status": "passed",
+    "selected": 29,
+    "passed": 29,
+    "fresh": 29,
+    "reused": 0,
+    "input_stable": true,
+    "input_digest": "verification_fd8312b8a62da859c7dcd437453f6fc10411ec3fe593f62836671e52d1219457"
+  },
+  "workspace_test_executables": 8,
+  "release_target_policy": "passed",
+  "initial_attempt": {
+    "status": "failed",
+    "reason": "cargo_output_binding:generated input differs from the immutable checker's exact source-derived bytes",
+    "resolution": "Clean local candidate commit and source-bound verifier bootstrap; no verifier policy change."
+  },
+  "remaining_host_boundaries": [
+    "Rust source semantic admission and normalization",
+    "Rust normalized input exporter",
+    "Rust initial native bootstrap",
+    "External atomic file launcher"
+  ],
+  "known_limitations": [
+    "No self-emitted .lkja",
+    "No complete compiler backend closure",
+    "No lkjscript source-graph semantic admission",
+    "No phase-local native regions",
+    "No C2/C3 semantic fixed point"
+  ],
+  "native_memory": "Unmetered process-owned heap; bounded input and values; no per-buffer RSS reclamation claim.",
+  "publication": "Integrated on origin/main; no hosted release or production promotion.",
+  "evidence": {
+    "full.json": {
+      "bytes": 24656,
+      "sha256": "5281bbcce94c5ca1136e1fdc71c9517bd3589073bb2ac3274d403eb24f133ec5"
+    },
+    "changed.json": {
+      "bytes": 2425,
+      "sha256": "ec8021435214d834d9c096eaeb120b2da6c7e00646b3858a97d7ed8765e51856"
+    },
+    "bootstrap.json": {
+      "bytes": 600,
+      "sha256": "1ea98aab590dad5d50a5b54c61404aa20645a0ef84d612c5b265c8c4a6f12007"
+    },
+    "release-target.json": {
+      "bytes": 1657,
+      "sha256": "a15a5d8e7edde5fa876d808eb7ffbbaf3a1ac79f788178ff5c8bae4dd0c3557b"
+    },
+    "compiler.log": {
+      "bytes": 19182,
+      "sha256": "22a56c47fac1be60091ec1fe0aedd6692914790ab53b06e86159278f9c51dae4"
+    },
+    "runtime.log": {
+      "bytes": 1372,
+      "sha256": "6484f752b459e56146fd689f6e6b7087f6d2697b5aa97050c34200a4586428de"
+    },
+    "public-cli.log": {
+      "bytes": 520,
+      "sha256": "6924db652faaf58425c8889e6a24c93cdf13441cab28de245a7f8cad1eb850f8"
+    },
+    "inputs.sha256": {
+      "bytes": 2088,
+      "sha256": "74f30eb839b50ba097da634018f1fc096a803fad9fa75385cdf4debaf7db49f9"
+    },
+    "initial-failure.json": {
+      "bytes": 19817,
+      "sha256": "2a4cbdeebd3511b8a33855afe461810343c7bdc55d4f4a300e39c6dfe271f535"
+    }
+  }
+}

@@ -1,0 +1,241 @@
+{
+  "scope": "Native framing, ordering and deterministic shape preview only; independent Rust MapContentRoot oracle and evaluator differential tests still pending",
+  "positive_cases": 30,
+  "rejected_cases": 9,
+  "image": {
+    "bytes": 34216,
+    "sha256": "7e0155fb4432d24d4a587a0d82c8a7aa492780514a0802d52ed832f648063653"
+  },
+  "positives": [
+    {
+      "key_bytes": 1,
+      "value_bytes": 1,
+      "entries": 0,
+      "input_sha256": "64ed86b909d6d0502b64b28db0ea1272ffb358e20e9b1d88b63ccb07fa900cf5",
+      "root": "6819865b72bfb11518265852041ee5d75dfc6a52594207a8e76f1f1bf8e9f258"
+    },
+    {
+      "key_bytes": 1,
+      "value_bytes": 1,
+      "entries": 1,
+      "input_sha256": "123b08ff685892e5213b6a292230903299bb82dde32465eeef6d5b2abc840cf1",
+      "root": "7679e525d220b8ac286b6c7c372444b1433923be4bdef9c7080dbe5c08b03714"
+    },
+    {
+      "key_bytes": 1,
+      "value_bytes": 1,
+      "entries": 2,
+      "input_sha256": "3ac2037cafac584470e446a2f9295b3c82927f4418b67f4625e5580fb83f5508",
+      "root": "89d08447c29979604232db09c47440ccd5ce017f8338fb8bd2a931373e9c34d3"
+    },
+    {
+      "key_bytes": 1,
+      "value_bytes": 1,
+      "entries": 255,
+      "input_sha256": "19ebdb501828a92aea26eb3a964f480c8bb128cfce41bf19b8032452b21a0bc9",
+      "root": "5ed7936fe23830a5a2cca9eb61b65e1ae5a1c939c537398f6da9f2d73d97d6c0"
+    },
+    {
+      "key_bytes": 1,
+      "value_bytes": 1,
+      "entries": 256,
+      "input_sha256": "5af5dd1da7240864a571ec23a85091f02e77d4a2ce92d346659e667d2ee00acd",
+      "root": "b7f07b7faffaa8fd8f3901dcb15e7c41b0677c939923d090752d4a1b7a25ffc6"
+    },
+    {
+      "key_bytes": 16,
+      "value_bytes": 32,
+      "entries": 0,
+      "input_sha256": "369f838dcc6990bfdbff8d255db0b135407a286e052cf1eb912814b583eda6ca",
+      "root": "6819865b72bfb11518265852041ee5d75dfc6a52594207a8e76f1f1bf8e9f258"
+    },
+    {
+      "key_bytes": 16,
+      "value_bytes": 32,
+      "entries": 1,
+      "input_sha256": "d888ff708d3d6a618fd1377a6a0b460cec8aadf88b8e4c2b2017850fc66f1513",
+      "root": "699727e5cf015d15eb01f1b0076f2b81bedcb7dd62f897d470598653df4c239c"
+    },
+    {
+      "key_bytes": 16,
+      "value_bytes": 32,
+      "entries": 2,
+      "input_sha256": "de0f88884cd368f8472a1935edadd7331e1865d90beb5d609de15e06bb55490d",
+      "root": "73969e2571ff16d686c7acca298d86d92e3f8921f88cfbb1a05fbf179f81e10c"
+    },
+    {
+      "key_bytes": 16,
+      "value_bytes": 32,
+      "entries": 255,
+      "input_sha256": "4a83b951aa9119d32a32f657c17feb085a0c45c59be9246dca0b194fe3578c23",
+      "root": "814552a611b382b9710e0ce353a13dac4e37c6fb10bcc22f0784ce5417a8eed9"
+    },
+    {
+      "key_bytes": 16,
+      "value_bytes": 32,
+      "entries": 256,
+      "input_sha256": "5955d5ae7af92e1b2171597b7e3beb279311ef90260c2b4562ce4197a1f0a35a",
+      "root": "455a6bbc861f0888879d5f97f373823400be6b9c5cd9edb8a05d1c4380de6f5c"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 32,
+      "entries": 0,
+      "input_sha256": "fc6676281fd97e2f11f165edfa5a26061160b6ab9b5246c7b0799cb70c4ed9e6",
+      "root": "6819865b72bfb11518265852041ee5d75dfc6a52594207a8e76f1f1bf8e9f258"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 32,
+      "entries": 1,
+      "input_sha256": "523a2b28a2dfea57dfd58d91340da7d1f49ee3f98ca457b991d948494f26a8f6",
+      "root": "953eac9b04ea0e519127c7a045fb923a6bcc02e1053fc01dba12b7d0b841f781"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 32,
+      "entries": 2,
+      "input_sha256": "fde26891c68ed972be0013ff4b5aca0ea3ffea6d25894b1ceeab5016dd78a84f",
+      "root": "9ed040d74328b6f8969756cc7ef601d39bc50a4a397b0cc4ff9ad22bccb12c0f"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 32,
+      "entries": 255,
+      "input_sha256": "79d496151d34aac17f2b1a03b18590f0e9212f6bce6e8dce16c90e0773756e63",
+      "root": "4e939ebb6458952b164556fad3c46f6a6e4abdd803d947fbecedae793223c601"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 32,
+      "entries": 256,
+      "input_sha256": "6270124651abf78e75469e1b8a3d6afc93bb8533a0e60d0cb7573df2f02aef4f",
+      "root": "3c98d8ee236a18f683d745c2670749a0cb8cce6c20b49b7810fd943a6cf3ed0c"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 33,
+      "entries": 0,
+      "input_sha256": "5b3eae1c72d7977e53e73a14e6a1d6e7e307391c3b56cbac169d5127a6c110e8",
+      "root": "6819865b72bfb11518265852041ee5d75dfc6a52594207a8e76f1f1bf8e9f258"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 33,
+      "entries": 1,
+      "input_sha256": "8e38dce3abcdfce9c9eedbef97f482dee58a359889562a7f0390828f9c514445",
+      "root": "0c8dcef0ef2f1b40a1878102cdd1908fce73e8bd12896218e9d79b920ae52423"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 33,
+      "entries": 2,
+      "input_sha256": "fd47ccfbf16f5d97d6cb0a4577fcb58642101b434c574b3d03a2bba231719eaa",
+      "root": "af310ddeb2c31575110a764ec11cc9fa1abc28788d68270576ac7d043b9dc11b"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 33,
+      "entries": 255,
+      "input_sha256": "2ff423aac907b378d8febe3aee8b4e34223e8100c3c1274e7179842cc7fcbd14",
+      "root": "74f206284e5be4bb91162c71ecb2bb081c963a321a98e58d645e190938a276f9"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 33,
+      "entries": 256,
+      "input_sha256": "c5f5e06ff5f4a595c78b36c7bec5833db5b90414472c2d8d9364b429f4c9bbe4",
+      "root": "60ef1720880889e935490c01c41e30ba3756534279ec10e0f024e44f0dfc7159"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 65,
+      "entries": 0,
+      "input_sha256": "712cccccd2c2632d9e4c63fe636edd5b09b27a130084b241a1d14229829a1da9",
+      "root": "6819865b72bfb11518265852041ee5d75dfc6a52594207a8e76f1f1bf8e9f258"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 65,
+      "entries": 1,
+      "input_sha256": "9140d1c3f8c95668e45cf58438bdca204a759289e5b7ee8a2602ad84da1411f0",
+      "root": "be01457b8f6573afa785d0f11f670619579f6bd2f502d00e0ffd1b77f029e117"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 65,
+      "entries": 2,
+      "input_sha256": "ab5dc0c5fac3c3c2121a01a977b071fe25a9108d61c64d4c3150063699d2ac9a",
+      "root": "c7ae7c160838ee122209db0acc384ed83432c6da476c3aa2da943b5e5f87b762"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 65,
+      "entries": 255,
+      "input_sha256": "b3ed547492f11cfde5e0f0465df13409704a5c6e9da8b72a70259edc2319d608",
+      "root": "50447423722b10fe7cde8bcf8b7daf654bd68c54fb6f44d0a78779eed244ee5e"
+    },
+    {
+      "key_bytes": 17,
+      "value_bytes": 65,
+      "entries": 256,
+      "input_sha256": "d96462d5eb17eb3ef7a9b6137712d743d5568a2a4d2437da81a82d864d62c0ab",
+      "root": "5cced4ca35d83c4dd2d3bb859609f0b530bdd40ee523263c6c6ae9e45460da51"
+    },
+    {
+      "key_bytes": 32,
+      "value_bytes": 128,
+      "entries": 0,
+      "input_sha256": "cecc2d87bd96716ebedc2990ec9a6f631a6d03435f7fc41100e53041fbbda8af",
+      "root": "6819865b72bfb11518265852041ee5d75dfc6a52594207a8e76f1f1bf8e9f258"
+    },
+    {
+      "key_bytes": 32,
+      "value_bytes": 128,
+      "entries": 1,
+      "input_sha256": "c846d218346678d6cbc1b7c1ae7e6cda1fb651f78638740e47b36f91c189ded9",
+      "root": "25f8d39b907a524ac83b949d793d45df8a1fe1e0c4acec35d2d359a5fff5a1e4"
+    },
+    {
+      "key_bytes": 32,
+      "value_bytes": 128,
+      "entries": 2,
+      "input_sha256": "d3293e4d4e28d756a7b271d7095ae91036d7ebd6cdcc293e7eb470bb9f7ae230",
+      "root": "127576d4bcdbb42b10369f18463a37ea49ca89def6362203fdd0374b2742e787"
+    },
+    {
+      "key_bytes": 32,
+      "value_bytes": 128,
+      "entries": 255,
+      "input_sha256": "039b158fca8eb8f870e54e832a8e86cd8e2d128312264e82c31c8873ddc7876d",
+      "root": "6dcaa01bceeb2709ee31991ed9c6d9060e0d09a4fde48e36c3a0702a1f4d5cfa"
+    },
+    {
+      "key_bytes": 32,
+      "value_bytes": 128,
+      "entries": 256,
+      "input_sha256": "46cbbbe278a599699225bd424331ad2a62c46fc765489674b2293abe4c57238e",
+      "root": "8aee940ae8ddd179312bf98d1dfd822a8c5ce79a256d81e45e17e67a39a7a2e0"
+    }
+  ],
+  "exact_bounds": [
+    {
+      "key_bytes": 3,
+      "value_bytes": 1,
+      "entries": 100000,
+      "table_bytes": 400000,
+      "input_sha256": "a814d6836660b40b4bebc76438da7f67d78f731fec0d17977e90e8f795282784",
+      "root": "95f6fb5abe1aeda4b6aa4ad53f2367408738b8a3f78d84edb6439f155032ba60",
+      "elapsed_ms": 769
+    },
+    {
+      "key_bytes": 16,
+      "value_bytes": 112,
+      "entries": 65536,
+      "table_bytes": 8388608,
+      "input_sha256": "d0939aaa5f5d2c6096c16cba4cea076ca0f4f7683563fbdaad760c8c2dac3354",
+      "root": "a92b6051c55fa94a50a26124a4d34fbbf004eaa02d17f383a54b5aba635a6935",
+      "elapsed_ms": 1056
+    }
+  ]
+}

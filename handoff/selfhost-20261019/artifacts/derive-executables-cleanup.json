@@ -1,0 +1,30 @@
+{
+  "reason": "All focused jobs joined; retain identities before official rebuild. e62 is the previous accepted workspace harness; other files are current focused outputs.",
+  "files": [
+    {
+      "path": "target/release/deps/lkjscript-e2fdc52c2bd3596c",
+      "bytes": 194452488,
+      "sha256": "e34b4b6ff7670eaf27e37a2c0af10fbc93ba1a8d74c117a7b8197d281cced18b"
+    },
+    {
+      "path": "target/release/deps/public_cli-ee349648d4b49b22",
+      "bytes": 88805904,
+      "sha256": "5e7a678306b50cba0036a82af41e425ed5fe4535fb6fef5ef5d8e9c5f6a7af60"
+    },
+    {
+      "path": "target/release/deps/liblkjscript-313279ebbabcfe35.rlib",
+      "bytes": 260045618,
+      "sha256": "f2735353eed8a3924efbbadd7ddab90fb00c29539a9c130d876c2aab7a281400"
+    },
+    {
+      "path": "target/release/deps/liblkjscript-313279ebbabcfe35.rmeta",
+      "bytes": 92837533,
+      "sha256": "3705ace46d335ca74d62e67250c4ec590a8c83562070b4818cf907ec66f55eca"
+    },
+    {
+      "path": "target/release/deps/lkjscript-e62cb20ef26e8b12",
+      "bytes": 194362432,
+      "sha256": "343fe6a015c4851322f700ff74a91e391c79c3266bf6a5946973d81d6630d4e5"
+    }
+  ]
+}
