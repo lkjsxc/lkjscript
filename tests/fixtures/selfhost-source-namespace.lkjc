@@ -1,0 +1,29 @@
+declarations.begin
+(units (module create source-namespace-one
+  (record create Pair (visibility public)
+    (type-parameter create T) (type-parameter create U)
+    (field create a (type T)) (field create b (type U)))
+  (variant create Choice (visibility public)
+    (type-parameter create T)
+    (case create some (payload T)) (case create none))
+  (function create first (visibility public) (effect pure)
+    (parameter create a (type I64)) (parameter create b (type I64))
+    (returns I64) (body (local a)))
+  (function create second (visibility public) (effect pure)
+    (parameter create a (type I64)) (returns I64) (body (local a)))
+  (function create message (visibility public) (effect pure)
+    (returns Text) (body (text "ok")))
+  (component create app (visibility public)
+    (port create run (type (function () Text)) (function message))
+    (port create alternate (type (function () Text)) (function message)))))
+declarations.end
+
+declarations.begin
+(units (module create source-namespace-two
+  (function create first (visibility public) (effect pure)
+    (returns I64) (body (i64 2))))
+  (target create source-namespace-one (component source-namespace-one::app) (runner command)
+    (port source-namespace-one::app::run))
+  (target create source-namespace-second (component source-namespace-one::app) (runner command)
+    (port source-namespace-one::app::alternate)))
+declarations.end

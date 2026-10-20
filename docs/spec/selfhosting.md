@@ -388,9 +388,50 @@ Rust-produced native validators and a validator emitted by the lkjscript backend
 The latter is native source inspection, not source-to-normalized self-compilation:
 Rust still bootstraps the validator's initial normalized backend input.
 
-Generic scope, namespace uniqueness, structural type cycles and non-expansive
-nominal admission, complete type/effect/custody/witness checking, broader source
-forms, and source normalization still precede the Tier 2 fixed point.
+### Restricted namespace, contextual type and nominal flow admission
+
+The next layers retain the existing decoded source profile. `source-namespace`
+derives exact `(parent identity, namespace class, canonical name)` keys and rejects
+duplicates with 16. Its class projection covers all 12 kernel classes and both
+Parameter parent domains. Whole-carrier checks currently cover Module, Target,
+Declaration, TypeParameter, Field, Case, function Parameter and Port. EffectParameter,
+RequirementParameter, Operation and Requirement owners remain unsupported with 13;
+direct projection controls do not substitute for their complete admission.
+Different classes/parents and exact local-binding shadowing remain legal.
+
+`source-type-scope` derives a strict structural DAG from every supplied descriptor,
+including unused types, and preserves the 256-edge depth limit. Each owner's type
+roots are checked in their using declaration context, so a shared type digest cannot
+cache scope success across unrelated declarations. Structural fields, List items,
+function types and Applied arguments participate; nominal declaration references
+do not become structural backedges. Scope, cycle or depth failure returns 17.
+Content addressing prevents ordinary rehashing from constructing cyclic type
+objects; derived graph fixtures test cycle proof separately from raw-carrier tests.
+
+`source-nominal` scans every included nominal field/case payload and derives exact
+parameter-slot edges for nested nominal arguments, including phantom arguments and
+function signatures within members. Plain parameter transmission is permitted;
+constructor expansion inside an argument rejects only when it lies on a slot cycle.
+Outer `List<tree<T>>` wrapping is therefore permitted while `grow<List<T>>` recursive
+argument growth rejects. Parameter permutation, duplication, selection, closed reset
+and acyclic growth remain permitted. Diagnostic 18 covers expanding cycles and the
+exact ordered arity of applications encountered through member payloads. Applications
+appearing only in function types/bodies or unused descriptors are outside that arity
+check and remain part of later general application typing.
+
+The composed checks prepare membership once and carry the remaining proof-work
+allowance through each layer. Internal checks return remaining work or a negative
+diagnostic; public wrappers preserve zero/positive results. Resource exhaustion is
+6, with no semantic-invalid claim. Earlier diagnostics 12 through 15 are unchanged.
+The [source-input contract](selfhosting-source-input.md) defines tables, contextual
+boundaries and layer-reaching controls. Native execution of these validators still
+starts from Rust-bootstrapped normalized input, without source-to-normalized lowering.
+
+This restricted profile does not establish E1-final. Broader namespace owner forms,
+full read/effect/witness scope, general application/expression typing, callable
+generic finite-flow, custody, effects, witnesses and source normalization remain.
+The declared full profile, source-driven ELF/artifact fixed points and measured
+native phase reclamation remain the Tier 2 governing requirements.
 
 ## Required final profile and proof
 

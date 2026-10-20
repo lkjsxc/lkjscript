@@ -1,0 +1,28 @@
+declarations.begin
+(units (module create source-type-scope-probe
+  (function create result (visibility private) (effect pure)
+    (parameter create graph (type Bytes)) (parameter create code (type I64))
+    (returns (record (diagnostic I64) (image Bytes)))
+    (body (record structural (field diagnostic (local code))
+      (field image (if (call ci::eq (local code) (i64 0))
+        (call ci::slice (local graph) (i64 48) (i64 80)) (call ci::text-bytes (text "")))))))
+  (function create read-type-scope (visibility public) (effect pure)
+    (parameter create graph (type Bytes)) (returns (record (diagnostic I64) (image Bytes)))
+    (body (call result (local graph) (call source-type-scope::validate (local graph)))))
+  (function create read-type-scope-budget (visibility public) (effect pure)
+    (parameter create data (type Bytes)) (returns (record (diagnostic I64) (image Bytes)))
+    (body (if (call ci::lt (call ci::length (local data)) (i64 4)) (call result (local data) (i64 12))
+      (let
+        (binding graph (call ci::slice (local data) (i64 4) (call ci::length (local data))))
+        (binding code (call source-type-scope::with-work (local graph) (call ci::u32 (local data) (i64 0))))
+        (in (call result (local graph) (local code)))))))
+  (function create read-type-dag (visibility public) (effect pure)
+    (parameter create data (type Bytes)) (returns (record (diagnostic I64) (image Bytes)))
+    (body (if (call ci::lt (call ci::length (local data)) (i64 80)) (call result (local data) (i64 12))
+      (let
+        (binding checked (call source-type-dag::prove
+          (call ci::slice (local data) (i64 80) (call ci::length (local data)))
+          (call ci::u32 (local data) (i64 0)) (call ci::u32 (local data) (i64 4))))
+        (in (call result (local data)
+          (if (call ci::lt (local checked) (i64 0)) (call ci::sub (i64 0) (local checked)) (i64 0))))))))))
+declarations.end

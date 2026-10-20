@@ -1,0 +1,16 @@
+declarations.begin
+(units (module create source-function-binders-fixture
+  (interface create Clock (visibility public)
+    (operation create tick (returns I64)
+      (idempotency idempotent) (external-visibility none)))
+  (function create identity (visibility public) (effect pure)
+    (requirement-parameter create R (interface Clock) (operations Clock::tick))
+    (effect-parameter create E)
+    (type-parameter create T)
+    (parameter create value (type T)) (returns T) (body (local value)))
+  (function create independent (visibility public) (effect pure)
+    (requirement-parameter create R (interface Clock) (operations Clock::tick))
+    (effect-parameter create E)
+    (type-parameter create T)
+    (parameter create value (type T)) (returns T) (body (local value)))))
+declarations.end

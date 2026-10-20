@@ -3,8 +3,8 @@ use super::*;
 use crate::platform::kernel::{self, KernelSnapshot, TypeObjectDigest};
 
 fn probes(module: &str) -> &'static (KernelSnapshot, NormalizedProgram) {
-    static PROBES: [OnceLock<(KernelSnapshot, NormalizedProgram)>; 8] =
-        [const { OnceLock::new() }; 8];
+    static PROBES: [OnceLock<(KernelSnapshot, NormalizedProgram)>; 11] =
+        [const { OnceLock::new() }; 11];
     let (index, proposal) = match module {
         "source-probe" => (
             0,
@@ -37,6 +37,18 @@ fn probes(module: &str) -> &'static (KernelSnapshot, NormalizedProgram) {
         "source-scope-probe" => (
             7,
             include_str!("../../../../tests/fixtures/selfhost-source-scope-probes.lkjc"),
+        ),
+        "source-namespace-probe" => (
+            8,
+            include_str!("../../../../tests/fixtures/selfhost-source-namespace-probes.lkjc"),
+        ),
+        "source-type-scope-probe" => (
+            9,
+            include_str!("../../../../tests/fixtures/selfhost-source-type-scope-probes.lkjc"),
+        ),
+        "source-nominal-probe" => (
+            10,
+            include_str!("../../../../tests/fixtures/selfhost-source-nominal-probes.lkjc"),
         ),
         _ => return compiler(),
     };
@@ -93,15 +105,20 @@ fn invoke(module: &str, name: &str, arguments: Vec<NormalizedValue>) -> Normaliz
     let declaration = function(module, name);
     let policy = NormalizedRunPolicy::foreground();
     let control = ExecutionControl::uncancelled();
-    let observe = module == "source-scope-probe"
-        && matches!(arguments.first(), Some(NormalizedValue::Bytes(bytes)) if bytes.len() > 1_048_576);
+    let observe = matches!(
+        module,
+        "source-scope-probe"
+            | "source-namespace-probe"
+            | "source-type-scope-probe"
+            | "source-nominal-probe"
+    ) && matches!(arguments.first(), Some(NormalizedValue::Bytes(bytes)) if bytes.len() > 1_048_576);
     let start = std::time::Instant::now();
     let vm = NormalizedVm::for_test(program, policy)
         .invoke(declaration, arguments.clone(), None, &control)
         .unwrap();
     if observe {
         eprintln!(
-            "selfhost source syntax vm elapsed_ms={} instructions={} cumulative_modeled_allocation={}",
+            "selfhost source syntax vm validator={module}::{name} elapsed_ms={} instructions={} cumulative_modeled_allocation={}",
             start.elapsed().as_millis(),
             vm.1.instructions,
             vm.1.allocated_bytes
@@ -113,7 +130,7 @@ fn invoke(module: &str, name: &str, arguments: Vec<NormalizedValue>) -> Normaliz
         .unwrap();
     if observe {
         eprintln!(
-            "selfhost source syntax reference elapsed_ms={} expressions={} cumulative_modeled_allocation={}",
+            "selfhost source syntax reference validator={module}::{name} elapsed_ms={} expressions={} cumulative_modeled_allocation={}",
             start.elapsed().as_millis(),
             reference.1.expressions,
             reference.1.allocated_bytes
@@ -136,8 +153,8 @@ fn field<'a>(value: &'a NormalizedValue, name: &str) -> &'a NormalizedValue {
         .1
 }
 
-fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
-    let module = match name {
+fn probe_module(name: &str) -> &'static str {
+    match name {
         "read-owner" | "read-records" => "source-record-probe",
         "read-carrier" | "read-graph" => "source-graph-probe",
         "read-syntax" | "read-syntax-budget" => "source-scope-probe",
@@ -147,8 +164,17 @@ fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
         "bind-type" | "bind-owner" | "bind-dependency" | "bind-retirement" | "read-bindings" => {
             "source-object-probe"
         }
+        "read-namespace" | "read-namespace-budget" | "read-namespace-key" => {
+            "source-namespace-probe"
+        }
+        "read-type-scope" | "read-type-scope-budget" | "read-type-dag" => "source-type-scope-probe",
+        "read-nominal" | "read-nominal-budget" => "source-nominal-probe",
         _ => "source-probe",
-    };
+    }
+}
+
+fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
+    let module = probe_module(name);
     let value = invoke(module, name, vec![NormalizedValue::bytes(bytes)]);
     let NormalizedValue::I64(code) = field(&value, "diagnostic") else {
         panic!("code")
@@ -196,6 +222,90 @@ fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
         );
     }
     (*code, image.to_vec())
+}
+
+fn emitted_result(name: &str, bytes: &[u8], code: i64) {
+    static IMAGES: OnceLock<std::sync::Mutex<BTreeMap<String, Vec<u8>>>> = OnceLock::new();
+    let module = probe_module(name);
+    let image = IMAGES
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .entry(name.to_owned())
+        .or_insert_with(|| {
+            let (_, program) = probes(module);
+            let target = program.function(function(module, name)).unwrap().0 as usize;
+            let input = input::export(program, target).unwrap();
+            let (source, compiler) = compiler();
+            let (diagnostic, image) =
+                compile_with_policy(source, compiler, &input, NormalizedRunPolicy::foreground());
+            assert_eq!(diagnostic, 0, "self-produced validator {name}");
+            eprintln!(
+                "selfhost source self-produced native entry={name} bytes={} sha256={}",
+                image.len(),
+                crate::platform::semantic_id::encode_hex(&Sha256::digest(&image))
+            );
+            image
+        })
+        .clone();
+    let output = native_filter_tests::execute_filter(&image, bytes, &[], 127);
+    assert_eq!(
+        output.status.code(),
+        Some(if code == 0 { 0 } else { 65 }),
+        "self-produced validator {name}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        if code == 0 {
+            let prefix = usize::from(name.ends_with("-budget")) * 4;
+            bytes[prefix + 48..prefix + 80].to_vec()
+        } else {
+            vec![]
+        },
+        "self-produced validator {name}"
+    );
+    assert_eq!(
+        output.stderr,
+        if code == 0 {
+            vec![]
+        } else {
+            format!("compiler_rejected:{code}\n").into_bytes()
+        },
+        "self-produced validator {name}"
+    );
+}
+
+// Locate the exact composed traversal bound without borrowing its implementation.
+// Every refusal must remain a resource result, never an accepted semantic failure.
+fn exact_budget_boundary(name: &str, source: &KernelSnapshot) {
+    let graph = graph::packet(source);
+    let packet = |work: u32| [work.to_le_bytes().as_slice(), graph.as_slice()].concat();
+    let check = |work: u32| {
+        let code = result(name, &packet(work)).0;
+        assert!(
+            matches!(code, 0 | 6),
+            "{name}: unexpected diagnostic {code}"
+        );
+        code
+    };
+    let mut low = 0;
+    let mut high = u32::from_le_bytes(graph[100..104].try_into().unwrap());
+    assert_eq!(check(low), 6);
+    assert_eq!(check(high), 0);
+    while high - low > 1 {
+        let middle = low + (high - low) / 2;
+        if check(middle) == 0 {
+            high = middle;
+        } else {
+            low = middle;
+        }
+    }
+    for (work, expected) in [(high - 1, 6), (high, 0), (high + 1, 0)] {
+        assert_eq!(check(work), expected, "{name}: allowance {work}");
+        emitted_result(name, &packet(work), expected);
+    }
+    eprintln!("selfhost exact composed allowance entry={name} work={high}");
 }
 
 fn encode<T: bincode::Encode>(value: T) -> Vec<u8> {
@@ -712,3 +822,18 @@ mod graph;
 
 #[path = "selfhost_source_scope_tests.rs"]
 mod scope;
+
+#[path = "selfhost_source_namespace_tests.rs"]
+mod namespace;
+
+#[path = "selfhost_source_type_scope_tests.rs"]
+mod type_scope;
+
+#[path = "selfhost_source_nominal_flow_tests.rs"]
+mod nominal_flow;
+
+#[path = "selfhost_source_namespace_unsupported_tests.rs"]
+mod namespace_unsupported;
+
+#[path = "selfhost_source_function_binder_oracle_tests.rs"]
+mod function_binder_oracle;

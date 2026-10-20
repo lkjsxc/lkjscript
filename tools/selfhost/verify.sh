@@ -19,6 +19,18 @@ sha256sum src/platform/compiler/selfhost_input.rs \
   src/platform/execution/normalized/selfhost_source_binding_tests.rs \
   src/platform/execution/normalized/selfhost_source_graph_tests.rs \
   src/platform/execution/normalized/selfhost_source_scope_tests.rs \
+  src/platform/execution/normalized/selfhost_source_namespace_tests.rs \
+  src/platform/execution/normalized/selfhost_source_namespace_unsupported_tests.rs \
+  src/platform/execution/normalized/selfhost_source_type_scope_tests.rs \
+  src/platform/execution/normalized/selfhost_source_nominal_flow_tests.rs \
+  tests/fixtures/selfhost-source-namespace.lkjc \
+  tests/fixtures/selfhost-source-namespace-probes.lkjc \
+  tests/fixtures/selfhost-source-type-scope.lkjc \
+  tests/fixtures/selfhost-source-type-scope-probes.lkjc \
+  tests/fixtures/selfhost-source-nominal-flow.lkjc \
+  tests/fixtures/selfhost-source-nominal-probes.lkjc \
+  src/platform/execution/normalized/selfhost_source_function_binder_oracle_tests.rs \
+  tests/fixtures/selfhost-source-function-binders.lkjc \
   tests/fixtures/selfhost-source-scope-probes.lkjc \
   tests/fixtures/selfhost-source-lexical.lkjc \
   tests/fixtures/selfhost-closure.lkjc \

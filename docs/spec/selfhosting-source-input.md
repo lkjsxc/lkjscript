@@ -12,8 +12,11 @@ type reference, including unused owners and untaken expression operands. Success
 does not establish lexical scope, unique syntax ownership, acyclicity, expression
 typing, affine custody, effects or witness validity. The additional
 `source-scope::validate` pass establishes the bounded ownership and value-local
-scope contract below. Source normalization and the Tier 2 source-graph fixed point
-remain separate work.
+scope contract below. `source-namespace::validate`, `source-type-scope::validate`
+and `source-nominal::validate` successively add namespace uniqueness, contextual
+type-parameter scope, structural type DAG proof and nominal member parameter flow
+over the same decoded profile. Source normalization and the Tier 2 source-graph
+fixed point remain separate work.
 
 The current carrier has one package and no dependencies or external blobs.
 Recognized unsupported boundaries reject explicitly; importing a package's
@@ -177,11 +180,120 @@ Diagnostics 12, 13 and 14 retain their preceding carrier/endpoint meanings.
 Native filters preserve distinct numeric diagnostics while using their common
 rejection exit status 65 and emitting no partial image.
 
-This is a restricted E1 milestone over the existing source-reader profile, not
-complete language admission. Namespace uniqueness, generic/type-parameter scope,
-structural type-construction acyclicity and non-expansive nominal SCC checks,
-expression types, custody, effects, witnesses and normalization remain required.
-Unsupported source forms still reject with 13; this pass does not add support for
-regions, implementation calls or other forms excluded by the existing readers.
-A well-owned, lexically valid but ill-typed graph intentionally remains accepted
-by this layer. The full Tier 2 profile and reproduction obligations are unchanged.
+The syntax pass alone remains a restricted E1 layer: a well-owned, lexically valid
+but ill-typed graph can pass it. The additional checks below preserve that layer's
+entrypoints and diagnostics rather than treating syntax success as complete
+semantic admission.
+
+## Namespace uniqueness
+
+`source-namespace::validate` first establishes the syntax contract, then enforces
+uniqueness of `(parent identity, namespace class, canonical name)`. The class
+projection follows all 12 kernel namespace classes with these parent rules:
+
+| Classes | Parent | Current whole-carrier support |
+| --- | --- | --- |
+| Module, Target | None | Both supported |
+| Declaration | Exact Module | Supported |
+| TypeParameter, Field, Case, Port | Exact Declaration | All supported |
+| Parameter | Exact Function Declaration or Operation | Function parent supported; Operation owner unsupported |
+| EffectParameter, RequirementParameter, Operation, Requirement | Exact Declaration | Unsupported owner forms, diagnostic 13 |
+
+Binding, Expression, HttpRoute, Documentation and Annotation do not participate.
+Equal names across different parents or classes remain legal. Local binding
+shadowing retains exact binder references and is not package namespace collision.
+
+The pass derives 16-byte rows containing parent owner-directory index, namespace
+class, absolute name offset and name length. The owner count denotes no parent;
+directory indexes preserve complete OwnerKey identities, including their domains.
+Deterministic merge sort compares parent, class and original canonical name bytes.
+Adjacent equal keys reject with 16. The table is private derived state; names are
+not replaced with hashes or copied into independently authoritative keys.
+
+Whole-carrier collision controls cover the eight currently decoded classes. Direct
+projection controls separately cover all 12 classes, both Parameter parent domains
+and excluded owner forms. These projection tests do not establish complete carrier
+admission for the four unsupported classes. Their adoption requires the preceding
+shape, reference and containment layers to admit the corresponding owner forms.
+
+## Structural type DAG and contextual type scope
+
+`source-type-scope::validate` additionally derives structural child edges from every
+supplied type descriptor, including unused descriptors. Structural field types,
+List items, function parameters/results and Applied arguments are child edges.
+Named nominal declaration references are not structural backedges. All endpoints
+must already exist in the admitted type directory. Repeatedly settling descriptors
+whose children have known heights establishes acyclicity and the maximum structural
+depth of 256 edges. Unsettled descriptors with no progress identify a cycle.
+
+Every supported owner carrying type roots is checked in its enclosing semantic
+declaration context. Traversal follows all child types; a TypeParameter descriptor
+must name a parameter belonging to that declaration. A shared digest may therefore
+be valid in one using declaration and invalid in another. Visited-descriptor state
+is local to a using context, with no digest-only global scope cache. Any later reuse
+must bind complete declaration/callable context and relevant binder identities and
+kinds, including method, read-scope, effect and witness contexts when admitted.
+The current slice does not admit those broader contexts through unsupported forms.
+
+Type-object digests commit to their child digests, so rehashing ordinary objects
+cannot create a self-consistent structural cycle. Independent derived graph fixtures
+exercise cycle proof and the exact depth boundary directly. Raw-carrier tests
+exercise acyclic structure and context-sensitive type-parameter mutations; direct
+cycle tests must not be reported as end-to-end hash-consistent cyclic carrier
+coverage. Failure is code 17.
+
+## Nominal member parameter flow
+
+`source-nominal::validate` adds non-expansive nominal flow after the preceding checks.
+It scans every included nominal field and case payload, including inactive members,
+and traverses nested applications, function signatures and phantom type arguments.
+Applications encountered through these member payloads must supply the exact ordered
+type-parameter arity. This arity check does not cover applications appearing only in
+function signatures/bodies or otherwise unused descriptors; general application
+typing remains a later obligation.
+
+For each source-parameter occurrence in a nominal application's transmitted argument,
+derive an edge from that exact source slot to the target declaration's exact slot.
+The edge is plain when the entire argument is the parameter, and expanding when a
+constructor surrounds the occurrence inside that argument. An expanding edge with
+a return path rejects: equivalently, no cyclic strongly connected component may
+contain an expanding edge. `tree<T> = leaf(T) or branch(List<tree<T>>)` is permitted
+because the transmitted argument is T; `grow<T> = stop or next(grow<List<T>>)` is
+rejected because its argument expands T on a cycle. Permutation, duplication,
+selection, closed replacement and expansion along acyclic slot paths remain legal.
+Member-application arity or expanding-cycle failure is code 18. Callable generic
+finite-flow is a separate later semantic check.
+
+## Composed proof work and remaining boundaries
+
+The composed entrypoints prepare syntax membership once and pass a shared remaining
+allowance through scope, namespace, type structure/context and nominal checks.
+Internal `check` functions return a nonnegative remainder or a negative diagnostic;
+public wrappers return zero or the positive diagnostic. Later passes do not reset
+the allowance. Work is reserved before its covered traversal or table growth.
+Namespace work includes owner collection, sort nodes, merge rows, comparisons and
+bounded name-prefix inspection. Type and nominal work includes roots, child edges,
+nodes and membership scans. Exact fit succeeds; exhaustion remains diagnostic 6.
+These units are distinct from evaluator quotas, cumulative allocation and RSS.
+
+| Diagnostic | Additional E1 meaning |
+| --- | --- |
+| 6 | Additional proof-work allowance invalid or exhausted; no semantic-invalid claim |
+| 16 | Duplicate exact namespace key |
+| 17 | Contextual type-parameter scope, structural cycle or structural-depth failure |
+| 18 | Nominal member-application arity or expanding cyclic parameter-slot flow |
+
+Earlier diagnostics 12 through 15 remain unchanged. Layer-reaching negative carriers
+must rebind framing, objects, directories and state and pass preceding validators.
+Tests compare exact Rust kernel diagnostics and independent expectations across VM,
+canonical reference, Rust-native and selfhost-native execution. Standalone native
+source validation still uses a Rust-bootstrapped normalized validator; it is not
+source-to-normalized self-compilation. Complete carrier SHA-256 and semantic-state
+identity remain separate evidence.
+
+This is restricted-profile E1 work, not E1-final or Tier 2 completion. Broader source
+forms, full contextual read/effect/witness scope, general application and expression
+typing, callable generic finite-flow, custody, effects, witnesses and normalization
+remain required. Regions, implementation calls and other excluded forms still
+reject with 13. The full Tier 2 profile, source-driven ELF/artifact fixed points and
+measured native phase reclamation remain unchanged; no bounded-RSS claim is made.

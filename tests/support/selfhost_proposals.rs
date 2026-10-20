@@ -93,6 +93,28 @@ pub const SOURCE: &str = concat!(
     "\n",
     include_str!("../../tools/selfhost/source-scope.lkjc"),
     "\n",
+    include_str!("../../tools/selfhost/source-namespace-key.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-namespace-sort.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-namespace.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-type-table.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-type-uses.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-type-dag.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-type-scope.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-nominal-queue.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-nominal-cycle.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-nominal-flow.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-nominal.lkjc"),
+    "\n",
 );
 
 #[derive(Clone)]
@@ -228,6 +250,7 @@ fn stub(function: &mut [Form]) -> Result<(), String> {
                     let value = match field[1].text().as_str() {
                         "Bytes" => "(call ci::text-bytes (text \"\"))",
                         "I64" => "(i64 0)",
+                        "Bool" => "(bool false)",
                         other => return Err(format!("unsupported bootstrap record field {other}")),
                     };
                     Ok(format!("(field {} {value})", field[0].text()))
