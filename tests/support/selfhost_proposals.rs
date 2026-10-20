@@ -79,6 +79,20 @@ pub const SOURCE: &str = concat!(
     "\n",
     include_str!("../../tools/selfhost/source-links.lkjc"),
     "\n",
+    include_str!("../../tools/selfhost/source-table.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-sort.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-edges.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-containment.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-members.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-forest.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-scope.lkjc"),
+    "\n",
 );
 
 #[derive(Clone)]

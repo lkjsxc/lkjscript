@@ -3,19 +3,21 @@
 set -euo pipefail
 
 usage() {
-  printf '%s\n' 'usage: bash tools/bootstrap-verifier.sh [--output ABSENT_ABSOLUTE_RECEIPT_ROOT] [--expected-source COMMIT] [--with-controller] [--retain-archive]' >&2
+  printf '%s\n' 'usage: bash tools/bootstrap-verifier.sh [--output ABSENT_ABSOLUTE_RECEIPT_ROOT] [--expected-source COMMIT] [--expected-tree TREE] [--with-controller] [--retain-archive]' >&2
 }
 bootstrap_root=
 expected_source=
+expected_tree=
 with_controller=false
 retain_archive=false
 while (( $# )); do
   case "$1" in
-    --output|--expected-source)
+    --output|--expected-source|--expected-tree)
       (( $# >= 2 )) || { usage; exit 2; }
       case "$1" in
         --output) bootstrap_root=$2 ;;
         --expected-source) expected_source=$2 ;;
+        --expected-tree) expected_tree=$2 ;;
       esac
       shift 2 ;;
     --with-controller) with_controller=true; shift ;;
@@ -25,6 +27,7 @@ while (( $# )); do
   esac
 done
 [[ -z "$expected_source" || "$expected_source" =~ ^[0-9a-f]{40}$ ]] || { usage; exit 2; }
+[[ -z "$expected_tree" || ( "$expected_tree" =~ ^[0-9a-f]{40}$ && -n "$expected_source" ) ]] || { usage; exit 2; }
 [[ $(readlink -e "$PWD") == "$PWD" ]]
 [[ $(git rev-parse --show-toplevel) == "$PWD" ]]
 bootstrap_target="$PWD/target"
@@ -78,10 +81,43 @@ mkdir -p -m 0700 "$evidence"
 
 capture_bootstrap_source() {
   source_head=$(git rev-parse HEAD) || return "$?"
-  source_tree=$(git rev-parse 'HEAD^{tree}') || return "$?"
+  source_head_tree=$(git rev-parse 'HEAD^{tree}') || return "$?"
+  source_tree=$(git write-tree) || return "$?"
   source_status=$(git status --porcelain=v1 --untracked-files=all) || return "$?"
-  jq -n --arg source "$source_head" --arg tree "$source_tree" --arg status "$source_status" \
-    '{source:$source,tree:$tree,status:$status}' > "$1"
+  source_mode=committed
+  if [[ -n "$expected_tree" ]]; then source_mode=staged-tree; fi
+  jq -n --arg source "$source_head" --arg tree "$source_tree" --arg head_tree "$source_head_tree" \
+    --arg mode "$source_mode" --arg status "$source_status" \
+    '{source:$source,tree:$tree,head_tree:$head_tree,mode:$mode,status:$status}' > "$1"
+}
+admit_bootstrap_source() {
+  local entry metadata path mode object stage actual_mode actual_object
+  jq -e --arg expected "$expected_source" --arg tree "$expected_tree" \
+    '($expected == "" or .source == $expected)
+      and (if $tree == "" then .status == "" and .tree == .head_tree
+           else .tree == $tree end)' "$1" > /dev/null || return "$?"
+  if [[ -z "$expected_tree" ]]; then return 0; fi
+  [[ $(git cat-file -t "$expected_tree") == tree ]] || return 1
+  git -c core.fsmonitor=false diff --quiet --no-ext-diff --ignore-submodules=none -- || return "$?"
+  git ls-files --others --exclude-standard -z > "$evidence/bootstrap-untracked" || return "$?"
+  [[ ! -s "$evidence/bootstrap-untracked" ]] || return 1
+  git ls-files -v -z > "$evidence/bootstrap-index-flags" || return "$?"
+  while IFS= read -r -d '' entry; do
+    [[ ${entry:0:1} == H ]] || return 1
+  done < "$evidence/bootstrap-index-flags"
+  git ls-files --stage -z > "$evidence/bootstrap-index-entries" || return "$?"
+  while IFS= read -r -d '' entry; do
+    metadata=${entry%%$'\t'*}
+    path=${entry#*$'\t'}
+    IFS=' ' read -r mode object stage <<< "$metadata"
+    [[ "$stage" == 0 && ( "$mode" == 100644 || "$mode" == 100755 ) ]] || return 1
+    [[ -f "$path" && ! -L "$path" && $(readlink -e -- "$path") == "$PWD/$path" ]] || return 1
+    actual_mode=$(stat -c '%a' -- "$path") || return "$?"
+    if (( (8#$actual_mode & 0111) != 0 )); then actual_mode=100755; else actual_mode=100644; fi
+    [[ "$mode" == "$actual_mode" ]] || return 1
+    actual_object=$(git hash-object --no-filters -- "$path") || return "$?"
+    [[ "$object" == "$actual_object" ]] || return 1
+  done < "$evidence/bootstrap-index-entries"
 }
 bootstrap_value_hash() {
   local line
@@ -274,9 +310,9 @@ if ! jq -e '.supported == true' "$evidence/bootstrap-context-before.json" > /dev
   jq -r '.errors[]' "$evidence/bootstrap-context-before.json" >&2
   exit 1
 fi
-# A clean tree binds all compiler inputs to the retained commit/tree identity.
-jq -e --arg expected "$expected_source" '.status == "" and ($expected == "" or .source == $expected)' \
-  "$evidence/bootstrap-source-before.json" > /dev/null
+# Default admission binds clean committed source; explicit staged admission binds
+# the exact index and the raw working bytes before precommit verification.
+admit_bootstrap_source "$evidence/bootstrap-source-before.json"
 { "$bootstrap_cargo" --version; "$bootstrap_rustc" --version --verbose; } > "$evidence/bootstrap-toolchain.txt"
 bootstrap_command=("$bootstrap_cargo" build --profile bootstrap --locked -p lkjscript-dev)
 if "$with_controller"; then bootstrap_command+=(--bins); else bootstrap_command+=(--bin lkjscript-dev); fi
@@ -297,6 +333,7 @@ jq -n --argjson exit_code "$bootstrap_status" --arg completed_at "$(date -u +%Y-
 capture_bootstrap_source "$evidence/bootstrap-source-after.json"
 bootstrap_context "$evidence/bootstrap-context-after.json"
 test "$bootstrap_status" -eq 0
+admit_bootstrap_source "$evidence/bootstrap-source-after.json"
 cmp "$evidence/bootstrap-source-before.json" "$evidence/bootstrap-source-after.json"
 cmp "$evidence/bootstrap-context-before.json" "$evidence/bootstrap-context-after.json"
 jq -e '.supported == true' "$evidence/bootstrap-context-after.json" > /dev/null

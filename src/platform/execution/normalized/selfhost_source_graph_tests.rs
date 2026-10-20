@@ -15,7 +15,7 @@ fn required_fuel(bytes: &[u8]) -> usize {
         + 1024 * (read_word(bytes, 12) + read_word(bytes, 16) + read_word(bytes, 20))
 }
 
-fn packet(source: &KernelSnapshot) -> Vec<u8> {
+pub(super) fn packet(source: &KernelSnapshot) -> Vec<u8> {
     assert!(source.dependencies.is_empty());
     assert!(source.dependency_types.is_empty());
     assert!(source.blobs.is_empty());

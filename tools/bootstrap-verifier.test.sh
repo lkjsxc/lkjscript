@@ -48,6 +48,12 @@ env | LC_ALL=C sort > .artifacts/child-environment
 printf 'original stderr\n' >&2
 if [[ "$mode" == fail-cargo ]]; then printf '{"reason":"compiler-diagnostic"}\n'; exit 7; fi
 if [[ "$mode" == source-change ]]; then printf 'changed\n' >> source.txt; fi
+if [[ "$mode" == index-change ]]; then printf 'changed\n' >> source.txt; git add source.txt; fi
+if [[ "$mode" == head-change ]]; then
+  git -c user.name=Fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false \
+    commit --quiet --no-verify -m 'Owned bootstrap drift fixture'
+fi
+if [[ "$mode" == untracked-change ]]; then printf 'changed\n' > unexpected.txt; fi
 if [[ "$mode" == context-change ]]; then printf '# changed\n' >> .artifacts/toolchain/bin/rustc; fi
 if [[ "$mode" == mold-config-change ]]; then printf '# changed\n' >> .cargo/config.toml; fi
 if [[ "$mode" == mold-bytes-change ]]; then printf '# changed\n' >> .artifacts/toolchain/bin/mold; fi
@@ -279,6 +285,105 @@ refuse
 git restore source.txt
 case_name=mismatched-source
 refuse --expected-source 0000000000000000000000000000000000000000
+# Staged source is an explicit precommit identity, never a clean base commit.
+printf 'staged candidate\n' > source.txt
+git add source.txt
+staged_tree=$(git write-tree)
+head_tree=$(git rev-parse 'HEAD^{tree}')
+cp source.txt .artifacts/staged-source
+staged_refuse_before_cargo() {
+  rm -f .artifacts/child-environment
+  refuse --expected-tree "$staged_tree" "$@"
+  test ! -e .artifacts/child-environment
+}
+case_name=staged-default
+rm -f .artifacts/child-environment
+refuse
+test ! -e .artifacts/child-environment
+case_name=staged-valid
+run --expected-tree "$staged_tree"
+jq -e --arg source "$expected_source" --arg tree "$staged_tree" --arg head_tree "$head_tree" \
+  '.status == "passed" and .source.source == $source and .source.tree == $tree
+    and .source.head_tree == $head_tree and .source.mode == "staged-tree"
+    and .source.status != ""' ".artifacts/$case_name/receipt.json" > /dev/null
+case_name=staged-reused
+printf 'fresh\n' > .artifacts/mode
+run --expected-tree "$staged_tree"
+jq -e '.status == "passed" and .cargo_reused > 0' ".artifacts/$case_name/receipt.json" > /dev/null
+printf 'valid\n' > .artifacts/mode
+case_name=staged-wrong-tree
+staged_refuse_before_cargo --expected-tree "$head_tree"
+case_name=staged-wrong-head
+staged_refuse_before_cargo --expected-source 0000000000000000000000000000000000000000
+case_name=staged-missing-head
+if env -i "${fixture_env[@]}" bash tools/bootstrap-verifier.sh \
+  --expected-tree "$staged_tree" > ".artifacts/$case_name.stdout" 2> ".artifacts/$case_name.stderr"; then
+  printf 'Unexpected staged bootstrap without a declared base\n' >&2; exit 1
+fi
+case_name=staged-unstaged
+printf 'unstaged\n' >> source.txt
+staged_refuse_before_cargo
+git restore --worktree source.txt
+case_name=staged-untracked
+printf 'untracked\n' > unexpected.txt
+staged_refuse_before_cargo
+rm unexpected.txt
+for flag in assume-unchanged skip-worktree; do
+  case_name="staged-$flag"
+  git update-index "--$flag" source.txt
+  staged_refuse_before_cargo
+  git update-index "--no-$flag" source.txt
+done
+case_name=staged-mode
+git config core.filemode false
+chmod +x source.txt
+staged_refuse_before_cargo
+chmod 0644 source.txt
+git config core.filemode true
+case_name=staged-filtered-bytes
+git config core.autocrlf true
+printf 'staged candidate\r\n' > source.txt
+git add source.txt
+git diff --quiet
+staged_refuse_before_cargo
+git config core.autocrlf false
+cp .artifacts/staged-source source.txt
+case_name=staged-intent
+: > incomplete.txt
+git add --intent-to-add incomplete.txt
+staged_refuse_before_cargo
+git reset --quiet -- incomplete.txt
+rm incomplete.txt
+case_name=staged-conflict
+source_object=$(git rev-parse :source.txt)
+printf '0 0000000000000000000000000000000000000000\tsource.txt\n100644 %s 2\tsource.txt\n100644 %s 3\tsource.txt\n' \
+  "$source_object" "$source_object" | git update-index --index-info
+staged_refuse_before_cargo
+git add source.txt
+test "$(git write-tree)" = "$staged_tree"
+case_name=staged-symlink
+ln -s source.txt linked.txt
+git add linked.txt
+linked_tree=$(git write-tree)
+staged_refuse_before_cargo --expected-tree "$linked_tree"
+git rm --quiet --cached linked.txt
+rm linked.txt
+for mode in source-change index-change head-change untracked-change; do
+  case_name="staged-$mode"
+  printf '%s\n' "$mode" > .artifacts/mode
+  refuse --expected-tree "$staged_tree"
+  jq -e '.status == "failed" and .phase == "admission"' ".artifacts/$case_name/receipt.json" > /dev/null
+  ! rg -Fx "$fixture/target/bootstrap" ".artifacts/$case_name.stdout"
+  if [[ "$mode" == head-change ]]; then
+    git update-ref HEAD "$expected_source" "$(git rev-parse HEAD)"
+  fi
+  cp .artifacts/staged-source source.txt
+  git add source.txt
+  rm -f unexpected.txt
+  test "$(git write-tree)" = "$staged_tree"
+done
+printf 'valid\n' > .artifacts/mode
+git restore --source=HEAD --staged --worktree source.txt
 case_name=existing
 mkdir ".artifacts/$case_name"
 printf 'retained\n' > ".artifacts/$case_name/marker"

@@ -18,6 +18,9 @@ sha256sum src/platform/compiler/selfhost_input.rs \
   src/platform/execution/normalized/selfhost_source_tests.rs \
   src/platform/execution/normalized/selfhost_source_binding_tests.rs \
   src/platform/execution/normalized/selfhost_source_graph_tests.rs \
+  src/platform/execution/normalized/selfhost_source_scope_tests.rs \
+  tests/fixtures/selfhost-source-scope-probes.lkjc \
+  tests/fixtures/selfhost-source-lexical.lkjc \
   tests/fixtures/selfhost-closure.lkjc \
   tests/fixtures/selfhost-artifact-probes.lkjc \
   tests/fixtures/selfhost-source-probes.lkjc \

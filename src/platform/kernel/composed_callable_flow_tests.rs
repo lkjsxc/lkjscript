@@ -1993,3 +1993,6 @@ fn composed_duplicate_syntax_still_enforces_work_and_owning_cancellation() {
         assert_eq!(visited.plain.len() + visited.scoped.len(), 1);
     }
 }
+
+#[path = "call_scope_index_tests.rs"]
+mod scope_index;

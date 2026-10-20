@@ -3,8 +3,8 @@ use super::*;
 use crate::platform::kernel::{self, KernelSnapshot, TypeObjectDigest};
 
 fn probes(module: &str) -> &'static (KernelSnapshot, NormalizedProgram) {
-    static PROBES: [OnceLock<(KernelSnapshot, NormalizedProgram)>; 7] =
-        [const { OnceLock::new() }; 7];
+    static PROBES: [OnceLock<(KernelSnapshot, NormalizedProgram)>; 8] =
+        [const { OnceLock::new() }; 8];
     let (index, proposal) = match module {
         "source-probe" => (
             0,
@@ -33,6 +33,10 @@ fn probes(module: &str) -> &'static (KernelSnapshot, NormalizedProgram) {
         "source-graph-probe" => (
             6,
             include_str!("../../../../tests/fixtures/selfhost-source-graph-probes.lkjc"),
+        ),
+        "source-scope-probe" => (
+            7,
+            include_str!("../../../../tests/fixtures/selfhost-source-scope-probes.lkjc"),
         ),
         _ => return compiler(),
     };
@@ -89,12 +93,32 @@ fn invoke(module: &str, name: &str, arguments: Vec<NormalizedValue>) -> Normaliz
     let declaration = function(module, name);
     let policy = NormalizedRunPolicy::foreground();
     let control = ExecutionControl::uncancelled();
+    let observe = module == "source-scope-probe"
+        && matches!(arguments.first(), Some(NormalizedValue::Bytes(bytes)) if bytes.len() > 1_048_576);
+    let start = std::time::Instant::now();
     let vm = NormalizedVm::for_test(program, policy)
         .invoke(declaration, arguments.clone(), None, &control)
         .unwrap();
+    if observe {
+        eprintln!(
+            "selfhost source syntax vm elapsed_ms={} instructions={} cumulative_modeled_allocation={}",
+            start.elapsed().as_millis(),
+            vm.1.instructions,
+            vm.1.allocated_bytes
+        );
+    }
+    let start = std::time::Instant::now();
     let reference = NormalizedReferenceInterpreter::new(source, program, policy)
         .invoke(declaration, arguments, None, &control)
         .unwrap();
+    if observe {
+        eprintln!(
+            "selfhost source syntax reference elapsed_ms={} expressions={} cumulative_modeled_allocation={}",
+            start.elapsed().as_millis(),
+            reference.1.expressions,
+            reference.1.allocated_bytes
+        );
+    }
     assert_eq!(vm.0, reference.0, "{module}::{name}");
     assert_eq!(vm.1.live_call_frames_after, 0);
     assert_eq!(reference.1.live_call_frames_after, 0);
@@ -116,6 +140,7 @@ fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
     let module = match name {
         "read-owner" | "read-records" => "source-record-probe",
         "read-carrier" | "read-graph" => "source-graph-probe",
+        "read-syntax" | "read-syntax-budget" => "source-scope-probe",
         "read-map" => "source-map-probe",
         "read-state" => "source-state-probe",
         "read-revision" | "read-dependency" | "read-retirement" => "source-history-probe",
@@ -684,3 +709,6 @@ mod binding;
 
 #[path = "selfhost_source_graph_tests.rs"]
 mod graph;
+
+#[path = "selfhost_source_scope_tests.rs"]
+mod scope;

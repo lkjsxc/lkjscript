@@ -21,6 +21,10 @@ LTO/debug data. `--output` selects an absent receipt directory; `--expected-sour
 binds a commit; `--with-controller` builds the release controller. Reject unsupported
 Cargo configuration/environment. Bind checker identity to its compiled checkout.
 
+For a frozen precommit tree, use the explicit
+[staged-tree bootstrap](../decisions/20261020-staged-tree-verifier-bootstrap.md)
+contract; acceptance must precede committing that exact tree.
+
 Default checks atomically replace `.artifacts/lkjscript-dev/latest-receipt.json`
 with a receipt smaller than 64 KiB. It records selected gates, execution outcomes,
 input stability, elapsed times and output identities. Joined transient logs and

@@ -325,6 +325,25 @@ fn implementation_parameters(
         _ => &[],
     }
 }
+fn reserve_metadata<T>(
+    observation: &mut CallableFlowWork,
+    maximum: usize,
+    count: usize,
+) -> Result<(), Diagnostic> {
+    observation.metadata_bytes = count
+        .checked_mul(std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>())
+        .and_then(|n| observation.metadata_bytes.checked_add(n))
+        .filter(|n| *n <= maximum)
+        .ok_or_else(|| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "kernel_callable_flow_storage",
+                "composed callable flow exhausted its metadata admission",
+            )
+        })?;
+    Ok(())
+}
+
 impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
     fn scope_parameters(
         &mut self,
@@ -594,19 +613,24 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         expression: Option<ExpressionId>,
         scopes: BTreeMap<ReadScopeReference, ReadScopeArgument>,
     ) -> Result<(), Diagnostic> {
+        use std::collections::btree_map::Entry;
+
         let key = (source, target, expression);
-        self.comparison_work(scopes.len() + 3, self.associated.call_scopes.len())?;
-        if let Some(previous) = self.associated.call_scopes.get(&key) {
-            if previous != &scopes {
-                return Err(associated::invalid());
+        self.comparison_searches(scopes.len() + 3, self.associated.call_scopes.len(), 1)?;
+        match self.associated.call_scopes.entry(key) {
+            Entry::Occupied(entry) => {
+                if entry.get() != &scopes {
+                    return Err(associated::invalid());
+                }
             }
-            return Ok(());
+            Entry::Vacant(entry) => {
+                reserve_metadata::<(
+                    (usize, usize, Option<ExpressionId>),
+                    BTreeMap<ReadScopeReference, ReadScopeArgument>,
+                )>(&mut self.observation, self.maximum_metadata_bytes, 1)?;
+                entry.insert(scopes);
+            }
         }
-        self.reserve::<(
-            (usize, usize, Option<ExpressionId>),
-            BTreeMap<ReadScopeReference, ReadScopeArgument>,
-        )>(1)?;
-        self.associated.call_scopes.insert(key, scopes);
         Ok(())
     }
 
@@ -1252,18 +1276,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         Ok(context.witness_slots(path))
     }
     fn reserve<T>(&mut self, count: usize) -> Result<(), Diagnostic> {
-        self.observation.metadata_bytes = count
-            .checked_mul(std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>())
-            .and_then(|n| self.observation.metadata_bytes.checked_add(n))
-            .filter(|n| *n <= self.maximum_metadata_bytes)
-            .ok_or_else(|| {
-                Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "kernel_callable_flow_storage",
-                    "composed callable flow exhausted its metadata admission",
-                )
-            })?;
-        Ok(())
+        reserve_metadata::<T>(&mut self.observation, self.maximum_metadata_bytes, count)
     }
     fn declaration(
         &mut self,

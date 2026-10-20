@@ -10,8 +10,10 @@ validation certificates, compiled units or executable templates.
 state. `source-links::validate` additionally resolves every supported owner and
 type reference, including unused owners and untaken expression operands. Success
 does not establish lexical scope, unique syntax ownership, acyclicity, expression
-typing, affine custody, effects or witness validity. Source normalization and the
-Tier 2 source-graph fixed point remain separate work.
+typing, affine custody, effects or witness validity. The additional
+`source-scope::validate` pass establishes the bounded ownership and value-local
+scope contract below. Source normalization and the Tier 2 source-graph fixed point
+remain separate work.
 
 The current carrier has one package and no dependencies or external blobs.
 Recognized unsupported boundaries reject explicitly; importing a package's
@@ -113,3 +115,73 @@ commitment on success and no bytes on rejection. Those entrypoints inspect sourc
 they do not compile or publish it. Tests serialize canonical objects without a
 semantic preprocessing pass, compare with independent current codecs and logical
 state expectations, and run on VM, reference and standalone native execution.
+
+## Syntax membership and exact value-local scope
+
+After complete carrier and endpoint admission, `source-scope::validate` derives a
+private table of 12-byte rows: child owner-directory index, parent owner-directory
+index, and ordered membership position, all u32 little-endian. No derived table is
+accepted from the producer. It is not a persisted schema or a validation witness.
+
+Modules and targets have no containment parent. Declarations belong to their exact
+module. Declared type parameters, fields, cases, callable parameters and component
+ports have exactly one listed container, agreeing with their reverse parent field.
+Each expression has one owning expression, binding initializer, declaration root,
+or expression-valued port. Each let binding belongs to one let, has the ordinary
+let kind and owns its required initializer. Module membership is obtained from
+canonical declaration fields; modules do not encode a separate member array.
+
+The pass extracts every supported containment edge, sorts rows deterministically
+by child index, and requires the complete sorted child inventory to be exactly the
+owner directory. Duplicates and omissions reject, including unused and disconnected
+syntax. Content-addressed type descriptors are shared and never receive this
+syntax-parent uniqueness rule. Calls, function values and nominal references are
+reference edges, not containment edges: direct/mutual calls and nominal recursive
+references are not rejected as syntax cycles.
+
+Repeated parent-pointer doubling proves that every admitted owner chain terminates
+at a designated root. A disconnected cycle cannot hide behind valid incoming counts.
+The algorithm uses logarithmically many flat passes, without recursively following
+an input-controlled syntax stack. Intermediate tables remain derived Bytes values;
+this is not native lexical region reclamation.
+
+Every local expression is checked, including untaken branches, uncalled definitions
+and final array items. Function-parameter references must reach their exact callable
+container; ordinary lexical-binding references must reach their containing let.
+The encoded reference variant must match that binder category. An operation-parameter,
+match-payload or transaction-binding reference to an otherwise admitted function
+parameter or let binding is a proved semantic mismatch. Genuine excluded owner
+forms encounter the preceding unsupported-profile boundary instead.
+
+The immediate child on the ancestry path determines visibility: initializer i may
+refer only to bindings with smaller positions; the body follows all bindings.
+Nested or sequential equal names are legal and never replace a committed binder
+identity with a nearest-name lookup. Custody validation remains a later obligation.
+
+`source-scope::with-work(graph, work)` selects an additional ancestry-proof allowance
+in 0 through 2,147,483,647. Complete carrier/endpoint/membership admission precedes
+that allowance check. The default entrypoint uses the carrier's admitted allowance.
+Each doubling or final-root pass reserves O units before visiting rows; the value-
+local scan reserves one unit per owner and one per visited ancestor. Exact fit
+passes. Refusal returns diagnostic 6 without a semantic-invalid claim or output.
+Carrier bounds independently bound decoding, edge construction and sorting;
+these work units are not VM allocation charges, native allocator requests or RSS.
+
+| Diagnostic | Additional ownership/scope meaning |
+| --- | --- |
+| 0 | The specified ownership, containment and value-local scope checks succeeded |
+| 6 | The additional ancestry-proof allowance was refused or exhausted |
+| 15 | Invalid containment membership, reverse parent, syntax cycle or value-local scope |
+
+Diagnostics 12, 13 and 14 retain their preceding carrier/endpoint meanings.
+Native filters preserve distinct numeric diagnostics while using their common
+rejection exit status 65 and emitting no partial image.
+
+This is a restricted E1 milestone over the existing source-reader profile, not
+complete language admission. Namespace uniqueness, generic/type-parameter scope,
+structural type-construction acyclicity and non-expansive nominal SCC checks,
+expression types, custody, effects, witnesses and normalization remain required.
+Unsupported source forms still reject with 13; this pass does not add support for
+regions, implementation calls or other forms excluded by the existing readers.
+A well-owned, lexically valid but ill-typed graph intentionally remains accepted
+by this layer. The full Tier 2 profile and reproduction obligations are unchanged.

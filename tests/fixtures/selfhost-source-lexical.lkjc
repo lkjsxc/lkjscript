@@ -1,0 +1,39 @@
+declarations.begin
+(units (module create source-lexical-fixture
+  (variant create Chain (visibility public)
+    (type-parameter create T)
+    (case create end)
+    (case create next (payload (Chain T))))
+  (external create add (visibility public) (implementation core.i64.add)
+    (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+  (function create chain (visibility public) (effect pure)
+    (parameter create input (type I64)) (returns I64)
+    (body (let
+      (binding first (local input))
+      (binding second (local first))
+      (binding third (i64 7))
+      (in (if (bool true) (local second) (local third))))))
+  (function create nested (visibility public) (effect pure) (returns I64)
+    (body (let (binding outer (i64 11))
+      (in (let (binding inner (i64 13))
+        (in (call add (local outer) (local inner))))))))
+  (function create sibling (visibility public) (effect pure)
+    (parameter create foreign (type I64)) (returns I64) (body (local foreign)))
+  (function create recursive-a (visibility public) (effect pure) (returns I64)
+    (body (if (bool true) (i64 1) (call recursive-b))))
+  (function create recursive-b (visibility public) (effect pure) (returns I64)
+    (body (if (bool true) (i64 2) (call recursive-a))))
+  (function create tail (visibility public) (effect pure) (returns (list I64))
+    (body (list I64 (i64 1) (i64 2) (i64 3))))
+  (test create answer (visibility private)
+    (actual (call chain (i64 42))) (expected (i64 42)))))
+declarations.end
+
+declarations.begin
+(units (module create source-lexical-roots
+  (function create message (visibility public) (effect pure) (returns Text) (body (text "ok")))
+  (component create app (visibility public)
+    (port create run (type (function () Text)) (function message))))
+  (target create source-lexical-entry (component source-lexical-roots::app) (runner command)
+    (port source-lexical-roots::app::run)))
+declarations.end

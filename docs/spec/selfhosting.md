@@ -369,9 +369,28 @@ without calling source normalization or producing a validation certificate.
 Positive source fixtures and fully rehashed negative mutations distinguish shape,
 binding, missing endpoints and incompatible kinds on VM, reference and standalone
 native execution. A deliberately ill-typed but reference-closed source establishes
-that this pass does not claim semantic compiler acceptance. Parent membership,
-lexical scope, syntax ownership, cycles, type/effect/custody/witness checks and
-source normalization still precede the Tier 2 fixed point.
+that this pass does not claim semantic compiler acceptance.
+
+The additional `source-scope` layer derives and sorts exact owner-index containment
+rows, checks the complete child inventory and reverse membership, proves root
+termination by parent-pointer doubling, and checks every value-local reference by
+committed binder identity. Sequential let initializers see only earlier bindings;
+nested and sequential equal names remain legal. Modules and targets are roots,
+while type descriptors remain shareable. Calls and nominal references do not enter
+the syntax containment graph. A separate ancestry allowance returns resource
+refusal without classifying exhaustion as semantic invalidity. The source-input
+specification defines the restricted profile and its diagnostic 15.
+
+Independent raw mutations exercise orphan/shared syntax, reverse membership,
+disconnected cycles, self/forward initializers, cross-function and escaped locals,
+and unused final operands. The same raw carriers are supplied to VM, reference,
+Rust-produced native validators and a validator emitted by the lkjscript backend.
+The latter is native source inspection, not source-to-normalized self-compilation:
+Rust still bootstraps the validator's initial normalized backend input.
+
+Generic scope, namespace uniqueness, structural type cycles and non-expansive
+nominal admission, complete type/effect/custody/witness checking, broader source
+forms, and source normalization still precede the Tier 2 fixed point.
 
 ## Required final profile and proof
 

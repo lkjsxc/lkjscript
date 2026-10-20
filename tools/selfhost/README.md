@@ -27,6 +27,15 @@ bindings. The tests compare these with independent current codecs and logical
 root oracles. Matching these commitments does not establish reference resolution,
 type correctness, custody or execution permission.
 
+The `source-table`, `source-sort`, `source-edges`, `source-containment`,
+`source-members`, `source-forest` and `source-scope` modules add complete
+owner membership, reverse parent agreement, unique syntax containment, cycle
+rejection and exact value-local lexical scope for the existing decoded profile.
+Native source-inspection tests include both Rust-produced and self-host-produced
+ELF validators. This remains a restricted E1 milestone; complete semantic admission,
+source normalization and native phase reclamation retain their separate obligations.
+See the [source-input contract](../../docs/spec/selfhosting-source-input.md).
+
 `project/` owns accepted meaning. The `.lkjc` modules in this directory are
 maintained authoring proposals. Changes pass ordinary graph admission before publication.
 Tests reconstruct the complete compiler with bounded public transactions: first
