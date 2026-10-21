@@ -80,7 +80,7 @@ declarations.begin
               (binding rows (field (local prepared) (name rows)))
               (binding syntax (call source-scope::check (local graph) (local rows) (local work)))
               (binding names (if (call ci::lt (local syntax) (i64 0)) (local syntax)
-                (call source-namespace::check (local graph) (local syntax))))
+                (call source-namespace::check (local graph) (local syntax) (local rows))))
               (in (if (call ci::lt (local names) (i64 0)) (local names)
                 (call check (local graph) (local rows) (local names))))))
             (call ci::sub (i64 0) (local code))))))))

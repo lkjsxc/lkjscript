@@ -206,6 +206,9 @@ shadowing retains exact binder references and is not package namespace collision
 The pass derives 16-byte rows containing parent owner-directory index, namespace
 class, absolute name offset and name length. The owner count denotes no parent;
 directory indexes preserve complete OwnerKey identities, including their domains.
+Parent indexes come from the admitted 12-byte containment table for this exact
+carrier, including the root sentinel. Public validation entrypoints prepare that
+table themselves; it is neither a producer certificate nor a cross-carrier cache.
 Deterministic merge sort compares parent, class and original canonical name bytes.
 Adjacent equal keys reject with 16. The table is private derived state; names are
 not replaced with hashes or copied into independently authoritative keys.

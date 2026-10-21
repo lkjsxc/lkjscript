@@ -433,6 +433,29 @@ generic finite-flow, custody, effects, witnesses and source normalization remain
 The declared full profile, source-driven ELF/artifact fixed points and measured
 native phase reclamation remain the Tier 2 governing requirements.
 
+## Tier 2 capability progress
+
+Track source recognition, independent source-driven execution and compiler-source
+adoption separately. The lookup/parent-reuse slice changes no feature eligibility.
+An E2/E3 vertical slice may proceed when its own prerequisites hold; other broad
+E1 rows need not block it. Compiler-source adoption additionally requires the
+bootstrap exporter and both output paths to support the adopted construct.
+
+| Family | Host execution | Selfhost IR/output | E1 decoding/references | E1 containment/names/binders | E2 semantics | E3 lowering | Independent source-driven controls | Compiler adoption |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Scalars, Text/StaticText, Bytes, List<I64>, structural records, branches, let, recursion | VM/reference/native | Profile 4 | Current restricted profile | Current restricted profile | Pending | Pending | Pending; Tier 1 controls exist | Current |
+| Affine ByteBuffer and borrowed buffer reads | VM/reference/native | Profile 4, including borrowed tag 134 and cleanup fallback | Current restricted profile | Current restricted profile | Custody/borrow pending | Pending | Pending; Tier 1 controls exist | Current |
+| Interface, Operation and operation Parameters, Requirement, effect/requirement binders | VM/reference | Effectful forms need extension | Unsupported forms return 13 | Namespace projection exists; carrier admission pending | Pending | Pending | Seed kernel fixture only | Optional |
+| Nominal owned records/choices, Match and general List<T> | VM/reference; native portions restricted | Nominal/match extension needed | Ordinary Record/Variant members decoded; owned forms and Match pending | Field/Case admission and nominal slot flow present; match binders pending | Pending | Pending | Pending | Optional |
+| First-class functions, binding and Invoke | VM/reference/host ELF | Selfhost closure/invoke parity pending | Decoded restricted forms | Current lexical checks | Signature/capture/effect pending | Pending | Pending; host/Tier 1 closure controls exist | Optional |
+| OwnedContract/OwnedImplementation, witnesses, associated types and read views | VM/reference | Witness resolution/read-view support needed | Broader forms unsupported | Contextual binders pending | Pending | Pending | Pending | Optional |
+| Lexical Region, capabilities, relative pointers/slices and slab persistence | VM/reference; native pending | Bootstrap/selfhost extension needed | Unsupported forms return 13 | Region/read-scope admission pending | Pending | Pending | Native and reclamation controls pending | Required before phase-local adoption |
+
+E1-final requires every declared family to satisfy its E1 obligations. Tier 2
+additionally requires all remaining columns, complete compiler-source fixed points,
+behavioral emitted-stage mutations and measured same-process native reclamation.
+The complete profile below remains authoritative; this table cannot narrow it.
+
 ## Required final profile and proof
 
 `P_self` must include the complete transitive compiler source closure and its

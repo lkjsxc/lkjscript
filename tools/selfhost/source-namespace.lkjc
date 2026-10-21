@@ -13,10 +13,11 @@ declarations.begin
             (call unique (local graph) (local rows) (call ci::add (local at) (i64 16)) (local remaining))))))
       (local work))))
   (function create check (visibility package) (effect pure)
-    (parameter create graph (type Bytes)) (parameter create work (type I64)) (returns I64)
+    (parameter create graph (type Bytes)) (parameter create work (type I64))
+    (parameter create rows (type Bytes)) (returns I64)
     (body (let
       (binding empty (type ByteBuffer) (call ci::empty))
-      (binding keys (call source-namespace-key::collect (local graph) (i64 0) (local work) (local empty)))
+      (binding keys (call source-namespace-key::collect (local graph) (i64 0) (local work) (local rows) (local empty)))
       (in (if (call ci::lt (field (local keys) (name work)) (i64 0)) (field (local keys) (name work))
         (let (binding sorted (call source-namespace-sort::rows (local graph)
           (field (local keys) (name rows)) (field (local keys) (name work))))
@@ -31,7 +32,7 @@ declarations.begin
           (let
             (binding previous (call source-scope::check (local graph) (field (local prepared) (name rows)) (local work)))
             (binding checked (if (call ci::lt (local previous) (i64 0)) (local previous)
-              (call check (local graph) (local previous))))
+              (call check (local graph) (local previous) (field (local prepared) (name rows)))))
             (in (if (call ci::lt (local checked) (i64 0)) (call ci::sub (i64 0) (local checked)) (i64 0)))))
         (field (local prepared) (name code)))))))
   (function create validate (visibility public) (effect pure)

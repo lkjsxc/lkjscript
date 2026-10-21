@@ -3,8 +3,8 @@ use super::*;
 use crate::platform::kernel::{self, KernelSnapshot, TypeObjectDigest};
 
 fn probes(module: &str) -> &'static (KernelSnapshot, NormalizedProgram) {
-    static PROBES: [OnceLock<(KernelSnapshot, NormalizedProgram)>; 11] =
-        [const { OnceLock::new() }; 11];
+    static PROBES: [OnceLock<(KernelSnapshot, NormalizedProgram)>; 12] =
+        [const { OnceLock::new() }; 12];
     let (index, proposal) = match module {
         "source-probe" => (
             0,
@@ -49,6 +49,10 @@ fn probes(module: &str) -> &'static (KernelSnapshot, NormalizedProgram) {
         "source-nominal-probe" => (
             10,
             include_str!("../../../../tests/fixtures/selfhost-source-nominal-probes.lkjc"),
+        ),
+        "source-index-probe" => (
+            11,
+            include_str!("../../../../tests/fixtures/selfhost-source-index-probes.lkjc"),
         ),
         _ => return compiler(),
     };
@@ -169,6 +173,7 @@ fn probe_module(name: &str) -> &'static str {
         }
         "read-type-scope" | "read-type-scope-budget" | "read-type-dag" => "source-type-scope-probe",
         "read-nominal" | "read-nominal-budget" => "source-nominal-probe",
+        "read-index" | "read-namespace-parents" => "source-index-probe",
         _ => "source-probe",
     }
 }
@@ -236,6 +241,11 @@ fn emitted_result(name: &str, bytes: &[u8], code: i64) {
             let (_, program) = probes(module);
             let target = program.function(function(module, name)).unwrap().0 as usize;
             let input = input::export(program, target).unwrap();
+            let word = |at| u32::from_le_bytes(input[at..at + 4].try_into().unwrap());
+            eprintln!(
+                "selfhost source normalized entry={name} functions={} nodes={} type_rows={} input_bytes={}",
+                word(92), word(100), word(84), input.len()
+            );
             let (source, compiler) = compiler();
             let (diagnostic, image) =
                 compile_with_policy(source, compiler, &input, NormalizedRunPolicy::foreground());
@@ -837,3 +847,12 @@ mod namespace_unsupported;
 
 #[path = "selfhost_source_function_binder_oracle_tests.rs"]
 mod function_binder_oracle;
+
+#[path = "selfhost_source_measure_tests.rs"]
+mod measure;
+
+#[path = "selfhost_source_index_tests.rs"]
+mod index;
+
+#[path = "selfhost_source_parent_tests.rs"]
+mod parents;
