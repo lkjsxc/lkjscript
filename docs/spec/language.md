@@ -119,7 +119,7 @@ slot. Checked bulk construction also charges its temporary raw-value conversion 
 still validates and charges every logical occurrence, including repeated shared children, and
 separately charges owned carrier metadata. Sharing does not waive admission. All reservations use
 checked arithmetic before allocation, are cumulative without refunds, and depend on no observed
-reference counts. Other collection costs and default limits remain unchanged.
+reference counts. Other collection costs and single-value admission limits remain unchanged.
 
 For old length L, let P = floor((L-1)/32) for L > 0, otherwise zero, and let H be the least
 nonnegative height with P <= 32^H. Every append reserves one leaf and one new element handle.
@@ -152,9 +152,9 @@ second item charge. A key converted from Text/Bytes retains its immutable payloa
 range of a byte view, without a second payload allocation. Existing payloads move into
 new entries; shared payloads, keys and subtrees
 incur no fresh deep-copy charge. Even transient rotation nodes remain cumulatively charged.
-Absent removal allocates no tree storage. Neither finite value admission (depth 256 and
-1,000,000 aggregate items), single-allocation bounds nor project defaults are raised.
-Trusted foreground execution continues to omit cumulative quotas unless explicitly selected.
+Absent removal allocates no tree storage. Finite value admission (depth 256 and
+1,000,000 aggregate items) and single-allocation bounds remain separate from cumulative
+work. Ordinary trusted execution omits cumulative quotas unless explicitly selected.
 
 Map projection reserves owned option/result/variant boxes before cloning their spine and
 stops at shared aggregate handles. Ordered entries reserve their result buffer, each key's
@@ -268,16 +268,19 @@ storage reuse does not preserve outgoing bindings or grant scope authority. Reus
 incurs no replacement-local-storage allocation charge. Ineligible transfers and ordinary calls
 retain the existing allocation and admission path. Other allocation and metadata charges remain
 cumulative, and reference expression/value accounting remains independent.
-Non-tail calls retain call-frame admission. The unchanged defaults are 10,000,000 VM instructions,
-4,096 live call frames, 1,000,000 operand values, 268,435,456 allocated bytes, 1,000,000 collection
-items, and 100,000 capability calls. Reference work remains independently counted in expression
-and value units. Removed return/jump instructions are not counted as executed work.
+Non-tail calls retain call-frame admission: current defaults are 4,096 live call frames
+and 1,000,000 operand values. Instructions, cumulative allocated bytes, cumulative collection
+items and invocation capability calls have no default quotas. Callers may select each quota
+explicitly. Reference work remains independently counted in expression and value units.
+Removed return/jump instructions are not counted as executed work. Unmetered u64 observations
+saturate as lower bounds and never determine acceptance or storage-size arithmetic.
 
 For a fixed finite prepared program and fixed non-tail nesting/cleanup depth, a longer admitted
 terminal graph-call chain uses constant additional live frames, local slots and substitution/
-allowance state. Payload retention and cumulative allocation remain separately bounded. This
-does not guarantee termination, unlimited execution or IO speed. Infinite tail recursion exhausts
-work or cancels. Failure releases owned
+allowance state. Value admission, real storage arithmetic and explicitly selected cumulative
+quotas remain separate. This does not guarantee termination, unlimited physical memory or IO
+speed. Infinite tail recursion runs until cancellation, an operational deadline or an explicitly
+selected quota stops it; there is no implicit fuel watchdog. Failure releases owned
 execution state and produces no successful value receipt; pure execution never advances semantic
 HEAD or changes operational data. Residual operands, mismatched ownership, forged terminal
 control flow or a falsely certified omitted transaction continuation reject at their owning

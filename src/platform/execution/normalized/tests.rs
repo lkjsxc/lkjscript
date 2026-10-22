@@ -5362,7 +5362,7 @@ fn foreground_storage_overflow_remains_distinct_from_saturated_work() {
 }
 
 #[test]
-fn foreground_optional_quotas_preserve_independent_grants_and_cancellation_in_both_evaluators() {
+fn default_optional_quotas_preserve_independent_grants_and_cancellation_in_both_evaluators() {
     let snapshot = crate::platform::compiler::tests::complete_expression_snapshot();
     let program = prepare_snapshot(&snapshot);
     let caller = declaration_named(&snapshot, "caller");
@@ -5381,10 +5381,26 @@ fn foreground_optional_quotas_preserve_independent_grants_and_cancellation_in_bo
             (result, calls.load(Ordering::Relaxed))
         };
         let control = ExecutionControl::uncancelled();
-        let bounded = run(NormalizedRunPolicy::default(), 2, &control);
-        let trusted = run(NormalizedRunPolicy::foreground(), 2, &control);
-        assert_eq!(bounded.0.unwrap(), trusted.0.unwrap());
-        assert_eq!((bounded.1, trusted.1), (1, 1));
+        let policy = NormalizedRunPolicy::default();
+        assert_eq!(policy, NormalizedRunPolicy::foreground());
+        assert_eq!(policy.instruction_steps, None);
+        assert_eq!(policy.maximum_allocated_bytes, None);
+        assert_eq!(policy.maximum_collection_items, None);
+        assert_eq!(policy.maximum_capability_calls, None);
+        let ordinary = run(policy, 2, &control);
+        let explicit = run(
+            NormalizedRunPolicy {
+                instruction_steps: Some(10_000),
+                maximum_allocated_bytes: Some(268_435_456),
+                maximum_collection_items: Some(100),
+                maximum_capability_calls: Some(2),
+                ..policy
+            },
+            2,
+            &control,
+        );
+        assert_eq!(ordinary.0.unwrap(), explicit.0.unwrap());
+        assert_eq!((ordinary.1, explicit.1), (1, 1));
         for dimension in 0..4 {
             let mut policy = NormalizedRunPolicy::foreground();
             match dimension {

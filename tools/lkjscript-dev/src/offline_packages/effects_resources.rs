@@ -94,15 +94,21 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
             "effect runtime retained state after termination",
         )?;
         require(
-            row["instruction_steps_policy"] == if case == "fuel" { 300 } else { 10_000_000 }
+            row["instruction_steps_policy"]
+                == if case == "fuel" {
+                    json!(300)
+                } else {
+                    Value::Null
+                }
                 && row["allocated_bytes_policy"]
                     == if case == "allocation" {
-                        work["type_metadata_bytes"]
-                            .as_u64()
-                            .ok_or_else(|| DevError::corrupt("allocation metadata base missing"))?
-                            + 50_000
+                        json!(
+                            work["type_metadata_bytes"].as_u64().ok_or_else(|| {
+                                DevError::corrupt("allocation metadata base missing")
+                            })? + 50_000
+                        )
                     } else {
-                        268_435_456
+                        Value::Null
                     },
             "effect probe changed an unselected execution policy",
         )?;

@@ -3003,14 +3003,27 @@ mod tests {
                 "deployment_policy_required"
             );
         }
-        let bounded = RunPolicy::default();
-        let normalized = normalized_run_policy(bounded);
-        assert_eq!(normalized.instruction_steps, bounded.instruction_fuel);
-        assert_eq!(normalized.maximum_allocated_bytes, Some(256 * 1024 * 1024));
-        assert_eq!(normalized.maximum_collection_items, Some(1_000_000));
-        assert_eq!(normalized.maximum_capability_calls, Some(100_000));
-        assert_eq!(normalized.maximum_call_depth, bounded.maximum_call_depth);
-        assert_eq!(normalized.maximum_value_stack, bounded.maximum_value_stack);
+        let ordinary = normalized_run_policy(RunPolicy::default());
+        assert_eq!(ordinary, NormalizedRunPolicy::foreground());
+        assert_eq!(ordinary.instruction_steps, None);
+        assert_eq!(ordinary.maximum_allocated_bytes, None);
+        assert_eq!(ordinary.maximum_collection_items, None);
+        assert_eq!(ordinary.maximum_capability_calls, None);
+        let explicit = RunPolicy {
+            instruction_fuel: Some(7),
+            maximum_call_depth: 19,
+            maximum_value_stack: 43,
+            maximum_allocated_bytes: Some(11),
+            maximum_collection_items: Some(13),
+            maximum_capability_calls: Some(17),
+        };
+        let normalized = normalized_run_policy(explicit);
+        assert_eq!(normalized.instruction_steps, Some(7));
+        assert_eq!(normalized.maximum_allocated_bytes, Some(11));
+        assert_eq!(normalized.maximum_collection_items, Some(13));
+        assert_eq!(normalized.maximum_capability_calls, Some(17));
+        assert_eq!(normalized.maximum_call_depth, 19);
+        assert_eq!(normalized.maximum_value_stack, 43);
     }
 
     #[test]

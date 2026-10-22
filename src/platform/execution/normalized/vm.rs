@@ -1,4 +1,4 @@
-//! Bounded dense-index virtual machine for normalized Graph 14 compiler units.
+//! Dense-index virtual machine with explicit optional cumulative execution quotas.
 
 use super::capability::{
     NormalizedCapabilities, NormalizedCapabilityTransaction, NormalizedTransactionCompletion,
@@ -84,10 +84,10 @@ impl Default for NormalizedRunPolicy {
 }
 
 impl NormalizedRunPolicy {
-    /// Trusted foreground execution has no cumulative work quotas. Structural limits,
+    /// The ordinary trusted default has no cumulative work quotas. Structural limits,
     /// cancellation, admission and exact deployment-grant accounting remain independent.
     pub fn foreground() -> Self {
-        crate::platform::execution::RunPolicy::unmetered().into()
+        Self::default()
     }
 }
 

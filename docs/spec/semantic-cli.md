@@ -1172,14 +1172,15 @@ later completion cannot turn that outcome into success.
 Omitted execution policy selects the named trusted foreground profile: no cumulative instruction,
 allocation, collection-work or invocation capability-call quota. Omitted runtime policy supplies
 no invocation deadline, while cancellation and bounded cleanup grace remain. Supplied complete
-numeric objects retain their legacy bounded meaning, including cumulative defaults of 256 MiB,
-1,000,000 collection items and 100,000 invocation capability calls. Structural call/stack,
-single-value/container, preparation/codec and adapter limits and canonical per-grant quotas
-remain binding. Saturated observation counters are lower bounds; real storage arithmetic and
-explicit quota overflow still reject. Project differential execution retains bounded defaults.
-Resident descriptors require complete execution and runtime objects, but each cumulative quota
-may explicitly be null. Fresh HTTP recipes select four nulls; omitted new quota fields in older
-objects retain the legacy defaults above. The named trusted foreground profile is reported only
+numeric fields retain their explicit limits; omitted optional cumulative fields impose no
+quota. Ordinary project differential execution and source batch rows without an execution
+override also have no default cumulative quotas. Structural call/stack, single-value/container,
+preparation/codec and adapter limits and canonical per-grant quotas remain binding.
+Saturated observation counters are lower bounds; real storage arithmetic and explicit quota
+overflow still reject. Resident descriptors require execution and runtime objects;
+instruction_fuel and both structural limits remain required inside execution. Each cumulative
+quota may explicitly be null, and fresh HTTP recipes select four nulls. No old numeric limits
+are inserted for omitted optional fields. The named trusted foreground profile is reported only
 when all four cumulative quotas are absent. See [deployment security](deployment-security.md)
 and the [resident-policy guide](../guides/resident-policy.md). An installed executable runs
 independent bundles in separate processes;

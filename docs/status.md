@@ -20,19 +20,24 @@ Native allocations remain process-owned until exit; no phase-reclamation claim.
 
 ## Current milestone
 
-GC has no default aggregate preparation quotas for retained objects/bytes,
-reference inventory, map entries, object reads or read bytes. Visited references,
-complete map traversal, exact object bindings and cancellation still govern
-reachability. Explicit caller-selected read allowances still refuse before payload
-consumption. Saturating telemetry observes work without deciding acceptance.
-Compaction keeps immutable history and uses deterministic multiple-pack partitioning.
-This slice performs no retirement pruning, history truncation or project reseed.
+Ordinary source execution, differential batches and Rust execution-policy defaults
+have no cumulative instruction, allocation, collection-item or capability-call
+quota. Optional descriptor fields also impose no quota when omitted. Explicit
+positive quotas retain checked precharge and exact refusal; null represents no
+quota. Serialization materializes every selection without historical defaults.
 
-Verification keeps complete compact receipts without a 64 KiB aggregate cap;
-the evidence writer and archived-original reader also have no 128 MiB ceiling.
-Gate outcomes, identities and bounded excerpts remain; joined transient work is
-still cleaned up. Guidance has no hard line-count, editorial byte or word rule. The
-[decision record](decisions/20261022-gc-preparation-quotas.md) records scope and controls.
+Passive work observations saturate independently of checked storage arithmetic.
+Cancellation, operational deadlines, exact capability grants, type/value admission
+and live call/stack limits remain enforced. General user programs may diverge
+without a caller-selected bound or cancellation; this policy change does not prove
+termination. The [decision](decisions/20261022-default-cumulative-execution.md)
+records the compatibility cut, public-path witnesses and remaining limits.
+
+GC preparation and verification evidence retain the preceding removal of default
+aggregate quotas, with visited-reference progress, exact bindings, cancellation
+and complete compact receipts. Physical compaction preserves immutable history.
+The [GC decision](decisions/20261022-gc-preparation-quotas.md) owns those controls.
+No retirement pruning, history truncation or project reseed is performed.
 
 ## Maintained compiler baseline
 
@@ -46,25 +51,26 @@ c387db4db5404258a9d6026c01f27e9c140c0002d8456ebdeb889f3ac38add7f.
 These are existing carrier observations, not new runtime-memory measurements.
 
 The preceding physical GC retained 200,012 objects in 13 packs / 334,241,707 bytes.
-Its observed modeled retained bytes were 467,387,305; that metric now has no
-512 MiB admission ceiling. HEAD and source identities remain unchanged here.
+Its observed modeled retained bytes were 467,387,305; that metric has no
+512 MiB admission ceiling. Compiler source and semantic identities remain unchanged.
 The [preceding decision](decisions/20261021-source-effect-owners.md) binds those
 carrier, artifact and storage measurements to their exact baseline.
 
 ## Verification and next work
 
-The focused GC suite passed all 14 tests, including actual 528 MiB retention,
-more than 4 GiB of reads and 1,000,001 distinct queued references. Negative
-controls retain exact object verification, explicit read limits, cancellation,
-reader leases and all compaction durability checkpoints. Expanded receipt tests
-retain every gate status and excerpt beyond the former 64 KiB ceiling.
-All seven surface-audit tests pass, including long guidance with a late forbidden
-text control beyond the former editorial byte and word ceilings.
+Focused runtime controls, descriptor admission, both independent evaluators and
+public source/detached/resident routes pass. The ordinary source counting witness
+executes 11,000,010 production instructions and observes 649,351,110 modeled
+allocated bytes, beyond the former default thresholds, with reference equality.
+Explicit quotas, deadline cancellation, post-failure health and joined cleanup
+remain covered. The completed focused selfhost run passed 113 tests plus 10 native
+ELF controls; the optional same-carrier benchmark remained ignored.
 
-Publication requires exact staged-tree bootstrap, changed selection, every gate
-in full --fresh and release-target policy inspection. Terminal evidence is in
+Publication requires exact staged-tree bootstrap, every gate in full --fresh
+and release-target policy inspection. The source/test changed selection widens
+to those same full gates, so a single fresh full run covers both selections. Terminal evidence is in
 .artifacts/lkjscript-dev/latest-receipt.json; focused evidence is under
-.artifacts/selfhost/resource-ceilings and .artifacts/selfhost. Git records normal
+.artifacts/selfhost/default-execution and .artifacts/selfhost. Git records normal
 integration. No public product release or deployment is implied.
 
 WS1 remains incomplete: kernel work/analysis limits, authoring/inspection quotas,

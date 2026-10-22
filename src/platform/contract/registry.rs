@@ -8470,7 +8470,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("success", "typed-result-encoded-and-owned-work-joined-and-adapters-closed".to_owned()),
                 ("cancellation", "SIGINT-SIGTERM-completion-first-on-ready-tie-then-joined-cancellation".to_owned()),
                 ("failure", "nonzero-no-automatic-retry-possibly-visible-effects-and-cleanup-notes".to_owned()),
-                ("project-route", "pure-differential-existing-bounded-defaults".to_owned()),
+                ("project-route", "pure-differential-no-default-cumulative-quota".to_owned()),
             ])?);
             records.push(compact_record("execution.pure-batch", &[
                 ("selector", "run --deployment PATH --batch-input-file PATH --batch-result-file PATH".to_owned()),
@@ -8494,7 +8494,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("row-lifetime", "fresh-controls-vm-independent-reference-and-explicitly-joined-executor".to_owned()),
                 ("verification", "every-successful-row-compares-production-and-canonical-reference-values".to_owned()),
                 ("output", "complete-typed-result_json-with-value-location=batch-row-and-compact-actual-dual-execution-observations".to_owned()),
-                ("limits", "ordinary-source-bounded-defaults-or-exact-row-execution-policy-and-deadline".to_owned()),
+                ("limits", "ordinary-source-no-default-cumulative-quota-or-exact-row-execution-policy-and-deadline".to_owned()),
                 ("failure", "original-row-diagnostic-and-actual-invoked-tier-cleanup-observations-next-row-continues-authority-change-aborts-aggregate".to_owned()),
                 ("cancellation", "process-signal-joins-preparation-or-current-row-and-refuses-aggregate-publication".to_owned()),
                 ("publication", "bounded-complete-create-new-aggregate-only-no-accepted-head-change".to_owned()),
@@ -8601,12 +8601,21 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                         (
                             "maximum",
                             if name.ends_with("frames") {
-                                "4096"
+                                (usize::MAX as u64).to_string()
                             } else {
-                                "10000000"
+                                u64::MAX.to_string()
+                            },
+                        ),
+                        (
+                            "semantics",
+                            if name.ends_with("frames") {
+                                "exact-live-high-water"
+                            } else {
+                                "saturated-u64-is-lower-bound"
                             }
                             .to_owned(),
                         ),
+                        ("permission", "none".to_owned()),
                     ],
                 )?);
             }
@@ -8980,7 +8989,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("runtime-omitted", "no-deadline-default-bounded-cleanup-grace".to_owned()),
                 ("execution-runtime-null", "reject".to_owned()),
                 ("resident-execution-runtime", "required-objects-positive-live-limits-nullable-cumulative-quotas".to_owned()),
-                ("explicit-execution-cumulative-defaults", "allocated-bytes=268435456,collection-items=1000000,capability-calls=100000".to_owned()),
+                ("optional-execution-fields-omitted", "no-cumulative-quota-for-that-field".to_owned()),
                 ("topology", "listen-http-session-worker-required-null".to_owned()),
                 ("remaining-limits", "call-depth-value-stack-single-value-container-type-codec-adapter-and-canonical-grant".to_owned()),
                 ("frontier", "current-representation-and-admission-not-permanent-language-ceilings".to_owned()),
@@ -8991,7 +9000,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("numeric", "positive-u64".to_owned()),
                 ("null", "no-cumulative-quota-for-that-field".to_owned()),
                 ("fuel-omitted", "reject".to_owned()),
-                ("added-field-omitted", "use-current-default".to_owned()),
+                ("optional-field-omitted", "no-cumulative-quota-for-that-field".to_owned()),
                 ("counter-scope", "one-invocation".to_owned()),
                 ("counter-overflow", "saturated-u64-is-lower-bound".to_owned()),
                 ("new-http-recipe", "four-explicit-nulls".to_owned()),

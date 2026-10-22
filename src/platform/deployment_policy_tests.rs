@@ -1,4 +1,4 @@
-//! Descriptor policy tests use literal legacy values, not the new policy default as oracle.
+//! Descriptor policies use independent literal expectations for absent and explicit quotas.
 use super::*;
 use serde_json::{Value, json};
 
@@ -84,23 +84,21 @@ fn strict_descriptor_projection_retains_integer_extremes_and_string_contents() {
 }
 
 #[test]
-fn legacy_numeric_descriptors_keep_the_previously_implicit_quotas() {
+fn omitted_cumulative_fields_do_not_install_implicit_quotas() {
     let value = descriptor(json!({"instruction_fuel": 123, "maximum_call_depth": 19,
         "maximum_value_stack": 43}));
     let decoded = decode(&value).unwrap();
     let normalized = normalized_run_policy(decoded.execution.unwrap());
-    assert_eq!(
-        quota_values(normalized),
-        [Some(123), Some(268_435_456), Some(1_000_000), Some(100_000)]
-    );
+    assert_eq!(quota_values(normalized), [Some(123), None, None, None]);
     assert_eq!(normalized.maximum_call_depth, 19);
     assert_eq!(normalized.maximum_value_stack, 43);
     let encoded = encode_deployment(&decoded).unwrap();
     let roundtrip = decode_deployment(&encoded).unwrap();
     assert_eq!(decoded.execution, roundtrip.execution);
     let materialized: Value = serde_json::from_slice(&encoded).unwrap();
-    for name in QUOTAS {
-        assert!(materialized["execution"].get(name).is_some());
+    assert_eq!(materialized["execution"]["instruction_fuel"], 123);
+    for name in &QUOTAS[1..] {
+        assert_eq!(materialized["execution"].get(name), Some(&Value::Null));
     }
 }
 
@@ -119,13 +117,13 @@ fn explicit_null_disables_only_the_selected_quota() {
             assert_eq!(normalized.maximum_value_stack, 43);
         }
     }
-    let legacy_null = descriptor(json!({"instruction_fuel": null,
+    let omitted_quotas = descriptor(json!({"instruction_fuel": null,
         "maximum_call_depth": 19, "maximum_value_stack": 43}));
     assert_eq!(
         quota_values(normalized_run_policy(
-            decode(&legacy_null).unwrap().execution.unwrap()
+            decode(&omitted_quotas).unwrap().execution.unwrap()
         )),
-        [None, Some(268_435_456), Some(1_000_000), Some(100_000)]
+        [None; 4]
     );
 }
 

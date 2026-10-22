@@ -1,9 +1,9 @@
-# Choose resident cumulative quotas explicitly
+# Choose cumulative execution quotas explicitly
 
-This guide describes deployment contract 5, now available in immutable public
-v0.1.45. It does not change the older immutable v0.1.44 executable.
-It changes deployment policy, not the authored program, artifact or capability grants.
-Use an executable that advertises nullable fields through:
+Ordinary source execution, source differential batches, Rust policy defaults and
+trusted foreground execution impose no cumulative work quotas. This does not remove
+live call/stack controls, value admission, operational deadlines or capability grants.
+Discover the current executable's exact policy contract with:
 
 ```sh
 lkjscript capabilities --section deployment
@@ -27,64 +27,60 @@ objects. Its execution object explicitly chooses:
 
 These four nulls remove cumulative instruction, allocation, collection-item and
 invocation capability-call budgets. They do not disable accounting, type checks,
-operational deadlines, cancellation, stack limits or exact grants. The generated
-runtime still selects 16 active tasks, 64 queued tasks, a 30-second request deadline,
-30-second shutdown drain and 5-second cancellation grace. Change these operational
-choices explicitly for a real deployment rather than treating a sample as its policy.
+cancellation or exact grants. The generated runtime still selects 16 active tasks,
+64 queued tasks, a 30-second request deadline, 30-second shutdown drain and
+5-second cancellation grace. Choose these operational policies explicitly for a
+deployment; they are not a hostile-code sandbox.
 
-The entire execution and runtime objects are still required for resident routes.
-Deleting either object, replacing either with null, omitting instruction_fuel, or
-omitting a structural limit is not an unmetered mode and is rejected.
+The execution and runtime objects remain required for resident routes. Deleting
+either object, replacing either with null, omitting instruction_fuel or omitting
+a structural limit rejects. A Command deployment may omit both policy objects.
 
 ## Bound only the work dimension you intend
 
-To keep the same program and live limits while capping instructions, copy its
-deployment descriptor and replace just instruction_fuel with a positive integer.
-Keep the other three nulls to avoid silently installing different work quotas.
-Likewise, maximum_capability_calls can independently cap invocation calls even when
-instructions are unbounded. This never grants an operation or changes a grant limit.
+To cap instructions, set instruction_fuel to a positive integer. Each of the other
+three cumulative fields independently accepts a positive integer or null.
+Omitting any of those optional fields also means no quota for that dimension.
+For example, a three-field object with instruction_fuel, maximum_call_depth and
+maximum_value_stack caps only its explicitly selected instructions and live state.
 
-A quota-exhausted HTTP invocation reports a bounded resource failure with HTTP 500
-and x-lkjscript-failure-class: resource. Its exact code names the exhausted owner.
-An operational deadline instead reports HTTP 503 and the cancelled class. Neither
-response establishes rollback of earlier application effects. Health/recovery work
-uses a new invocation; retrying a failed effectful request remains application policy.
+No work policy grants an operation or changes an exact per-grant maximum.
+A quota-exhausted HTTP invocation reports HTTP 500 with
+x-lkjscript-failure-class: resource and the exhausted owner's code. A deadline
+reports HTTP 503 and the cancelled class. Neither proves rollback of prior effects.
+Health/recovery work uses a new invocation; effectful retries remain application policy.
 
-## Existing descriptors and recovery
+## Current-format behavior
 
-An older three-field execution object with numeric instruction_fuel retains its
-previous behavior: absent new fields still mean 268,435,456 cumulative allocated
-bytes, 1,000,000 cumulative collection items and 100,000 invocation capability calls.
-Explicit null removes a selected quota; omission preserves that legacy default.
-Numeric zero is invalid, not another spelling of unlimited. Serialization writes
-all six actual selections, including materialized legacy defaults.
+Optional-field omission no longer installs the historical 256 MiB allocation,
+1,000,000 collection-item or 100,000 invocation-call quotas. A caller that wants
+those limits must state their numbers. Numeric zero is invalid, not unlimited.
+Serialization materializes all six selections, including null for absent quotas;
+round trips preserve explicit numbers and absence without hidden defaults.
 
-Older executables reject new fields and null fuel rather than silently ignoring them.
-Keep the original numeric descriptor and executable for rollback; changing the
-runtime selection does not rewrite application data or grants. An artifact remains
-a runtime-dependent bundle, not a standalone machine executable.
+This is an intentional policy compatibility cut. No authored program, artifact,
+grant, accepted graph or application data is rewritten. An immutable older
+executable retains its old interpretation; use matching executables and descriptors
+when reproducing historical behavior. A .lkja bundle still requires its runtime.
 
-The relay-information recipe uses the same explicit HTTP policy choice. Its graph,
-route, grant and live-limit projection is checked against the original captured
-recipe after backing out only the documented execution-policy transition.
+Rust embedders use Option<u64> for each cumulative dimension. RunPolicy::default()
+and RunPolicy::unmetered() both select four None values. NormalizedRunPolicy::default()
+and its named foreground profile select the same cumulative policy. Explicit Some
+values retain deterministic precharge/refusal semantics. Call-depth and operand-stack
+defaults remain separate implementation limits pending iterative evaluator work.
 
-Rust embedders must adapt RunPolicy construction: instruction_fuel is now
-Option<u64>, and the three additional quota fields must be supplied or inherited
-through ..RunPolicy::default(). RunPolicy::unmetered() explicitly chooses four
-absent cumulative quotas. This is a Rust source-API change; compatibility of old
-three-field JSON descriptors does not make old Rust struct literals compile unchanged.
+## Observations and cancellation
 
-## Operational boundary
+Work counters are per invocation. Unmetered observations saturate at u64::MAX;
+saturation expresses a lower bound and grants no capacity. Allocated-byte accounting
+measures cumulative modeled allocation, not process RSS or maximum live heap.
+Checked storage arithmetic, cancellation and exact grant accounting remain enforced.
 
-These work counters are per invocation. Unbounded observations saturate at u64::MAX
-and then express a lower bound. Allocated-byte accounting measures cumulative
-allocation work, not process RSS or maximum live heap. A deadline also is not a
-hard operating-system CPU or memory sandbox. Use an appropriate external isolation
-boundary for untrusted programs or public multi-tenant service operation.
+Without an explicit instruction quota or cancellation/deadline, a divergent program
+may keep running. Removing default fuel is not a termination proof. Finite validation
+and compiler passes need independent progress arguments.
 
-The maintained public test authors [a native counting and HTTP workload](../../tests/fixtures/resident-policy.lkjc),
-then runs it without its authoring project. It requires a case exceeding the old
-10,000,000-instruction budget, separate quota exhaustion, deadline cancellation,
-post-failure health and joined server shutdown. The
-[campaign](../campaigns/202609250154.md) distinguishes planned and actually executed
-results, exact source acceptance and public-release status.
+The maintained [counting and HTTP workload](../../tests/fixtures/resident-policy.lkjc)
+runs through ordinary source differential execution and detached execution beyond
+the former instruction/allocation defaults. It also checks each explicit quota,
+deadline cancellation, post-failure health and joined server shutdown.

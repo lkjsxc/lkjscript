@@ -1,4 +1,4 @@
-//! Copied-product resident quotas, operational cancellation and detached recovery.
+//! Ordinary source defaults, copied-product quotas, cancellation and detached recovery.
 use super::*;
 use serde_json::json;
 use std::io::Write;
@@ -249,6 +249,34 @@ fn detached_resident_quotas_remain_optional_and_operational_deadlines_still_join
         command.as_object_mut().unwrap().remove(name);
     }
     let command = public.input("count.json", &command.to_string());
+    // Exercise the ordinary source route without a policy override. Unlike detached
+    // execution, this also runs the independently reconstructed canonical interpreter.
+    let source_head = std::fs::read(public.project.join("HEAD")).unwrap();
+    let source = public.cli(&["run", "count", "--arguments", "[1000000]"], true);
+    let source_execution = compact_record(&source, "execution");
+    assert_eq!(compact_field(source_execution, "value"), "1000000");
+    assert_eq!(compact_field(source_execution, "differential"), "equal");
+    for (field, former_maximum) in [
+        ("production-instructions", 10_000_000),
+        ("production-allocated-bytes", 268_435_456),
+    ] {
+        let actual = compact_field(source_execution, field)
+            .parse::<u64>()
+            .unwrap();
+        assert!(actual > former_maximum, "{field}: {actual}");
+        eprintln!("ordinary source default witness {field}: {actual}");
+    }
+    assert!(
+        compact_field(source_execution, "reference-expressions")
+            .parse::<u64>()
+            .unwrap()
+            > 0
+    );
+    assert_eq!(
+        std::fs::read(public.project.join("HEAD")).unwrap(),
+        source_head
+    );
+
     // Remove only fixture-owned authoring inputs. Runtime has no project dependency.
     std::fs::remove_dir_all(&public.project).unwrap();
     std::fs::remove_file(public.root.path().join("work.lkjc")).unwrap();

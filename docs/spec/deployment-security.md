@@ -51,16 +51,17 @@ collection-item or invocation capability-call quotas. Explicit execution has six
 | `instruction_fuel` | Required | Positive u64 or null | Reject |
 | `maximum_call_depth` | Required | Positive usize | Reject |
 | `maximum_value_stack` | Required | Positive usize | Reject |
-| `maximum_allocated_bytes` | Optional | Positive u64 or null | 268,435,456 bytes |
-| `maximum_collection_items` | Optional | Positive u64 or null | 1,000,000 items |
-| `maximum_capability_calls` | Optional | Positive u64 or null | 100,000 calls |
+| `maximum_allocated_bytes` | Optional | Positive u64 or null | No cumulative quota |
+| `maximum_collection_items` | Optional | Positive u64 or null | No cumulative quota |
+| `maximum_capability_calls` | Optional | Positive u64 or null | No cumulative quota |
 
 Each null disables only that cumulative quota. Numeric zero, negative, fractional,
 excessive, duplicate and unknown fields reject before artifact/secret/adapter access.
-Omission of the three added fields preserves the actual limits of older numeric
-three-field descriptors. Encoding materializes those selections, so an encode/decode
-round trip does not remove a previously implicit quota. Null instruction fuel alone
-therefore does not remove allocation, collection or capability-call quotas.
+Omission of an optional cumulative field imposes no quota for that dimension.
+Encoding materializes null or the caller's positive number for every cumulative
+selection; round trips preserve both absence and explicit quotas. No historical
+numeric defaults are inserted. This intentionally changes the interpretation of
+older three-field descriptors under the current executable.
 
 The counters are per invocation, not a process-lifetime budget. Unbounded counters
 remain observed and saturate at u64::MAX, where the value is a lower bound rather than
@@ -68,10 +69,11 @@ an exact total. Allocated bytes and collection items are cumulative work account
 not an RSS or live-heap ceiling. Depth, stack, admission/codec bounds, task concurrency,
 body/stream limits and exact per-grant authority remain independently enforced.
 
-New HTTP recipes explicitly set all four cumulative quotas to null. Existing authored
-descriptors keep their previous numeric selections; no configuration file is implicitly
-rewritten. Current discovery exposes the expanded quota choice. Rollback retains
-the selected descriptor and an executable that supports its exact fields.
+Ordinary source execution, source differential batches and Rust policy defaults also
+omit all four cumulative quotas. New HTTP recipes explicitly set four nulls.
+Existing descriptors retain explicitly written numbers; no configuration file is
+implicitly rewritten. To retain a formerly implicit limit, state its number.
+Reproducing historical behavior requires the matching descriptor and executable.
 No graph, artifact, package or application-data migration is required.
 
 Absent runtime removes only this route's invocation deadline; shutdown and cancellation grace

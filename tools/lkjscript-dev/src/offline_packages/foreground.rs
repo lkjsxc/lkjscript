@@ -311,7 +311,15 @@ fn loops(context: &mut Context, consumer: &Consumer) -> Result<(), DevError> {
         ("bounded-equivalent", 1000, true),
     ] {
         if bounded {
-            descriptor["execution"] = json!(lkjscript::platform::execution::RunPolicy::default());
+            // This control selects its quotas independently of ordinary unmetered defaults.
+            descriptor["execution"] = json!({
+                "instruction_fuel": 10_000_000,
+                "maximum_call_depth": 4_096,
+                "maximum_value_stack": 1_000_000,
+                "maximum_allocated_bytes": 268_435_456,
+                "maximum_collection_items": 1_000_000,
+                "maximum_capability_calls": 100_000
+            });
         }
         fs::write(&path, evidence::encode_json(&descriptor)?)?;
         let command = context.command_index();
