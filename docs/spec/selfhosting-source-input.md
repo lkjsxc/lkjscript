@@ -14,7 +14,7 @@ typing, affine custody, effects or witness validity. The additional
 `source-scope::validate` pass establishes the bounded ownership and value-local
 scope contract below. `source-namespace::validate`, `source-type-scope::validate`
 and `source-nominal::validate` successively add namespace uniqueness, contextual
-type-parameter scope, structural type DAG proof and nominal member parameter flow
+type/R/E binder scope, structural type DAG proof and nominal member parameter flow
 over the same decoded profile. Source normalization and the Tier 2 source-graph
 fixed point remain separate work.
 
@@ -69,7 +69,10 @@ There is no padding, overlap, gap, aliasing or trailing data.
 Traversal allowance must be at least
 `4096 + 128*L + 1024*(O+T+R)` and at most 2,147,483,647. It is an input admission
 condition distinct from VM instruction/allocation quotas and native process
-limits. Bounds precede products, object access and hashing. Lookup uses binary
+limits. The minimum admits the carrier; it does not guarantee that every later
+proof finishes within that allowance. A caller may select a larger allowance
+within the same maximum. Later proof exhaustion returns 6 without a semantic
+validity claim. Bounds precede products, object access and hashing. Lookup uses binary
 search over admitted immutable directories; it does not copy the complete source
 or linearly rescan the directory for each reference.
 
@@ -119,6 +122,61 @@ they do not compile or publish it. Tests serialize canonical objects without a
 semantic preprocessing pass, compare with independent current codecs and logical
 state expectations, and run on VM, reference and standalone native execution.
 
+## Interface, requirement and effect owner extension
+
+The current E1 extension admits Interface declarations, Operation records and
+Operation-owned Parameters, Component Requirements, and Function-owned
+RequirementParameter and EffectParameter records. These names refer to separate
+canonical discriminants; record tags, owner domains and namespace classes are
+not interchangeable.
+
+| Record | Canonical record tag | Directory OwnerKey domain | Directory owner kind | Namespace class |
+| --- | ---: | ---: | ---: | ---: |
+| Operation | 6 | 6 | 14 | 6 |
+| Requirement | 10 | 10 | 18 | 8 |
+| EffectParameter | 3 | 16 | 24 | 11 |
+| RequirementParameter | 16 | 17 | 25 | 12 |
+
+Directory domains and kinds use `IdentityKind::tag` and `OwnerKind::tag`.
+The canonical owner envelope separately encodes `OwnerHeader` enum variants;
+the readers validate both representations.
+
+Interface uses declaration-kind byte 3, declaration payload 2, and directory
+owner kind 4. Function/Operation Parameter parents use parent variants 0/1
+and owner domains 2/6 respectively. The current codecs remain the wire authority.
+
+Shape admission checks canonical names, arrays and enum discriminants. Operation
+records carry ordered Parameters, a result type, idempotency and visibility.
+Requirement constraints carry an Interface reference and a strictly increasing,
+duplicate-free operation-reference list; each operation reference has the same
+package identity as its Interface. Component Requirement limits have at most
+1,024 entries, strictly increasing names, nonzero full-width u64 magnitudes and
+current unit tags 0 through 4. Values above I64::MAX are valid u64 magnitudes.
+
+Functions admit ordered requirement/effect binder arrays and pure/task effect
+encodings. TaskFunction descriptors use type form 18. Each effect row contains
+a requirement-operand array followed by an effect-parameter array; each array
+is strictly increasing and duplicate-free under current canonical byte order.
+The combined atom count is at most 100,000. A requirement operand distinguishes
+a concrete Requirement from a RequirementParameter. Package-qualified references
+retain both package and member identities.
+
+Reference admission resolves every included endpoint, including unused type rows.
+Operations require Interface parents; Requirements require Component parents;
+R/E binders require Function parents. Every constrained operation must belong to
+the exact referenced Interface. Reverse-parent and forward-membership agreement
+is then checked by syntax admission, followed by namespace and contextual scope.
+Malformed shape returns 12. Foreign package references retain the unsupported
+package boundary 13; missing or incompatible local endpoints return 14. Invalid
+containment returns 15, duplicate namespace keys return 16, and contextual binder
+failure returns 17. Resource exhaustion remains 6.
+
+Nonempty R/E application arguments on Call and FunctionValue remain unsupported
+with 13. Implementation witnesses, associated owned types, nontrivial result
+relations, read-scope/read-source metadata, Match and lexical Region forms remain
+outside this extension. It does not implement E2 effect compatibility,
+substitution, requirement satisfaction or source-to-normalized lowering.
+
 ## Syntax membership and exact value-local scope
 
 After complete carrier and endpoint admission, `source-scope::validate` derives a
@@ -128,7 +186,9 @@ accepted from the producer. It is not a persisted schema or a validation witness
 
 Modules and targets have no containment parent. Declarations belong to their exact
 module. Declared type parameters, fields, cases, callable parameters and component
-ports have exactly one listed container, agreeing with their reverse parent field.
+ports and requirements have exactly one listed container, agreeing with their reverse
+parent field. Interface declarations own Operations; Operations own their ordered
+Parameters. Function declarations own their ordered requirement and effect binders.
 Each expression has one owning expression, binding initializer, declaration root,
 or expression-valued port. Each let binding belongs to one let, has the ordinary
 let kind and owns its required initializer. Module membership is obtained from
@@ -196,8 +256,10 @@ projection follows all 12 kernel namespace classes with these parent rules:
 | Module, Target | None | Both supported |
 | Declaration | Exact Module | Supported |
 | TypeParameter, Field, Case, Port | Exact Declaration | All supported |
-| Parameter | Exact Function Declaration or Operation | Function parent supported; Operation owner unsupported |
-| EffectParameter, RequirementParameter, Operation, Requirement | Exact Declaration | Unsupported owner forms, diagnostic 13 |
+| Parameter | Exact Function Declaration or Operation | Both parent forms supported |
+| EffectParameter, RequirementParameter | Exact Function Declaration | Supported |
+| Operation | Exact Interface Declaration | Supported |
+| Requirement | Exact Component Declaration | Supported |
 
 Binding, Expression, HttpRoute, Documentation and Annotation do not participate.
 Equal names across different parents or classes remain legal. Local binding
@@ -213,17 +275,16 @@ Deterministic merge sort compares parent, class and original canonical name byte
 Adjacent equal keys reject with 16. The table is private derived state; names are
 not replaced with hashes or copied into independently authoritative keys.
 
-Whole-carrier collision controls cover the eight currently decoded classes. Direct
-projection controls separately cover all 12 classes, both Parameter parent domains
-and excluded owner forms. These projection tests do not establish complete carrier
-admission for the four unsupported classes. Their adoption requires the preceding
-shape, reference and containment layers to admit the corresponding owner forms.
+Whole-carrier collision controls cover all 12 namespace classes after valid shape,
+reference and containment admission. Independent parent projections cover both
+Parameter parent domains and excluded owner forms. The exact admitted containment
+parent is reused for Operation-owned Parameters as well as Function Parameters.
 
 ## Structural type DAG and contextual type scope
 
 `source-type-scope::validate` additionally derives structural child edges from every
 supplied type descriptor, including unused descriptors. Structural field types,
-List items, function parameters/results and Applied arguments are child edges.
+List items, pure/task function parameters/results and Applied arguments are child edges.
 Named nominal declaration references are not structural backedges. All endpoints
 must already exist in the admitted type directory. Repeatedly settling descriptors
 whose children have known heights establishes acyclicity and the maximum structural
@@ -233,17 +294,33 @@ Every supported owner carrying type roots is checked in its enclosing semantic
 declaration context. Traversal follows all child types; a TypeParameter descriptor
 must name a parameter belonging to that declaration. A shared digest may therefore
 be valid in one using declaration and invalid in another. Visited-descriptor state
-is local to a using context, with no digest-only global scope cache. Any later reuse
-must bind complete declaration/callable context and relevant binder identities and
-kinds, including method, read-scope, effect and witness contexts when admitted.
-The current slice does not admit those broader contexts through unsupported forms.
+is local to a using context, with no digest-only global scope cache.
+
+Every direct task row and every nested TaskFunction row used by an owner checks
+requirement-parameter and effect-parameter references against that exact enclosing
+Function declaration. Concrete component Requirements are resolved endpoints, not
+function-local binders. Function results, Function and Operation parameters,
+Operation results, structural fields and expression type roots participate,
+including untaken branches. Empty task rows remain task rows. These are lexical
+binder checks, not E2 effect compatibility or requirement satisfaction.
+
+All supplied descriptors receive shape, endpoint and structural checks. Contextual
+binder checks apply at actual owner type roots. A structurally valid unused
+TaskFunction descriptor combining binders from different functions is therefore
+permitted until an owner uses it in an invalid context. Any later cache must bind
+the complete carrier and using binder context, including method, read-scope and
+witness identities when those forms are admitted.
 
 Type-object digests commit to their child digests, so rehashing ordinary objects
 cannot create a self-consistent structural cycle. Independent derived graph fixtures
 exercise cycle proof and the exact depth boundary directly. Raw-carrier tests
 exercise acyclic structure and context-sensitive type-parameter mutations; direct
 cycle tests must not be reported as end-to-end hash-consistent cyclic carrier
-coverage. Failure is code 17.
+coverage. Raw TaskFunction boundary controls alternate parameter and result edges
+at depths 256 and 257, with a fixed explicitly selected allowance within the
+existing range. Namespace success precedes the structural outcomes 0 and 17.
+A smaller allowance returning 6 is resource evidence, not a depth-semantic result.
+Structural cycle or depth failure is code 17.
 
 ## Nominal member parameter flow
 
@@ -276,14 +353,16 @@ public wrappers return zero or the positive diagnostic. Later passes do not rese
 the allowance. Work is reserved before its covered traversal or table growth.
 Namespace work includes owner collection, sort nodes, merge rows, comparisons and
 bounded name-prefix inspection. Type and nominal work includes roots, child edges,
-nodes and membership scans. Exact fit succeeds; exhaustion remains diagnostic 6.
+nodes and membership scans. Every direct or nested effect-row atom reserves one
+unit before its scoped lookup; the remaining allowance flows into child traversal.
+Exact fit succeeds; exhaustion remains diagnostic 6.
 These units are distinct from evaluator quotas, cumulative allocation and RSS.
 
 | Diagnostic | Additional E1 meaning |
 | --- | --- |
 | 6 | Additional proof-work allowance invalid or exhausted; no semantic-invalid claim |
 | 16 | Duplicate exact namespace key |
-| 17 | Contextual type-parameter scope, structural cycle or structural-depth failure |
+| 17 | Contextual type/R/E binder scope, structural cycle or structural-depth failure |
 | 18 | Nominal member-application arity or expanding cyclic parameter-slot flow |
 
 Earlier diagnostics 12 through 15 remain unchanged. Layer-reaching negative carriers
@@ -295,7 +374,7 @@ source-to-normalized self-compilation. Complete carrier SHA-256 and semantic-sta
 identity remain separate evidence.
 
 This is restricted-profile E1 work, not E1-final or Tier 2 completion. Broader source
-forms, full contextual read/effect/witness scope, general application and expression
+forms, full contextual read/witness scope and effect applications, general application and expression
 typing, callable generic finite-flow, custody, effects, witnesses and normalization
 remain required. Regions, implementation calls and other excluded forms still
 reject with 13. The full Tier 2 profile, source-driven ELF/artifact fixed points and

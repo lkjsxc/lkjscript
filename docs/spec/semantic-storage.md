@@ -243,8 +243,10 @@ reopen either the complete old revision or complete new revision, never a partia
 may remove only a stage whose ownership and target are exact.
 
 Accepted immutable objects may exist before visibility and remain unreachable after a failed or
-stale attempt. Their existence cannot advance authority. There is currently no public retention
-deletion or compaction operation.
+stale attempt. Their existence cannot advance authority. Physical reachability compaction is the
+public `gc` operation described above; it preserves the full retained history. There is no public
+historical-retention deletion or project-reseeding operation. Current Retirement records remain
+part of semantic state and are not discarded by physical compaction.
 
 ## Package transports
 

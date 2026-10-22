@@ -1,0 +1,116 @@
+declarations.begin
+(units
+  (module create source-effect-shape
+    (function create items
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create count (type I64))
+      (parameter create kind (type I64))
+      (parameter create previous (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local count) (i64 0))
+          (local at)
+          (let
+            (binding width (if (call ci::eq (local kind) (i64 0)) (i64 35) (i64 34)))
+            (in
+              (if
+                (call source-read::range (local data) (local at) (local width) (local end))
+                (let
+                  (binding next
+                    (if
+                      (call ci::eq (local kind) (i64 0))
+                      (let
+                        (binding variant (call ci::get (local data) (local at)))
+                        (in
+                          (if
+                            (call ci::lt (local variant) (i64 2))
+                            (call source-read::reference
+                              (local data)
+                              (call ci::add (local at) (i64 1))
+                              (local end)
+                              (if (call ci::eq (local variant) (i64 0)) (i64 10) (i64 20)))
+                            (i64 -1))))
+                      (call source-read::reference (local data) (local at) (local end) (i64 19))))
+                  (in
+                    (if
+                      (call ci::lt (local next) (i64 0))
+                      (i64 -1)
+                      (if
+                        (if
+                          (call ci::eq (local previous) (i64 -1))
+                          (bool true)
+                          (if
+                            (call source-read::range
+                              (local data)
+                              (local previous)
+                              (local width)
+                              (local end))
+                            (call ci::lt
+                              (call artifact-input::bytes-order
+                                (local data)
+                                (local previous)
+                                (local at)
+                                (local width))
+                              (i64 0))
+                            (bool false)))
+                        (call items
+                          (local data)
+                          (local next)
+                          (local end)
+                          (call ci::sub (local count) (i64 1))
+                          (local kind)
+                          (local at))
+                        (i64 -1)))))
+                (i64 -1)))))))
+    (function create row
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding requirements (call source-read::unsigned (local data) (local at) (local end)))
+          (in
+            (if
+              (call ci::both
+                (call ci::eq (field (local requirements) (name code)) (i64 0))
+                (call ci::lt (field (local requirements) (name value)) (i64 100001)))
+              (let
+                (binding after
+                  (call items
+                    (local data)
+                    (field (local requirements) (name next))
+                    (local end)
+                    (field (local requirements) (name value))
+                    (i64 0)
+                    (i64 -1)))
+                (in
+                  (if
+                    (call ci::lt (local after) (i64 0))
+                    (i64 -1)
+                    (let
+                      (binding effects (call source-read::unsigned (local data) (local after) (local end)))
+                      (in
+                        (if
+                          (call ci::both
+                            (call ci::eq (field (local effects) (name code)) (i64 0))
+                            (call ci::lt
+                              (field (local effects) (name value))
+                              (call ci::sub (i64 100001) (field (local requirements) (name value)))))
+                          (call items
+                            (local data)
+                            (field (local effects) (name next))
+                            (local end)
+                            (field (local effects) (name value))
+                            (i64 1)
+                            (i64 -1))
+                          (i64 -1)))))))
+              (i64 -1))))))))
+declarations.end

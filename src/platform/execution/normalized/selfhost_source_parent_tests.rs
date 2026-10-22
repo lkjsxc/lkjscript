@@ -3,8 +3,10 @@ use super::*;
 
 #[test]
 fn selfhost_source_namespace_reuses_exact_admitted_parents_for_all_supported_classes() {
-    let source = byte_buffer_tests::author_only(include_str!(
-        "../../../../tests/fixtures/selfhost-source-namespace.lkjc"
+    let source = byte_buffer_tests::author_only(concat!(
+        include_str!("../../../../tests/fixtures/selfhost-source-namespace.lkjc"),
+        "\n",
+        include_str!("../../../../tests/fixtures/selfhost-source-effect-owners.lkjc"),
     ))
     .unwrap();
     kernel::validate_full(&source).unwrap();
@@ -48,6 +50,10 @@ fn selfhost_source_namespace_reuses_exact_admitted_parents_for_all_supported_cla
             NamespaceClass::Parameter,
             NamespaceClass::Port,
             NamespaceClass::Target,
+            NamespaceClass::Operation,
+            NamespaceClass::Requirement,
+            NamespaceClass::EffectParameter,
+            NamespaceClass::RequirementParameter,
         ])
     );
     index::assert_probe("read-namespace-parents", &bytes, &image);

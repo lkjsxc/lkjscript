@@ -115,6 +115,16 @@ pub const SOURCE: &str = concat!(
     "\n",
     include_str!("../../tools/selfhost/source-nominal.lkjc"),
     "\n",
+    include_str!("../../tools/selfhost/source-effect-shape.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-capability-shape.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-effect.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-capability.lkjc"),
+    "\n",
+    include_str!("../../tools/selfhost/source-function.lkjc"),
+    "\n",
 );
 
 #[derive(Clone)]
@@ -295,6 +305,11 @@ fn upsert(form: &Form, module: &str) -> Form {
     Form::List(result.iter().map(|x| upsert(x, module)).collect())
 }
 
+fn proposal_batch_size(module: &str) -> usize {
+    // Four source-owner bodies exceeded the default transaction witness allowance.
+    if module == "source-owner" { 2 } else { 4 }
+}
+
 /// Declare typed interfaces one module at a time, then replace small groups of
 /// bodies through tx. Every intermediate graph uses the default request bounds.
 pub fn steps(source: &str) -> Result<(String, Vec<String>), String> {
@@ -328,7 +343,7 @@ pub fn steps(source: &str) -> Result<(String, Vec<String>), String> {
             stub(head)?;
             members.push(upsert(member, &name).text());
         }
-        for group in members.chunks(4) {
+        for group in members.chunks(proposal_batch_size(&name)) {
             bodies.push(format!(
                 "(tx (base @head) (upsert-module {name} {}))",
                 group.join(" ")
@@ -406,7 +421,7 @@ pub fn replay(source: &str) -> Vec<String> {
             };
             let name = items[2].text();
             if unit.head() == Some("module") {
-                for members in items[3..].chunks(4) {
+                for members in items[3..].chunks(proposal_batch_size(&name)) {
                     let group = Form::List(items[..3].iter().chain(members).cloned().collect());
                     changes.push(format!(
                         "(tx (base @head) {})",

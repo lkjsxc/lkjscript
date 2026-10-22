@@ -1,0 +1,45 @@
+declarations.begin
+(units
+  (module create source-capability
+    (function create operations
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create count (type I64))
+      (parameter create interface (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local count) (i64 0))
+          (local at)
+          (let
+            (binding next
+              (call source-link-ref::package-ref (local graph) (local data) (local at) (i64 6) (i64 14)))
+            (in
+              (if
+                (call ci::lt (local next) (i64 0))
+                (local next)
+                (let
+                  (binding operation
+                    (call source-table::data
+                      (local graph)
+                      (call source-table::owner
+                        (local graph)
+                        (local data)
+                        (call ci::add (local at) (i64 17))
+                        (i64 6))))
+                  (binding parent
+                    (call source-table::owner (local graph) (local operation) (i64 39) (i64 2)))
+                  (in
+                    (if
+                      (call ci::eq (local parent) (local interface))
+                      (call operations
+                        (local graph)
+                        (local data)
+                        (local next)
+                        (call ci::sub (local count) (i64 1))
+                        (local interface))
+                      (i64 -14))))))))))))
+declarations.end

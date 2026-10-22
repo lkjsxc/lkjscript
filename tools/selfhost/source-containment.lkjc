@@ -1,77 +1,231 @@
 declarations.begin
-(units (module create source-containment
-  (function create members (visibility private) (effect pure)
-    (parameter create graph (type Bytes)) (parameter create data (type Bytes))
-    (parameter create at (type I64)) (parameter create domain (type I64))
-    (parameter create parent (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let
-      (binding next (type ByteBuffer)
-        (call source-edges::array (local graph) (local data) (local at) (i64 3) (local parent) (local out)))
-      (in (call source-edges::array (local graph) (local data)
-        (call source-table::skip (local data) (local at) (i64 17))
-        (local domain) (local parent) (local next))))))
-  (function create declaration (visibility private) (effect pure)
-    (parameter create graph (type Bytes)) (parameter create data (type Bytes))
-    (parameter create row (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let
-      (binding tag-at (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 1)))
-      (binding tag (call ci::get (local data) (local tag-at)))
-      (binding at (call ci::add (local tag-at) (i64 1)))
-      (binding next (type ByteBuffer) (call source-table::edge (local row)
-        (call source-table::owner (local graph) (local data) (i64 39) (i64 1)) (i64 0) (local out)))
-      (in (if (call ci::eq (local tag) (i64 0))
-        (call members (local graph) (local data) (local at) (i64 4) (local row) (local next))
-        (if (call ci::eq (local tag) (i64 1))
-          (call members (local graph) (local data) (local at) (i64 5) (local row) (local next))
-          (if (call ci::eq (local tag) (i64 3))
-            (call members (local graph) (local data) (local at) (i64 7) (local row) (local next))
-            (if (call ci::eq (local tag) (i64 4))
-              (let
-                (binding types (call ci::add (local at) (i64 3)))
-                (binding after (type ByteBuffer)
-                  (call members (local graph) (local data) (local types) (i64 7) (local row) (local next)))
-                (binding result (call source-table::skip (local data)
-                  (call source-table::skip (local data) (local types) (i64 17)) (i64 17)))
-                (in (call source-edges::one (local graph) (local data)
-                  (call ci::add (local result) (i64 37)) (i64 9) (local row) (i64 0) (local after))))
-              (if (call ci::eq (local tag) (i64 5))
-                (call source-edges::one (local graph) (local data) (call ci::add (local at) (i64 33))
-                  (i64 9) (local row) (i64 0) (local next))
-                (if (call ci::eq (local tag) (i64 6))
-                  (call source-edges::array (local graph) (local data) (call ci::add (local at) (i64 1))
-                    (i64 11) (local row) (local next))
-                  (call source-edges::items (local graph) (local data) (local at) (i64 2)
-                    (i64 9) (local row) (i64 0) (local next))))))))))))
-  (function create record (visibility private) (effect pure)
-    (parameter create graph (type Bytes)) (parameter create data (type Bytes))
-    (parameter create row (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let (binding tag (call ci::get (local data) (i64 18)))
-      (in (if (call ci::either (call ci::eq (local tag) (i64 0)) (call ci::eq (local tag) (i64 12)))
-        (call source-table::edge (local row) (call source-table::count (local graph)) (i64 0) (local out))
-        (if (call ci::eq (local tag) (i64 1))
-          (call declaration (local graph) (local data) (local row) (local out))
-          (if (call ci::eq (local tag) (i64 8))
-            (call source-edges::optional (local graph) (local data)
-              (call ci::add (call source-link-ref::name-end (local data) (i64 39)) (i64 1))
-              (local row) (local out))
-            (if (call ci::eq (local tag) (i64 9))
-              (call source-edges::expression (local graph) (local data) (local row) (local out))
-              (if (call ci::eq (local tag) (i64 11))
-                (let (binding at (call ci::add
-                  (call source-link-ref::name-end (local data) (i64 56)) (i64 33)))
-                  (in (if (call ci::eq (call ci::get (local data) (local at)) (i64 0))
-                    (call source-edges::one (local graph) (local data) (call ci::add (local at) (i64 1))
-                      (i64 9) (local row) (i64 0) (local out))
-                    (local out))))
-                (local out))))))))))
-  (function create walk (visibility package) (effect pure)
-    (parameter create graph (type Bytes)) (parameter create row (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (if (call ci::eq (local row) (call source-table::count (local graph))) (local out)
-      (let (binding next (type ByteBuffer)
-        (call record (local graph) (call source-table::data (local graph) (local row)) (local row) (local out)))
-        (in (call walk (local graph) (call ci::add (local row) (i64 1)) (local next)))))))))
+(units
+  (module create source-containment
+    (function create members
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create domain (type I64))
+      (parameter create parent (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding next
+            (type ByteBuffer)
+            (call source-edges::array
+              (local graph)
+              (local data)
+              (local at)
+              (i64 3)
+              (local parent)
+              (local out)))
+          (in
+            (call source-edges::array
+              (local graph)
+              (local data)
+              (call source-table::skip (local data) (local at) (i64 17))
+              (local domain)
+              (local parent)
+              (local next))))))
+    (function create declaration
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create row (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding tag-at (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 1)))
+          (binding tag (call ci::get (local data) (local tag-at)))
+          (binding at (call ci::add (local tag-at) (i64 1)))
+          (binding next
+            (type ByteBuffer)
+            (call source-table::edge
+              (local row)
+              (call source-table::owner (local graph) (local data) (i64 39) (i64 1))
+              (i64 0)
+              (local out)))
+          (in
+            (if
+              (call ci::eq (local tag) (i64 0))
+              (call members (local graph) (local data) (local at) (i64 4) (local row) (local next))
+              (if
+                (call ci::eq (local tag) (i64 1))
+                (call members (local graph) (local data) (local at) (i64 5) (local row) (local next))
+                (if
+                  (call ci::eq (local tag) (i64 2))
+                  (call source-edges::array
+                    (local graph)
+                    (local data)
+                    (local at)
+                    (i64 6)
+                    (local row)
+                    (local next))
+                  (if
+                    (call ci::eq (local tag) (i64 3))
+                    (call members (local graph) (local data) (local at) (i64 7) (local row) (local next))
+                    (if
+                      (call ci::eq (local tag) (i64 4))
+                      (let
+                        (binding parts (call source-function::parts (local data) (local at)))
+                        (binding requirements
+                          (type ByteBuffer)
+                          (call source-edges::array
+                            (local graph)
+                            (local data)
+                            (field (local parts) (name requirements))
+                            (i64 17)
+                            (local row)
+                            (local next)))
+                        (binding effects
+                          (type ByteBuffer)
+                          (call source-edges::array
+                            (local graph)
+                            (local data)
+                            (field (local parts) (name effects))
+                            (i64 16)
+                            (local row)
+                            (local requirements)))
+                        (binding after
+                          (type ByteBuffer)
+                          (call members
+                            (local graph)
+                            (local data)
+                            (field (local parts) (name types))
+                            (i64 7)
+                            (local row)
+                            (local effects)))
+                        (in
+                          (call source-edges::one
+                            (local graph)
+                            (local data)
+                            (field (local parts) (name body))
+                            (i64 9)
+                            (local row)
+                            (i64 0)
+                            (local after))))
+                      (if
+                        (call ci::eq (local tag) (i64 5))
+                        (call source-edges::one
+                          (local graph)
+                          (local data)
+                          (call ci::add (local at) (i64 33))
+                          (i64 9)
+                          (local row)
+                          (i64 0)
+                          (local next))
+                        (if
+                          (call ci::eq (local tag) (i64 6))
+                          (let
+                            (binding requirements
+                              (type ByteBuffer)
+                              (call source-edges::array
+                                (local graph)
+                                (local data)
+                                (local at)
+                                (i64 10)
+                                (local row)
+                                (local next)))
+                            (in
+                              (call source-edges::array
+                                (local graph)
+                                (local data)
+                                (call source-table::skip (local data) (local at) (i64 17))
+                                (i64 11)
+                                (local row)
+                                (local requirements))))
+                          (call source-edges::items
+                            (local graph)
+                            (local data)
+                            (local at)
+                            (i64 2)
+                            (i64 9)
+                            (local row)
+                            (i64 0)
+                            (local next)))))))))))))
+    (function create record
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create row (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding tag (call ci::get (local data) (i64 18)))
+          (in
+            (if
+              (call ci::eq (local tag) (i64 6))
+              (call source-edges::array
+                (local graph)
+                (local data)
+                (call source-link-ref::name-end (local data) (i64 56))
+                (i64 7)
+                (local row)
+                (local out))
+              (if
+                (call ci::either (call ci::eq (local tag) (i64 0)) (call ci::eq (local tag) (i64 12)))
+                (call source-table::edge
+                  (local row)
+                  (call source-table::count (local graph))
+                  (i64 0)
+                  (local out))
+                (if
+                  (call ci::eq (local tag) (i64 1))
+                  (call declaration (local graph) (local data) (local row) (local out))
+                  (if
+                    (call ci::eq (local tag) (i64 8))
+                    (call source-edges::optional
+                      (local graph)
+                      (local data)
+                      (call ci::add (call source-link-ref::name-end (local data) (i64 39)) (i64 1))
+                      (local row)
+                      (local out))
+                    (if
+                      (call ci::eq (local tag) (i64 9))
+                      (call source-edges::expression (local graph) (local data) (local row) (local out))
+                      (if
+                        (call ci::eq (local tag) (i64 11))
+                        (let
+                          (binding at
+                            (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 33)))
+                          (in
+                            (if
+                              (call ci::eq (call ci::get (local data) (local at)) (i64 0))
+                              (call source-edges::one
+                                (local graph)
+                                (local data)
+                                (call ci::add (local at) (i64 1))
+                                (i64 9)
+                                (local row)
+                                (i64 0)
+                                (local out))
+                              (local out))))
+                        (local out)))))))))))
+    (function create walk
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (local out)
+          (let
+            (binding next
+              (type ByteBuffer)
+              (call record
+                (local graph)
+                (call source-table::data (local graph) (local row))
+                (local row)
+                (local out)))
+            (in (call walk (local graph) (call ci::add (local row) (i64 1)) (local next)))))))))
 declarations.end

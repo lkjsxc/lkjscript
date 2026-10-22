@@ -1,0 +1,174 @@
+declarations.begin
+(units
+  (module create source-capability-shape
+    (function create operation-items
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create count (type I64))
+      (parameter create previous (type I64))
+      (parameter create package (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local count) (i64 0))
+          (local at)
+          (let
+            (binding next (call source-read::reference (local data) (local at) (local end) (i64 6)))
+            (in
+              (if
+                (call ci::lt (local next) (i64 0))
+                (i64 -1)
+                (if
+                  (if
+                    (if
+                      (call ci::eq (local previous) (i64 -1))
+                      (bool true)
+                      (call ci::lt
+                        (call artifact-input::bytes-order (local data) (local previous) (local at) (i64 34))
+                        (i64 0)))
+                    (if
+                      (if
+                        (call ci::eq (local package) (i64 -1))
+                        (bool true)
+                        (if
+                          (call source-read::range (local data) (local package) (i64 17) (local end))
+                          (if
+                            (call ci::eq
+                              (call artifact-input::bytes-order
+                                (local data)
+                                (local package)
+                                (local at)
+                                (i64 17))
+                              (i64 0))
+                            (bool true)
+                            (bool false))
+                          (bool false)))
+                      (bool true)
+                      (bool false))
+                    (bool false))
+                  (call operation-items
+                    (local data)
+                    (local next)
+                    (local end)
+                    (call ci::sub (local count) (i64 1))
+                    (local at)
+                    (local package))
+                  (i64 -1))))))))
+    (function create operations
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create package (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding count (call source-read::unsigned (local data) (local at) (local end)))
+          (in
+            (if
+              (if
+                (call ci::eq (field (local count) (name code)) (i64 0))
+                (if (call ci::lt (field (local count) (name value)) (i64 100001)) (bool true) (bool false))
+                (bool false))
+              (call operation-items
+                (local data)
+                (field (local count) (name next))
+                (local end)
+                (field (local count) (name value))
+                (i64 -1)
+                (local package))
+              (i64 -1))))))
+    (function create limit-items
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create count (type I64))
+      (parameter create previous (type I64))
+      (parameter create previous-length (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local count) (i64 0))
+          (local at)
+          (let
+            (binding name (call source-read::name (local data) (local at) (local end)))
+            (in
+              (if
+                (call ci::eq (field (local name) (name code)) (i64 0))
+                (if
+                  (if
+                    (call ci::eq (local previous) (i64 -1))
+                    (bool true)
+                    (call source-shape::name-less
+                      (local data)
+                      (local previous)
+                      (local previous-length)
+                      (field (local name) (name start))
+                      (field (local name) (name length))))
+                  (let
+                    (binding maximum
+                      (call source-read::integer (local data) (field (local name) (name next)) (local end)))
+                    (in
+                      (if
+                        (if
+                          (call ci::eq (field (local maximum) (name code)) (i64 0))
+                          (if
+                            (if
+                              (call ci::eq (field (local maximum) (name low)) (i64 0))
+                              (call ci::lt (i64 0) (field (local maximum) (name high)))
+                              (bool true))
+                            (bool true)
+                            (bool false))
+                          (bool false))
+                        (let
+                          (binding next
+                            (call source-fields::tag
+                              (local data)
+                              (field (local maximum) (name next))
+                              (local end)
+                              (i64 4)))
+                          (in
+                            (if
+                              (call ci::lt (local next) (i64 0))
+                              (i64 -1)
+                              (call limit-items
+                                (local data)
+                                (local next)
+                                (local end)
+                                (call ci::sub (local count) (i64 1))
+                                (field (local name) (name start))
+                                (field (local name) (name length))))))
+                        (i64 -1))))
+                  (i64 -1))
+                (i64 -1)))))))
+    (function create limits
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding count (call source-read::unsigned (local data) (local at) (local end)))
+          (in
+            (if
+              (if
+                (call ci::eq (field (local count) (name code)) (i64 0))
+                (if (call ci::lt (field (local count) (name value)) (i64 1025)) (bool true) (bool false))
+                (bool false))
+              (call limit-items
+                (local data)
+                (field (local count) (name next))
+                (local end)
+                (field (local count) (name value))
+                (i64 -1)
+                (i64 0))
+              (i64 -1))))))))
+declarations.end

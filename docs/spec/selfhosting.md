@@ -285,16 +285,17 @@ most 100,000, names have 1 through 128 bytes and inline text at most 65,536 byte
 Negative indices and overflow-sized extents reject before arithmetic or access.
 
 The type reader covers Unit, Bool, I64, Bytes, Text, StaticText, ByteBuffer, type
-parameters, named/applied types, structural records, lists and function types.
-It checks nonempty strictly ordered structural fields and positive Applied arity.
-The owner reader checks headers and the supported module, declaration, parameter,
-type-parameter, binding, expression, field, case, port and target record shapes.
-It retains package-qualified references and ordered expression operands. Pure
-functions, externals, constants, records/variants, components and tests have
-structural readers; other effects, borrowed results, witness parameters and
-read-scope metadata currently reject explicitly. Expression forms 0 through 16
-cover literals, locals, branches, lets, calls/function values/invocation, records,
-variants, fields and lists. Known broader forms reject with code 13 before their
+parameters, named/applied types, structural records, lists and pure/task function
+types. It checks nonempty strictly ordered structural fields and positive Applied
+arity. The owner reader checks supported modules, declarations, parameters,
+type/R/E binders, operations, requirements, bindings, expressions, fields, cases,
+ports and targets. It retains package-qualified references and ordered operands.
+Pure/task functions, externals, constants, records/variants, interfaces, components
+and tests have structural readers. Implementation witnesses, associated owned
+types, borrowed results and read-scope metadata remain explicitly unsupported.
+Expression forms 0 through 16 cover literals, locals, branches, lets,
+calls/function values/invocation, records, variants, fields and lists. Nonempty
+R/E application arguments and broader forms reject with code 13 before their
 unsupported payload is interpreted; this does not classify that payload as valid.
 
 Tests use the current Rust codecs as an independent structural oracle and also
@@ -388,23 +389,27 @@ Rust-produced native validators and a validator emitted by the lkjscript backend
 The latter is native source inspection, not source-to-normalized self-compilation:
 Rust still bootstraps the validator's initial normalized backend input.
 
-### Restricted namespace, contextual type and nominal flow admission
+### Namespace, contextual binder and nominal flow admission
 
-The next layers retain the existing decoded source profile. `source-namespace`
-derives exact `(parent identity, namespace class, canonical name)` keys and rejects
-duplicates with 16. Its class projection covers all 12 kernel classes and both
-Parameter parent domains. Whole-carrier checks currently cover Module, Target,
-Declaration, TypeParameter, Field, Case, function Parameter and Port. EffectParameter,
-RequirementParameter, Operation and Requirement owners remain unsupported with 13;
-direct projection controls do not substitute for their complete admission.
+The E1 extension admits Interface/Operation declarations and Operation Parameters,
+Component Requirements, Function R/E binders, pure/task rows and TaskFunction types.
+Shape and endpoint checks precede exact containment and reverse membership.
+`source-namespace` derives `(parent identity, namespace class, canonical name)` keys
+and rejects duplicates with 16 across all 12 kernel namespace classes, including
+both Parameter parent domains. It reuses the exact admitted containment parents.
 Different classes/parents and exact local-binding shadowing remain legal.
 
 `source-type-scope` derives a strict structural DAG from every supplied descriptor,
 including unused types, and preserves the 256-edge depth limit. Each owner's type
 roots are checked in their using declaration context, so a shared type digest cannot
 cache scope success across unrelated declarations. Structural fields, List items,
-function types and Applied arguments participate; nominal declaration references
-do not become structural backedges. Scope, cycle or depth failure returns 17.
+pure/task function types and Applied arguments participate; nominal declaration
+references do not become structural backedges. Direct task rows and nested
+TaskFunction rows check R/E binder identity against the exact enclosing Function.
+Unused descriptors still receive complete shape/reference/structural admission;
+contextual binder checks apply at owner uses, including untaken expression branches.
+Unused mixed-context descriptors are not globally rejected. Scope, cycle or depth
+failure returns 17.
 Content addressing prevents ordinary rehashing from constructing cyclic type
 objects; derived graph fixtures test cycle proof separately from raw-carrier tests.
 
@@ -427,16 +432,19 @@ The [source-input contract](selfhosting-source-input.md) defines tables, context
 boundaries and layer-reaching controls. Native execution of these validators still
 starts from Rust-bootstrapped normalized input, without source-to-normalized lowering.
 
-This restricted profile does not establish E1-final. Broader namespace owner forms,
-full read/effect/witness scope, general application/expression typing, callable
-generic finite-flow, custody, effects, witnesses and source normalization remain.
+This E1 extension does not establish E1-final. Call/FunctionValue R/E application
+arguments, owned/witness/read/region forms and Match still need broader admission.
+General application/expression typing, callable generic finite-flow, custody,
+effect compatibility, requirement satisfaction, witnesses and source normalization
+remain E2/E3 obligations.
 The declared full profile, source-driven ELF/artifact fixed points and measured
 native phase reclamation remain the Tier 2 governing requirements.
 
 ## Tier 2 capability progress
 
 Track source recognition, independent source-driven execution and compiler-source
-adoption separately. The lookup/parent-reuse slice changes no feature eligibility.
+adoption separately. E1 admission of task rows does not provide task lowering or
+execution through the pure-only Tier 1 backend.
 An E2/E3 vertical slice may proceed when its own prerequisites hold; other broad
 E1 rows need not block it. Compiler-source adoption additionally requires the
 bootstrap exporter and both output paths to support the adopted construct.
@@ -445,7 +453,7 @@ bootstrap exporter and both output paths to support the adopted construct.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Scalars, Text/StaticText, Bytes, List<I64>, structural records, branches, let, recursion | VM/reference/native | Profile 4 | Current restricted profile | Current restricted profile | Pending | Pending | Pending; Tier 1 controls exist | Current |
 | Affine ByteBuffer and borrowed buffer reads | VM/reference/native | Profile 4, including borrowed tag 134 and cleanup fallback | Current restricted profile | Current restricted profile | Custody/borrow pending | Pending | Pending; Tier 1 controls exist | Current |
-| Interface, Operation and operation Parameters, Requirement, effect/requirement binders | VM/reference | Effectful forms need extension | Unsupported forms return 13 | Namespace projection exists; carrier admission pending | Pending | Pending | Seed kernel fixture only | Optional |
+| Interface, Operation and operation Parameters, Requirement, effect/requirement binders | VM/reference | Effectful forms need extension | Owners, constraints and pure/task rows admitted; R/E applications pending | All 12 namespace classes; direct/nested R/E scope | Compatibility/substitution pending | Pending | Four-engine raw-carrier E1 controls; source-driven execution pending | Optional; compiler remains pure |
 | Nominal owned records/choices, Match and general List<T> | VM/reference; native portions restricted | Nominal/match extension needed | Ordinary Record/Variant members decoded; owned forms and Match pending | Field/Case admission and nominal slot flow present; match binders pending | Pending | Pending | Pending | Optional |
 | First-class functions, binding and Invoke | VM/reference/host ELF | Selfhost closure/invoke parity pending | Decoded restricted forms | Current lexical checks | Signature/capture/effect pending | Pending | Pending; host/Tier 1 closure controls exist | Optional |
 | OwnedContract/OwnedImplementation, witnesses, associated types and read views | VM/reference | Witness resolution/read-view support needed | Broader forms unsupported | Contextual binders pending | Pending | Pending | Pending | Optional |

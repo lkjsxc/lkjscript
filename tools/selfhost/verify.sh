@@ -24,7 +24,11 @@ sha256sum src/platform/compiler/selfhost_input.rs \
   src/platform/execution/normalized/selfhost_source_graph_tests.rs \
   src/platform/execution/normalized/selfhost_source_scope_tests.rs \
   src/platform/execution/normalized/selfhost_source_namespace_tests.rs \
-  src/platform/execution/normalized/selfhost_source_namespace_unsupported_tests.rs \
+  src/platform/execution/normalized/selfhost_source_effect_tests.rs \
+  src/platform/execution/normalized/selfhost_source_effect_owner_tests.rs \
+  src/platform/execution/normalized/selfhost_source_effect_scope_tests.rs \
+  src/platform/execution/normalized/selfhost_source_effect_shape_tests.rs \
+  tests/fixtures/selfhost-source-effect-owners.lkjc \
   src/platform/execution/normalized/selfhost_source_type_scope_tests.rs \
   src/platform/execution/normalized/selfhost_source_nominal_flow_tests.rs \
   tests/fixtures/selfhost-source-namespace.lkjc \

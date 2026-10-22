@@ -50,7 +50,13 @@ declarations.begin
                 (if
                   (call ci::eq (local domain) (i64 2))
                   (i64 3)
-                  (if (call ci::eq (local domain) (i64 3)) (i64 17) (local domain)))))
+                  (if
+                    (call ci::eq (local domain) (i64 3))
+                    (i64 17)
+                    (if
+                      (call ci::eq (local domain) (i64 16))
+                      (i64 19)
+                      (if (call ci::eq (local domain) (i64 17)) (i64 20) (local domain)))))))
             (in
               (if
                 (call ci::eq (call ci::get (local data) (local at)) (local namespace))
@@ -87,21 +93,30 @@ declarations.begin
                             (call ci::eq (local actual) (i64 2))
                             (call ci::eq (local actual) (i64 3))))
                         (binding callable
-                          (call ci::either
-                            (call ci::eq (local actual) (i64 5))
-                            (call ci::eq (local actual) (i64 6))))
+                          (if
+                            (call ci::lt (i64 4) (local actual))
+                            (if (call ci::lt (local actual) (i64 8)) (bool true) (bool false))
+                            (bool false)))
                         (binding accepted
                           (call ci::either
                             (call ci::either
-                              (call ci::eq (local wanted) (i64 0))
-                              (call ci::eq (local actual) (local wanted)))
-                            (call ci::either
-                              (call ci::both (call ci::eq (local wanted) (i64 101)) (local nominal))
                               (call ci::either
-                                (call ci::both (call ci::eq (local wanted) (i64 102)) (local callable))
-                                (call ci::both
-                                  (call ci::eq (local wanted) (i64 103))
-                                  (call ci::either (local nominal) (local callable)))))))
+                                (call ci::eq (local wanted) (i64 0))
+                                (call ci::eq (local actual) (local wanted)))
+                              (call ci::either
+                                (call ci::both (call ci::eq (local wanted) (i64 101)) (local nominal))
+                                (call ci::either
+                                  (call ci::both (call ci::eq (local wanted) (i64 102)) (local callable))
+                                  (call ci::both
+                                    (call ci::eq (local wanted) (i64 103))
+                                    (call ci::either (local nominal) (local callable))))))
+                            (if
+                              (call ci::eq (local wanted) (i64 104))
+                              (if
+                                (call ci::lt (i64 5) (local actual))
+                                (if (call ci::lt (local actual) (i64 8)) (bool true) (bool false))
+                                (bool false))
+                              (bool false))))
                         (in (if (local accepted) (call ci::add (local at) (i64 17)) (i64 -14)))))))
                 (i64 -12)))))))
     (function create package-ref

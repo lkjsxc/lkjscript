@@ -1,0 +1,36 @@
+declarations.begin
+(units
+  (module create source-function
+    (function create parts
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns
+        (record
+          (requirements I64)
+          (effects I64)
+          (types I64)
+          (parameters I64)
+          (result I64)
+          (effect I64)
+          (body I64)))
+      (body
+        (let
+          (binding requirements (call ci::add (local at) (i64 1)))
+          (binding effects (call source-table::skip (local data) (local requirements) (i64 17)))
+          (binding types (call source-table::skip (local data) (local effects) (i64 17)))
+          (binding parameters (call source-table::skip (local data) (local types) (i64 17)))
+          (binding result (call source-table::skip (local data) (local parameters) (i64 17)))
+          (binding effect (call ci::add (local result) (i64 36)))
+          (binding body (call source-effect::function-end (local data) (local effect)))
+          (in
+            (record structural
+              (field requirements (local requirements))
+              (field effects (local effects))
+              (field types (local types))
+              (field parameters (local parameters))
+              (field result (local result))
+              (field effect (local effect))
+              (field body (local body)))))))))
+declarations.end

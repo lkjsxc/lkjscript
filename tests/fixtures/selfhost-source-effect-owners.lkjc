@@ -1,0 +1,82 @@
+declarations.begin
+(units
+  (module create source-effect-owners-fixture
+    (interface create Clock
+      (visibility public)
+      (operation create tick
+        (parameter create left (type I64))
+        (parameter create right (type I64))
+        (returns I64)
+        (idempotency idempotent)
+        (external-visibility none))
+      (operation create now (returns I64) (idempotency idempotent) (external-visibility none)))
+    (interface create OtherClock
+      (visibility public)
+      (operation create now (returns I64) (idempotency idempotent) (external-visibility none)))
+    (function create ready (visibility private) (effect pure) (returns Unit) (body (unit)))
+    (component create clocks
+      (visibility public)
+      (requirement create clock
+        (interface Clock)
+        (operations Clock::tick Clock::now)
+        (limits (maximum_calls 16 calls)))
+      (requirement create other (interface Clock) (operations Clock::tick Clock::now) (limits))
+      (port create ready (type (function () Unit)) (function ready)))
+    (component create other-clocks
+      (visibility public)
+      (port create ready (type (function () Unit)) (function ready)))
+    (function create concrete-task
+      (visibility public)
+      (effect (task (requirement clocks::clock) (requirement R) (parameter E)))
+      (requirement-parameter create R (interface Clock) (operations Clock::tick))
+      (effect-parameter create E)
+      (parameter create callback
+        (type (task-function (I64) I64 (row (requirement clocks::clock) (requirement R) (parameter E)))))
+      (returns Unit)
+      (body (unit)))
+    (function create first
+      (visibility public)
+      (effect (task (requirement R1) (requirement R2) (parameter E1) (parameter E2)))
+      (requirement-parameter create R1 (interface Clock) (operations Clock::tick Clock::now))
+      (requirement-parameter create R2 (interface Clock) (operations Clock::tick Clock::now))
+      (effect-parameter create E1)
+      (effect-parameter create E2)
+      (parameter create callback (type (task-function (I64) I64 (row (requirement R1) (parameter E1)))))
+      (parameter create nested
+        (type (record (callback (task-function (I64) I64 (row (requirement R2) (parameter E2)))))))
+      (parameter create ordered (type (task-function (I64) I64 (row (parameter E1) (parameter E2)))))
+      (returns Unit)
+      (body (unit)))
+    (function create empty-task (visibility public) (effect (task)) (returns Unit) (body (unit)))
+    (function create pure-carrier
+      (visibility public)
+      (effect pure)
+      (parameter create callback (type (task-function (I64) I64 (row))))
+      (returns Unit)
+      (body (unit)))
+    (function create generic-task
+      (visibility public)
+      (effect (task (parameter E)))
+      (effect-parameter create E)
+      (type-parameter create T)
+      (parameter create callback (type (task-function (T) T (row (parameter E)))))
+      (returns Unit)
+      (body (unit)))
+    (function create second
+      (visibility public)
+      (effect (task (requirement R1) (requirement R2) (parameter E1) (parameter E2)))
+      (requirement-parameter create R1 (interface Clock) (operations Clock::tick Clock::now))
+      (requirement-parameter create R2 (interface Clock) (operations Clock::tick Clock::now))
+      (effect-parameter create E1)
+      (effect-parameter create E2)
+      (parameter create callback (type (task-function (I64) I64 (row (requirement R1) (parameter E1)))))
+      (parameter create nested
+        (type (record (callback (task-function (I64) I64 (row (requirement R2) (parameter E2)))))))
+      (returns Unit)
+      (body (unit)))
+    (function create branch-carrier
+      (visibility public)
+      (effect pure)
+      (returns (list (task-function (I64) I64 (row))))
+      (body (if (bool true) (list (task-function (I64) I64 (row))) (list (task-function (I64) I64 (row))))))))
+declarations.end

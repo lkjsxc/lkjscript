@@ -67,21 +67,47 @@ declarations.begin
       (returns I64)
       (body
         (if
-          (call ci::eq (local tag) (i64 7))
-          (call parameter (local graph) (local data))
+          (call ci::eq (local tag) (i64 3))
+          (call source-link-ref::name-end
+            (local data)
+            (call source-link-ref::owner-ref (local graph) (local data) (i64 39) (i64 2) (i64 104)))
           (if
-            (call ci::eq (local tag) (i64 8))
-            (call binding (local graph) (local data))
+            (call ci::eq (local tag) (i64 6))
+            (call source-link-ref::advance
+              (call source-link-ref::type-ref
+                (local graph)
+                (local data)
+                (call source-link-ref::array
+                  (local graph)
+                  (local data)
+                  (call source-link-ref::name-end
+                    (local data)
+                    (call source-link-ref::owner-ref (local graph) (local data) (i64 39) (i64 2) (i64 4)))
+                  (i64 7)
+                  (i64 15)))
+              (i64 2))
             (if
-              (call ci::eq (local tag) (i64 9))
-              (call source-link-expr::read (local graph) (local data))
+              (call ci::eq (local tag) (i64 10))
+              (call requirement (local graph) (local data) (bool false))
               (if
-                (call ci::eq (local tag) (i64 11))
-                (call port (local graph) (local data))
+                (call ci::eq (local tag) (i64 16))
+                (call requirement (local graph) (local data) (bool true))
                 (if
-                  (call ci::eq (local tag) (i64 12))
-                  (call target (local graph) (local data))
-                  (i64 -13))))))))
+                  (call ci::eq (local tag) (i64 7))
+                  (call parameter (local graph) (local data))
+                  (if
+                    (call ci::eq (local tag) (i64 8))
+                    (call binding (local graph) (local data))
+                    (if
+                      (call ci::eq (local tag) (i64 9))
+                      (call source-link-expr::read (local graph) (local data))
+                      (if
+                        (call ci::eq (local tag) (i64 11))
+                        (call port (local graph) (local data))
+                        (if
+                          (call ci::eq (local tag) (i64 12))
+                          (call target (local graph) (local data))
+                          (i64 -13))))))))))))
     (function create declaration
       (visibility private)
       (effect pure)
@@ -107,12 +133,7 @@ declarations.begin
                     (call source-link-ref::array
                       (local graph)
                       (local data)
-                      (call source-link-ref::array
-                        (local graph)
-                        (local data)
-                        (local at)
-                        (i64 3)
-                        (i64 11))
+                      (call source-link-ref::array (local graph) (local data) (local at) (i64 3) (i64 11))
                       (i64 4)
                       (i64 12))
                     (if
@@ -120,43 +141,16 @@ declarations.begin
                       (call source-link-ref::array
                         (local graph)
                         (local data)
-                        (call source-link-ref::array
-                          (local graph)
-                          (local data)
-                          (local at)
-                          (i64 3)
-                          (i64 11))
+                        (call source-link-ref::array (local graph) (local data) (local at) (i64 3) (i64 11))
                         (i64 5)
                         (i64 13))
                       (if
-                        (call ci::eq (local tag) (i64 3))
-                        (let
-                          (binding type-end
-                            (call source-link-ref::type-ref
-                              (local graph)
-                              (local data)
-                              (call source-link-ref::array
-                                (local graph)
-                                (local data)
-                                (call source-link-ref::array
-                                  (local graph)
-                                  (local data)
-                                  (local at)
-                                  (i64 3)
-                                  (i64 11))
-                                (i64 7)
-                                (i64 15))))
-                          (in
-                            (if
-                              (call ci::lt (local type-end) (i64 0))
-                              (local type-end)
-                              (call ci::sub (call ci::length (local data)) (i64 32)))))
+                        (call ci::eq (local tag) (i64 2))
+                        (call source-link-ref::array (local graph) (local data) (local at) (i64 6) (i64 14))
                         (if
-                          (call ci::eq (local tag) (i64 4))
-                          (call source-link-ref::owner-ref
-                            (local graph)
-                            (local data)
-                            (call source-link-ref::advance
+                          (call ci::eq (local tag) (i64 3))
+                          (let
+                            (binding type-end
                               (call source-link-ref::type-ref
                                 (local graph)
                                 (local data)
@@ -166,42 +160,52 @@ declarations.begin
                                   (call source-link-ref::array
                                     (local graph)
                                     (local data)
-                                    (call source-link-ref::advance (local at) (i64 3))
+                                    (local at)
                                     (i64 3)
                                     (i64 11))
                                   (i64 7)
-                                  (i64 15)))
-                              (i64 4))
-                            (i64 9)
-                            (i64 17))
+                                  (i64 15))))
+                            (in
+                              (if
+                                (call ci::lt (local type-end) (i64 0))
+                                (local type-end)
+                                (call ci::sub (call ci::length (local data)) (i64 32)))))
                           (if
-                            (call ci::eq (local tag) (i64 5))
-                            (call source-link-ref::owner-ref
-                              (local graph)
-                              (local data)
-                              (call source-link-ref::type-ref (local graph) (local data) (local at))
-                              (i64 9)
-                              (i64 17))
+                            (call ci::eq (local tag) (i64 4))
+                            (call function (local graph) (local data) (local at))
                             (if
-                              (call ci::eq (local tag) (i64 6))
-                              (call source-link-ref::array
+                              (call ci::eq (local tag) (i64 5))
+                              (call source-link-ref::owner-ref
                                 (local graph)
                                 (local data)
-                                (call source-link-ref::advance (local at) (i64 1))
-                                (i64 11)
-                                (i64 19))
+                                (call source-link-ref::type-ref (local graph) (local data) (local at))
+                                (i64 9)
+                                (i64 17))
                               (if
-                                (call ci::eq (local tag) (i64 7))
-                                (call source-link-ref::advance
-                                  (call source-link-ref::items
+                                (call ci::eq (local tag) (i64 6))
+                                (call source-link-ref::array
+                                  (local graph)
+                                  (local data)
+                                  (call source-link-ref::array
                                     (local graph)
                                     (local data)
                                     (local at)
-                                    (i64 2)
-                                    (i64 9)
-                                    (i64 17))
-                                  (i64 1))
-                                (i64 -13)))))))))))))))
+                                    (i64 10)
+                                    (i64 18))
+                                  (i64 11)
+                                  (i64 19))
+                                (if
+                                  (call ci::eq (local tag) (i64 7))
+                                  (call source-link-ref::advance
+                                    (call source-link-ref::items
+                                      (local graph)
+                                      (local data)
+                                      (local at)
+                                      (i64 2)
+                                      (i64 9)
+                                      (i64 17))
+                                    (i64 1))
+                                  (i64 -13))))))))))))))))
     (function create parameter
       (visibility private)
       (effect pure)
@@ -220,8 +224,7 @@ declarations.begin
                 (call source-link-ref::owner-ref (local graph) (local data) (i64 40) (i64 6) (i64 14))
                 (i64 -12))))
           (binding name-end (call source-link-ref::name-end (local data) (local parent-end)))
-          (binding type-end
-            (call source-link-ref::type-ref (local graph) (local data) (local name-end)))
+          (binding type-end (call source-link-ref::type-ref (local graph) (local data) (local name-end)))
           (in
             (call source-link-ref::optional
               (local graph)
@@ -245,13 +248,7 @@ declarations.begin
               (call source-link-ref::advance (local name-end) (i64 1))
               (i64 9)
               (i64 17)))
-          (in
-            (call source-link-ref::optional
-              (local graph)
-              (local data)
-              (local value-end)
-              (i64 0)
-              (i64 0))))))
+          (in (call source-link-ref::optional (local graph) (local data) (local value-end) (i64 0) (i64 0))))))
     (function create port
       (visibility private)
       (effect pure)
@@ -298,12 +295,7 @@ declarations.begin
         (let
           (binding name-end (call source-link-ref::name-end (local data) (i64 39)))
           (binding component-end
-            (call source-link-ref::package-ref
-              (local graph)
-              (local data)
-              (local name-end)
-              (i64 2)
-              (i64 9)))
+            (call source-link-ref::package-ref (local graph) (local data) (local name-end) (i64 2) (i64 9)))
           (binding port-end
             (call source-link-ref::optional
               (local graph)
@@ -311,5 +303,100 @@ declarations.begin
               (local component-end)
               (i64 -11)
               (i64 19)))
-          (in (call source-link-ref::advance (local port-end) (i64 1))))))))
+          (in (call source-link-ref::advance (local port-end) (i64 1))))))
+    (function create function
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding requirements
+            (call source-link-ref::array
+              (local graph)
+              (local data)
+              (call source-link-ref::advance (local at) (i64 1))
+              (i64 17)
+              (i64 25)))
+          (binding effects
+            (call source-link-ref::array (local graph) (local data) (local requirements) (i64 16) (i64 24)))
+          (binding types
+            (call source-link-ref::array (local graph) (local data) (local effects) (i64 3) (i64 11)))
+          (binding parameters
+            (call source-link-ref::array (local graph) (local data) (local types) (i64 7) (i64 15)))
+          (binding result (call source-link-ref::type-ref (local graph) (local data) (local parameters)))
+          (binding effect (call source-link-ref::advance (local result) (i64 3)))
+          (in
+            (if
+              (call ci::lt (local effect) (i64 0))
+              (local effect)
+              (let
+                (binding after
+                  (if
+                    (call ci::eq (call ci::get (local data) (local effect)) (i64 0))
+                    (call ci::add (local effect) (i64 1))
+                    (call source-effect::links
+                      (local graph)
+                      (local data)
+                      (call ci::add (local effect) (i64 1)))))
+                (in
+                  (call source-link-ref::owner-ref
+                    (local graph)
+                    (local data)
+                    (local after)
+                    (i64 9)
+                    (i64 17)))))))))
+    (function create requirement
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create parameter (type Bool))
+      (returns I64)
+      (body
+        (let
+          (binding parent
+            (call source-link-ref::owner-ref
+              (local graph)
+              (local data)
+              (i64 39)
+              (i64 2)
+              (if (local parameter) (i64 104) (i64 9))))
+          (binding interface-at (call source-link-ref::name-end (local data) (local parent)))
+          (binding interface-end
+            (call source-link-ref::package-ref
+              (local graph)
+              (local data)
+              (local interface-at)
+              (i64 2)
+              (i64 4)))
+          (in
+            (if
+              (call ci::lt (local interface-end) (i64 0))
+              (local interface-end)
+              (let
+                (binding items (call source-table::array (local data) (local interface-end)))
+                (binding interface
+                  (call source-table::owner
+                    (local graph)
+                    (local data)
+                    (call ci::add (local interface-at) (i64 17))
+                    (i64 2)))
+                (binding after
+                  (call source-capability::operations
+                    (local graph)
+                    (local data)
+                    (field (local items) (name next))
+                    (field (local items) (name value))
+                    (local interface)))
+                (in
+                  (if
+                    (call ci::lt (local after) (i64 0))
+                    (local after)
+                    (if
+                      (local parameter)
+                      (local after)
+                      (call ci::sub (call ci::length (local data)) (i64 32)))))))))))))
 declarations.end

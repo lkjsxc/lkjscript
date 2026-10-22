@@ -171,7 +171,9 @@ fn probe_module(name: &str) -> &'static str {
         "read-namespace" | "read-namespace-budget" | "read-namespace-key" => {
             "source-namespace-probe"
         }
-        "read-type-scope" | "read-type-scope-budget" | "read-type-dag" => "source-type-scope-probe",
+        "read-type-scope" | "read-type-scope-budget" | "read-type-dag" | "read-type-structure" => {
+            "source-type-scope-probe"
+        }
         "read-nominal" | "read-nominal-budget" => "source-nominal-probe",
         "read-index" | "read-namespace-parents" => "source-index-probe",
         _ => "source-probe",
@@ -242,9 +244,18 @@ fn emitted_result(name: &str, bytes: &[u8], code: i64) {
             let target = program.function(function(module, name)).unwrap().0 as usize;
             let input = input::export(program, target).unwrap();
             let word = |at| u32::from_le_bytes(input[at..at + 4].try_into().unwrap());
+            let maximum_locals = (0..word(92) as usize)
+                .map(|row| word(word(88) as usize + row * 40 + 12))
+                .max()
+                .unwrap_or(0);
+            let maximum_stack = (0..word(100) as usize)
+                .map(|row| word(word(96) as usize + row * 32 + 28))
+                .max()
+                .unwrap_or(0);
             eprintln!(
-                "selfhost source normalized entry={name} functions={} nodes={} type_rows={} input_bytes={}",
-                word(92), word(100), word(84), input.len()
+                "selfhost source normalized entry={name} functions={} nodes={} type_rows={} input_bytes={} maximum_locals={} maximum_stack={} sha256={}",
+                word(92), word(100), word(84), input.len(), maximum_locals, maximum_stack,
+                crate::platform::semantic_id::encode_hex(&Sha256::digest(&input))
             );
             let (source, compiler) = compiler();
             let (diagnostic, image) =
@@ -629,6 +640,7 @@ fn selfhost_source_type_shapes_reject_rehashed_malformed_payloads_and_foreign_en
         vec![2, 2],
         vec![1, 2, 0],
         vec![1, 35],
+        vec![1, 18],
         vec![251, 1, 0, 2],
         vec![1, 251, 2, 0],
         vec![1, 10, 0],
@@ -668,7 +680,7 @@ fn selfhost_source_type_shapes_reject_rehashed_malformed_payloads_and_foreign_en
     // A known out-of-profile form is rejected explicitly before any output.
     // This is not a semantic admission claim for that unsupported form.
     for form in [
-        6, 9, 12, 13, 14, 15, 18, 19, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
+        6, 9, 12, 13, 14, 15, 19, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
     ] {
         assert_eq!(result("read-type", &envelope(&[1, form])), (13, vec![]));
     }
@@ -842,8 +854,8 @@ mod type_scope;
 #[path = "selfhost_source_nominal_flow_tests.rs"]
 mod nominal_flow;
 
-#[path = "selfhost_source_namespace_unsupported_tests.rs"]
-mod namespace_unsupported;
+#[path = "selfhost_source_effect_tests.rs"]
+mod effects;
 
 #[path = "selfhost_source_function_binder_oracle_tests.rs"]
 mod function_binder_oracle;

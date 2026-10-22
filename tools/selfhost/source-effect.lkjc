@@ -1,0 +1,190 @@
+declarations.begin
+(units
+  (module create source-effect
+    (function create end
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (call source-table::skip
+          (local data)
+          (call source-table::skip (local data) (local at) (i64 35))
+          (i64 34))))
+    (function create function-end
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (call ci::get (local data) (local at)) (i64 0))
+          (call ci::add (local at) (i64 1))
+          (call end (local data) (call ci::add (local at) (i64 1))))))
+    (function create items
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create count (type I64))
+      (parameter create kind (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local at) (i64 0))
+          (local at)
+          (if
+            (call ci::eq (local count) (i64 0))
+            (local at)
+            (let
+              (binding concrete
+                (if
+                  (call ci::eq (local kind) (i64 0))
+                  (call ci::eq (call ci::get (local data) (local at)) (i64 0))
+                  (bool false)))
+              (binding next
+                (call source-link-ref::package-ref
+                  (local graph)
+                  (local data)
+                  (call ci::add (local at) (if (call ci::eq (local kind) (i64 0)) (i64 1) (i64 0)))
+                  (if (call ci::eq (local kind) (i64 0)) (if (local concrete) (i64 10) (i64 17)) (i64 16))
+                  (if (call ci::eq (local kind) (i64 0)) (if (local concrete) (i64 18) (i64 25)) (i64 24))))
+              (in
+                (call items
+                  (local graph)
+                  (local data)
+                  (local next)
+                  (call ci::sub (local count) (i64 1))
+                  (local kind))))))))
+    (function create links
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local at) (i64 0))
+          (local at)
+          (let
+            (binding requirements (call source-table::array (local data) (local at)))
+            (binding after
+              (call items
+                (local graph)
+                (local data)
+                (field (local requirements) (name next))
+                (field (local requirements) (name value))
+                (i64 0)))
+            (in
+              (if
+                (call ci::lt (local after) (i64 0))
+                (local after)
+                (let
+                  (binding effects (call source-table::array (local data) (local after)))
+                  (in
+                    (call items
+                      (local graph)
+                      (local data)
+                      (field (local effects) (name next))
+                      (field (local effects) (name value))
+                      (i64 1))))))))))
+    (function create scope-items
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create rows (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create count (type I64))
+      (parameter create kind (type I64))
+      (parameter create declaration (type I64))
+      (parameter create work (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local count) (i64 0))
+          (local work)
+          (if
+            (call ci::lt (local work) (i64 1))
+            (i64 -6)
+            (let
+              (binding concrete
+                (if
+                  (call ci::eq (local kind) (i64 0))
+                  (call ci::eq (call ci::get (local data) (local at)) (i64 0))
+                  (bool false)))
+              (binding scoped
+                (if
+                  (local concrete)
+                  (bool true)
+                  (call ci::eq
+                    (call source-table::parent
+                      (local rows)
+                      (call source-table::owner
+                        (local graph)
+                        (local data)
+                        (call ci::add (local at) (if (call ci::eq (local kind) (i64 0)) (i64 18) (i64 17)))
+                        (if (call ci::eq (local kind) (i64 0)) (i64 17) (i64 16))))
+                    (local declaration))))
+              (in
+                (if
+                  (local scoped)
+                  (call scope-items
+                    (local graph)
+                    (local rows)
+                    (local data)
+                    (call ci::add (local at) (if (call ci::eq (local kind) (i64 0)) (i64 35) (i64 34)))
+                    (call ci::sub (local count) (i64 1))
+                    (local kind)
+                    (local declaration)
+                    (call ci::sub (local work) (i64 1)))
+                  (i64 -17))))))))
+    (function create scope
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create rows (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create declaration (type I64))
+      (parameter create work (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding requirements (call source-table::array (local data) (local at)))
+          (binding left
+            (call scope-items
+              (local graph)
+              (local rows)
+              (local data)
+              (field (local requirements) (name next))
+              (field (local requirements) (name value))
+              (i64 0)
+              (local declaration)
+              (local work)))
+          (in
+            (if
+              (call ci::lt (local left) (i64 0))
+              (local left)
+              (let
+                (binding effects
+                  (call source-table::array
+                    (local data)
+                    (call ci::add
+                      (field (local requirements) (name next))
+                      (call ci::mul (field (local requirements) (name value)) (i64 35)))))
+                (in
+                  (call scope-items
+                    (local graph)
+                    (local rows)
+                    (local data)
+                    (field (local effects) (name next))
+                    (field (local effects) (name value))
+                    (i64 1)
+                    (local declaration)
+                    (local left)))))))))))
+declarations.end

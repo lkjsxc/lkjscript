@@ -33,8 +33,7 @@ declarations.begin
       (body
         (let
           (binding count (if (call ci::lt (local an) (local bn)) (local an) (local bn)))
-          (binding order
-            (call artifact-input::bytes-order (local data) (local a) (local b) (local count)))
+          (binding order (call artifact-input::bytes-order (local data) (local a) (local b) (local count)))
           (in
             (if
               (call ci::eq (local order) (i64 0))
@@ -160,33 +159,33 @@ declarations.begin
                   (call ci::eq (local form) (i64 11))
                   (call source-read::typed (local data) (local at) (local end) (i64 2) (i64 33))
                   (if
-                    (call ci::eq (local form) (i64 16))
+                    (call ci::either
+                      (call ci::eq (local form) (i64 16))
+                      (call ci::eq (local form) (i64 18)))
                     (let
-                      (binding cursor-0
+                      (binding parameters
                         (call span-cursor
-                          (call source-read::array
-                            (local data)
-                            (local at)
-                            (local end)
-                            (i64 2)
-                            (i64 33))))
+                          (call source-read::array (local data) (local at) (local end) (i64 2) (i64 33))))
                       (in
                         (if
-                          (call ci::lt (i64 -1) (local cursor-0))
+                          (call ci::lt (local parameters) (i64 0))
+                          (local parameters)
                           (let
-                            (binding cursor-1
+                            (binding result
                               (call source-read::typed
                                 (local data)
-                                (local cursor-0)
+                                (local parameters)
                                 (local end)
                                 (i64 2)
                                 (i64 33)))
                             (in
                               (if
-                                (call ci::lt (i64 -1) (local cursor-1))
-                                (local cursor-1)
-                                (local cursor-1))))
-                          (local cursor-0))))
+                                (call ci::lt (local result) (i64 0))
+                                (local result)
+                                (if
+                                  (call ci::eq (local form) (i64 18))
+                                  (call source-effect-shape::row (local data) (local result) (local end))
+                                  (local result))))))))
                     (if
                       (call ci::eq (local form) (i64 17))
                       (let
@@ -210,9 +209,7 @@ declarations.begin
                                       (if
                                         (call ci::eq (field (local arguments) (name code)) (i64 0))
                                         (if
-                                          (call ci::lt
-                                            (i64 0)
-                                            (field (local arguments) (name length)))
+                                          (call ci::lt (i64 0) (field (local arguments) (name length)))
                                           (bool true)
                                           (bool false))
                                         (bool false))
@@ -251,8 +248,7 @@ declarations.begin
                       (if
                         (call ci::lt (local form) (i64 35))
                         (let
-                          (binding next
-                            (call type-body (local data) (i64 20) (local end) (local form)))
+                          (binding next (call type-body (local data) (i64 20) (local end) (local form)))
                           (in
                             (if
                               (call ci::eq (local next) (local end))
