@@ -102,15 +102,28 @@ fn selfhost_byte_aggregates_preserve_field_order_nesting_and_list_bounds() {
 }
 
 #[test]
-fn selfhost_byte_filter_bounds_usage_raw_octets_and_traps() {
+fn selfhost_byte_filter_grows_input_and_preserves_usage_and_traps() {
     let source = byte_buffer_tests::author_only(include_str!(
         "../../../../tests/fixtures/native-filter.lkjc"
     ))
     .unwrap();
     let program = prepare_snapshot(&source);
     let echo = build_named(&source, &program, "echo");
-    for length in [0, 1, 256, 256 * 1024, 16 * 1024 * 1024] {
-        let bytes: Vec<_> = (0..length).map(|i| (i % 256) as u8).collect();
+    for length in [
+        0,
+        1,
+        256,
+        65_535,
+        65_536,
+        65_537,
+        256 * 1024,
+        16 * 1024 * 1024,
+        16 * 1024 * 1024 + 1,
+        20 * 1024 * 1024 + 17,
+    ] {
+        let bytes: Vec<_> = (0..length)
+            .map(|i| (i ^ (i >> 8) ^ (i >> 16)) as u8)
+            .collect();
         let output = native_filter_tests::execute_filter(
             &echo,
             &bytes,
@@ -126,11 +139,7 @@ fn selfhost_byte_filter_bounds_usage_raw_octets_and_traps() {
         assert!(output.stderr.is_empty());
         assert!(output.stdout == bytes, "echo length {length}");
     }
-    let too_large = vec![0; 16 * 1024 * 1024 + 1];
-    let output = native_filter_tests::execute_filter(&echo, &too_large, &[], 4096);
-    assert_eq!(output.status.code(), Some(65));
-    assert!(output.stdout.is_empty());
-    assert_eq!(output.stderr, b"native_input\n");
+    native_filter_tests::check_filter_host_failures(&echo);
     let output = native_filter_tests::execute_filter(&echo, b"", &["extra"], 1);
     assert_eq!(output.status.code(), Some(64));
     assert!(output.stdout.is_empty());

@@ -1,6 +1,6 @@
 # Current status
 
-Updated 2026-10-22. Accepted typed meaning is the sole editable authority.
+Updated 2026-10-22 (UTC). Accepted typed meaning is the sole editable authority.
 Production bytecode is checked against an independent canonical interpreter.
 Verification has no three-minute requirement; elapsed time is an observation.
 
@@ -16,71 +16,78 @@ emits standalone Linux x86_64 ELF or current .lkja. Restricted E1 recognizes
 interfaces, operations/parameters, requirements, function R/E binders and
 TaskFunction types. Source admission does not replace Rust normalization.
 The [self-hosting specification](spec/selfhosting.md) owns the capability matrix.
-Native allocations remain process-owned until exit; no phase-reclamation claim.
+Native heap allocations remain process-owned until exit; phase reclamation is
+still required.
 
 ## Current milestone
 
-Ordinary source execution, differential batches and Rust execution-policy defaults
-have no cumulative instruction, allocation, collection-item or capability-call
-quota. Optional descriptor fields also impose no quota when omitted. Explicit
-positive quotas retain checked precharge and exact refusal; null represents no
-quota. Serialization materializes every selection without historical defaults.
+Both native binary-filter emitters read stdin to EOF using a private growable
+mapping, without the former 16 MiB transport quota. Checked geometric growth
+may move the mapping only before a language descriptor exists; the final mapping
+stays stable through execution and output. A scratch-byte probe detects exact-fit
+EOF without unnecessary growth. I/O failure, allocation failure and usage retain
+distinct diagnostics, with no compiler output published before successful admission.
 
-Passive work observations saturate independently of checked storage arithmetic.
-Cancellation, operational deadlines, exact capability grants, type/value admission
-and live call/stack limits remain enforced. General user programs may diverge
-without a caller-selected bound or cancellation; this policy change does not prove
-termination. The [decision](decisions/20261022-default-cumulative-execution.md)
-records the compatibility cut, public-path witnesses and remaining limits.
+This transport capability precedes larger compiler-format inputs. It changes
+neither LKJCI1 profile 4 nor LKJSG001. The 8 MiB format bounds, finite widths,
+native byte-operation/image limits and semantic checks remain separate work.
+The [decision](decisions/20261022-native-input-growth.md) records the bootstrap,
+pointer invariant, behavioral controls and complete carrier identity.
 
-GC preparation and verification evidence retain the preceding removal of default
-aggregate quotas, with visited-reference progress, exact bindings, cancellation
-and complete compact receipts. Physical compaction preserves immutable history.
-The [GC decision](decisions/20261022-gc-preparation-quotas.md) owns those controls.
-No retirement pruning, history truncation or project reseed is performed.
+Ordinary Rust execution policies retain the removal of default cumulative
+instruction, modeled allocation, collection-item and capability-call quotas.
+Explicit quotas still use checked precharge; passive observations grant no capacity.
+Live frame/stack limits and cancellation remain enforced. The
+[execution decision](decisions/20261022-default-cumulative-execution.md) owns those
+controls. GC preparation and verification evidence also retain their preceding
+removal of default aggregate quotas; physical compaction preserves immutable history.
 
 ## Maintained compiler baseline
 
-The authoritative project is unchanged from 9eaaad6: 62 modules, 465 functions,
-28,326 owners, 27 types and 9,881 retirements at
-rev_e8682917d0eaef1ccd6dd37517ef3024b023d56cb96fcd71540f22fe37d660ea.
+The authoritative project has 62 modules, 442 pure functions and 23 externals,
+28,550 owners, 27 types and 10,202 retirements at
+rev_a52428252252cf7cb597e2316da6e1ee1cff948a446323484724b1cc5e146985.
 Semantic state:
-semantic_state_d10ac03835ca364518838b7c29ad2bd8dd69b9ecb6ec269b9fd84c5b8ff54b9b.
-The complete LKJSG001 carrier is 6,793,590 bytes, SHA-256
-c387db4db5404258a9d6026c01f27e9c140c0002d8456ebdeb889f3ac38add7f.
-These are existing carrier observations, not new runtime-memory measurements.
+semantic_state_dd7af6f9c105d7b87f3e47270713bfcda165e78280168e9579fa501289549a98.
+The complete LKJSG001 carrier is 6,898,767 bytes, SHA-256
+4488fc83fc5ede9865069bab3c5063277cafd58ba458b1b844d24f85aad14955.
 
-The preceding physical GC retained 200,012 objects in 13 packs / 334,241,707 bytes.
-Its observed modeled retained bytes were 467,387,305; that metric has no
-512 MiB admission ceiling. Compiler source and semantic identities remain unchanged.
-The [preceding decision](decisions/20261021-source-effect-owners.md) binds those
-carrier, artifact and storage measurements to their exact baseline.
+Mode-1 input occupies 7,746,716 bytes for 467 units, leaving 641,892 bytes under
+its current bound. Public rebuilt current-validation reports 9,173,945 aggregate
+semantic-work units across separate local and composed-source validation operations.
+That sum does not measure headroom under a single admission ceiling. Direct kernel
+work and native allocation/RSS remain distinct observations.
+The source transaction preserves existing module, function and parameter identities.
+No retirement deletion, history truncation or project reseed occurs.
 
 ## Verification and next work
 
-Focused runtime controls, descriptor admission, both independent evaluators and
-public source/detached/resident routes pass. The ordinary source counting witness
-executes 11,000,010 production instructions and observes 649,351,110 modeled
-allocated bytes, beyond the former default thresholds, with reference equality.
-Explicit quotas, deadline cancellation, post-failure health and joined cleanup
-remain covered. The completed focused selfhost run passed 113 tests plus 10 native
-ELF controls; the optional same-carrier benchmark remained ignored.
+Both emitters pass exact-content inputs through 20 MiB plus 17 bytes, short transfers,
+read errors and explicit address-space refusal. An exact 4 MiB input succeeds under
+an 8 MiB address-space limit. Supplemental debugger controls force a moving remap
+and preserve the pending byte for both emitters. GDB is not a gate dependency.
 
-Publication requires exact staged-tree bootstrap, every gate in full --fresh
-and release-target policy inspection. The source/test changed selection widens
-to those same full gates, so a single fresh full run covers both selections. Terminal evidence is in
-.artifacts/lkjscript-dev/latest-receipt.json; focused evidence is under
-.artifacts/selfhost/default-execution and .artifacts/selfhost. Git records normal
-integration. No public product release or deployment is implied.
+The maintained Tier 1 compiler reproduces native C2=C3 and identical artifact bytes
+through the VM, reference and emitted compilers. These consume Rust-normalized
+inputs; they do not establish the source-driven E2/E3 fixed points. The complete
+carrier hash and separate normalized-input hashes are recorded in the decision.
 
-WS1 remains incomplete: kernel work/analysis limits, authoring/inspection quotas,
-recursive depth limits, native stdin/value bounds, LKJSG001 synthetic fuel and
-size/table bounds, and coupled LKJCI1/.lkja widths/layouts remain next work.
-Trusted runtime frame/stack policies need an iterative reference-evaluator design
-before removal. Object/pack/catalog encoding bounds remain representation work.
-General verification inventory, file and command-output bounds remain separate work.
+Publication requires exact staged-tree bootstrap, tools/selfhost/verify.sh, every
+gate in full --fresh and release-target inspection. Source/test changes select
+the same full gate set for changed; do not duplicate that complete checker run.
+Terminal evidence is under .artifacts/selfhost/native-input-capacity and
+.artifacts/lkjscript-dev/latest-receipt.json. Git records normal integration.
+No public product release or deployment is implied.
 
-This is neither E1-final nor Tier 2. Full Tier 2 still requires source-driven E2/E3,
-the declared region/closure/witness profile, source-driven C2=C3 and A1=A2=A3,
-behavioral mutations, independent full-profile programs and measured same-process
-native reclamation. [Verification](spec/verification.md) owns final acceptance.
+Next close the mode-1 LKJCI1 producer/consumer capacity path: checked offsets and
+conversions, finite record progress, explicit allowance semantics and larger-input
+controls. Its remaining byte headroom is the closest format constraint. LKJSG001
+fuel/count bounds and kernel callable-flow work follow their own complete audits;
+they need not form a single format rewrite. Inventory the active compiler profile
+and advance E2/E3 without waiting for unrelated horizontal E1 families.
+
+WS1 and Tier 2 remain incomplete. Remaining obligations include authoring/inspection
+quotas, recursive depth limits, custody/type encodings, source-driven E2/E3, the
+declared region/closure/witness profile, complete-carrier-bound source C2=C3 and
+A1=A2=A3, behavioral mutations, independent full-profile programs and measured
+same-process native reclamation. [Verification](spec/verification.md) owns final acceptance.

@@ -3,8 +3,6 @@
 use super::asm::{R::*, *};
 use super::{Emitter, NormalizedProgram, Result, TypeForm};
 
-pub(super) const INPUT_LIMIT: u64 = 16 * 1024 * 1024;
-
 pub(super) fn signature(program: &NormalizedProgram, entry: usize) -> bool {
     let function = &program.functions[entry];
     let [parameter] = function.parameters.as_ref() else {
@@ -40,21 +38,72 @@ impl Emitter<'_> {
         self.a.when(NE, self.runtime.argument);
         self.a.imm(R14, 0);
         self.a.imm(R15, 0);
-        self.a.imm(Di, INPUT_LIMIT + 1 + 24);
-        self.a.call(self.runtime.alloc);
+        // Input storage is private to this reader until EOF. Growth may move its
+        // mapping because no Bytes descriptor or view exists yet. The mapping
+        // then stays live through the result write, which may alias the input.
+        self.a.imm(Bx, 65536);
+        self.a.imm(Ax, 9);
+        self.a.imm(Di, 0);
+        self.a.mov(Si, Bx);
+        self.a.imm(Dx, 3);
+        self.a.imm(R10, 0x22);
+        self.a.imm(R8, u64::MAX);
+        self.a.imm(R9, 0);
+        self.a.syscall();
+        self.a.group(7, Ax, -4095);
+        self.a.when(AE, self.runtime.capacity);
         self.a.mov(R12, Ax);
-        self.a.imm(Ax, 7);
-        self.a.store(R12, 0, Ax);
-        self.a.lea(Ax, R12, 24);
-        self.a.store(R12, 16, Ax);
         self.a.imm(R13, 0);
         let read = self.a.label();
+        let probe = self.a.label();
+        let probed = self.a.label();
+        let available = self.a.label();
         let eof = self.a.label();
         self.a.bind(read);
+        self.a.bin(0x39, R13, Bx);
+        self.a.when(B, available);
+        // Probe EOF before growing a full mapping. The scratch byte cannot alias
+        // input storage and R9 survives the remap syscall.
+        self.a.group(5, Sp, 8);
+        self.a.bind(probe);
         self.a.imm(Di, 0);
-        self.a.lea(Si, R12, 24);
+        self.a.mov(Si, Sp);
+        self.a.imm(Dx, 1);
+        self.a.imm(Ax, 0);
+        self.a.syscall();
+        self.a.group(7, Ax, -4);
+        self.a.when(E, probe);
+        self.a.group(7, Ax, 0);
+        self.a.when(LE, probed);
+        self.a.load_byte(R9, Sp);
+        self.a.bind(probed);
+        // MOVZX and LEA preserve the read-result comparison flags.
+        self.a.lea(Sp, Sp, 8);
+        self.a.when(L, self.runtime.input);
+        self.a.when(E, eof);
+        // Capacity stays positive and length stays nonnegative within I64.
+        // Representation arithmetic is independent of caller resource policy.
+        self.a.mov(Dx, Bx);
+        self.a.bin(0x01, Dx, Bx);
+        self.a.when(O, self.runtime.capacity);
+        self.a.imm(Ax, 25);
+        self.a.mov(Di, R12);
+        self.a.mov(Si, Bx);
+        self.a.imm(R10, 1);
+        self.a.syscall();
+        self.a.group(7, Ax, -4095);
+        self.a.when(AE, self.runtime.capacity);
+        self.a.mov(R12, Ax);
+        self.a.mov(Bx, Dx);
+        self.a.mov(Si, R12);
         self.a.bin(0x01, Si, R13);
-        self.a.imm(Dx, INPUT_LIMIT + 1);
+        self.a.store_byte(Si, R9);
+        self.a.group(0, R13, 1);
+        self.a.bind(available);
+        self.a.imm(Di, 0);
+        self.a.mov(Si, R12);
+        self.a.bin(0x01, Si, R13);
+        self.a.mov(Dx, Bx);
         self.a.bin(0x29, Dx, R13);
         self.a.imm(Ax, 0);
         self.a.syscall();
@@ -63,13 +112,17 @@ impl Emitter<'_> {
         self.a.group(7, Ax, 0);
         self.a.when(L, self.runtime.input);
         self.a.when(E, eof);
+        // read returned at most capacity - length bytes, so this cannot overflow.
         self.a.bin(0x01, R13, Ax);
-        self.a.group(7, R13, INPUT_LIMIT as i32 + 1);
-        self.a.when(AE, self.runtime.input);
         self.a.jump(read);
         self.a.bind(eof);
-        self.a.store(R12, 8, R13);
-        self.a.push(R12);
+        self.a.imm(Di, 24);
+        self.a.call(self.runtime.alloc);
+        self.a.imm(Cx, 7);
+        self.a.store(Ax, 0, Cx);
+        self.a.store(Ax, 8, R13);
+        self.a.store(Ax, 16, R12);
+        self.a.push(Ax);
         self.a.call(self.label(entry)?);
         self.a.group(0, Sp, 8);
         // Structural record fields are emitted in canonical name order.

@@ -10,6 +10,23 @@ pub(super) fn execute_filter(
     arguments: &[&str],
     chunk: usize,
 ) -> Output {
+    execute_filter_controlled(image, input, arguments, chunk, FilterHostControl::Ordinary)
+}
+
+#[derive(Clone, Copy)]
+enum FilterHostControl {
+    Ordinary,
+    AddressSpaceKib(u32),
+    UnreadableInput,
+}
+
+fn execute_filter_controlled(
+    image: &[u8],
+    input: &[u8],
+    arguments: &[&str],
+    chunk: usize,
+    control: FilterHostControl,
+) -> Output {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("compiler");
     crate::release_container::inspect_static_elf_bytes(image).unwrap();
@@ -20,25 +37,49 @@ pub(super) fn execute_filter(
         "native compiler test",
     )
     .unwrap();
-    let mut child = Command::new(&path)
+    let mut command = if let FilterHostControl::AddressSpaceKib(limit) = control {
+        // Apply an explicit host limit only in the child, without pre_exec or unsafe.
+        let mut command = Command::new("/bin/sh");
+        command
+            .args([
+                "-c",
+                "set -e; ulimit -v \"$1\"; shift; exec \"$@\"",
+                "native-filter-limit",
+            ])
+            .arg(limit.to_string())
+            .arg(&path);
+        command
+    } else {
+        Command::new(&path)
+    };
+    let stdin = if matches!(control, FilterHostControl::UnreadableInput) {
+        Stdio::from(std::fs::File::open(directory.path()).unwrap())
+    } else {
+        Stdio::piped()
+    };
+    let mut child = command
         .args(arguments)
         .env_clear()
         .current_dir(directory.path())
-        .stdin(Stdio::piped())
+        .stdin(stdin)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
     std::thread::scope(|scope| {
-        let mut stdin = child.stdin.take().unwrap();
+        let stdin = child.stdin.take();
         let stdout = child.stdout.take().unwrap();
         let stderr = child.stderr.take().unwrap();
         let writer = scope.spawn(move || {
-            for bytes in input.chunks(chunk) {
-                if let Err(error) = stdin.write_all(bytes) {
-                    assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
-                    break;
+            if let Some(mut stdin) = stdin {
+                for bytes in input.chunks(chunk) {
+                    if let Err(error) = stdin.write_all(bytes) {
+                        assert_eq!(error.kind(), std::io::ErrorKind::BrokenPipe);
+                        break;
+                    }
                 }
+            } else {
+                assert!(input.is_empty());
             }
         });
         let out = scope.spawn(move || {
@@ -80,6 +121,34 @@ pub(super) fn execute_filter(
     })
 }
 
+pub(super) fn check_filter_host_failures(image: &[u8]) {
+    let unreadable =
+        execute_filter_controlled(image, b"", &[], 1, FilterHostControl::UnreadableInput);
+    assert_eq!(unreadable.status.code(), Some(65));
+    assert!(unreadable.stdout.is_empty());
+    assert_eq!(unreadable.stderr, b"native_input\n");
+
+    let limit = FilterHostControl::AddressSpaceKib(8 * 1024);
+    let small = vec![0xa5; 65_537];
+    let accepted = execute_filter_controlled(image, &small, &[], 4093, limit);
+    assert_eq!(accepted.status.code(), Some(0), "{:?}", accepted.stderr);
+    assert!(accepted.stderr.is_empty());
+    assert_eq!(accepted.stdout, small);
+
+    // EOF at full capacity must not require another mapping under this host limit.
+    let exact = vec![0x3c; 4 * 1024 * 1024];
+    let accepted = execute_filter_controlled(image, &exact, &[], 4093, limit);
+    assert_eq!(accepted.status.code(), Some(0), "{:?}", accepted.stderr);
+    assert!(accepted.stderr.is_empty());
+    assert_eq!(accepted.stdout, exact);
+
+    let large = vec![0x5a; 8 * 1024 * 1024 + 1];
+    let refused = execute_filter_controlled(image, &large, &[], 4093, limit);
+    assert_eq!(refused.status.code(), Some(70));
+    assert!(refused.stdout.is_empty());
+    assert_eq!(refused.stderr, b"native_allocation\n");
+}
+
 fn fixture() -> (crate::platform::kernel::KernelSnapshot, NormalizedProgram) {
     let source = byte_buffer_tests::author_only(include_str!(
         "../../../../tests/fixtures/native-filter.lkjc"
@@ -90,7 +159,7 @@ fn fixture() -> (crate::platform::kernel::KernelSnapshot, NormalizedProgram) {
 }
 
 #[test]
-fn native_elf_binary_filter_bounds_usage_raw_octets_and_traps() {
+fn native_elf_binary_filter_grows_input_and_preserves_usage_and_traps() {
     let (source, program) = fixture();
     let build = |name| {
         let index = program
@@ -100,18 +169,27 @@ fn native_elf_binary_filter_bounds_usage_raw_octets_and_traps() {
         elf_x86_64::compile_function(&program, index).unwrap().0
     };
     let echo = build("echo");
-    for length in [0, 1, 256, 256 * 1024, 16 * 1024 * 1024] {
-        let bytes: Vec<_> = (0..length).map(|i| (i % 256) as u8).collect();
+    for length in [
+        0,
+        1,
+        256,
+        65_535,
+        65_536,
+        65_537,
+        256 * 1024,
+        16 * 1024 * 1024,
+        16 * 1024 * 1024 + 1,
+        20 * 1024 * 1024 + 17,
+    ] {
+        let bytes: Vec<_> = (0..length)
+            .map(|i| (i ^ (i >> 8) ^ (i >> 16)) as u8)
+            .collect();
         let output = execute_filter(&echo, &bytes, &[], if length < 1024 { 1 } else { 65521 });
         assert_eq!(output.status.code(), Some(0));
         assert!(output.stderr.is_empty());
-        assert_eq!(output.stdout, bytes);
+        assert!(output.stdout == bytes, "echo length {length}");
     }
-    let too_large = vec![0; 16 * 1024 * 1024 + 1];
-    let output = execute_filter(&echo, &too_large, &[], 4096);
-    assert_eq!(output.status.code(), Some(65));
-    assert!(output.stdout.is_empty());
-    assert_eq!(output.stderr, b"native_input\n");
+    check_filter_host_failures(&echo);
     let output = execute_filter(&echo, b"", &["extra"], 1);
     assert_eq!(output.status.code(), Some(64));
     assert!(output.stdout.is_empty());

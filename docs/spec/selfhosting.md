@@ -207,8 +207,9 @@ old backing storage until process exit; freeze and byte-producing operations mak
 owned copies. Byte payloads have a 256 MiB per-value limit. This runtime does not
 claim lexical region reclamation, bounded process RSS or whole-program zero-copy.
 
-A scalar root prints I64 without a newline. A binary-filter root reads up to
-16 MiB from stdin, then writes the successful image as raw bytes; rejection writes
+A scalar root prints I64 without a newline. A binary-filter root reads stdin to
+EOF without a default transport quota, then writes the successful image as raw
+bytes; rejection writes
 `compiler_rejected:<code>\n` with empty stdout and exits 65. Usage exits 64;
 native traps exit 70. The profile's tighter 8 MiB bound applies before hashing.
 Read/write loops handle partial transfers and retry EINTR; other I/O errors exit
@@ -250,7 +251,7 @@ Tier 1 reproduction from Rust-admitted input, not semantic self-hosting.
 | ByteBuffer empty/push/length/freeze and affine calls | VM, reference, native process-owned heap | Phase-local region reclamation for later compiler tables |
 | BLAKE3 unkeyed and domain-derived digest | VM/reference neutral Rust primitives; native integer implementation | No host hashing during native execution |
 | List literals/length/get and result records | VM, reference, native ELF | Covered by the complete current compiler closure |
-| Bounded binary input and atomic output staging | Native stdin/stdout filter; external staging harness | Native reproduction is a Tier 1 verification obligation |
+| Binary input and atomic output staging | Native stdin/stdout filter; external staging harness | Native reproduction is a Tier 1 verification obligation |
 
 This component has no phase-local graph arena: it scans immutable input and
 constructs derived rows and output in owned buffers. Artifact emission also sorts
@@ -258,8 +259,8 @@ derived object rows and builds the compilation map's logical radix digest.
 Region-native compiler tables become necessary as source decoding, type environments, normalization and
 relocations grow. It does not claim region-exclusive execution or reduced RSS.
 The host can now build this lkjscript component as a standalone native compiler.
-Select its `compile-elf` command target. The exact binary-filter signature and
-16 MiB transport bound are specified in [native ELF](native-elf.md). Native output
+Select its `compile-elf` command target. The exact binary-filter signature, checked growable input mapping and
+mapping lifetime are specified in [native ELF](native-elf.md). Native output
 must equal VM/reference output for positive, malformed and mutated-source cases.
 Milestone D both-output backend closure is accepted at `108906b5`; its exact
 official receipt records the fresh gate matrix and remaining Rust boundaries.

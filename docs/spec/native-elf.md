@@ -15,15 +15,35 @@ traps exit 70 with the VM diagnostic code on stderr and no result on stdout.
 
 A selected entry with the exact signature `(Bytes) -> {diagnostic: I64, image:
 Bytes}` is a binary filter. It accepts no command-line arguments, reads stdin to
-EOF with a 16 MiB limit, and writes the raw image only after the entry returns
-diagnostic zero. Nonzero diagnostics produce `compiler_rejected:N` plus newline
-on stderr, empty stdout and exit 65. Read errors or excess input produce
-`native_input` and exit 65; argument errors exit 64 and runtime traps/allocation
-failure exit 70. Read and write loops retry EINTR and continue partial transfers.
+EOF without a default transport quota, and writes the raw image only after the
+entry returns diagnostic zero. Nonzero diagnostics produce `compiler_rejected:N`
+plus newline on stderr, empty stdout and exit 65. Read errors produce
+`native_input` and exit 65; argument errors exit 64 and runtime traps or reported
+allocation failures exit 70. Read and write loops retry EINTR and continue partial transfers.
 Output write errors exit nonzero (74 for observed syscall errors). The target's
 signature selects this boundary at build time; neither input nor output is sniffed.
 An external launcher may stage, sync, chmod and atomically publish successful
 bytes; the generated program performs no filesystem publication itself.
+
+The input reader owns one separate anonymous mapping, initially 64 KiB. This
+initial capacity is a tuning choice. Checked geometric growth uses Linux
+[`mremap(MREMAP_MAYMOVE)`](https://man7.org/linux/man-pages/man2/mremap.2.html)
+before any language descriptor or view refers to the input. A full mapping is
+first probed with one scratch byte: EOF completes without further allocation;
+a successful probe is appended after growth. The reader keeps the
+only base pointer and a relative length, updates the base after every remap, and
+creates the immutable `Bytes` descriptor at EOF. The mapping then stays stable
+through execution and output, including outputs that alias or slice the input.
+No old growth mapping is retained. This input lifetime rule does not implement
+general heap or phase reclamation.
+
+The length ABI remains a nonnegative I64. Capacities are positive powers of two
+from 64 KiB through 2^62; doubling is checked before the signed representation
+would overflow. Reads always have positive available capacity, retry EINTR, and
+advance by the returned count. Reported mapping failure or unrepresentable growth
+produces `native_allocation`, empty stdout and exit 70. Linux address-space and
+caller-selected OS limits still apply. The separate byte-operation, generated
+image and compiler-format bounds remain unchanged by this transport contract.
 
 The initial native instruction set covers Unit, Bool, I64, text constants,
 structural and nominal records, lists, fields, branches, ordinary and generic
@@ -31,8 +51,8 @@ calls, bound function values, invocation and self tail recursion. It includes
 checked I64 arithmetic/comparisons/conversion, boolean operations and list
 length/get/append. Immutable byte intermediates support length/get/equality,
 construction from octet lists or raw UTF-8 text, copying, slicing and concatenation.
-Byte construction and indexing preserve exact octet/index/range traps. Every byte
-producer allocates independent bounded storage; JSON string encoding is separate
+Byte construction and indexing preserve exact octet/index/range traps. Byte construction
+intrinsics allocate independent bounded storage; JSON string encoding is separate
 from the raw UTF-8 view. Unkeyed and domain-derived 32-byte BLAKE3 run as native
 integer code, with bounded chunk-tree recursion and independent block/chunk/tree
 test vectors. `core.bytes.blake3-derive-key(Text, Bytes) -> Bytes` hashes the exact
@@ -57,7 +77,7 @@ and other unsupported instructions produce
 The safe first-party emitter writes the ELF64 header, an RX `PT_LOAD` segment,
 a non-executable stack declaration, native x86_64 code and relocation/data bytes
 into a bounded `Vec<u8>`. The generated executable uses Linux `read` (0), `write` (1), `mmap`
-(9) and `exit` (60), with no loader, Rust VM, system assembler or external crate.
+(9), `mremap` (25) and `exit` (60), with no loader, Rust VM, system assembler or external crate.
 Anonymous mappings contain writable values and remain live until process exit.
 Native execution does not implement the VM's configurable work/allocation quotas.
 Every direct and indirect call aligns the machine stack to 16 bytes. A saved
