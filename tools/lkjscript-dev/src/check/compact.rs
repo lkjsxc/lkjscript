@@ -9,8 +9,6 @@ use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-pub(super) const MAXIMUM_RECEIPT_BYTES: usize = 64 * 1024;
-
 /// A run owns one replaceable scratch directory. The lease lives in the shared
 /// target so deleting scratch never unlinks the object used for exclusion.
 pub(super) struct Scratch {
@@ -198,7 +196,11 @@ pub(super) fn receipt(
             if evidence::proof(&path, proof.path.clone())? != *proof {
                 return Err(DevError::corrupt("live Cargo inventory changed before summarizing"));
             }
-            let mut inventory = serde_json::from_slice::<Value>(&super::cache::read_bounded(&path, MAXIMUM_RECEIPT_BYTES as u64)?)?;
+            let bytes = super::cache::read_bounded(&path, proof.bytes.ok_or_else(|| DevError::corrupt("live Cargo inventory has no byte length"))?)?;
+            if proof.digest.as_ref() != Some(&VerificationDigest::of(&bytes)) {
+                return Err(DevError::corrupt("live Cargo inventory changed during summarizing"));
+            }
+            let mut inventory = serde_json::from_slice::<Value>(&bytes)?;
             for field in ["test_executables", "workspace_test_executables"] {
                 if let Some(tests) = inventory.as_object_mut().and_then(|value| value.remove(field)) {
                     inventory[format!("{field}_digest")] = serde_json::to_value(VerificationDigest::of(&serde_json::to_vec(&tests)?))?;
@@ -265,30 +267,10 @@ pub(super) fn receipt(
     }))
 }
 
-pub(super) fn publish(
-    repository: &Path,
-    mut receipt: Value,
-) -> Result<PublishedEvidence, DevError> {
-    let mut bytes = serde_json::to_vec(&receipt)?;
-    if bytes.len() >= MAXIMUM_RECEIPT_BYTES {
-        if let Some(gates) = receipt.get_mut("gates").and_then(Value::as_array_mut) {
-            for gate in gates {
-                if let Some(gate) = gate.as_object_mut() {
-                    gate.remove("stdout_excerpt");
-                    gate.remove("stderr_excerpt");
-                }
-            }
-        }
-        bytes = serde_json::to_vec(&receipt)?;
-    }
-    if bytes.len() >= MAXIMUM_RECEIPT_BYTES {
-        return Err(DevError::infrastructure(
-            "compact check receipt exceeds 64 KiB",
-        ));
-    }
+pub(super) fn publish(repository: &Path, receipt: Value) -> Result<PublishedEvidence, DevError> {
     evidence::publish(
         &repository.join(".artifacts/lkjscript-dev/latest-receipt.json"),
-        &bytes,
+        &serde_json::to_vec(&receipt)?,
     )
 }
 

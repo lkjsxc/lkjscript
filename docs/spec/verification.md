@@ -2,6 +2,8 @@
 
 Verify boundaries with independent expectations and complete admission. Support only
 current formats; regenerate maintained inputs after format changes without fallback readers.
+Keep current guidance concise and complete without editorial byte or word ceilings.
+Product-surface text and executable-output controls remain mandatory.
 
 ## Execution and storage
 
@@ -26,7 +28,8 @@ For a frozen precommit tree, use the explicit
 contract; acceptance must precede committing that exact tree.
 
 Default checks atomically replace `.artifacts/lkjscript-dev/latest-receipt.json`
-with a receipt smaller than 64 KiB. It records selected gates, execution outcomes,
+with a complete compact receipt, without an aggregate size ceiling. It records
+selected gates, execution outcomes,
 input stability, elapsed times and output identities. Joined transient logs and
 fixtures are deleted, including failed runs. No gate executable is copied.
 `--retain-archive` explicitly retains complete originals for a release handoff or

@@ -10,7 +10,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const DIGEST_DOMAIN: &str = "lkjscript.dev.verification-evidence.v1";
-const MAXIMUM_EVIDENCE_BYTES: usize = 128 * 1024 * 1024;
 static STAGE_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -81,11 +80,6 @@ pub(crate) fn encode_json<T: Serialize>(value: &T) -> Result<Vec<u8>, DevError> 
     let mut bytes = serde_json::to_vec_pretty(value)
         .map_err(|error| DevError::infrastructure(format!("encode evidence: {error}")))?;
     bytes.push(b'\n');
-    if bytes.len() > MAXIMUM_EVIDENCE_BYTES {
-        return Err(DevError::infrastructure(format!(
-            "evidence exceeds {MAXIMUM_EVIDENCE_BYTES} bytes"
-        )));
-    }
     Ok(bytes)
 }
 
@@ -106,11 +100,6 @@ pub(crate) fn publish_with_checkpoints(
     bytes: &[u8],
     checkpoint: &mut dyn FnMut(AtomicCheckpoint) -> Result<(), DevError>,
 ) -> Result<PublishedEvidence, DevError> {
-    if bytes.len() > MAXIMUM_EVIDENCE_BYTES {
-        return Err(DevError::infrastructure(format!(
-            "evidence exceeds {MAXIMUM_EVIDENCE_BYTES} bytes"
-        )));
-    }
     let parent = path.parent().ok_or_else(|| {
         DevError::infrastructure(format!("evidence path '{}' has no parent", path.display()))
     })?;

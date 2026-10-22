@@ -1750,7 +1750,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Gc,
-            "Retain accepted history and selected package/compiler roots, compact canonical objects into one compressed pack, and reclaim unreferenced storage under an exclusive reader lease.",
+            "Retain complete accepted history and selected package/compiler roots without default preparation quotas, compact canonical objects into deterministic compressed packs, and reclaim unreferenced storage under an exclusive reader lease.",
             "gc",
             (
                 ControlModel::GarbageCollectionRequest,

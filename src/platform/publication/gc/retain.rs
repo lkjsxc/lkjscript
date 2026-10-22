@@ -1,18 +1,13 @@
-//! Bounded, operation-local canonical reads. No accepted validation cache supplies reachability.
+//! Operation-local canonical reads. No accepted validation cache supplies reachability.
 
 use super::*;
 
-pub(super) const MAXIMUM_RETAINED_BYTES: usize = 512 * 1_048_576;
-pub(super) const MAXIMUM_OBJECTS: usize = 1_000_000;
-const OBJECT_OVERHEAD: usize = 256;
-const MAXIMUM_READS: u64 = 16_000_000;
-const MAXIMUM_READ_BYTES: u64 = 4_294_967_296;
+const OBJECT_OVERHEAD: u64 = 256;
 
 pub(super) struct Retained<'a, S: ?Sized> {
     base: &'a S,
     objects: RefCell<BTreeMap<ObjectKey, Vec<u8>>>,
-    bytes: Cell<usize>,
-    admission: RefCell<StoreReadAdmission>,
+    observation: Cell<PreparationObservation>,
     control: &'a ExecutionControl,
 }
 
@@ -21,12 +16,7 @@ impl<'a, S: ImmutableObjectStore + ?Sized> Retained<'a, S> {
         Self {
             base,
             objects: RefCell::new(BTreeMap::new()),
-            bytes: Cell::new(0),
-            admission: RefCell::new(StoreReadAdmission::new(StoreReadLimits {
-                maximum_catalog_lookups: MAXIMUM_READS,
-                maximum_objects: MAXIMUM_READS,
-                maximum_bytes: MAXIMUM_READ_BYTES,
-            })),
+            observation: Cell::new(PreparationObservation::default()),
             control,
         }
     }
@@ -58,13 +48,6 @@ impl<'a, S: ImmutableObjectStore + ?Sized> Retained<'a, S> {
         mut visit: impl FnMut(&[u8], &[u8]) -> Result<(), Diagnostic>,
     ) -> Result<(), Diagnostic> {
         checkpoint(self.control)?;
-        if root.entries() > MAXIMUM_OBJECTS as u64 {
-            return Err(gc_error(
-                DiagnosticClass::Resource,
-                "gc_map_entries",
-                "reachable map exceeds compaction capacity",
-            ));
-        }
         let reader = ObjectPageReader::new(self);
         let mut error = None;
         let result = PersistentMap::from_root(root).for_each(
@@ -98,6 +81,67 @@ impl<'a, S: ImmutableObjectStore + ?Sized> Retained<'a, S> {
         })
     }
 
+    pub(super) fn observation(&self) -> PreparationObservation {
+        self.observation.get()
+    }
+
+    fn read_inner(
+        &self,
+        key: ObjectKey,
+        maximum: usize,
+        external: Option<&mut StoreReadAdmission>,
+        work: &mut StoreWork,
+    ) -> Result<Option<Vec<u8>>, StoreError> {
+        let mut observed = StoreWork::default();
+        let result = match external {
+            Some(admission) => self
+                .base
+                .read_admitted(key, maximum, admission, &mut observed),
+            None => self.base.read(key, maximum, &mut observed),
+        };
+        work.add(observed);
+        let mut observation = self.observation.get();
+        observation.catalog_lookups = observation
+            .catalog_lookups
+            .saturating_add(observed.catalog_lookups);
+        observation.objects_read = observation
+            .objects_read
+            .saturating_add(observed.objects_read);
+        observation.bytes_read = observation.bytes_read.saturating_add(observed.bytes_read);
+        self.observation.set(observation);
+        let bytes = result?;
+        if let Some(bytes) = &bytes {
+            key.verify(bytes)?;
+            let mut objects = self.objects.borrow_mut();
+            if let Some(previous) = objects.get(&key) {
+                if previous != bytes {
+                    return Err(StoreError::new(
+                        StoreErrorClass::Corrupt,
+                        "gc_changed_object",
+                        "reachable canonical bytes changed during compaction",
+                    ));
+                }
+            } else {
+                let mut retained = Vec::new();
+                retained.try_reserve_exact(bytes.len()).map_err(|_| {
+                    StoreError::new(
+                        StoreErrorClass::Resource,
+                        "gc_retention_allocation",
+                        "cannot allocate reachable canonical object retention",
+                    )
+                })?;
+                retained.extend_from_slice(bytes);
+                objects.insert(key, retained);
+                observation.retained_modeled_bytes = observation
+                    .retained_modeled_bytes
+                    .saturating_add(bytes.len() as u64)
+                    .saturating_add(OBJECT_OVERHEAD);
+                self.observation.set(observation);
+            }
+        }
+        Ok(bytes)
+    }
+
     pub(super) fn finish(self) -> BTreeMap<ObjectKey, Vec<u8>> {
         self.objects.into_inner()
     }
@@ -110,7 +154,7 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for Retained<'_, S> 
         maximum: usize,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
-        self.read_admitted(key, maximum, &mut StoreReadAdmission::unbounded(), work)
+        self.read_inner(key, maximum, None, work)
     }
 
     fn read_admitted(
@@ -120,62 +164,7 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for Retained<'_, S> 
         external: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
-        let fresh = !self.objects.borrow().contains_key(&key);
-        if fresh
-            && (self.objects.borrow().len() == MAXIMUM_OBJECTS
-                || self.bytes.get() > MAXIMUM_RETAINED_BYTES - OBJECT_OVERHEAD)
-        {
-            return Err(StoreError::new(
-                StoreErrorClass::Resource,
-                "gc_retention_capacity",
-                "reachable object retention exceeds compaction capacity",
-            ));
-        }
-        let maximum = if fresh {
-            maximum.min(MAXIMUM_RETAINED_BYTES - self.bytes.get() - OBJECT_OVERHEAD)
-        } else {
-            maximum
-        };
-        let inner = self.admission.borrow().remaining();
-        let outer = external.remaining();
-        let combined = StoreReadLimits {
-            maximum_catalog_lookups: inner
-                .maximum_catalog_lookups
-                .min(outer.maximum_catalog_lookups),
-            maximum_objects: inner.maximum_objects.min(outer.maximum_objects),
-            maximum_bytes: inner.maximum_bytes.min(outer.maximum_bytes),
-        };
-        let mut admission = StoreReadAdmission::new(combined);
-        let result = self.base.read_admitted(key, maximum, &mut admission, work);
-        let remaining = admission.remaining();
-        let charged = |budget: StoreReadLimits| {
-            StoreReadAdmission::new(StoreReadLimits {
-                maximum_catalog_lookups: budget.maximum_catalog_lookups
-                    - (combined.maximum_catalog_lookups - remaining.maximum_catalog_lookups),
-                maximum_objects: budget.maximum_objects
-                    - (combined.maximum_objects - remaining.maximum_objects),
-                maximum_bytes: budget.maximum_bytes
-                    - (combined.maximum_bytes - remaining.maximum_bytes),
-            })
-        };
-        *self.admission.borrow_mut() = charged(inner);
-        *external = charged(outer);
-        let bytes = result?;
-        if let Some(bytes) = &bytes {
-            key.verify(bytes)?;
-            if fresh {
-                self.bytes
-                    .set(self.bytes.get() + bytes.len() + OBJECT_OVERHEAD);
-                self.objects.borrow_mut().insert(key, bytes.clone());
-            } else if self.objects.borrow().get(&key) != Some(bytes) {
-                return Err(StoreError::new(
-                    StoreErrorClass::Corrupt,
-                    "gc_changed_object",
-                    "reachable canonical bytes changed during compaction",
-                ));
-            }
-        }
-        Ok(bytes)
+        self.read_inner(key, maximum, Some(external), work)
     }
 
     fn stage(
@@ -193,38 +182,5 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for Retained<'_, S> 
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn retention_and_read_allowances_refuse_before_payload_growth() {
-        let bytes = b"bounded".to_vec();
-        let key = ObjectKey::for_bytes(ObjectDomain::Blob, &bytes);
-        let base = BTreeMap::from([(key, bytes)]);
-        let control = ExecutionControl::uncancelled();
-        let store = Retained::new(&base, &control);
-        store.bytes.set(MAXIMUM_RETAINED_BYTES - OBJECT_OVERHEAD);
-        let mut work = StoreWork::default();
-        assert_eq!(
-            store.read(key, 7, &mut work).unwrap_err().class,
-            StoreErrorClass::Resource
-        );
-        assert_eq!(work.objects_read, 0);
-        assert!(store.objects.borrow().is_empty());
-        store.bytes.set(0);
-        let mut outer = StoreReadAdmission::new(StoreReadLimits {
-            maximum_catalog_lookups: 1,
-            maximum_objects: 1,
-            maximum_bytes: 6,
-        });
-        assert_eq!(
-            store
-                .read_admitted(key, 7, &mut outer, &mut work)
-                .unwrap_err()
-                .class,
-            StoreErrorClass::Resource
-        );
-        assert_eq!(work.objects_read, 0);
-        assert!(store.objects.borrow().is_empty());
-    }
-}
+#[path = "retain_tests.rs"]
+mod tests;

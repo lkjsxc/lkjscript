@@ -14,7 +14,24 @@ use std::collections::VecDeque;
 
 #[path = "gc/retain.rs"]
 mod retain;
-use retain::{MAXIMUM_OBJECTS, Retained};
+use retain::Retained;
+
+/// Passive, saturating observations of reachability preparation, not admission limits.
+/// Modeled retained bytes include payloads and a 256-byte estimate per object;
+/// they are neither allocator measurements nor process RSS.
+#[derive(Clone, Copy, Debug, Default, serde::Serialize)]
+pub(crate) struct PreparationObservation {
+    pub retained_modeled_bytes: u64,
+    pub catalog_lookups: u64,
+    pub objects_read: u64,
+    pub bytes_read: u64,
+    pub references_visited: u64,
+}
+
+struct Collected {
+    objects: BTreeMap<ObjectKey, Vec<u8>>,
+    preparation: PreparationObservation,
+}
 
 #[derive(Debug, serde::Serialize)]
 pub(crate) struct GarbageCollectionReceipt {
@@ -25,6 +42,7 @@ pub(crate) struct GarbageCollectionReceipt {
     pub objects_retained: usize,
     pub objects_reclaimed: usize,
     pub canonical_bytes_retained: u64,
+    pub preparation: PreparationObservation,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disk: Option<PackCompactionReceipt>,
 }
@@ -51,13 +69,13 @@ impl GraphRepository {
                 .as_ref()
                 .map(|bytes| crate::platform::compiler::gc_manifest_from_bytes(bytes.as_slice()))
                 .transpose()?;
-            let objects = collect(&store, head, &readiness, compiled, control)?;
-            let result = receipt(head, graph.store.objects.len(), &objects, None);
+            let collected = collect(&store, head, &readiness, compiled, control)?;
+            let result = receipt(head, graph.store.objects.len(), &collected, None);
             checkpoint(control)?;
             graph
                 .store
                 .objects
-                .retain(|key| objects.contains_key(key))
+                .retain(|key| collected.objects.contains_key(key))
                 .map_err(store_diagnostic)?;
             return Ok(result);
         }
@@ -71,15 +89,19 @@ impl GraphRepository {
         let head = current.head;
         let readiness = read_package_readiness(&self.root)?;
         let compiled = crate::platform::compiler::gc_manifest(self)?;
-        let objects = collect(&store, head, &readiness, compiled, control)?;
+        let collected = collect(&store, head, &readiness, compiled, control)?;
         let mut result = receipt(
             head,
             store.catalog_observation().entries as usize,
-            &objects,
+            &collected,
             None,
         );
         checkpoint(control)?;
-        result.disk = Some(store.compact_reachable(objects).map_err(store_diagnostic)?);
+        result.disk = Some(
+            store
+                .compact_reachable(collected.objects)
+                .map_err(store_diagnostic)?,
+        );
         Ok(result)
     }
 }
@@ -87,9 +109,10 @@ impl GraphRepository {
 fn receipt(
     head: HeadRecord,
     before: usize,
-    objects: &BTreeMap<ObjectKey, Vec<u8>>,
+    collected: &Collected,
     disk: Option<PackCompactionReceipt>,
 ) -> GarbageCollectionReceipt {
+    let objects = &collected.objects;
     GarbageCollectionReceipt {
         operation: "gc",
         status: "compacted",
@@ -97,7 +120,10 @@ fn receipt(
         objects_before: before,
         objects_retained: objects.len(),
         objects_reclaimed: before.saturating_sub(objects.len()),
-        canonical_bytes_retained: objects.values().map(|bytes| bytes.len() as u64).sum(),
+        canonical_bytes_retained: objects.values().fold(0_u64, |total, bytes| {
+            total.saturating_add(bytes.len() as u64)
+        }),
+        preparation: collected.preparation,
         disk,
     }
 }
@@ -147,13 +173,6 @@ impl Queue {
             }
             return Ok(());
         }
-        if self.seen.len() == MAXIMUM_OBJECTS {
-            return Err(gc_error(
-                DiagnosticClass::Resource,
-                "gc_reference_capacity",
-                "reachable reference inventory exceeds compaction capacity",
-            ));
-        }
         self.seen.insert(key, item);
         self.pending.push_back(item);
         Ok(())
@@ -176,7 +195,7 @@ fn collect<S: ImmutableObjectStore + ?Sized>(
     readiness: &PackageReadiness,
     compiled: Option<CompilationManifestDigest>,
     control: &ExecutionControl,
-) -> Result<BTreeMap<ObjectKey, Vec<u8>>, Diagnostic> {
+) -> Result<Collected, Diagnostic> {
     let store = Retained::new(base, control);
     let mut queue = Queue::default();
     queue.push(Pending::Revision(head))?;
@@ -194,7 +213,12 @@ fn collect<S: ImmutableObjectStore + ?Sized>(
         visit(&store, &mut queue, readiness, item)?;
     }
     checkpoint(control)?;
-    Ok(store.finish())
+    let mut preparation = store.observation();
+    preparation.references_visited = queue.seen.len() as u64;
+    Ok(Collected {
+        objects: store.finish(),
+        preparation,
+    })
 }
 
 fn visit<S: ImmutableObjectStore + ?Sized>(

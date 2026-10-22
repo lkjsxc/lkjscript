@@ -29,8 +29,8 @@ before large reads; campaigns resolve concrete history, never recurring diaries.
 Short platform paths start at src/platform; others at root. Follow callers/narrower
 guidance. Public product operations own semantics, without external generators or
 privileged writes; contributor.rs observes. Generate assets through supported owners
-and docs/generated via discovery. Status stays below 100 lines: capabilities,
-milestone/source/run/gate/next action. Replace stale state; no temporary/stash/failed
+and docs/generated via discovery. Keep status concise and complete: capabilities,
+milestone/source/run/gate/next action, without a hard line limit. Replace stale state; no temporary/stash/failed
 run histories. Specs/decisions/release/Git own semantics/rationale/delivery/completed
 changes. Keep one checkout and one Cargo target at `$PWD/target`. Default checks
 overwrite one compact receipt and delete joined scratch; retain originals only
@@ -78,7 +78,7 @@ ranges. Set checker/Cargo jobs independently. [Verification](docs/spec/verificat
 owns proof/gates/complete-context reuse; [release](docs/release.md) owns exact source/
 candidate/authority. Preserve complete matrices and honest outcomes while sharing
 immutable fixtures. Release handoffs explicitly retain their originals; default
-checks retain only the bounded latest receipt. Public claims need independent expectations/public
+checks retain only the complete compact latest receipt. Public claims need independent expectations/public
 authoring/detached copies. Digests prove identity, not behavior/permission; scoped
 descendants cannot relabel proof and bytes/time do not measure API billing.
 

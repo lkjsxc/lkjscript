@@ -195,11 +195,19 @@ The in-memory backend instead installs a filtered copy-on-write index atomically
 existing readers/forks keep their original immutable allocations alive.
 
 GC rereads canonical objects and walks complete maps without using semantic proof
-caches. Preparation admits at most 1,000,000 distinct objects, 512 MiB of retained
-payloads plus modeled per-object overhead, 16,000,000 object reads and 4 GiB of read
-bytes. The reference queue is separately limited to 1,000,000 entries. Exhaustion,
-missing/corrupt references and cancellation reject before compaction. This finite
-preparation capacity does not limit semantic validity or truncate history.
+caches. There is no default aggregate preparation limit on retained objects/bytes,
+map entries, queued references, or canonical reads. A visited map queues each exact
+reference once and rejects conflicting bindings; each complete persistent-map walk
+checks its declared entry count. Cancellation is checked between references and map
+entries. Missing/corrupt objects and allocation failure still reject before compaction.
+Explicit caller-selected object-read allowances remain pre-consumption checks.
+
+The receipt reports passive saturating counters for preparation reads, read bytes,
+visited references and modeled retained bytes (payload plus 256 bytes per object).
+A saturated u64 counter is a lower bound. These counters never size allocations or
+determine acceptance, and do not measure peak live memory, retained arena capacity,
+mapped OS bytes or RSS. Object-domain, pack and catalog encoding bounds remain
+separate representation work; removing preparation quotas does not change them.
 
 Disk GC partitions deduplicated objects in deterministic key order using a 32 MiB
 target for raw payload plus pack framing. Compression uses the current deflate codec

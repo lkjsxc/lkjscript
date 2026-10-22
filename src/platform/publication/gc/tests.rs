@@ -304,3 +304,17 @@ fn inferred_parallel_types_are_reconstructed_metadata_not_missing_storage_roots(
     );
     crate::platform::execute_in_memory(&memory, vec!["check".into()]).unwrap();
 }
+
+#[test]
+fn gc_reference_queue_crosses_former_million_entry_ceiling_without_duplicate_visits() {
+    let mut queue = Queue::default();
+    for index in 0_u64..1_000_001 {
+        let mut bytes = [0; 32];
+        bytes[..8].copy_from_slice(&index.to_be_bytes());
+        let item = Pending::Type(TypeObjectDigest::from_bytes(bytes));
+        queue.push(item).unwrap();
+        queue.push(item).unwrap();
+    }
+    assert_eq!(queue.seen.len(), 1_000_001);
+    assert_eq!(queue.pending.len(), 1_000_001);
+}

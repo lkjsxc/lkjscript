@@ -315,7 +315,8 @@ fn verify_retained(repository: &Path, path: &Path, proof: &FileProof) -> Result<
 
 fn read_original<T: DeserializeOwned + Serialize>(path: &Path) -> Result<T, DevError> {
     canonical_regular(path)?;
-    let bytes = process::read_bounded(path, 128 * 1024 * 1024)?;
+    let length = fs::symlink_metadata(path)?.len();
+    let bytes = process::read_bounded(path, length)?;
     let value = serde_json::from_slice(&bytes)?;
     require(
         evidence::encode_json(&value)? == bytes,
@@ -363,6 +364,40 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .as_nanos()
+    }
+
+    #[test]
+    fn original_json_roundtrip_exceeds_the_former_128_mib_ceiling() {
+        let temporary = tempfile::tempdir().expect("temporary evidence directory");
+        let root = temporary
+            .path()
+            .canonicalize()
+            .expect("canonical directory");
+        let value = "x".repeat(128 * 1024 * 1024);
+        let bytes = evidence::encode_json(&value).expect("encode complete evidence");
+        assert!(bytes.len() > 128 * 1024 * 1024);
+        let path = root.join("large.json");
+        let published = evidence::publish(&path, &bytes).expect("publish complete evidence");
+        assert_eq!(published.bytes, bytes.len() as u64);
+        let proof = evidence::proof(&path, "large.json".into()).expect("rehash evidence");
+        assert_eq!(proof.bytes, Some(published.bytes));
+        assert_eq!(proof.digest.as_ref(), Some(&published.digest));
+        drop(bytes);
+        let decoded: String = read_original(&path).expect("read complete original evidence");
+        assert_eq!(decoded, value);
+        drop(decoded);
+        use std::io::Write;
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .and_then(|mut file| file.write_all(b" "))
+            .expect("append noncanonical whitespace");
+        let error = read_original::<String>(&path).expect_err("noncanonical original rejects");
+        assert!(
+            error
+                .to_string()
+                .contains("source evidence is not canonical")
+        );
     }
 
     #[test]

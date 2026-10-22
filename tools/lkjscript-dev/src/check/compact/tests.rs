@@ -79,7 +79,7 @@ fn compact_full_matrix_retains_actual_failures_and_replaces_the_latest_receipt()
         GateStatus::InfrastructureFailure,
         GateStatus::Skipped,
     ];
-    for index in 0..40 {
+    for index in 0..120 {
         let name = format!("gate_{index}");
         let status = states[index % states.len()];
         observed.selected_gates.push(name.clone());
@@ -119,12 +119,26 @@ fn compact_full_matrix_retains_actual_failures_and_replaces_the_latest_receipt()
     let compact = receipt(temporary.path(), &observed, None)?;
     assert_eq!(compact["status"], "failed");
     assert_eq!(compact["originals_retained"], false);
-    assert_eq!(compact["selected_gates"].as_array().map(Vec::len), Some(40));
+    assert_eq!(
+        compact["selected_gates"].as_array().map(Vec::len),
+        Some(120)
+    );
     assert!(serde_json::from_value::<CheckReceipt>(compact.clone()).is_err());
     let published = publish(temporary.path(), compact)?;
-    assert!(published.bytes < MAXIMUM_RECEIPT_BYTES as u64);
+    assert!(
+        published.bytes > 64 * 1024,
+        "complete receipt exceeds the former ceiling"
+    );
     let saved: Value = serde_json::from_slice(&fs::read(&published.path)?)?;
     for (index, gate) in observed.gates.iter().enumerate() {
+        assert_eq!(
+            saved["gates"][index]["stdout_excerpt"],
+            bounded_text(gate.stdout_excerpt.as_deref().unwrap())
+        );
+        assert_eq!(
+            saved["gates"][index]["stderr_excerpt"],
+            bounded_text(gate.stderr_excerpt.as_deref().unwrap())
+        );
         assert_eq!(
             saved["gates"][index]["status"],
             serde_json::to_value(gate.status)?

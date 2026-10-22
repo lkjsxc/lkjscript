@@ -6,80 +6,75 @@ Verification has no three-minute requirement; elapsed time is an observation.
 
 ## Capabilities
 
-One checkout and one leased Cargo target serve bounded copy-on-write memory
-projects, admitted standard packages/programs and one current schema epoch.
-Public `tx` preserves symbolic identities, runs impact-scoped differential tests
-and publishes atomically. Default checks retain bounded receipts and remove joined
-scratch. Safe Rust, denied lint invariants and the no-Python policy remain intact.
-
-Lexical regions connect allocation, reads, writes, freeze, relative offsets and
-slab persistence to both evaluators. The [region specification](spec/regions.md)
-owns layouts, custody, generations and lexical cleanup. Native allocation remains
-process-owned until exit; this milestone makes no phase-reclamation or RSS claim.
+One checkout and one leased Cargo target serve admitted packages/programs and
+one current schema epoch. Public tx preserves symbolic identities, runs
+impact-scoped differential tests and publishes atomically. Safe Rust, denied
+lint invariants and the no-Python policy remain intact.
 
 The lkjscript-written Tier 1 backend consumes Rust-admitted LKJCI1 profile 4 and
-emits standalone Linux x86_64 ELF or current `.lkja`. Source admission does not
-replace that Rust normalization boundary. [Self-hosting](spec/selfhosting.md)
-defines the separate Tier 1, Tier 2 and Tier 3 contracts and feature matrix.
+emits standalone Linux x86_64 ELF or current .lkja. Restricted E1 recognizes
+interfaces, operations/parameters, requirements, function R/E binders and
+TaskFunction types. Source admission does not replace Rust normalization.
+The [self-hosting specification](spec/selfhosting.md) owns the capability matrix.
+Native allocations remain process-owned until exit; no phase-reclamation claim.
 
 ## Current milestone
 
-Restricted E1 now admits Interface declarations, Operations and their Parameters,
-Component Requirements, Function requirement/effect binders and TaskFunction types.
-All 12 namespace classes receive whole-carrier controls. Contextual R/E checks
-bind the exact using Function; shared type digests cannot reuse another context.
-The maintained compiler inventory contains 62 modules and 465 functions.
+GC has no default aggregate preparation quotas for retained objects/bytes,
+reference inventory, map entries, object reads or read bytes. Visited references,
+complete map traversal, exact object bindings and cancellation still govern
+reachability. Explicit caller-selected read allowances still refuse before payload
+consumption. Saturating telemetry observes work without deciding acceptance.
+Compaction keeps immutable history and uses deterministic multiple-pack partitioning.
+This slice performs no retirement pruning, history truncation or project reseed.
 
-Every supplied type receives shape, endpoint and structural DAG/depth admission.
-Context checks follow all actual owner roots, including untaken branches.
-Diagnostics 12 through 18 retain separate layer ownership; resource refusal is 6.
-Nonempty R/E application arguments, Match, witnesses, associated types, read views
-and lexical Regions remain unsupported by this source frontend.
-[Source input](spec/selfhosting-source-input.md) owns the precise boundaries.
+Verification keeps complete compact receipts without a 64 KiB aggregate cap;
+the evidence writer and archived-original reader also have no 128 MiB ceiling.
+Gate outcomes, identities and bounded excerpts remain; joined transient work is
+still cleaned up. Guidance has no hard line-count, editorial byte or word rule. The
+[decision record](decisions/20261022-gc-preparation-quotas.md) records scope and controls.
 
-Twenty-two ordinary transactions accepted the maintained graph at
-`rev_e8682917d0eaef1ccd6dd37517ef3024b023d56cb96fcd71540f22fe37d660ea`.
-Its semantic state is
-`semantic_state_d10ac03835ca364518838b7c29ad2bd8dd69b9ecb6ec269b9fd84c5b8ff54b9b`.
-The complete carrier has 28,326 owners, 27 types and 9,881 retirements:
-6,793,590 bytes (6.479 MiB), SHA-256
-`c387db4db5404258a9d6026c01f27e9c140c0002d8456ebdeb889f3ac38add7f`.
-Its allowance is 908,735,232. Semantic state does not bind unused type descriptors.
+## Maintained compiler baseline
 
-The separate Tier 1 artifact projection has 467 canonical units and occupies
-7,690,384 bytes (7.334 MiB), leaving 698,224 bytes within its 8,388,608-byte bound.
-Full-kernel validation consumes 9,097,803 of 10,000,000 semantic-work units.
-The nominal validator has 241 reachable functions, 13,424 nodes and 637,133
-normalized-input bytes. These are distinct capacity boundaries.
+The authoritative project is unchanged from 9eaaad6: 62 modules, 465 functions,
+28,326 owners, 27 types and 9,881 retirements at
+rev_e8682917d0eaef1ccd6dd37517ef3024b023d56cb96fcd71540f22fe37d660ea.
+Semantic state:
+semantic_state_d10ac03835ca364518838b7c29ad2bd8dd69b9ecb6ec269b9fd84c5b8ff54b9b.
+The complete LKJSG001 carrier is 6,793,590 bytes, SHA-256
+c387db4db5404258a9d6026c01f27e9c140c0002d8456ebdeb889f3ac38add7f.
+These are existing carrier observations, not new runtime-memory measurements.
 
-Physical GC retained all 200,012 objects and the complete immutable history.
-It reduced 956 packs / 393,152,063 bytes to 13 packs / 334,241,707 bytes.
-HEAD, publication identities and the complete source-carrier digest are unchanged.
-No retention horizon, retirement pruning or project reseed is introduced.
-Exact capacity deltas, storage observations and controls are in the
-[decision record](decisions/20261021-source-effect-owners.md).
+The preceding physical GC retained 200,012 objects in 13 packs / 334,241,707 bytes.
+Its observed modeled retained bytes were 467,387,305; that metric now has no
+512 MiB admission ceiling. HEAD and source identities remain unchanged here.
+The [preceding decision](decisions/20261021-source-effect-owners.md) binds those
+carrier, artifact and storage measurements to their exact baseline.
 
-## Acceptance and next work
+## Verification and next work
 
-The completed focused harness passed 113 selfhost and 10 native ELF tests.
-Independent positive, rebound negative, unsupported and resource controls cover
-VM, canonical reference, Rust-native and selfhost-native validators. The latter
-still receives Rust-normalized Tier 1 input. Derived type-cycle controls do not
-claim hash-consistent cyclic raw-carrier coverage.
+The focused GC suite passed all 14 tests, including actual 528 MiB retention,
+more than 4 GiB of reads and 1,000,001 distinct queued references. Negative
+controls retain exact object verification, explicit read limits, cancellation,
+reader leases and all compaction durability checkpoints. Expanded receipt tests
+retain every gate status and excerpt beyond the former 64 KiB ceiling.
+All seven surface-audit tests pass, including long guidance with a late forbidden
+text control beyond the former editorial byte and word ceilings.
 
-Candidate publication requires exact staged-tree bootstrap, changed selection,
-the complete fresh full gate registry and release-target policy inspection.
-Terminal outcomes and source identities belong to
-`.artifacts/selfhost/accepted-e-source-effects/receipt.json` and its component
-receipts. All source, proposal, specification and status edits precede those gates.
-Git records ordinary integration; no public release or deployment is implied.
+Publication requires exact staged-tree bootstrap, changed selection, every gate
+in full --fresh and release-target policy inspection. Terminal evidence is in
+.artifacts/lkjscript-dev/latest-receipt.json; focused evidence is under
+.artifacts/selfhost/resource-ceilings and .artifacts/selfhost. Git records normal
+integration. No public product release or deployment is implied.
 
-This is not E1-final or Tier 2 completion. Next select an active-profile E2/E3
-vertical slice whose own E1 prerequisites hold, with explicit diagnostic semantics.
-Audit coupled capacity formulas and exact resource boundaries before raising limits.
-Broader E1 families may proceed independently; they do not block restricted
-source-driven compilation when its own prerequisites hold.
-Full Tier 2 still requires complete source admission/lowering, the declared
-region/closure/witness profile, source-driven C2=C3 and A1=A2=A3, behavioral
-mutations, independent programs and measured same-process native reclamation.
-[Verification](spec/verification.md) owns acceptance.
+WS1 remains incomplete: kernel work/analysis limits, authoring/inspection quotas,
+recursive depth limits, native stdin/value bounds, LKJSG001 synthetic fuel and
+size/table bounds, and coupled LKJCI1/.lkja widths/layouts remain next work.
+Trusted runtime frame/stack policies need an iterative reference-evaluator design
+before removal. Object/pack/catalog encoding bounds remain representation work.
+General verification inventory, file and command-output bounds remain separate work.
+
+This is neither E1-final nor Tier 2. Full Tier 2 still requires source-driven E2/E3,
+the declared region/closure/witness profile, source-driven C2=C3 and A1=A2=A3,
+behavioral mutations, independent full-profile programs and measured same-process
+native reclamation. [Verification](spec/verification.md) owns final acceptance.

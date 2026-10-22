@@ -1,4 +1,4 @@
-//! One bounded maintenance operation over the ordinary repository authority.
+//! One cancellable maintenance operation over the ordinary repository authority.
 
 use super::*;
 
