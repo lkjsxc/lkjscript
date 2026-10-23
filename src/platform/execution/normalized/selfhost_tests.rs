@@ -565,7 +565,7 @@ fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
         (100, 0, 3),
         (104, 0, 5),
         (108, 0, 5),
-        (112, 1, 10),
+        (112, 1, 2),
         (112, 2, 2),
         (116, 0, 5),
         (120, 1, 5),
@@ -601,6 +601,13 @@ fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
         input::rechecksum(&mut changed);
         assert_eq!(compile(&changed), (expected, vec![]), "byte {offset}");
     }
+    // The mode marker cannot turn a profile-4 packet into a profile-5 artifact.
+    // With both discriminators changed, the malformed artifact layout is reached.
+    let mut artifact_mode = valid.clone();
+    artifact_mode[8..12].copy_from_slice(&5_u32.to_le_bytes());
+    artifact_mode[112..116].copy_from_slice(&1_u32.to_le_bytes());
+    input::rechecksum(&mut artifact_mode);
+    assert_eq!(compile(&artifact_mode), (10, vec![]));
     for nodes in [
         vec![(6, 0)],
         vec![(2, 0), (6, 0)],
@@ -617,7 +624,9 @@ fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
     excessive[32..40].copy_from_slice(&2_147_483_648_u64.to_le_bytes());
     input::rechecksum(&mut excessive);
     assert_eq!(compile(&excessive), (6, vec![]));
-    assert_eq!(compile(&vec![0; input::MAX_INPUT + 1]), (3, vec![]));
+    let mut oversized = valid;
+    oversized.resize(input::MAX_INPUT + 1, 0);
+    assert_eq!(compile(&oversized), (3, vec![]));
 }
 
 #[test]

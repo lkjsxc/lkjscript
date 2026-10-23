@@ -25,12 +25,13 @@ retain compact evidence before removing task-owned stage binaries.
 
 ## Current canonical input: LKJCI1
 
-All integers are little-endian. Magic is `LKJCI001`; only profile `4` is
-admitted. Earlier profile readers are removed. The u32 at offset 112 selects
-ELF (0) or artifact (1) emission. Both modes retain Rust semantic admission and
-IR export as Tier 1 boundaries. The ELF layout follows; the
-[artifact layout](selfhosting-artifact-input.md) supplies canonical unit fields
-and source objects. Neither is the final semantic graph profile.
+All integers are little-endian. Magic is `LKJCI001`. The u32 at offset 112 selects
+ELF (0, profile `4`) or artifact (1, profile `5`) emission. Each selector admits
+only its current profile; mode-1 profile-4 inputs reject. Both modes retain Rust
+semantic admission and IR export as Tier 1 boundaries. The ELF layout follows;
+the [artifact layout](selfhosting-artifact-input.md) supplies canonical unit
+fields and source objects, with explicit unmetered or positive-u64 admission
+allowances. Neither is the final semantic graph profile.
 
 | Header offset | Width | Meaning |
 | --- | --- | --- |
@@ -42,8 +43,10 @@ and source objects. Neither is the final semantic graph profile.
 | 32 | 8 | Traversal fuel |
 | 40 | 32 | BLAKE3 of bytes `[0,40)` concatenated with `[72,length)` |
 
-The common decoder bounds actual input to 160 through 8,388,608 bytes before
-hashing or table access; ELF mode additionally requires at least 2248 bytes.
+The common decoder requires at least 160 bytes, checks magic, then dispatches by
+selector. ELF mode retains its 8,388,608-byte maximum before hashing and additionally
+requires at least 2248 bytes. Artifact mode uses its own checked u32 extent domain
+and has no default aggregate 8 MiB quota.
 Header lengths, counts and fuel require zero high words. In ELF mode there are
 1 through 32768 instructions; locals, operand depth and record fields are each
 bounded by 128. The root is either `() -> I64` or the exact binary-filter
@@ -174,15 +177,16 @@ empty bytes before the binary filter writes stdout.
 | 3 | Input extent/count bound |
 | 4 | Content digest |
 | 5 | Noncanonical table, index, state extent, reserved word or root |
-| 6 | Traversal fuel |
+| 6 | ELF traversal fuel or insufficient explicit artifact allowance |
 | 7 | Unsupported/malformed instruction form |
 | 8 | Invalid types, UTF-8 literal, stack, custody, primitive signature, call or edge |
 | 9 | Unsupported root signature |
 | 10 | Artifact projection layout, unit form, owner metadata or required reference |
 | 11 | Artifact source-object domain, order, extent or digest |
 
-ELF validation order is outer extent, magic, profile/selector, header lengths/counts, digest,
-directory/module extents and root index, fuel, types and complete layout, root
+ELF validation order is minimum common extent, magic, selector, mode extent and
+profile, header lengths/counts, digest, directory/module extents and root index,
+fuel, types and complete layout, root
 signature, then every function's
 entry and instruction transfers. Offsets use checked I64 arithmetic over bounded
 counts. ELF output is exactly `65536 + 512*F + 128*N + B` bytes. A ByteBuffer owns
@@ -211,10 +215,11 @@ A scalar root prints I64 without a newline. A binary-filter root reads stdin to
 EOF without a default transport quota, then writes the successful image as raw
 bytes; rejection writes
 `compiler_rejected:<code>\n` with empty stdout and exits 65. Usage exits 64;
-native traps exit 70. The profile's tighter 8 MiB bound applies before hashing.
+native traps exit 70. ELF mode retains its tighter 8 MiB bound before hashing;
+artifact mode uses profile 5's checked framing and optional allowance.
 Read/write loops handle partial transfers and retry EINTR; other I/O errors exit
 nonzero. An external launcher owns atomic file publication. Native execution is
-unmetered and subject to process limits. Input bounds and traversal fuel differ
+unmetered and subject to process limits. Input bounds and admission allowances differ
 from VM instruction/allocation quotas.
 
 Compiler workload measurements use the existing trusted foreground evaluator

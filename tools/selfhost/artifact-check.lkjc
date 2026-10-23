@@ -11,20 +11,30 @@ declarations.begin
       (returns I64)
       (body
         (if
-          (call ci::either (call ci::lt (local offset) (i64 0)) (call ci::lt (local count) (i64 0)))
-          (i64 -1)
           (if
-            (call ci::either
-              (call ci::lt (i64 8388608) (local count))
-              (call ci::either
-                (call ci::lt (local stride) (i64 0))
-                (call ci::lt (i64 256) (local stride))))
-            (i64 -1)
-            (let
-              (binding end
-                (call ci::add (local offset) (call ci::mul (local count) (local stride))))
-              (in
-                (if (call ci::lt (call ci::length (local data)) (local end)) (i64 -1) (local end))))))))
+            (if (call ci::lt (local offset) (i64 0)) (bool false) (bool true))
+            (if
+              (if (call ci::lt (local count) (i64 0)) (bool false) (bool true))
+              (if (call ci::lt (i64 0) (local stride)) (bool true) (bool false))
+              (bool false))
+            (bool false))
+          (let
+            (binding length (call ci::length (local data)))
+            (in
+              (if
+                (if (call ci::lt (local length) (local offset)) (bool false) (bool true))
+                (if
+                  (if
+                    (call
+                      ci::lt
+                      (call ci::div (call ci::sub (local length) (local offset)) (local stride))
+                      (local count))
+                    (bool false)
+                    (bool true))
+                  (call ci::add (local offset) (call ci::mul (local count) (local stride)))
+                  (i64 -1))
+                (i64 -1))))
+          (i64 -1))))
     (function create zeros
       (visibility public)
       (effect pure)

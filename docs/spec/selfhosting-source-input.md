@@ -21,8 +21,9 @@ fixed point remain separate work.
 The current carrier has one package and no dependencies or external blobs.
 Recognized unsupported boundaries reject explicitly; importing a package's
 interface or prior validation witness cannot supply its missing source bodies.
-This carrier is separate from LKJCI1 profile 4, which retains its existing
-backend input and output contract.
+This carrier is separate from normalized LKJCI1: mode 0 uses profile 4 for ELF
+and mode 1 uses profile 5 for canonical artifacts. Those backend inputs retain
+Rust admission and normalization until the source-driven E2/E3 path replaces them.
 
 ## Exact bytes
 

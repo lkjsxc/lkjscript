@@ -860,6 +860,9 @@ mod effects;
 #[path = "selfhost_source_function_binder_oracle_tests.rs"]
 mod function_binder_oracle;
 
+#[path = "selfhost_source_profile_tests.rs"]
+mod profile;
+
 #[path = "selfhost_source_measure_tests.rs"]
 mod measure;
 

@@ -156,15 +156,13 @@ fn selfhost_artifact_input_rejects_malformed_complete_bundles() {
     }
     for (offset, value, diagnostic) in [
         (0, 0_u32, 1),
-        (8, 3, 2),
+        (8, 4, 2),
         (12, 1, 3),
         (20, 1, 3),
         (24, 0, 3),
         (24, 701, 3),
         (28, 1, 3),
-        (32, 0, 6),
-        (32, u32::MAX, 6),
-        (36, 1, 6),
+        (32, 1, 6),
         (72, 0, 10),
         (76, 0, 10),
         (80, u32::MAX, 10),
@@ -224,6 +222,103 @@ fn selfhost_artifact_input_rejects_malformed_complete_bundles() {
     zero_owner[unit + 32..unit + 48].fill(0);
     input::rechecksum(&mut zero_owner);
     assert_eq!(result("compile-elf", &zero_owner), (10, vec![]));
+}
+
+#[test]
+fn selfhost_artifact_input_preserves_unmetered_and_exact_u64_allowances() {
+    use std::num::NonZeroU64;
+
+    let source = byte_buffer_tests::author_only(
+        "declarations.begin\n(units (module create allowance (function create entry (visibility public) (effect pure) (returns I64) (body (i64 42)))))\ndeclarations.end\n",
+    )
+    .unwrap();
+    let program = prepare_snapshot(&source);
+    let valid = selfhost_artifact_input::bundle(program.artifact()).unwrap();
+    assert_eq!(u32::from_le_bytes(valid[8..12].try_into().unwrap()), 5);
+    assert_eq!(&valid[32..40], &[0; 8]);
+    let expected = image("compile-elf", &valid);
+    let units = u64::from(u32::from_le_bytes(valid[76..80].try_into().unwrap()));
+    let objects = u64::from(u32::from_le_bytes(valid[84..88].try_into().unwrap()));
+    // Normative admission estimate, distinct from evaluator execution counters.
+    let required = 4096 + 128 * valid.len() as u64 + 64 * (units * units + objects);
+    assert!(required < 1_u64 << 31);
+    for selected in [
+        required - 1,
+        required,
+        required + 1,
+        (1_u64 << 31) - 1,
+        1_u64 << 31,
+        (1_u64 << 32) - 1,
+        1_u64 << 32,
+        (1_u64 << 32) + 1,
+        (1_u64 << 63) - 1,
+        1_u64 << 63,
+        (1_u64 << 63) + 1,
+        u64::MAX,
+    ] {
+        let mut input = valid.clone();
+        input[32..40].copy_from_slice(&selected.to_le_bytes());
+        input::rechecksum(&mut input);
+        let projected = selfhost_artifact_input::bundle_with_allowance(
+            program.artifact(),
+            NonZeroU64::new(selected),
+        );
+        if selected < required {
+            assert!(projected.is_err());
+            assert_eq!(result("compile-elf", &input), (6, vec![]));
+        } else {
+            assert_eq!(projected.unwrap(), input);
+            assert_eq!(result("compile-elf", &input), (0, expected.clone()));
+        }
+    }
+    for allowance in [0, required] {
+        let mut stale = valid.clone();
+        stale[8..12].copy_from_slice(&4_u32.to_le_bytes());
+        stale[32..40].copy_from_slice(&allowance.to_le_bytes());
+        input::rechecksum(&mut stale);
+        assert_eq!(result("compile-elf", &stale), (2, vec![]));
+    }
+}
+
+#[test]
+fn selfhost_artifact_input_extents_reject_overflow_before_multiplication() {
+    for (offset, count, stride, expected) in [
+        (0_i64, 1_i64, 257_i64, vec![251, 2, 2]),
+        (257, 0, 1, vec![251, 2, 2]),
+        (1, 128, 2, vec![251, 2, 2]),
+        (2, 128, 2, vec![1]),
+        (258, 0, 1, vec![1]),
+        (0, 0, i64::MAX, vec![0]),
+        (0, 1, i64::MAX, vec![1]),
+        (0, i64::MAX, i64::MAX, vec![1]),
+        (i64::MAX, 0, 1, vec![1]),
+        (-1, 1, 1, vec![1]),
+        (0, -1, 1, vec![1]),
+        (0, 1, -1, vec![1]),
+        (0, 1, 0, vec![1]),
+        (i64::MIN, 1, 1, vec![1]),
+        (0, i64::MIN, 1, vec![1]),
+        (0, 1, i64::MIN, vec![1]),
+    ] {
+        let mut input = vec![0; 257];
+        for (at, value) in [(0, offset), (8, count), (16, stride)] {
+            input[at..at + 8].copy_from_slice(&value.to_le_bytes());
+        }
+        assert_eq!(
+            image("probe-extent", &input),
+            expected,
+            "offset={offset} count={count} stride={stride}"
+        );
+    }
+    for (length, expected) in [
+        (8 * 1_048_576, vec![252, 0, 0, 0, 1]),
+        (8 * 1_048_576 + 1, vec![252, 2, 0, 0, 1]),
+    ] {
+        let mut input = vec![0; length];
+        input[8..16].copy_from_slice(&(length as i64).to_le_bytes());
+        input[16..24].copy_from_slice(&1_i64.to_le_bytes());
+        assert_eq!(image("probe-extent", &input), expected, "length={length}");
+    }
 }
 
 #[test]
@@ -621,4 +716,180 @@ fn selfhost_artifact_executes_control_flow_and_exact_arithmetic_traps() {
     for length in [0, 59, emitted.len() - 1] {
         assert!(crate::platform::compiler::load_artifact(&emitted[..length]).is_err());
     }
+}
+
+/// Publicly authored unused functions keep this above the former aggregate
+/// quota while remaining within the current single-leaf unit-map capability.
+pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
+    static CAPACITY: OnceLock<(Vec<u8>, Vec<u8>)> = OnceLock::new();
+    CAPACITY.get_or_init(|| {
+        use crate::platform::compiler::unit::CompiledText;
+        use crate::platform::kernel::OwnerKey;
+
+        let author_started = std::time::Instant::now();
+        let initial = byte_buffer_tests::author_only(
+            "declarations.begin\n(units (module create capacity-entry (function create entry (visibility public) (effect pure) (returns I64) (body (i64 42)))))\ndeclarations.end\n",
+        )
+        .unwrap();
+        let memory = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+        let repository = GraphRepository::create_memory(&memory, &initial, None)
+            .unwrap()
+            .repository;
+        let text = |index| {
+            let prefix = format!("capacity-payload-{index:03}:");
+            format!("{prefix}{}", "x".repeat(6144 - prefix.len()))
+        };
+        for (start, end) in [(0, 250), (250, 500), (500, 699)] {
+            let mut proposal = format!(
+                "request base={}\ndeclarations.begin\n(units (module create capacity-{start}\n",
+                repository.view_current().unwrap().revision()
+            );
+            for index in start..end {
+                proposal.push_str(&format!(
+                    "(function create payload-{index} (visibility public) (effect pure) (returns Text) (body (text \"{}\")))\n",
+                    text(index)
+                ));
+            }
+            proposal.push_str("))\ndeclarations.end\n");
+            assert!(proposal.len() < 4 * 1_048_576);
+            let decoded = crate::platform::control::decode_compact_change(
+                "artifact capacity",
+                proposal.as_bytes(),
+            )
+            .unwrap();
+            let plan = repository
+                .prepare_authored_change(&decoded.semantic, decoded.options)
+                .unwrap();
+            repository.publish(&plan.publication).unwrap();
+        }
+        let source = repository
+            .view_current()
+            .unwrap()
+            .reconstruct_full_oracle()
+            .unwrap()
+            .value;
+        let original = prepare_snapshot(&source);
+        let entry = declaration_named(&source, "entry");
+        let expected_texts = (0..699)
+            .map(|index| {
+                (
+                    OwnerKey::Declaration(declaration_named(&source, &format!("payload-{index}")).declaration),
+                    text(index),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let mut expected_owners = expected_texts.keys().copied().collect::<BTreeSet<_>>();
+        assert!(expected_owners.insert(OwnerKey::Declaration(entry.declaration)));
+        assert_eq!(expected_owners.len(), 700);
+        assert_eq!(original.functions.len(), 700);
+        let mut observed_owners = BTreeSet::new();
+        for (key, bytes) in &original.artifact().objects {
+            if key.domain != ObjectDomain::CompilerUnit {
+                continue;
+            }
+            let unit = crate::platform::compiler::CompilationUnit::decode(bytes, *key).unwrap();
+            assert!(observed_owners.insert(unit.source.owner));
+            if let Some(expected) = expected_texts.get(&unit.source.owner) {
+                assert_eq!(unit.tables.texts.len(), 1);
+                let CompiledText::Inline(actual) = &unit.tables.texts[0] else {
+                    panic!("capacity literal was not inline");
+                };
+                assert_eq!(actual.as_str(), expected.as_str());
+            }
+        }
+        assert_eq!(observed_owners, expected_owners);
+
+        let input = selfhost_artifact_input::bundle(original.artifact()).unwrap();
+        let at = |offset| u32::from_le_bytes(input[offset..offset + 4].try_into().unwrap()) as usize;
+        assert_eq!(at(8), 5);
+        assert_eq!(at(76), 700);
+        assert_eq!(&input[32..40], &[0; 8]);
+        assert!(input.len() > 8 * 1_048_576, "input_bytes={}", input.len());
+        let meta = at(88);
+        for count in [at(84), at(meta + 192), at(meta + 264), at(meta + 304)] {
+            assert!(count <= 100_000);
+        }
+        for index in 0..700 {
+            assert!(at(160 + index * 8 + 4) <= 8 * 1_048_576);
+        }
+        let author_ms = author_started.elapsed().as_millis();
+        let (compiler_source, compiler_program) = compiler();
+        let native = crate::platform::compiler::elf_x86_64::compile_function(
+            compiler_program,
+            compiler_program
+                .function(declaration_named(compiler_source, "compile-elf"))
+                .unwrap()
+                .0 as usize,
+        )
+        .unwrap()
+        .0;
+        let started = std::time::Instant::now();
+        let emitted = native_filter_tests::execute_filter(&native, &input, &[], 65521);
+        let native_ms = started.elapsed().as_millis();
+        assert_eq!(emitted.status.code(), Some(0), "{:?}", emitted.stderr);
+        assert!(emitted.stderr.is_empty());
+        let loaded = crate::platform::compiler::load_artifact(&emitted.stdout).unwrap();
+        let preserved = |domain| {
+            matches!(
+                domain,
+                ObjectDomain::CompilerUnit
+                    | ObjectDomain::Owner
+                    | ObjectDomain::Type
+                    | ObjectDomain::Blob
+                    | ObjectDomain::PackageRevision
+                    | ObjectDomain::PackageInterface
+            )
+        };
+        let expected_keys = original
+            .artifact()
+            .objects
+            .keys()
+            .filter(|key| preserved(key.domain))
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let actual_keys = loaded
+            .objects
+            .keys()
+            .filter(|key| preserved(key.domain))
+            .copied()
+            .collect::<BTreeSet<_>>();
+        assert_eq!(actual_keys, expected_keys);
+        for key in expected_keys {
+            assert!(
+                loaded.objects.get(&key) == original.artifact().objects.get(&key),
+                "capacity object differs: {key:?}"
+            );
+        }
+        let program = NormalizedProgram::prepare(loaded).unwrap();
+        let policy = NormalizedRunPolicy::foreground();
+        let control = ExecutionControl::uncancelled();
+        assert_eq!(
+            NormalizedVm::for_test(&program, policy)
+                .invoke(entry, vec![], None, &control)
+                .unwrap()
+                .0,
+            NormalizedValue::I64(42)
+        );
+        assert_eq!(
+            NormalizedReferenceInterpreter::new(&source, &program, policy)
+                .invoke(entry, vec![], None, &control)
+                .unwrap()
+                .0,
+            NormalizedValue::I64(42)
+        );
+        eprintln!(
+            "selfhost artifact capacity units=700 unused_text_functions=699 input_bytes={} input_sha256={} artifact_bytes={} artifact_sha256={} C1_sha256={} author_ms={author_ms} native_ms={native_ms}",
+            input.len(),
+            crate::platform::semantic_id::encode_hex(&Sha256::digest(&input)),
+            emitted.stdout.len(),
+            crate::platform::semantic_id::encode_hex(&Sha256::digest(&emitted.stdout)),
+            crate::platform::semantic_id::encode_hex(&Sha256::digest(&native)),
+        );
+        (input, emitted.stdout)
+    })
+}
+
+#[test]
+fn selfhost_artifact_input_exceeds_the_former_aggregate_byte_quota() {
+    capacity_bundle();
 }

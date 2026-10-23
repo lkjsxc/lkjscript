@@ -438,6 +438,7 @@ fn selfhost_byte_backend_reproduces_its_complete_native_closure() {
         crate::platform::semantic_id::encode_hex(&Sha256::digest(&c2))
     );
     let (artifact_input, artifact_expected) = artifact::complete_compiler();
+    let (capacity_input, capacity_expected) = artifact::capacity_bundle();
     let independent_artifact_source = byte_buffer_tests::author_only(
         &include_str!("../../../../tests/fixtures/selfhost-artifact-empty-runtime.lkjc")
             .replace("(i64 42)", "(i64 -91)"),
@@ -469,6 +470,25 @@ fn selfhost_byte_backend_reproduces_its_complete_native_closure() {
             crate::platform::semantic_id::encode_hex(&Sha256::digest(artifact_input)),
             produced.stdout.len(),
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&produced.stdout))
+        );
+        let capacity = native_filter_tests::execute_filter(stage, capacity_input, &[], 65521);
+        assert_eq!(
+            capacity.status.code(),
+            Some(0),
+            "{name}: {:?}",
+            capacity.stderr
+        );
+        assert!(capacity.stderr.is_empty());
+        assert!(
+            capacity.stdout == *capacity_expected,
+            "{name} capacity artifact differs"
+        );
+        eprintln!(
+            "selfhost tier=backend stage={name} capacity_input_bytes={} capacity_input_sha256={} capacity_artifact_bytes={} capacity_artifact_sha256={}",
+            capacity_input.len(),
+            crate::platform::semantic_id::encode_hex(&Sha256::digest(capacity_input)),
+            capacity.stdout.len(),
+            crate::platform::semantic_id::encode_hex(&Sha256::digest(&capacity.stdout)),
         );
         let mut malformed = artifact_input.clone();
         malformed[40] ^= 1;

@@ -69,13 +69,32 @@ declarations.begin
     (parameter create i (type I64)) (returns T))
   (function create validate (visibility public) (effect pure)
     (parameter create data (type Bytes)) (returns I64)
-    (body (let (binding length (call length (local data)))
-      (in (if (call either (call lt (local length) (i64 160)) (call lt (i64 8388608) (local length))) (i64 3)
-        (if (call same (call slice (local data) (i64 0) (i64 8)) (call text-bytes (text "LKJCI001")))
-          (if (call eq (call u32 (local data) (i64 8)) (i64 4))
-            (if (call eq (call u32 (local data) (i64 112)) (i64 0)) (call flow::validate (local data))
-              (if (call eq (call u32 (local data) (i64 112)) (i64 1)) (call artifact-input::validate (local data)) (i64 2)))
-            (i64 2)) (i64 1)))))))
+    (body
+        (let
+          (binding length (call ci::length (local data)))
+          (in
+            (if
+              (call ci::lt (local length) (i64 160))
+              (i64 3)
+              (if
+                (call
+                  ci::same
+                  (call ci::slice (local data) (i64 0) (i64 8))
+                  (call ci::text-bytes (text "LKJCI001")))
+                (if
+                  (call ci::eq (call ci::u32 (local data) (i64 112)) (i64 0))
+                  (if
+                    (call ci::lt (i64 8388608) (local length))
+                    (i64 3)
+                    (if
+                      (call ci::eq (call ci::u32 (local data) (i64 8)) (i64 4))
+                      (call flow::validate (local data))
+                      (i64 2)))
+                  (if
+                    (call ci::eq (call ci::u32 (local data) (i64 112)) (i64 1))
+                    (call artifact-input::validate (local data))
+                    (i64 2)))
+                (i64 1)))))))
   (function create append (visibility public) (effect pure)
     (parameter create data (type Bytes)) (parameter create i (type I64))
     (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)

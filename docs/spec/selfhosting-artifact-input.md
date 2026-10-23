@@ -18,18 +18,22 @@ effects, constrained type parameters and test summaries reject at export.
 ## Complete input
 
 All scalar fields are little-endian; IDs and digests are raw bytes. The common
-magic is `LKJCI001`, profile at offset 8 is exactly 4, and offset 112 is exactly 1.
-Actual length is bounded by 160 and 8,388,608 bytes before hashing. The header is
-160 bytes, with this layout:
+magic is `LKJCI001`, profile at offset 8 is exactly 5, and offset 112 is exactly 1.
+Mode 0 retains profile 4; a mode-1 profile-4 input rejects deterministically.
+The default aggregate 8 MiB quota is removed. The current offset representation
+admits actual lengths from 160 through 4,294,967,295 bytes before hashing. This is
+a representation domain, not a promise that every such input fits the native
+runtime: its separate 256 MiB per-value limit and host allocation failures still
+apply. The header is 160 bytes, with this layout:
 
 | Offset | Width | Meaning |
 | --- | --- | --- |
 | 0 | 8 | Magic |
-| 8 | 4 | Profile 4 |
+| 8 | 4 | Profile 5 |
 | 12 | 4 | Zero |
 | 16 | 8 | Complete byte length L |
 | 24 | 8 | Unit count U, 1 through 700 |
-| 32 | 8 | Traversal fuel |
+| 32 | 8 | Zero for unmetered admission, otherwise a positive u64 allowance |
 | 40 | 32 | BLAKE3 of `[0,40)` concatenated with `[72,L)` |
 | 72 | 8 | Unit directory offset 160 and count U, two u32 words |
 | 80 | 8 | Source-object row offset `160+8*U` and count O, 1 through 100000 |
@@ -38,10 +42,30 @@ Actual length is bounded by 160 and 8,388,608 bytes before hashing. The header i
 | 112 | 4 | Artifact selector 1 |
 | 116 | 44 | Zero |
 
-Lengths, counts and fuel have zero high words. Fuel is at least
-`4096 + 128*L + 64*U*U + 64*O` and at most 2,147,483,647. This bounds structural
-visits, byte scans and the derived-row selection sort; it is not an execution
-quota. Calls in the compiled program are not executed during admission.
+Lengths and unit counts have zero high words. The allowance uses all 64 bits:
+zero explicitly selects unmetered admission; every positive value must be at
+least `4096 + 128*L + 64*(U*U + O)`. There is no default allowance ceiling and no
+signed narrowing. The Rust projection API represents this choice as
+`Option<NonZeroU64>` and preserves a selected positive value exactly. The native
+checker compares the high and low u32 halves lexicographically. A value one below
+the required estimate rejects with diagnostic 6; equality succeeds.
+
+This estimate is an optional admission policy, separate from execution steps,
+allocation limits and observations. The passes do not decrement it. Their
+termination comes from finite, advancing cursors: unit and object record indexes
+increase to their validated counts, spans partition the finite input, UTF-8
+cursors advance, and metadata searches decrease a bounded binary-search interval.
+Calls in the compiled program are not executed during admission.
+
+Before computing the estimate, layout requires at least 336 bytes per unit,
+validated metadata extent, and the retained object/owner counts. Even the weaker
+bounds `L <= 2^32-1`, `U <= floor(L/336)` and `O <= floor(L/48)` bound the formula
+by 10,457,892,146,095,296, below `2^54` and signed I64. The actual 700-unit and
+100,000-object guards make this bound more conservative. Generic extent checks
+require nonnegative offset/count and positive stride, establish `offset <= L`,
+and compare `count <= (L-offset)/stride` before multiplying or adding. A zero
+count at the end is valid; an out-of-range offset, zero stride or overflowing
+extent rejects deterministically.
 
 Directory rows are `(offset:u32,length:u32)`. Metadata, unit blobs in directory
 order and source-object blobs in row order fill the input consecutively with no
@@ -93,7 +117,10 @@ a program with no parameters or resource boundary can have no runtime-owner rows
 
 ## Unit projection
 
-Every unit starts with a 256-byte descriptor:
+Each projected unit retains its independent 336 through 8,388,608-byte extent
+restriction. The canonical Rust unit reader independently retains its 8 MiB
+encoded-unit boundary. Lifting aggregate input size does not lift either unit
+boundary. Every unit starts with a 256-byte descriptor:
 
 | Offset | Width | Meaning |
 | --- | --- | --- |
@@ -163,8 +190,14 @@ stack execution or correspondence with the raw source graph.
 `unit-wire` encodes the current canonical bincode fields, typed ID/digest tags,
 unit key, `LKJCUNIT` envelope and object identity. It does not copy an encoded
 unit from input. `unit-map` builds the canonical logical radix content digest
-and one valid physical leaf, supporting at most 700 bindings. A different valid
-physical partition may have the same logical content digest.
+and one valid physical leaf, supporting at most 700 bindings. This count is an
+implementation guard for the current flat emitter, not a language limit. With U
+bindings, 17-byte keys, 65-byte values and common-prefix length p, its exact page
+size is `107 + p + U*(88-p)`. At U=700 the worst case is 61,707 bytes, within the
+canonical map reader's 65,536-byte page boundary. Removing the guard requires
+hierarchical page emission and inclusion of every derived child page in the
+artifact's objects and pack. A different valid physical partition may have the
+same logical content digest.
 
 The compiler derives the compilation manifest, combines source and generated
 objects in ObjectKey order, derives the artifact closure and manifest, and emits
@@ -178,3 +211,29 @@ execute independent programs with fixed expected values and trap codes. Native
 stage tests compare A2/A3 against the same VM/reference/C1 output. These establish
 Tier 1 backend behavior only; source semantics, lexical phase arenas and semantic
 source-graph reproduction remain required for Tier 2.
+
+## Capacity and allocation boundaries
+
+The mode-1 aggregate byte quota is the only product capacity ceiling removed by
+profile 5. The 700-unit flat-map guard, 100,000 source objects and metadata owners,
+8 MiB projected units, per-table/instruction limits and 128-local limit remain.
+Mode 0 retains its existing profile, byte bound, type representation and fuel.
+No `LKJSG001`, canonical unit, map, pack or `.lkja` envelope changes are coupled
+to this cutover.
+
+The Rust exporter checks every projection extent and serialized u32 conversion.
+Projection buffers reserve through `Vec::try_reserve` before resizing. These
+failures return `compiler_artifact_input_unsupported`; unrelated standard Rust
+allocations in decoding, unit/reference collection and sorting retain their host
+allocation behavior. The exporter also rejects the retained unit, source-object,
+metadata-owner, table, signature, local, instruction and operand count bounds.
+These checks do not replace native framing or whole supplied-unit validation.
+
+Capacity evidence uses a publicly authored package with 700 units, including 699
+unused functions with distinct 6,144-byte inline text literals. Tests require the
+actual mode-1 input to exceed 8 MiB, preserve the complete expected unit identity
+set and each text association, and compare exact source/unit object sets and
+bytes after independent strict loading. C1, C2 and C3 consume the same large
+input and produce identical artifacts. The small entry evaluates to 42 in both
+engines. These are Tier 1 capacity controls; they do not establish source-driven
+E2/E3, native phase reclamation, or capacity up to the u32 representation maximum.
