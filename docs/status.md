@@ -1,6 +1,6 @@
 # Current status
 
-Updated 2026-10-22 (UTC). Accepted typed meaning is the sole editable authority.
+Updated 2026-10-23 (UTC). Accepted typed meaning is the sole editable authority.
 Production bytecode is checked against an independent canonical interpreter.
 Verification has no three-minute requirement; elapsed time is an observation.
 
@@ -13,95 +13,108 @@ lint invariants and the no-Python policy remain intact.
 
 The lkjscript-written Tier 1 backend consumes Rust-admitted LKJCI1 mode 0/profile 4
 for standalone Linux x86_64 ELF and mode 1/profile 5 for current .lkja artifacts.
-Restricted E1 recognizes interfaces, operations/parameters, requirements,
-function R/E binders and TaskFunction types. E1 does not replace Rust semantic
-admission or normalization. The [self-hosting specification](spec/selfhosting.md)
-owns the complete capability matrix. Native heap allocations remain process-owned
-until exit; same-process and phase reclamation still require implementation.
+The additional compile-source-elf route consumes complete raw LKJSG001 and performs
+restricted scalar E2 admission and E3 lowering inside lkjscript. The
+[self-hosting specification](spec/selfhosting.md) owns the complete capability
+matrix. Native heap allocations remain process-owned until exit; same-process
+and phase reclamation still require implementation.
 
 ## Current milestone
 
-Mode-1 artifact input has no default aggregate 8 MiB quota. The Rust producer uses
-explicit optional positive u64 allowance; zero represents unmetered admission.
-The native checker compares full-width allowance halves and validates extents
-before multiplication. Stale mode-1 profile-4 inputs reject deterministically.
-Mode 0 remains profile 4. The [capacity decision](decisions/20261022-mode1-byte-capacity.md)
-records the producer/consumer cutover, finite progress and independent controls.
+The source-driven scalar path checks all supplied owners/types, including
+uncalled functions, untaken branches and unused descriptors. It admits pure
+monomorphic Unit/Bool/I64 functions, locals, If, Let, Sequence and direct calls.
+It resolves the command Target and component Port internally, produces its own
+normalized instructions and flow certificates, and emits ELF through the existing
+backend. Empty-row task callables remain unsupported tasks.
 
-The 700-unit guard remains because the current unit map emits a single canonical
-leaf. u32 framing, 8 MiB individual units, finite table/local counts and native
-256 MiB value construction remain separate restrictions. Both native filter
-emitters already read through EOF using checked growable mappings, including
-exact-fit EOF and moving remaps; the
-[transport decision](decisions/20261022-native-input-growth.md) owns that invariant.
+Four scalar tests cover eight independently executed positive programs, eight
+semantic failures, two unsupported-form controls and two independently constructed
+hash-consistent structural failures. Bool/Unit parameter and result calls,
+I64 boundaries, nested lexical scopes, operand prefixes, direct/mutual recursion
+and alternate component selection are exercised. Missing links and a disconnected
+cycle pass commitment checks before rejecting at their intended structural layer.
+The [scalar decision](decisions/20261023-source-scalar-e2-e3.md) records the exact
+contract, complete-carrier identities, measurements and evidence boundaries.
 
-The [complete active-source inventory](decisions/20261022-active-compiler-profile.md)
-now records all owners, types, intrinsic signatures/substitutions, lexical scopes,
-direct/mutual recursion and syntactic tail calls. It is derived observation and
-does not precompute E2 permission or E3 custody certificates.
+Public adoption exposed a composed callable-work policy blocker. The unchanged
+planner transaction now succeeds after replacing the ordinary composed-work quota
+with explicit None. Some(limit) preserves exact checked quota enforcement.
+Cancellation, finite specialization, metadata reservations and depth checks remain.
+The independent associated/read-view/Region preparation chain and package-source
+collectors retain their existing bounds pending coherent downstream audits.
 
-Ordinary Rust execution retains the removal of default cumulative instruction,
-modeled allocation, collection-item and capability-call quotas. Explicit quotas
-still use checked precharge; passive observations grant no capacity. Live
-frame/stack limits and cancellation remain enforced. GC preparation and evidence
-also retain their removal of default aggregate quotas; physical compaction
-preserves immutable history.
+The previous aggregate mode-1 byte quota remains removed: the maintained input
+now exceeds 8 MiB and succeeds. Native input transport uses checked growable
+mappings. The 700-unit artifact guard still protects flat map emission. Ordinary
+Rust execution retains explicit unmetered cumulative policies; GC preparation and
+evidence retain their earlier aggregate-quota removals. None of those changes
+removes unrelated representation, recursion or physical limits.
 
 ## Maintained compiler baseline
 
-The authoritative project has 62 modules, 442 pure functions and 23 externals,
-28,584 owners, 27 types and 10,586 retirements at
-rev_dc8bb4c50291e16e49a520baf65b2c93dc039d1305fc0f9c0e2a961767b03c70.
+The authoritative project has 72 modules, 553 pure functions and 23 externals,
+33,640 owners, 35 types and 10,586 retirements at
+rev_58c7fb8d64952a3b5f12e6637b4265657ff13b023a870af12af8b3f19153ba87.
 Semantic state:
-semantic_state_db9cdb516c961897effbf694efb3530f047cab7de3faa46dffae067760576b0a.
-The complete LKJSG001 carrier is 6,985,830 bytes, SHA-256
-6a29a86a8d10164f5d302c6abea284e071bbe1c426e0e3c7df088eecfb5948b0.
+semantic_state_a82dd2ca1863cd9923f8f417570f7d4fd23bdbf7db94ab96328e67a5e866ca71.
+The complete LKJSG001 carrier is 7,836,565 bytes, SHA-256
+8a9a3da1fa795170436ae4ec1f3716425ef988e08a2f81901475133005846e33.
+Its separate 8 MiB ceiling leaves 552,043 bytes of headroom.
 
-Mode-1 input occupies 7,754,834 bytes for 467 units. The native closure has
-244 functions and 16,460 nodes in 832,748 mode-0 bytes. Direct local full-kernel
-validation consumes 2,573,097 work units. Public rebuilt current-validation
-separately reports 9,177,359 aggregate units across local and composed-source
-operations; that sum does not measure headroom under a single admission ceiling.
-Physical packs occupy 353,464,648 bytes. Reachable historical payload and native
-requested/live/mapped/RSS quantities have not been remeasured.
+Mode-1 input occupies 9,081,896 bytes for 580 units and emits a 9,598,554-byte
+artifact. The unchanged Tier 1 native backend closure has 244 functions and
+16,460 nodes in 832,748 mode-0 bytes. Direct local full-kernel validation consumes
+3,091,132 work units. Public rebuilt current-validation separately reports
+11,111,393 aggregate units; that sum is not headroom under one admission ceiling.
+Composed analysis alone reports 7,985,578 work units and 11,392,635 modeled metadata
+bytes. The maintained closure does not select associated preparation.
 
-The source transaction preserves existing module, function and parameter
-identities. No retirement deletion, history truncation or project reseed occurs.
+The complete inventory records exact intrinsic signatures/substitutions, parameter
+use modes, lexical scopes, recursion and syntactic tail calls. It remains a derived
+observation, not E2 permission or an E3 custody certificate. Physical packs occupy
+390,397,862 bytes; versioned historical reachability retains 469,578,376
+canonical payload bytes. These quantities are distinct. Native requested
+allocation, live retention, mapped capacity and RSS have not been measured.
+
+The public source transactions add ten modules without replacing old declarations
+or adding retirements. No history truncation, retirement deletion or project
+reseed occurs.
 
 ## Verification and next work
 
-The publicly authored capacity control has 700 supplied units and a 9,567,313-byte
-input, emits 9,739,154 artifact bytes, and preserves every expected source/unit
-object after strict loading. The independent entry returns 42 in both evaluators.
-Focused controls cover exact selected allowances, full-u64 high words,
-overflow-safe extents, stale profiles, malformed complete bundles and unchanged
-mode-0 custody admission.
+Native maintained-closure measurement reproduces Tier 1 C2=C3 and identical
+C1/C2/C3 artifact bytes, bound to the complete source carrier. Mandatory selfhost
+gates additionally own VM/reference equality and behavioral/compiler-source
+controls. These fixed points still consume Rust-normalized input. Scalar
+source-to-ELF execution does not establish maintained compiler-source fixed points
+or equality with independently packaged Rust canonical artifacts.
 
-Native maintained-closure measurement reproduces C2=C3 and identical C1/C2/C3
-artifact bytes. Mandatory selfhost gates additionally own VM/reference equality
-and behavioral/compiler-source controls. These remain Rust-normalized Tier 1
-proofs. Complete carrier, executable, input and output digests are in the decision;
-source-driven C2=C3 and A1=A2=A3 are not yet established.
+The combined source frontend/backend builds with the Rust native backend:
+560 functions and 698,850 ELF bytes. Its mode-0 export reaches the aggregate
+32,768-instruction guard and rejects. The exact normalized node count remains
+unmeasured. This is the next concrete capacity dependency. Audit and remove that
+guard across exporter, flow, scalar planner/packing and native layout consumers
+with checked finite-width addressing and an actual above-threshold control;
+do not replace it with another arbitrary quota.
+
+Then extend Bytes/Text intrinsics, structural records, closed List substitutions
+and complete ByteBuffer custody cleanup to the maintained compiler profile.
+Preserve whole-carrier admission and complete-carrier identity binding through
+each semantic extension. The nearby source-carrier and artifact-unit bounds
+must be addressed when they become actual dependencies.
 
 Publication requires exact staged-tree bootstrap, tools/selfhost/verify.sh,
 every gate in full --fresh and release-target inspection. The current checker
 entrypoint is tools/bootstrap-verifier.sh and lkjscript-dev; there is no root
-./verify executable. Source/test changes select the full gate set for changed,
-so the complete checker matrix runs once. Terminal evidence is under
-.artifacts/selfhost/mode1-byte-capacity and the official latest receipt.
+./verify executable. Source/test changes select the full matrix for changed,
+so the matrix runs once. Terminal evidence is under
+.artifacts/selfhost/source-scalar and the official latest receipt.
 Git owns integration records. No public product release or deployment is implied.
 
-Next implement a source-driven scalar semantic/lowering path that checks every
-supplied function, branch and type before emitting native code. Resolve all
-port/target relationships inside lkjscript, reject unsupported task kinds
-explicitly, and use raw LKJSG001 transport from Rust. Then extend Bytes/Text,
-records, closed List substitutions and complete ByteBuffer cleanup to the
-maintained compiler profile. Measure the combined checker/backend closure before
-requiring a format redesign; LKJSG001 retains 1,402,778 bytes of current headroom.
-
-WS1 and Tier 2 remain incomplete. Remaining obligations include authoring/inspection
-quotas, recursive depth limits, custody/type encodings, source-driven E2/E3, the
-declared region/closure/witness profile, complete-carrier-bound fixed points,
-hash-consistent semantic mutation controls, independent full-profile programs and
-measured same-process native reclamation. [Verification](spec/verification.md)
-owns final acceptance.
+WS1 and full Tier 2 remain incomplete. Remaining obligations include
+authoring/inspection quotas, recursive depth limits, custody/type encodings,
+full active-profile E2/E3, nominal/closure/witness/read-view/Region expansion,
+source-driven C2=C3 and A1=A2=A3, independent full-profile controls and measured
+same-process native reclamation. [Verification](spec/verification.md) owns final
+acceptance.

@@ -1124,14 +1124,14 @@ fn canonical_associated_growth_agrees_with_eager_and_demanded_production_decisio
                     &[&fixture.source],
                     &|| Ok(()),
                     &mut work,
-                    contract::MAXIMUM_VALIDATION_WORK,
+                    Some(contract::MAXIMUM_VALIDATION_WORK),
                 )
             } else {
                 callable_flow::validate_snapshot_callable_closure(
                     &[&fixture.source],
                     &|| Ok(()),
                     &mut work,
-                    contract::MAXIMUM_VALIDATION_WORK,
+                    Some(contract::MAXIMUM_VALIDATION_WORK),
                 )
             };
             match (expected_finite, result) {
@@ -1171,7 +1171,7 @@ fn canonical_associated_flow_capacity_cancellation_and_healthy_retry_keep_distin
             &[&fixture.source],
             &count,
             &mut work,
-            contract::MAXIMUM_VALIDATION_WORK,
+            Some(contract::MAXIMUM_VALIDATION_WORK),
             64 * 1_048_576,
             eager,
         )
@@ -1187,7 +1187,7 @@ fn canonical_associated_flow_capacity_cancellation_and_healthy_retry_keep_distin
                 &[&fixture.source],
                 &|| Ok(()),
                 &mut 0,
-                maximum_work,
+                Some(maximum_work),
                 maximum_metadata_bytes,
                 eager,
             )
@@ -1212,7 +1212,7 @@ fn canonical_associated_flow_capacity_cancellation_and_healthy_retry_keep_distin
             &[&fixture.source],
             &cancel,
             &mut 0,
-            complete_work,
+            Some(complete_work),
             expected.metadata_bytes,
             eager,
         )
@@ -1224,7 +1224,7 @@ fn canonical_associated_flow_capacity_cancellation_and_healthy_retry_keep_distin
             &[&fixture.source],
             &|| Ok(()),
             &mut retry_work,
-            complete_work,
+            Some(complete_work),
             expected.metadata_bytes,
             eager,
         )

@@ -1,0 +1,414 @@
+declarations.begin
+(units
+  (module create source-scalar-infer
+    (function create reference-fact
+      (visibility package) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create domain (type I64))
+      (returns I64)
+      (body
+        (call ci::get (local facts)
+          (call source-table::owner
+            (local graph) (local data) (local at) (local domain)))))
+
+    (function create ready-items
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create remaining (type I64))
+      (parameter create domain (type I64))
+      (returns Bool)
+      (body
+        (if (call ci::eq (local remaining) (i64 0))
+          (bool true)
+          (if
+            (call ci::eq
+              (call reference-fact
+                (local graph) (local facts) (local data) (local at) (local domain))
+              (i64 0))
+            (bool false)
+            (call ready-items
+              (local graph) (local facts) (local data)
+              (call ci::add (local at) (i64 17))
+              (call ci::sub (local remaining) (i64 1))
+              (local domain))))))
+
+    (function create arguments
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create call-data (type Bytes))
+      (parameter create argument-at (type I64))
+      (parameter create function-data (type Bytes))
+      (parameter create parameter-at (type I64))
+      (parameter create remaining (type I64))
+      (returns I64)
+      (body
+        (if (call ci::eq (local remaining) (i64 0))
+          (i64 1)
+          (let
+            (binding actual
+              (call reference-fact
+                (local graph) (local facts) (local call-data) (local argument-at) (i64 9)))
+            (binding parameter
+              (call source-table::owner
+                (local graph) (local function-data) (local parameter-at) (i64 7)))
+            (binding expected
+              (call source-scalar-profile::parameter-type (local graph) (local parameter)))
+            (in
+              (if (call ci::eq (local actual) (i64 0))
+                (i64 0)
+                (if (call ci::eq (local actual) (local expected))
+                  (call arguments
+                    (local graph) (local facts) (local call-data)
+                    (call ci::add (local argument-at) (i64 17))
+                    (local function-data)
+                    (call ci::add (local parameter-at) (i64 17))
+                    (call ci::sub (local remaining) (i64 1)))
+                  (i64 -19))))))))
+
+    (function create call-fact
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (let
+          (binding function
+            (call source-table::owner (local graph) (local data) (i64 57) (i64 2)))
+          (binding function-data
+            (call source-table::data (local graph) (local function)))
+          (binding parts
+            (call source-scalar-profile::function-parts (local graph) (local function)))
+          (binding parameters
+            (call source-table::array
+              (local function-data) (field (local parts) (name parameters))))
+          (binding operands
+            (call source-table::array (local data) (i64 76)))
+          (in
+            (if
+              (call ci::eq
+                (field (local operands) (name value))
+                (field (local parameters) (name value)))
+              (let
+                (binding checked
+                  (call arguments
+                    (local graph) (local facts) (local data)
+                    (field (local operands) (name next))
+                    (local function-data)
+                    (field (local parameters) (name next))
+                    (field (local operands) (name value))))
+                (in
+                  (if (call ci::eq (local checked) (i64 1))
+                    (call source-scalar-profile::function-result
+                      (local graph) (local function))
+                    (local checked))))
+              (i64 -19))))))
+
+    (function create if-fact
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (let
+          (binding condition
+            (call reference-fact (local graph) (local facts) (local data) (i64 38) (i64 9)))
+          (binding yes
+            (call reference-fact (local graph) (local facts) (local data) (i64 55) (i64 9)))
+          (binding no
+            (call reference-fact (local graph) (local facts) (local data) (i64 72) (i64 9)))
+          (in
+            (if
+              (call ci::either
+                (call ci::eq (local condition) (i64 0))
+                (call ci::either
+                  (call ci::eq (local yes) (i64 0))
+                  (call ci::eq (local no) (i64 0))))
+              (i64 0)
+              (if
+                (call ci::both
+                  (call ci::eq (local condition) (i64 2))
+                  (call ci::eq (local yes) (local no)))
+                (local yes)
+                (i64 -19)))))))
+
+    (function create let-fact
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (let
+          (binding bindings (call source-table::array (local data) (i64 38)))
+          (in
+            (if
+              (call ready-items
+                (local graph) (local facts) (local data)
+                (field (local bindings) (name next))
+                (field (local bindings) (name value))
+                (i64 8))
+              (call reference-fact
+                (local graph) (local facts) (local data)
+                (call source-table::skip (local data) (i64 38) (i64 17))
+                (i64 9))
+              (i64 0))))))
+
+    (function create sequence-fact
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (let
+          (binding items (call source-table::array (local data) (i64 38)))
+          (in
+            (if (call ci::eq (field (local items) (name value)) (i64 0))
+              (i64 -19)
+              (if
+                (call ready-items
+                  (local graph) (local facts) (local data)
+                  (field (local items) (name next))
+                  (field (local items) (name value))
+                  (i64 9))
+                (call reference-fact
+                  (local graph) (local facts) (local data)
+                  (call ci::add
+                    (field (local items) (name next))
+                    (call ci::mul
+                      (call ci::sub (field (local items) (name value)) (i64 1))
+                      (i64 17)))
+                  (i64 9))
+                (i64 0)))))))
+
+    (function create expression-fact
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (let
+          (binding op (call ci::get (local data) (i64 37)))
+          (in
+            (if (call ci::eq (local op) (i64 0))
+              (i64 3)
+              (if (call ci::eq (local op) (i64 1))
+                (i64 2)
+                (if (call ci::eq (local op) (i64 2))
+                  (i64 1)
+                  (if (call ci::eq (local op) (i64 5))
+                    (call reference-fact
+                      (local graph) (local facts) (local data) (i64 39)
+                      (if (call ci::eq (call ci::get (local data) (i64 38)) (i64 0))
+                        (i64 7)
+                        (i64 8)))
+                    (if (call ci::eq (local op) (i64 7))
+                      (call if-fact (local graph) (local facts) (local data))
+                      (if (call ci::eq (local op) (i64 8))
+                        (call let-fact (local graph) (local facts) (local data))
+                        (if (call ci::eq (local op) (i64 9))
+                          (call sequence-fact (local graph) (local facts) (local data))
+                          (call call-fact (local graph) (local facts) (local data))))))))))))
+)
+    (function create binding-fact
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (let
+          (binding kind-at (call source-link-ref::name-end (local data) (i64 39)))
+          (binding actual
+            (call reference-fact
+              (local graph) (local facts) (local data)
+              (call ci::add (local kind-at) (i64 2)) (i64 9)))
+          (in
+            (if (call ci::eq (local actual) (i64 0))
+              (i64 0)
+              (if
+                (call ci::eq
+                  (call ci::get (local data) (call ci::add (local kind-at) (i64 19)))
+                  (i64 0))
+                (local actual)
+                (if
+                  (call ci::eq (local actual)
+                    (call source-scalar-profile::scalar-type
+                      (local graph)
+                      (call source-type-table::lookup
+                        (local graph) (local data)
+                        (call ci::add (local kind-at) (i64 20)))))
+                  (local actual)
+                  (i64 -19))))))))
+
+    (function create seed
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (parameter create pending (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (pending I64) (rows Bytes)))
+      (body
+        (if (call ci::eq (local row) (call source-table::count (local graph)))
+          (record structural
+            (field code (i64 0))
+            (field pending (local pending))
+            (field rows (call ci::freeze (local out))))
+          (let
+            (binding kind (call source-table::kind (local graph) (local row)))
+            (binding value
+              (if (call ci::eq (local kind) (i64 15))
+                (call source-scalar-profile::parameter-type (local graph) (local row))
+                (i64 0)))
+            (binding next (type ByteBuffer) (call ci::push (local value) (local out)))
+            (in
+              (call seed
+                (local graph)
+                (call ci::add (local row) (i64 1))
+                (call ci::add (local pending)
+                  (if
+                    (call ci::either
+                      (call ci::eq (local kind) (i64 16))
+                      (call ci::eq (local kind) (i64 17)))
+                    (i64 1)
+                    (i64 0)))
+                (local next)))))))
+
+    (function create pass
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create row (type I64))
+      (parameter create pending (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (pending I64) (rows Bytes)))
+      (body
+        (if (call ci::eq (local row) (call source-table::count (local graph)))
+          (record structural
+            (field code (i64 0))
+            (field pending (local pending))
+            (field rows (call ci::freeze (local out))))
+          (let
+            (binding kind (call source-table::kind (local graph) (local row)))
+            (binding old (call ci::get (local facts) (local row)))
+            (binding value
+              (if (call ci::lt (i64 0) (local old))
+                (local old)
+                (if (call ci::eq (local kind) (i64 16))
+                  (call binding-fact
+                    (local graph) (local facts)
+                    (call source-table::data (local graph) (local row)))
+                  (if (call ci::eq (local kind) (i64 17))
+                    (call expression-fact
+                      (local graph) (local facts)
+                      (call source-table::data (local graph) (local row)))
+                    (i64 0)))))
+            (in
+              (if (call ci::lt (local value) (i64 0))
+                (record structural
+                  (field code (call ci::sub (i64 0) (local value)))
+                  (field pending (local pending))
+                  (field rows (call ci::freeze (local out))))
+                (let
+                  (binding next (type ByteBuffer) (call ci::push (local value) (local out)))
+                  (in
+                    (call pass
+                      (local graph) (local facts)
+                      (call ci::add (local row) (i64 1))
+                      (call ci::add (local pending)
+                        (if (call ci::eq (local value) (i64 0))
+                          (if
+                            (call ci::either
+                              (call ci::eq (local kind) (i64 16))
+                              (call ci::eq (local kind) (i64 17)))
+                            (i64 1)
+                            (i64 0))
+                          (i64 0)))
+                      (local next))))))))))
+
+    (function create bodies
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create row (type I64))
+      (returns I64)
+      (body
+        (if (call ci::eq (local row) (call source-table::count (local graph)))
+          (i64 0)
+          (let
+            (binding checked
+              (if (call ci::eq (call source-table::kind (local graph) (local row)) (i64 6))
+                (let
+                  (binding data (call source-table::data (local graph) (local row)))
+                  (binding parts
+                    (call source-scalar-profile::function-parts (local graph) (local row)))
+                  (binding actual
+                    (call reference-fact
+                      (local graph) (local facts) (local data)
+                      (field (local parts) (name body)) (i64 9)))
+                  (in
+                    (if
+                      (call ci::eq (local actual)
+                        (call source-scalar-profile::function-result (local graph) (local row)))
+                      (i64 0)
+                      (i64 19))))
+                (i64 0)))
+            (in
+              (if (call ci::eq (local checked) (i64 0))
+                (call bodies (local graph) (local facts) (call ci::add (local row) (i64 1)))
+                (local checked)))))))
+
+    (function create rounds
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create previous (type I64))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (let
+          (binding out (type ByteBuffer) (call ci::empty))
+          (binding next
+            (call pass (local graph) (local facts) (i64 0) (i64 0) (local out)))
+          (in
+            (if (call ci::eq (field (local next) (name code)) (i64 0))
+              (if (call ci::eq (field (local next) (name pending)) (i64 0))
+                (record structural
+                  (field code
+                    (call bodies (local graph) (field (local next) (name rows)) (i64 0)))
+                  (field rows (field (local next) (name rows))))
+                (if (call ci::lt (field (local next) (name pending)) (local previous))
+                  (call rounds
+                    (local graph)
+                    (field (local next) (name rows))
+                    (field (local next) (name pending)))
+                  (record structural
+                    (field code (i64 19))
+                    (field rows (call ci::text-bytes (text ""))))))
+              (record structural
+                (field code (field (local next) (name code)))
+                (field rows (call ci::text-bytes (text "")))))))))
+
+    (function create check
+      (visibility package) (effect pure)
+      (parameter create graph (type Bytes))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (let
+          (binding out (type ByteBuffer) (call ci::empty))
+          (binding initial (call seed (local graph) (i64 0) (i64 0) (local out)))
+          (in
+            (call rounds
+              (local graph)
+              (field (local initial) (name rows))
+              (field (local initial) (name pending)))))))))
+declarations.end

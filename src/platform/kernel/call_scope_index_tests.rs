@@ -108,13 +108,13 @@ fn composed_call_scope_index_refusals_do_not_expose_new_membership() {
     assert_eq!(failure.code, "kernel_callable_flow_storage");
     assert!(analysis.associated.call_scopes.is_empty());
     analysis.maximum_metadata_bytes = MAXIMUM_ANALYSIS_BYTES;
-    analysis.maximum_work = *analysis.work;
+    analysis.maximum_work = Some(*analysis.work);
     let failure = analysis
         .retain_call_scopes(key.0, key.1, key.2, BTreeMap::new())
         .unwrap_err();
     assert_eq!(failure.code, "kernel_callable_flow_work");
     assert!(analysis.associated.call_scopes.is_empty());
-    analysis.maximum_work = 100_000;
+    analysis.maximum_work = Some(100_000);
     read.cancel_after.set(Some(read.checkpoints.get() + 1));
     let failure = analysis
         .retain_call_scopes(key.0, key.1, key.2, BTreeMap::new())

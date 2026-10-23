@@ -1025,7 +1025,10 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         &source_snapshots,
         &|| control.check().map_err(execution_diagnostic),
         &mut composed_work,
-        usize::try_from(maximum_visits - store.visits()).map_err(|_| limit("validation visits"))?,
+        Some(
+            usize::try_from(maximum_visits - store.visits())
+                .map_err(|_| limit("validation visits"))?,
+        ),
     )?;
     store.charge_visits(composed_work as u64)?;
     // Topology belongs to the checked native planner. Every exact package was

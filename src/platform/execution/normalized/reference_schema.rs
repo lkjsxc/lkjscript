@@ -330,7 +330,8 @@ impl NormalizedReferenceSchema {
                 })
             },
             &mut source_work,
-            crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+            super::reference_types::requires_associated_preparation(&inputs)
+                .then_some(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK),
         )
         .map_err(source_error)?;
         let after_composed = source_work;

@@ -27,8 +27,10 @@ retain compact evidence before removing task-owned stage binaries.
 
 All integers are little-endian. Magic is `LKJCI001`. The u32 at offset 112 selects
 ELF (0, profile `4`) or artifact (1, profile `5`) emission. Each selector admits
-only its current profile; mode-1 profile-4 inputs reject. Both modes retain Rust
-semantic admission and IR export as Tier 1 boundaries. The ELF layout follows;
+only its current profile; mode-1 profile-4 inputs reject. The Tier 1 route retains
+Rust semantic admission and IR export. The restricted scalar source route below
+instead constructs mode-0 input inside lkjscript after its own source checks.
+The ELF layout follows;
 the [artifact layout](selfhosting-artifact-input.md) supplies canonical unit
 fields and source objects, with explicit unmetered or positive-u64 admission
 allowances. Neither is the final semantic graph profile.
@@ -153,8 +155,10 @@ live, preserving borrowed calls and lexical cleanup. It performs no expression
 evaluation or native instruction selection. The current projection accepts one
 explicit closed type instantiation per declaration, needed for generic list
 primitives. Inconsistent instantiations, unsupported types, effects, witnesses,
-regions and instructions reject with `compiler_input_unsupported`. Rust still
-owns source semantic admission and normalization; Tier 2 must replace that boundary.
+regions and instructions reject with `compiler_input_unsupported`. This exporter
+remains the Tier 1 route and bootstrap path for the maintained compiler closure.
+The scalar source route does not call it to lower target programs; extending
+independent source admission and lowering to the complete compiler remains required.
 
 ## Compiler component and artifact contract
 
@@ -440,11 +444,43 @@ starts from Rust-bootstrapped normalized input, without source-to-normalized low
 
 This E1 extension does not establish E1-final. Call/FunctionValue R/E application
 arguments, owned/witness/read/region forms and Match still need broader admission.
-General application/expression typing, callable generic finite-flow, custody,
-effect compatibility, requirement satisfaction, witnesses and source normalization
-remain E2/E3 obligations.
-The declared full profile, source-driven ELF/artifact fixed points and measured
-native phase reclamation remain the Tier 2 governing requirements.
+The scalar route below adds restricted expression typing and lowering. General
+application typing, callable generic finite-flow, custody, effect compatibility,
+requirement satisfaction, witnesses and full-profile source normalization remain
+E2/E3 obligations.
+
+### Scalar source admission and lowering
+
+`source-elf::compile`, exposed by the `compile-source-elf` command target, consumes
+a complete raw `LKJSG001` carrier. `source-scalar::prepare` performs the composed
+E1 checks, scalar profile admission and expression typing before any lowering.
+The profile admits unrestricted Unit, Bool and I64, pure monomorphic function
+signatures, literals, locals, If, Let, Sequence and direct calls. Exactly one
+command target selects a component function port with signature `() -> I64`.
+All supplied owners and types participate, including uncalled function bodies,
+untaken branches and unused descriptors. Task callables remain unsupported even
+with an empty effect row. The
+[source-input contract](selfhosting-source-input.md#scalar-source-admission-and-elf-lowering)
+defines the complete restricted profile and diagnostics 13 and 19.
+
+The `source-scalar-plan/cursor/state/trace/emit/pack` modules derive stable function
+and local indexes, control flow, operand/local state certificates and current
+mode-0/profile-4 bytes. They then invoke `elf::compile-elf`; this internal
+normalized representation is produced entirely inside lkjscript. Calls use
+ordinary Call and each function returns through Return. There is no tail-call
+optimization or owned-value cleanup in this scalar profile. Both `LKJSG001` and
+the generated mode-0 input retain their current 8 MiB bounds.
+
+Rust may build the initial native compiler executable and provide raw carrier
+transport and independent test orchestration. It must not supply target semantic
+tables, lowered instructions or flow certificates to this path. The
+[scalar decision](../decisions/20261023-source-scalar-e2-e3.md) records eight
+executed positive programs, ten semantic/profile controls and two independently
+constructed hash-consistent structural controls. Scalar source-to-ELF execution
+does not establish the maintained compiler's source-driven C2/C3 fixed
+point, canonical `.lkja` A1/A2/A3 equality or parity with Rust's canonical artifact
+emission. Full-profile semantic admission, both source-driven fixed points and
+measured same-process native reclamation remain required.
 
 ## Tier 2 capability progress
 
@@ -457,7 +493,8 @@ bootstrap exporter and both output paths to support the adopted construct.
 
 | Family | Host execution | Selfhost IR/output | E1 decoding/references | E1 containment/names/binders | E2 semantics | E3 lowering | Independent source-driven controls | Compiler adoption |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Scalars, Text/StaticText, Bytes, List<I64>, structural records, branches, let, recursion | VM/reference/native | Profile 4 | Current restricted profile | Current restricted profile | Pending | Pending | Pending; Tier 1 controls exist | Current |
+| Unit, Bool, I64, If, Let, Sequence and direct monomorphic recursion | VM/reference/native | Profile 4 | Current restricted profile | Current restricted profile | Scalar whole-inventory typing implemented | Scalar mode-0 lowering implemented; ordinary Call/Return | Eight executed positive cases; ten semantic/profile and two raw structural rejection controls | Current source use; complete source compilation pending |
+| Text/StaticText, Bytes, List<I64> and structural records | VM/reference/native | Profile 4 | Current restricted profile | Current restricted profile | Pending | Pending | Pending; Tier 1 controls exist | Current |
 | Affine ByteBuffer and borrowed buffer reads | VM/reference/native | Profile 4, including borrowed tag 134 and cleanup fallback | Current restricted profile | Current restricted profile | Custody/borrow pending | Pending | Pending; Tier 1 controls exist | Current |
 | Interface, Operation and operation Parameters, Requirement, effect/requirement binders | VM/reference | Effectful forms need extension | Owners, constraints and pure/task rows admitted; R/E applications pending | All 12 namespace classes; direct/nested R/E scope | Compatibility/substitution pending | Pending | Four-engine raw-carrier E1 controls; source-driven execution pending | Optional; compiler remains pure |
 | Nominal owned records/choices, Match and general List<T> | VM/reference; native portions restricted | Nominal/match extension needed | Ordinary Record/Variant members decoded; owned forms and Match pending | Field/Case admission and nominal slot flow present; match binders pending | Pending | Pending | Pending | Optional |

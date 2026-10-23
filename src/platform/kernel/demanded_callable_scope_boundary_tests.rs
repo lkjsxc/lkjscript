@@ -33,7 +33,7 @@ fn cold_scope_projection_keeps_exact_work_and_metadata_admission() {
         source.reset(None);
         let mut used = 0;
         let mut analysis = analysis(&source, &mut used);
-        analysis.maximum_work = work - extra;
+        analysis.maximum_work = Some(work - extra);
         let mut scopes = Scopes::default();
         let result = scopes.ordinal(&mut analysis, owner, id);
         if extra == 0 {
@@ -117,11 +117,11 @@ fn warm_scope_hits_keep_cancellation_work_and_the_original_projection() {
         assert_eq!(analysis.observation.metadata_bytes, bytes);
     }
     source.reset(None);
-    analysis.maximum_work = *analysis.work + hit_work - 1;
+    analysis.maximum_work = Some(*analysis.work + hit_work - 1);
     let error = scopes.ordinal(&mut analysis, owner, id).unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Resource);
     assert_eq!(scopes.entries.len(), 1);
-    analysis.maximum_work = 10_000_000;
+    analysis.maximum_work = Some(10_000_000);
     assert_eq!(scopes.ordinal(&mut analysis, owner, id).unwrap(), 7);
     assert_eq!(source.reads.get(), 0);
     assert_eq!(analysis.observation.metadata_bytes, bytes);

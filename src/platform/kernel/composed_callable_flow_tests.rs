@@ -240,7 +240,7 @@ impl Read {
         );
     }
     fn admit(&self) -> Result<CallableFlowWork, Diagnostic> {
-        validate_callable_closure(self, &mut 0, 1_000_000)
+        validate_callable_closure(self, &mut 0, None)
     }
     fn prerequisites(&mut self, n: u64, count: usize) {
         let leaf = self.ty(TypeForm::OwnedI64Cell);
@@ -350,7 +350,7 @@ fn recursive_prerequisite_wrapping_rejects_before_exact_context_exploration() {
     read.prerequisites(1, 1);
     read.mapping_prerequisites(1, vec![lexical(1, 0)]);
     let mut work = 0;
-    let error = validate_callable_closure(&read, &mut work, 1_000).unwrap_err();
+    let error = validate_callable_closure(&read, &mut work, Some(1_000)).unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Semantic);
     assert_eq!(error.code, "kernel_callable_recursive_witness_construction");
     assert!(error.message.contains("unsupported potential recursive"));
@@ -576,7 +576,7 @@ fn acyclic_duplicate_prerequisites_share_selection_nodes_without_tree_expansion(
     let body = implementation_call(&mut read, 1004, 40, vec![selected(1001, vec![], vec![])]);
     read.function(1004, 0, 0, body);
     let mut work = 0;
-    let observation = validate_callable_closure(&read, &mut work, 5_000_000).unwrap();
+    let observation = validate_callable_closure(&read, &mut work, Some(5_000_000)).unwrap();
     assert_eq!(observation.slots, 1, "only the complete contract Self slot");
     assert_eq!(
         observation.edges, 0,
@@ -671,7 +671,7 @@ fn typed_duplicate_prerequisites(depth: u64) -> Read {
 fn acyclic_typed_prerequisite_dag_admits_without_expanding_every_path() {
     let read = typed_duplicate_prerequisites(24);
     let mut work = 0;
-    let observation = validate_callable_closure(&read, &mut work, 1_000_000).unwrap();
+    let observation = validate_callable_closure(&read, &mut work, Some(1_000_000)).unwrap();
     eprintln!("typed DAG: work={work} observation={observation:?}");
     assert!(observation.slots < 2_000);
     assert!(observation.metadata_bytes < 16 * 1024 * 1024);
@@ -918,7 +918,7 @@ fn missing_supplier_body_and_erased_phantom_arguments_reject() {
 #[test]
 fn work_exhaustion_and_owning_cancellation_are_separate_from_invalid_meaning() {
     let read = callback(false, false);
-    let error = validate_callable_closure(&read, &mut 0, 0).unwrap_err();
+    let error = validate_callable_closure(&read, &mut 0, Some(0)).unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Resource);
     assert_eq!(error.code, "kernel_callable_flow_work");
     read.cancel_after.set(Some(8));
@@ -1069,7 +1069,7 @@ fn exhaustive_composed_permutations_resets_phantoms_and_nested_occurrences_match
                     let unpruned = validate_callable_closure_with_scope(
                         &read,
                         &mut 0,
-                        1_000_000,
+                        Some(1_000_000),
                         recursive::ProofScope::All,
                     );
                     assert_eq!(
@@ -1208,12 +1208,12 @@ fn compact_acyclic_proof_matches_unpruned_paths_and_measures_reserved_work() {
     for depth in [1, 2, 4, 6, 8] {
         let read = typed_duplicate_prerequisites(depth);
         let mut compact_work = 0;
-        let compact = validate_callable_closure(&read, &mut compact_work, 5_000_000).unwrap();
+        let compact = validate_callable_closure(&read, &mut compact_work, Some(5_000_000)).unwrap();
         let mut unpruned_work = 0;
         let unpruned = validate_callable_closure_with_scope(
             &read,
             &mut unpruned_work,
-            5_000_000,
+            Some(5_000_000),
             recursive::ProofScope::All,
         )
         .unwrap();
@@ -1227,9 +1227,13 @@ fn compact_acyclic_proof_matches_unpruned_paths_and_measures_reserved_work() {
         );
     }
     let read = typed_duplicate_prerequisites(24);
-    let failure =
-        validate_callable_closure_with_scope(&read, &mut 0, 1_000_000, recursive::ProofScope::All)
-            .unwrap_err();
+    let failure = validate_callable_closure_with_scope(
+        &read,
+        &mut 0,
+        Some(1_000_000),
+        recursive::ProofScope::All,
+    )
+    .unwrap_err();
     assert_eq!(failure.class, DiagnosticClass::Resource);
     assert!(matches!(
         failure.code.as_str(),
@@ -1243,15 +1247,15 @@ fn compact_acyclic_proof_matches_unpruned_paths_and_measures_reserved_work() {
 fn compact_proof_preserves_exact_work_boundary_and_late_cancellation() {
     let read = typed_duplicate_prerequisites(8);
     let mut required = 0;
-    let expected = validate_callable_closure(&read, &mut required, 1_000_000).unwrap();
+    let expected = validate_callable_closure(&read, &mut required, None).unwrap();
     assert!(required > 1);
     let checkpoints = read.checkpoints.get();
     let mut actual = 0;
-    let exact = validate_callable_closure(&read, &mut actual, required).unwrap();
+    let exact = validate_callable_closure(&read, &mut actual, Some(required)).unwrap();
     assert_eq!(actual, required);
     assert_eq!(exact.metadata_bytes, expected.metadata_bytes);
     let mut work = 0;
-    let failure = validate_callable_closure(&read, &mut work, required - 1).unwrap_err();
+    let failure = validate_callable_closure(&read, &mut work, Some(required - 1)).unwrap_err();
     assert_eq!(failure.class, DiagnosticClass::Resource);
     assert_eq!(failure.code, "kernel_callable_flow_work");
     assert!(work < required);
@@ -1357,7 +1361,7 @@ fn recursive_duplicate_prerequisites(depth: u64) -> Read {
 fn recursive_typed_prerequisite_dag_demands_only_observable_provenance() {
     let read = recursive_duplicate_prerequisites(24);
     let mut work = 0;
-    let observation = validate_callable_closure(&read, &mut work, 1_000_000).unwrap();
+    let observation = validate_callable_closure(&read, &mut work, Some(1_000_000)).unwrap();
     eprintln!("recursive typed DAG: work={work} observation={observation:?}");
     assert!(observation.slots < 2_000);
     assert!(observation.metadata_bytes < 16 * 1024 * 1024);
@@ -1369,12 +1373,13 @@ fn demanded_recursive_proof_matches_eager_paths_and_measures_both_costs() {
     for depth in [1, 2, 4, 6, 8] {
         let read = recursive_duplicate_prerequisites(depth);
         let mut demanded_work = 0;
-        let demanded = validate_callable_closure(&read, &mut demanded_work, 5_000_000).unwrap();
+        let demanded =
+            validate_callable_closure(&read, &mut demanded_work, Some(5_000_000)).unwrap();
         let mut eager_work = 0;
         let eager = validate_callable_closure_with_scope(
             &read,
             &mut eager_work,
-            5_000_000,
+            Some(5_000_000),
             recursive::ProofScope::RecursivePaths,
         )
         .unwrap();
@@ -1393,7 +1398,7 @@ fn demanded_recursive_proof_matches_eager_paths_and_measures_both_costs() {
     let error = validate_callable_closure_with_scope(
         &read,
         &mut 0,
-        1_000_000,
+        Some(1_000_000),
         recursive::ProofScope::RecursivePaths,
     )
     .unwrap_err();
@@ -1418,11 +1423,11 @@ fn demanded_recursive_proof_preserves_eager_semantic_decisions() {
         selected_chain(false),
         selected_chain(true),
     ] {
-        let demanded = validate_callable_closure(&read, &mut 0, 5_000_000);
+        let demanded = validate_callable_closure(&read, &mut 0, Some(5_000_000));
         let eager = validate_callable_closure_with_scope(
             &read,
             &mut 0,
-            5_000_000,
+            Some(5_000_000),
             recursive::ProofScope::RecursivePaths,
         );
         assert_eq!(
@@ -1436,13 +1441,13 @@ fn demanded_recursive_proof_preserves_eager_semantic_decisions() {
 fn demanded_recursive_proof_preserves_work_refusal_and_late_cancellation() {
     let read = recursive_duplicate_prerequisites(12);
     let mut required = 0;
-    let expected = validate_callable_closure(&read, &mut required, 1_000_000).unwrap();
+    let expected = validate_callable_closure(&read, &mut required, None).unwrap();
     let checkpoints = read.checkpoints.get();
     let mut exact = 0;
-    let observed = validate_callable_closure(&read, &mut exact, required).unwrap();
+    let observed = validate_callable_closure(&read, &mut exact, Some(required)).unwrap();
     assert_eq!(exact, required);
     assert_eq!(observed.metadata_bytes, expected.metadata_bytes);
-    let error = validate_callable_closure(&read, &mut 0, required - 1).unwrap_err();
+    let error = validate_callable_closure(&read, &mut 0, Some(required - 1)).unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Resource);
     assert_eq!(error.code, "kernel_callable_flow_work");
     for after in [
@@ -1493,7 +1498,7 @@ fn demanded_paths_preserve_equal_shape_forwarding_permutations_and_resets() {
                     recursive::ProofScope::RecursivePaths,
                 ] {
                     let result =
-                        validate_callable_closure_with_scope(&read, &mut 0, 1_000_000, scope);
+                        validate_callable_closure_with_scope(&read, &mut 0, Some(1_000_000), scope);
                     if growing {
                         assert_eq!(result.unwrap_err().code, "kernel_callable_expansion");
                     } else {
@@ -1550,7 +1555,7 @@ fn root_query_analysis<'a>(
     Analysis {
         read,
         work,
-        maximum_work,
+        maximum_work: Some(maximum_work),
         maximum_metadata_bytes: MAXIMUM_ANALYSIS_BYTES,
         observation: CallableFlowWork::default(),
         contexts: Vec::new(),
@@ -1732,7 +1737,7 @@ fn composed_root_view_query_hits_preserve_work_and_cancellation_boundaries() {
     {
         let mut analysis = root_query_analysis(&read, &mut work, 8192);
         assert!(!analysis.type_contains_view(package(1), root).unwrap());
-        analysis.maximum_work = *analysis.work;
+        analysis.maximum_work = Some(*analysis.work);
         let exhausted = analysis.type_contains_view(package(1), root).unwrap_err();
         assert_eq!(exhausted.class, DiagnosticClass::Resource);
         assert_eq!(exhausted.code, "kernel_callable_flow_work");
@@ -1757,9 +1762,37 @@ fn composed_root_view_query_hits_preserve_work_and_cancellation_boundaries() {
     assert_eq!(partial.code, "kernel_callable_flow_work");
     assert!(retry.completed_view_queries.is_empty());
     let spent = *retry.work;
-    retry.maximum_work = 8192;
+    retry.maximum_work = Some(8192);
     assert!(!retry.type_contains_view(package(1), root).unwrap());
     assert!(*retry.work > spent);
+}
+
+#[test]
+fn unmetered_work_saturation_preserves_cancellation_and_explicit_limits() {
+    let read = Read::default();
+    let mut work = usize::MAX - 1;
+    let mut analysis = root_query_analysis(&read, &mut work, 0);
+    analysis.maximum_work = None;
+
+    // Only the passive tally saturates; this check grants no storage capacity.
+    analysis.steps(2).unwrap();
+    assert_eq!(*analysis.work, usize::MAX);
+    analysis.steps(usize::MAX).unwrap();
+    assert_eq!(*analysis.work, usize::MAX);
+
+    read.cancel_after.set(Some(read.checkpoints.get() + 1));
+    let cancelled = analysis.steps(0).unwrap_err();
+    assert_eq!(cancelled.class, DiagnosticClass::Cancelled);
+    assert_eq!(cancelled.code, "test_cancelled");
+    assert_eq!(*analysis.work, usize::MAX);
+    read.cancel_after.set(None);
+
+    // The largest explicit limit remains bounded, unlike None.
+    analysis.maximum_work = Some(usize::MAX);
+    let exhausted = analysis.steps(1).unwrap_err();
+    assert_eq!(exhausted.class, DiagnosticClass::Resource);
+    assert_eq!(exhausted.code, "kernel_callable_flow_work");
+    assert_eq!(*analysis.work, usize::MAX);
 }
 
 #[test]
@@ -1767,7 +1800,9 @@ fn composed_work_phase_diagnostic_separates_carried_work_and_completed_phases() 
     let mut read = Read::default();
     let body = read.expression(package(1), ExpressionOperation::I64 { value: 1 });
     read.function(1, 0, 0, body);
-    let entry = 2_000_000;
+    // This carried tally checks policy and accounting above the former default;
+    // it is not a claim that this small fixture performs ten million steps.
+    let entry = 10_000_001;
     let mut prerequisite_end = entry;
     {
         let mut analysis = root_query_analysis(&read, &mut prerequisite_end, 16_000_000);
@@ -1776,7 +1811,7 @@ fn composed_work_phase_diagnostic_separates_carried_work_and_completed_phases() 
     }
     let mut exhausted_work = entry;
     let exhausted =
-        validate_callable_closure(&read, &mut exhausted_work, prerequisite_end).unwrap_err();
+        validate_callable_closure(&read, &mut exhausted_work, Some(prerequisite_end)).unwrap_err();
     assert_eq!(exhausted.class, DiagnosticClass::Resource);
     assert_eq!(exhausted.code, "kernel_callable_flow_work");
     assert_eq!(exhausted_work, prerequisite_end);
@@ -1793,17 +1828,30 @@ fn composed_work_phase_diagnostic_separates_carried_work_and_completed_phases() 
     assert_eq!(exhausted.notes.last(), Some(&expected));
 
     let mut fresh_work = 0;
-    let fresh = validate_callable_closure(&read, &mut fresh_work, 16_000_000).unwrap();
+    let fresh = validate_callable_closure(&read, &mut fresh_work, None).unwrap();
     let mut carried_work = entry;
-    let carried = validate_callable_closure(&read, &mut carried_work, 16_000_000).unwrap();
+    let carried = validate_callable_closure(&read, &mut carried_work, None).unwrap();
     assert_eq!(carried_work, entry + fresh_work);
     assert_eq!(carried.slots, fresh.slots);
     assert_eq!(carried.edges, fresh.edges);
     assert_eq!(carried.metadata_bytes, fresh.metadata_bytes);
 
+    let limit = entry.checked_add(fresh_work).unwrap();
+    let mut exact_work = entry;
+    let exact = validate_callable_closure(&read, &mut exact_work, Some(limit)).unwrap();
+    assert_eq!(exact_work, limit);
+    assert_eq!(exact.slots, fresh.slots);
+    assert_eq!(exact.edges, fresh.edges);
+    assert_eq!(exact.metadata_bytes, fresh.metadata_bytes);
+    let mut short_work = entry;
+    let short = validate_callable_closure(&read, &mut short_work, Some(limit - 1)).unwrap_err();
+    assert_eq!(short.class, DiagnosticClass::Resource);
+    assert_eq!(short.code, "kernel_callable_flow_work");
+    assert!(short_work < limit);
+
     read.cancel_after.set(Some(read.checkpoints.get() + 1));
     let mut cancelled_work = entry;
-    let cancelled = validate_callable_closure(&read, &mut cancelled_work, 16_000_000).unwrap_err();
+    let cancelled = validate_callable_closure(&read, &mut cancelled_work, None).unwrap_err();
     assert_eq!(cancelled.class, DiagnosticClass::Cancelled);
     assert_eq!(cancelled.code, "test_cancelled");
     assert!(cancelled.notes.is_empty());
@@ -1819,7 +1867,7 @@ fn composed_witness_scope_requires_the_exact_contract_declaration_in_both_proofs
             contract.package,
             OwnerKey::Declaration(contract.declaration),
         ));
-        let failure = validate_callable_closure_with_scope(&read, &mut 0, 1_000_000, scope)
+        let failure = validate_callable_closure_with_scope(&read, &mut 0, Some(1_000_000), scope)
             .expect_err("a witness reference cannot supply its missing contract authority");
         assert_eq!(failure.class, DiagnosticClass::Semantic);
         assert_eq!(failure.code, "kernel_callable_flow_target");
@@ -1969,13 +2017,13 @@ fn composed_duplicate_syntax_still_enforces_work_and_owning_cancellation() {
         );
         assert!(*analysis.work > before_duplicate);
         assert_eq!(analysis.observation.metadata_bytes, metadata);
-        analysis.maximum_work = *analysis.work;
+        analysis.maximum_work = Some(*analysis.work);
         let exhausted = analysis
             .visit_syntax(&mut visited, occurrence.clone())
             .unwrap_err();
         assert_eq!(exhausted.class, DiagnosticClass::Resource);
         assert_eq!(exhausted.code, "kernel_callable_flow_work");
-        analysis.maximum_work = 100_000;
+        analysis.maximum_work = Some(100_000);
         read.cancel_after.set(Some(read.checkpoints.get() + 1));
         let cancelled = analysis
             .visit_syntax(&mut visited, occurrence.clone())

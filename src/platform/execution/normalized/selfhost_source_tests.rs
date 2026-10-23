@@ -871,3 +871,6 @@ mod index;
 
 #[path = "selfhost_source_parent_tests.rs"]
 mod parents;
+
+#[path = "selfhost_source_scalar_tests.rs"]
+mod scalar;

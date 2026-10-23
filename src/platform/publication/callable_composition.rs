@@ -8,9 +8,7 @@ use crate::platform::kernel::{
     SemanticRoot, TypeObject, TypeObjectDigest, decode_owner, decode_owner_binding,
     decode_type_object,
 };
-use crate::platform::package_transport::source::{
-    CollectingStore, MAXIMUM_VALIDATION_VISITS, entries, required,
-};
+use crate::platform::package_transport::source::{CollectingStore, entries, required};
 use crate::platform::storage::object::{ImmutableObjectStore, ObjectDomain, StoreWork};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -102,13 +100,6 @@ pub(super) fn validate<S: ImmutableObjectStore + ?Sized>(
     prior_semantic_work: u64,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
 ) -> Result<u64, Diagnostic> {
-    let exhausted = || {
-        Diagnostic::new(
-            DiagnosticClass::Resource,
-            "package_source_budget",
-            "candidate composed callable admission exhausted aggregate validation visits",
-        )
-    };
     checkpoint()?;
     let mut work = StoreWork::default();
     let mut owners = BTreeMap::new();
@@ -144,12 +135,9 @@ pub(super) fn validate<S: ImmutableObjectStore + ?Sized>(
         pending.extend(object.child_types());
         types.insert(ty, object);
     }
-    let observed = prior_semantic_work
-        .checked_add(store.visits())
-        .filter(|total| *total <= MAXIMUM_VALIDATION_VISITS)
-        .ok_or_else(exhausted)?;
-    let mut observed = usize::try_from(observed).map_err(|_| exhausted())?;
-    let entry_work = observed;
+    // These are passive observations. The collecting reader owns its separate
+    // read admission; composed semantic work never grants storage capacity.
+    let mut composed_work = 0;
     validate_callable_closure(
         &Candidate {
             package: root.package_id,
@@ -158,19 +146,10 @@ pub(super) fn validate<S: ImmutableObjectStore + ?Sized>(
             suppliers,
             checkpoint,
         },
-        &mut observed,
-        MAXIMUM_VALIDATION_VISITS as usize,
-    )
-    .map_err(|mut diagnostic| {
-        if diagnostic.code == "kernel_callable_flow_work" {
-            diagnostic.notes.push(format!(
-                "candidate_composed_work prior_supplier_semantics={} collecting_visits={} entry={}",
-                prior_semantic_work,
-                store.visits(),
-                entry_work,
-            ));
-        }
-        diagnostic
-    })?;
-    Ok(observed as u64)
+        &mut composed_work,
+        None,
+    )?;
+    Ok(prior_semantic_work
+        .saturating_add(store.visits())
+        .saturating_add(composed_work as u64))
 }

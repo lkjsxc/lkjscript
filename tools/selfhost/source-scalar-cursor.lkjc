@@ -1,0 +1,263 @@
+declarations.begin
+(units
+  (module create source-scalar-cursor
+    (function create event
+      (visibility private) (effect pure)
+      (parameter create row (type I64))
+      (parameter create enter (type Bool))
+      (parameter create tag (type I64))
+      (parameter create a (type I64))
+      (parameter create b (type I64))
+      (parameter create value (type I64))
+      (parameter create anchor (type I64))
+      (parameter create extra (type I64))
+      (returns (record (row I64) (enter Bool) (tag I64) (a I64) (b I64) (value I64) (anchor I64) (extra I64)))
+      (body (record structural
+        (field row (local row)) (field enter (local enter)) (field tag (local tag))
+        (field a (local a)) (field b (local b)) (field value (local value))
+        (field anchor (local anchor)) (field extra (local extra)))))
+
+    (function create move
+      (visibility private) (effect pure)
+      (parameter create row (type I64))
+      (parameter create enter (type Bool))
+      (returns (record (row I64) (enter Bool) (tag I64) (a I64) (b I64) (value I64) (anchor I64) (extra I64)))
+      (body (call event (local row) (local enter) (i64 0) (i64 0) (i64 0)
+        (i64 0) (i64 0) (i64 0))))
+
+    (function create array-child
+      (visibility package) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create index (type I64))
+      (parameter create domain (type I64))
+      (returns I64)
+      (body (call source-table::owner (local graph) (local data)
+        (call ci::add
+          (field (call source-table::array (local data) (local at)) (name next))
+          (call ci::mul (local index) (i64 17)))
+        (local domain))))
+
+    (function create arguments
+      (visibility package) (effect pure)
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body (call ci::add (call source-table::skip (local data) (i64 74) (i64 33)) (i64 1))))
+
+    (function create call-node
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create plan (type Bytes))
+      (parameter create row (type I64))
+      (returns (record (row I64) (enter Bool) (tag I64) (a I64) (b I64) (value I64) (anchor I64) (extra I64)))
+      (body (let
+        (binding data (call source-table::data (local graph) (local row)))
+        (binding target (call source-table::owner (local graph) (local data) (i64 57) (i64 2)))
+        (binding count
+          (field (call source-table::array (local data) (call arguments (local data))) (name value)))
+        (in
+          (call event (local row) (bool false) (i64 9)
+            (call source-scalar-plan::function-index (local plan) (local target))
+            (local count) (i64 0) (local row) (i64 0))))))
+
+    (function create start
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create plan (type Bytes))
+      (parameter create row (type I64))
+      (returns (record (row I64) (enter Bool) (tag I64) (a I64) (b I64) (value I64) (anchor I64) (extra I64)))
+      (body (let
+        (binding data (call source-table::data (local graph) (local row)))
+        (in
+          (if (call ci::eq (call source-table::kind (local graph) (local row)) (i64 16))
+            (call move
+              (call source-table::owner (local graph) (local data)
+                (call ci::add (call source-link-ref::name-end (local data) (i64 39)) (i64 2))
+                (i64 9))
+              (bool true))
+            (let
+              (binding op (call ci::get (local data) (i64 37)))
+              (in
+                (if (call ci::lt (local op) (i64 3))
+                  (call event (local row) (bool false) (call ci::sub (i64 3) (local op))
+                    (i64 0) (i64 0)
+                    (if (call ci::eq (local op) (i64 2))
+                      (field
+                        (call source-read::signed (local data) (i64 38)
+                          (call ci::sub (call ci::length (local data)) (i64 32)))
+                        (name value))
+                      (if (call ci::eq (local op) (i64 1))
+                        (call ci::get (local data) (i64 38)) (i64 0)))
+                    (local row) (i64 0))
+                  (if (call ci::eq (local op) (i64 5))
+                    (call event (local row) (bool false) (i64 4)
+                      (call source-scalar-plan::slot (local plan)
+                        (call source-table::owner (local graph) (local data) (i64 39)
+                          (if (call ci::eq (call ci::get (local data) (i64 38)) (i64 0))
+                            (i64 7) (i64 8))))
+                      (i64 0) (i64 0) (local row) (i64 0))
+                    (if (call ci::eq (local op) (i64 7))
+                      (call move (call source-table::owner (local graph) (local data) (i64 38) (i64 9))
+                        (bool true))
+                      (if (call ci::eq (local op) (i64 8))
+                        (call move
+                          (call array-child (local graph) (local data) (i64 38) (i64 0) (i64 8))
+                          (bool true))
+                        (if (call ci::eq (local op) (i64 9))
+                          (call move
+                            (call array-child (local graph) (local data) (i64 38) (i64 0) (i64 9))
+                            (bool true))
+                          (if
+                            (call ci::eq
+                              (field (call source-table::array (local data) (call arguments (local data)))
+                                (name value))
+                              (i64 0))
+                            (call call-node (local graph) (local plan) (local row))
+                            (call move
+                              (call array-child (local graph) (local data) (call arguments (local data))
+                                (i64 0) (i64 9))
+                              (bool true)))))))))))))))
+
+    (function create after-if
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create plan (type Bytes))
+      (parameter create parent (type I64))
+      (parameter create position (type I64))
+      (parameter create pc (type I64))
+      (returns (record (row I64) (enter Bool) (tag I64) (a I64) (b I64) (value I64) (anchor I64) (extra I64)))
+      (body (let
+        (binding data (call source-table::data (local graph) (local parent)))
+        (in
+          (if (call ci::eq (local position) (i64 0))
+            (let
+              (binding child (call source-table::owner (local graph) (local data) (i64 55) (i64 9)))
+              (in
+                (call event (local child) (bool true) (i64 8)
+                  (call ci::add (call ci::add (local pc) (i64 2))
+                    (call source-scalar-plan::node-count (local plan) (local child)))
+                  (i64 0) (i64 0) (local parent) (i64 2))))
+            (if (call ci::eq (local position) (i64 1))
+              (let
+                (binding child (call source-table::owner (local graph) (local data) (i64 72) (i64 9)))
+                (in
+                  (call event (local child) (bool true) (i64 7)
+                    (call ci::add (call ci::add (local pc) (i64 1))
+                      (call source-scalar-plan::node-count (local plan) (local child)))
+                    (i64 0) (i64 0) (local parent) (call ci::get (local facts) (local parent)))))
+              (call move (local parent) (bool false))))))))
+
+    (function create after-let
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parent (type I64))
+      (parameter create position (type I64))
+      (returns (record (row I64) (enter Bool) (tag I64) (a I64) (b I64) (value I64) (anchor I64) (extra I64)))
+      (body (let
+        (binding data (call source-table::data (local graph) (local parent)))
+        (binding count (field (call source-table::array (local data) (i64 38)) (name value)))
+        (in
+          (if (call ci::lt (local position) (local count))
+            (if (call ci::lt (call ci::add (local position) (i64 1)) (local count))
+              (call move
+                (call array-child (local graph) (local data) (i64 38)
+                  (call ci::add (local position) (i64 1)) (i64 8))
+                (bool true))
+              (call move
+                (call source-table::owner (local graph) (local data)
+                  (call source-table::skip (local data) (i64 38) (i64 17)) (i64 9))
+                (bool true)))
+            (call move (local parent) (bool false)))))))
+
+    (function create after-sequence
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create parent (type I64))
+      (parameter create row (type I64))
+      (parameter create position (type I64))
+      (returns (record (row I64) (enter Bool) (tag I64) (a I64) (b I64) (value I64) (anchor I64) (extra I64)))
+      (body (let
+        (binding data (call source-table::data (local graph) (local parent)))
+        (binding count (field (call source-table::array (local data) (i64 38)) (name value)))
+        (in
+          (if (call ci::lt (call ci::add (local position) (i64 1)) (local count))
+            (call event
+              (call array-child (local graph) (local data) (i64 38)
+                (call ci::add (local position) (i64 1)) (i64 9))
+              (bool true) (i64 6) (i64 0) (i64 0) (i64 0)
+              (local parent) (call ci::get (local facts) (local row)))
+            (call move (local parent) (bool false)))))))
+
+    (function create after-call
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create plan (type Bytes))
+      (parameter create parent (type I64))
+      (parameter create position (type I64))
+      (returns (record (row I64) (enter Bool) (tag I64) (a I64) (b I64) (value I64) (anchor I64) (extra I64)))
+      (body (let
+        (binding data (call source-table::data (local graph) (local parent)))
+        (binding at (call arguments (local data)))
+        (binding count (field (call source-table::array (local data) (local at)) (name value)))
+        (in
+          (if (call ci::lt (call ci::add (local position) (i64 1)) (local count))
+            (call move
+              (call array-child (local graph) (local data) (local at)
+                (call ci::add (local position) (i64 1)) (i64 9))
+              (bool true))
+            (call call-node (local graph) (local plan) (local parent)))))))
+
+    (function create finish
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create plan (type Bytes))
+      (parameter create row (type I64))
+      (parameter create pc (type I64))
+      (returns (record (row I64) (enter Bool) (tag I64) (a I64) (b I64) (value I64) (anchor I64) (extra I64)))
+      (body (let
+        (binding parent (call source-table::parent (local parents) (local row)))
+        (binding kind (call source-table::kind (local graph) (local parent)))
+        (in
+          (if (call ci::eq (local kind) (i64 6))
+            (call event (call source-table::count (local graph)) (bool false) (i64 11)
+              (i64 0) (i64 0) (i64 0) (local parent)
+              (call source-scalar-profile::function-result (local graph) (local parent)))
+            (if (call ci::eq (local kind) (i64 16))
+              (call event (local parent) (bool false) (i64 5)
+                (call source-scalar-plan::slot (local plan) (local parent))
+                (i64 0) (i64 0) (local parent) (call ci::get (local facts) (local parent)))
+              (let
+                (binding data (call source-table::data (local graph) (local parent)))
+                (binding op (call ci::get (local data) (i64 37)))
+                (binding position (call source-table::column (local parents) (local row) (i64 8)))
+                (in
+                  (if (call ci::eq (local op) (i64 7))
+                    (call after-if (local graph) (local facts) (local plan) (local parent)
+                      (local position) (local pc))
+                    (if (call ci::eq (local op) (i64 8))
+                      (call after-let (local graph) (local parent) (local position))
+                      (if (call ci::eq (local op) (i64 9))
+                        (call after-sequence (local graph) (local facts) (local parent) (local row)
+                          (local position))
+                        (call after-call (local graph) (local plan) (local parent) (local position)))))))))))))
+
+    (function create next
+      (visibility package) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create plan (type Bytes))
+      (parameter create row (type I64))
+      (parameter create enter (type Bool))
+      (parameter create pc (type I64))
+      (returns (record (row I64) (enter Bool) (tag I64) (a I64) (b I64) (value I64) (anchor I64) (extra I64)))
+      (body (if (local enter)
+        (call start (local graph) (local plan) (local row))
+        (call finish (local graph) (local parents) (local facts) (local plan) (local row) (local pc)))))
+  ))
+declarations.end

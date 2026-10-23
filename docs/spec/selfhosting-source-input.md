@@ -15,15 +15,18 @@ typing, affine custody, effects or witness validity. The additional
 scope contract below. `source-namespace::validate`, `source-type-scope::validate`
 and `source-nominal::validate` successively add namespace uniqueness, contextual
 type/R/E binder scope, structural type DAG proof and nominal member parameter flow
-over the same decoded profile. Source normalization and the Tier 2 source-graph
+over the same decoded profile. `source-scalar::validate` adds whole-inventory
+typing for the restricted scalar profile below, and `source-elf::compile` lowers
+that profile to ELF. Full-profile normalization and the Tier 2 compiler-source
 fixed point remain separate work.
 
 The current carrier has one package and no dependencies or external blobs.
 Recognized unsupported boundaries reject explicitly; importing a package's
 interface or prior validation witness cannot supply its missing source bodies.
 This carrier is separate from normalized LKJCI1: mode 0 uses profile 4 for ELF
-and mode 1 uses profile 5 for canonical artifacts. Those backend inputs retain
-Rust admission and normalization until the source-driven E2/E3 path replaces them.
+and mode 1 uses profile 5 for canonical artifacts. The existing Tier 1 paths use
+Rust admission and normalization. The scalar source route instead derives its
+mode-0 input inside lkjscript from the raw carrier.
 
 ## Exact bytes
 
@@ -374,9 +377,117 @@ source validation still uses a Rust-bootstrapped normalized validator; it is not
 source-to-normalized self-compilation. Complete carrier SHA-256 and semantic-state
 identity remain separate evidence.
 
-This is restricted-profile E1 work, not E1-final or Tier 2 completion. Broader source
-forms, full contextual read/witness scope and effect applications, general application and expression
-typing, callable generic finite-flow, custody, effects, witnesses and normalization
-remain required. Regions, implementation calls and other excluded forms still
-reject with 13. The full Tier 2 profile, source-driven ELF/artifact fixed points and
-measured native phase reclamation remain unchanged; no bounded-RSS claim is made.
+These layers establish restricted-profile E1 admission. The scalar extension below
+adds a separate E2/E3 path. Broader source forms, full contextual read/witness
+scope and effect applications, general application typing, callable generic
+finite-flow, custody, witnesses and full-profile normalization remain required.
+Regions, implementation calls and other excluded forms still reject with 13.
+The full Tier 2 profile, compiler-source ELF/artifact fixed points and measured
+native phase reclamation remain unchanged.
+
+## Scalar source admission and ELF lowering
+
+`source-scalar::prepare` composes carrier/reference, containment, lexical scope,
+namespace, structural/contextual type and nominal checks before scalar profile
+admission and expression typing. `source-scalar::validate` returns the resulting
+diagnostic. `source-elf::compile` additionally lowers the admitted program and
+returns `{diagnostic: I64, image: Bytes}`; the `compile-source-elf` command target
+exposes it as a native binary filter. Success returns ELF bytes. Failure returns
+the diagnostic with an empty image.
+
+### Admitted scalar profile
+
+| Dimension | Current scalar contract |
+| --- | --- |
+| Value types | Unrestricted Unit, Bool and I64 |
+| Supplied descriptors | Those three primitive types and pure function descriptors whose parameters and result are scalar |
+| Declarations | Modules, pure monomorphic Functions and Components without requirements; their Parameters, ordinary Let Bindings, Expressions, function Ports and Target |
+| Expressions | Unit/Bool/I64 literals, parameter/binding Local, If, Let, nonempty Sequence and direct Call |
+| Calls and functions | Exact argument arity/types and declared result type; no type, requirement or effect parameters or application arguments |
+| Entry | Exactly one command Target, with no runner arguments, selecting a function Port of its Component; the selected function has signature `() -> I64` |
+| Excluded source families | External/intrinsic declarations, Text/StaticText, Bytes, ByteBuffer, List, records/choices, task callables, first-class function values/Invoke, generics, witnesses, read views and Regions |
+
+A function descriptor is admitted for signature/port description; it does not
+admit function-valued expressions. Parameters are unrestricted. Let annotations,
+when present, must be scalar and equal the initializer's inferred type. If
+conditions must be Bool and both branches must have the same type. Sequence
+typing checks every item and takes the final item's type. Direct and mutual
+recursion use declared signatures; they do not require expanding call bodies.
+
+Profile checking visits every supplied type and owner. Inference visits every
+Binding and Expression, then checks every Function body against its declared
+result. Uncalled functions, untaken branches and unused supplied types receive
+the same checks. An unused non-scalar descriptor therefore rejects with 13.
+A task Function or TaskFunction descriptor remains outside the scalar profile
+even when its effect row is empty.
+
+Inference stores one unresolved-or-scalar fact per owner. Each complete pass
+either resolves all remaining facts, strictly decreases the unresolved count,
+or rejects with 19. Published facts never change type. This is a finite progress
+measure over admitted syntax; it is separate from the earlier carrier proof-work
+allowance.
+
+### Internal normalization and bounds
+
+The planner inventories every supplied Function in canonical owner order,
+assigns stable parameter/binding slots and computes instruction counts. The cursor
+walks admitted containment and preserves source operand, initializer and sequence
+order. State and trace construction derive operand types and lexical local
+availability from the inferred facts and exact parents. Lowering emits literals,
+loads/stores, sequence drops, conditional/unconditional jumps, direct Call and
+Return. Even a call in tail position uses ordinary Call/Return. This profile has
+no owned values and makes no claim about asymmetric consumption, borrow lifetime
+or disposal lowering.
+
+`source-scalar-pack` writes the existing mode-0/profile-4 LKJCI1 format, including
+its section offsets, fixed built-in type table, flow certificates and checksum.
+`source-elf` passes those internally produced bytes through the existing
+`elf::compile-elf` validation and emission path. No Rust target normalization,
+inferred tables or custody certificates are inputs to this process.
+
+This slice retains the 8,388,608-byte `LKJSG001` ceiling, 100,000 combined source
+directory entries and existing carrier proof allowance. Generated mode-0 input
+also remains at most 8,388,608 bytes, with 1 through 1,024 Functions, at most
+128 parameters and locals per Function, operand depth at most 128 and
+1 through 32,768 total instructions. Function parameters are included in the
+local count. Lowering checks section lengths and output bounds before assembling
+the final input; its generated backend allowance must fit 2,147,483,647.
+These are retained implementation/profile restrictions, not expanded capacity
+or evidence of unmetered source compilation.
+
+| Diagnostic | Scalar extension |
+| --- | --- |
+| 0 | Selected scalar admission/lowering checks succeeded |
+| 13 | Recognized form outside the scalar profile or retained lowering/profile bound |
+| 19 | Scalar type, call arity, annotation, function result, target/port agreement or lowering-consistency failure |
+
+Earlier diagnostics 6 and 12 through 18 retain their meanings. In particular,
+malformed carrier/binding errors remain 12, endpoint failures remain 14 and
+containment/value-local scope failures remain 15. Backend diagnostics propagate
+if the internally generated input fails backend validation. Rejection produces
+no executable bytes.
+
+### Bootstrap and evidence boundary
+
+A Rust-built native compiler is permitted as the initial executable. The target
+program crosses that boundary only as complete raw `LKJSG001` bytes; Rust may
+transport those bytes, launch processes and orchestrate independent controls.
+It must not pre-filter source owners/types or supply semantic or lowering
+results for the scalar target. The public meaning remains the accepted semantic
+project; the `.lkjc` files remain authoring proposals.
+
+Acceptance evidence must identify the complete carrier digest, compiler
+executable, target/format profile and execution context. The semantic-state
+digest alone is insufficient, including for unused-type mutations. Independent
+controls must cover valid scalar execution and fully rebound malformed/ill-typed
+carriers, reaching the intended admission layer. The
+[scalar decision](../decisions/20261023-source-scalar-e2-e3.md) records the current
+positive programs, semantic/profile controls and independently constructed missing
+endpoint and cyclic carriers. The latter pass commitment checks before rejecting
+at their intended structural layers. Executable and carrier identities bind these
+observations; publication still requires the complete frozen-tree gates.
+
+The scalar route emits ELF only. It does not establish compilation of the
+maintained compiler's complete source closure, source-driven C2/C3 identity,
+canonical `.lkja` A1/A2/A3 equality, Rust canonical-artifact parity or same-process
+native memory reclamation. Those remain separate Tier 2 obligations.

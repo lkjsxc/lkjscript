@@ -1,0 +1,65 @@
+declarations.begin
+(units
+  (module create source-elf
+    (function create failure
+      (visibility private)
+      (effect pure)
+      (parameter create code (type I64))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (record structural
+          (field diagnostic (local code))
+          (field image (call ci::text-bytes (text "")))
+        )
+      )
+    )
+
+    (function create compile
+      (visibility public)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding prepared (call source-scalar::prepare (local graph)))
+          (binding code (field (local prepared) (name code)))
+          (in
+            (if
+              (call ci::eq (local code) (i64 0))
+              (let
+                (binding lowered
+                  (call source-scalar-emit::lower
+                    (local graph)
+                    (field (local prepared) (name facts))
+                    (field (local prepared) (name parents))))
+                (binding lower-code (field (local lowered) (name code)))
+                (in
+                  (if
+                    (call ci::eq (local lower-code) (i64 0))
+                    (call elf::compile-elf
+                      (field (local lowered) (name input)))
+                    (call failure (local lower-code))
+                  )
+                )
+              )
+              (call failure (local code))
+            )
+          )
+        )
+      )
+    )
+
+    (component create compiler
+      (visibility public)
+      (port create compile
+        (type (function (Bytes) (record (diagnostic I64) (image Bytes))))
+        (function compile))
+    )
+  )
+
+  (target create compile-source-elf
+    (component source-elf::compiler)
+    (runner command)
+    (port source-elf::compiler::compile))
+)
+declarations.end

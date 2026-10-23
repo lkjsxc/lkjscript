@@ -793,7 +793,7 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
         &complete_sources,
         &|| Ok(()),
         &mut composition_work,
-        (16_000_000 - reader.visits.get()) as usize,
+        Some((16_000_000 - reader.visits.get()) as usize),
     )?;
     reader.charge(composition_work)?;
     if *reader.seen.borrow() != container.objects.keys().copied().collect() {

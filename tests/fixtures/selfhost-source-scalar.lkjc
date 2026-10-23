@@ -1,0 +1,108 @@
+declarations.begin
+(units
+  (module create scalar-controls
+    (function create choose
+      (visibility public) (effect pure)
+      (parameter create flag (type Bool))
+      (parameter create value (type I64))
+      (returns I64)
+      (body (if (local flag) (local value) (i64 -9))))
+    (function create outer
+      (visibility public) (effect pure)
+      (parameter create earlier (type I64))
+      (parameter create value (type I64))
+      (returns I64)
+      (body (sequence (local earlier) (local value))))
+    (function create identity-bool
+      (visibility public) (effect pure)
+      (parameter create flag (type Bool))
+      (returns Bool)
+      (body (local flag)))
+    (function create identity-unit
+      (visibility public) (effect pure)
+      (parameter create value (type Unit))
+      (returns Unit)
+      (body (local value)))
+    (function create zero-arity
+      (visibility public) (effect pure) (returns I64)
+      (body (i64 7)))
+    (function create unused-result
+      (visibility public) (effect pure) (returns I64)
+      (body (i64 17)))
+    (function create ordered-call
+      (visibility public) (effect pure) (returns I64)
+      (body (call choose (bool false) (i64 30))))
+    (function create unused-unit (visibility public) (effect pure)
+      (returns Unit) (body (unit)))
+    (function create direct-recursive
+      (visibility public) (effect pure)
+      (parameter create again (type Bool))
+      (parameter create value (type I64))
+      (returns I64)
+      (body
+        (if (local again)
+          (call direct-recursive (bool false) (local value))
+          (local value))))
+    (function create mutual-left
+      (visibility public) (effect pure)
+      (parameter create again (type Bool))
+      (parameter create value (type I64))
+      (returns I64)
+      (body
+        (if (local again)
+          (call mutual-right (bool false) (local value))
+          (local value))))
+    (function create mutual-right
+      (visibility public) (effect pure)
+      (parameter create again (type Bool))
+      (parameter create value (type I64))
+      (returns I64)
+      (body
+        (if (local again)
+          (call mutual-left (bool false) (local value))
+          (local value))))
+    (function create entry
+      (visibility public) (effect pure) (returns I64)
+      (body
+        (let
+          (binding marker (type Unit) (unit))
+          (binding unused-annotation (type I64) (i64 11))
+          (binding selected (type Bool) (bool true))
+          (binding seed (type I64) (i64 42))
+          (in
+            (sequence
+              (call identity-unit (local marker))
+              (bool false)
+              (i64 77)
+              (let
+                (binding seed (type I64) (i64 313))
+                (in (local seed)))
+              (call zero-arity)
+              (call direct-recursive
+                (bool true)
+                (call mutual-left
+                  (bool true)
+                  (call mutual-right
+                    (bool true)
+                    (call outer
+                      (i64 73)
+                      (call choose
+                        (bool true)
+                        (if (call identity-bool (local selected))
+                          (let
+                            (binding branch-value (type I64) (local seed))
+                            (in (sequence (unit) (local branch-value))))
+                          (let
+                            (binding fallback (type I64) (i64 -9))
+                            (in (local fallback))))))))))))))
+    (component create app
+      (visibility public)
+      (port create run (type (function () I64)) (function entry)))
+    (component create other
+      (visibility public)
+      (port create run (type (function () I64)) (function zero-arity))))
+  (target create scalar-main
+    (component scalar-controls::app)
+    (runner command)
+    (port scalar-controls::app::run)))
+declarations.end

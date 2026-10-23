@@ -106,11 +106,13 @@ impl CallableClosureRead for Snapshots<'_> {
 
 /// The caller binds every supplied snapshot to an already admitted exact source revision. This
 /// analysis writes no summary or canonical meaning and does not acquire repository locks.
+/// `None` leaves work observational; `Some` enforces the complete carried-work quota.
+/// Metadata, depth, cancellation and finite specialization checks apply in either mode.
 pub(crate) fn validate_snapshot_callable_closure(
     snapshots: &[&KernelSnapshot],
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
     work: &mut usize,
-    maximum_work: usize,
+    maximum_work: Option<usize>,
 ) -> Result<CallableFlowWork, Diagnostic> {
     validate_callable_closure(
         &Snapshots {
@@ -127,7 +129,7 @@ pub(crate) fn validate_snapshot_callable_closure_eager(
     snapshots: &[&KernelSnapshot],
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
     work: &mut usize,
-    maximum_work: usize,
+    maximum_work: Option<usize>,
 ) -> Result<CallableFlowWork, Diagnostic> {
     validate_callable_closure_with_scope(
         &Snapshots {
@@ -145,7 +147,7 @@ pub(crate) fn validate_snapshot_callable_closure_with_limits(
     snapshots: &[&KernelSnapshot],
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
     work: &mut usize,
-    maximum_work: usize,
+    maximum_work: Option<usize>,
     maximum_metadata_bytes: usize,
     eager: bool,
 ) -> Result<CallableFlowWork, Diagnostic> {
@@ -299,7 +301,7 @@ struct WorkContext {
 struct Analysis<'a, R: ?Sized> {
     read: &'a R,
     work: &'a mut usize,
-    maximum_work: usize,
+    maximum_work: Option<usize>,
     maximum_metadata_bytes: usize,
     observation: CallableFlowWork,
     contexts: Vec<ContextInfo>,
@@ -1151,27 +1153,30 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
     }
     fn steps(&mut self, count: usize) -> Result<(), Diagnostic> {
         self.read.validation_checkpoint()?;
-        *self.work = self
-            .work
-            .checked_add(count)
-            .filter(|n| *n <= self.maximum_work)
-            .ok_or_else(|| {
-                let mut diagnostic = Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "kernel_callable_flow_work",
-                    "composed callable flow exhausted its work admission",
-                );
-                let context = self.diagnostic_context;
-                let root_context = context.context.and_then(|index| self.contexts.get(index));
-                let method = root_context.and_then(|info| info.key.method);
-                let root_owner = root_context.map(|info| info.key.owner);
-                diagnostic.notes.push(format!(
-                    "operation={} owner={:?} context={:?} context_owner={:?} method={:?} expression={:?} root={:?} consumed={} requested={} maximum={}",
-                    context.phase, context.owner, context.context, root_owner, method,
-                    context.expression, context.query, *self.work, count, self.maximum_work,
-                ));
-                diagnostic
-            })?;
+        *self.work = match self.maximum_work {
+            None => self.work.saturating_add(count),
+            Some(maximum) => self
+                .work
+                .checked_add(count)
+                .filter(|n| *n <= maximum)
+                .ok_or_else(|| {
+                    let mut diagnostic = Diagnostic::new(
+                        DiagnosticClass::Resource,
+                        "kernel_callable_flow_work",
+                        "composed callable flow exhausted its work admission",
+                    );
+                    let context = self.diagnostic_context;
+                    let root_context = context.context.and_then(|index| self.contexts.get(index));
+                    let method = root_context.and_then(|info| info.key.method);
+                    let root_owner = root_context.map(|info| info.key.owner);
+                    diagnostic.notes.push(format!(
+                        "operation={} owner={:?} context={:?} context_owner={:?} method={:?} expression={:?} root={:?} consumed={} requested={} maximum={}",
+                        context.phase, context.owner, context.context, root_owner, method,
+                        context.expression, context.query, *self.work, count, maximum,
+                    ));
+                    diagnostic
+                })?,
+        };
         Ok(())
     }
     fn comparison_work(&mut self, width: usize, keys: usize) -> Result<(), Diagnostic> {
@@ -2557,7 +2562,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
 pub(crate) fn validate_callable_closure<R: CallableClosureRead + ?Sized>(
     read: &R,
     work: &mut usize,
-    maximum_work: usize,
+    maximum_work: Option<usize>,
 ) -> Result<CallableFlowWork, Diagnostic> {
     validate_callable_closure_with_scope(read, work, maximum_work, recursive::ProofScope::Recursive)
 }
@@ -2565,7 +2570,7 @@ pub(crate) fn validate_callable_closure<R: CallableClosureRead + ?Sized>(
 fn validate_callable_closure_with_scope<R: CallableClosureRead + ?Sized>(
     read: &R,
     work: &mut usize,
-    maximum_work: usize,
+    maximum_work: Option<usize>,
     scope: recursive::ProofScope,
 ) -> Result<CallableFlowWork, Diagnostic> {
     validate_callable_closure_with_limits(read, work, maximum_work, MAXIMUM_ANALYSIS_BYTES, scope)
@@ -2574,7 +2579,7 @@ fn validate_callable_closure_with_scope<R: CallableClosureRead + ?Sized>(
 fn validate_callable_closure_with_limits<R: CallableClosureRead + ?Sized>(
     read: &R,
     work: &mut usize,
-    maximum_work: usize,
+    maximum_work: Option<usize>,
     maximum_metadata_bytes: usize,
     scope: recursive::ProofScope,
 ) -> Result<CallableFlowWork, Diagnostic> {
@@ -2750,7 +2755,7 @@ mod read_view_tests {
         validate_callable_closure_with_scope(
             read,
             &mut 0,
-            1_000_000,
+            Some(1_000_000),
             if eager {
                 recursive::ProofScope::All
             } else {

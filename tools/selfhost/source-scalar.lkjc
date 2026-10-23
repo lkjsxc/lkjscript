@@ -1,0 +1,100 @@
+declarations.begin
+(units
+  (module create source-scalar
+    (function create failure
+      (visibility private) (effect pure)
+      (parameter create code (type I64))
+      (returns (record (code I64) (facts Bytes) (parents Bytes)))
+      (body
+        (record structural
+          (field code (local code))
+          (field facts (call ci::text-bytes (text "")))
+          (field parents (call ci::text-bytes (text ""))))))
+
+    (function create finish
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (returns (record (code I64) (facts Bytes) (parents Bytes)))
+      (body
+        (let
+          (binding profile (call source-scalar-profile::check (local graph)))
+          (in
+            (if (call ci::eq (local profile) (i64 0))
+              (let
+                (binding inferred (call source-scalar-infer::check (local graph)))
+                (in
+                  (if (call ci::eq (field (local inferred) (name code)) (i64 0))
+                    (record structural
+                      (field code (i64 0))
+                      (field facts (field (local inferred) (name rows)))
+                      (field parents (local parents)))
+                    (call failure (field (local inferred) (name code))))))
+              (call failure (local profile)))))))
+
+    (function create scope
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create work (type I64))
+      (returns (record (code I64) (facts Bytes) (parents Bytes)))
+      (body
+        (let
+          (binding scoped
+            (call source-scope::check (local graph) (local parents) (local work)))
+          (binding named
+            (if (call ci::lt (local scoped) (i64 0))
+              (local scoped)
+              (call source-namespace::check (local graph) (local scoped) (local parents))))
+          (binding typed
+            (if (call ci::lt (local named) (i64 0))
+              (local named)
+              (call source-type-scope::check (local graph) (local parents) (local named))))
+          (binding nominal
+            (if (call ci::lt (local typed) (i64 0))
+              (local typed)
+              (call source-nominal::check (local graph) (local typed))))
+          (in
+            (if (call ci::lt (local nominal) (i64 0))
+              (call failure (call ci::sub (i64 0) (local nominal)))
+              (call finish (local graph) (local parents)))))))
+
+    (function create prepare
+      (visibility package) (effect pure)
+      (parameter create graph (type Bytes))
+      (returns (record (code I64) (facts Bytes) (parents Bytes)))
+      (body
+        (if (call ci::lt (call ci::length (local graph)) (i64 128))
+          (call failure (i64 12))
+          (let
+            (binding prepared (call source-members::prepare (local graph)))
+            (in
+              (if (call ci::eq (field (local prepared) (name code)) (i64 0))
+                (call scope
+                  (local graph)
+                  (field (local prepared) (name rows))
+                  (call ci::u32 (local graph) (i64 100)))
+                (call failure (field (local prepared) (name code)))))))))
+
+    (function create validate
+      (visibility public) (effect pure)
+      (parameter create graph (type Bytes))
+      (returns I64)
+      (body
+        (field (call prepare (local graph)) (name code))))
+
+    (function create inspect
+      (visibility public) (effect pure)
+      (parameter create graph (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding prepared (call prepare (local graph)))
+          (in
+            (record structural
+              (field diagnostic (field (local prepared) (name code)))
+              (field image
+                (if (call ci::eq (field (local prepared) (name code)) (i64 0))
+                  (call ci::slice (local graph) (i64 48) (i64 80))
+                  (call ci::text-bytes (text "")))))))))))
+declarations.end

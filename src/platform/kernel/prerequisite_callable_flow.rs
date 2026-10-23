@@ -574,7 +574,7 @@ mod initializer_tests {
             let mut analysis = Analysis {
                 read: self,
                 work: &mut work,
-                maximum_work: contract::MAXIMUM_VALIDATION_WORK,
+                maximum_work: Some(contract::MAXIMUM_VALIDATION_WORK),
                 maximum_metadata_bytes: MAXIMUM_ANALYSIS_BYTES,
                 observation: CallableFlowWork::default(),
                 contexts: vec![],

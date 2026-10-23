@@ -127,7 +127,7 @@ pub(super) fn analysis<'a>(read: &'a Source, work: &'a mut usize) -> Analysis<'a
     Analysis {
         read,
         work,
-        maximum_work: 10_000_000,
+        maximum_work: Some(10_000_000),
         maximum_metadata_bytes: MAXIMUM_ANALYSIS_BYTES,
         observation: CallableFlowWork::default(),
         contexts: Vec::new(),

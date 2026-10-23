@@ -2983,12 +2983,11 @@ pub(super) fn check_product_substitution(
     closure.product_depths(&[], &BTreeMap::new(), &BTreeSet::new())
 }
 
-pub(super) fn complete(
-    schema: &mut NormalizedReferenceSchema,
-    snapshots: &[&KernelSnapshot],
-    control: &crate::platform::execution::ExecutionControl,
-) -> Result<(), ExecutionError> {
-    if snapshots.iter().any(|snapshot| {
+// This independent preparation chain still shares a bounded source-work policy.
+// Keep its selection common to reconstruction and completion until its recursive
+// derived-witness traversal and all downstream debits have been replaced together.
+pub(super) fn requires_associated_preparation(snapshots: &[&KernelSnapshot]) -> bool {
+    snapshots.iter().any(|snapshot| {
         snapshot.types.values().chain(snapshot.dependency_types.values()).any(|object| object.form.is_associated() || matches!(object.form, TypeForm::ReadViewApplied { .. }
             | TypeForm::RegionBrand { .. } | TypeForm::Region { .. } | TypeForm::RelPtr { .. }
             | TypeForm::RegionSlice { .. } | TypeForm::RegionCap { .. }))
@@ -2996,7 +2995,15 @@ pub(super) fn complete(
                 OwnerRecord::Declaration(owner) if owner.payload.has_read_view_metadata() || matches!(&owner.payload,
                     DeclarationPayload::OwnedContract(contract) if !contract.associated_types.is_empty())
                     || matches!(&owner.payload, DeclarationPayload::OwnedImplementation(implementation) if !implementation.associated_types.is_empty())))
-    }) {
+    })
+}
+
+pub(super) fn complete(
+    schema: &mut NormalizedReferenceSchema,
+    snapshots: &[&KernelSnapshot],
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<(), ExecutionError> {
+    if requires_associated_preparation(snapshots) {
         // Independent canonical preparation precedes complete custody, nominal,
         // property and permission proof under the remaining source allowance.
         let maximum = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;

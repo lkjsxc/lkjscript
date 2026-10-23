@@ -69,10 +69,6 @@ pub(super) fn validate(
         types,
     };
     let mut work = 0;
-    let analysis = validate_callable_closure(
-        &read,
-        &mut work,
-        crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
-    )?;
+    let analysis = validate_callable_closure(&read, &mut work, None)?;
     Ok((work, analysis))
 }

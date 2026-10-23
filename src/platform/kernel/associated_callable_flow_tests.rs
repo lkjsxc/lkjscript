@@ -37,7 +37,7 @@ fn associated_alias_provenance_does_not_make_a_constructor_cycle() {
         let mut analysis = Analysis {
             read: &Empty,
             work: &mut work,
-            maximum_work: 10_000,
+            maximum_work: Some(10_000),
             maximum_metadata_bytes: MAXIMUM_ANALYSIS_BYTES,
             observation: CallableFlowWork::default(),
             contexts: vec![ContextInfo {

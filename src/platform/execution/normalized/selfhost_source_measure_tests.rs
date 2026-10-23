@@ -117,6 +117,45 @@ fn selfhost_source_measure_maintained_native_closure() {
             "sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(bytes)),
         })
     };
+    // Observe the combined source frontend/backend closure without consuming
+    // its exported input or executing the Rust-bootstrapped source compiler.
+    let source_entry_declaration = super::function("source-elf", "compile");
+    let source_entry = program.function(source_entry_declaration).unwrap().0 as usize;
+    let started = Instant::now();
+    let source_export = input::export(program, source_entry);
+    let source_export_ms = started.elapsed().as_millis();
+    let source_export = match source_export {
+        Ok(bytes) => json!({
+            "status": "ok",
+            "input": identity(&bytes),
+            "profile": word(&bytes, 8),
+            "functions": word(&bytes, 92),
+            "nodes": word(&bytes, 100),
+            "types": word(&bytes, 84),
+        }),
+        Err(error) => json!({
+            "status": "rejected",
+            "code": error.code,
+            "message": error.message,
+        }),
+    };
+    let started = Instant::now();
+    let source_bootstrap =
+        crate::platform::compiler::elf_x86_64::compile_function(program, source_entry);
+    let source_bootstrap_ms = started.elapsed().as_millis();
+    let source_bootstrap = match source_bootstrap {
+        Ok((bytes, functions, rewrites)) => json!({
+            "status": "ok",
+            "image": identity(&bytes),
+            "functions": functions,
+            "rewrites": rewrites,
+        }),
+        Err(error) => json!({
+            "status": "rejected",
+            "code": error.code,
+            "message": error.message,
+        }),
+    };
     let report = json!({
         "schema": "lkjscript.selfhost.maintained-native-measurement.v1",
         "scope": "Tier 1 maintained closure; Rust normalized inputs and C1 bootstrap",
@@ -127,6 +166,16 @@ fn selfhost_source_measure_maintained_native_closure() {
         "retirements": source.retirements.len(),
         "types": source.types.len(),
         "entry": entry_declaration,
+        "source_compiler_capacity": {
+            "scope": "Combined source frontend/backend capacity observation only",
+            "entry": source_entry_declaration,
+            "target": "linux-x86_64",
+            "bootstrap": "Rust elf_x86_64::compile_function",
+            "export_input_consumed": false,
+            "bootstrap_image_executed": false,
+            "normalized_export": source_export,
+            "native_bootstrap": source_bootstrap,
+        },
         "mode0": {
             "input": identity(&mode0),
             "profile": word(&mode0, 8),
@@ -156,6 +205,8 @@ fn selfhost_source_measure_maintained_native_closure() {
             "mode0_export": mode0_export_ms,
             "mode1_export": mode1_export_ms,
             "C1_bootstrap": bootstrap_ms,
+            "source_compiler_export": source_export_ms,
+            "source_compiler_bootstrap": source_bootstrap_ms,
             "native_filter_harness": {
                 "C1_mode0": c1_mode0_ms,
                 "C2_mode0": c2_mode0_ms,

@@ -733,14 +733,14 @@ fn assert_production(source: &KernelSnapshot, finite: bool) {
                 &[source],
                 &|| Ok(()),
                 &mut work,
-                contract::MAXIMUM_VALIDATION_WORK,
+                Some(contract::MAXIMUM_VALIDATION_WORK),
             )
         } else {
             callable_flow::validate_snapshot_callable_closure(
                 &[source],
                 &|| Ok(()),
                 &mut work,
-                contract::MAXIMUM_VALIDATION_WORK,
+                Some(contract::MAXIMUM_VALIDATION_WORK),
             )
         };
         match (finite, result) {
@@ -920,14 +920,14 @@ fn assert_bad_projection_scope(family: &Family) {
                 &[&source],
                 &|| Ok(()),
                 &mut 0,
-                contract::MAXIMUM_VALIDATION_WORK,
+                Some(contract::MAXIMUM_VALIDATION_WORK),
             )
         } else {
             callable_flow::validate_snapshot_callable_closure(
                 &[&source],
                 &|| Ok(()),
                 &mut 0,
-                contract::MAXIMUM_VALIDATION_WORK,
+                Some(contract::MAXIMUM_VALIDATION_WORK),
             )
         };
         assert_eq!(result.unwrap_err().class, DiagnosticClass::Semantic);
@@ -948,7 +948,7 @@ fn assert_limits_cancel_retry(family: &Family) {
             &[&family.common.source],
             &checkpoint,
             &mut work,
-            contract::MAXIMUM_VALIDATION_WORK,
+            Some(contract::MAXIMUM_VALIDATION_WORK),
             64 * 1_048_576,
             eager,
         )
@@ -959,7 +959,7 @@ fn assert_limits_cancel_retry(family: &Family) {
             &[&family.common.source],
             &|| Ok(()),
             &mut 0,
-            work,
+            Some(work),
             measured.metadata_bytes,
             eager,
         )
@@ -973,7 +973,7 @@ fn assert_limits_cancel_retry(family: &Family) {
                 &[&family.common.source],
                 &|| Ok(()),
                 &mut 0,
-                maximum_work,
+                Some(maximum_work),
                 maximum_bytes,
                 eager,
             )
@@ -998,7 +998,7 @@ fn assert_limits_cancel_retry(family: &Family) {
             &[&family.common.source],
             &cancel,
             &mut 0,
-            work,
+            Some(work),
             measured.metadata_bytes,
             eager,
         )
@@ -1010,7 +1010,7 @@ fn assert_limits_cancel_retry(family: &Family) {
             &[&family.common.source],
             &|| Ok(()),
             &mut retry_work,
-            work,
+            Some(work),
             measured.metadata_bytes,
             eager,
         )

@@ -128,6 +128,19 @@ fn assert_active_expression(operation: &kernel::ExpressionOperation) {
 #[test]
 fn selfhost_source_profile_inventories_every_owner_and_type() {
     let source = &compiler().0;
+    let requires_associated_preparation =
+        crate::platform::execution::normalized::reference_types::requires_associated_preparation(
+            &[source],
+        );
+    assert!(!requires_associated_preparation);
+    let mut composed_work = 0;
+    let composed = kernel::callable_flow::validate_snapshot_callable_closure(
+        &[source],
+        &|| Ok(()),
+        &mut composed_work,
+        None,
+    )
+    .unwrap();
     assert!(source.dependencies.is_empty());
     assert!(source.dependency_interfaces.is_empty());
     assert!(source.dependency_types.is_empty());
@@ -385,6 +398,9 @@ fn selfhost_source_profile_inventories_every_owner_and_type() {
     );
     let summary = json!({
         "control_flow": &control_flow["summary"],
+        "requires_associated_preparation": requires_associated_preparation,
+        "composed_callable_steps": composed_work,
+        "composed_callable_metadata_bytes": composed.metadata_bytes,
         "carrier_bytes": carrier.len(),
         "carrier_sha256": carrier_sha256,
         "semantic_state": semantic_state.to_string(),

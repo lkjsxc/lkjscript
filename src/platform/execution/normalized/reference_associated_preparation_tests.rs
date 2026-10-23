@@ -1824,3 +1824,91 @@ fn canonical_associated_preparation_seals_indirect_invocations_and_callable_targ
     let retry = prove(&case.fixture, &[], Limits::default(), &control).unwrap();
     assert_eq!((retry.steps, retry.bytes), (healthy.steps, healthy.bytes));
 }
+
+// These mutations check policy routing, before semantic admission.
+#[test]
+fn preparation_policy_keeps_owned_buffers_ordinary_and_detects_read_metadata() {
+    use crate::platform::execution::normalized::reference_types::requires_associated_preparation;
+
+    let ordinary =
+        crate::platform::execution::normalized::tests::byte_buffer_tests::author("").unwrap();
+    assert!(
+        ordinary
+            .types
+            .values()
+            .any(|object| matches!(object.form, TypeForm::ByteBuffer))
+    );
+    assert!(ordinary.owners.values().any(|owner| matches!(
+        owner,
+        OwnerRecord::Parameter(parameter) if parameter.use_mode == ParameterUse::Borrow
+    )));
+    assert!(!requires_associated_preparation(&[&ordinary]));
+
+    let mut read_metadata = ordinary.clone();
+    let reader = named(&read_metadata, "reader");
+    let DeclarationPayload::Function(function) = payload(&mut read_metadata, reader) else {
+        unreachable!()
+    };
+    function.read_scope_parameters.push(ReadScopeParameter {
+        id: crate::platform::semantic_id::ReadScopeParameterId::migrate(SEED, 9000),
+        name: name("policy_scope"),
+    });
+    assert!(requires_associated_preparation(&[&read_metadata]));
+    assert!(requires_associated_preparation(&[
+        &ordinary,
+        &read_metadata
+    ]));
+    assert!(requires_associated_preparation(&[
+        &read_metadata,
+        &ordinary
+    ]));
+}
+
+#[test]
+fn preparation_policy_includes_unused_types_and_associated_declarations() {
+    use crate::platform::execution::normalized::reference_types::requires_associated_preparation;
+
+    let ordinary = base_source();
+    assert!(!requires_associated_preparation(&[&ordinary]));
+    let contract = named(&ordinary, "Read");
+    let member = AssociatedTypeMemberId::migrate(SEED, 9001);
+    let object = TypeObject::new(TypeForm::AssociatedContractMember { contract, member }).unwrap();
+    let digest = encode_type_object(&object).unwrap().0;
+
+    // No expression or callable signature references the added object. Its
+    // declaration relationship is deliberately unresolved: routing must inspect
+    // supplied inventory before semantic validation can reject that relationship.
+    for dependency_type in [false, true] {
+        let mut supplied = ordinary.clone();
+        let table = if dependency_type {
+            &mut supplied.dependency_types
+        } else {
+            &mut supplied.types
+        };
+        assert!(table.insert(digest, object.clone()).is_none());
+        assert!(
+            requires_associated_preparation(&[&supplied]),
+            "unused associated type was ignored; dependency_type={dependency_type}"
+        );
+    }
+
+    // Associated member metadata must select the guarded chain even before
+    // any projection type or callable body uses the member.
+    let mut declared = ordinary.clone();
+    let DeclarationPayload::OwnedContract(value) = payload(&mut declared, contract) else {
+        unreachable!()
+    };
+    value.associated_types.push(AssociatedTypeMember {
+        id: member,
+        name: name("UnusedPolicyMember"),
+        bound: AssociatedTypeBound::Owned,
+    });
+    assert!(
+        declared
+            .types
+            .values()
+            .chain(declared.dependency_types.values())
+            .all(|object| !object.form.is_associated())
+    );
+    assert!(requires_associated_preparation(&[&declared]));
+}
