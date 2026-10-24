@@ -154,7 +154,9 @@ fn selfhost_source_measure_maintained_native_closure() {
         "../../../../tests/fixtures/selfhost-source-scalar.lkjc"
     ))
     .unwrap();
+    let selected_target = super::scalar::target_id(&scalar_source, "scalar-main");
     let scalar_carrier = graph::packet(&scalar_source);
+    let scalar_request = super::scalar::source_request(&scalar_carrier, selected_target);
     let unused_bytes = kernel::TypeObject::new(kernel::TypeForm::Bytes).unwrap();
     let unused_digest = kernel::encode_type_object(&unused_bytes).unwrap().0;
     assert!(
@@ -164,11 +166,16 @@ fn selfhost_source_measure_maintained_native_closure() {
             .is_none()
     );
     let rejected_carrier = graph::packet(&scalar_source);
+    let rejected_request = super::scalar::source_request(&rejected_carrier, selected_target);
     assert_eq!(&scalar_carrier[48..80], &rejected_carrier[48..80]);
     assert_ne!(scalar_carrier, rejected_carrier);
     assert_ne!(
         Sha256::digest(&scalar_carrier),
         Sha256::digest(&rejected_carrier)
+    );
+    assert_ne!(
+        Sha256::digest(&scalar_request),
+        Sha256::digest(&rejected_request)
     );
     let mut expected_scalar_image: Option<Vec<u8>> = None;
     let mut scalar_controls = Vec::new();
@@ -177,7 +184,7 @@ fn selfhost_source_measure_maintained_native_closure() {
         ("backend C1 emission", &source_from_c1),
         ("backend C2 emission", &source_from_c2),
     ] {
-        let (scalar_image, compile_ms) = run(image, &scalar_carrier);
+        let (scalar_image, compile_ms) = run(image, &scalar_request);
         if let Some(expected) = &expected_scalar_image {
             assert_eq!(scalar_image.as_slice(), expected.as_slice(), "{stage}");
         } else {
@@ -193,7 +200,7 @@ fn selfhost_source_measure_maintained_native_closure() {
         assert_eq!(output.stdout, b"42", "{stage}");
         assert!(output.stderr.is_empty(), "{stage}");
         let started = Instant::now();
-        let rejected = native_filter_tests::execute_filter(image, &rejected_carrier, &[], 4093);
+        let rejected = native_filter_tests::execute_filter(image, &rejected_request, &[], 4093);
         let reject_ms = started.elapsed().as_millis();
         assert_eq!(
             rejected.status.code(),
@@ -207,10 +214,18 @@ fn selfhost_source_measure_maintained_native_closure() {
             "stage": stage,
             "compiler": identity(image),
             "accepted_carrier": identity(&scalar_carrier),
+            "accepted_request": identity(&scalar_request),
+            "request_format": "LKJSRQ01",
+            "request_profile": 1,
+            "selected_target": selected_target,
+            "selector_key_hex": crate::platform::semantic_id::encode_hex(
+                &kernel::EncodedOwnerKey::new(OwnerKey::Target(selected_target)).bytes()
+            ),
             "emitted_program": identity(&scalar_image),
             "program_exit": output.status.code(),
             "program_stdout": "42",
             "rejected_carrier": identity(&rejected_carrier),
+            "rejected_request": identity(&rejected_request),
             "rejection": "hash-consistent unused Bytes type",
             "rejection_diagnostic": 13,
             "compile_wall_time_ms": compile_ms,
@@ -228,7 +243,7 @@ fn selfhost_source_measure_maintained_native_closure() {
         "types": source.types.len(),
         "entry": entry_declaration,
         "source_compiler_capacity": {
-            "scope": "Tier 1 backend reproduction and raw scalar source execution; no maintained source self-compilation",
+            "scope": "Tier 1 backend reproduction and explicitly selected scalar source execution; no maintained source self-compilation",
             "entry": source_entry_declaration,
             "target": "linux-x86_64",
             "bootstrap": "Rust elf_x86_64::compile_function",
@@ -243,7 +258,7 @@ fn selfhost_source_measure_maintained_native_closure() {
                 "compiler_from_backend_C2": identity(&source_from_c2),
                 "identical": true,
             },
-            "raw_carrier_controls": scalar_controls,
+            "source_request_controls": scalar_controls,
         },
         "mode0": {
             "input": identity(&mode0),

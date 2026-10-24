@@ -508,7 +508,7 @@ declarations.begin
       (returns I64)
       (body
         (if (call ci::eq (local row) (call source-table::count (local graph)))
-          (if (call ci::eq (local targets) (i64 1)) (i64 0) (i64 13))
+          (if (call ci::lt (i64 0) (local targets)) (i64 0) (i64 13))
           (let
             (binding code (call owner-profile (local graph) (local row)))
             (in

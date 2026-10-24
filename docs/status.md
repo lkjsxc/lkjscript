@@ -13,8 +13,10 @@ lint invariants and the no-Python policy remain intact.
 
 The lkjscript-written Tier 1 backend consumes Rust-admitted LKJCI1 mode 0/profile 4
 for standalone Linux x86_64 ELF and mode 1/profile 5 for current .lkja artifacts.
-The additional compile-source-elf route consumes complete raw LKJSG001 and performs
-restricted scalar E2/E3 and eight exact pure I64/Bool intrinsics inside lkjscript.
+The additional compile-source-elf route now consumes LKJSRQ01/profile1: a 32-byte
+header carrying the caller's canonical Target key followed by the complete raw
+LKJSG001 carrier. It performs restricted scalar E2/E3 and eight exact pure
+I64/Bool intrinsics inside lkjscript, then selects the admitted live Target.
 The [self-hosting specification](spec/selfhosting.md) owns the complete capability
 matrix. Native heap allocations remain process-owned until exit; same-process
 and phase reclamation still require implementation.
@@ -22,25 +24,29 @@ and phase reclamation still require implementation.
 ## Current milestone
 
 The source-driven scalar path checks all supplied owners/types, including
-uncalled functions, untaken branches and unused descriptors. It admits pure
-monomorphic Unit/Bool/I64 functions, locals, If, Let, Sequence, direct calls and
-eight exact I64/Bool External implementations. Permission checks complete
-implementation identifiers, signatures, unrestricted parameter modes and empty
-generic binders. The compiler requires one command Target, resolves its Component
-Port internally, derives normalized instructions and flow certificates, and emits
-ELF through the unchanged backend. Empty-row task callables remain unsupported
-tasks.
+uncalled functions, untaken branches, unused descriptors and unselected targets.
+It admits pure monomorphic Unit/Bool/I64 functions, locals, If, Let, Sequence,
+direct calls and the eight exact I64/Bool External implementations. Permission
+checks complete implementation identifiers, signatures, unrestricted parameter
+modes and empty generic binders. Empty-row task callables remain unsupported tasks.
 
-The joined scalar tests add 26 intrinsic cases: six exact values, nine exact
-runtime traps and eleven semantic/profile rejections. The complete-carrier E2
-matrix compares VM, reference and native results; native E3 compiles raw carriers
-and executes independent value/trap expectations. Eager Boolean arguments,
-left-to-right evaluation and integer trap ordering are preserved. The five
-existing scalar tests also retain the balanced 32,770-instruction witness and
-independently constructed hash-consistent missing-endpoint/disconnected-cycle
-controls. No Rust target lowering or source prefilter is supplied.
-The [intrinsic decision](decisions/20261024-source-scalar-intrinsics.md) records
-the exact eight signatures, added cases, canonical adoption and evidence scope.
+The canonical selector transaction permits one or more command Targets. After
+request-header validation and complete-carrier E1/E2, lkjscript resolves the
+selected Target, its Component and pure `() -> I64` function Port, derives the
+normalized entry index, and emits ELF through the unchanged backend. The host
+supplies only the typed Target identity and raw carrier. Missing/retired selectors
+reject after whole-inventory admission; unframed legacy source input rejects.
+The [selector decision](decisions/20261024-source-target-selector.md) records the
+current-format transition, bootstrap, single adoption and evidence boundaries.
+
+The five existing scalar tests retain the 26 intrinsic cases, eager left-to-right
+evaluation and exact value/trap expectations, the balanced 32,770-instruction
+witness, and independently constructed hash-consistent missing-endpoint and
+disconnected-cycle controls. New request controls cover selection from the same
+carrier, malformed framing and invalid unused targets. The joined selector suite
+passed all five tests, with zero failures or ignored tests. The accepted
+[intrinsic decision](decisions/20261024-source-scalar-intrinsics.md) retains its
+exact signatures and earlier evidence scope.
 
 The earlier [scalar decision](decisions/20261023-source-scalar-e2-e3.md) and
 [node-capacity decision](decisions/20261023-mode0-node-capacity.md) retain their
@@ -65,95 +71,96 @@ removes unrelated representation, recursion or physical limits.
 
 ## Maintained compiler baseline
 
-Accepted main baseline is commit 01c805a202b258a1a9241f1edafd5feaa7655ce1.
-The intrinsic canonical transaction and targeted controls have succeeded;
-intrinsic publication still requires the exact-tree gates below.
+Accepted main predecessor is commit
+4165156d4d4c9726af61199d34f9b1b2053b9ef3, tree
+a08a988e92c8500102856f6d05fff8f31cdf86c4. Selector public adoption succeeded once,
+with differential equality, seven updates and 445 created canonical owners, at
+rev_22b1d6d49b74893bf402af9461931f8c372f820ada378524eb50ef892a9f03d9.
+It adds one callable and preserves retained declaration/parameter identities.
+The joined maintained measurement, complete profile and isolated historical
+reachability receipt provide the counts below.
 
-The authoritative project has 72 modules, 559 pure functions and 23 externals,
-33,919 owners, 35 types and 11,651 retirements at
-rev_dd94b401eb30277e5289bbc9d651230337edcd6b1391e46fabcd92c0fe38d427.
-Semantic state:
-semantic_state_706b6db4ae98c6adb7511c56da0e893974a45585b91fbaf48e8e38593870fa19.
-The complete LKJSG001 carrier is 8,110,321 bytes, SHA-256
-b800b61e8d90d6c507fa9918130bc629bdbad491b9d9ec38f79b28beeaa64177.
-Its aggregate 8 MiB quota and the matching index-backing quota are removed.
-The retained positive signed-32-bit proof domain still requires
+| Current selector observation | Value |
+| --- | --- |
+| Modules / pure functions / externals | 72 / 560 / 23 |
+| Live owners / supplied types / retirements | 34,006 / 35 / 12,009 |
+| Complete LKJSG001 bytes / SHA-256 | 8,201,410 / db0ae8fd2a2c1d529bc43297bd29fa5308224e1ed5c379bc62c31d0a4d335ee4 |
+| Semantic state | semantic_state_0626b9fe9d87ae871e734eafa2e45f60533f163388f1ee7e9a705b0921ba8599 |
+| Mode-1 input bytes / units | 9,177,461 / 587 |
+| .lkja output bytes / units | 9,699,624 / 587 |
+| Direct local full-kernel work | 3,130,736 |
+| Composed callable work / modeled metadata bytes | 8,105,847 / 11,531,962 |
+| Physical packs / bytes | 390 / 430,408,188 |
+| Reachable canonical history / retained pack bytes | 508,557,991 / 405,487,133 |
+
+The accepted intrinsic before inventory is 72 modules, 559 pure functions and
+23 externals; 33,919 live owners, 35 supplied types and 11,651 retirements. Its
+complete carrier is 8,110,321 bytes, mode-1 input is 9,155,057 bytes for 586 units,
+and artifact output is 9,675,994 bytes. The selector decision preserves the
+separated before/after table. Measured deltas are +87 live owners, +358
+retirements and +91,089 carrier bytes. Mode-1 input grows by 22,404 bytes and one
+unit; the artifact grows by 23,630 bytes. These compare maintained closures, not
+speed on one pinned input. Historical retirements remain in the complete carrier.
+
+The source carrier's aggregate 8 MiB quota and index-backing quota remain removed.
+The retained positive signed-32-bit proof domain requires
 L <= 16,777,183 - 8*N, with independent layout, count and object restrictions.
+Composed work remains passive telemetry under explicit unmetered policy, not
+10-million quota headroom. Other validation/preparation bounds remain distinct.
+The inventory identifies remaining record/Text/List/borrow/consume dependencies;
+it grants neither source-profile permission nor cleanup certificates.
 
-Mode-1 input occupies 9,155,057 bytes for 586 units and emits a 9,675,994-byte
-artifact. The Tier 1 native backend closure has 244 functions and 16,456 nodes
-in 832,576 mode-0 bytes. Direct local full-kernel validation consumes 3,120,526
-work units. Composed callable analysis separately reports 8,076,365 work units
-and 11,499,321 modeled metadata bytes. The composed count is passive telemetry
-under explicit unmetered policy, not a 10-million quota headroom measure.
-These observations are not interchangeable with an aggregate public validation
-total. The maintained closure does not select associated preparation.
-
-The complete inventory records exact intrinsic signatures/substitutions, parameter
-use modes, lexical scopes, recursion and syntactic tail calls. Its 24 structural
-record types, 146 Text expressions, 91 List expressions, 14 generic sites,
-one borrow parameter and 159 consume parameters identify further source-profile
-dependencies. The inventory is a derived observation, not E2 permission or an E3
-custody certificate.
-
-Physical packs occupy 419,166,252 bytes across 346 packs, preserving all previous
-history. Isolated public GC measures 497,593,841 reachable canonical bytes across
-231,731 historical objects, retaining 397,154,190 pack bytes in the copy and
-modeling 556,916,977 preparation-retention bytes. The run verifies the original
-project/source/index/branch/history unchanged and successful copy cleanup. These
-are storage observations. Native requested allocation, live retention, mapped
-capacity and RSS remain unmeasured.
-
-The intrinsic transaction updates nine existing bodies and adds five callable
-declarations through public authoring, preserving retained declaration/parameter
-identities. It creates 851 owners; after replacement, live owners increase by
-264 and retirement records by 587. Complete carrier bytes increase by 169,127.
-Historical retirements remain part of the carrier. No history truncation,
-retirement deletion or project reseed occurs.
+Current isolated GC retained 234,781 objects with 508,557,991 canonical bytes and
+405,487,133 pack bytes, using 568,661,927 modeled preparation bytes. It reclaimed
+784 objects and 24,921,055 pack bytes in the copy, reducing 390 packs to 16 in
+180,613.176497 ms. The original project, sources, index, branch and stashes were
+preserved; the copy was removed successfully. The raw report digest is
+`8f1a844b8e3c782d0f848ce56cf591db825d6ff2ace8cae01151de8b36cbbcd1`. Native
+requested allocation, live retention, mapped capacity and RSS remain unmeasured;
+historical storage and modeled GC retention do not establish native reclamation.
 
 ## Verification and next work
 
-The joined targeted run passed all five scalar tests, one explicitly enabled
-maintained native measurement and one complete-profile test, with no failures.
-Their test-reported times were 321.97, 23.72 and 11.96 seconds; the corresponding
-whole-command times were 516,360.533, 23,873.855 and 12,077.030 milliseconds.
-These intervals are distinct and are not a same-input performance comparison.
+The joined selector run passed five scalar tests, one explicitly enabled
+maintained-native measurement and one complete-profile test, all with zero
+failures or ignored tests. Test times were 365.19 / 24.42 / 11.46 seconds; whole
+command times were 559,348.815185 / 24,566.869172 / 11,579.212302 ms. The continuation
+is `f2d8a6839299314c1068ba319b4b46b0b7d2f1ddc5df76973ea10b4d5559d837`. The root's
+separate recovery proof passed and binds the initial compile failure, exact
+three-prefix/three-line-join correction, retained single adoption and source
+inventory; its SHA-256 is
+`5196441bfb8ddee34e9e3d36729760b286433a9001fd6ae59349d2d882767f80`.
 
-Native maintained-closure measurement reproduces Tier 1 C2=C3 and identical
-C1/C2/C3 artifact bytes, bound to the complete source carrier. The native digest
-is 55eaea3fcc2604a386f68a5dffd5bb9c2ca8e936ca0d2bf94235e1770c2487d5;
-the artifact digest is 6dab0ce912baa2306325d2f74c5e341f12264797213fd9bf8f67fe0cdd62840a.
-These fixed points still consume Rust-normalized input. Scalar source-to-ELF
-execution does not establish maintained compiler-source fixed points, canonical
-Rust A1 parity or same-process native reclamation.
+Current normalized-input Tier 1 backend ELF C2=C3 has digest
+`55eaea3fcc2604a386f68a5dffd5bb9c2ca8e936ca0d2bf94235e1770c2487d5`; the artifact
+from C1=C2=C3 has digest
+`2f2ce9aedd41988db53042561c4ea1b3a08af8a4927ab849694875204a4f22ca`. Source
+compiler executables emitted by backend C1/C2 are identical. All three native
+source compilers accept the same framed scalar request, emit identical programs
+printing 42 and reject a hash-consistent unused Bytes descriptor with diagnostic
+13. The decision binds the complete carriers/requests, selected Target, compiler
+identities and execution context. These observations do not establish maintained
+compiler-source C2=C3, canonical Rust A1=A2=A3 or same-process native reclamation.
 
-The combined source frontend/backend exports and consumes 1,672,927 mode-0
-bytes containing 566 functions, 34,469 nodes and 31 normalized type entries.
-Backend C1 and C2 reproduce identical 5,312,463-byte frontend images. Both images
-and the Rust-bootstrap frontend compile a complete raw scalar carrier to a
-program returning 42 and reject a hash-consistent unused Bytes type. Checked
-complete-layout arithmetic and the retained byte/function/local/type domains
-still bound native addresses and displacements.
+Next extend Bytes/flat records, Text, closed List substitutions and complete
+ByteBuffer custody/cleanup. Reconcile and measure each actual successor; static
+local drafts are not adoption or runtime evidence. The accepted before inventory
+has 586 mode-1 units; the selector inventory has 587. Replace flat map emission
+before a measured successor would exceed the retained 700-unit limit. Reassess
+complete carrier size, retirement count and proof-domain constraints separately.
+Preserve whole-carrier admission and complete-carrier identity binding.
 
-Next implement explicit Target selection, then Bytes/flat records, Text, closed
-List substitutions and complete ByteBuffer custody/cleanup. Reconcile and measure
-each actual successor; static local drafts are not adoption or runtime evidence.
-At 586 measured mode-1 units, replace flat map emission before a measured
-successor reaches the retained 700-unit blocker. Reassess complete carrier size,
-retirement count and proof-domain constraints separately. Preserve whole-carrier
-admission and complete-carrier identity binding.
-
-No intrinsic full publication gates have run yet. Required acceptance is the
-exact staged tree through tools/bootstrap-verifier.sh, literal
-tools/selfhost/verify.sh (127 expected selfhost passes plus two ignored and ten
-native passes), the stdout-selected lkjscript-dev check full --fresh --machine
---jobs 4 (29 fresh gates, zero reuse), and that same verifier's release target.
-There is no root ./verify executable. One checkout and the canonical target stay
-under the appropriate exclusive gate lease. The matrix runs once for the frozen
-candidate. Targeted evidence is under .artifacts/selfhost/source-scalar-intrinsics;
-future frozen acceptance and terminal publication receipts must bind its actual
-source, revision and tree. Git owns final integration and remote identities.
-No public product release or deployment is implied.
+No selector full publication result is claimed. Required acceptance is the exact
+staged tree through tools/bootstrap-verifier.sh, literal tools/selfhost/verify.sh
+(127 expected selfhost passes plus two ignored and ten native passes), the
+stdout-selected lkjscript-dev check full --fresh --machine --jobs 4 (29 fresh
+gates, zero reuse), and that same verifier's release target. There is no root
+./verify executable. One checkout and the canonical target stay under the
+appropriate exclusive gate lease. The matrix runs once for the frozen candidate.
+Targeted evidence is under .artifacts/selfhost/source-target-selector; future
+acceptance and terminal publication receipts must bind its actual source,
+revision and tree. Git owns final integration and remote identities. No public
+product release or deployment is implied.
 
 WS1 and full Tier 2 remain incomplete. Remaining obligations include
 authoring/inspection quotas, recursive depth limits, custody/type encodings,

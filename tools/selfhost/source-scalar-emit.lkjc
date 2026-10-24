@@ -219,9 +219,11 @@ declarations.begin
       (parameter create graph (type Bytes))
       (parameter create facts (type Bytes))
       (parameter create parents (type Bytes))
+      (parameter create target (type I64))
       (returns (record (code I64) (input Bytes)))
       (body (let
-        (binding plan (call source-scalar-plan::prepare (local graph) (local parents) (local facts)))
+        (binding plan (call source-scalar-plan::prepare
+          (local graph) (local parents) (local facts) (local target)))
         (in
           (if (call ci::eq (field (local plan) (name code)) (i64 0))
             (let
