@@ -28,14 +28,16 @@ It resolves the command Target and component Port internally, produces its own
 normalized instructions and flow certificates, and emits ELF through the existing
 backend. Empty-row task callables remain unsupported tasks.
 
-Four scalar tests cover eight independently executed positive programs, eight
+Five scalar tests cover eight independently executed small positive programs, eight
 semantic failures, two unsupported-form controls and two independently constructed
 hash-consistent structural failures. Bool/Unit parameter and result calls,
 I64 boundaries, nested lexical scopes, operand prefixes, direct/mutual recursion
 and alternate component selection are exercised. Missing links and a disconnected
 cycle pass commitment checks before rejecting at their intended structural layer.
-The [scalar decision](decisions/20261023-source-scalar-e2-e3.md) records the exact
-contract, complete-carrier identities, measurements and evidence boundaries.
+The additional balanced source witness lowers 32,770 normalized instructions
+and independently executes to 42. The [scalar decision](decisions/20261023-source-scalar-e2-e3.md)
+and [capacity decision](decisions/20261023-mode0-node-capacity.md) record exact
+contracts, complete-carrier identities, measurements and evidence boundaries.
 
 Public adoption exposed a composed callable-work policy blocker. The unchanged
 planner transaction now succeeds after replacing the ordinary composed-work quota
@@ -53,33 +55,35 @@ removes unrelated representation, recursion or physical limits.
 
 ## Maintained compiler baseline
 
-The authoritative project has 72 modules, 553 pure functions and 23 externals,
-33,640 owners, 35 types and 10,586 retirements at
-rev_58c7fb8d64952a3b5f12e6637b4265657ff13b023a870af12af8b3f19153ba87.
+The authoritative project has 72 modules, 554 pure functions and 23 externals,
+33,666 owners, 35 types and 10,980 retirements at
+rev_9793beb62fcf1a8ffdf61e7bbf9a6c5a310e0d4ae3b77aa86f23cb023af26c3d.
 Semantic state:
-semantic_state_a82dd2ca1863cd9923f8f417570f7d4fd23bdbf7db94ab96328e67a5e866ca71.
-The complete LKJSG001 carrier is 7,836,565 bytes, SHA-256
-8a9a3da1fa795170436ae4ec1f3716425ef988e08a2f81901475133005846e33.
-Its separate 8 MiB ceiling leaves 552,043 bytes of headroom.
+semantic_state_46901f9d2d9b88d28aa1b8237ce5f52a5a78dfc5cc1b147f281f599950f9ca8e.
+The complete LKJSG001 carrier is 7,925,055 bytes, SHA-256
+99916677a11a0216a68c127c97f75d18f783531c5103b76089a36d623db6aedd.
+Its separate 8 MiB ceiling leaves 463,553 bytes of headroom.
 
-Mode-1 input occupies 9,081,896 bytes for 580 units and emits a 9,598,554-byte
-artifact. The unchanged Tier 1 native backend closure has 244 functions and
-16,460 nodes in 832,748 mode-0 bytes. Direct local full-kernel validation consumes
-3,091,132 work units. Public rebuilt current-validation separately reports
-11,111,393 aggregate units; that sum is not headroom under one admission ceiling.
-Composed analysis alone reports 7,985,578 work units and 11,392,635 modeled metadata
-bytes. The maintained closure does not select associated preparation.
+Mode-1 input occupies 9,089,215 bytes for 581 units and emits a 9,606,367-byte
+artifact. The Tier 1 native backend closure has 244 functions and 16,456 nodes
+in 832,576 mode-0 bytes. Direct local full-kernel validation consumes 3,094,806
+work units. Composed callable analysis separately reports 7,998,497 work units
+and 11,405,716 modeled metadata bytes. These measures are not interchangeable
+with an aggregate public validation total. The maintained closure does not
+select associated preparation.
 
 The complete inventory records exact intrinsic signatures/substitutions, parameter
 use modes, lexical scopes, recursion and syntactic tail calls. It remains a derived
 observation, not E2 permission or an E3 custody certificate. Physical packs occupy
-390,397,862 bytes; versioned historical reachability retains 469,578,376
-canonical payload bytes. These quantities are distinct. Native requested
-allocation, live retention, mapped capacity and RSS have not been measured.
+401,520,402 bytes; versioned historical reachability retains 480,434,611 canonical
+payload bytes across 226,375 objects. Isolated public GC measures reachability
+while preserving the authoritative project. Native requested allocation, live
+retention, mapped capacity and RSS have not been measured.
 
-The public source transactions add ten modules without replacing old declarations
-or adding retirements. No history truncation, retirement deletion or project
-reseed occurs.
+The capacity transaction updates six function bodies and adds one helper through
+public authoring while preserving existing declaration and parameter identities.
+Historical retirement records remain part of the complete carrier. No history
+truncation, retirement deletion or project reseed occurs.
 
 ## Verification and next work
 
@@ -90,26 +94,35 @@ controls. These fixed points still consume Rust-normalized input. Scalar
 source-to-ELF execution does not establish maintained compiler-source fixed points
 or equality with independently packaged Rust canonical artifacts.
 
-The combined source frontend/backend builds with the Rust native backend:
-560 functions and 698,850 ELF bytes. Its mode-0 export reaches the aggregate
-32,768-instruction guard and rejects. The exact normalized node count remains
-unmeasured. This is the next concrete capacity dependency. Audit and remove that
-guard across exporter, flow, scalar planner/packing and native layout consumers
-with checked finite-width addressing and an actual above-threshold control;
-do not replace it with another arbitrary quota.
+The combined source frontend/backend now exports and consumes 1,661,846 mode-0
+bytes containing 561 functions, 34,214 nodes and 31 record types. The independent
+32,768-node guard is removed across exporter, flow admission and scalar planning/
+packing. Checked complete-layout arithmetic and the retained byte/function/local/
+type domains bound native addresses and displacements. Explicit proof allowance
+still rejects at one less than required; a hash-consistent u32-max extent rejects
+before a table walk.
 
-Then extend Bytes/Text intrinsics, structural records, closed List substitutions
-and complete ByteBuffer custody cleanup to the maintained compiler profile.
-Preserve whole-carrier admission and complete-carrier identity binding through
-each semantic extension. The nearby source-carrier and artifact-unit bounds
-must be addressed when they become actual dependencies.
+Backend C1 and C2 emit identical 5,274,542-byte frontend images. Both images and
+the Rust-bootstrap frontend compile a complete raw scalar carrier to an
+independently executed program and reject a hash-consistent unused Bytes type.
+This closes the aggregate-node capacity blocker while retaining the narrower
+scalar source profile.
+
+Next, admit and lower exact I64/Bool intrinsic declarations and introduce explicit
+Target selection. Immutable Bytes, structural records, Text, closed List
+substitutions and complete ByteBuffer cleanup then extend E2/E3 toward the
+maintained compiler profile. Reassess complete source-carrier headroom before
+adopting each slice; retirement accumulation makes live-source size insufficient.
+Preserve whole-carrier admission and complete-carrier identity binding. The
+nearby source-carrier and artifact-unit bounds remain concrete dependencies.
 
 Publication requires exact staged-tree bootstrap, tools/selfhost/verify.sh,
 every gate in full --fresh and release-target inspection. The current checker
 entrypoint is tools/bootstrap-verifier.sh and lkjscript-dev; there is no root
 ./verify executable. Source/test changes select the full matrix for changed,
 so the matrix runs once. Terminal evidence is under
-.artifacts/selfhost/source-scalar and the official latest receipt.
+.artifacts/selfhost/mode0-node-capacity, its frozen acceptance directory and the
+official latest receipt.
 Git owns integration records. No public product release or deployment is implied.
 
 WS1 and full Tier 2 remain incomplete. Remaining obligations include

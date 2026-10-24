@@ -1,6 +1,23 @@
 declarations.begin
 (units
   (module create source-scalar-pack
+    (function create node-capacity
+      (visibility package)
+      (effect pure)
+      (parameter create function-count (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::both
+            (call ci::lt (i64 0) (local function-count))
+            (call ci::lt (local function-count) (i64 1025)))
+          (call ci::div
+            (call ci::sub
+              (i64 8388608)
+              (call ci::add (i64 2176) (call ci::mul (local function-count) (i64 40))))
+            (i64 32))
+          (i64 -1))))
+
     (function create failure
       (visibility private)
       (effect pure)
@@ -338,7 +355,9 @@ declarations.begin
               (call ci::lt (local function-count) (i64 1025)))
             (call ci::both
               (call ci::lt (i64 0) (local node-count))
-              (call ci::lt (local node-count) (i64 32769))))
+              (call ci::lt
+                (local node-count)
+                (call ci::add (call node-capacity (local function-count)) (i64 1)))))
           (if
             (call ci::both
               (call ci::lt (i64 -1) (local entry))

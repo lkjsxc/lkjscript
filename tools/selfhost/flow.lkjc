@@ -249,7 +249,7 @@ declarations.begin
       (binding nodes (call ci::u32 (local data) (i64 100)))
       (binding blob (call ci::add (i64 2176) (call ci::add (call ci::mul (local count) (i64 40)) (call ci::mul (local nodes) (i64 32)))))
       (binding length (call ci::length (local data)))
-      (in (if (call ci::both (call ci::lt (i64 0) (local nodes)) (call ci::lt (local nodes) (i64 32769)))
+      (in (if (call ci::lt (i64 0) (local nodes))
         (if (call ci::lt (local blob) (call ci::add (local length) (i64 1)))
           (if (call ci::table-is (local data) (i64 72)
                 (list I64 (i64 112) (i64 1) (i64 128) (call ci::u32 (local data) (i64 84)) (i64 2176) (local count)

@@ -117,45 +117,106 @@ fn selfhost_source_measure_maintained_native_closure() {
             "sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(bytes)),
         })
     };
-    // Observe the combined source frontend/backend closure without consuming
-    // its exported input or executing the Rust-bootstrapped source compiler.
+    // Reproduce the combined source compiler through the already checked
+    // Tier 1 backend stages. Its own scalar frontend cannot compile this
+    // maintained compiler closure, so this is not source self-compilation.
     let source_entry_declaration = super::function("source-elf", "compile");
     let source_entry = program.function(source_entry_declaration).unwrap().0 as usize;
     let started = Instant::now();
-    let source_export = input::export(program, source_entry);
+    let source_input = input::export(program, source_entry).unwrap();
     let source_export_ms = started.elapsed().as_millis();
-    let source_export = match source_export {
-        Ok(bytes) => json!({
-            "status": "ok",
-            "input": identity(&bytes),
-            "profile": word(&bytes, 8),
-            "functions": word(&bytes, 92),
-            "nodes": word(&bytes, 100),
-            "types": word(&bytes, 84),
-        }),
-        Err(error) => json!({
-            "status": "rejected",
-            "code": error.code,
-            "message": error.message,
-        }),
-    };
+    let source_export = json!({
+        "status": "ok",
+        "input": identity(&source_input),
+        "profile": word(&source_input, 8),
+        "functions": word(&source_input, 92),
+        "nodes": word(&source_input, 100),
+        "types": word(&source_input, 84),
+        "exceeds_historical_node_limit": word(&source_input, 100) > 32_768,
+    });
     let started = Instant::now();
-    let source_bootstrap =
-        crate::platform::compiler::elf_x86_64::compile_function(program, source_entry);
+    let (source_bootstrap_image, source_functions, source_rewrites) =
+        crate::platform::compiler::elf_x86_64::compile_function(program, source_entry).unwrap();
     let source_bootstrap_ms = started.elapsed().as_millis();
-    let source_bootstrap = match source_bootstrap {
-        Ok((bytes, functions, rewrites)) => json!({
-            "status": "ok",
-            "image": identity(&bytes),
-            "functions": functions,
-            "rewrites": rewrites,
-        }),
-        Err(error) => json!({
-            "status": "rejected",
-            "code": error.code,
-            "message": error.message,
-        }),
-    };
+    let source_bootstrap = json!({
+        "status": "ok",
+        "image": identity(&source_bootstrap_image),
+        "functions": source_functions,
+        "rewrites": source_rewrites,
+    });
+    let (source_from_c1, source_c1_emit_ms) = run(&c1, &source_input);
+    let (source_from_c2, source_c2_emit_ms) = run(&c2, &source_input);
+    assert!(source_from_c1 == source_from_c2);
+
+    // Rust authors a valid independent seed and transports complete object bytes.
+    // It neither normalizes this target nor supplies source typing/lowering facts.
+    let mut scalar_source = byte_buffer_tests::author_only(include_str!(
+        "../../../../tests/fixtures/selfhost-source-scalar.lkjc"
+    ))
+    .unwrap();
+    let scalar_carrier = graph::packet(&scalar_source);
+    let unused_bytes = kernel::TypeObject::new(kernel::TypeForm::Bytes).unwrap();
+    let unused_digest = kernel::encode_type_object(&unused_bytes).unwrap().0;
+    assert!(
+        scalar_source
+            .types
+            .insert(unused_digest, unused_bytes)
+            .is_none()
+    );
+    let rejected_carrier = graph::packet(&scalar_source);
+    assert_eq!(&scalar_carrier[48..80], &rejected_carrier[48..80]);
+    assert_ne!(scalar_carrier, rejected_carrier);
+    assert_ne!(
+        Sha256::digest(&scalar_carrier),
+        Sha256::digest(&rejected_carrier)
+    );
+    let mut expected_scalar_image: Option<Vec<u8>> = None;
+    let mut scalar_controls = Vec::new();
+    for (stage, image) in [
+        ("Rust bootstrap", &source_bootstrap_image),
+        ("backend C1 emission", &source_from_c1),
+        ("backend C2 emission", &source_from_c2),
+    ] {
+        let (scalar_image, compile_ms) = run(image, &scalar_carrier);
+        if let Some(expected) = &expected_scalar_image {
+            assert_eq!(scalar_image.as_slice(), expected.as_slice(), "{stage}");
+        } else {
+            expected_scalar_image = Some(scalar_image.clone());
+        }
+        let output = execute(&scalar_image, &[]);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{stage}: {:?}",
+            output.stderr
+        );
+        assert_eq!(output.stdout, b"42", "{stage}");
+        assert!(output.stderr.is_empty(), "{stage}");
+        let started = Instant::now();
+        let rejected = native_filter_tests::execute_filter(image, &rejected_carrier, &[], 4093);
+        let reject_ms = started.elapsed().as_millis();
+        assert_eq!(
+            rejected.status.code(),
+            Some(65),
+            "{stage}: {:?}",
+            rejected.stderr
+        );
+        assert!(rejected.stdout.is_empty(), "{stage}");
+        assert_eq!(rejected.stderr, b"compiler_rejected:13\n", "{stage}");
+        scalar_controls.push(json!({
+            "stage": stage,
+            "compiler": identity(image),
+            "accepted_carrier": identity(&scalar_carrier),
+            "emitted_program": identity(&scalar_image),
+            "program_exit": output.status.code(),
+            "program_stdout": "42",
+            "rejected_carrier": identity(&rejected_carrier),
+            "rejection": "hash-consistent unused Bytes type",
+            "rejection_diagnostic": 13,
+            "compile_wall_time_ms": compile_ms,
+            "reject_wall_time_ms": reject_ms,
+        }));
+    }
     let report = json!({
         "schema": "lkjscript.selfhost.maintained-native-measurement.v1",
         "scope": "Tier 1 maintained closure; Rust normalized inputs and C1 bootstrap",
@@ -167,14 +228,22 @@ fn selfhost_source_measure_maintained_native_closure() {
         "types": source.types.len(),
         "entry": entry_declaration,
         "source_compiler_capacity": {
-            "scope": "Combined source frontend/backend capacity observation only",
+            "scope": "Tier 1 backend reproduction and raw scalar source execution; no maintained source self-compilation",
             "entry": source_entry_declaration,
             "target": "linux-x86_64",
             "bootstrap": "Rust elf_x86_64::compile_function",
-            "export_input_consumed": false,
-            "bootstrap_image_executed": false,
+            "export_input_consumed": true,
+            "bootstrap_image_executed": true,
             "normalized_export": source_export,
             "native_bootstrap": source_bootstrap,
+            "normalized_reproduction": {
+                "backend_C1": identity(&c1),
+                "backend_C2": identity(&c2),
+                "compiler_from_backend_C1": identity(&source_from_c1),
+                "compiler_from_backend_C2": identity(&source_from_c2),
+                "identical": true,
+            },
+            "raw_carrier_controls": scalar_controls,
         },
         "mode0": {
             "input": identity(&mode0),
@@ -207,6 +276,8 @@ fn selfhost_source_measure_maintained_native_closure() {
             "C1_bootstrap": bootstrap_ms,
             "source_compiler_export": source_export_ms,
             "source_compiler_bootstrap": source_bootstrap_ms,
+            "source_compiler_from_backend_C1": source_c1_emit_ms,
+            "source_compiler_from_backend_C2": source_c2_emit_ms,
             "native_filter_harness": {
                 "C1_mode0": c1_mode0_ms,
                 "C2_mode0": c2_mode0_ms,
@@ -233,7 +304,7 @@ fn selfhost_source_measure_maintained_native_closure() {
             "native live retained storage",
             "native mapped arena capacity",
             "native resident memory",
-            "source-driven E2/E3",
+            "maintained-compiler source-driven fixed points",
         ],
     });
     let mut encoded = serde_json::to_vec_pretty(&report).unwrap();

@@ -547,6 +547,134 @@ fn selfhost_source_scalar_e3_compiles_raw_carriers_and_executes_independent_resu
     }
 }
 
+#[test]
+fn selfhost_source_scalar_e3_lowers_more_than_historical_node_limit_natively() {
+    const HISTORICAL_MAX_NODES: usize = 32_768;
+    let leaf_count = HISTORICAL_MAX_NODES / 2 + 1;
+
+    fn append_sequence(proposal: &mut String, first: usize, leaves: usize, last: usize) {
+        if leaves == 1 {
+            proposal.push_str(if first == last {
+                " (i64 42)"
+            } else {
+                " (i64 0)"
+            });
+            return;
+        }
+        // Choose the fewest children that retain the minimum tree depth, then
+        // distribute leaves evenly. Each Sequence has between 2 and 16 children.
+        let mut child_capacity = 1;
+        while (leaves - 1) / child_capacity >= 16 {
+            child_capacity *= 16;
+        }
+        let children = 1 + (leaves - 1) / child_capacity;
+        let base = leaves / children;
+        let larger = leaves % children;
+        proposal.push_str(" (sequence");
+        let mut next = first;
+        for child in 0..children {
+            let count = base + usize::from(child < larger);
+            append_sequence(proposal, next, count, last);
+            next += count;
+        }
+        proposal.push(')');
+    }
+
+    let mut proposal = String::from(
+        "declarations.begin\n\
+         (units (module create scalar-capacity\n\
+          (function create entry (visibility public) (effect pure) (returns I64)\n\
+           (body",
+    );
+    append_sequence(&mut proposal, 0, leaf_count, leaf_count - 1);
+    proposal.push_str(
+        "))\n\
+          (component create app (visibility public)\n\
+           (port create run (type (function () I64)) (function entry))))\n\
+         (target create scalar-capacity-main (component scalar-capacity::app)\n\
+          (runner command) (port scalar-capacity::app::run)))\n\
+         declarations.end\n",
+    );
+    // Public authoring supplies the seed. The native source compiler receives
+    // only the complete raw carrier; Rust does not normalize this target.
+    // This large fixture selects its own bounded authoring policy. A Sequence
+    // tree has fewer internal nodes than leaves, plus five declaration owners.
+    // Summary planning has initial and final passes; the relation allowance is
+    // a separate explicit fixture budget, not a product-default change.
+    let owner_budget = u64::try_from(leaf_count)
+        .unwrap()
+        .checked_mul(2)
+        .unwrap()
+        .checked_add(5)
+        .unwrap();
+    let empty = empty_normalized_snapshot(b"owned-byte-buffer");
+    let memory = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+    let repo = GraphRepository::create_memory(&memory, &empty, None)
+        .unwrap()
+        .repository;
+    let base = repo.view_current().unwrap().revision();
+    let request = format!("request base={base}\n{proposal}");
+    let mut decoded =
+        crate::platform::control::decode_compact_change("buffer", request.as_bytes()).unwrap();
+    decoded.semantic.budget.impact.maximum_affected_owners = owner_budget;
+    decoded.semantic.budget.impact.maximum_summary_owners = owner_budget.checked_mul(2).unwrap();
+    decoded.semantic.budget.impact.maximum_summary_edits = owner_budget;
+    decoded.semantic.budget.impact.maximum_behavior_owners = owner_budget;
+    decoded.semantic.budget.impact.maximum_relation_edges = owner_budget.checked_mul(16).unwrap();
+    let plan = repo
+        .prepare_authored_change(&decoded.semantic, decoded.options)
+        .unwrap();
+    repo.publish(&plan.publication).unwrap();
+    let source = repo
+        .view_current()
+        .unwrap()
+        .reconstruct_full_oracle()
+        .unwrap()
+        .value;
+    assert!(u64::try_from(source.owners.len()).unwrap() <= owner_budget);
+    let carrier = graph::packet(&source);
+    assert!(carrier.len() <= 8 * 1024 * 1024);
+    let compiler = native_compiler();
+    let started = std::time::Instant::now();
+    // Deliberately bypass run_filter: this capacity control runs only natively,
+    // without repeating the large carrier on the VM and reference interpreter.
+    let output = native_filter_tests::execute_filter(&compiler.image, &carrier, &[], 4093);
+    let compile_ms = started.elapsed().as_millis();
+    assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
+    assert!(output.stderr.is_empty());
+    // Sequence entry/exit emit no nodes. Across the complete tree, sum(k - 1)
+    // is leaf_count - 1, so literals, Drops and the final Return total 2*leaves.
+    // Each Drop and Return has exactly one operand-state byte; there are no locals.
+    let expected_nodes = 2 * leaf_count;
+    let expected_state_bytes = leaf_count;
+    assert_eq!(expected_nodes, 32_770);
+    assert!(expected_nodes > HISTORICAL_MAX_NODES);
+    assert_eq!(
+        output.stdout.len(),
+        65536 + 512 + expected_nodes * 128 + expected_state_bytes
+    );
+    assert_eq!(output.stdout.len(), 4_276_993);
+    let program = execute(&output.stdout, &[]);
+    assert_eq!(program.status.code(), Some(0), "{:?}", program.stderr);
+    assert_eq!(program.stdout, b"42");
+    assert!(program.stderr.is_empty());
+    eprintln!(
+        "selfhost scalar capacity bootstrap=rust_elf source_carrier_sha256={} \
+         executable_sha256={} carrier_sha256={} carrier_bytes={} \
+         expected_mode0_nodes={expected_nodes} expected_mode0_state_bytes={expected_state_bytes} \
+         program_sha256={} program_bytes={} compile_ms={compile_ms} \
+         source_shape=balanced_sequence_tree max_sequence_fanout=16 derived_sequence_levels=4 \
+         input=LKJSG001 target=linux-x86_64 arguments=[] environment=empty \
+         stdin_chunk_bytes=4093 filter_deadline_seconds=10",
+        compiler.source_carrier_sha256,
+        compiler.executable_sha256,
+        sha256(&carrier),
+        carrier.len(),
+        sha256(&output.stdout),
+        output.stdout.len(),
+    );
+}
+
 fn assert_raw_scalar_e3_rejection(
     name: &str,
     source: &KernelSnapshot,

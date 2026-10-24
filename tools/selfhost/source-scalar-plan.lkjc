@@ -401,7 +401,10 @@ declarations.begin
         (if
           (call ci::eq (local count) (i64 0))
           (i64 0)
-          (if (call ci::eq (local count) (i64 32768)) (i64 -13) (call ci::add (local count) (i64 1))))))
+          (if
+            (call ci::lt (local count) (call source-scalar-pack::node-capacity (i64 1)))
+            (call ci::add (local count) (i64 1))
+            (i64 -13)))))
     (function create item-counts
       (visibility private)
       (effect pure)
@@ -425,7 +428,9 @@ declarations.begin
                 (call ci::eq (local count) (i64 0))
                 (i64 0)
                 (if
-                  (call ci::lt (call ci::sub (i64 32768) (local sum)) (local count))
+                  (call ci::lt
+                    (call ci::sub (call source-scalar-pack::node-capacity (i64 1)) (local sum))
+                    (local count))
                   (i64 -13)
                   (call item-counts
                     (local graph)
@@ -492,7 +497,9 @@ declarations.begin
                           (call ci::eq (local length) (i64 0))
                           (i64 -19)
                           (if
-                            (call ci::lt (i64 32769) (local length))
+                            (call ci::lt
+                              (call source-scalar-pack::node-capacity (i64 1))
+                              (call ci::sub (local length) (i64 1)))
                             (i64 -13)
                             (call item-counts
                               (local graph)
@@ -669,7 +676,11 @@ declarations.begin
               (call node-count (local rows) (call function-owner (local functions) (local index))))
             (in
               (if
-                (call ci::lt (call ci::sub (i64 32768) (local total)) (local count))
+                (call ci::lt
+                  (call ci::sub
+                    (call source-scalar-pack::node-capacity (call function-count (local functions)))
+                    (local total))
+                  (local count))
                 (i64 -13)
                 (call node-total
                   (local rows)

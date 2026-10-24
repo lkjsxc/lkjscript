@@ -12,7 +12,6 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(crate) const HEADER: usize = 72;
 pub(crate) const DECLARATIONS: usize = 2176;
 pub(crate) const MAX_FUNCTIONS: usize = 1024;
-pub(crate) const MAX_NODES: usize = 32768;
 pub(crate) const MAX_LOCALS: usize = 128;
 pub(crate) const MAX_STACK: usize = 128;
 pub(crate) const MAX_INPUT: usize = 8 * 1024 * 1024;
@@ -281,6 +280,7 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
         });
     }
     let signatures = functions.clone();
+    let node_capacity = node_capacity(functions.len())?;
     for (dense, &index) in reachable.iter().enumerate() {
         let function = &mut functions[dense];
         match &program.functions[index].body {
@@ -289,7 +289,7 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                 if code.local_count as usize > MAX_LOCALS
                     || code.parameter_count != function.parameters
                     || code.local_count < code.parameter_count
-                    || code.instructions.len() > MAX_NODES
+                    || code.instructions.len() > node_capacity
                     || code.instructions.is_empty()
                 {
                     return Err(unsupported());
@@ -613,56 +613,118 @@ pub(crate) fn encode(functions: &[Function], entry: u32) -> Result<Vec<u8>, Diag
     encode_records(functions, &[], entry)
 }
 
+fn checked_input_end(offset: usize, additional: usize) -> Result<usize, Diagnostic> {
+    offset
+        .checked_add(additional)
+        .filter(|end| *end <= MAX_INPUT)
+        .ok_or_else(unsupported)
+}
+
+// This is the largest possible node table after the function rows. Blob bytes
+// reduce the admitted count further; there is no independent node quota.
+fn node_capacity(function_count: usize) -> Result<usize, Diagnostic> {
+    let function_bytes = function_count.checked_mul(40).ok_or_else(unsupported)?;
+    let node_offset = checked_input_end(DECLARATIONS, function_bytes)?;
+    Ok((MAX_INPUT - node_offset) / 32)
+}
+
+fn input_word(value: usize) -> Result<u32, Diagnostic> {
+    u32::try_from(value).map_err(|_| unsupported())
+}
+
 pub(crate) fn encode_records(
     functions: &[Function],
     records: &[Record],
     entry: u32,
 ) -> Result<Vec<u8>, Diagnostic> {
     let count = functions.len();
-    let node_count: usize = functions.iter().map(|f| f.nodes.len()).sum();
-    if count == 0
-        || count > MAX_FUNCTIONS
-        || node_count == 0
-        || node_count > MAX_NODES
-        || records.len() > 120
-    {
+    if count == 0 || count > MAX_FUNCTIONS || records.len() > 120 {
         return Err(unsupported());
     }
-    let node_offset = DECLARATIONS + count * 40;
-    let blob_offset = node_offset + node_count * 32;
-    let mut bytes = vec![0u8; blob_offset];
+    let capacity = node_capacity(count)?;
+    let node_count = functions.iter().try_fold(0usize, |total, function| {
+        total
+            .checked_add(function.nodes.len())
+            .filter(|nodes| *nodes <= capacity)
+            .ok_or_else(unsupported)
+    })?;
+    if node_count == 0 {
+        return Err(unsupported());
+    }
+    let function_bytes = count.checked_mul(40).ok_or_else(unsupported)?;
+    let node_offset = checked_input_end(DECLARATIONS, function_bytes)?;
+    let node_bytes = node_count.checked_mul(32).ok_or_else(unsupported)?;
+    let blob_offset = checked_input_end(node_offset, node_bytes)?;
+
+    // Admit the complete layout before allocation or narrowing any offset.
+    let mut length = blob_offset;
+    for record in records {
+        let fields = record
+            .fields
+            .len()
+            .checked_mul(16)
+            .ok_or_else(unsupported)?;
+        length = checked_input_end(length, fields)?;
+        for (name, _) in &record.fields {
+            length = checked_input_end(length, name.len())?;
+        }
+    }
+    for function in functions {
+        if function.locals.len() > MAX_LOCALS {
+            return Err(unsupported());
+        }
+        length = checked_input_end(length, function.locals.len())?;
+        for node in &function.nodes {
+            if node.initialized.len() != function.locals.len() || node.stack.len() > MAX_STACK {
+                return Err(unsupported());
+            }
+            length = checked_input_end(length, node.data.len())?;
+            length = checked_input_end(length, node.initialized.len())?;
+            length = checked_input_end(length, node.stack.len())?;
+        }
+    }
+    let blob_size = length.checked_sub(blob_offset).ok_or_else(unsupported)?;
+    let node_work = node_count.checked_mul(64).ok_or_else(unsupported)?;
+    let fuel = blob_size
+        .checked_mul(256)
+        .and_then(|work| work.checked_add(node_work))
+        .and_then(|work| work.checked_add(count))
+        .and_then(|work| work.checked_add(4096))
+        .filter(|work| *work <= 2_147_483_647)
+        .ok_or_else(unsupported)?;
+
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(length).map_err(|_| unsupported())?;
+    bytes.resize(blob_offset, 0);
     for (i, record) in records.iter().enumerate() {
         let row = 128 + (7 + i) * 16;
         let offset = bytes.len();
         word(&mut bytes, row, 8);
-        word(&mut bytes, row + 4, record.fields.len() as u32);
-        word(&mut bytes, row + 8, offset as u32);
+        word(&mut bytes, row + 4, input_word(record.fields.len())?);
+        word(&mut bytes, row + 8, input_word(offset)?);
         bytes.resize(offset + record.fields.len() * 16, 0);
         for (f, (name, ty)) in record.fields.iter().enumerate() {
             let field = offset + f * 16;
             let name_offset = bytes.len();
             word(&mut bytes, field, u32::from(*ty));
-            word(&mut bytes, field + 4, name_offset as u32);
-            word(&mut bytes, field + 8, name.len() as u32);
+            word(&mut bytes, field + 4, input_word(name_offset)?);
+            word(&mut bytes, field + 8, input_word(name.len())?);
             bytes.extend_from_slice(name.as_bytes());
         }
     }
     let mut node_index = 0;
     for (index, function) in functions.iter().enumerate() {
-        if function.locals.len() > MAX_LOCALS {
-            return Err(unsupported());
-        }
         let at = DECLARATIONS + index * 40;
         let local_offset = bytes.len();
         for (i, value) in [
             0,
             function.result,
             function.parameters,
-            function.locals.len() as u32,
-            node_index as u32,
-            function.nodes.len() as u32,
+            input_word(function.locals.len())?,
+            input_word(node_index)?,
+            input_word(function.nodes.len())?,
             function.external,
-            local_offset as u32,
+            input_word(local_offset)?,
             0,
             0,
         ]
@@ -673,9 +735,6 @@ pub(crate) fn encode_records(
         }
         bytes.extend_from_slice(&function.locals);
         for node in &function.nodes {
-            if node.initialized.len() != function.locals.len() || node.stack.len() > MAX_STACK {
-                return Err(unsupported());
-            }
             let at = node_offset + node_index * 32;
             let payload_offset = bytes.len();
             bytes.extend_from_slice(&node.data);
@@ -684,47 +743,50 @@ pub(crate) fn encode_records(
                 word(&mut bytes, at + i * 4, value);
             }
             if node.tag == 12 {
-                word(&mut bytes, at + 4, payload_offset as u32);
+                word(&mut bytes, at + 4, input_word(payload_offset)?);
             }
             if node.tag == 14 {
-                word(&mut bytes, at + 12, payload_offset as u32);
+                word(&mut bytes, at + 12, input_word(payload_offset)?);
             }
             bytes[at + 16..at + 24].copy_from_slice(&node.immediate.to_le_bytes());
-            word(&mut bytes, at + 24, state_offset as u32);
-            word(&mut bytes, at + 28, node.stack.len() as u32);
+            word(&mut bytes, at + 24, input_word(state_offset)?);
+            word(&mut bytes, at + 28, input_word(node.stack.len())?);
             bytes.extend_from_slice(&node.initialized);
             bytes.extend_from_slice(&node.stack);
             node_index += 1;
         }
     }
-    if bytes.len() > MAX_INPUT {
-        return Err(unsupported());
-    }
-    let blob_size = bytes.len() - blob_offset;
-    let fuel = 256 * blob_size + 64 * node_count + count + 4096;
-    if fuel > 2_147_483_647 {
+    if bytes.len() != length {
         return Err(unsupported());
     }
     bytes[..8].copy_from_slice(b"LKJCI001");
     word(&mut bytes, 8, 4);
     word(&mut bytes, 12, entry);
-    let length = bytes.len() as u64;
+    let length = u64::try_from(length).map_err(|_| unsupported())?;
     bytes[16..24].copy_from_slice(&length.to_le_bytes());
-    bytes[24..32].copy_from_slice(&(count as u64).to_le_bytes());
-    bytes[32..40].copy_from_slice(&(fuel as u64).to_le_bytes());
+    bytes[24..32].copy_from_slice(
+        &u64::try_from(count)
+            .map_err(|_| unsupported())?
+            .to_le_bytes(),
+    );
+    bytes[32..40].copy_from_slice(
+        &u64::try_from(fuel)
+            .map_err(|_| unsupported())?
+            .to_le_bytes(),
+    );
     for (i, value) in [
         112,
         1,
         128,
-        7 + records.len() as u32,
-        DECLARATIONS as u32,
-        count as u32,
-        node_offset as u32,
-        node_count as u32,
-        blob_offset as u32,
-        blob_size as u32,
+        7 + input_word(records.len())?,
+        input_word(DECLARATIONS)?,
+        input_word(count)?,
+        input_word(node_offset)?,
+        input_word(node_count)?,
+        input_word(blob_offset)?,
+        input_word(blob_size)?,
         0,
-        count as u32,
+        input_word(count)?,
         0,
         0,
     ]

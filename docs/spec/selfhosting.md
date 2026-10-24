@@ -49,11 +49,12 @@ The common decoder requires at least 160 bytes, checks magic, then dispatches by
 selector. ELF mode retains its 8,388,608-byte maximum before hashing and additionally
 requires at least 2248 bytes. Artifact mode uses its own checked u32 extent domain
 and has no default aggregate 8 MiB quota.
-Header lengths, counts and fuel require zero high words. In ELF mode there are
-1 through 32768 instructions; locals, operand depth and record fields are each
-bounded by 128. The root is either `() -> I64` or the exact binary-filter
-signature `(Bytes) -> {diagnostic: I64, image: Bytes}`; other signatures reject
-with code 9.
+Header lengths, counts and fuel require zero high words. ELF mode requires a
+positive instruction count and the complete layout
+`2176 + 40*F + 32*N + B <= 8,388,608`; there is no separate instruction-count
+quota. Locals, operand depth and record fields are each bounded by 128. The root
+is either `() -> I64` or the exact binary-filter signature
+`(Bytes) -> {diagnostic: I64, image: Bytes}`; other signatures reject with code 9.
 
 Let N be instruction count and B blob byte length. Fuel must be at least
 `4096 + F + 64*N + 256*B` and at most 2,147,483,647. This conservative work
@@ -61,6 +62,18 @@ certificate covers bounded descriptor/state visits, UTF-8 checks, field-name
 comparisons and record permutation scans; it is separate from evaluator steps.
 All scans advance monotonically. Calls may recurse, but input admission neither
 executes nor recursively traverses the call graph.
+
+The Rust exporter preflights the encoded input buffer's complete section and
+blob sizes with checked arithmetic before reserving it, then serializes counts
+and offsets with checked u32 conversions. A failed output-buffer reservation
+returns `compiler_input_unsupported`.
+Its early per-function check derives from the space available after the function
+table; it is not an independent per-function instruction quota. The source scalar
+planner bounds intermediate counts by the space available with one function,
+then checks the aggregate against the actual function count. The source packer
+checks the complete blob extent. These checks admit every instruction count that
+fits the retained byte bound and the other unchanged profile restrictions;
+none substitutes a larger fixed instruction ceiling.
 
 | Offset | Table | Encoding |
 | --- | --- | --- |
@@ -206,6 +219,17 @@ slot. Calls align RSP to 16 before CALL and preserve the original argument base;
 callees observe RSP modulo 16 equal to 8. Self-tail calls replace parameters and
 jump to the first instruction without growing the stack. Other recursion uses
 ordinary frames.
+
+With `F <= 1024` and the retained complete-input bound, the padded image is at
+most 33,971,712 bytes. Relative calls and branches therefore fit signed rel32,
+and absolute data addresses from base `0x400000` fit the current u32 encoding.
+The decoder reads node counts as u32 before multiplying by 32, which also fits
+I64 for malformed inputs; it rejects a fixed-table extent outside the actual
+input before traversal. The count expansion does not change the 128-local stack
+displacement domain. Explicit launcher output quotas remain independent. A future
+input-byte expansion must re-audit this layout argument before claiming a wider
+native domain. Canonical artifact table and per-unit instruction limits are
+separate from this mode-0 aggregate count.
 
 I64, Bool and Unit are unboxed. Bytes/Text use a length and data pointer;
 ByteBuffer adds capacity. Lists and records use a count followed by scalar or

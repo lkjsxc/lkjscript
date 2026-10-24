@@ -662,32 +662,44 @@ fn selfhost_compiler_is_deterministic_and_source_mutation_changes_emitted_behavi
 }
 
 #[test]
-fn selfhost_compiler_accepts_exact_input_and_fuel_limits() {
+fn selfhost_compiler_accepts_more_than_historical_node_limit_and_exact_fuel() {
+    const HISTORICAL_MAX_NODES: usize = 32_768;
+    let node_count = HISTORICAL_MAX_NODES + 2;
     let mut nodes = vec![(1, 0)];
-    for _ in 0..(input::MAX_NODES - 2) / 2 {
+    for _ in 0..(node_count - 2) / 2 {
         nodes.extend_from_slice(&[(1, 1), (2, 0)]);
     }
     nodes.push((6, 0));
-    assert_eq!(nodes.len(), input::MAX_NODES);
+    assert_eq!(nodes.len(), node_count);
+    assert!(nodes.len() > HISTORICAL_MAX_NODES);
     let mut bytes = input::arithmetic(&nodes).unwrap();
-    assert_eq!(bytes.len(), 1_100_110);
+    assert_eq!(bytes.len(), 1_100_177);
+    assert_eq!(
+        u32::from_le_bytes(bytes[100..104].try_into().unwrap()) as usize,
+        node_count
+    );
     let (source, program) = compiler();
     let (code, image) =
         compile_with_policy(source, program, &bytes, NormalizedRunPolicy::foreground());
     assert_eq!(code, 0);
     let blob_bytes = u32::from_le_bytes(bytes[108..112].try_into().unwrap()) as usize;
-    assert_eq!(
-        image.len(),
-        65536 + 5 * 512 + input::MAX_NODES * 128 + blob_bytes
-    );
+    assert_eq!(image.len(), 65536 + 5 * 512 + node_count * 128 + blob_bytes);
     let output = execute(&image, &[]);
     assert!(output.status.success());
-    assert_eq!(output.stdout, b"16383");
+    assert_eq!(output.stdout, b"16384");
     assert!(output.stderr.is_empty());
     let fuel = u64::from_le_bytes(bytes[32..40].try_into().unwrap());
     bytes[32..40].copy_from_slice(&(fuel - 1).to_le_bytes());
     input::rechecksum(&mut bytes);
     assert_eq!(compile(&bytes), (6, vec![]));
+}
+
+#[test]
+fn selfhost_compiler_rejects_hash_consistent_node_extent_outside_input() {
+    let mut bytes = input::arithmetic(&[(1, 42), (6, 0)]).unwrap();
+    bytes[100..104].copy_from_slice(&u32::MAX.to_le_bytes());
+    input::rechecksum(&mut bytes);
+    assert_eq!(compile(&bytes), (3, vec![]));
 }
 
 #[test]

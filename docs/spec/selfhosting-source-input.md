@@ -449,9 +449,12 @@ This slice retains the 8,388,608-byte `LKJSG001` ceiling, 100,000 combined sourc
 directory entries and existing carrier proof allowance. Generated mode-0 input
 also remains at most 8,388,608 bytes, with 1 through 1,024 Functions, at most
 128 parameters and locals per Function, operand depth at most 128 and
-1 through 32,768 total instructions. Function parameters are included in the
-local count. Lowering checks section lengths and output bounds before assembling
-the final input; its generated backend allowance must fit 2,147,483,647.
+a positive total instruction count. There is no separate instruction-count quota:
+`2176 + 40*F + 32*N + B <= 8,388,608` bounds the complete mode-0 encoding,
+where F counts function rows, N counts instructions and B counts blob bytes.
+Function parameters are included in the local count. Lowering checks section
+lengths and output bounds before assembling the final input; its generated
+backend allowance must fit 2,147,483,647.
 These are retained implementation/profile restrictions, not expanded capacity
 or evidence of unmetered source compilation.
 
