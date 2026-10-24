@@ -410,10 +410,41 @@ native phase reclamation remain unchanged.
 `source-scalar::prepare` composes carrier/reference, containment, lexical scope,
 namespace, structural/contextual type and nominal checks before scalar profile
 admission and expression typing. `source-scalar::validate` returns the resulting
-diagnostic. `source-elf::compile` additionally lowers the admitted program and
-returns `{diagnostic: I64, image: Bytes}`; the `compile-source-elf` command target
-exposes it as a native binary filter. Success returns ELF bytes. Failure returns
-the diagnostic with an empty image.
+diagnostic. These E2 entry points inspect raw complete `LKJSG001` carriers.
+`source-elf::compile` consumes an explicit source request, additionally lowers
+the selected admitted target and returns `{diagnostic: I64, image: Bytes}`; the
+`compile-source-elf` command target exposes it as a native binary filter.
+Success returns ELF bytes. Failure returns the diagnostic with an empty image.
+
+### Explicit source request
+
+The current source compilation request is `LKJSRQ01`, profile 1. Its 32-byte
+header precedes the exact complete `LKJSG001` carrier:
+
+| Offset | Width | Meaning |
+| --- | --- | --- |
+| 0 | 8 | ASCII `LKJSRQ01` |
+| 8 | 4 | Little-endian u32 profile, exactly 1 |
+| 12 | 17 | Canonical encoded Target owner key: domain tag 12 and 16 identity bytes |
+| 29 | 3 | Zero reserved bytes |
+| 32 | Remaining bytes | Unchanged complete `LKJSG001` carrier |
+
+The all-zero Target identity is invalid. Owner-key domain tag 12 is distinct
+from Target owner-kind tag 20. Unknown magic/profile, wrong domain, zero identity,
+nonzero reserved bytes and incomplete framing reject with 12. Raw-only
+`LKJSG001` input is no longer accepted by `source-elf::compile`.
+
+After checking the request header, the compiler admits the entire embedded
+carrier through E1 and E2. Every supplied target is checked, including unselected
+targets. It then resolves the selected key in the live owner directory. Missing
+or retired targets reject with 19; negative lookup rows are never used for table
+access. Component, port, callable signature and the normalized entry index are
+derived inside lkjscript. The host supplies only the caller's TargetId.
+
+The request has no second length field. Existing carrier length, partition and
+commitment checks reject truncated or trailing payload bytes. The carrier length,
+proof allowance and object constraints define the supported payload domain;
+request transport adds exactly 32 bytes.
 
 ### Admitted scalar profile
 
@@ -424,7 +455,7 @@ the diagnostic with an empty image.
 | Declarations | Modules, pure monomorphic Functions, the eight exact scalar External implementations below, and Components without requirements; their Parameters, ordinary Let Bindings, Expressions, function Ports and Target |
 | Expressions | Unit/Bool/I64 literals, parameter/binding Local, If, Let, nonempty Sequence and direct Call |
 | Calls and functions | Exact argument arity/types and declared result type; no type, requirement or effect parameters or application arguments |
-| Entry | Exactly one command Target, with no runner arguments, selecting a function Port of its Component; the selected function has signature `() -> I64` |
+| Entry | One or more command Targets, each with no runner arguments and selecting a function Port of its Component with pure `() -> I64` signature; the request selects one live TargetId |
 | Excluded source families | Other External/intrinsic declarations, Text/StaticText, Bytes, ByteBuffer, List, records/choices, task callables, first-class function values/Invoke, generics, witnesses, read views and Regions |
 
 A function descriptor is admitted for signature/port description; it does not
@@ -459,8 +490,8 @@ and/or, and the existing normalized integer overflow and division traps.
 
 Profile checking visits every supplied type and owner. Inference visits every
 Binding and Expression, then checks every Function body against its declared
-result. Uncalled functions, untaken branches and unused supplied types receive
-the same checks. An unused non-scalar descriptor therefore rejects with 13.
+result. Uncalled functions, untaken branches, unused supplied types and unselected
+targets receive the same checks. A carrier without any Target rejects with 13. An unused non-scalar descriptor therefore rejects with 13.
 A task Function or TaskFunction descriptor remains outside the scalar profile
 even when its effect row is empty.
 
@@ -510,7 +541,7 @@ or evidence of unmetered source compilation.
 | --- | --- |
 | 0 | Selected scalar admission/lowering checks succeeded |
 | 13 | Recognized form outside the scalar profile or retained lowering/profile bound |
-| 19 | Scalar type, call arity, annotation, function result, target/port agreement or lowering-consistency failure |
+| 19 | Scalar type, call arity, annotation, function result, target/port agreement, absent/retired selected target or lowering-consistency failure |
 
 Earlier diagnostics 6 and 12 through 18 retain their meanings. In particular,
 malformed carrier/binding errors remain 12, endpoint failures remain 14 and
@@ -521,14 +552,16 @@ no executable bytes.
 ### Bootstrap and evidence boundary
 
 A Rust-built native compiler is permitted as the initial executable. The target
-program crosses that boundary only as complete raw `LKJSG001` bytes; Rust may
-transport those bytes, launch processes and orchestrate independent controls.
+program crosses that boundary only as complete raw `LKJSG001` bytes and the
+caller's canonical TargetId in a source request. Rust may serialize that request,
+transport bytes, launch processes and orchestrate independent controls.
 It must not pre-filter source owners/types or supply semantic or lowering
 results for the scalar target. The public meaning remains the accepted semantic
 project; the `.lkjc` files remain authoring proposals.
 
-Acceptance evidence must identify the complete carrier digest, compiler
-executable, target/format profile and execution context. The semantic-state
+Acceptance evidence must identify the complete carrier digest, complete request
+digest, canonical selected Target key, compiler executable, target/format profiles
+and execution context. The semantic-state
 digest alone is insufficient, including for unused-type mutations. Independent
 controls must cover valid scalar execution and fully rebound malformed/ill-typed
 carriers, reaching the intended admission layer. The

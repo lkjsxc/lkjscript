@@ -42,23 +42,31 @@ The latter is a reproducible observation of every supplied owner and type, inclu
 intrinsic substitutions, lexical scopes and direct/mutual recursion; it is not E2
 admission or an E3 custody certificate.
 
-The `compile-source-elf` target accepts complete raw `LKJSG001` carriers.
+The `compile-source-elf` target accepts only `LKJSRQ01` profile-1 requests:
+a 32-byte header carrying the caller's typed TargetId, followed by the exact
+complete `LKJSG001` carrier. Raw-only compilation input rejects with 12.
 `source-scalar-profile`, `source-scalar-infer` and `source-scalar` compose the
 existing E1 checks with whole-inventory typing for pure monomorphic functions
-over unrestricted Unit, Bool and I64. Literals, locals, If, Let, Sequence and
-direct calls are supported; uncalled bodies, untaken branches and unused supplied
-types receive the same checks. Exactly one command target selects a component
-function port with signature `() -> I64`. Recognized excluded forms return 13;
-scalar type or target inconsistencies return 19.
+over unrestricted Unit, Bool and I64, including the eight exact scalar intrinsics.
+Literals, locals, If, Let, Sequence and direct calls are supported; uncalled bodies,
+untaken branches, unused supplied types and unselected targets receive the same
+checks. Each of one or more command targets selects a component function port
+with pure signature `() -> I64`. After full admission, lkjscript resolves the
+request's live TargetId and derives the internal entry index. Recognized excluded
+forms return 13; scalar type/target inconsistencies and absent or retired
+selectors return 19. The E2 inspection entries continue to consume raw carriers.
 
 `source-scalar-plan`, `source-scalar-cursor`, `source-scalar-state`,
 `source-scalar-trace`, `source-scalar-emit` and `source-scalar-pack` derive
 layout, instructions and flow certificates inside lkjscript. `source-elf` passes
 that internally generated mode-0/profile-4 input to the existing ELF backend.
-Rust may bootstrap the compiler executable and transport raw carriers; it does
-not lower or supply semantic certificates for these target programs. Both the
-carrier and generated mode-0 input retain their 8 MiB limits. Calls use ordinary
-Call/Return; this scalar path establishes no owned-value cleanup contract.
+Rust may bootstrap the compiler executable and serialize the caller's TargetId
+beside the unchanged carrier. It does not map the selector to an entry index,
+pre-filter source owners, lower targets or supply semantic certificates. Generated
+mode-0 input retains its 8 MiB bound. The carrier length, proof allowance and
+object constraints define its supported domain, without a separate aggregate byte
+quota. Calls use ordinary Call/Return; this scalar path establishes no owned-value
+cleanup contract.
 See the [scalar contract](../../docs/spec/selfhosting-source-input.md#scalar-source-admission-and-elf-lowering)
 for exact limits and remaining obligations. The
 [scalar decision](../../docs/decisions/20261023-source-scalar-e2-e3.md) records eight
@@ -91,8 +99,10 @@ changed, fresh full and release-target checks after updating status and all
 maintained source. Build the native binary filter with
 `lkjscript --project tools/selfhost/project build --native-elf COMPILER --target compile-elf`;
 it reads one LKJCI1 input from stdin and emits complete ELF or `.lkja` bytes on stdout, with
-diagnostics on stderr. Select `--target compile-source-elf` to build the raw-source
-scalar filter instead; its stdin is `LKJSG001` and its output is ELF.
+diagnostics on stderr. Select `--target compile-source-elf` to build the source
+scalar filter instead; its stdin is `LKJSRQ01` profile 1 containing the selected
+TargetId and complete `LKJSG001`, and its output is ELF. Evidence binds the
+complete request, carrier, target, compiler executable, profiles and context.
 An external launcher owns atomic output publication.
 Milestone D requires both native backend closure and `.lkja` emission. Full-profile
 semantic admission, phase-local regions and C2/C3 identity from the complete

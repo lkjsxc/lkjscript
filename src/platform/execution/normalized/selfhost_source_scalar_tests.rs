@@ -5,7 +5,7 @@
 //! these controls do not establish maintained-compiler C2/C3 fixed points.
 use super::*;
 use crate::platform::kernel::ExpressionOperation as E;
-use crate::platform::semantic_id::{BindingId, DeclarationId, ExpressionId, PortId};
+use crate::platform::semantic_id::{BindingId, DeclarationId, ExpressionId, PortId, TargetId};
 
 const SCALAR_SOURCE: &str = include_str!("../../../../tests/fixtures/selfhost-source-scalar.lkjc");
 const INTRINSIC_SOURCE: &str =
@@ -21,6 +21,9 @@ struct Case {
     name: &'static str,
     carrier: Vec<u8>,
     carrier_sha256: String,
+    selected_target: TargetId,
+    request: Vec<u8>,
+    request_sha256: String,
     diagnostic: i64,
     result: Option<ScalarResult>,
     e1: OnceLock<()>,
@@ -43,16 +46,29 @@ impl Case {
         result: Option<ScalarResult>,
     ) -> Self {
         assert_eq!(diagnostic == 0, result.is_some());
+        let selected_target = target_id(&source, "scalar-main");
         let carrier = graph::packet(&source);
         let carrier_sha256 = sha256(&carrier);
+        let request = source_request(&carrier, selected_target);
+        let request_sha256 = sha256(&request);
         Self {
             name,
             carrier,
             carrier_sha256,
+            selected_target,
+            request,
+            request_sha256,
             diagnostic,
             result,
             e1: OnceLock::new(),
         }
+    }
+
+    fn select(mut self, selected_target: TargetId) -> Self {
+        self.selected_target = selected_target;
+        self.request = source_request(&self.carrier, selected_target);
+        self.request_sha256 = sha256(&self.request);
+        self
     }
 
     fn assert_e1(&self) {
@@ -77,6 +93,37 @@ impl Case {
 
 fn sha256(bytes: &[u8]) -> String {
     crate::platform::semantic_id::encode_hex(&Sha256::digest(bytes))
+}
+
+// Resolve a fixture label to the caller's authored identity only. No host
+// component, port, function or normalized-entry selection occurs here.
+pub(super) fn target_id(source: &KernelSnapshot, name: &str) -> TargetId {
+    source
+        .owners
+        .iter()
+        .find_map(|(key, record)| match (key, record) {
+            (OwnerKey::Target(id), OwnerRecord::Target(record)) if record.name.as_str() == name => {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .unwrap()
+}
+
+pub(super) fn source_request(carrier: &[u8], selected_target: TargetId) -> Vec<u8> {
+    let capacity = 32usize
+        .checked_add(carrier.len())
+        .expect("source request size");
+    let mut request = Vec::with_capacity(capacity);
+    request.extend_from_slice(b"LKJSRQ01");
+    request.extend_from_slice(&1u32.to_le_bytes());
+    request.extend_from_slice(
+        &kernel::EncodedOwnerKey::new(OwnerKey::Target(selected_target)).bytes(),
+    );
+    request.extend_from_slice(&[0; 3]);
+    assert_eq!(request.len(), 32);
+    request.extend_from_slice(carrier);
+    request
 }
 
 fn fixture() -> &'static KernelSnapshot {
@@ -210,6 +257,14 @@ fn cases() -> &'static [Case] {
     CASES.get_or_init(|| {
         let base = fixture();
         let mut cases = vec![Case::new("baseline", base.clone(), 0, Some(42))];
+        let other = Case::new("same-carrier-other-target", base.clone(), 0, Some(7))
+            .select(target_id(base, "scalar-other"));
+        assert_eq!(cases[0].carrier, other.carrier);
+        assert_eq!(cases[0].carrier_sha256, other.carrier_sha256);
+        assert_ne!(cases[0].request, other.request);
+        assert_ne!(cases[0].request_sha256, other.request_sha256);
+        assert_ne!(cases[0].selected_target, other.selected_target);
+        cases.push(other);
 
         for (name, value) in [
             ("zero", 0),
@@ -324,6 +379,48 @@ fn cases() -> &'static [Case] {
         };
         target_mut(&mut source).port = Some(selected);
         cases.push(Case::new("target-crosses-components", source, 19, None));
+
+        let mut source = base.clone();
+        let wrong_port = kernel::PortReference {
+            package: source.root.package_id,
+            port: port(&source, "app"),
+        };
+        let key = OwnerKey::Target(target_id(&source, "scalar-other"));
+        let OwnerRecord::Target(record) = source.owners.get_mut(&key).unwrap() else {
+            panic!("unselected fixture target");
+        };
+        record.port = Some(wrong_port);
+        cases.push(Case::new(
+            "unselected-target-crosses-components",
+            source,
+            19,
+            None,
+        ));
+
+        let mut source = base.clone();
+        let replacement = declaration_reference(&source, "choose");
+        let descriptor = kernel::TypeObject::new(kernel::TypeForm::Function {
+            parameters: vec![
+                scalar_type(&source, kernel::TypeForm::Bool),
+                scalar_type(&source, kernel::TypeForm::I64),
+            ],
+            result: scalar_type(&source, kernel::TypeForm::I64),
+        })
+        .unwrap();
+        let digest = kernel::encode_type_object(&descriptor).unwrap().0;
+        source.types.insert(digest, descriptor);
+        let key = OwnerKey::Port(port(&source, "other"));
+        let OwnerRecord::Port(record) = source.owners.get_mut(&key).unwrap() else {
+            panic!("unselected fixture port");
+        };
+        record.function_type = digest;
+        record.implementation = kernel::PortImplementation::Function(replacement);
+        cases.push(Case::new(
+            "unselected-target-unsupported-entry",
+            source,
+            13,
+            None,
+        ));
 
         let mut source = base.clone();
         let replacement = declaration_reference(&source, "choose");
@@ -645,12 +742,13 @@ fn native_compiler() -> &'static NativeCompiler {
     COMPILER.get_or_init(|| build_native_compiler("source-elf", "compile", "source-elf::compile"))
 }
 
-fn run_filter(compiler: &NativeCompiler, case: &Case) -> Vec<u8> {
+fn run_filter(compiler: &NativeCompiler, case: &Case, input: &[u8], input_format: &str) -> Vec<u8> {
     case.assert_e1();
     eprintln!(
         "selfhost scalar request case={} entry={} source_carrier_sha256={} \
          executable_sha256={} carrier_sha256={} carrier_bytes={} semantic_state_hex={} \
-         input=LKJSG001 target=linux-x86_64 arguments=[] environment=empty \
+         request_sha256={} selected_target={} input={input_format} stdin_sha256={} \
+         target=linux-x86_64 arguments=[] environment=empty \
          stdin_chunk_bytes=127 filter_deadline_seconds=10",
         case.name,
         compiler.entry,
@@ -659,16 +757,22 @@ fn run_filter(compiler: &NativeCompiler, case: &Case) -> Vec<u8> {
         case.carrier_sha256,
         case.carrier.len(),
         crate::platform::semantic_id::encode_hex(&case.carrier[48..80]),
+        case.request_sha256,
+        case.selected_target,
+        sha256(input),
     );
     let start = std::time::Instant::now();
-    let output = native_filter_tests::execute_filter(&compiler.image, &case.carrier, &[], 127);
+    let output = native_filter_tests::execute_filter(&compiler.image, input, &[], 127);
     eprintln!(
         "selfhost scalar response case={} entry={} executable_sha256={} \
-         carrier_sha256={} exit={:?} output_sha256={} output_bytes={} elapsed_ms={}",
+         carrier_sha256={} request_sha256={} selected_target={} \
+         exit={:?} output_sha256={} output_bytes={} elapsed_ms={}",
         case.name,
         compiler.entry,
         compiler.executable_sha256,
         case.carrier_sha256,
+        case.request_sha256,
+        case.selected_target,
         output.status.code(),
         sha256(&output.stdout),
         output.stdout.len(),
@@ -721,7 +825,12 @@ fn selfhost_source_scalar_e2_checks_complete_carriers_in_vm_reference_and_native
             &[]
         };
         assert_eq!(image.as_ref(), expected, "case={}", case.name);
-        assert_eq!(run_filter(inspector, case), expected, "case={}", case.name);
+        assert_eq!(
+            run_filter(inspector, case, &case.carrier, "LKJSG001"),
+            expected,
+            "case={}",
+            case.name
+        );
     }
 
     // Exercise the separate public diagnostic-only entry without repeating the
@@ -745,17 +854,26 @@ fn selfhost_source_scalar_e2_checks_complete_carriers_in_vm_reference_and_native
 }
 
 #[test]
-fn selfhost_source_scalar_e3_compiles_raw_carriers_and_executes_independent_results() {
+fn selfhost_source_scalar_e3_compiles_selected_requests_and_executes_independent_results() {
     let compiler = native_compiler();
     for case in cases() {
-        let image = run_filter(compiler, case);
-        if matches!(case.name, "baseline" | "intrinsic-arithmetic") {
-            // This one complete producer comparison covers the E3 passes and
+        let image = run_filter(compiler, case, &case.request, "LKJSRQ01/profile1");
+        if case.name == "same-carrier-other-target" {
+            assert_eq!(
+                image,
+                run_filter(compiler, case, &case.request, "LKJSRQ01/profile1"),
+            );
+        }
+        if matches!(
+            case.name,
+            "baseline" | "same-carrier-other-target" | "intrinsic-arithmetic"
+        ) {
+            // These complete producer comparisons cover the E3 passes and
             // backend on both independent language engines before execution.
             let value = super::invoke(
                 "source-elf",
                 "compile",
-                vec![NormalizedValue::bytes(case.carrier.as_slice())],
+                vec![NormalizedValue::bytes(case.request.as_slice())],
             );
             assert_eq!(super::field(&value, "diagnostic"), &NormalizedValue::I64(0),);
             let NormalizedValue::Bytes(expected) = super::field(&value, "image") else {
@@ -768,12 +886,15 @@ fn selfhost_source_scalar_e3_compiles_raw_carriers_and_executes_independent_resu
             let output = execute(&image, &[]);
             eprintln!(
                 "selfhost scalar execution case={} compiler_sha256={} carrier_sha256={} \
+                 request_sha256={} selected_target={} \
                  program_sha256={} target=linux-x86_64 output=ELF64 normalized_profile=4 \
                  arguments=[] environment=empty \
                  program_deadline_seconds=5 exit={:?} stdout_sha256={} elapsed_ms={}",
                 case.name,
                 compiler.executable_sha256,
                 case.carrier_sha256,
+                case.request_sha256,
+                case.selected_target,
                 sha256(&image),
                 output.status.code(),
                 sha256(&output.stdout),
@@ -803,6 +924,7 @@ fn selfhost_source_scalar_e3_compiles_raw_carriers_and_executes_independent_resu
             }
         }
     }
+    check_request_controls(compiler);
 }
 
 #[test]
@@ -854,7 +976,7 @@ fn selfhost_source_scalar_e3_lowers_more_than_historical_node_limit_natively() {
          declarations.end\n",
     );
     // Public authoring supplies the seed. The native source compiler receives
-    // only the complete raw carrier; Rust does not normalize this target.
+    // the complete carrier and caller's typed target selector; Rust does not normalize it.
     // This large fixture selects its own bounded authoring policy. A Sequence
     // tree has fewer internal nodes than leaves, plus five declaration owners.
     // Summary planning has initial and final passes; the relation allowance is
@@ -891,12 +1013,14 @@ fn selfhost_source_scalar_e3_lowers_more_than_historical_node_limit_natively() {
         .value;
     assert!(u64::try_from(source.owners.len()).unwrap() <= owner_budget);
     let carrier = graph::packet(&source);
+    let selected_target = target_id(&source, "scalar-capacity-main");
+    let request = source_request(&carrier, selected_target);
     assert!(carrier.len() <= 8 * 1024 * 1024);
     let compiler = native_compiler();
     let started = std::time::Instant::now();
     // Deliberately bypass run_filter: this capacity control runs only natively,
     // without repeating the large carrier on the VM and reference interpreter.
-    let output = native_filter_tests::execute_filter(&compiler.image, &carrier, &[], 4093);
+    let output = native_filter_tests::execute_filter(&compiler.image, &request, &[], 4093);
     let compile_ms = started.elapsed().as_millis();
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
     assert!(output.stderr.is_empty());
@@ -922,7 +1046,8 @@ fn selfhost_source_scalar_e3_lowers_more_than_historical_node_limit_natively() {
          expected_mode0_nodes={expected_nodes} expected_mode0_state_bytes={expected_state_bytes} \
          program_sha256={} program_bytes={} compile_ms={compile_ms} \
          source_shape=balanced_sequence_tree max_sequence_fanout=16 derived_sequence_levels=4 \
-         input=LKJSG001 target=linux-x86_64 arguments=[] environment=empty \
+         input=LKJSRQ01 request_profile=1 request_sha256={} selected_target={} \
+         target=linux-x86_64 arguments=[] environment=empty \
          stdin_chunk_bytes=4093 filter_deadline_seconds=10",
         compiler.source_carrier_sha256,
         compiler.executable_sha256,
@@ -930,6 +1055,177 @@ fn selfhost_source_scalar_e3_lowers_more_than_historical_node_limit_natively() {
         carrier.len(),
         sha256(&output.stdout),
         output.stdout.len(),
+        sha256(&request),
+        selected_target,
+    );
+}
+
+fn assert_request_rejection(
+    compiler: &NativeCompiler,
+    name: &str,
+    carrier_fixture: &[u8],
+    request: &[u8],
+    diagnostic: i64,
+) {
+    let value = super::invoke(
+        "source-elf",
+        "compile",
+        vec![NormalizedValue::bytes(request)],
+    );
+    assert_eq!(
+        super::field(&value, "diagnostic"),
+        &NormalizedValue::I64(diagnostic),
+        "request control={name}",
+    );
+    let NormalizedValue::Bytes(image) = super::field(&value, "image") else {
+        panic!("request rejection image");
+    };
+    assert!(image.is_empty(), "request control={name}");
+    let selector = request.get(12..29).unwrap_or(&[]);
+    let payload = request.get(32..).unwrap_or(&[]);
+    eprintln!(
+        "selfhost scalar request control={name} source_carrier_sha256={} \
+         executable_sha256={} carrier_fixture_sha256={} request_sha256={} \
+         request_payload_sha256={} selector_hex={} request_bytes={} \
+         input=LKJSRQ01 expected_request_profile=1 diagnostic={diagnostic} \
+         target=linux-x86_64 arguments=[] environment=empty \
+         stdin_chunk_bytes=127 filter_deadline_seconds=10",
+        compiler.source_carrier_sha256,
+        compiler.executable_sha256,
+        sha256(carrier_fixture),
+        sha256(request),
+        sha256(payload),
+        crate::platform::semantic_id::encode_hex(selector),
+        request.len(),
+    );
+    let output = native_filter_tests::execute_filter(&compiler.image, request, &[], 127);
+    assert_eq!(
+        output.status.code(),
+        Some(65),
+        "request control={name}: {:?}",
+        output.stderr
+    );
+    assert!(output.stdout.is_empty(), "request control={name}");
+    assert_eq!(
+        output.stderr,
+        format!("compiler_rejected:{diagnostic}\n").as_bytes(),
+        "request control={name}",
+    );
+}
+
+fn check_request_controls(compiler: &NativeCompiler) {
+    let baseline = &cases()[0];
+    let carrier = baseline.carrier.as_slice();
+    let valid = baseline.request.as_slice();
+    let reject = |name: &str, request: &[u8], diagnostic| {
+        assert_request_rejection(compiler, name, carrier, request, diagnostic)
+    };
+
+    reject("legacy-raw-only", carrier, 12);
+    for length in [0, 8, 12, 28, 31, 32] {
+        reject(&format!("request-prefix-{length}"), &valid[..length], 12);
+    }
+    let mut changed = valid.to_vec();
+    changed[0] ^= 1;
+    reject("request-wrong-magic", &changed, 12);
+    let mut changed = valid.to_vec();
+    changed[8..12].copy_from_slice(&2u32.to_le_bytes());
+    reject("request-unknown-profile", &changed, 12);
+    let mut changed = valid.to_vec();
+    // Keep the live Target's identity bytes: a lookup that ignores the tag
+    // would otherwise resolve the valid target and silently accept this request.
+    changed[12] = 2;
+    reject("request-wrong-owner-domain", &changed, 12);
+    let mut changed = valid.to_vec();
+    changed[13..29].fill(0);
+    reject("request-zero-identity", &changed, 12);
+    for offset in 29..32 {
+        let mut changed = valid.to_vec();
+        changed[offset] = 1;
+        reject(&format!("request-reserved-{offset}"), &changed, 12);
+    }
+    reject("request-truncated-payload", &valid[..valid.len() - 1], 12);
+    let mut changed = valid.to_vec();
+    changed.push(0);
+    reject("request-trailing-payload", &changed, 12);
+
+    let missing = TargetId::migrate(b"scalar-request-missing-target", 0);
+    assert!(!fixture().owners.contains_key(&OwnerKey::Target(missing)));
+    assert!(
+        !fixture()
+            .retirements
+            .contains_key(&OwnerKey::Target(missing))
+    );
+    reject(
+        "request-missing-live-target",
+        &source_request(carrier, missing),
+        19,
+    );
+
+    let mut retired_source = fixture().clone();
+    let retired = TargetId::migrate(b"scalar-request-retired-target", 0);
+    let key = OwnerKey::Target(retired);
+    assert!(!retired_source.owners.contains_key(&key));
+    assert!(
+        retired_source
+            .retirements
+            .insert(
+                key,
+                kernel::RetirementRecord {
+                    graph_contract_version: 1,
+                    owner: key,
+                    last_kind: kernel::OwnerKind::Target,
+                    last_name: None,
+                    last_parent: None,
+                    last_live_revision: crate::platform::semantic_id::RevisionId::from_digest(
+                        [31; 32]
+                    ),
+                    deletion_change: kernel::ChangeDigest::from_bytes([41; 32]),
+                },
+            )
+            .is_none()
+    );
+    let retired_carrier = graph::packet(&retired_source);
+    assert_eq!(
+        super::invoke(
+            "source-scalar",
+            "validate",
+            vec![NormalizedValue::bytes(retired_carrier.as_slice())]
+        ),
+        NormalizedValue::I64(0),
+        "retirement control reaches target selection after complete E2",
+    );
+    assert_request_rejection(
+        compiler,
+        "request-retired-target",
+        &retired_carrier,
+        &source_request(&retired_carrier, retired),
+        19,
+    );
+
+    let unsupported = cases()
+        .iter()
+        .find(|case| case.name == "unused-unsupported-bytes-type")
+        .unwrap();
+    assert_request_rejection(
+        compiler,
+        "request-whole-inventory-before-missing-selector",
+        &unsupported.carrier,
+        &source_request(&unsupported.carrier, missing),
+        13,
+    );
+
+    let mut no_targets = fixture().clone();
+    no_targets
+        .owners
+        .retain(|key, _| !matches!(key, OwnerKey::Target(_)));
+    let no_target_carrier = graph::packet(&no_targets);
+    assert_request_rejection(
+        compiler,
+        "request-no-target-inventory",
+        &no_target_carrier,
+        &source_request(&no_target_carrier, baseline.selected_target),
+        13,
     );
 }
 
@@ -942,6 +1238,9 @@ fn assert_raw_scalar_e3_rejection(
     let carrier = graph::packet(source);
     let carrier_sha256 = sha256(&carrier);
     let argument = || vec![NormalizedValue::bytes(carrier.as_slice())];
+    let selected_target = TargetId::migrate(b"raw-scalar-control-selector", 0);
+    let request = source_request(&carrier, selected_target);
+    let request_sha256 = sha256(&request);
 
     // The complete carrier is canonically encoded with recomputed commitments.
     // Passing the carrier validator excludes a digest/encoding rejection.
@@ -969,7 +1268,11 @@ fn assert_raw_scalar_e3_rejection(
 
     // invoke compares the VM and independent language reference interpreter.
     // Neither receives a Rust admission result or normalized target program.
-    let value = super::invoke("source-elf", "compile", argument());
+    let value = super::invoke(
+        "source-elf",
+        "compile",
+        vec![NormalizedValue::bytes(request.as_slice())],
+    );
     assert_eq!(
         super::field(&value, "diagnostic"),
         &NormalizedValue::I64(diagnostic),
@@ -985,7 +1288,8 @@ fn assert_raw_scalar_e3_rejection(
         "selfhost scalar raw request case={name} construction=independent-owner-records \
          entry={} source_carrier_sha256={} executable_sha256={} \
          carrier_sha256={carrier_sha256} carrier_bytes={} semantic_state_hex={} \
-         input=LKJSG001 target=linux-x86_64 arguments=[] environment=empty \
+         request_sha256={request_sha256} selected_target={selected_target} \
+         input=LKJSRQ01 request_profile=1 target=linux-x86_64 arguments=[] environment=empty \
          stdin_chunk_bytes=127 filter_deadline_seconds=10",
         compiler.entry,
         compiler.source_carrier_sha256,
@@ -994,10 +1298,11 @@ fn assert_raw_scalar_e3_rejection(
         crate::platform::semantic_id::encode_hex(&carrier[48..80]),
     );
     let start = std::time::Instant::now();
-    let output = native_filter_tests::execute_filter(&compiler.image, &carrier, &[], 127);
+    let output = native_filter_tests::execute_filter(&compiler.image, &request, &[], 127);
     eprintln!(
         "selfhost scalar raw response case={name} entry={} executable_sha256={} \
-         carrier_sha256={carrier_sha256} diagnostic={diagnostic} exit={:?} \
+         carrier_sha256={carrier_sha256} request_sha256={request_sha256} \
+         selected_target={selected_target} diagnostic={diagnostic} exit={:?} \
          output_sha256={} output_bytes={} elapsed_ms={}",
         compiler.entry,
         compiler.executable_sha256,

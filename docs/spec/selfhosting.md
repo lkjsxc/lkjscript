@@ -476,28 +476,36 @@ E2/E3 obligations.
 ### Scalar source admission and lowering
 
 `source-elf::compile`, exposed by the `compile-source-elf` command target, consumes
-a complete raw `LKJSG001` carrier. `source-scalar::prepare` performs the composed
-E1 checks, scalar profile admission and expression typing before any lowering.
+only a `LKJSRQ01` profile-1 request: an explicit typed TargetId and the complete
+unchanged `LKJSG001` carrier. Raw-only calls reject. `source-scalar::prepare`
+continues to inspect raw carriers and performs the composed E1 checks, scalar
+profile admission and expression typing before selection or lowering.
 The profile admits unrestricted Unit, Bool and I64, pure monomorphic function
-signatures, literals, locals, If, Let, Sequence and direct calls. Exactly one
-command target selects a component function port with signature `() -> I64`.
+signatures, the eight exact scalar intrinsics in the source-input contract,
+literals, locals, If, Let, Sequence and direct calls. One or more command targets
+may be supplied; every target must select a component function port with pure
+signature `() -> I64`. The request selects one live TargetId inside lkjscript.
 All supplied owners and types participate, including uncalled function bodies,
-untaken branches and unused descriptors. Task callables remain unsupported even
+untaken branches, unused descriptors and unselected targets. Task callables remain unsupported even
 with an empty effect row. The
 [source-input contract](selfhosting-source-input.md#scalar-source-admission-and-elf-lowering)
-defines the complete restricted profile and diagnostics 13 and 19.
+defines the exact request header, complete restricted profile and diagnostics 12, 13 and 19.
 
 The `source-scalar-plan/cursor/state/trace/emit/pack` modules derive stable function
 and local indexes, control flow, operand/local state certificates and current
 mode-0/profile-4 bytes. They then invoke `elf::compile-elf`; this internal
 normalized representation is produced entirely inside lkjscript. Calls use
 ordinary Call and each function returns through Return. There is no tail-call
-optimization or owned-value cleanup in this scalar profile. Both `LKJSG001` and
-the generated mode-0 input retain their current 8 MiB bounds.
+optimization or owned-value cleanup in this scalar profile. Generated mode-0 input
+retains its 8 MiB bound. `LKJSG001` has no separate aggregate byte quota; its u32
+length, proof allowance and object constraints define the supported carrier domain.
 
-Rust may build the initial native compiler executable and provide raw carrier
-transport and independent test orchestration. It must not supply target semantic
-tables, lowered instructions or flow certificates to this path. The
+Rust may build the initial native compiler executable, serialize the caller's
+TargetId beside the unchanged carrier, and provide transport and independent test
+orchestration. It must not select or pre-filter source owners, map TargetId to an
+entry index, or supply target semantic tables, lowered instructions or flow
+certificates. Evidence binds the complete carrier, request and selected target,
+compiler executable, profiles and execution context. The
 [scalar decision](../decisions/20261023-source-scalar-e2-e3.md) records eight
 executed positive programs, ten semantic/profile controls and two independently
 constructed hash-consistent structural controls. Scalar source-to-ELF execution

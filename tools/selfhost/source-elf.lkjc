@@ -14,40 +14,65 @@ declarations.begin
       )
     )
 
-    (function create compile
-      (visibility public)
+    (function create compile-carrier
+      (visibility private)
       (effect pure)
       (parameter create graph (type Bytes))
+      (parameter create selector (type Bytes))
       (returns (record (diagnostic I64) (image Bytes)))
       (body
         (let
           (binding prepared (call source-scalar::prepare (local graph)))
           (binding code (field (local prepared) (name code)))
           (in
-            (if
-              (call ci::eq (local code) (i64 0))
+            (if (call ci::eq (local code) (i64 0))
               (let
-                (binding lowered
-                  (call source-scalar-emit::lower
-                    (local graph)
-                    (field (local prepared) (name facts))
-                    (field (local prepared) (name parents))))
-                (binding lower-code (field (local lowered) (name code)))
+                (binding target
+                  (call source-table::owner (local graph) (local selector) (i64 0) (i64 12)))
                 (in
-                  (if
-                    (call ci::eq (local lower-code) (i64 0))
-                    (call elf::compile-elf
-                      (field (local lowered) (name input)))
-                    (call failure (local lower-code))
-                  )
-                )
-              )
-              (call failure (local code))
-            )
-          )
-        )
-      )
-    )
+                  (if (call ci::lt (local target) (i64 0))
+                    (call failure (i64 19))
+                    (if (call ci::eq (call source-table::kind (local graph) (local target)) (i64 20))
+                      (let
+                        (binding lowered
+                          (call source-scalar-emit::lower
+                            (local graph)
+                            (field (local prepared) (name facts))
+                            (field (local prepared) (name parents))
+                            (local target)))
+                        (binding lower-code (field (local lowered) (name code)))
+                        (in
+                          (if (call ci::eq (local lower-code) (i64 0))
+                            (call elf::compile-elf (field (local lowered) (name input)))
+                            (call failure (local lower-code)))))
+                      (call failure (i64 19))))))
+              (call failure (local code)))))))
+
+    (function create compile
+      (visibility public)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (if (call ci::lt (call ci::length (local graph)) (i64 32))
+          (call failure (i64 12))
+          (if
+            (call ci::both
+              (call ci::same
+                (call ci::slice (local graph) (i64 0) (i64 8))
+                (call ci::text-bytes (text "LKJSRQ01")))
+              (call ci::both
+                (call ci::eq (call ci::u32 (local graph) (i64 8)) (i64 1))
+                (call ci::both
+                  (call ci::eq (call ci::get (local graph) (i64 12)) (i64 12))
+                  (call ci::both
+                    (if (call artifact-check::zeros (local graph) (i64 13) (i64 29))
+                      (bool false) (bool true))
+                    (call artifact-check::zeros (local graph) (i64 29) (i64 32))))))
+            (call compile-carrier
+              (call ci::slice (local graph) (i64 32) (call ci::length (local graph)))
+              (call ci::slice (local graph) (i64 12) (i64 29)))
+            (call failure (i64 12))))))
 
     (component create compiler
       (visibility public)

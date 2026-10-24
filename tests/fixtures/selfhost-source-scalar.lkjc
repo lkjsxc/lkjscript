@@ -104,5 +104,9 @@ declarations.begin
   (target create scalar-main
     (component scalar-controls::app)
     (runner command)
-    (port scalar-controls::app::run)))
+    (port scalar-controls::app::run))
+  (target create scalar-other
+    (component scalar-controls::other)
+    (runner command)
+    (port scalar-controls::other::run)))
 declarations.end
