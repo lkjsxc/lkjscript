@@ -84,11 +84,9 @@ declarations.begin
             (call source-table::owner (local graph) (local data) (i64 57) (i64 2)))
           (binding function-data
             (call source-table::data (local graph) (local function)))
-          (binding parts
-            (call source-scalar-profile::function-parts (local graph) (local function)))
           (binding parameters
-            (call source-table::array
-              (local function-data) (field (local parts) (name parameters))))
+            (call source-table::array (local function-data)
+              (call source-scalar-profile::parameters (local graph) (local function))))
           (binding operands
             (call source-table::array (local data) (i64 76)))
           (in

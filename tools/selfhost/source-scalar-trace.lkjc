@@ -79,17 +79,25 @@ declarations.begin
               (if (call ci::lt (call ci::sub (local limit) (call ci::size (local out))) (local count))
                 (call failure (local out))
                 (let
-                  (binding source (call source-table::data (local graph) (local owner)))
-                  (binding parts (call source-scalar-profile::function-parts (local graph) (local owner)))
-                  (binding body
-                    (call source-table::owner (local graph) (local source)
-                      (field (local parts) (name body)) (i64 9)))
                   (binding next (type ByteBuffer)
                     (call types (local facts) (local locals) (local start) (local count) (i64 0) (local out)))
                   (in
-                    (call walk (local graph) (local facts) (local parents) (local plan)
-                      (local functions) (local locals) (local function) (local start)
-                      (local body) (bool true) (i64 0) (local limit) (local next)))))
+                    (if (call ci::eq (call source-table::kind (local graph) (local owner)) (i64 5))
+                      (call walk (local graph) (local facts) (local parents) (local plan)
+                        (local functions) (local locals) (call ci::add (local function) (i64 1))
+                        (call ci::add (local start) (local count))
+                        (call source-table::count (local graph)) (bool true) (i64 0)
+                        (local limit) (local next))
+                      (let
+                        (binding source (call source-table::data (local graph) (local owner)))
+                        (binding parts (call source-scalar-profile::function-parts (local graph) (local owner)))
+                        (binding body
+                          (call source-table::owner (local graph) (local source)
+                            (field (local parts) (name body)) (i64 9)))
+                        (in
+                          (call walk (local graph) (local facts) (local parents) (local plan)
+                            (local functions) (local locals) (local function) (local start)
+                            (local body) (bool true) (i64 0) (local limit) (local next))))))))
               (let
                 (binding event
                   (call source-scalar-cursor::next (local graph) (local parents) (local facts) (local plan)

@@ -421,11 +421,11 @@ the diagnostic with an empty image.
 | --- | --- |
 | Value types | Unrestricted Unit, Bool and I64 |
 | Supplied descriptors | Those three primitive types and pure function descriptors whose parameters and result are scalar |
-| Declarations | Modules, pure monomorphic Functions and Components without requirements; their Parameters, ordinary Let Bindings, Expressions, function Ports and Target |
+| Declarations | Modules, pure monomorphic Functions, the eight exact scalar External implementations below, and Components without requirements; their Parameters, ordinary Let Bindings, Expressions, function Ports and Target |
 | Expressions | Unit/Bool/I64 literals, parameter/binding Local, If, Let, nonempty Sequence and direct Call |
 | Calls and functions | Exact argument arity/types and declared result type; no type, requirement or effect parameters or application arguments |
 | Entry | Exactly one command Target, with no runner arguments, selecting a function Port of its Component; the selected function has signature `() -> I64` |
-| Excluded source families | External/intrinsic declarations, Text/StaticText, Bytes, ByteBuffer, List, records/choices, task callables, first-class function values/Invoke, generics, witnesses, read views and Regions |
+| Excluded source families | Other External/intrinsic declarations, Text/StaticText, Bytes, ByteBuffer, List, records/choices, task callables, first-class function values/Invoke, generics, witnesses, read views and Regions |
 
 A function descriptor is admitted for signature/port description; it does not
 admit function-valued expressions. Parameters are unrestricted. Let annotations,
@@ -433,6 +433,29 @@ when present, must be scalar and equal the initializer's inferred type. If
 conditions must be Bool and both branches must have the same type. Sequence
 typing checks every item and takes the final item's type. Direct and mutual
 recursion use declared signatures; they do not require expanding call bodies.
+
+External admission uses the complete implementation identifier rather than the
+declaration name. The following pure implementations require an empty type-parameter
+list and exactly two unrestricted parameters with these types:
+
+| Implementation | Mode-0 primitive code | Parameters | Result |
+| --- | --- | --- | --- |
+| `core.i64.add` | 1 | I64, I64 | I64 |
+| `core.i64.subtract` | 2 | I64, I64 | I64 |
+| `core.i64.multiply` | 3 | I64, I64 | I64 |
+| `core.i64.divide` | 4 | I64, I64 | I64 |
+| `core.i64.equal` | 5 | I64, I64 | Bool |
+| `core.i64.less` | 6 | I64, I64 | Bool |
+| `core.bool.and` | 9 | Bool, Bool | Bool |
+| `core.bool.or` | 10 | Bool, Bool | Bool |
+
+Every supplied External is checked, including unused declarations and aliases.
+Unknown or other implementation identifiers, generic binders, and borrowed or
+consumed parameters reject with 13. A recognized implementation with the wrong
+scalar signature or arity rejects with 19. External remains a pure callable
+declaration; this permission does not admit a TaskFunction with an empty effect
+row. Calls preserve eager left-to-right argument evaluation, including Boolean
+and/or, and the existing normalized integer overflow and division traps.
 
 Profile checking visits every supplied type and owner. Inference visits every
 Binding and Expression, then checks every Function body against its declared
@@ -449,8 +472,11 @@ allowance.
 
 ### Internal normalization and bounds
 
-The planner inventories every supplied Function in canonical owner order,
-assigns stable parameter/binding slots and computes instruction counts. The cursor
+The planner inventories every supplied Function and admitted External in canonical
+owner order, assigns stable parameter/binding slots and computes instruction counts.
+Each External has a zero-instruction callable row with its exact parameter/result
+types, parameter slots and primitive code. Calls use this same canonical callable
+directory. The cursor
 walks admitted containment and preserves source operand, initializer and sequence
 order. State and trace construction derive operand types and lexical local
 availability from the inferred facts and exact parents. Lowering emits literals,
@@ -468,8 +494,9 @@ inferred tables or custody certificates are inputs to this process.
 The source carrier retains 100,000 combined directory entries, its existing
 proof allowance and individual object/field bounds. The complete carrier-byte
 domain follows from the header and allowance constraints above. Generated mode-0
-input remains at most 8,388,608 bytes, with 1 through 1,024 Functions, at most
-128 parameters and locals per Function, operand depth at most 128 and
+input remains at most 8,388,608 bytes, with 1 through 1,024 callable rows
+(Functions and admitted Externals), at most 128 parameters and locals per row,
+operand depth at most 128 and
 a positive total instruction count. There is no separate instruction-count quota:
 `2176 + 40*F + 32*N + B <= 8,388,608` bounds the complete mode-0 encoding,
 where F counts function rows, N counts instructions and B counts blob bytes.

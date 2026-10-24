@@ -42,7 +42,9 @@ declarations.begin
         (binding b (type ByteBuffer)
           (call source-table::edge (call source-scalar-plan::local-count (local functions) (local index))
             (local first) (call source-scalar-plan::node-count (local plan) (local owner)) (local a)))
-        (binding c (type ByteBuffer) (call source-table::edge (i64 0) (local blob) (i64 0) (local b)))
+        (binding c (type ByteBuffer)
+          (call source-table::edge (call source-scalar-profile::external-code (local graph) (local owner))
+            (local blob) (i64 0) (local b)))
         (in (call ci::le (i64 0) (i64 4) (local c))))))
 
     (function create function-table

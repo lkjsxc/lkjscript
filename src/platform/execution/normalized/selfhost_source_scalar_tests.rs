@@ -8,13 +8,21 @@ use crate::platform::kernel::ExpressionOperation as E;
 use crate::platform::semantic_id::{BindingId, DeclarationId, ExpressionId, PortId};
 
 const SCALAR_SOURCE: &str = include_str!("../../../../tests/fixtures/selfhost-source-scalar.lkjc");
+const INTRINSIC_SOURCE: &str =
+    include_str!("../../../../tests/fixtures/selfhost-source-scalar-intrinsics.lkjc");
+
+#[derive(Clone, Copy)]
+enum ScalarResult {
+    Value(i64),
+    Trap(&'static str),
+}
 
 struct Case {
     name: &'static str,
     carrier: Vec<u8>,
     carrier_sha256: String,
     diagnostic: i64,
-    result: Option<i64>,
+    result: Option<ScalarResult>,
     e1: OnceLock<()>,
 }
 
@@ -24,6 +32,15 @@ impl Case {
         source: KernelSnapshot,
         diagnostic: i64,
         result: Option<i64>,
+    ) -> Self {
+        Self::with_result(name, source, diagnostic, result.map(ScalarResult::Value))
+    }
+
+    fn with_result(
+        name: &'static str,
+        source: KernelSnapshot,
+        diagnostic: i64,
+        result: Option<ScalarResult>,
     ) -> Self {
         assert_eq!(diagnostic == 0, result.is_some());
         let carrier = graph::packet(&source);
@@ -348,8 +365,235 @@ fn cases() -> &'static [Case] {
             kernel::OwnerKind::TaskFunction,
         );
         cases.push(Case::new("unused-empty-task-is-not-pure", source, 13, None));
+        cases.extend(intrinsic_cases());
         cases
     })
+}
+
+fn external_mut<'a>(
+    source: &'a mut KernelSnapshot,
+    name: &str,
+) -> &'a mut kernel::ExternalDeclaration {
+    let id = declaration(source, name);
+    let OwnerRecord::Declaration(record) =
+        source.owners.get_mut(&OwnerKey::Declaration(id)).unwrap()
+    else {
+        panic!("intrinsic declaration");
+    };
+    let kernel::DeclarationPayload::External(external) = &mut record.payload else {
+        panic!("intrinsic external");
+    };
+    external
+}
+
+fn intrinsic_cases() -> Vec<Case> {
+    // Author one valid complete carrier. Selection changes the one port's target
+    // without removing any external, function, expression, or supplied type.
+    let base = byte_buffer_tests::author_only(INTRINSIC_SOURCE).unwrap();
+    let mut cases = Vec::new();
+    let outcomes = [
+        (
+            "intrinsic-arithmetic",
+            "arithmetic",
+            ScalarResult::Value(42),
+        ),
+        (
+            "intrinsic-truncation",
+            "truncation",
+            ScalarResult::Value(-13),
+        ),
+        (
+            "intrinsic-false-relations",
+            "false-relations",
+            ScalarResult::Value(0),
+        ),
+        (
+            "intrinsic-minimum-division",
+            "minimum-division",
+            ScalarResult::Value(i64::MIN),
+        ),
+        (
+            "intrinsic-maximum-addition",
+            "maximum-addition",
+            ScalarResult::Value(i64::MAX),
+        ),
+        (
+            "intrinsic-recursion",
+            "recursive-entry",
+            ScalarResult::Value(42),
+        ),
+        (
+            "intrinsic-add-overflow",
+            "add-trap",
+            ScalarResult::Trap("integer_overflow"),
+        ),
+        (
+            "intrinsic-subtract-overflow",
+            "subtract-trap",
+            ScalarResult::Trap("integer_overflow"),
+        ),
+        (
+            "intrinsic-multiply-overflow",
+            "multiply-trap",
+            ScalarResult::Trap("integer_overflow"),
+        ),
+        (
+            "intrinsic-divide-zero",
+            "divide-zero",
+            ScalarResult::Trap("integer_division"),
+        ),
+        (
+            "intrinsic-divide-overflow",
+            "divide-overflow",
+            ScalarResult::Trap("integer_division"),
+        ),
+        (
+            "intrinsic-strict-and",
+            "strict-and",
+            ScalarResult::Trap("integer_overflow"),
+        ),
+        (
+            "intrinsic-strict-or",
+            "strict-or",
+            ScalarResult::Trap("integer_overflow"),
+        ),
+        (
+            "intrinsic-left-before-right",
+            "left-before-right",
+            ScalarResult::Trap("integer_division"),
+        ),
+        (
+            "intrinsic-operand-before-intrinsic",
+            "operand-before-intrinsic",
+            ScalarResult::Trap("integer_overflow"),
+        ),
+    ];
+    for (name, selected, result) in outcomes {
+        let mut source = base.clone();
+        let function = declaration_reference(&source, selected);
+        let key = OwnerKey::Port(port(&source, "main"));
+        let OwnerRecord::Port(record) = source.owners.get_mut(&key).unwrap() else {
+            panic!("intrinsic fixture port");
+        };
+        record.implementation = kernel::PortImplementation::Function(function);
+        cases.push(Case::with_result(name, source, 0, Some(result)));
+    }
+
+    for (name, implementation, expected) in [
+        ("unused-unknown-intrinsic", "core.i64.unknown", 13),
+        ("unused-outside-scalar-intrinsic", "core.i64.less-equal", 13),
+        ("unused-forged-intrinsic-signature", "core.bool.and", 19),
+    ] {
+        let mut source = base.clone();
+        external_mut(&mut source, "unused-sum").implementation =
+            kernel::ImplementationName::new(implementation).unwrap();
+        cases.push(Case::new(name, source, expected, None));
+    }
+
+    let mut source = base.clone();
+    let boolean = scalar_type(&source, kernel::TypeForm::Bool);
+    external_mut(&mut source, "unused-sum").result = boolean;
+    cases.push(Case::new("unused-intrinsic-wrong-result", source, 19, None));
+
+    let mut source = base.clone();
+    let boolean = scalar_type(&source, kernel::TypeForm::Bool);
+    let parameter = external_mut(&mut source, "unused-sum").parameters[1];
+    let OwnerRecord::Parameter(record) = source
+        .owners
+        .get_mut(&OwnerKey::Parameter(parameter))
+        .unwrap()
+    else {
+        panic!("intrinsic fixture parameter");
+    };
+    record.ty = boolean;
+    cases.push(Case::new(
+        "unused-intrinsic-wrong-second-parameter",
+        source,
+        19,
+        None,
+    ));
+
+    let mut source = base.clone();
+    let parameter = external_mut(&mut source, "unused-sum")
+        .parameters
+        .pop()
+        .unwrap();
+    assert!(
+        source
+            .owners
+            .remove(&OwnerKey::Parameter(parameter))
+            .is_some()
+    );
+    cases.push(Case::new("unused-intrinsic-wrong-arity", source, 19, None));
+
+    for (name, use_mode) in [
+        ("unused-intrinsic-borrow", kernel::ParameterUse::Borrow),
+        ("unused-intrinsic-consume", kernel::ParameterUse::Consume),
+    ] {
+        let mut source = base.clone();
+        let parameter = external_mut(&mut source, "unused-sum").parameters[0];
+        let OwnerRecord::Parameter(record) = source
+            .owners
+            .get_mut(&OwnerKey::Parameter(parameter))
+            .unwrap()
+        else {
+            panic!("intrinsic fixture custody");
+        };
+        record.use_mode = use_mode;
+        cases.push(Case::new(name, source, 13, None));
+    }
+
+    let mut source = base.clone();
+    let declaration = declaration(&source, "unused-sum");
+    let parameter = crate::platform::semantic_id::TypeParameterId::migrate(
+        b"scalar-intrinsic-unused-type-parameter",
+        0,
+    );
+    external_mut(&mut source, "unused-sum")
+        .type_parameters
+        .push(parameter);
+    assert!(
+        source
+            .owners
+            .insert(
+                OwnerKey::TypeParameter(parameter),
+                OwnerRecord::TypeParameter(kernel::TypeParameterRecord {
+                    header: kernel::OwnerHeader::new(
+                        OwnerKey::TypeParameter(parameter),
+                        kernel::OwnerKind::TypeParameter,
+                    ),
+                    declaration,
+                    name: kernel::Name::new("Extra").unwrap(),
+                    constraints: kernel::TypeParameterConstraints::None,
+                }),
+            )
+            .is_none()
+    );
+    cases.push(Case::new(
+        "unused-intrinsic-generic-binder",
+        source,
+        13,
+        None,
+    ));
+
+    let mut source = base.clone();
+    let body = fixture_function(&source, "unused-call").body;
+    let argument = match &expression(&source, body).operation {
+        E::Call { arguments, .. } => arguments[1],
+        _ => panic!("unused intrinsic call"),
+    };
+    expression_mut(&mut source, argument).operation = E::Bool { value: false };
+    cases.push(Case::new("unused-intrinsic-call-type", source, 19, None));
+
+    let mut source = base.clone();
+    let callee = declaration_reference(&source, "sum");
+    let body = fixture_function(&source, "unused-zero-call").body;
+    let E::Call { function, .. } = &mut expression_mut(&mut source, body).operation else {
+        panic!("unused zero-arity call");
+    };
+    *function = callee;
+    cases.push(Case::new("unused-intrinsic-call-arity", source, 19, None));
+    cases
 }
 
 struct NativeCompiler {
@@ -505,7 +749,7 @@ fn selfhost_source_scalar_e3_compiles_raw_carriers_and_executes_independent_resu
     let compiler = native_compiler();
     for case in cases() {
         let image = run_filter(compiler, case);
-        if case.name == "baseline" {
+        if matches!(case.name, "baseline" | "intrinsic-arithmetic") {
             // This one complete producer comparison covers the E3 passes and
             // backend on both independent language engines before execution.
             let value = super::invoke(
@@ -535,14 +779,28 @@ fn selfhost_source_scalar_e3_compiles_raw_carriers_and_executes_independent_resu
                 sha256(&output.stdout),
                 start.elapsed().as_millis(),
             );
-            assert!(output.status.success(), "case={}", case.name);
-            assert!(output.stderr.is_empty(), "case={}", case.name);
-            assert_eq!(
-                output.stdout,
-                expected.to_string().as_bytes(),
-                "case={}",
-                case.name,
-            );
+            match expected {
+                ScalarResult::Value(expected) => {
+                    assert!(output.status.success(), "case={}", case.name);
+                    assert!(output.stderr.is_empty(), "case={}", case.name);
+                    assert_eq!(
+                        output.stdout,
+                        expected.to_string().as_bytes(),
+                        "case={}",
+                        case.name,
+                    );
+                }
+                ScalarResult::Trap(code) => {
+                    assert_eq!(output.status.code(), Some(70), "case={}", case.name);
+                    assert!(output.stdout.is_empty(), "case={}", case.name);
+                    assert_eq!(
+                        output.stderr,
+                        format!("normalized_{code}\n").as_bytes(),
+                        "case={}",
+                        case.name,
+                    );
+                }
+            }
         }
     }
 }

@@ -85,12 +85,13 @@ declarations.begin
             (field code (if (call ci::eq (local count) (i64 0)) (i64 13) (i64 0)))
             (field rows (call ci::freeze (local out))))
           (if
-            (call ci::eq (call source-table::kind (local graph) (local row)) (i64 6))
+            (call source-scalar-profile::callable (local graph) (local row))
             (let
               (binding source (call source-table::data (local graph) (local row)))
-              (binding parts (call source-scalar-profile::function-parts (local graph) (local row)))
               (binding parameters
-                (field (call source-table::array (local source) (field (local parts) (name parameters)))
+                (field
+                  (call source-table::array (local source)
+                    (call source-scalar-profile::parameters (local graph) (local row)))
                   (name value)))
               (in
                 (if
@@ -149,7 +150,7 @@ declarations.begin
           (call ci::eq (local row) (call source-table::count (local graph)))
           (local row)
           (if
-            (call ci::eq (call source-table::kind (local graph) (local row)) (i64 6))
+            (call source-scalar-profile::callable (local graph) (local row))
             (local row)
             (call containing-owner
               (local graph)
