@@ -186,7 +186,7 @@ speed benchmark. No fuel accounting definition changes in this slice.
 | Remaining source-carrier byte headroom | 552,043 | 463,553 |
 | Backend mode-0 bytes / functions / nodes | 832,748 / 244 / 16,460 | 832,576 / 244 / 16,456 |
 | Combined frontend mode-0 bytes / functions / nodes | Rejected by node guard | 1,661,846 / 561 / 34,214 |
-| Combined frontend mode-0 record types | Not measured | 31 |
+| Combined frontend mode-0 type entries | Not measured | 31 |
 | Mode-1 bytes / canonical units | 9,081,896 / 580 | 9,089,215 / 581 |
 | Emitted canonical artifact bytes | 9,598,554 | 9,606,367 |
 | Physical pack count / bytes | 233 / 390,397,862 | 277 / 401,520,402 |

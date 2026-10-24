@@ -132,6 +132,77 @@ fn selfhost_source_graph_admits_complete_raw_compiler_and_independent_sources() 
 }
 
 #[test]
+fn selfhost_source_graph_native_admits_complete_carriers_above_former_byte_limit() {
+    const FUNCTIONS: usize = 128;
+    const INLINE_BYTES: usize = 64 * 1024;
+    let mut proposal = String::from("declarations.begin\n(units (module create carrier-capacity\n");
+    for index in 0..FUNCTIONS {
+        proposal.push_str(&format!(
+            "(function create value-{index} (visibility public) (effect pure) \
+             (returns Text) (body (text \"seed\")))\n"
+        ));
+    }
+    proposal.push_str("))\ndeclarations.end\n");
+    let mut source = byte_buffer_tests::author_only(&proposal).unwrap();
+    let mut literals = 0;
+    for owner in source.owners.values_mut() {
+        if let OwnerRecord::Expression(kernel::ExpressionRecord {
+            operation:
+                kernel::ExpressionOperation::Text {
+                    value: kernel::TextValue::Inline { text },
+                },
+            ..
+        }) = owner
+        {
+            *text = "x".repeat(INLINE_BYTES);
+            literals += 1;
+        }
+    }
+    assert_eq!(literals, FUNCTIONS);
+    kernel::validate_full(&source).unwrap();
+    let bytes = packet(&source);
+    assert!(bytes.len() > 8_388_608);
+    assert!(required_fuel(&bytes) <= i32::MAX as usize);
+    let carrier_digest = Sha256::digest(&bytes);
+    eprintln!(
+        "selfhost source carrier capacity entry=source-links::validate engine=self-produced-native owners={} types={} retirements={} bytes={} sha256={} state={}",
+        source.owners.len(),
+        source.types.len(),
+        source.retirements.len(),
+        bytes.len(),
+        crate::platform::semantic_id::encode_hex(&carrier_digest),
+        kernel::semantic_state_digest(&source).unwrap()
+    );
+
+    // The cached helper executes the large input only in the self-produced native
+    // validator. Its read-graph entry calls source-links::validate on all raw bytes.
+    // Rust validation supplies an independent expectation, not semantic input tables.
+    emitted_result("read-graph", &bytes, 0);
+
+    let missing = TypeObjectDigest::from_bytes([247; 32]);
+    assert!(!source.types.contains_key(&missing));
+    let object = kernel::TypeObject::new(kernel::TypeForm::List { item: missing }).unwrap();
+    let digest = kernel::encode_type_object(&object).unwrap().0;
+    assert!(source.types.insert(digest, object).is_none());
+    assert!(kernel::validate_full(&source).is_err());
+    let invalid = packet(&source);
+    assert!(invalid.len() > 8_388_608);
+    assert_eq!(&bytes[48..80], &invalid[48..80]);
+    let invalid_digest = Sha256::digest(&invalid);
+    assert_ne!(carrier_digest, invalid_digest);
+    eprintln!(
+        "selfhost source carrier capacity control=unused-missing-type entry=source-links::validate engine=self-produced-native bytes={} sha256={} expected=14",
+        invalid.len(),
+        crate::platform::semantic_id::encode_hex(&invalid_digest)
+    );
+
+    // Fresh canonical object digests and carrier framing reach endpoint admission:
+    // read-carrier accepts, while read-graph checks the unused supplied type.
+    emitted_result("read-carrier", &invalid, 0);
+    emitted_result("read-graph", &invalid, 14);
+}
+
+#[test]
 fn selfhost_source_graph_rejects_extent_directory_order_and_object_forgery() {
     let bytes = packet(&nominal());
     for length in [0, 7, 8, 31, 79, 99, 127, 128, bytes.len() - 1] {

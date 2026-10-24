@@ -181,9 +181,11 @@ fn selfhost_source_index_windows_reject_invalid_ranges_without_arithmetic_traps(
                 check(&bytes, -2);
             }
         }
-        let mut too_large = base;
-        too_large.resize(8_388_609, 0);
-        check(&too_large, -2);
+        let mut large_window = base;
+        large_window.resize(8_388_609, 0);
+        check(&large_window, 0);
+        word(&mut large_window, 4, u32::MAX);
+        check(&large_window, -2);
     }
     let base = packet(0, &[vec![3; 17]], 50, &[3; 17], 50);
     for (at, value) in [

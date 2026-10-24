@@ -30,10 +30,11 @@ mode-0 input inside lkjscript from the raw carrier.
 
 ## Exact bytes
 
-All scalar header fields and span fields are u32 little-endian. Complete input is
-128 through 8,388,608 bytes. The sum of owner, type and retirement counts is at
-most 100,000. Empty directories are allowed. Package identity is nonzero and the
-package name has 1 through 128 canonical name bytes.
+All scalar header fields and span fields are u32 little-endian. Complete input
+is at least 128 bytes, and its actual length must equal the encoded u32 length.
+There is no separate aggregate input-byte quota. The sum of owner, type and
+retirement counts is at most 100,000. Empty directories are allowed. Package
+identity is nonzero and the package name has 1 through 128 canonical name bytes.
 
 | Header offset | Width | Meaning |
 | --- | --- | --- |
@@ -79,6 +80,25 @@ within the same maximum. Later proof exhaustion returns 6 without a semantic
 validity claim. Bounds precede products, object access and hashing. Lookup uses binary
 search over admitted immutable directories; it does not copy the complete source
 or linearly rescan the directory for each reference.
+
+The retained allowance representation also bounds the admitted byte domain.
+With N = O+T+R, admission requires
+`L <= floor((2,147,483,647 - 4096 - 1024*N) / 128) = 16,777,183 - 8*N`.
+Retained layout and object constraints can tighten this allowance-derived upper
+bound. It is below the u32 wire domain. Removing the former aggregate 8 MiB check
+does not remove the count, per-object, per-field or allowance restrictions.
+Individual object readers still require their current envelopes and payload
+bounds. Logical owner and retirement maps receive only their directory slices;
+the retained 100,000-entry bound limits those slices to 5,000,000 and 4,900,000
+bytes respectively, below the map reader's independent byte limit.
+
+The complete-length comparison precedes allowance multiplication, so even a
+malformed u32 length times 128 fits I64. Index windows check bounded counts and
+strides, then compare against the actual backing length using subtraction after
+nonnegative and ordered-range checks. Wider backing storage does not grant an
+invalid window access. Carrier/object scans advance through finite byte or
+record ranges; directory searches strictly shrink their intervals. Existing
+visited-state, scope and work checks remain unchanged.
 
 ## Binding and references
 
@@ -445,9 +465,10 @@ its section offsets, fixed built-in type table, flow certificates and checksum.
 `elf::compile-elf` validation and emission path. No Rust target normalization,
 inferred tables or custody certificates are inputs to this process.
 
-This slice retains the 8,388,608-byte `LKJSG001` ceiling, 100,000 combined source
-directory entries and existing carrier proof allowance. Generated mode-0 input
-also remains at most 8,388,608 bytes, with 1 through 1,024 Functions, at most
+The source carrier retains 100,000 combined directory entries, its existing
+proof allowance and individual object/field bounds. The complete carrier-byte
+domain follows from the header and allowance constraints above. Generated mode-0
+input remains at most 8,388,608 bytes, with 1 through 1,024 Functions, at most
 128 parameters and locals per Function, operand depth at most 128 and
 a positive total instruction count. There is no separate instruction-count quota:
 `2176 + 40*F + 32*N + B <= 8,388,608` bounds the complete mode-0 encoding,

@@ -14,20 +14,17 @@ declarations.begin
               (call ci::lt (local length) (i64 128))
               (i64 12)
               (if
-                (call ci::lt (i64 8388608) (local length))
-                (i64 12)
+                (call ci::same
+                  (call ci::slice (local data) (i64 0) (i64 8))
+                  (call ci::text-bytes (text "LKJSG001")))
                 (if
-                  (call ci::same
-                    (call ci::slice (local data) (i64 0) (i64 8))
-                    (call ci::text-bytes (text "LKJSG001")))
+                  (call ci::eq (call ci::u32 (local data) (i64 8)) (local length))
                   (if
-                    (call ci::eq (call ci::u32 (local data) (i64 8)) (local length))
-                    (if
-                      (call artifact-check::zeros (local data) (i64 104) (i64 128))
-                      (call header (local data))
-                      (i64 12))
+                    (call artifact-check::zeros (local data) (i64 104) (i64 128))
+                    (call header (local data))
                     (i64 12))
-                  (i64 12))))))))
+                  (i64 12))
+                (i64 12)))))))
     (function create header
       (visibility private)
       (effect pure)
