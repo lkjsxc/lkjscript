@@ -4,7 +4,8 @@ The target is semantic self-hosting. The maintained project provides a normalize
 backend compiler and a restricted raw-source scalar compiler. The backend validates
 LKJCI1 mode 0/profile 4 for standalone Linux x86_64 ELF and
 mode 1/profile 5 for current `.lkja` artifacts. Artifact mode has no default
-aggregate input-byte quota; its retained unit, map and value bounds are explicit.
+aggregate input-byte quota. Its unit map expands through canonical radix pages,
+with no 700-unit guard; per-page, per-unit, offset and value bounds remain explicit.
 The current input covers pure scalar/byte function closures, buffers, List<I64>,
 structural records, branches and recursion. Focused tests reproduce the complete
 backend in both output formats, with Tier 1 C2/C3 ELF identity and equal artifacts

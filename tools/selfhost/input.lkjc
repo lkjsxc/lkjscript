@@ -43,6 +43,8 @@ declarations.begin
     (parameter create buffer (type ByteBuffer) (use borrow)) (returns I64))
   (external create freeze (visibility public) (implementation core.buffer.freeze)
     (parameter create buffer (type ByteBuffer) (use consume)) (returns Bytes))
+  (external create discard (visibility public) (implementation core.buffer.discard)
+    (parameter create buffer (type ByteBuffer) (use consume)) (returns Unit))
   (function create u32 (visibility public) (effect pure)
     (parameter create data (type Bytes)) (parameter create at (type I64)) (returns I64)
     (body (call add (call get (local data) (local at))

@@ -714,10 +714,7 @@ declarations.begin
                           (call ci::eq (call ci::u32 (local data) (i64 28)) (i64 0))
                           (if
                             (call ci::lt (i64 0) (call ci::u32 (local data) (i64 24)))
-                            (if
-                              (call ci::lt (call ci::u32 (local data) (i64 24)) (i64 701))
-                              (bool true)
-                              (bool false))
+                            (bool true)
                             (bool false))
                           (bool false))
                         (bool false))

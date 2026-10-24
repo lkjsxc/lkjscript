@@ -490,6 +490,16 @@ fn selfhost_byte_backend_reproduces_its_complete_native_closure() {
             capacity.stdout.len(),
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&capacity.stdout)),
         );
+        let rejected_capacity = native_filter_tests::execute_filter(
+            stage,
+            &artifact::capacity_invalid_unused_unit(capacity_input),
+            &[],
+            65521,
+        );
+        assert_eq!(rejected_capacity.status.code(), Some(65));
+        assert!(rejected_capacity.stdout.is_empty());
+        assert_eq!(rejected_capacity.stderr, b"compiler_rejected:10\n");
+
         let mut malformed = artifact_input.clone();
         malformed[40] ^= 1;
         let rejected = native_filter_tests::execute_filter(stage, &malformed, &[], 127);

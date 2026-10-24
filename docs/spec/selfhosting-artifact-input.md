@@ -32,7 +32,7 @@ apply. The header is 160 bytes, with this layout:
 | 8 | 4 | Profile 5 |
 | 12 | 4 | Zero |
 | 16 | 8 | Complete byte length L |
-| 24 | 8 | Unit count U, 1 through 700 |
+| 24 | 8 | Positive unit count U; zero high word and checked directory/input extent |
 | 32 | 8 | Zero for unmetered admission, otherwise a positive u64 allowance |
 | 40 | 32 | BLAKE3 of `[0,40)` concatenated with `[72,L)` |
 | 72 | 8 | Unit directory offset 160 and count U, two u32 words |
@@ -60,8 +60,8 @@ Calls in the compiled program are not executed during admission.
 Before computing the estimate, layout requires at least 336 bytes per unit,
 validated metadata extent, and the retained object/owner counts. Even the weaker
 bounds `L <= 2^32-1`, `U <= floor(L/336)` and `O <= floor(L/48)` bound the formula
-by 10,457,892,146,095,296, below `2^54` and signed I64. The actual 700-unit and
-100,000-object guards make this bound more conservative. Generic extent checks
+by 10,457,892,146,095,296, below `2^54` and signed I64. The independent
+100,000-object guard makes this bound more conservative. Generic extent checks
 require nonnegative offset/count and positive stride, establish `offset <= L`,
 and compare `count <= (L-offset)/stride` before multiplying or adding. A zero
 count at the end is valid; an out-of-range offset, zero stride or overflowing
@@ -190,14 +190,44 @@ stack execution or correspondence with the raw source graph.
 `unit-wire` encodes the current canonical bincode fields, typed ID/digest tags,
 unit key, `LKJCUNIT` envelope and object identity. It does not copy an encoded
 unit from input. `unit-map` builds the canonical logical radix content digest
-and one valid physical leaf, supporting at most 700 bindings. This count is an
-implementation guard for the current flat emitter, not a language limit. With U
-bindings, 17-byte keys, 65-byte values and common-prefix length p, its exact page
-size is `107 + p + U*(88-p)`. At U=700 the worst case is 61,707 bytes, within the
-canonical map reader's 65,536-byte page boundary. Removing the guard requires
-hierarchical page emission and inclusion of every derived child page in the
-artifact's objects and pack. A different valid physical partition may have the
-same logical content digest.
+and an expandable physical radix hierarchy. The 700-unit admission guard is
+removed from both the Rust projection and the lkjscript reader. The physical
+page bound remains exactly 65,536 bytes. The logical keys are 17 bytes, values
+are 65 bytes, and sorted unique bindings are established before emission.
+
+For U bindings with common-prefix length p, a leaf occupies
+`107 + p + U*(88-p)` bytes. The encoder compares U against
+`floor((65429-p)/(88-p))` before choosing a leaf. An oversized range branches
+on the next key byte. Child ranges are nonempty and emitted in increasing edge
+order. A branch has no terminal value for these fixed-width keys, and occupies
+`106 + p + 82*C` bytes for C children; C is at most 256. Every child descriptor
+contains its edge, physical digest, entry count, logical byte count and logical
+content commitment. Prefix length increases strictly on descent, bounding
+recursive depth by the 17-byte key representation. The child cursor advances
+strictly; its buffer-threading loop uses the existing tail-call mechanism.
+
+The encoder returns the root's image, physical digest and logical commitment,
+plus every page in deterministic postorder as `length:u32le || page` frames.
+The root is last and appears once. Empty input produces one empty leaf; for
+U>0 every branch has at least two children and the hierarchy has at most 2U-1
+pages. This framing is compiler scratch representation, not a new canonical
+map or artifact format. The artifact assembler emits a domain-5 object row for
+every frame, then sorts all source and generated objects canonically. It does
+not append the root separately. Physical partitioning does not change the
+logical content commitment.
+
+Generated rows retain u32 offsets into the generated pool. Before each unit
+frame, the compiler proves the accumulated length plus its four-byte header
+and payload fit u32. It also proves that unit frames, map frames and compilation
+manifest together fit u32 before serializing their object offsets. The frame
+reader checks each length word, positive page length, 64 KiB page bound and
+remaining payload extent, and rejects trailing fragments. The exact-fit
+boundary succeeds; negative or one-over extents reject with diagnostic 3 and
+empty output. Final pack offsets and counts remain u64. These representation
+checks are separate from optional admission estimates and passive telemetry.
+Failure branches explicitly consume the live builder through core.buffer.discard
+before returning. This uses the existing primitive and preserves exact affine
+branch-state admission; it does not imply native OS mapping reclamation.
 
 The compiler derives the compilation manifest, combines source and generated
 objects in ObjectKey order, derives the artifact closure and manifest, and emits
@@ -214,26 +244,38 @@ source-graph reproduction remain required for Tier 2.
 
 ## Capacity and allocation boundaries
 
-The mode-1 aggregate byte quota is the only product capacity ceiling removed by
-profile 5. The 700-unit flat-map guard, 100,000 source objects and metadata owners,
-8 MiB projected units, per-table/instruction limits and 128-local limit remain.
-Mode 0 retains its existing profile, byte bound, type representation and fuel.
-No `LKJSG001`, canonical unit, map, pack or `.lkja` envelope changes are coupled
-to this cutover.
+Profile 5 has no default aggregate input-byte quota, and hierarchical map
+emission removes the 700-unit implementation guard. Independent restrictions
+remain: 100,000 source objects and metadata owners, 8 MiB projected units,
+per-table/instruction limits, 128 locals, and the native runtime's 256 MiB
+per-value bound. The canonical compilation manifest independently retains its
+10,000,000-unit admission guard. Input and generated-pool offsets remain u32;
+allocation may fail before those representation boundaries. Mode 0 retains its
+existing profile, byte bound, type representation and fuel. This change does not
+alter `LKJSG001`, canonical unit, map, pack or `.lkja` wire encodings or schema
+epoch 1. The changed canonical compiler graph binds new compiler identities;
+maintained application/package encodings require no schema migration.
 
 The Rust exporter checks every projection extent and serialized u32 conversion.
 Projection buffers reserve through `Vec::try_reserve` before resizing. These
 failures return `compiler_artifact_input_unsupported`; unrelated standard Rust
 allocations in decoding, unit/reference collection and sorting retain their host
-allocation behavior. The exporter also rejects the retained unit, source-object,
+allocation behavior. The exporter also rejects the retained per-unit, source-object,
 metadata-owner, table, signature, local, instruction and operand count bounds.
 These checks do not replace native framing or whole supplied-unit validation.
 
-Capacity evidence uses a publicly authored package with 700 units, including 699
+Capacity evidence uses a publicly authored package with 800 units, including 799
 unused functions with distinct 6,144-byte inline text literals. Tests require the
 actual mode-1 input to exceed 8 MiB, preserve the complete expected unit identity
 set and each text association, and compare exact source/unit object sets and
-bytes after independent strict loading. C1, C2 and C3 consume the same large
-input and produce identical artifacts. The small entry evaluates to 42 in both
-engines. These are Tier 1 capacity controls; they do not establish source-driven
+bytes after independent strict loading. Its unit map must contain multiple
+reachable pages. Independent map fixtures cover empty/singleton inputs, exact
+752/753 and 896/897 leaf boundaries, and a three-level 11-page tree. Every page
+matches the independent Rust builder using the same 64 KiB leaf target; the
+logical root also matches the ordinary Rust builder using its smaller leaf
+target. Freshly checksummed/rebound negative pages reach child-summary and
+logical-content rejection. Missing child pages reject. C1, C2 and C3 consume
+the same large input and produce identical artifacts. Each stage also rejects
+a freshly rebound malformed unused unit past the former 700-unit boundary with
+diagnostic 10. The small entry evaluates to 42 in both engines. These are Tier 1 capacity controls; they do not establish source-driven
 E2/E3, native phase reclamation, or capacity up to the u32 representation maximum.

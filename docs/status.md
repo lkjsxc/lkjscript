@@ -2,169 +2,157 @@
 
 Updated 2026-10-24 (UTC). Accepted typed meaning is the sole editable authority.
 Production bytecode is checked against an independent canonical interpreter.
-Verification has no three-minute requirement; elapsed time is an observation.
+Elapsed time is an observation; complete verification has no three-minute requirement.
 
-## Capabilities
+## Implemented capability
 
-One checkout and one leased Cargo target serve admitted packages/programs and
-one current schema epoch. Public tx preserves symbolic identities, runs
-impact-scoped differential tests and publishes atomically. Safe Rust, denied
-lint invariants and the no-Python policy remain intact.
+The Tier 1 lkjscript backend now emits an expandable canonical unit-map hierarchy.
+The 700-unit guard is removed from Rust projection and profile-5 admission. A leaf
+retains the 65,536-byte physical bound; larger inventories produce deterministic
+radix branches and include every child page in the artifact object inventory and
+pack. Generated-pool offsets and frame lengths remain checked. Capacity failure
+paths explicitly consume their ByteBuffer with the already supported discard
+intrinsic before returning diagnostic 3. Exact profile-4 custody checks remain.
 
-The lkjscript-written Tier 1 backend consumes Rust-admitted LKJCI1 mode 0/profile 4
-for standalone Linux x86_64 ELF and mode 1/profile 5 for current .lkja artifacts.
-The additional compile-source-elf route now consumes LKJSRQ01/profile1: a 32-byte
-header carrying the caller's canonical Target key followed by the complete raw
-LKJSG001 carrier. It performs restricted scalar E2/E3 and eight exact pure
-I64/Bool intrinsics inside lkjscript, then selects the admitted live Target.
-The [self-hosting specification](spec/selfhosting.md) owns the complete capability
-matrix. Native heap allocations remain process-owned until exit; same-process
-and phase reclamation still require implementation.
+The [hierarchy decision](decisions/20261024-hierarchical-unit-map.md) and
+[artifact input contract](spec/selfhosting-artifact-input.md) own the representation,
+termination, allowance and remaining-boundary details. The canonical schema stays
+at epoch 1. No canonical unit, map, pack or artifact wire encoding changes; the
+changed compiler graph binds new identities through public transactions.
 
-## Current milestone
+The previously integrated source selector accepts LKJSRQ01/profile 1: an explicit
+canonical Target key followed by the complete LKJSG001 carrier. Restricted scalar
+E2/E3 validates all supplied owners and types, including unused/untaken definitions
+and unselected targets, then selects a pure `() -> I64` command port. Its admitted
+operations and eight scalar intrinsics remain unchanged. Source-driven Bytes/record
+command ports and maintained-compiler raw-source self-compilation remain outstanding.
+The [self-hosting specification](spec/selfhosting.md) separates the maintained
+closure, observed active features and complete Tier 2 acceptance profile.
 
-The source-driven scalar path checks all supplied owners/types, including
-uncalled functions, untaken branches, unused descriptors and unselected targets.
-It admits pure monomorphic Unit/Bool/I64 functions, locals, If, Let, Sequence,
-direct calls and the eight exact I64/Bool External implementations. Permission
-checks complete implementation identifiers, signatures, unrestricted parameter
-modes and empty generic binders. Empty-row task callables remain unsupported tasks.
+## Accepted predecessor and current canonical source
 
-The canonical selector transaction permits one or more command Targets. After
-request-header validation and complete-carrier E1/E2, lkjscript resolves the
-selected Target, its Component and pure `() -> I64` function Port, derives the
-normalized entry index, and emits ELF through the unchanged backend. The host
-supplies only the typed Target identity and raw carrier. Missing/retired selectors
-reject after whole-inventory admission; unframed legacy source input rejects.
-The [selector decision](decisions/20261024-source-target-selector.md) records the
-current-format transition, bootstrap, single adoption and evidence boundaries.
+Accepted predecessor main is
+`7d928f74ad1c47bc625cd55fd9675f61e3a21ceb`, tree
+`dd549d04af552cdbbe859cae5785d7d121e637fe`. Selector acceptance completed:
+127 selfhost passes plus two ignored tests, ten native passes, all 29 fresh full
+gates with zero reuse, and release target. The supplemental changed check also
+passed all 29 gates freshly. Remote main was independently confirmed at that commit.
 
-The five existing scalar tests retain the 26 intrinsic cases, eager left-to-right
-evaluation and exact value/trap expectations, the balanced 32,770-instruction
-witness, and independently constructed hash-consistent missing-endpoint and
-disconnected-cycle controls. New request controls cover selection from the same
-carrier, malformed framing and invalid unused targets. The joined selector suite
-passed all five tests, with zero failures or ignored tests. The accepted
-[intrinsic decision](decisions/20261024-source-scalar-intrinsics.md) retains its
-exact signatures and earlier evidence scope.
+The current hierarchy candidate is based on that commit. Its authoritative project
+revision is `rev_1c34f3f6a0fd193b5077c8ceaf6c10f078e16416b990e796542790e649910472`; semantic state is
+`semantic_state_50c336e1c41ed4515a9ccb5c9db482c48f84513296d0dd22189e8dbc1e4b8cd5`. Public adoption and the explicit-disposal correction each published
+once with differential equality. No canonical object was written by a draft helper.
 
-The earlier [scalar decision](decisions/20261023-source-scalar-e2-e3.md) and
-[node-capacity decision](decisions/20261023-mode0-node-capacity.md) retain their
-contracts. The [carrier-capacity decision](decisions/20261024-source-carrier-byte-capacity.md)
-extends complete raw admission beyond the former 8 MiB quota: a native checker
-accepts an 8,433,806-byte carrier and rejects a hash-consistent unused missing
-type at endpoint admission. This extends E1 capacity, not Text/List E2 permission.
+| Observation | Accepted selector predecessor | Current hierarchy candidate |
+| --- | ---: | ---: |
+| Modules / pure functions / externals | 72 / 560 / 23 | 72 / 569 / 24 |
+| Live owners / supplied types / retirements | 34,006 / 35 / 12,009 | 34,550 / 40 / 12,612 |
+| Complete LKJSG001 bytes | 8,201,410 | 8,422,624 |
+| Mode-1 input bytes / units | 9,177,461 / 587 | 9,323,887 / 597 |
+| Emitted .lkja bytes / units | 9,699,624 / 587 | 9,853,415 / 597 |
+| Direct local full-kernel work | 3,130,736 | 3,179,744 |
+| Composed callable work / modeled metadata bytes | 8,105,847 / 11,531,962 | 8,258,577 / 11,725,696 |
+| Physical packs / bytes | 390 / 430,408,188 | 472 / 451,334,442 |
 
-Public adoption exposed a composed callable-work policy blocker. The unchanged
-planner transaction now succeeds after replacing the ordinary composed-work quota
-with explicit None. Some(limit) preserves exact checked quota enforcement.
-Cancellation, finite specialization, metadata reservations and depth checks remain.
-The independent associated/read-view/Region preparation chain and package-source
-collectors retain their existing bounds pending coherent downstream audits.
+Complete current carrier SHA-256:
+`0e8c5cd9644f5309f9c77cfad80a15c9a944af87c9328687ff194f493857d501`.
+These are different maintained closures, not a pinned-workload speed comparison.
+Physical pack growth, live canonical owners, retirements and carrier size remain
+separate observations. No GC, history reseed or identity-format cutover occurred.
 
-The previous aggregate mode-1 byte quota remains removed: the maintained input
-now exceeds 8 MiB and succeeds. Native input transport uses checked growable
-mappings. The 700-unit artifact guard still protects flat map emission. Ordinary
-Rust execution retains explicit unmetered cumulative policies; GC preparation and
-evidence retain their earlier aggregate-quota removals. None of those changes
-removes unrelated representation, recursion or physical limits.
+The current whole-inventory profile records 163 Text expressions, 91 List
+expressions, 28 structural-record descriptors, 14 generic
+application sites, 1 borrow parameter and 163 consume parameters.
+Its call graph has 172 recursive components and 769 syntactic
+tail-call contexts. These observations do not certify inferred custody, borrow
+lifetimes, source-profile permission or native phase reclamation.
 
-## Maintained compiler baseline
+## Actual focused verification
 
-Accepted main predecessor is commit
-4165156d4d4c9726af61199d34f9b1b2053b9ef3, tree
-a08a988e92c8500102856f6d05fff8f31cdf86c4. Selector public adoption succeeded once,
-with differential equality, seven updates and 445 created canonical owners, at
-rev_22b1d6d49b74893bf402af9461931f8c372f820ada378524eb50ef892a9f03d9.
-It adds one callable and preserves retained declaration/parameter identities.
-The joined maintained measurement, complete profile and isolated historical
-reachability receipt provide the counts below.
+The joined current-revision checks use
+`cargo test --release --locked --lib FILTER -- --test-threads=1 --nocapture`.
+The maintained-native measurement additionally uses `--ignored`.
 
-| Current selector observation | Value |
-| --- | --- |
-| Modules / pure functions / externals | 72 / 560 / 23 |
-| Live owners / supplied types / retirements | 34,006 / 35 / 12,009 |
-| Complete LKJSG001 bytes / SHA-256 | 8,201,410 / db0ae8fd2a2c1d529bc43297bd29fa5308224e1ed5c379bc62c31d0a4d335ee4 |
-| Semantic state | semantic_state_0626b9fe9d87ae871e734eafa2e45f60533f163388f1ee7e9a705b0921ba8599 |
-| Mode-1 input bytes / units | 9,177,461 / 587 |
-| .lkja output bytes / units | 9,699,624 / 587 |
-| Direct local full-kernel work | 3,130,736 |
-| Composed callable work / modeled metadata bytes | 8,105,847 / 11,531,962 |
-| Physical packs / bytes | 390 / 430,408,188 |
-| Reachable canonical history / retained pack bytes | 508,557,991 / 405,487,133 |
+| Filter | Passed / failed / ignored | Whole command seconds |
+| --- | ---: | ---: |
+| selfhost_byte_backend_reproduces_its_complete_native_closure | 1 / 0 / 0 | 2110.076 |
+| selfhost_artifact_generated_pools_check_exact_extents | 1 / 0 / 0 | 36.795 |
+| selfhost_artifact_input_ | 7 / 0 / 0 | 77.708 |
+| selfhost_source_profile_inventories_every_owner_and_type | 1 / 0 / 0 | 12.228 |
+| selfhost_source_measure_maintained_native_closure | 1 / 0 / 0 | 24.959 |
 
-The accepted intrinsic before inventory is 72 modules, 559 pure functions and
-23 externals; 33,919 live owners, 35 supplied types and 11,651 retirements. Its
-complete carrier is 8,110,321 bytes, mode-1 input is 9,155,057 bytes for 586 units,
-and artifact output is 9,675,994 bytes. The selector decision preserves the
-separated before/after table. Measured deltas are +87 live owners, +358
-retirements and +91,089 carrier bytes. Mode-1 input grows by 22,404 bytes and one
-unit; the artifact grows by 23,630 bytes. These compare maintained closures, not
-speed on one pinned input. Historical retirements remain in the complete carrier.
+The native backend closure has 254 functions and 17,033
+nodes; its 858,136-byte mode-0 input emits 2,676,552-byte C2/C3 executables.
+Their SHA-256 is `e8a1d9eb93e29a7aa9cb49d03abc07fae85950e0f8281e5dc9f040a703d901f4`.
+For the same Rust-projected mode-1 input, the Tier 1 .lkja outputs produced by
+native stages C1, C2 and C3 are byte-identical, with SHA-256 `d7c4aa68b5d12a07f90514d287cede7427e5e75a499edb149cf8970b492b9bfc`.
 
-The source carrier's aggregate 8 MiB quota and index-backing quota remain removed.
-The retained positive signed-32-bit proof domain requires
-L <= 16,777,183 - 8*N, with independent layout, count and object restrictions.
-Composed work remains passive telemetry under explicit unmetered policy, not
-10-million quota headroom. Other validation/preparation bounds remain distinct.
-The inventory identifies remaining record/Text/List/borrow/consume dependencies;
-it grants neither source-profile permission nor cleanup certificates.
+The independent capacity fixture supplies 800 units, including 799 unused
+functions with distinct 6,144-byte Text values. It exceeds 8 MiB, requires multiple
+map pages, preserves exact source/unit objects and Text associations, and evaluates
+to 42 in VM and canonical reference. C1/C2/C3 artifact equality and freshly rebound
+invalid unused-unit rejection beyond index 700 are checked. Map controls cover
+empty/singleton inputs, 752/753 and 896/897 leaf boundaries, an 11-page three-level
+tree, exact independent page bytes and logical commitments, missing children and
+rebound summary/content corruption. Exact-fit, one-over, malformed frame and
+maximum-count controls retain their intended diagnostics.
 
-Current isolated GC retained 234,781 objects with 508,557,991 canonical bytes and
-405,487,133 pack bytes, using 568,661,927 modeled preparation bytes. It reclaimed
-784 objects and 24,921,055 pack bytes in the copy, reducing 390 packs to 16 in
-180,613.176497 ms. The original project, sources, index, branch and stashes were
-preserved; the copy was removed successfully. The raw report digest is
-`8f1a844b8e3c782d0f848ce56cf591db825d6ff2ace8cae01151de8b36cbbcd1`. Native
-requested allocation, live retention, mapped capacity and RSS remain unmeasured;
-historical storage and modeled GC retention do not establish native reclamation.
+The combined source frontend/backend closure has 577 functions,
+35,132 nodes and 35 normalized types. Backend C1/C2 reproduce
+identical source-compiler executables. Their three native source-compiler controls
+emit the same scalar program printing 42 and reject a hash-consistent unused Bytes
+descriptor with diagnostic 13. Existing compiler-source behavioral mutation and
+independent value/trap controls remain active.
 
-## Verification and next work
+These are Tier 1 normalized-input fixed points and restricted scalar source
+controls. They do not establish maintained-source Tier 2 C2=C3 or source-derived
+canonical A1=A2=A3. Native requested allocation, live retained bytes, mapped arena
+capacity and RSS were not measured. Explicit discard ends affine custody; native
+mappings still remain process-owned until exit.
 
-The joined selector run passed five scalar tests, one explicitly enabled
-maintained-native measurement and one complete-profile test, all with zero
-failures or ignored tests. Test times were 365.19 / 24.42 / 11.46 seconds; whole
-command times were 559,348.815185 / 24,566.869172 / 11,579.212302 ms. The continuation
-is `f2d8a6839299314c1068ba319b4b46b0b7d2f1ddc5df76973ea10b4d5559d837`. The root's
-separate recovery proof passed and binds the initial compile failure, exact
-three-prefix/three-line-join correction, retained single adoption and source
-inventory; its SHA-256 is
-`5196441bfb8ddee34e9e3d36729760b286433a9001fd6ae59349d2d882767f80`.
+## Exact-tree publication boundary
 
-Current normalized-input Tier 1 backend ELF C2=C3 has digest
-`55eaea3fcc2604a386f68a5dffd5bb9c2ca8e936ca0d2bf94235e1770c2487d5`; the artifact
-from C1=C2=C3 has digest
-`2f2ce9aedd41988db53042561c4ea1b3a08af8a4927ab849694875204a4f22ca`. Source
-compiler executables emitted by backend C1/C2 are identical. All three native
-source compilers accept the same framed scalar request, emit identical programs
-printing 42 and reject a hash-consistent unused Bytes descriptor with diagnostic
-13. The decision binds the complete carriers/requests, selected Target, compiler
-identities and execution context. These observations do not establish maintained
-compiler-source C2=C3, canonical Rust A1=A2=A3 or same-process native reclamation.
+Focused receipts and whole-inventory/native measurements are under
+`.artifacts/selfhost/hierarchical-unit-map`. They bind the revision and carrier
+above. The final documentation/formatting preparation does not change that graph.
 
-Next extend Bytes/flat records, Text, closed List substitutions and complete
-ByteBuffer custody/cleanup. Reconcile and measure each actual successor; static
-local drafts are not adoption or runtime evidence. The accepted before inventory
-has 586 mode-1 units; the selector inventory has 587. Replace flat map emission
-before a measured successor would exceed the retained 700-unit limit. Reassess
-complete carrier size, retirement count and proof-domain constraints separately.
-Preserve whole-carrier admission and complete-carrier identity binding.
+Publication requires the frozen staged tree to pass `tools/bootstrap-verifier.sh`
+with expected base/tree, literal `tools/selfhost/verify.sh` (128 selfhost passes,
+two ignored, ten native passes), `check changed --machine`, all 29 fresh
+`check full --fresh --machine --jobs 4` gates with zero reuse, and `release target`.
+The exact tree, completed gate outcomes and later commit/remote identities are
+bound by the frozen manifest, acceptance and publication receipts under
+`.artifacts/selfhost/hierarchical-unit-map-acceptance/tree-<candidate-tree>`.
+Git owns the final commit identity. This file records precommit measurements;
+it does not substitute targeted checks for the exact-tree publication receipts.
+One checkout and the single coordinated Cargo target remain mandatory.
 
-No selector full publication result is claimed. Required acceptance is the exact
-staged tree through tools/bootstrap-verifier.sh, literal tools/selfhost/verify.sh
-(127 expected selfhost passes plus two ignored and ten native passes), the
-stdout-selected lkjscript-dev check full --fresh --machine --jobs 4 (29 fresh
-gates, zero reuse), and that same verifier's release target. There is no root
-./verify executable. One checkout and the canonical target stay under the
-appropriate exclusive gate lease. The matrix runs once for the frozen candidate.
-Targeted evidence is under .artifacts/selfhost/source-target-selector; future
-acceptance and terminal publication receipts must bind its actual source,
-revision and tree. Git owns final integration and remote identities. No public
-product release or deployment is implied.
+## Remaining boundaries and next dependency
 
-WS1 and full Tier 2 remain incomplete. Remaining obligations include
-authoring/inspection quotas, recursive depth limits, custody/type encodings,
-full active-profile E2/E3, nominal/closure/witness/read-view/Region expansion,
-source-driven C2=C3 and A1=A2=A3, independent full-profile controls and measured
-same-process native reclamation. [Verification](spec/verification.md) owns final
-acceptance.
+The hierarchy retains a per-page physical invariant, not an aggregate 700-unit
+quota. Other bounds remain explicit: u32 input/generated-pool offsets, 100,000
+source/metadata owners, 8 MiB per-unit limits, per-table/instruction constraints,
+128 locals/operands, the separate canonical manifest's 10,000,000-unit guard and
+native 256 MiB per-value policy. Mode 0 retains its 8 MiB input, 1,024 callable
+rows and signed-31-bit fuel domain. LKJSG001 retains its directory/object bounds
+and positive proof domain `L <= 16,777,183 - 8*N`.
+
+WS1 remains incomplete. The kernel's default/clamped 10M work policy, oracle
+16M aggregate-work adapter, associated preparation, change/authoring/inspection
+quotas and recursive depth consumers need coherent follow-up. Exact finite quotas
+must remain distinct from passive saturating telemetry; explicit zero must not
+become unmetered. Existing literal-only identity preservation does not eliminate
+whole-body retirement or historical storage growth.
+
+The next bounded source-lowering slice is direct self-tail transfer for admitted
+scalar functions, with argument-order and bounded-frame controls. Both native
+emitters currently reuse frames only for direct self calls; mutual tail calls
+still use an ordinary call followed by an epilogue. General tail-transfer ABI
+support and non-tail stack safety remain separate obligations. Bytes and structural-record
+typing and binary-filter target signatures then require source-derived
+type rows, followed by complete generic-template admission, closed specialization
+and affine ByteBuffer branch/borrow/cleanup analysis. Source-derived canonical
+compilation units remain distinct from native lowering.
+Full Tier 2 also requires nominal owned families, closures/invoke, explicit
+witnesses, associated types, source-tied ReadViews, native lexical Regions,
+independent full-profile controls and measured same-process phase reclamation.

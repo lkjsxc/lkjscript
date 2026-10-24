@@ -32,9 +32,12 @@ fn count_at_most(count: impl TryInto<u64>, maximum: u64, what: &str) -> Result<(
 }
 
 fn admit_bundle_counts(units: usize, objects: usize) -> Result<(), Diagnostic> {
-    if units == 0 || units > 700 {
+    if units == 0 {
         return Err(unsupported("unit count"));
     }
+    // The expandable map has no aggregate unit quota. Its input directory must
+    // still fit the current unsigned 32-bit projection before projection allocation.
+    projection_extent(160, units, 8)?;
     if objects == 0 || objects > 100_000 {
         return Err(unsupported("source-object count"));
     }
@@ -562,8 +565,8 @@ pub(crate) fn bundle_with_allowance(
         }
     }
     units.sort_by_key(|unit| unit.source.owner);
-    // The current emitter builds one canonical map leaf. Its 64 KiB page
-    // contract requires this guard until hierarchical map emission is available.
+    // Hierarchical map emission preserves the per-page format bound without
+    // imposing an aggregate unit quota. Input directories remain extent-checked.
     admit_bundle_counts(units.len(), source.len())?;
     if units
         .windows(2)
@@ -648,8 +651,10 @@ mod tests {
 
     #[test]
     fn selfhost_artifact_input_preserves_retained_inventory_boundaries() {
-        assert!(admit_bundle_counts(700, 100_000).is_ok());
-        for (units, objects) in [(0, 1), (1, 0), (701, 1), (1, 100_001)] {
+        for units in [700, 701, 1_000, 100_000] {
+            assert!(admit_bundle_counts(units, 100_000).is_ok());
+        }
+        for (units, objects) in [(0, 1), (1, 0), (usize::MAX, 1), (1, 100_001)] {
             assert!(admit_bundle_counts(units, objects).is_err());
         }
         assert!(admit_metadata_counts(0, 0, 0).is_ok());

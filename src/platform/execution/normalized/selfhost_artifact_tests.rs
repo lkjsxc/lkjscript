@@ -1,7 +1,9 @@
 //! Artifact emission primitives use semantic inputs and independent strict readers.
 use super::*;
 use crate::platform::compiler::selfhost_artifact_input;
-use crate::platform::persistent_map::{MapWork, MemoryPageStore, PersistentMap};
+use crate::platform::persistent_map::{
+    MapRoot, MapWork, MemoryPageStore, PageDigest, PageStore, PersistentMap,
+};
 use crate::platform::storage::pack::{PackBuilder, PackMetadata};
 
 fn probes() -> &'static (crate::platform::kernel::KernelSnapshot, NormalizedProgram) {
@@ -160,7 +162,7 @@ fn selfhost_artifact_input_rejects_malformed_complete_bundles() {
         (12, 1, 3),
         (20, 1, 3),
         (24, 0, 3),
-        (24, 701, 3),
+        (24, 701, 10),
         (28, 1, 3),
         (32, 1, 6),
         (72, 0, 10),
@@ -218,6 +220,14 @@ fn selfhost_artifact_input_rejects_malformed_complete_bundles() {
             "byte {offset}"
         );
     }
+    // Equal maximum counts pass header agreement and must fail layout before
+    // the allowance estimate can multiply the unit count.
+    let mut huge_count = valid.clone();
+    for offset in [24, 76] {
+        huge_count[offset..offset + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+    }
+    input::rechecksum(&mut huge_count);
+    assert_eq!(result("compile-elf", &huge_count), (10, vec![]));
     let mut zero_owner = valid.clone();
     zero_owner[unit + 32..unit + 48].fill(0);
     input::rechecksum(&mut zero_owner);
@@ -449,39 +459,280 @@ fn selfhost_artifact_units_match_canonical_complete_compiler_ir() {
 
 #[test]
 fn selfhost_artifact_map_pages_match_independent_logical_roots() {
-    for count in [0_usize, 1, 2, 65, 257, 700] {
-        let entries = (0..count)
-            .map(|i| {
-                let mut key = vec![7; 17];
-                key[15..17].copy_from_slice(&(i as u16).to_be_bytes());
-                (key, vec![(i % 251) as u8; 65])
+    type Entry = (Vec<u8>, Vec<u8>);
+
+    fn entries_for(mut keys: Vec<[u8; 17]>) -> Vec<Entry> {
+        keys.sort_unstable();
+        keys.into_iter()
+            .enumerate()
+            .map(|(index, key)| {
+                let value = (0..65)
+                    .map(|offset| (index * 29 + offset * 17) as u8)
+                    .collect();
+                (key.to_vec(), value)
             })
-            .collect::<Vec<_>>();
-        let data = entries
-            .iter()
-            .flat_map(|(key, value)| key.iter().chain(value))
-            .copied()
-            .collect::<Vec<_>>();
-        let emitted = image("probe-map", &data);
-        let mut pages = MemoryPageStore::default();
-        let map = PersistentMap::from_sorted_with_leaf_target(
-            &mut pages,
+            .collect()
+    }
+    fn prefix_15(count: usize) -> Vec<Entry> {
+        entries_for(
+            (0..count)
+                .map(|index| {
+                    let mut key = [7; 17];
+                    key[15..17].copy_from_slice(&(index as u16).to_be_bytes());
+                    key
+                })
+                .collect(),
+        )
+    }
+    fn prefix_1(count: usize) -> Vec<Entry> {
+        entries_for(
+            (0..count)
+                .map(|index| {
+                    let mut key = [7; 17];
+                    key[1] = (index % 256) as u8;
+                    key[15..17].copy_from_slice(&((index / 256) as u16).to_be_bytes());
+                    key
+                })
+                .collect(),
+        )
+    }
+    fn decode_pool(pool: &[u8]) -> Vec<&[u8]> {
+        let mut cursor = 0;
+        let mut pages = Vec::new();
+        while cursor < pool.len() {
+            assert!(
+                pool.len() - cursor >= 4,
+                "truncated page length at {cursor}"
+            );
+            let length = u32::from_le_bytes(pool[cursor..cursor + 4].try_into().unwrap()) as usize;
+            cursor += 4;
+            assert!((1..=65_536).contains(&length), "page length {length}");
+            let end = cursor.checked_add(length).unwrap();
+            assert!(end <= pool.len(), "truncated page at {cursor}");
+            pages.push(&pool[cursor..end]);
+            cursor = end;
+        }
+        assert_eq!(cursor, pool.len());
+        assert!(!pages.is_empty());
+        pages
+    }
+    let three_levels = entries_for(
+        (0_u8..2)
+            .flat_map(|group| {
+                (0_u16..897).map(move |index| {
+                    let mut key = [7; 17];
+                    key[1] = group;
+                    key[15..17].copy_from_slice(&index.to_be_bytes());
+                    key
+                })
+            })
+            .collect(),
+    );
+    let cases = [
+        ("empty", Vec::new(), Some(1)),
+        ("singleton", prefix_15(1), Some(1)),
+        ("small", prefix_15(9), Some(1)),
+        // 107 + 15 + count * 73: 65,530 bytes, then 65,603 bytes.
+        ("prefix15-fits", prefix_15(896), Some(1)),
+        ("prefix15-splits", prefix_15(897), None),
+        // 107 + 1 + count * 87: 65,532 bytes, then 65,619 bytes.
+        ("prefix1-fits", prefix_1(752), Some(1)),
+        ("prefix1-splits", prefix_1(753), None),
+        // One root, two child branches, and eight leaves.
+        ("three-levels", three_levels, Some(11)),
+    ];
+    for (name, entries, expected_page_count) in cases {
+        assert!(entries.windows(2).all(|pair| pair[0].0 < pair[1].0));
+        let mut input = Vec::with_capacity(entries.len() * 82);
+        for (key, value) in &entries {
+            assert_eq!(key.len(), 17);
+            assert_eq!(value.len(), 65);
+            input.extend_from_slice(key);
+            input.extend_from_slice(value);
+        }
+        let mut expected_pages = MemoryPageStore::default();
+        let expected = PersistentMap::from_sorted_with_leaf_target(
+            &mut expected_pages,
             entries.clone(),
-            65536,
+            65_536,
             &mut MapWork::default(),
         )
         .unwrap();
-        map.verify(&pages, &mut MapWork::default()).unwrap();
-        assert_eq!(pages.object_count(), 1);
-        assert_eq!(pages.objects().next().unwrap().1, emitted, "{count}");
-        let mut canonical_pages = MemoryPageStore::default();
-        let canonical =
-            PersistentMap::from_sorted(&mut canonical_pages, entries, &mut MapWork::default())
-                .unwrap();
-        assert_eq!(map.root().content_root(), canonical.root().content_root());
-        if count == 700 {
-            assert_ne!(map.root().page(), canonical.root().page());
+        expected
+            .verify(&expected_pages, &mut MapWork::default())
+            .unwrap();
+        let mut logical_pages = MemoryPageStore::default();
+        let logical = PersistentMap::from_sorted(
+            &mut logical_pages,
+            entries.clone(),
+            &mut MapWork::default(),
+        )
+        .unwrap();
+        logical
+            .verify(&logical_pages, &mut MapWork::default())
+            .unwrap();
+        assert_eq!(
+            expected.root().content_root(),
+            logical.root().content_root(),
+            "{name}"
+        );
+
+        let output = image("probe-map-pages", &input);
+        let emitted = decode_pool(&output)
+            .into_iter()
+            .map(|bytes| (PageDigest::of(bytes), bytes))
+            .collect::<Vec<_>>();
+        let expected_objects = expected_pages.objects().collect::<BTreeMap<_, _>>();
+        assert_eq!(emitted.len(), expected_pages.object_count(), "{name}");
+        match expected_page_count {
+            Some(count) => assert_eq!(emitted.len(), count, "{name}"),
+            None => assert!(emitted.len() > 1, "{name}: leaf must split"),
         }
+        let mut reconstructed_pages = MemoryPageStore::default();
+        let mut digests = BTreeSet::new();
+        for (digest, bytes) in &emitted {
+            assert!(digests.insert(*digest), "{name}: duplicate page");
+            assert_eq!(*bytes, *expected_objects.get(digest).unwrap(), "{name}");
+            reconstructed_pages.write_page(*digest, bytes).unwrap();
+        }
+        let root_digest = emitted.last().unwrap().0;
+        assert_eq!(
+            root_digest,
+            expected.root().page(),
+            "{name}: root must be last"
+        );
+        let root = MapRoot::from_parts(
+            root_digest,
+            expected.root().entries(),
+            expected.root().content(),
+        );
+        let report = PersistentMap::from_root(root)
+            .verify(&reconstructed_pages, &mut MapWork::default())
+            .unwrap();
+        assert_eq!(
+            report.pages as usize,
+            emitted.len(),
+            "{name}: unreachable emitted page"
+        );
+        assert_eq!(report.entries as usize, entries.len());
+
+        if name == "three-levels" {
+            assert_eq!(image("probe-map-pages", &input), output);
+            let mut incomplete_pages = MemoryPageStore::default();
+            for (digest, bytes) in emitted.iter().skip(1) {
+                incomplete_pages.write_page(*digest, bytes).unwrap();
+            }
+            assert!(
+                expected
+                    .verify(&incomplete_pages, &mut MapWork::default())
+                    .is_err()
+            );
+
+            let original_root = emitted.last().unwrap().1;
+            assert_eq!(original_root[10], 1, "branch kind");
+            let prefix = u16::from_le_bytes(original_root[20..22].try_into().unwrap()) as usize;
+            assert_eq!(
+                original_root[71 + prefix],
+                0,
+                "no terminal for fixed-width keys"
+            );
+            for (case, code) in [
+                ("child-summary", "persistent_map_child_summary"),
+                ("content", "persistent_map_page_content"),
+            ] {
+                let mut changed = original_root.to_vec();
+                if case == "child-summary" {
+                    // Keep the root's local sum exact, then disagree with the
+                    // referenced child's actual logical-byte summary.
+                    for at in [30 + prefix, 74 + prefix + 41] {
+                        let before = u64::from_le_bytes(changed[at..at + 8].try_into().unwrap());
+                        changed[at..at + 8]
+                            .copy_from_slice(&before.checked_add(1).unwrap().to_le_bytes());
+                    }
+                } else {
+                    changed[39 + prefix] ^= 1;
+                }
+                let core = changed.len() - 32;
+                let mut checksum =
+                    blake3::Hasher::new_derive_key("lkjscript.persistent-map-checksum.v2");
+                checksum.update(&(core as u64).to_be_bytes());
+                checksum.update(&changed[..core]);
+                changed[core..].copy_from_slice(checksum.finalize().as_bytes());
+                let rebound = PageDigest::of(&changed);
+                let mut corrupt_pages = reconstructed_pages.clone();
+                corrupt_pages.write_page(rebound, &changed).unwrap();
+                let rejected = PersistentMap::from_root(MapRoot::from_parts(
+                    rebound,
+                    root.entries(),
+                    root.content(),
+                ))
+                .verify(&corrupt_pages, &mut MapWork::default())
+                .unwrap_err();
+                assert_eq!(rejected.code, code, "{case}: {rejected}");
+            }
+        }
+        eprintln!(
+            "selfhost map case={name} entries={} pages={} pool_bytes={} root={root_digest} content={}",
+            entries.len(),
+            emitted.len(),
+            output.len(),
+            root.content()
+        );
+    }
+}
+
+#[test]
+fn selfhost_artifact_generated_pools_check_exact_extents() {
+    let maximum = i64::from(u32::MAX);
+    for (base, size, accepted) in [
+        (0, 0, true),
+        (0, maximum, true),
+        (maximum, 0, true),
+        (maximum - 1, 1, true),
+        (maximum, 1, false),
+        (-1, 0, false),
+        (0, -1, false),
+        (i64::MAX, 1, false),
+        (1, i64::MAX, false),
+    ] {
+        let input = [base.to_le_bytes(), size.to_le_bytes()].concat();
+        assert_eq!(
+            result("probe-pool-extent", &input),
+            (if accepted { 0 } else { 3 }, vec![])
+        );
+    }
+    let pool = image("probe-map-pages", &[]);
+    let framed = |base: i64, bytes: &[u8]| [base.to_le_bytes().as_slice(), bytes].concat();
+    let exact_base = maximum - pool.len() as i64;
+    let rows = image("probe-map-rows", &framed(exact_base, &pool));
+    assert_eq!(rows.len(), 48);
+    let word = |at| u32::from_le_bytes(rows[at..at + 4].try_into().unwrap());
+    assert_eq!(word(0), 5);
+    assert_eq!(word(4), 1);
+    assert_eq!(u64::from(word(8)), (exact_base + 4) as u64);
+    assert_eq!(word(12) as usize, pool.len() - 4);
+    assert_eq!(rows[16..48], PageDigest::of(&pool[4..]).bytes());
+    for base in [-1, exact_base + 1, i64::MAX] {
+        assert_eq!(result("probe-map-rows", &framed(base, &pool)), (3, vec![]));
+    }
+    let mut zero_length = pool.clone();
+    zero_length[..4].fill(0);
+    let mut oversize = pool.clone();
+    oversize[..4].copy_from_slice(&65_537_u32.to_le_bytes());
+    let mut trailing = pool.clone();
+    trailing.push(0);
+    for malformed in [
+        vec![],
+        vec![1, 0, 0],
+        zero_length,
+        oversize,
+        pool[..pool.len() - 1].to_vec(),
+        trailing,
+    ] {
+        assert_eq!(
+            result("probe-map-rows", &framed(0, &malformed)),
+            (3, vec![])
+        );
     }
 }
 
@@ -719,7 +970,7 @@ fn selfhost_artifact_executes_control_flow_and_exact_arithmetic_traps() {
 }
 
 /// Publicly authored unused functions keep this above the former aggregate
-/// quota while remaining within the current single-leaf unit-map capability.
+/// and unit-count quotas, requiring a complete multi-page unit map.
 pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
     static CAPACITY: OnceLock<(Vec<u8>, Vec<u8>)> = OnceLock::new();
     CAPACITY.get_or_init(|| {
@@ -739,7 +990,7 @@ pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
             let prefix = format!("capacity-payload-{index:03}:");
             format!("{prefix}{}", "x".repeat(6144 - prefix.len()))
         };
-        for (start, end) in [(0, 250), (250, 500), (500, 699)] {
+        for (start, end) in [(0, 250), (250, 500), (500, 799)] {
             let mut proposal = format!(
                 "request base={}\ndeclarations.begin\n(units (module create capacity-{start}\n",
                 repository.view_current().unwrap().revision()
@@ -770,7 +1021,7 @@ pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
             .value;
         let original = prepare_snapshot(&source);
         let entry = declaration_named(&source, "entry");
-        let expected_texts = (0..699)
+        let expected_texts = (0..799)
             .map(|index| {
                 (
                     OwnerKey::Declaration(declaration_named(&source, &format!("payload-{index}")).declaration),
@@ -780,8 +1031,8 @@ pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
             .collect::<BTreeMap<_, _>>();
         let mut expected_owners = expected_texts.keys().copied().collect::<BTreeSet<_>>();
         assert!(expected_owners.insert(OwnerKey::Declaration(entry.declaration)));
-        assert_eq!(expected_owners.len(), 700);
-        assert_eq!(original.functions.len(), 700);
+        assert_eq!(expected_owners.len(), 800);
+        assert_eq!(original.functions.len(), 800);
         let mut observed_owners = BTreeSet::new();
         for (key, bytes) in &original.artifact().objects {
             if key.domain != ObjectDomain::CompilerUnit {
@@ -802,14 +1053,14 @@ pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
         let input = selfhost_artifact_input::bundle(original.artifact()).unwrap();
         let at = |offset| u32::from_le_bytes(input[offset..offset + 4].try_into().unwrap()) as usize;
         assert_eq!(at(8), 5);
-        assert_eq!(at(76), 700);
+        assert_eq!(at(76), 800);
         assert_eq!(&input[32..40], &[0; 8]);
         assert!(input.len() > 8 * 1_048_576, "input_bytes={}", input.len());
         let meta = at(88);
         for count in [at(84), at(meta + 192), at(meta + 264), at(meta + 304)] {
             assert!(count <= 100_000);
         }
-        for index in 0..700 {
+        for index in 0..800 {
             assert!(at(160 + index * 8 + 4) <= 8 * 1_048_576);
         }
         let author_ms = author_started.elapsed().as_millis();
@@ -828,7 +1079,31 @@ pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
         let native_ms = started.elapsed().as_millis();
         assert_eq!(emitted.status.code(), Some(0), "{:?}", emitted.stderr);
         assert!(emitted.stderr.is_empty());
+        let rejected = native_filter_tests::execute_filter(
+            &native, &capacity_invalid_unused_unit(&input), &[], 65521,
+        );
+        assert_eq!(rejected.status.code(), Some(65));
+        assert!(rejected.stdout.is_empty());
+        assert_eq!(rejected.stderr, b"compiler_rejected:10\n");
+
         let loaded = crate::platform::compiler::load_artifact(&emitted.stdout).unwrap();
+        let package = &loaded.manifest.packages[0];
+        let compilation = crate::platform::compiler::CompilationManifest::decode(
+            loaded.objects.get(&package.compilation.object_key()).unwrap(), package.compilation,
+        ).unwrap();
+        let mut pages = MemoryPageStore::default();
+        for (key, bytes) in &loaded.objects {
+            if key.domain == ObjectDomain::MapPage {
+                pages.write_page(PageDigest::from_bytes(key.digest.bytes()), bytes).unwrap();
+            }
+        }
+        let map_report = PersistentMap::from_root(compilation.units)
+            .verify(&pages, &mut MapWork::default()).unwrap();
+        assert_eq!(map_report.entries, 800);
+        assert!(map_report.pages > 1, "complete artifact must use a hierarchy");
+        eprintln!("selfhost artifact capacity unit_map_pages={} unit_map_root={} logical_content={}",
+            map_report.pages, compilation.units.page(), compilation.units.content());
+
         let preserved = |domain| {
             matches!(
                 domain,
@@ -878,7 +1153,7 @@ pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
             NormalizedValue::I64(42)
         );
         eprintln!(
-            "selfhost artifact capacity units=700 unused_text_functions=699 input_bytes={} input_sha256={} artifact_bytes={} artifact_sha256={} C1_sha256={} author_ms={author_ms} native_ms={native_ms}",
+            "selfhost artifact capacity units=800 unused_text_functions=799 input_bytes={} input_sha256={} artifact_bytes={} artifact_sha256={} C1_sha256={} author_ms={author_ms} native_ms={native_ms}",
             input.len(),
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&input)),
             emitted.stdout.len(),
@@ -889,7 +1164,23 @@ pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
     })
 }
 
+pub(super) fn capacity_invalid_unused_unit(input: &[u8]) -> Vec<u8> {
+    let at = |offset| u32::from_le_bytes(input[offset..offset + 4].try_into().unwrap()) as usize;
+    let count = at(76);
+    assert!(count > 700);
+    // The entry has no text table; a later text-bearing unit is one of the
+    // unused payload functions beyond the former admission boundary.
+    let unit = (700..count)
+        .map(|index| at(160 + index * 8))
+        .find(|unit| at(unit + 256 + 9 * 8 + 4) == 1)
+        .unwrap();
+    let mut changed = input.to_vec();
+    changed[unit + 12..unit + 16].copy_from_slice(&1_u32.to_le_bytes());
+    input::rechecksum(&mut changed);
+    changed
+}
+
 #[test]
-fn selfhost_artifact_input_exceeds_the_former_aggregate_byte_quota() {
+fn selfhost_artifact_input_exceeds_former_unit_and_aggregate_byte_quotas() {
     capacity_bundle();
 }

@@ -183,6 +183,9 @@ authoring proposals admitted through ordinary public operations. `ci`, `flow`,
 `artifact-input` and `artifact-check` validate artifact projection structure;
 `wire`, `unit-wire`, `unit-map`, `pack`, `artifact-order`, `artifact-manifest` and
 `artifact` construct current units, maps, manifests, packs and the container.
+Artifact unit maps use an expandable radix hierarchy with a 64 KiB bound per
+page; every child page enters the artifact inventory. The artifact-input
+specification defines exact generated-pool extent checks and retained boundaries.
 `elf::compile-elf` returns `{diagnostic: I64, image: Bytes}`. Zero means success;
 the explicit input selector chooses ELF or `.lkja` output. All rejections return
 empty bytes before the binary filter writes stdout.
@@ -191,7 +194,7 @@ empty bytes before the binary filter writes stdout.
 | --- | --- |
 | 1 | Magic |
 | 2 | Unsupported profile or flags |
-| 3 | Input extent/count bound |
+| 3 | Input extent/count or generated artifact-pool extent bound |
 | 4 | Content digest |
 | 5 | Noncanonical table, index, state extent, reserved word or root |
 | 6 | ELF traversal fuel or insufficient explicit artifact allowance |
