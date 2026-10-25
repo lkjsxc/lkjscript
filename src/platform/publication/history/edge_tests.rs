@@ -66,21 +66,21 @@ fn history_admission_is_cumulative_across_entries_not_just_within_one_pair() {
     for (limits, code) in [
         (
             StoreReadLimits {
-                maximum_catalog_lookups: 3,
+                maximum_catalog_lookups: Some(3),
                 ..history_read_limits()
             },
             "object_read_catalog_lookups_exhausted",
         ),
         (
             StoreReadLimits {
-                maximum_objects: 3,
+                maximum_objects: Some(3),
                 ..history_read_limits()
             },
             "object_read_objects_exhausted",
         ),
         (
             StoreReadLimits {
-                maximum_bytes: complete.work.bytes_read - 1,
+                maximum_bytes: Some(complete.work.bytes_read - 1),
                 ..history_read_limits()
             },
             "object_read_bytes_exhausted",

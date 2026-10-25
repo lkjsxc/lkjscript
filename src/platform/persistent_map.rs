@@ -242,21 +242,21 @@ impl std::error::Error for MapError {}
 /// not own a request budget use [`MapAdmission::unbounded`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MapAdmission {
-    pub maximum_pages_read: u64,
-    pub maximum_bytes_read: u64,
-    pub maximum_entries_visited: u64,
-    pub maximum_pages_encoded: u64,
-    pub maximum_bytes_encoded: u64,
+    pub maximum_pages_read: Option<u64>,
+    pub maximum_bytes_read: Option<u64>,
+    pub maximum_entries_visited: Option<u64>,
+    pub maximum_pages_encoded: Option<u64>,
+    pub maximum_bytes_encoded: Option<u64>,
 }
 
 impl MapAdmission {
     pub const fn unbounded() -> Self {
         Self {
-            maximum_pages_read: u64::MAX,
-            maximum_bytes_read: u64::MAX,
-            maximum_entries_visited: u64::MAX,
-            maximum_pages_encoded: u64::MAX,
-            maximum_bytes_encoded: u64::MAX,
+            maximum_pages_read: None,
+            maximum_bytes_read: None,
+            maximum_entries_visited: None,
+            maximum_pages_encoded: None,
+            maximum_bytes_encoded: None,
         }
     }
 }
@@ -265,6 +265,29 @@ impl Default for MapAdmission {
     fn default() -> Self {
         Self::unbounded()
     }
+}
+
+/// One independent persistent-map observation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum MapWorkCounter {
+    PagesRead,
+    PagesDecoded,
+    PagesEncoded,
+    PagesWritten,
+    PagesReused,
+    BytesRead,
+    BytesEncoded,
+    BytesWritten,
+    KeyComparisons,
+    EntriesVisited,
+    DifferencesEmitted,
+    SubtreesSkipped,
+    EntriesSkipped,
+}
+
+impl MapWorkCounter {
+    const fn bit(self) -> u16 { 1_u16 << self as u8 }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -282,6 +305,9 @@ pub struct MapWork {
     pub differences_emitted: u64,
     pub subtrees_skipped: u64,
     pub entries_skipped: u64,
+    /// At least one passive work counter is a lower bound.
+    pub saturated: bool,
+    saturated_counters: u16,
     admission: MapAdmission,
 }
 
@@ -308,6 +334,16 @@ impl Default for MapWork {
 }
 
 impl MapWork {
+    /// Preserve per-counter exactness when projecting observations between layers.
+    pub(crate) fn mark_counter_saturated(&mut self, counter: MapWorkCounter) {
+        self.saturated = true;
+        self.saturated_counters |= counter.bit();
+    }
+
+    pub const fn counter_saturated(self, counter: MapWorkCounter) -> bool {
+        self.saturated_counters & counter.bit() != 0
+    }
+
     pub const fn with_admission(admission: MapAdmission) -> Self {
         Self {
             pages_read: 0,
@@ -323,101 +359,99 @@ impl MapWork {
             differences_emitted: 0,
             subtrees_skipped: 0,
             entries_skipped: 0,
+            saturated: false,
+            saturated_counters: 0,
             admission,
         }
     }
 
     /// Returns the exact admission still available after the work already observed by this map
     /// operation. This lets a caller carry one request allowance across consecutive map paths.
-    pub const fn remaining_admission(&self) -> MapAdmission {
+    pub fn remaining_admission(&self) -> MapAdmission {
         MapAdmission {
-            maximum_pages_read: self
-                .admission
-                .maximum_pages_read
-                .saturating_sub(self.pages_read),
-            maximum_bytes_read: self
-                .admission
-                .maximum_bytes_read
-                .saturating_sub(self.bytes_read),
-            maximum_entries_visited: self
-                .admission
-                .maximum_entries_visited
-                .saturating_sub(self.entries_visited),
-            maximum_pages_encoded: self
-                .admission
-                .maximum_pages_encoded
-                .saturating_sub(self.pages_encoded),
-            maximum_bytes_encoded: self
-                .admission
-                .maximum_bytes_encoded
-                .saturating_sub(self.bytes_encoded),
+            maximum_pages_read: self.admission.maximum_pages_read.map(|limit| limit.saturating_sub(self.pages_read)),
+            maximum_bytes_read: self.admission.maximum_bytes_read.map(|limit| limit.saturating_sub(self.bytes_read)),
+            maximum_entries_visited: self.admission.maximum_entries_visited.map(|limit| limit.saturating_sub(self.entries_visited)),
+            maximum_pages_encoded: self.admission.maximum_pages_encoded.map(|limit| limit.saturating_sub(self.pages_encoded)),
+            maximum_bytes_encoded: self.admission.maximum_bytes_encoded.map(|limit| limit.saturating_sub(self.bytes_encoded)),
         }
     }
 
+    /// Merge passive observations without changing this operation's policy.
+    pub fn add_observation(&mut self, other: Self) {
+        self.saturated |= other.saturated;
+        self.saturated_counters |= other.saturated_counters;
+        observe_counter(&mut self.pages_read, other.pages_read, &mut self.saturated, &mut self.saturated_counters, MapWorkCounter::PagesRead);
+        observe_counter(&mut self.pages_decoded, other.pages_decoded, &mut self.saturated, &mut self.saturated_counters, MapWorkCounter::PagesDecoded);
+        observe_counter(&mut self.pages_encoded, other.pages_encoded, &mut self.saturated, &mut self.saturated_counters, MapWorkCounter::PagesEncoded);
+        observe_counter(&mut self.pages_written, other.pages_written, &mut self.saturated, &mut self.saturated_counters, MapWorkCounter::PagesWritten);
+        observe_counter(&mut self.pages_reused, other.pages_reused, &mut self.saturated, &mut self.saturated_counters, MapWorkCounter::PagesReused);
+        observe_counter(&mut self.bytes_read, other.bytes_read, &mut self.saturated, &mut self.saturated_counters, MapWorkCounter::BytesRead);
+        observe_counter(&mut self.bytes_encoded, other.bytes_encoded, &mut self.saturated, &mut self.saturated_counters, MapWorkCounter::BytesEncoded);
+        observe_counter(&mut self.bytes_written, other.bytes_written, &mut self.saturated, &mut self.saturated_counters, MapWorkCounter::BytesWritten);
+        observe_counter(&mut self.key_comparisons, other.key_comparisons, &mut self.saturated, &mut self.saturated_counters, MapWorkCounter::KeyComparisons);
+        observe_counter(&mut self.entries_visited, other.entries_visited, &mut self.saturated, &mut self.saturated_counters, MapWorkCounter::EntriesVisited);
+        observe_counter(&mut self.differences_emitted, other.differences_emitted, &mut self.saturated, &mut self.saturated_counters, MapWorkCounter::DifferencesEmitted);
+        observe_counter(&mut self.subtrees_skipped, other.subtrees_skipped, &mut self.saturated, &mut self.saturated_counters, MapWorkCounter::SubtreesSkipped);
+        observe_counter(&mut self.entries_skipped, other.entries_skipped, &mut self.saturated, &mut self.saturated_counters, MapWorkCounter::EntriesSkipped);
+    }
+
     fn admit_page_read(&mut self) -> Result<(), MapError> {
-        let observed = admitted_total(
-            self.pages_read,
-            1,
-            self.admission.maximum_pages_read,
-            "persistent_map_admission_pages_read",
-            "pages read",
+        let (observed, saturated) = admitted_total(
+            self.pages_read, 1, self.admission.maximum_pages_read,
+            "persistent_map_admission_pages_read", "pages read",
         )?;
         self.pages_read = observed;
+        self.saturated |= saturated;
+        if saturated { self.saturated_counters |= MapWorkCounter::PagesRead.bit(); }
         Ok(())
     }
 
     fn maximum_next_page_bytes(&self) -> usize {
-        let remaining = self
-            .admission
-            .maximum_bytes_read
-            .saturating_sub(self.bytes_read);
-        usize::try_from(remaining)
-            .unwrap_or(usize::MAX)
-            .min(MAXIMUM_PAGE_BYTES)
+        self.admission.maximum_bytes_read
+            .map(|limit| limit.saturating_sub(self.bytes_read))
+            .and_then(|remaining| usize::try_from(remaining).ok())
+            .map_or(MAXIMUM_PAGE_BYTES, |remaining| remaining.min(MAXIMUM_PAGE_BYTES))
     }
 
     fn admit_page_bytes_read(&mut self, bytes: usize) -> Result<(), MapError> {
         let byte_count = usize_to_u64(bytes, "persistent_map_admission_bytes_read")?;
-        self.bytes_read = admitted_total(
-            self.bytes_read,
-            byte_count,
-            self.admission.maximum_bytes_read,
-            "persistent_map_admission_bytes_read",
-            "bytes read",
+        let (observed, saturated) = admitted_total(
+            self.bytes_read, byte_count, self.admission.maximum_bytes_read,
+            "persistent_map_admission_bytes_read", "bytes read",
         )?;
+        self.bytes_read = observed;
+        self.saturated |= saturated;
+        if saturated { self.saturated_counters |= MapWorkCounter::BytesRead.bit(); }
         Ok(())
     }
 
     fn admit_entries_visited(&mut self, additional: u64) -> Result<(), MapError> {
-        let observed = admitted_total(
-            self.entries_visited,
-            additional,
-            self.admission.maximum_entries_visited,
-            "persistent_map_admission_entries_visited",
-            "entries visited",
+        let (observed, saturated) = admitted_total(
+            self.entries_visited, additional, self.admission.maximum_entries_visited,
+            "persistent_map_admission_entries_visited", "entries visited",
         )?;
         self.entries_visited = observed;
+        self.saturated |= saturated;
+        if saturated { self.saturated_counters |= MapWorkCounter::EntriesVisited.bit(); }
         Ok(())
     }
 
     fn admit_page_encoding(&mut self, bytes: usize) -> Result<(), MapError> {
         let byte_count = usize_to_u64(bytes, "persistent_map_admission_bytes_encoded")?;
-        let pages = admitted_total(
-            self.pages_encoded,
-            1,
-            self.admission.maximum_pages_encoded,
-            "persistent_map_admission_pages_encoded",
-            "pages encoded",
+        let (pages, pages_saturated) = admitted_total(
+            self.pages_encoded, 1, self.admission.maximum_pages_encoded,
+            "persistent_map_admission_pages_encoded", "pages encoded",
         )?;
-        let bytes = admitted_total(
-            self.bytes_encoded,
-            byte_count,
-            self.admission.maximum_bytes_encoded,
-            "persistent_map_admission_bytes_encoded",
-            "encoded bytes",
+        let (bytes, bytes_saturated) = admitted_total(
+            self.bytes_encoded, byte_count, self.admission.maximum_bytes_encoded,
+            "persistent_map_admission_bytes_encoded", "encoded bytes",
         )?;
         self.pages_encoded = pages;
         self.bytes_encoded = bytes;
+        self.saturated |= pages_saturated || bytes_saturated;
+        if pages_saturated { self.saturated_counters |= MapWorkCounter::PagesEncoded.bit(); }
+        if bytes_saturated { self.saturated_counters |= MapWorkCounter::BytesEncoded.bit(); }
         Ok(())
     }
 }
@@ -965,27 +999,34 @@ fn add_counter(counter: &mut u64, amount: u64, code: &'static str) -> Result<(),
 fn admitted_total(
     current: u64,
     additional: u64,
-    maximum: u64,
+    maximum: Option<u64>,
     code: &'static str,
     unit: &'static str,
-) -> Result<u64, MapError> {
-    let observed = current.checked_add(additional).ok_or_else(|| {
-        map_error(
-            MapErrorClass::Resource,
-            code,
-            format!("persistent-map {unit} observation overflowed"),
-        )
-    })?;
-    if observed > maximum {
-        return Err(map_error(
-            MapErrorClass::Resource,
-            code,
-            format!(
-                "persistent-map operation requires {observed} {unit}, exceeding the admitted maximum {maximum}"
-            ),
-        ));
+) -> Result<(u64, bool), MapError> {
+    match maximum {
+        Some(maximum) => current.checked_add(additional)
+            .filter(|total| *total <= maximum)
+            .map(|total| (total, false))
+            .ok_or_else(|| map_error(
+                MapErrorClass::Resource, code,
+                format!("persistent-map {unit} exhausted the admitted maximum {maximum}"),
+            )),
+        None => match current.checked_add(additional) {
+            Some(total) => Ok((total, false)),
+            None => Ok((u64::MAX, true)),
+        },
     }
-    Ok(observed)
+}
+
+fn observe_counter(counter: &mut u64, amount: u64, saturated: &mut bool, saturated_counters: &mut u16, field: MapWorkCounter) {
+    match counter.checked_add(amount) {
+        Some(total) => *counter = total,
+        None => {
+            *counter = u64::MAX;
+            *saturated = true;
+            *saturated_counters |= field.bit();
+        }
+    }
 }
 
 fn usize_to_u64(value: usize, code: &'static str) -> Result<u64, MapError> {
@@ -1809,11 +1850,7 @@ fn load_page<S: PageStore + ?Sized>(
 ) -> Result<Page, MapError> {
     let bytes = read_page_bytes(store, digest, work)?;
     let page = decode_page_with_admission(&bytes, Some(work))?;
-    add_counter(
-        &mut work.pages_decoded,
-        1,
-        "persistent_map_work_pages_decoded",
-    )?;
+    observe_counter(&mut work.pages_decoded, 1, &mut work.saturated, &mut work.saturated_counters, MapWorkCounter::PagesDecoded);
     Ok(page)
 }
 
@@ -1882,22 +1919,10 @@ fn write_page<S: PageStore + ?Sized>(
     let digest = PageDigest::of(&bytes);
     match store.write_page(digest, &bytes)? {
         PageWrite::Inserted => {
-            add_counter(
-                &mut work.pages_written,
-                1,
-                "persistent_map_work_pages_written",
-            )?;
-            add_counter(
-                &mut work.bytes_written,
-                usize_to_u64(bytes.len(), "persistent_map_work_bytes_written")?,
-                "persistent_map_work_bytes_written",
-            )?;
+            observe_counter(&mut work.pages_written, 1, &mut work.saturated, &mut work.saturated_counters, MapWorkCounter::PagesWritten);
+            observe_counter(&mut work.bytes_written, usize_to_u64(bytes.len(), "persistent_map_work_bytes_written")?, &mut work.saturated, &mut work.saturated_counters, MapWorkCounter::BytesWritten);
         }
-        PageWrite::Reused => add_counter(
-            &mut work.pages_reused,
-            1,
-            "persistent_map_work_pages_reused",
-        )?,
+        PageWrite::Reused => observe_counter(&mut work.pages_reused, 1, &mut work.saturated, &mut work.saturated_counters, MapWorkCounter::PagesReused),
     }
     NodeRef::from_page(digest, page)
 }
@@ -1981,11 +2006,7 @@ fn search_entries(
     let mut high = entries.len();
     while low < high {
         let middle = low + (high - low) / 2;
-        add_counter(
-            &mut work.key_comparisons,
-            1,
-            "persistent_map_work_comparisons",
-        )?;
+        observe_counter(&mut work.key_comparisons, 1, &mut work.saturated, &mut work.saturated_counters, MapWorkCounter::KeyComparisons);
         match entries[middle].key.as_slice().cmp(key) {
             std::cmp::Ordering::Less => low = middle + 1,
             std::cmp::Ordering::Greater => high = middle,
@@ -2004,11 +2025,7 @@ fn search_children(
     let mut high = children.len();
     while low < high {
         let middle = low + (high - low) / 2;
-        add_counter(
-            &mut work.key_comparisons,
-            1,
-            "persistent_map_work_comparisons",
-        )?;
+        observe_counter(&mut work.key_comparisons, 1, &mut work.saturated, &mut work.saturated_counters, MapWorkCounter::KeyComparisons);
         match children[middle].edge.cmp(&edge) {
             std::cmp::Ordering::Less => low = middle + 1,
             std::cmp::Ordering::Greater => high = middle,
@@ -2229,11 +2246,7 @@ where
         Page::Leaf { entries, .. } => {
             let mut visited = 0_u64;
             for entry in entries {
-                add_counter(
-                    &mut work.key_comparisons,
-                    1,
-                    "persistent_map_work_comparisons",
-                )?;
+                observe_counter(&mut work.key_comparisons, 1, &mut work.saturated, &mut work.saturated_counters, MapWorkCounter::KeyComparisons);
                 if entry.key.starts_with(requested) {
                     visitor(&entry.key, &entry.value, work)?;
                     visited = visited.checked_add(1).ok_or_else(|| {
@@ -2331,7 +2344,7 @@ where
             std::cmp::Ordering::Equal => Some(lower_bound),
             std::cmp::Ordering::Less if lower_bound.starts_with(page.prefix()) => Some(lower_bound),
             std::cmp::Ordering::Less => {
-                skip_subtree(work, page.count())?;
+                skip_subtree(work, page.count());
                 return Ok(());
             }
         },
@@ -2411,7 +2424,7 @@ where
                 Err(index) => (index, false),
             };
             for child in &children[..start] {
-                skip_subtree(work, child.count)?;
+                skip_subtree(work, child.count);
             }
             for (offset, child) in children[start..].iter().enumerate() {
                 if state.has_more {
@@ -2895,11 +2908,7 @@ fn merge_leaf_edits<S: PageStore + ?Sized>(
     while entry_index < entries.len() || edit_index < edits.len() {
         match (entries.get(entry_index), edits.get(edit_index)) {
             (Some(entry), Some(edit)) => {
-                add_counter(
-                    &mut work.key_comparisons,
-                    1,
-                    "persistent_map_work_comparisons",
-                )?;
+                observe_counter(&mut work.key_comparisons, 1, &mut work.saturated, &mut work.saturated_counters, MapWorkCounter::KeyComparisons);
                 match entry.key.cmp(&edit.key) {
                     std::cmp::Ordering::Less => {
                         merged.push(entry.clone());
@@ -4013,35 +4022,35 @@ mod tests {
         let cases = [
             (
                 MapAdmission {
-                    maximum_pages_read: 0,
+                    maximum_pages_read: Some(0),
                     ..MapAdmission::unbounded()
                 },
                 "persistent_map_admission_pages_read",
             ),
             (
                 MapAdmission {
-                    maximum_bytes_read: 0,
+                    maximum_bytes_read: Some(0),
                     ..MapAdmission::unbounded()
                 },
                 "persistent_map_admission_bytes_read",
             ),
             (
                 MapAdmission {
-                    maximum_entries_visited: 0,
+                    maximum_entries_visited: Some(0),
                     ..MapAdmission::unbounded()
                 },
                 "persistent_map_admission_entries_visited",
             ),
             (
                 MapAdmission {
-                    maximum_pages_encoded: 0,
+                    maximum_pages_encoded: Some(0),
                     ..MapAdmission::unbounded()
                 },
                 "persistent_map_admission_pages_encoded",
             ),
             (
                 MapAdmission {
-                    maximum_bytes_encoded: baseline_work.bytes_encoded - 1,
+                    maximum_bytes_encoded: Some(baseline_work.bytes_encoded - 1),
                     ..MapAdmission::unbounded()
                 },
                 "persistent_map_admission_bytes_encoded",
@@ -4068,11 +4077,11 @@ mod tests {
         }
 
         let exact = MapAdmission {
-            maximum_pages_read: baseline_work.pages_read,
-            maximum_bytes_read: baseline_work.bytes_read,
-            maximum_entries_visited: baseline_work.entries_visited,
-            maximum_pages_encoded: baseline_work.pages_encoded,
-            maximum_bytes_encoded: baseline_work.bytes_encoded,
+            maximum_pages_read: Some(baseline_work.pages_read),
+            maximum_bytes_read: Some(baseline_work.bytes_read),
+            maximum_entries_visited: Some(baseline_work.entries_visited),
+            maximum_pages_encoded: Some(baseline_work.pages_encoded),
+            maximum_bytes_encoded: Some(baseline_work.bytes_encoded),
         };
         let mut exact_store = CountingPageStore::new(base_store);
         let mut exact_work = MapWork::with_admission(exact);
@@ -5211,17 +5220,9 @@ enum EmitKind {
     Removed,
 }
 
-fn skip_subtree(work: &mut MapWork, entries: u64) -> Result<(), MapError> {
-    add_counter(
-        &mut work.subtrees_skipped,
-        1,
-        "persistent_map_work_subtrees_skipped",
-    )?;
-    add_counter(
-        &mut work.entries_skipped,
-        entries,
-        "persistent_map_work_entries_skipped",
-    )
+fn skip_subtree(work: &mut MapWork, entries: u64) {
+    observe_counter(&mut work.subtrees_skipped, 1, &mut work.saturated, &mut work.saturated_counters, MapWorkCounter::SubtreesSkipped);
+    observe_counter(&mut work.entries_skipped, entries, &mut work.saturated, &mut work.saturated_counters, MapWorkCounter::EntriesSkipped);
 }
 
 fn emit_difference<F>(
@@ -5233,11 +5234,8 @@ where
     F: FnMut(MapDifference) -> Result<(), MapError>,
 {
     visitor(difference)?;
-    add_counter(
-        &mut work.differences_emitted,
-        1,
-        "persistent_map_work_differences",
-    )
+    observe_counter(&mut work.differences_emitted, 1, &mut work.saturated, &mut work.saturated_counters, MapWorkCounter::DifferencesEmitted);
+    Ok(())
 }
 
 fn emit_value_difference<F>(
@@ -5466,7 +5464,8 @@ where
                 "equal child digests carry different subtree summaries",
             ));
         }
-        return skip_subtree(work, before.count);
+        skip_subtree(work, before.count);
+        return Ok(());
     }
     let before_page = load_page(store, before.digest, work)?;
     verify_child_link(before_parent, before, &before_page)?;
@@ -5508,7 +5507,8 @@ where
             ));
         }
         verify_child_link(after_parent, after, before)?;
-        return skip_subtree(work, before.count());
+        skip_subtree(work, before.count());
+        return Ok(());
     }
     let after_page = load_page(store, after.digest, work)?;
     verify_child_link(after_parent, after, &after_page)?;
@@ -5548,7 +5548,8 @@ where
             ));
         }
         verify_child_link(before_parent, before, after)?;
-        return skip_subtree(work, before.count);
+        skip_subtree(work, before.count);
+        return Ok(());
     }
     let before_page = load_page(store, before.digest, work)?;
     verify_child_link(before_parent, before, &before_page)?;
@@ -5826,7 +5827,8 @@ where
                 "equal page digests have different in-memory summaries",
             ));
         }
-        return skip_subtree(work, before.count());
+        skip_subtree(work, before.count());
+        return Ok(());
     }
 
     if before.prefix() == after.prefix() {
@@ -6032,7 +6034,8 @@ impl PersistentMap {
                     "equal map roots carry different entry counts",
                 ));
             }
-            return skip_subtree(work, self.root.entries);
+            skip_subtree(work, self.root.entries);
+        return Ok(());
         }
         let before = load_page(store, self.root.page, work)?;
         verify_root(self.root, &before)?;
@@ -6074,4 +6077,92 @@ impl PersistentMap {
             logical_bytes: page.logical_bytes(),
         })
     }
+}
+
+#[cfg(test)]
+mod admission_policy_tests {
+    use super::*;
+
+    #[test]
+    fn unbounded_map_observation_saturates_without_creating_a_quota() {
+        let mut work = MapWork::default();
+        work.admit_entries_visited(u64::MAX).unwrap();
+        assert!(!work.saturated);
+        work.admit_entries_visited(1).unwrap();
+        assert!(work.saturated);
+        assert_eq!(work.entries_visited, u64::MAX);
+        assert_eq!(work.remaining_admission(), MapAdmission::unbounded());
+    }
+
+    #[test]
+    fn finite_map_limits_include_zero_and_the_full_integer_range() {
+        for limit in [0, 1, 10_000_001, u64::MAX] {
+            let mut work = MapWork::with_admission(MapAdmission {
+                maximum_entries_visited: Some(limit),
+                ..MapAdmission::unbounded()
+            });
+            work.admit_entries_visited(limit).unwrap();
+            assert_eq!(work.remaining_admission().maximum_entries_visited, Some(0));
+            let before = work;
+            assert!(work.admit_entries_visited(1).is_err());
+            assert_eq!(work, before);
+            assert!(!work.saturated);
+        }
+    }
+
+    #[test]
+    fn map_encoding_reservations_are_atomic_and_physical_pages_stay_bounded() {
+        let mut work = MapWork::with_admission(MapAdmission {
+            maximum_pages_encoded: Some(1),
+            maximum_bytes_encoded: Some(2),
+            ..MapAdmission::unbounded()
+        });
+        let before = work;
+        assert!(work.admit_page_encoding(3).is_err());
+        assert_eq!(work, before);
+        work.admit_page_encoding(2).unwrap();
+        assert!(work.admit_page_encoding(0).is_err());
+        assert_eq!(MapWork::default().maximum_next_page_bytes(), MAXIMUM_PAGE_BYTES);
+        let mut bounded = MapWork::with_admission(MapAdmission {
+            maximum_bytes_read: Some(3),
+            ..MapAdmission::unbounded()
+        });
+        bounded.admit_page_bytes_read(2).unwrap();
+        assert_eq!(bounded.maximum_next_page_bytes(), 1);
+        let next = MapWork::with_admission(bounded.remaining_admission());
+        assert_eq!(next.maximum_next_page_bytes(), 1);
+    }
+
+    #[test]
+    fn map_observation_merge_retains_saturation_evidence() {
+        let mut left = MapWork::default();
+        left.key_comparisons = u64::MAX;
+        let mut right = MapWork::default();
+        right.key_comparisons = 1;
+        left.add_observation(right);
+        assert!(left.saturated);
+        assert_eq!(left.key_comparisons, u64::MAX);
+        let mut receipt = MapWork::default();
+        receipt.add_observation(left);
+        assert!(receipt.saturated);
+        assert_eq!(receipt.remaining_admission(), MapAdmission::unbounded());
+    }
+    #[test]
+    fn independent_map_saturation_preserves_an_exact_finite_dimension() {
+        let mut work = MapWork::with_admission(MapAdmission { maximum_pages_read: Some(u64::MAX), ..MapAdmission::unbounded() });
+        work.pages_read = u64::MAX - 1;
+        work.bytes_read = u64::MAX;
+        work.admit_page_bytes_read(1).unwrap();
+        work.admit_page_read().unwrap();
+        assert!(work.saturated);
+        assert!(work.counter_saturated(MapWorkCounter::BytesRead));
+        assert!(!work.counter_saturated(MapWorkCounter::PagesRead));
+        assert_eq!(work.pages_read, u64::MAX);
+        assert!(work.admit_page_read().is_err());
+        let mut combined = MapWork::default();
+        combined.add_observation(work);
+        assert!(combined.counter_saturated(MapWorkCounter::BytesRead));
+        assert!(!combined.counter_saturated(MapWorkCounter::PagesRead));
+    }
+
 }

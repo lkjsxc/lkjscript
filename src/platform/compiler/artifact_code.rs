@@ -313,10 +313,10 @@ pub(super) fn validate(
             .map(|revision| revision.dependencies.as_slice())
             .ok_or_else(missing)?;
         if representation_package != Some(*package) {
-            let mut work = 0;
+            let mut work = crate::platform::kernel::ValidationWork::default();
             representation_packages =
-                artifact_representation_scope(dependencies, revisions, &mut work, remaining.get())?;
-            remaining.set(remaining.get() - work);
+                artifact_representation_scope(dependencies, revisions, &mut work, Some(remaining.get()))?;
+            remaining.set(remaining.get() - work.consumed);
             representation_package = Some(*package);
         }
         let read = Read {
@@ -430,8 +430,8 @@ mod tests {
             let representation_packages = artifact_representation_scope(
                 &package.dependencies,
                 &revisions,
-                &mut 0,
-                remaining.get(),
+                &mut crate::platform::kernel::ValidationWork::default(),
+                Some(remaining.get()),
             )
             .unwrap();
             let read = Read {

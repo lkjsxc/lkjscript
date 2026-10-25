@@ -29,7 +29,7 @@ fn incoming_mapping_is_read_once_across_all_demanded_witness_paths() -> Result<(
     for width in [1, 4, 16, 64] {
         let fixture = Fixture::new(width, None)?;
         let mut work = 0;
-        let observation = validate_callable_closure(&fixture, &mut work, Some(WORK_LIMIT))?;
+        let observation = crate::platform::kernel::test_work::validate_callable_closure(&fixture, &mut work, Some(WORK_LIMIT))?;
         let reads = fixture.mapping_reads.get();
         let lexical_reads = fixture.lexical_reads.get();
         let type_reads = fixture.type_reads.get();
@@ -63,7 +63,7 @@ fn incoming_mapping_is_read_once_across_all_demanded_witness_paths() -> Result<(
 #[test]
 fn undemanded_acyclic_mapping_keeps_input_projection_lazy() -> Result<(), Diagnostic> {
     let fixture = Fixture::new(0, None)?;
-    let observation = validate_callable_closure(&fixture, &mut 0, Some(WORK_LIMIT))?;
+    let observation = crate::platform::kernel::test_work::validate_callable_closure(&fixture, &mut 0, Some(WORK_LIMIT))?;
     assert_eq!(fixture.mapping_reads.get(), 0);
     assert_eq!(fixture.lexical_reads.get(), 0);
     assert_eq!(fixture.type_reads.get(), 0);
@@ -76,7 +76,7 @@ fn shared_inputs_keep_growth_at_every_distinct_witness_position() -> Result<(), 
     for width in [1, 4, 16] {
         for index in 0..width {
             let fixture = Fixture::new(width, Some(index))?;
-            let result = validate_callable_closure(&fixture, &mut 0, Some(WORK_LIMIT));
+            let result = crate::platform::kernel::test_work::validate_callable_closure(&fixture, &mut 0, Some(WORK_LIMIT));
             let error = match result {
                 Err(error) => error,
                 Ok(_) => {
@@ -100,16 +100,16 @@ fn shared_inputs_keep_growth_at_every_distinct_witness_position() -> Result<(), 
 fn shared_input_hits_keep_exact_work_and_late_cancellation_boundaries() -> Result<(), Diagnostic> {
     let fixture = Fixture::new(16, None)?;
     let mut work = 0;
-    let expected = validate_callable_closure(&fixture, &mut work, Some(WORK_LIMIT))?;
+    let expected = crate::platform::kernel::test_work::validate_callable_closure(&fixture, &mut work, Some(WORK_LIMIT))?;
     let checkpoints = fixture.proof_checkpoints.get();
     assert!(checkpoints > 8);
     fixture.reset(None);
     assert_eq!(
-        validate_callable_closure(&fixture, &mut 0, Some(work))?,
+        crate::platform::kernel::test_work::validate_callable_closure(&fixture, &mut 0, Some(work))?,
         expected
     );
     fixture.reset(None);
-    let refused = validate_callable_closure(&fixture, &mut 0, Some(work - 1));
+    let refused = crate::platform::kernel::test_work::validate_callable_closure(&fixture, &mut 0, Some(work - 1));
     assert!(matches!(
         refused,
         Err(Diagnostic {
@@ -119,13 +119,13 @@ fn shared_input_hits_keep_exact_work_and_late_cancellation_boundaries() -> Resul
     ));
     for cutoff in [1, 3, checkpoints / 2, checkpoints - 1] {
         fixture.reset(Some(cutoff));
-        let cancelled = validate_callable_closure(&fixture, &mut 0, Some(WORK_LIMIT));
+        let cancelled = crate::platform::kernel::test_work::validate_callable_closure(&fixture, &mut 0, Some(WORK_LIMIT));
         assert!(
             matches!(cancelled, Err(Diagnostic { class: DiagnosticClass::Cancelled, ref code, .. }) if code == "input_proof_cancelled")
         );
         fixture.reset(None);
         assert_eq!(
-            validate_callable_closure(&fixture, &mut 0, Some(WORK_LIMIT))?,
+            crate::platform::kernel::test_work::validate_callable_closure(&fixture, &mut 0, Some(WORK_LIMIT))?,
             expected
         );
         assert_eq!(fixture.mapping_reads.get(), 1);

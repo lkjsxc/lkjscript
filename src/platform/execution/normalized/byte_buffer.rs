@@ -240,20 +240,9 @@ impl ByteBuffer {
         {
             let mut s = self.lock();
             let v = s.bytes.as_mut().ok_or_else(reject)?;
-            let length = v.len().checked_add(1).ok_or_else(reject)?;
-            if length as u64 > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
-                return Err(ExecutionError::resource(
-                    "normalized_buffer_storage",
-                    "ByteBuffer exceeds finite storage",
-                ));
-            }
+            let length = v.len().checked_add(1).ok_or_else(storage_extent)?;
             if length > v.capacity() {
-                let capacity = v
-                    .capacity()
-                    .saturating_mul(2)
-                    .max(8)
-                    .max(length)
-                    .min(super::value::MAXIMUM_VALUE_ALLOCATION_BYTES as usize);
+                let capacity = growth_capacity(v.capacity(), length)?;
                 reserve_growth(v, capacity, control, reserve)?;
             }
             control.check()?;
@@ -268,6 +257,27 @@ impl ByteBuffer {
         Ok(BytePayload::adopt_vec(bytes))
     }
 }
+fn storage_extent() -> ExecutionError {
+    ExecutionError::resource(
+        "normalized_buffer_storage",
+        "ByteBuffer length or allocation extent is not representable",
+    )
+}
+
+fn growth_capacity(current: usize, required: usize) -> Result<usize, ExecutionError> {
+    // Vec requires an isize-sized allocation; the public length is an I64.
+    if isize::try_from(required).is_err() || i64::try_from(required).is_err() {
+        return Err(storage_extent());
+    }
+    Ok(current
+        .checked_mul(2)
+        .filter(|capacity| isize::try_from(*capacity).is_ok())
+        .filter(|capacity| i64::try_from(*capacity).is_ok())
+        .unwrap_or(required)
+        .max(8)
+        .max(required))
+}
+
 // Keep the capacity admission immediately beside its physical growth. In particular,
 // cancellation during reservation must stop before a Vec allocation, not only push.
 fn reserve_growth(
@@ -488,6 +498,16 @@ mod tests {
             assert!(bytes.capacity() >= requested);
             assert_eq!(bytes, vec![255; length]);
         }
+    }
+
+    #[test]
+    fn byte_buffer_growth_crosses_former_value_bound_without_allocating() {
+        let former = 256 * 1024 * 1024;
+        assert_eq!(growth_capacity(former, former + 1).unwrap(), former * 2);
+        assert_eq!(growth_capacity(0, 1).unwrap(), 8);
+        let maximum = isize::MAX as usize;
+        assert_eq!(growth_capacity(maximum - 1, maximum).unwrap(), maximum);
+        assert!(growth_capacity(maximum, maximum + 1).is_err());
     }
 
     #[test]

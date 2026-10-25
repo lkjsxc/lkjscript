@@ -456,37 +456,36 @@ fn literal_edit_cannot_hide_a_simultaneous_invalid_function_contract() {
 }
 
 #[test]
-fn literal_edit_oversized_scalar_and_missing_identity_are_read_only_failures() {
+fn literal_edit_missing_identity_is_a_read_only_failure() {
     let fixture = Fixture::new();
     let original = fixture.edit();
-    for oversized in [false, true] {
-        let mut request = original.semantic.clone();
-        let mut values = literals(&request).to_vec();
-        if oversized {
-            values[0].value = AuthoredLiteralValue::Text {
-                value: "x".repeat(crate::platform::change::MAXIMUM_AUTHORED_CHANGE_BYTES),
-            };
-        } else {
-            values[0].expression = ExpressionId::allocate(&[91; 32], 1);
-        }
-        request.changes = vec![AuthoredChange::SetFunctionLiterals {
-            function: DeclarationSelector::Id {
-                declaration: fixture.function,
-            },
-            literals: values,
-        }];
-        let errors = fixture
-            .repository
-            .prepare_authored_change(&request, Default::default())
-            .unwrap_err();
-        let expected = if oversized {
-            "change_authored_bytes"
-        } else {
-            "change_literal_foreign"
-        };
-        assert!(errors.iter().any(|e| e.code == expected), "{errors:#?}");
-        assert_eq!(fixture.view().revision(), request.base);
-    }
+    let mut request = original.semantic.clone();
+    let mut values = literals(&request).to_vec();
+    values[0].expression = ExpressionId::allocate(&[91; 32], 1);
+    request.changes = vec![AuthoredChange::SetFunctionLiterals {
+        function: DeclarationSelector::Id { declaration: fixture.function },
+        literals: values,
+    }];
+    let errors = fixture.repository.prepare_authored_change(&request, Default::default()).unwrap_err();
+    assert!(errors.iter().any(|error| error.code == "change_literal_foreign"), "{errors:#?}");
+    assert_eq!(fixture.view().revision(), request.base);
+}
+
+#[test]
+fn authored_intent_codec_accepts_scalar_bytes_beyond_the_former_default() {
+    let fixture = Fixture::new();
+    let mut request = fixture.edit().semantic;
+    let mut values = literals(&request).to_vec();
+    let former_default_bytes = 4 * 1024 * 1024;
+    values[0].value = AuthoredLiteralValue::Text { value: "x".repeat(former_default_bytes + 1) };
+    request.changes = vec![AuthoredChange::SetFunctionLiterals {
+        function: DeclarationSelector::Id { declaration: fixture.function },
+        literals: values,
+    }];
+    // Authoring byte encoding precedes semantic admission of the supplied literal and its type.
+    let encoded = crate::platform::change::canonical_authored_intent_bytes(&request).unwrap();
+    assert!(encoded.len() > former_default_bytes);
+    assert_eq!(fixture.view().revision(), request.base);
 }
 
 #[test]

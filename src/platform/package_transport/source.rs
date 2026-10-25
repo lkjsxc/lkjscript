@@ -517,9 +517,9 @@ impl<'a, S: ?Sized> CollectingStore<'a, S> {
         Self {
             base,
             admission: RefCell::new(StoreReadAdmission::new(StoreReadLimits {
-                maximum_catalog_lookups: MAXIMUM_VALIDATION_VISITS,
-                maximum_objects: MAXIMUM_VALIDATION_VISITS,
-                maximum_bytes: MAXIMUM_VALIDATION_READ_BYTES,
+                maximum_catalog_lookups: Some(MAXIMUM_VALIDATION_VISITS),
+                maximum_objects: Some(MAXIMUM_VALIDATION_VISITS),
+                maximum_bytes: Some(MAXIMUM_VALIDATION_READ_BYTES),
             })),
             objects: RefCell::new(BTreeMap::new()),
             retained_bytes: std::cell::Cell::new(84),
@@ -528,11 +528,10 @@ impl<'a, S: ?Sized> CollectingStore<'a, S> {
         }
     }
     pub(crate) fn visits(&self) -> u64 {
-        self.maximum_visits - self.admission.borrow().remaining().maximum_objects
-            + self.semantic_visits.get()
+        self.admission.borrow().observation().objects.saturating_add(self.semantic_visits.get())
     }
     pub(crate) fn read_bytes(&self) -> u64 {
-        MAXIMUM_VALIDATION_READ_BYTES - self.admission.borrow().remaining().maximum_bytes
+        self.admission.borrow().observation().bytes
     }
     fn charge_visits(&self, count: u64) -> Result<(), Diagnostic> {
         if self
@@ -580,33 +579,17 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for CollectingStore<
                     .saturating_sub(41),
             )
         };
-        let internal = self.admission.borrow().remaining();
-        let outer = external.remaining();
-        let combined = StoreReadLimits {
-            maximum_catalog_lookups: internal
-                .maximum_catalog_lookups
-                .min(outer.maximum_catalog_lookups),
-            maximum_objects: internal
-                .maximum_objects
-                .saturating_sub(self.semantic_visits.get())
-                .min(outer.maximum_objects),
-            maximum_bytes: internal.maximum_bytes.min(outer.maximum_bytes),
-        };
-        let mut admission = StoreReadAdmission::new(combined);
+        let internal = *self.admission.borrow();
+        let outer = *external;
+        let mut allowance = internal.remaining();
+        allowance.maximum_objects = allowance.maximum_objects
+            .map(|remaining| remaining.saturating_sub(self.semantic_visits.get()));
+        let mut admission = StoreReadAdmission::new(allowance.intersect(outer.remaining()));
         let result = self.base.read_admitted(key, maximum, &mut admission, work);
-        let remaining = admission.remaining();
-        let charged = |budget: StoreReadLimits| {
-            StoreReadAdmission::new(StoreReadLimits {
-                maximum_catalog_lookups: budget.maximum_catalog_lookups
-                    - (combined.maximum_catalog_lookups - remaining.maximum_catalog_lookups),
-                maximum_objects: budget.maximum_objects
-                    - (combined.maximum_objects - remaining.maximum_objects),
-                maximum_bytes: budget.maximum_bytes
-                    - (combined.maximum_bytes - remaining.maximum_bytes),
-            })
-        };
-        *self.admission.borrow_mut() = charged(internal);
-        *external = charged(outer);
+        let next_internal = internal.charged_from(&admission)?;
+        let next_outer = outer.charged_from(&admission)?;
+        *self.admission.borrow_mut() = next_internal;
+        *external = next_outer;
         let bytes = result?;
         if let Some(bytes) = &bytes
             && !self.objects.borrow().contains_key(&key)
@@ -759,9 +742,9 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     let store = CollectingStore {
         base,
         admission: RefCell::new(StoreReadAdmission::new(StoreReadLimits {
-            maximum_catalog_lookups: maximum_visits,
-            maximum_objects: maximum_visits,
-            maximum_bytes: maximum_read_bytes,
+            maximum_catalog_lookups: Some(maximum_visits),
+            maximum_objects: Some(maximum_visits),
+            maximum_bytes: Some(maximum_read_bytes),
         })),
         objects: RefCell::new(BTreeMap::new()),
         retained_bytes: std::cell::Cell::new(84 + selections.len() * 64),
@@ -877,7 +860,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
             control,
             &mut |count| store.charge_visits(count),
         )?;
-        let mut intrinsic_work = 0;
+        let mut intrinsic_work = crate::platform::kernel::ValidationWork::default();
         for record in snapshot.owners.values() {
             if let OwnerRecord::Declaration(DeclarationRecord {
                 payload: DeclarationPayload::External(external),
@@ -888,11 +871,11 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
                     &snapshot,
                     external,
                     &mut intrinsic_work,
-                    (maximum_visits - store.visits()) as usize,
+                    Some(usize::try_from(maximum_visits - store.visits()).map_err(|_| limit("validation visits"))?),
                 )?;
             }
         }
-        store.charge_visits(intrinsic_work as u64)?;
+        store.charge_visits(intrinsic_work.consumed as u64)?;
         #[cfg(test)]
         tests::before_source_full_validation(control);
         // Fresh canonical reconstruction, exact interface attachment, profile and intrinsic
@@ -935,7 +918,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
                 // Optional metadata capacity cannot grant a larger validation allowance.
                 let remaining = usize::try_from(maximum_visits - store.visits())
                     .map_err(|_| limit("validation visits"))?;
-                rebuild_full_witness_checked(&snapshot, remaining, &|| {
+                rebuild_full_witness_checked(&snapshot, Some(remaining), &|| {
                     control.check().map_err(execution_diagnostic)
                 })
                 .map(|witness| {
@@ -946,7 +929,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         } else {
             let remaining = usize::try_from(maximum_visits - store.visits())
                 .map_err(|_| limit("validation visits"))?;
-            rebuild_full_witness_checked(&snapshot, remaining, &|| {
+            rebuild_full_witness_checked(&snapshot, Some(remaining), &|| {
                 control.check().map_err(execution_diagnostic)
             })
             .map(|witness| {
@@ -1018,7 +1001,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     // source closure before exposing readiness, including unused schemes and untaken syntax.
     store.charge_visits(packages.len() as u64)?;
     let source_snapshots = packages.values().map(|p| &p.snapshot).collect::<Vec<_>>();
-    let mut composed_work = 0;
+    let mut composed_work = crate::platform::kernel::ValidationWork::default();
     #[cfg(test)]
     tests::before_source_composed_validation(control);
     crate::platform::kernel::callable_flow::validate_snapshot_callable_closure(
@@ -1030,7 +1013,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
                 .map_err(|_| limit("validation visits"))?,
         ),
     )?;
-    store.charge_visits(composed_work as u64)?;
+    store.charge_visits(composed_work.consumed as u64)?;
     // Topology belongs to the checked native planner. Every exact package was
     // independently admitted above; retain that operation's plan through source
     // reconstruction instead of recomputing a second host order.
@@ -1042,8 +1025,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     }
     let validation_visits = store.visits();
     Ok(AdmittedClosure {
-        validation_read_bytes: maximum_read_bytes
-            - store.admission.borrow().remaining().maximum_bytes,
+        validation_read_bytes: store.admission.borrow().observation().bytes,
         container: PackageContainer {
             root,
             selections: selections.to_vec(),
@@ -1803,7 +1785,7 @@ declarations.end
             "package_container_completeness"
         );
         assert_not_ready(&extra.encode().unwrap(), extra.root.transport);
-        let errors = crate::platform::kernel::validate_full_with_limit(&package.snapshot, 1)
+        let errors = crate::platform::kernel::validate_full_with_limit(&package.snapshot, Some(1))
             .expect_err("bounded validation");
         assert!(errors.iter().any(|error| error.code == "kernel_full_work"));
     }

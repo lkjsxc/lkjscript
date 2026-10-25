@@ -1255,14 +1255,14 @@ fn maintained_snapshot(relative: &str) -> KernelSnapshot {
 fn production_accepts(snapshot: &KernelSnapshot) -> bool {
     let mut diagnostics = Vec::new();
     let mut work = 0;
-    let result = super::validate_affine_roots_with_limits(
+    let result = crate::platform::kernel::test_work::validate_affine_roots_with_limits(
         snapshot,
         snapshot.owners.keys().copied(),
         &mut diagnostics,
         &mut work,
         super::ExpressionValidationLimits {
-            maximum_steps: 1_000_000,
-            maximum_diagnostics: 1_000,
+            maximum_steps: Some(1_000_000),
+            maximum_diagnostics: Some(1_000),
         },
     );
     result.is_ok() && diagnostics.is_empty()

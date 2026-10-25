@@ -10,9 +10,9 @@ fn read_word(bytes: &[u8], at: usize) -> usize {
     u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()) as usize
 }
 
-fn required_fuel(bytes: &[u8]) -> usize {
-    4096 + 128 * bytes.len()
-        + 1024 * (read_word(bytes, 12) + read_word(bytes, 16) + read_word(bytes, 20))
+pub(super) fn set_allowance(bytes: &mut [u8], allowance: Option<u64>) {
+    word(bytes, 100, usize::from(allowance.is_some()));
+    bytes[104..112].copy_from_slice(&allowance.unwrap_or(0).to_le_bytes());
 }
 
 pub(super) fn packet(source: &KernelSnapshot) -> Vec<u8> {
@@ -46,7 +46,7 @@ pub(super) fn packet(source: &KernelSnapshot) -> Vec<u8> {
     }
     let name = source.root.package_name.as_str().as_bytes();
     let mut bytes = vec![0; 128];
-    bytes[..8].copy_from_slice(b"LKJSG001");
+    bytes[..8].copy_from_slice(b"LKJSG002");
     word(&mut bytes, 12, source.owners.len());
     word(&mut bytes, 16, source.types.len());
     word(&mut bytes, 20, source.retirements.len());
@@ -72,9 +72,29 @@ pub(super) fn packet(source: &KernelSnapshot) -> Vec<u8> {
     }
     let length = bytes.len();
     word(&mut bytes, 8, length);
-    let fuel = required_fuel(&bytes);
-    word(&mut bytes, 100, fuel);
+    set_allowance(&mut bytes, None);
     bytes
+}
+
+// Synthetic capacity fixtures change inventories outside a repository. Rebuild
+// both logical commitments exactly as the public authoring result would, before
+// using the independent kernel oracle or serializing the carrier.
+fn rebind_capacity_inventory(source: &mut KernelSnapshot) {
+    let owners = source.owners.iter().map(|(key, record)| {
+        let (object, _) = kernel::encode_owner(record).unwrap();
+        (kernel::owner_map_key(*key).to_vec(),
+            kernel::encode_owner_binding(&kernel::OwnerBinding { kind: record.kind(), object }))
+    }).collect::<Vec<_>>();
+    let retired = source.retirements.iter().map(|(key, record)| {
+        let (object, _) = kernel::encode_retirement(record).unwrap();
+        (kernel::retirement_map_key(*key).to_vec(), object.bytes().to_vec())
+    }).collect::<Vec<_>>();
+    let owners = crate::platform::persistent_map::MapContentRoot::from_sorted(owners).unwrap();
+    let retired = crate::platform::persistent_map::MapContentRoot::from_sorted(retired).unwrap();
+    source.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
+        source.root.owners.page(), u64::try_from(source.owners.len()).unwrap(), owners.digest());
+    source.root.retirements = crate::platform::persistent_map::MapRoot::from_parts(
+        source.root.retirements.page(), u64::try_from(source.retirements.len()).unwrap(), retired.digest());
 }
 
 fn nominal() -> KernelSnapshot {
@@ -100,9 +120,7 @@ fn expect(name: &str, bytes: &[u8], code: i64) {
 
 fn reframe(bytes: &mut [u8]) {
     let length = bytes.len();
-    let fuel = required_fuel(bytes);
     word(bytes, 8, length);
-    word(bytes, 100, fuel);
 }
 
 #[test]
@@ -132,8 +150,8 @@ fn selfhost_source_graph_admits_complete_raw_compiler_and_independent_sources() 
 }
 
 #[test]
-fn selfhost_source_graph_native_admits_complete_carriers_above_former_byte_limit() {
-    const FUNCTIONS: usize = 128;
+fn selfhost_source_graph_native_admits_complete_carriers_above_former_byte_and_proof_limits() {
+    const FUNCTIONS: usize = 256;
     const INLINE_BYTES: usize = 64 * 1024;
     let mut proposal = String::from("declarations.begin\n(units (module create carrier-capacity\n");
     for index in 0..FUNCTIONS {
@@ -159,10 +177,14 @@ fn selfhost_source_graph_native_admits_complete_carriers_above_former_byte_limit
         }
     }
     assert_eq!(literals, FUNCTIONS);
+    rebind_capacity_inventory(&mut source);
     kernel::validate_full(&source).unwrap();
     let bytes = packet(&source);
     assert!(bytes.len() > 8_388_608);
-    assert!(required_fuel(&bytes) <= i32::MAX as usize);
+    let obsolete_proof_estimate = 4096 + 128 * bytes.len()
+        + 1024 * (source.owners.len() + source.types.len() + source.retirements.len());
+    assert!(obsolete_proof_estimate > i32::MAX as usize);
+    assert_eq!(&bytes[100..112], &[0; 12]);
     let carrier_digest = Sha256::digest(&bytes);
     eprintln!(
         "selfhost source carrier capacity entry=source-links::validate engine=self-produced-native owners={} types={} retirements={} bytes={} sha256={} state={}",
@@ -225,11 +247,14 @@ fn selfhost_source_graph_rejects_extent_directory_order_and_object_forgery() {
     let mut changed = bytes.clone();
     word(&mut changed, 28, 1);
     expect("read-graph", &changed, 13);
-    for fuel in [0, required_fuel(&bytes) - 1, u32::MAX as usize] {
+    for tag in [2, u32::MAX as usize] {
         let mut changed = bytes.clone();
-        word(&mut changed, 100, fuel);
-        expect("read-graph", &changed, 6);
+        word(&mut changed, 100, tag);
+        expect("read-graph", &changed, 12);
     }
+    let mut obsolete = bytes.clone();
+    obsolete[..8].copy_from_slice(b"LKJSG001");
+    expect("read-graph", &obsolete, 12);
     for directory in [80, 84] {
         let width = if directory == 80 { 50 } else { 32 };
         let start = read_word(&bytes, directory);
@@ -471,7 +496,7 @@ fn selfhost_source_graph_commitments_do_not_misclassify_type_errors_as_admission
 }
 
 #[test]
-fn selfhost_source_graph_handles_empty_directories_and_exact_allowance() {
+fn selfhost_source_graph_handles_empty_directories_and_tagged_allowances() {
     let mut source = nominal();
     source.owners.clear();
     source.types.clear();
@@ -481,15 +506,23 @@ fn selfhost_source_graph_handles_empty_directories_and_exact_allowance() {
     assert_eq!(read_word(&empty, 16), 0);
     assert_eq!(read_word(&empty, 20), 0);
     expect("read-graph", &empty, 0);
-    let mut exhausted = empty.clone();
-    word(&mut exhausted, 100, required_fuel(&empty) - 1);
-    expect("read-graph", &exhausted, 6);
-    let mut just_more = empty.clone();
-    word(&mut just_more, 100, required_fuel(&empty) + 1);
-    expect("read-graph", &just_more, 0);
-    let mut permitted = empty;
-    word(&mut permitted, 100, i32::MAX as usize);
-    expect("read-graph", &permitted, 0);
+    for allowance in [None, Some(0), Some(1), Some(u64::from(u32::MAX)), Some(u64::MAX)] {
+        let mut selected = empty.clone();
+        set_allowance(&mut selected, allowance);
+        expect("read-graph", &selected, 0);
+        let code = if allowance == Some(0) { 6 } else { 0 };
+        expect("read-nominal", &selected, code);
+        emitted_result("read-nominal", &selected, code);
+    }
+    let source = nominal();
+    let base = packet(&source);
+    for (allowance, code) in [(None, 0), (Some(0), 6), (Some(u64::MAX), 0)] {
+        let mut selected = base.clone();
+        set_allowance(&mut selected, allowance);
+        expect("read-graph", &selected, 0);
+        expect("read-nominal", &selected, code);
+        emitted_result("read-nominal", &selected, code);
+    }
 }
 
 #[test]
@@ -606,4 +639,70 @@ fn selfhost_source_graph_visits_the_final_operand_of_the_final_owner() {
     let bytes = packet(&source);
     expect("read-carrier", &bytes, 0);
     expect("read-graph", &bytes, 14);
+}
+
+#[test]
+fn selfhost_source_graph_native_admits_carriers_above_former_entity_quota() {
+    const RETIREMENTS: usize = 100_001;
+    let mut source = nominal();
+    let kind = source
+        .owners
+        .values()
+        .find(|owner| matches!(owner, OwnerRecord::Expression(_)))
+        .unwrap()
+        .kind();
+    source.owners.clear();
+    source.types.clear();
+    source.retirements.clear();
+    for index in 1..=RETIREMENTS {
+        let mut identity = [0; 16];
+        identity[8..].copy_from_slice(&u64::try_from(index).unwrap().to_be_bytes());
+        let owner = OwnerKey::Expression(
+            crate::platform::semantic_id::ExpressionId::from_bytes(identity).unwrap(),
+        );
+        source.retirements.insert(
+            owner,
+            kernel::RetirementRecord {
+                graph_contract_version: 1,
+                owner,
+                last_kind: kind,
+                last_name: None,
+                last_parent: None,
+                last_live_revision: crate::platform::semantic_id::RevisionId::from_digest([31; 32]),
+                deletion_change: kernel::ChangeDigest::from_bytes([41; 32]),
+            },
+        );
+    }
+    rebind_capacity_inventory(&mut source);
+    kernel::validate_full(&source).unwrap();
+    let expected = kernel::semantic_state_digest(&source).unwrap();
+    let bytes = packet(&source);
+    assert_eq!(read_word(&bytes, 12), 0);
+    assert_eq!(read_word(&bytes, 16), 0);
+    assert_eq!(read_word(&bytes, 20), RETIREMENTS);
+    assert_eq!(&bytes[48..80], &expected.bytes());
+    assert_eq!(&bytes[100..112], &[0; 12]);
+    let carrier_digest = Sha256::digest(&bytes);
+    eprintln!(
+        "selfhost source entity capacity entry=source-links::validate engine=self-produced-native owners=0 types=0 retirements={RETIREMENTS} bytes={} sha256={} state={expected} child_deadline_seconds=10",
+        bytes.len(),
+        crate::platform::semantic_id::encode_hex(&carrier_digest),
+    );
+    // Reuse the native helper's bounded lifetime and joined child/pipe cleanup.
+    // This large carrier is deliberately not executed in either interpreter.
+    emitted_result("read-graph", &bytes, 0);
+
+    let changed_owner = OwnerKey::Expression(crate::platform::semantic_id::ExpressionId::migrate(
+        b"source-entity-final-binding",
+        0,
+    ));
+    source.retirements.last_entry().unwrap().get_mut().owner = changed_owner;
+    rebind_capacity_inventory(&mut source);
+    assert!(kernel::validate_full(&source).is_err());
+    let invalid = packet(&source);
+    assert_eq!(read_word(&invalid, 20), RETIREMENTS);
+    assert_ne!(carrier_digest, Sha256::digest(&invalid));
+    // Fresh object digests and a fresh semantic-state commitment leave the final
+    // object's owner/directory mismatch as the intended rejection boundary.
+    emitted_result("read-graph", &invalid, 12);
 }

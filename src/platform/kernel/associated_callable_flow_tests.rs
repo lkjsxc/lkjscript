@@ -33,12 +33,12 @@ fn associated_alias_provenance_does_not_make_a_constructor_cycle() {
     // Both variants have identical slot topology. Only the second has a real
     // constructor dependency; the nonempty witness path is diagnostic provenance.
     for expanding in [false, true] {
-        let mut work = 0;
+        let mut work = ValidationWork::default();
         let mut analysis = Analysis {
             read: &Empty,
             work: &mut work,
             maximum_work: Some(10_000),
-            maximum_metadata_bytes: MAXIMUM_ANALYSIS_BYTES,
+            maximum_metadata_bytes: Some(MAXIMUM_ANALYSIS_BYTES),
             observation: CallableFlowWork::default(),
             contexts: vec![ContextInfo {
                 key: Context {

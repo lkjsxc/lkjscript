@@ -262,9 +262,9 @@ mod tests {
             let store = CollectingStore {
                 base: &source.container.objects,
                 admission: RefCell::new(StoreReadAdmission::new(StoreReadLimits {
-                    maximum_catalog_lookups: maximum,
-                    maximum_objects: maximum,
-                    maximum_bytes: MAXIMUM_VALIDATION_READ_BYTES,
+                    maximum_catalog_lookups: Some(maximum),
+                    maximum_objects: Some(maximum),
+                    maximum_bytes: Some(MAXIMUM_VALIDATION_READ_BYTES),
                 })),
                 objects: RefCell::new(BTreeMap::new()),
                 retained_bytes: std::cell::Cell::new(84),

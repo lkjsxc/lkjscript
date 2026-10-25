@@ -360,9 +360,9 @@ fn memory_reads_enforce_admission_before_copying_objects() {
     let (key, bytes) = created.initial.publication.objects.iter().next().unwrap();
     let mut work = StoreWork::default();
     let mut admission = StoreReadAdmission::new(StoreReadLimits {
-        maximum_catalog_lookups: 1,
-        maximum_objects: 1,
-        maximum_bytes: (bytes.len() - 1) as u64,
+        maximum_catalog_lookups: Some(1),
+        maximum_objects: Some(1),
+        maximum_bytes: Some((bytes.len() - 1) as u64),
     });
     assert!(
         store

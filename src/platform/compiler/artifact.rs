@@ -399,6 +399,8 @@ pub struct ArtifactLoadWork {
     pub store: StoreWork,
     pub implementation_inventory_steps: u64,
     pub callable_analysis_steps: u64,
+    pub callable_analysis_saturated: bool,
+    pub callable_analysis_bytes_saturated: bool,
     pub callable_analysis_bytes: u64,
 }
 
@@ -2712,6 +2714,8 @@ fn trace_object_closure(
     )?;
     let (steps, analysis) = flow_admission::validate(&reference_owners, &runtime_owners, &types)?;
     work.callable_analysis_steps = steps as u64;
+    work.callable_analysis_saturated = analysis.work_saturated;
+    work.callable_analysis_bytes_saturated = analysis.metadata_saturated;
     work.callable_analysis_bytes = analysis.metadata_bytes as u64;
     validate_artifact_session_relations(manifest, &units, &runtime_owners, &interfaces, &types)?;
     for (digest, expected_length) in blobs {
@@ -3383,21 +3387,22 @@ fn validate_interface_source_coherence(
 fn artifact_representation_scope(
     dependencies: &[crate::platform::kernel::DependencyRecord],
     revisions: &BTreeMap<PackageRevisionDigest, PackageRevision>,
-    work: &mut usize,
-    maximum_work: usize,
+    work: &mut crate::platform::kernel::ValidationWork,
+    maximum_work: Option<usize>,
 ) -> Result<BTreeSet<PackageId>, Diagnostic> {
     struct Admission<'a> {
-        work: &'a mut usize,
-        maximum_work: usize,
+        work: &'a mut crate::platform::kernel::ValidationWork,
+        maximum_work: Option<usize>,
         bytes: usize,
     }
     impl Admission<'_> {
         fn step(&mut self) -> Result<(), Diagnostic> {
-            *self.work = self.work.checked_add(1)
-                .filter(|work| *work <= self.maximum_work).ok_or_else(|| artifact_error(
+            if !self.work.charge(1, self.maximum_work) {
+                return Err(artifact_error(
                     DiagnosticClass::Resource, "artifact_representation_work",
-                    "exact representation dependency traversal exceeds its validation work admission",
-                ))?;
+                    "exact representation dependency traversal exceeds its explicit work admission",
+                ));
+            }
             Ok(())
         }
         fn retain<T>(&mut self) -> Result<(), Diagnostic> {
@@ -3577,7 +3582,7 @@ fn validate_artifact_nominal_meaning(
             roots.entry(*package).or_default().push(*owner);
         }
     }
-    let mut work = 0usize;
+    let mut work = crate::platform::kernel::ValidationWork::default();
     let mut affine_roots = BTreeMap::<PackageId, Vec<OwnerKey>>::new();
     // Type-correct canonical code can still duplicate affine ownership. Admit all
     // retained owner shapes as well as bodies, including unused metadata and branches.
@@ -3585,23 +3590,14 @@ fn validate_artifact_nominal_meaning(
         .keys()
         .chain(reference.keys().filter(|key| !runtime.contains_key(key)))
     {
-        work = work
-            .checked_add(1)
-            .filter(|work| *work <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
-                artifact_error(
-                    DiagnosticClass::Resource,
-                    "artifact_affine_work",
-                    "artifact affine root inventory exhausted its existing work budget",
-                )
-            })?;
+        work.charge(1, None);
         affine_roots.entry(*package).or_default().push(*owner);
         roots.entry(*package).or_default();
     }
     let has_associated_types = associated_admission::contains_associated_types(
         types,
         &mut work,
-        crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+        None,
     )?;
     let associated = crate::platform::kernel::owned_associated::OwnedAssociatedAdmission::new();
     let mut unit_cursor = units.iter().peekable();
@@ -3622,7 +3618,7 @@ fn validate_artifact_nominal_meaning(
             &exact.dependencies,
             revisions,
             &mut work,
-            crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+            None,
         )?;
         let read = Read {
             package,
@@ -3639,7 +3635,7 @@ fn validate_artifact_nominal_meaning(
                 let mut next = associated_work.get();
                 associated_admission::admit_work(
                     &mut next,
-                    crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+                    None,
                 )?;
                 associated_work.set(next);
                 Ok(())
@@ -3664,8 +3660,8 @@ fn validate_artifact_nominal_meaning(
             &mut diagnostics,
             &mut work,
             crate::platform::kernel::ExpressionValidationLimits {
-                maximum_steps: crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
-                maximum_diagnostics: 1,
+                maximum_steps: None,
+                maximum_diagnostics: Some(1),
             },
         );
         if let Some(error) = diagnostics.into_iter().next() {
@@ -3692,7 +3688,7 @@ fn validate_artifact_nominal_meaning(
             &read,
             roots,
             &mut work,
-            crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+            None,
         )?;
         let mut diagnostics = Vec::new();
         let exhausted = crate::platform::kernel::validate_affine_roots_with_limits(
@@ -3701,8 +3697,8 @@ fn validate_artifact_nominal_meaning(
             &mut diagnostics,
             &mut work,
             crate::platform::kernel::ExpressionValidationLimits {
-                maximum_steps: crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
-                maximum_diagnostics: 1,
+                maximum_steps: None,
+                maximum_diagnostics: Some(1),
             },
         );
         if let Some(error) = diagnostics.into_iter().next() {
@@ -5180,23 +5176,7 @@ fn map_diagnostic(error: MapError) -> Diagnostic {
 }
 
 fn add_map_work(total: &mut MapWork, other: MapWork) {
-    total.pages_read = total.pages_read.saturating_add(other.pages_read);
-    total.pages_decoded = total.pages_decoded.saturating_add(other.pages_decoded);
-    total.pages_encoded = total.pages_encoded.saturating_add(other.pages_encoded);
-    total.pages_written = total.pages_written.saturating_add(other.pages_written);
-    total.pages_reused = total.pages_reused.saturating_add(other.pages_reused);
-    total.bytes_read = total.bytes_read.saturating_add(other.bytes_read);
-    total.bytes_encoded = total.bytes_encoded.saturating_add(other.bytes_encoded);
-    total.bytes_written = total.bytes_written.saturating_add(other.bytes_written);
-    total.key_comparisons = total.key_comparisons.saturating_add(other.key_comparisons);
-    total.entries_visited = total.entries_visited.saturating_add(other.entries_visited);
-    total.differences_emitted = total
-        .differences_emitted
-        .saturating_add(other.differences_emitted);
-    total.subtrees_skipped = total
-        .subtrees_skipped
-        .saturating_add(other.subtrees_skipped);
-    total.entries_skipped = total.entries_skipped.saturating_add(other.entries_skipped);
+    total.add_observation(other);
 }
 
 fn store_diagnostic(error: StoreError) -> Diagnostic {

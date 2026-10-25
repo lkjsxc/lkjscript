@@ -1,33 +1,92 @@
 declarations.begin
-(units (module create source-forest
-  (function create rooted (visibility private) (effect pure)
-    (parameter create rows (type Bytes)) (parameter create row (type I64))
-    (parameter create count (type I64)) (returns Bool)
-    (body (if (call ci::eq (local row) (local count)) (bool true)
-      (if (call ci::eq (call source-table::parent (local rows) (local row)) (local count))
-        (call rooted (local rows) (call ci::add (local row) (i64 1)) (local count))
-        (bool false)))))
-  (function create jump (visibility private) (effect pure)
-    (parameter create rows (type Bytes)) (parameter create row (type I64))
-    (parameter create count (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (if (call ci::eq (local row) (local count)) (local out)
-      (let
-        (binding parent (call source-table::parent (local rows) (local row)))
-        (binding ancestor (if (call ci::eq (local parent) (local count)) (local count)
-          (call source-table::parent (local rows) (local parent))))
-        (binding next (type ByteBuffer) (call source-table::edge (local row) (local ancestor) (i64 0) (local out)))
-        (in (call jump (local rows) (call ci::add (local row) (i64 1)) (local count) (local next)))))))
-  (function create prove (visibility package) (effect pure)
-    (parameter create rows (type Bytes)) (parameter create count (type I64))
-    (parameter create distance (type I64)) (parameter create work (type I64)) (returns I64)
-    (body (if (call ci::lt (local work) (local count)) (i64 -6)
-      (let (binding remaining (call ci::sub (local work) (local count)))
-        (in (if (call ci::lt (local distance) (local count))
+(units
+  (module create source-forest
+    (function create rooted
+      (visibility private)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create row (type I64))
+      (parameter create count (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local row) (local count))
+          (bool true)
+          (if
+            (call ci::eq (call source-table::parent (local rows) (local row)) (local count))
+            (call rooted (local rows) (call ci::add (local row) (i64 1)) (local count))
+            (bool false)))))
+    (function create jump
+      (visibility private)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create row (type I64))
+      (parameter create count (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local row) (local count))
+          (local out)
           (let
-            (binding empty (type ByteBuffer) (call ci::empty))
-            (binding buffer (type ByteBuffer) (call jump (local rows) (i64 0) (local count) (local empty)))
-            (binding next (call ci::freeze (local buffer)))
-            (in (call prove (local next) (local count) (call ci::mul (local distance) (i64 2)) (local remaining))))
-          (if (call rooted (local rows) (i64 0) (local count)) (local remaining) (i64 -15))))))))))
+            (binding parent (call source-table::parent (local rows) (local row)))
+            (binding ancestor
+              (if
+                (call ci::eq (local parent) (local count))
+                (local count)
+                (call source-table::parent (local rows) (local parent))))
+            (binding next
+              (type ByteBuffer)
+              (call source-table::edge (local row) (local ancestor) (i64 0) (local out)))
+            (in (call jump (local rows) (call ci::add (local row) (i64 1)) (local count) (local next)))))))
+    (function create prove
+      (visibility package)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create count (type I64))
+      (parameter create distance (type I64))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
+      (body
+        (if
+          (call source-budget::insufficient (local work) (local count))
+          (call source-budget::fail (local work) (i64 6))
+          (let
+            (binding remaining (call source-budget::charge (local work) (local count)))
+            (in
+              (if
+                (call ci::lt (local distance) (local count))
+                (let
+                  (binding empty (type ByteBuffer) (call ci::empty))
+                  (binding buffer
+                    (type ByteBuffer)
+                    (call jump (local rows) (i64 0) (local count) (local empty)))
+                  (binding next (call ci::freeze (local buffer)))
+                  (in
+                    (call prove
+                      (local next)
+                      (local count)
+                      (call ci::mul (local distance) (i64 2))
+                      (local remaining))))
+                (if
+                  (call rooted (local rows) (i64 0) (local count))
+                  (local remaining)
+                  (call source-budget::fail (local remaining) (i64 15)))))))))))
 declarations.end

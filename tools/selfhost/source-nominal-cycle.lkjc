@@ -1,60 +1,219 @@
 declarations.begin
-(units (module create source-nominal-cycle
-  (function create extend (visibility private) (effect pure)
-    (parameter create edges (type Bytes)) (parameter create at (type I64))
-    (parameter create node (type I64)) (parameter create queue (type Bytes))
-    (parameter create work (type I64)) (returns (record (work I64) (rows Bytes)))
-    (body (if (call ci::eq (local at) (call ci::length (local edges)))
-      (record structural (field work (local work)) (field rows (local queue)))
-      (if (call ci::lt (local work) (i64 1))
-        (record structural (field work (i64 -6)) (field rows (local queue)))
-        (let (binding remaining (call ci::sub (local work) (i64 1)))
-          (in (if (call ci::eq (call ci::u32 (local edges) (local at)) (local node))
+(units
+  (module create source-nominal-cycle
+    (function create extend
+      (visibility private)
+      (effect pure)
+      (parameter create edges (type Bytes))
+      (parameter create at (type I64))
+      (parameter create node (type I64))
+      (parameter create queue (type Bytes))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (work
+            (record
+              (code I64)
+              (finite Bool)
+              (high I64)
+              (low I64)
+              (observed-high I64)
+              (observed-low I64)
+              (saturated Bool)))
+          (rows Bytes)))
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local edges)))
+          (record structural (field work (local work)) (field rows (local queue)))
+          (if
+            (call source-budget::insufficient (local work) (i64 1))
+            (record structural
+              (field work (call source-budget::fail (local work) (i64 6)))
+              (field rows (local queue)))
             (let
-              (binding target (call ci::u32 (local edges) (call ci::add (local at) (i64 4))))
-              (binding found (call source-nominal-queue::contains (local queue) (i64 0)
-                (local target) (local remaining)))
-              (in (if (call ci::lt (field (local found) (name work)) (i64 0))
-                (record structural (field work (field (local found) (name work))) (field rows (local queue)))
-                (let (binding next (if (field (local found) (name found))
-                  (record structural (field work (field (local found) (name work))) (field rows (local queue)))
-                  (call source-nominal-queue::append (local queue) (local target) (field (local found) (name work)))))
-                  (in (if (call ci::lt (field (local next) (name work)) (i64 0)) (local next)
-                    (call extend (local edges) (call ci::add (local at) (i64 12)) (local node)
-                      (field (local next) (name rows)) (field (local next) (name work)))))))))
-            (call extend (local edges) (call ci::add (local at) (i64 12))
-              (local node) (local queue) (local remaining)))))))))
-  (function create reaches (visibility private) (effect pure)
-    (parameter create edges (type Bytes)) (parameter create goal (type I64))
-    (parameter create queue (type Bytes)) (parameter create at (type I64))
-    (parameter create work (type I64)) (returns I64)
-    (body (if (call ci::eq (local at) (call ci::length (local queue))) (local work)
-      (if (call ci::lt (local work) (i64 1)) (i64 -6)
-        (let (binding node (call ci::u32 (local queue) (local at)))
-          (in (if (call ci::eq (local node) (local goal)) (i64 -18)
-            (let (binding next (call extend (local edges) (i64 0) (local node)
-              (local queue) (call ci::sub (local work) (i64 1))))
-              (in (if (call ci::lt (field (local next) (name work)) (i64 0))
-                (field (local next) (name work))
-                (call reaches (local edges) (local goal) (field (local next) (name rows))
-                  (call ci::add (local at) (i64 4)) (field (local next) (name work)))))))))))))
-  (function create walk (visibility private) (effect pure)
-    (parameter create edges (type Bytes)) (parameter create at (type I64))
-    (parameter create work (type I64)) (returns I64)
-    (body (if (call ci::eq (local at) (call ci::length (local edges))) (local work)
-      (if (call ci::lt (local work) (i64 1)) (i64 -6)
-        (let
-          (binding remaining (call ci::sub (local work) (i64 1)))
-          (binding next (if (call ci::eq
-              (call ci::u32 (local edges) (call ci::add (local at) (i64 8))) (i64 0))
-            (local remaining)
-            (call reaches (local edges) (call ci::u32 (local edges) (local at))
-              (call source-nominal-queue::push (call ci::text-bytes (text ""))
-                (call ci::u32 (local edges) (call ci::add (local at) (i64 4))))
-              (i64 0) (local remaining))))
-          (in (if (call ci::lt (local next) (i64 0)) (local next)
-            (call walk (local edges) (call ci::add (local at) (i64 12)) (local next)))))))))
-  (function create prove (visibility package) (effect pure)
-    (parameter create edges (type Bytes)) (parameter create work (type I64)) (returns I64)
-    (body (call walk (local edges) (i64 0) (local work))))))
+              (binding remaining (call source-budget::charge (local work) (i64 1)))
+              (in
+                (if
+                  (call ci::eq (call ci::u32 (local edges) (local at)) (local node))
+                  (let
+                    (binding target (call ci::u32 (local edges) (call ci::add (local at) (i64 4))))
+                    (binding found
+                      (call source-nominal-queue::contains
+                        (local queue)
+                        (i64 0)
+                        (local target)
+                        (local remaining)))
+                    (in
+                      (if
+                        (call source-budget::failed (field (local found) (name work)))
+                        (record structural
+                          (field work (field (local found) (name work)))
+                          (field rows (local queue)))
+                        (let
+                          (binding next
+                            (if
+                              (field (local found) (name found))
+                              (record structural
+                                (field work (field (local found) (name work)))
+                                (field rows (local queue)))
+                              (call source-nominal-queue::append
+                                (local queue)
+                                (local target)
+                                (field (local found) (name work)))))
+                          (in
+                            (if
+                              (call source-budget::failed (field (local next) (name work)))
+                              (local next)
+                              (call extend
+                                (local edges)
+                                (call ci::add (local at) (i64 12))
+                                (local node)
+                                (field (local next) (name rows))
+                                (field (local next) (name work)))))))))
+                  (call extend
+                    (local edges)
+                    (call ci::add (local at) (i64 12))
+                    (local node)
+                    (local queue)
+                    (local remaining)))))))))
+    (function create reaches
+      (visibility private)
+      (effect pure)
+      (parameter create edges (type Bytes))
+      (parameter create goal (type I64))
+      (parameter create queue (type Bytes))
+      (parameter create at (type I64))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local queue)))
+          (local work)
+          (if
+            (call source-budget::insufficient (local work) (i64 1))
+            (call source-budget::fail (local work) (i64 6))
+            (let
+              (binding node (call ci::u32 (local queue) (local at)))
+              (in
+                (if
+                  (call ci::eq (local node) (local goal))
+                  (call source-budget::fail (local work) (i64 18))
+                  (let
+                    (binding next
+                      (call extend
+                        (local edges)
+                        (i64 0)
+                        (local node)
+                        (local queue)
+                        (call source-budget::charge (local work) (i64 1))))
+                    (in
+                      (if
+                        (call source-budget::failed (field (local next) (name work)))
+                        (field (local next) (name work))
+                        (call reaches
+                          (local edges)
+                          (local goal)
+                          (field (local next) (name rows))
+                          (call ci::add (local at) (i64 4))
+                          (field (local next) (name work)))))))))))))
+    (function create walk
+      (visibility private)
+      (effect pure)
+      (parameter create edges (type Bytes))
+      (parameter create at (type I64))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local edges)))
+          (local work)
+          (if
+            (call source-budget::insufficient (local work) (i64 1))
+            (call source-budget::fail (local work) (i64 6))
+            (let
+              (binding remaining (call source-budget::charge (local work) (i64 1)))
+              (binding next
+                (if
+                  (call ci::eq (call ci::u32 (local edges) (call ci::add (local at) (i64 8))) (i64 0))
+                  (local remaining)
+                  (call reaches
+                    (local edges)
+                    (call ci::u32 (local edges) (local at))
+                    (call source-nominal-queue::push
+                      (call ci::text-bytes (text ""))
+                      (call ci::u32 (local edges) (call ci::add (local at) (i64 4))))
+                    (i64 0)
+                    (local remaining))))
+              (in
+                (if
+                  (call source-budget::failed (local next))
+                  (local next)
+                  (call walk (local edges) (call ci::add (local at) (i64 12)) (local next)))))))))
+    (function create prove
+      (visibility package)
+      (effect pure)
+      (parameter create edges (type Bytes))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
+      (body (call walk (local edges) (i64 0) (local work))))))
 declarations.end

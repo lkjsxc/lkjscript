@@ -17,8 +17,7 @@ pub(super) use view_admission::reject_read_view_type_escape;
 #[path = "map_key_sharing_tests.rs"]
 mod map_key_sharing_tests;
 
-// Current finite value/admission representation, independent of invocation-lifetime quotas.
-pub(crate) const MAXIMUM_VALUE_ALLOCATION_BYTES: u64 = 256 * 1024 * 1024;
+// Raw item admission remains separate from invocation-lifetime quotas.
 pub(crate) const MAXIMUM_ADMISSION_ITEMS: u64 = 1_000_000;
 
 /// Actual storage arithmetic is checked even when cumulative allocation has no quota.
@@ -251,11 +250,10 @@ impl NormalizedValue {
             control.check()?;
             bytes = bytes
                 .checked_add(charge.bytes)
-                .filter(|bytes| *bytes <= MAXIMUM_VALUE_ALLOCATION_BYTES)
                 .ok_or_else(|| {
                     crate::platform::execution::ExecutionError::resource(
                         "normalized_map_storage",
-                        "raw map construction exceeds its owned storage bound",
+                        "raw map construction storage accounting overflowed",
                     )
                 })?;
             Ok(())
@@ -270,12 +268,11 @@ impl NormalizedValue {
         super::list::List::from_items(items, super::list::MAXIMUM_LENGTH as u64, &mut |charge| {
             bytes = bytes
                 .checked_add(charge.bytes)
-                .filter(|n| *n <= 268_435_456)
                 .ok_or_else(|| {
                     crate::platform::execution::ExecutionError::new(
                         crate::platform::execution::ExecutionFailureClass::Resource,
                         "normalized_list_storage",
-                        "raw list construction exceeds its owned storage bound",
+                        "raw list construction storage accounting overflowed",
                     )
                 })?;
             Ok(())
@@ -416,11 +413,10 @@ pub(super) fn raw_map_reservation(
         control.check()?;
         bytes = bytes
             .checked_add(charge.bytes)
-            .filter(|bytes| *bytes <= MAXIMUM_VALUE_ALLOCATION_BYTES)
             .ok_or_else(|| {
                 crate::platform::execution::ExecutionError::resource(
                     "normalized_map_storage",
-                    "raw map operation exceeds finite storage",
+                    "raw map operation storage accounting overflowed",
                 )
             })?;
         Ok(())
@@ -434,6 +430,9 @@ pub(super) struct RawValue(NormalizedValue);
 impl RawValue {
     pub(super) fn new(value: NormalizedValue) -> Self {
         Self(value)
+    }
+    pub(super) fn as_raw(&self) -> &NormalizedValue {
+        &self.0
     }
     pub(super) fn into_raw(mut self) -> NormalizedValue {
         std::mem::replace(&mut self.0, NormalizedValue::Unit)

@@ -189,7 +189,7 @@ fn target_route_ids<W: WitnessBaseRead + ?Sized>(
     let read = witness.read_incoming_relations_of_kind(
         owner,
         RelationKind::HttpRouteTarget,
-        crate::platform::kernel::contract::MAXIMUM_HTTP_ROUTES_PER_TARGET.saturating_add(1),
+        Some(crate::platform::kernel::contract::MAXIMUM_HTTP_ROUTES_PER_TARGET.saturating_add(1)),
     )?;
     work.witness.add(read.work);
     if read.value.truncated {

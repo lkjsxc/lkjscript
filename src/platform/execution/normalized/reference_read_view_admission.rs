@@ -98,6 +98,15 @@ impl<'a> Budget<'a> {
                 "canonical type/layout exceeds the semantic depth boundary",
             ));
         }
+        self.charge_step()
+    }
+    // Iterative walks have no recursive host-stack depth. They retain the same
+    // work policy and cancellation checks as the recursive preparation paths.
+    fn step_iterative(&mut self) -> Result<()> {
+        self.control.check()?;
+        self.charge_step()
+    }
+    fn charge_step(&mut self) -> Result<()> {
         self.remaining = self.remaining.checked_sub(1).ok_or_else(|| {
             ExecutionError::resource(
                 "reference_read_view_proof_work",

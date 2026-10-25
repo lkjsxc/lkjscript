@@ -3,7 +3,6 @@
 
 use super::*;
 
-const MAXIMUM_ANALYSIS_BYTES: usize = 64 * 1_048_576;
 const MAXIMUM_WITNESS_EDGES: usize = 64;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -27,22 +26,16 @@ struct Flow {
     slots: Vec<Slot>,
     indexes: BTreeMap<Slot, usize>,
     edges: Vec<Edge>,
-    bytes: usize,
+    bytes: ValidationWork,
 }
 
 impl Flow {
     fn reserve<T>(&mut self, count: usize) -> Result<(), Diagnostic> {
-        self.bytes = count
-            .checked_mul(std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>())
-            .and_then(|bytes| self.bytes.checked_add(bytes))
-            .filter(|bytes| *bytes <= MAXIMUM_ANALYSIS_BYTES)
-            .ok_or_else(|| {
-                Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "kernel_type_nominal_storage",
-                    "finite-instantiation analysis exceeds its metadata storage limit",
-                )
-            })?;
+        self.reserve_product::<T>(count, 1)
+    }
+
+    fn reserve_product<T>(&mut self, count: usize, multiple: usize) -> Result<(), Diagnostic> {
+        self.bytes.charge_factors(&[count, std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>(), multiple], None);
         Ok(())
     }
 
@@ -77,18 +70,9 @@ impl Flow {
         tick: &mut impl FnMut() -> Result<(), Diagnostic>,
     ) -> Result<Option<Vec<usize>>, Diagnostic> {
         let count = self.slots.len();
-        self.reserve::<Vec<usize>>(count.checked_mul(2).ok_or_else(|| {
-            type_error("kernel_type_nominal_depth", "nominal slot count overflow")
-        })?)?;
-        self.reserve::<usize>(self.edges.len().checked_mul(2).ok_or_else(|| {
-            type_error("kernel_type_nominal_depth", "nominal edge count overflow")
-        })?)?;
-        self.reserve::<usize>(count.checked_mul(8).ok_or_else(|| {
-            type_error(
-                "kernel_type_nominal_depth",
-                "nominal traversal count overflow",
-            )
-        })?)?;
+        self.reserve_product::<Vec<usize>>(count, 2)?;
+        self.reserve_product::<usize>(self.edges.len(), 2)?;
+        self.reserve_product::<usize>(count, 8)?;
         let mut outgoing = vec![Vec::new(); count];
         let mut incoming = vec![Vec::new(); count];
         for (index, edge) in self.edges.iter().enumerate() {

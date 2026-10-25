@@ -526,7 +526,7 @@ fn private_scoped_mapping_transport_admits_hidden_targets_only_after_complete_so
             .is_none()
     );
     let mut work = 0;
-    let error = crate::platform::kernel::infer_function_expression_type(
+    let error = crate::platform::kernel::test_work::infer_function_expression_type(
         &consumer,
         caller_id,
         direct,

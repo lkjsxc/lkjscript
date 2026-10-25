@@ -192,7 +192,7 @@ fn recheck(
             && !store.derived.contains_key(&key)
         {
             admission.admit_catalog_lookup().map_err(read_error)?;
-            work.catalog_lookups = work.catalog_lookups.saturating_add(1);
+            work.add(crate::platform::storage::object::StoreWork { catalog_lookups: 1, ..crate::platform::storage::object::StoreWork::default() });
             let value = memory.objects.get(&key).ok_or_else(missing_object)?;
             let length = value.as_slice().len();
             if length > key.domain.maximum_bytes() {
@@ -210,11 +210,11 @@ fn recheck(
                 .as_ref()
                 .is_some_and(|old| old.as_ptr() == Arc::as_ptr(value))
             {
-                work.objects_reused = work.objects_reused.saturating_add(1);
+                work.add(crate::platform::storage::object::StoreWork { objects_reused: 1, ..crate::platform::storage::object::StoreWork::default() });
             } else {
                 key.verify(value.as_slice()).map_err(read_error)?;
-                work.objects_read = work.objects_read.saturating_add(1);
-                work.bytes_read = work.bytes_read.saturating_add(length as u64);
+                work.add(crate::platform::storage::object::StoreWork { objects_read: 1, ..crate::platform::storage::object::StoreWork::default() });
+                work.add(crate::platform::storage::object::StoreWork { bytes_read: length as u64, ..crate::platform::storage::object::StoreWork::default() });
             }
             continue;
         }
@@ -347,6 +347,7 @@ pub(super) struct RevalidatedBase {
     pub facts: CanonicalWitnessFacts,
     pub current: Result<CurrentValidation, Vec<Diagnostic>>,
     pub semantic_work: u64,
+    pub semantic_work_saturated: bool,
 }
 
 impl RevalidatedBase {
@@ -356,10 +357,10 @@ impl RevalidatedBase {
     ) -> Result<Self, Diagnostic> {
         checkpoint()?;
         let facts = rebuild_canonical_facts(&snapshot)?;
-        let mut semantic_work = 0;
+        let mut semantic_work = crate::platform::kernel::ValidationWork::default();
         let current = crate::platform::kernel::validate_full_checked(
             &snapshot,
-            crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
+            None,
             &mut semantic_work,
             checkpoint,
         )
@@ -386,7 +387,8 @@ impl RevalidatedBase {
             snapshot,
             facts,
             current,
-            semantic_work,
+            semantic_work: semantic_work.consumed as u64,
+            semantic_work_saturated: semantic_work.saturated,
         })
     }
 
@@ -420,11 +422,9 @@ struct LinkReadSet {
     modeled_bytes: usize,
 }
 
-const REBUILD_LIMITS: StoreReadLimits = StoreReadLimits {
-    maximum_catalog_lookups: 2_000_000,
-    maximum_objects: 1_000_000,
-    maximum_bytes: 256 * 1_048_576,
-};
+// Revalidation observes complete input reads; only explicit enclosing policies
+// may impose an aggregate read quota.
+const REBUILD_LIMITS: StoreReadLimits = StoreReadLimits::unbounded();
 
 impl ViewStore {
     pub(super) fn persistent_base(&self) -> &StorageBackend {
@@ -526,14 +526,7 @@ impl ViewStore {
     }
 
     pub fn rebuild_work(&self) -> StoreWork {
-        let remaining = self.rebuild_reads.get().remaining();
-        StoreWork {
-            catalog_lookups: REBUILD_LIMITS.maximum_catalog_lookups
-                - remaining.maximum_catalog_lookups,
-            objects_read: REBUILD_LIMITS.maximum_objects - remaining.maximum_objects,
-            bytes_read: REBUILD_LIMITS.maximum_bytes - remaining.maximum_bytes,
-            ..StoreWork::default()
-        }
+        self.rebuild_reads.get().observation().as_store_work()
     }
 
     pub fn install(&mut self, validation: &RevalidatedBase) -> Result<(), Diagnostic> {
@@ -616,35 +609,19 @@ impl ImmutableObjectStore for ViewStore {
         admission: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
-        let caller = admission.remaining();
-        let rebuild = self.rebuild_reads.get().remaining();
-        let allowed = StoreReadLimits {
-            maximum_catalog_lookups: caller
-                .maximum_catalog_lookups
-                .min(rebuild.maximum_catalog_lookups),
-            maximum_objects: caller.maximum_objects.min(rebuild.maximum_objects),
-            maximum_bytes: caller.maximum_bytes.min(rebuild.maximum_bytes),
-        };
-        let mut joint = StoreReadAdmission::new(allowed);
+        let caller = *admission;
+        let rebuild = self.rebuild_reads.get();
+        let mut joint = StoreReadAdmission::new(caller.remaining().intersect(rebuild.remaining()));
         let result = self.read_joint(key, maximum_bytes, &mut joint, work);
         if matches!(&result, Ok(Some(_)))
             && let Some(objects) = self.rebuild_objects.borrow_mut().as_mut()
         {
             objects.insert(key);
         }
-        let remaining = joint.remaining();
-        let charge = |original: StoreReadLimits| {
-            StoreReadAdmission::new(StoreReadLimits {
-                maximum_catalog_lookups: original.maximum_catalog_lookups
-                    - (allowed.maximum_catalog_lookups - remaining.maximum_catalog_lookups),
-                maximum_objects: original.maximum_objects
-                    - (allowed.maximum_objects - remaining.maximum_objects),
-                maximum_bytes: original.maximum_bytes
-                    - (allowed.maximum_bytes - remaining.maximum_bytes),
-            })
-        };
-        *admission = charge(caller);
-        self.rebuild_reads.set(charge(rebuild));
+        let next_caller = caller.charged_from(&joint)?;
+        let next_rebuild = rebuild.charged_from(&joint)?;
+        *admission = next_caller;
+        self.rebuild_reads.set(next_rebuild);
         if matches!(&result, Ok(Some(_))) {
             self.record_link_read(key)?;
         }
@@ -703,9 +680,9 @@ impl ViewStore {
                 ));
             }
             key.verify(bytes)?;
-            work.catalog_lookups = work.catalog_lookups.saturating_add(1);
-            work.objects_read = work.objects_read.saturating_add(1);
-            work.bytes_read = work.bytes_read.saturating_add(bytes.len() as u64);
+            work.add(crate::platform::storage::object::StoreWork { catalog_lookups: 1, ..crate::platform::storage::object::StoreWork::default() });
+            work.add(crate::platform::storage::object::StoreWork { objects_read: 1, ..crate::platform::storage::object::StoreWork::default() });
+            work.add(crate::platform::storage::object::StoreWork { bytes_read: bytes.len() as u64, ..crate::platform::storage::object::StoreWork::default() });
             Ok(Some(bytes.clone()))
         } else {
             Ok(None)

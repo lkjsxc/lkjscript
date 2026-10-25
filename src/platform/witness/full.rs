@@ -64,7 +64,7 @@ pub fn rebuild_full_witness(snapshot: &KernelSnapshot) -> Result<FullWitness, Ve
 
 pub(crate) fn rebuild_full_witness_with_limit(
     snapshot: &KernelSnapshot,
-    maximum_work: usize,
+    maximum_work: Option<usize>,
 ) -> Result<FullWitness, Vec<Diagnostic>> {
     rebuild_full_witness_checked(snapshot, maximum_work, &|| Ok(()))
 }
@@ -83,11 +83,11 @@ pub(crate) fn checked_full_validation_invocations() -> usize {
 
 pub(crate) fn rebuild_full_witness_checked(
     snapshot: &KernelSnapshot,
-    maximum_work: usize,
+    maximum_work: Option<usize>,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
 ) -> Result<FullWitness, Vec<Diagnostic>> {
     let validation =
-        crate::platform::kernel::validate_full_checked(snapshot, maximum_work, &mut 0, checkpoint)?;
+        crate::platform::kernel::validate_full_checked(snapshot, maximum_work, &mut crate::platform::kernel::ValidationWork::default(), checkpoint)?;
     #[cfg(test)]
     CHECKED_FULL_VALIDATIONS.with(|count| count.set(count.get().saturating_add(1)));
     let witness =
@@ -157,7 +157,7 @@ pub(crate) fn rebuild_full_witness_checked_for_source(
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
     binding: crate::platform::package_transport::source::SourceValidationBinding,
 ) -> Result<(FullWitness, CompletedSourceValidation), Vec<Diagnostic>> {
-    let witness = rebuild_full_witness_checked(snapshot, maximum_work, checkpoint)?;
+    let witness = rebuild_full_witness_checked(snapshot, Some(maximum_work), checkpoint)?;
     // Mint only after real full validation, canonical facts and the end checkpoint succeed.
     let completed = CompletedSourceValidation {
         binding,

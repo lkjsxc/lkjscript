@@ -31,7 +31,7 @@ mod effect_admission_tests {
         ];
         for maximum in [12, 13] {
             let mut budget = ChangeBudget::default();
-            budget.validation.maximum_expression_steps = maximum;
+            budget.validation.maximum_expression_steps = Some(maximum);
             let mut lowerer = AuthoredLowerer::new(
                 &base,
                 &witness,
@@ -108,7 +108,7 @@ mod supplied_type_tests {
         for base in [&cold, &warm] {
             for maximum in [2, 3] {
                 let mut budget = ChangeBudget::default();
-                budget.canonical_edits.maximum_type_edits = maximum;
+                budget.canonical_edits.maximum_type_edits = Some(maximum);
                 let mut lowerer = AuthoredLowerer::new(
                     base,
                     &witness,
@@ -159,7 +159,7 @@ mod supplied_type_tests {
         let witness = crate::platform::witness::rebuild_full_witness(&base).unwrap();
         for maximum in [3, 4] {
             let mut budget = ChangeBudget::default();
-            budget.canonical_edits.maximum_type_edits = maximum;
+            budget.canonical_edits.maximum_type_edits = Some(maximum);
             let mut lowerer = AuthoredLowerer::new(
                 &base,
                 &witness,
@@ -1578,29 +1578,19 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     }
 
     fn admit_effect_work(&mut self, atoms: usize) -> Result<(), Diagnostic> {
-        let overflow = || {
-            request_error(
-                DiagnosticClass::Resource,
-                "change_budget_validation_expression_steps",
-                "effect normalization work overflow",
-            )
-        };
-        let count = u64::try_from(atoms).map_err(|_| overflow())?;
+        let count = atoms as u64;
         let factor = u64::from(count.checked_ilog2().unwrap_or(0)) + 1;
-        let steps = count
-            .checked_mul(factor)
-            .and_then(|n| n.checked_add(1))
-            .ok_or_else(overflow)?;
-        self.work.effect_normalization_steps = self
-            .work
-            .effect_normalization_steps
-            .checked_add(steps)
-            .ok_or_else(overflow)?;
-        self.work
-            .effect_normalization_steps
-            .checked_add(self.work.associated_inventory_steps)
-            .ok_or_else(overflow)?;
-        self.check_budget("effect row normalization before allocation")
+        let mut steps = super::BudgetCounter::product(count, factor);
+        steps.observe(super::BudgetCounter::exact(1));
+        let mut total = self.work.validation_observation();
+        total.charge(steps, self.budget.validation.maximum_expression_steps,
+            "effect row normalization before allocation", "validation_expression_steps")?;
+        let mut observed = super::BudgetCounter { consumed: self.work.effect_normalization_steps,
+            saturated: self.work.effect_normalization_saturated };
+        observed.observe(steps);
+        self.work.effect_normalization_steps = observed.consumed;
+        self.work.effect_normalization_saturated = observed.saturated;
+        Ok(())
     }
 
     fn lower_effect_row_parts(

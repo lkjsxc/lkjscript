@@ -700,12 +700,6 @@ fn reserve_execution_allocation(
     observation: &mut NormalizedRunObservation,
     bytes: u64,
 ) -> Result<(), ExecutionError> {
-    if bytes > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
-        return Err(resource_error(
-            "normalized_allocation",
-            "one allocation exceeds finite value storage",
-        ));
-    }
     let next_bytes = crate::platform::execution::cumulative_charge(
         observation.allocated_bytes,
         bytes,
@@ -5268,12 +5262,6 @@ fn call_core_intrinsic_borrowed(
             let [NormalizedValue::List(items)] = arguments else {
                 return Err(type_error("byte construction requires one integer list"));
             };
-            if items.len() as u64 > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
-                return Err(resource_error(
-                    "normalized_allocation",
-                    "byte output exceeds finite value storage",
-                ));
-            }
             let mut bytes = Vec::with_capacity(items.len());
             for item in items.iter() {
                 control.check()?;
@@ -5294,12 +5282,6 @@ fn call_core_intrinsic_borrowed(
             let [NormalizedValue::Bytes(bytes)] = arguments else {
                 return Err(type_error("UTF-8 decoding requires bytes"));
             };
-            if bytes.len() as u64 > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
-                return Err(resource_error(
-                    "normalized_allocation",
-                    "UTF-8 input exceeds finite value storage",
-                ));
-            }
             let decoded = std::str::from_utf8(bytes);
             control.check()?;
             normalized_structural_record([
@@ -6274,4 +6256,35 @@ fn direct_memory_type(
         }
     }
     Err(type_error("cyclic memory type substitution"))
+}
+
+
+#[cfg(test)]
+mod allocation_capacity_tests {
+    use super::*;
+
+    #[test]
+    fn allocation_reservation_has_no_hidden_per_value_ceiling() {
+        let amount = 256 * 1024 * 1024 + 1;
+        assert_eq!(NormalizedRunPolicy::default().maximum_allocated_bytes, None);
+        for limit in [None, Some(amount)] {
+            let policy = NormalizedRunPolicy { maximum_allocated_bytes: limit,
+                ..NormalizedRunPolicy::default() };
+            let mut observation = NormalizedRunObservation::default();
+            reserve_execution_allocation(policy, None, &mut observation, amount).unwrap();
+            assert_eq!(observation.allocated_bytes, amount);
+            assert_eq!(observation.allocation_charges, 1);
+            let next = reserve_execution_allocation(policy, None, &mut observation, 1);
+            assert_eq!(next.is_ok(), limit.is_none());
+            assert_eq!(observation.allocated_bytes, amount + u64::from(limit.is_none()));
+        }
+        for limit in [0, u64::MAX] {
+            let policy = NormalizedRunPolicy { maximum_allocated_bytes: Some(limit),
+                ..NormalizedRunPolicy::default() };
+            let mut observation = NormalizedRunObservation::default();
+            reserve_execution_allocation(policy, None, &mut observation, limit).unwrap();
+            assert!(reserve_execution_allocation(policy, None, &mut observation, 1).is_err());
+            assert_eq!(observation.allocated_bytes, limit);
+        }
+    }
 }

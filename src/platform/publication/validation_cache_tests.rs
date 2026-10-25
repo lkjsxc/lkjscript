@@ -159,15 +159,15 @@ fn immutable_identity_reuse_keeps_limits_and_rechecks_replaced_bytes() {
     assert_eq!(work.objects_reused, proof.objects.len() as u64);
     for limits in [
         StoreReadLimits {
-            maximum_catalog_lookups: 0,
+            maximum_catalog_lookups: Some(0),
             ..REBUILD_LIMITS
         },
         StoreReadLimits {
-            maximum_objects: 0,
+            maximum_objects: Some(0),
             ..REBUILD_LIMITS
         },
         StoreReadLimits {
-            maximum_bytes: 0,
+            maximum_bytes: Some(0),
             ..REBUILD_LIMITS
         },
     ] {

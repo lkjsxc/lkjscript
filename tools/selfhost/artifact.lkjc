@@ -37,7 +37,7 @@ declarations.begin
             (binding at
               (call ci::add (call ci::u32 (local data) (i64 72)) (call ci::mul (local i) (i64 8))))
             (binding offset (call ci::u32 (local data) (local at)))
-            (binding size (call flow::field (local data) (local at) (i64 4)))
+            (binding size (call ci::field32 (local data) (local at) (i64 4)))
             (binding unit
               (call ci::slice
                 (local data)
@@ -116,7 +116,7 @@ declarations.begin
                 (local b)))
             (binding d
               (type ByteBuffer)
-              (call ci::push (call flow::field (local data) (local unit) (i64 8)) (local c)))
+              (call ci::push (call ci::field32 (local data) (local unit) (i64 8)) (local c)))
             (binding e
               (type ByteBuffer)
               (call wire::range

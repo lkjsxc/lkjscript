@@ -4,7 +4,7 @@ use lkjscript::platform::contributor::CatalogInventory;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub(crate) const SCALE_CONTRACT_VERSION: u32 = 3;
+pub(crate) const SCALE_CONTRACT_VERSION: u32 = 4;
 pub(crate) const SCALE_SCHEMA: &str = "lkjscript-semantic-scale-receipt";
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -284,10 +284,13 @@ pub(crate) struct OracleEvidence {
     pub(crate) validation_expression_records: u64,
     pub(crate) validation_relation_edges: u64,
     pub(crate) validation_work: u64,
+    pub(crate) validation_work_saturated: bool,
     pub(crate) map_pages_read: u64,
     pub(crate) map_bytes_read: u64,
+    pub(crate) map_work_saturated: bool,
     pub(crate) store_objects_read: u64,
     pub(crate) store_bytes_read: u64,
+    pub(crate) store_work_saturated: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

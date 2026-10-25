@@ -268,14 +268,14 @@ impl Read {
 fn production(schema: &Schema) -> Vec<Diagnostic> {
     let read = Read::new(schema);
     let mut diagnostics = vec![];
-    let outcome = validate_expression_roots_with_limits(
+    let outcome = crate::platform::kernel::test_work::validate_expression_roots_with_limits(
         &read,
         read.owners.keys().copied(),
         &mut diagnostics,
         &mut 0,
         ExpressionValidationLimits {
-            maximum_steps: 1_000_000,
-            maximum_diagnostics: 100,
+            maximum_steps: Some(1_000_000),
+            maximum_diagnostics: Some(100),
         },
     );
     assert!(outcome.is_ok(), "{schema:?}: {outcome:?}; {diagnostics:?}");
@@ -453,14 +453,14 @@ fn finite_recursive_nominals_bounded_analysis_cancellation_and_recovery() {
     let mut read = Read::new(&schema);
     let mut diagnostics = Vec::new();
     let mut work = 0;
-    let outcome = validate_expression_roots_with_limits(
+    let outcome = crate::platform::kernel::test_work::validate_expression_roots_with_limits(
         &read,
         read.owners.keys().copied(),
         &mut diagnostics,
         &mut work,
         ExpressionValidationLimits {
-            maximum_steps: 5,
-            maximum_diagnostics: 100,
+            maximum_steps: Some(5),
+            maximum_diagnostics: Some(100),
         },
     );
     assert_eq!(outcome, Err(ExpressionValidationExhaustion::Steps));
@@ -468,14 +468,14 @@ fn finite_recursive_nominals_bounded_analysis_cancellation_and_recovery() {
     read.control = crate::platform::execution::ExecutionControl::cancel_after_checks(40);
     diagnostics.clear();
     work = 0;
-    validate_expression_roots_with_limits(
+    crate::platform::kernel::test_work::validate_expression_roots_with_limits(
         &read,
         read.owners.keys().copied(),
         &mut diagnostics,
         &mut work,
         ExpressionValidationLimits {
-            maximum_steps: 1_000_000,
-            maximum_diagnostics: 100,
+            maximum_steps: Some(1_000_000),
+            maximum_diagnostics: Some(100),
         },
     )
     .unwrap();

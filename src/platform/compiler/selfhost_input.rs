@@ -10,11 +10,11 @@ use crate::platform::kernel::{
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) const HEADER: usize = 72;
-pub(crate) const DECLARATIONS: usize = 2176;
-pub(crate) const MAX_FUNCTIONS: usize = 1024;
-pub(crate) const MAX_LOCALS: usize = 128;
-pub(crate) const MAX_STACK: usize = 128;
-pub(crate) const MAX_INPUT: usize = 8 * 1024 * 1024;
+pub(crate) const DESCRIPTORS: usize = 160;
+pub(crate) const DESCRIPTOR_BYTES: usize = 32;
+pub(crate) const FUNCTION_BYTES: usize = 80;
+pub(crate) const NODE_BYTES: usize = 64;
+pub(crate) const VALUE_TYPE_BYTES: usize = 16;
 
 #[track_caller]
 fn unsupported() -> Diagnostic {
@@ -22,125 +22,143 @@ fn unsupported() -> Diagnostic {
         DiagnosticClass::Source,
         "compiler_input_unsupported",
         format!(
-            "LKJCI1 profile 4 requires a bounded closed pure byte/aggregate function closure with forward branches (exporter precondition at {})",
+            "LKJCI1 profile 6 requires a closed pure byte/aggregate function closure with forward branches (exporter precondition at {})",
             std::panic::Location::caller()
         ),
     )
 }
 
+/// Type identity and custody are independent wire fields. In particular, type
+/// identity 134 is an ordinary descriptor and never denotes a borrowed buffer.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct ValueType {
+    pub identity: u64,
+    pub borrowed: bool,
+}
+impl ValueType {
+    pub(crate) const fn owned(identity: u64) -> Self {
+        Self { identity, borrowed: false }
+    }
+    pub(crate) const fn borrowed_buffer() -> Self {
+        Self { identity: 6, borrowed: true }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Node {
-    pub tag: u32,
-    pub a: u32,
-    pub b: u32,
-    pub c: u32,
+    pub tag: u64,
+    pub a: u64,
+    pub b: u64,
+    pub c: u64,
     pub immediate: i64,
     pub initialized: Vec<u8>,
-    pub stack: Vec<u8>,
+    pub stack: Vec<ValueType>,
     pub data: Vec<u8>,
 }
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Function {
-    pub result: u32,
-    pub parameters: u32,
-    pub locals: Vec<u8>,
-    pub external: u32,
+    pub result: u64,
+    pub parameters: u64,
+    pub locals: Vec<ValueType>,
+    pub external: u64,
     pub nodes: Vec<Node>,
 }
 #[derive(Clone, Debug)]
 struct State {
     initialized: Vec<u8>,
-    stack: Vec<u8>,
+    stack: Vec<ValueType>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Record {
-    pub fields: Vec<(String, u8)>,
+    pub fields: Vec<(String, u64)>,
 }
 
 #[derive(Default)]
 struct Types {
     records: Vec<Record>,
-    known: BTreeMap<TypeObjectDigest, u8>,
-    active: BTreeSet<TypeObjectDigest>,
+    known: BTreeMap<TypeObjectDigest, u64>,
 }
 
 impl Types {
-    fn record(&mut self, mut fields: Vec<(String, u8)>) -> Result<u8, Diagnostic> {
+    fn record(&mut self, mut fields: Vec<(String, u64)>) -> Result<u64, Diagnostic> {
         fields.sort();
-        if fields.len() > MAX_STACK
-            || fields
-                .iter()
-                .any(|(name, ty)| name.is_empty() || *ty == 6 || *ty == 134)
+        if fields.iter().any(|(name, ty)| name.is_empty() || *ty == 6)
             || fields.windows(2).any(|w| w[0].0 == w[1].0)
         {
             return Err(unsupported());
         }
         let record = Record { fields };
         if let Some(index) = self.records.iter().position(|r| r == &record) {
-            return Ok(index as u8 + 8);
+            return input_word(index)?.checked_add(8).ok_or_else(unsupported);
         }
-        if self.records.len() >= 120 {
-            return Err(unsupported());
-        }
-        let ty = self.records.len() as u8 + 8;
+        let ty = input_word(self.records.len())?.checked_add(8).ok_or_else(unsupported)?;
+        self.records.try_reserve(1).map_err(|_| allocation())?;
         self.records.push(record);
         Ok(ty)
     }
 
-    fn code(
-        &mut self,
-        program: &NormalizedProgram,
-        ty: TypeObjectDigest,
-    ) -> Result<u8, Diagnostic> {
-        if let Some(code) = self.known.get(&ty) {
-            return Ok(*code);
-        }
-        if !self.active.insert(ty) || self.active.len() > 127 {
-            return Err(unsupported());
-        }
-        let code = match program.types.get(&ty).map(|ty| &ty.form) {
-            Some(TypeForm::I64) => 1,
-            Some(TypeForm::Bool) => 2,
-            Some(TypeForm::Unit) => 3,
-            Some(TypeForm::Text) => 4,
-            Some(TypeForm::Bytes) => 5,
-            Some(TypeForm::ByteBuffer) => 6,
-            Some(TypeForm::List { item }) if self.code(program, *item)? == 1 => 7,
-            Some(TypeForm::StructuralRecord { fields }) => {
-                let mut mapped = vec![];
-                for field in fields {
-                    mapped.push((
-                        field.name.as_str().to_owned(),
-                        self.code(program, field.ty)?,
-                    ));
-                }
-                self.record(mapped)?
+    // Explicit enter/exit frames make the complete descriptor walk stack safe.
+    // The active set is a semantic cycle check, independent of traversal depth.
+    fn code(&mut self, program: &NormalizedProgram, root: TypeObjectDigest) -> Result<u64, Diagnostic> {
+        let mut pending = vec![(root, false)];
+        let mut active = BTreeSet::new();
+        while let Some((ty, exit)) = pending.pop() {
+            if self.known.contains_key(&ty) { continue; }
+            let form = &program.types.get(&ty).ok_or_else(unsupported)?.form;
+            if !exit {
+                if !active.insert(ty) { return Err(unsupported()); }
+                pending.try_reserve(1).map_err(|_| allocation())?;
+                pending.push((ty, true));
+                let children: Vec<_> = match form {
+                    TypeForm::List { item } => vec![*item],
+                    TypeForm::StructuralRecord { fields } => fields.iter().map(|f| f.ty).collect(),
+                    TypeForm::I64 | TypeForm::Bool | TypeForm::Unit | TypeForm::Text
+                    | TypeForm::Bytes | TypeForm::ByteBuffer => vec![],
+                    _ => return Err(unsupported()),
+                };
+                pending.try_reserve(children.len()).map_err(|_| allocation())?;
+                for child in children.into_iter().rev() { pending.push((child, false)); }
+                continue;
             }
-            _ => return Err(unsupported()),
-        };
-        self.active.remove(&ty);
-        self.known.insert(ty, code);
-        Ok(code)
+            let code = match form {
+                TypeForm::I64 => 1,
+                TypeForm::Bool => 2,
+                TypeForm::Unit => 3,
+                TypeForm::Text => 4,
+                TypeForm::Bytes => 5,
+                TypeForm::ByteBuffer => 6,
+                TypeForm::List { item } if self.known.get(item) == Some(&1) => 7,
+                TypeForm::StructuralRecord { fields } => {
+                    let mut mapped = Vec::new();
+                    mapped.try_reserve_exact(fields.len()).map_err(|_| allocation())?;
+                    for field in fields {
+                        mapped.push((field.name.as_str().to_owned(),
+                            *self.known.get(&field.ty).ok_or_else(unsupported)?));
+                    }
+                    self.record(mapped)?
+                }
+                _ => return Err(unsupported()),
+            };
+            active.remove(&ty);
+            self.known.insert(ty, code);
+        }
+        self.known.get(&root).copied().ok_or_else(unsupported)
     }
 
-    fn parameter(
-        &mut self,
-        program: &NormalizedProgram,
-        ty: TypeObjectDigest,
-        mode: ParameterUse,
-    ) -> Result<u8, Diagnostic> {
+    fn parameter(&mut self, program: &NormalizedProgram, ty: TypeObjectDigest,
+        mode: ParameterUse) -> Result<ValueType, Diagnostic> {
         let code = self.code(program, ty)?;
         match (code, mode) {
-            (6, ParameterUse::Consume) => Ok(6),
-            (6, ParameterUse::Borrow) => Ok(134),
+            (6, ParameterUse::Consume) => Ok(ValueType::owned(6)),
+            (6, ParameterUse::Borrow) => Ok(ValueType::borrowed_buffer()),
             (6, ParameterUse::Unrestricted) => Err(unsupported()),
-            (_, ParameterUse::Unrestricted) => Ok(code),
+            (_, ParameterUse::Unrestricted) => Ok(ValueType::owned(code)),
             _ => Err(unsupported()),
         }
     }
 }
-fn primitive(name: &str) -> Result<u32, Diagnostic> {
+fn primitive(name: &str) -> Result<u64, Diagnostic> {
     Ok(match name {
         "core.i64.add" => 1,
         "core.i64.subtract" => 2,
@@ -199,9 +217,6 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
             }
             continue;
         }
-        if reachable.len() > MAX_FUNCTIONS {
-            return Err(unsupported());
-        }
         if function.effect != FunctionEffect::Pure
             || !function.implementation_parameters.is_empty()
             || !function.implementation_arguments.is_empty()
@@ -256,8 +271,8 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
     let indices: BTreeMap<_, _> = reachable
         .iter()
         .enumerate()
-        .map(|(i, &f)| (f, i as u32))
-        .collect();
+        .map(|(i, &f)| Ok((f, input_word(i)?)))
+        .collect::<Result<_, Diagnostic>>()?;
     let mut functions = Vec::new();
     for &index in &reachable {
         let function = &program.functions[index];
@@ -272,29 +287,27 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
             .map(|p| types.parameter(program, resolve(p.ty)?, p.use_mode))
             .collect::<Result<Vec<_>, _>>()?;
         functions.push(Function {
-            result: u32::from(types.code(program, resolve(function.result.ty)?)?),
-            parameters: function.parameter_count,
+            result: types.code(program, resolve(function.result.ty)?)?,
+            parameters: u64::from(function.parameter_count),
             locals,
             external: 0,
             nodes: vec![],
         });
     }
     let signatures = functions.clone();
-    let node_capacity = node_capacity(functions.len())?;
     for (dense, &index) in reachable.iter().enumerate() {
         let function = &mut functions[dense];
         match &program.functions[index].body {
             NormalizedFunctionBody::External(name) => function.external = primitive(name.as_str())?,
             NormalizedFunctionBody::Code(code) => {
-                if code.local_count as usize > MAX_LOCALS
-                    || code.parameter_count != function.parameters
+                if u64::from(code.parameter_count) != function.parameters
                     || code.local_count < code.parameter_count
-                    || code.instructions.len() > node_capacity
                     || code.instructions.is_empty()
                 {
                     return Err(unsupported());
                 }
-                function.locals.resize(code.local_count as usize, 0);
+                function.locals.try_reserve(code.local_count as usize - function.locals.len()).map_err(|_| allocation())?;
+                function.locals.resize(code.local_count as usize, ValueType::owned(0));
                 let mut initial = State {
                     initialized: vec![0; code.local_count as usize],
                     stack: vec![],
@@ -316,22 +329,22 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                         I::I64(value) => {
                             node.tag = 1;
                             node.immediate = *value;
-                            after.stack.push(1);
+                            after.stack.push(ValueType::owned(1));
                         }
                         I::Bool(value) => {
                             node.tag = 2;
                             node.immediate = i64::from(*value);
-                            after.stack.push(2);
+                            after.stack.push(ValueType::owned(2));
                         }
                         I::Unit => {
                             node.tag = 3;
-                            after.stack.push(3);
+                            after.stack.push(ValueType::owned(3));
                         }
                         I::Text(value) | I::StaticText(value) => {
                             node.tag = 12;
-                            node.b = value.len() as u32;
+                            node.b = input_word(value.len())?;
                             node.data = value.as_bytes().to_vec();
-                            after.stack.push(4);
+                            after.stack.push(ValueType::owned(4));
                         }
                         I::List { items } => {
                             let start = after
@@ -339,14 +352,14 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                                 .len()
                                 .checked_sub(*items as usize)
                                 .ok_or_else(unsupported)?;
-                            if after.stack[start..].iter().any(|ty| *ty != 1) {
+                            if after.stack[start..].iter().any(|ty| *ty != ValueType::owned(1)) {
                                 return Err(unsupported());
                             }
                             after.stack.truncate(start);
-                            after.stack.push(7);
+                            after.stack.push(ValueType::owned(7));
                             node.tag = 13;
                             node.a = 7;
-                            node.b = *items;
+                            node.b = u64::from(*items);
                         }
                         I::Record {
                             layout: None,
@@ -363,93 +376,92 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                                 let NormalizedFieldSelector::Structural(name) = field else {
                                     return Err(unsupported());
                                 };
-                                shape.push((name.as_str().to_owned(), *ty));
+                                if ty.borrowed { return Err(unsupported()); }
+                                shape.push((name.as_str().to_owned(), ty.identity));
                             }
                             let ty = types.record(shape.clone())?;
                             let canonical = &types.records[ty as usize - 8].fields;
                             for field in &shape {
-                                node.data.push(
-                                    canonical
-                                        .iter()
-                                        .position(|f| f == field)
-                                        .ok_or_else(unsupported)?
-                                        as u8,
-                                );
+                                let member = input_word(canonical.iter()
+                                    .position(|f| f == field).ok_or_else(unsupported)?)?;
+                                node.data.extend_from_slice(&member.to_le_bytes());
                             }
                             node.tag = 14;
-                            node.a = u32::from(ty);
-                            node.b = fields.len() as u32;
+                            node.a = ty;
+                            node.b = input_word(fields.len())?;
                             after.stack.truncate(start);
-                            after.stack.push(ty);
+                            after.stack.push(ValueType::owned(ty));
                         }
                         I::Field(NormalizedFieldSelector::Structural(name)) => {
                             let ty = after.stack.pop().ok_or_else(unsupported)?;
+                            if ty.borrowed { return Err(unsupported()); }
+                            let ty = ty.identity;
                             let record = types
                                 .records
-                                .get(usize::from(ty).checked_sub(8).ok_or_else(unsupported)?)
+                                .get(usize::try_from(ty).map_err(|_| unsupported())?.checked_sub(8).ok_or_else(unsupported)?)
                                 .ok_or_else(unsupported)?;
                             let index = record
                                 .fields
                                 .iter()
                                 .position(|(field, _)| field == name.as_str())
                                 .ok_or_else(unsupported)?;
-                            after.stack.push(record.fields[index].1);
+                            after.stack.push(ValueType::owned(record.fields[index].1));
                             node.tag = 15;
-                            node.a = u32::from(ty);
-                            node.b = index as u32;
+                            node.a = ty;
+                            node.b = input_word(index)?;
                         }
                         I::LoadLocal { local, .. } | I::MoveLocal(local) => {
                             node.tag = 4;
-                            node.a = *local;
+                            node.a = u64::from(*local);
                             if after.initialized.get(*local as usize) != Some(&1) {
                                 return Err(unsupported());
                             }
                             let ty = *function
                                 .locals
                                 .get(*local as usize)
-                                .filter(|&&ty| ty != 0)
+                                .filter(|&&ty| ty.identity != 0)
                                 .ok_or_else(unsupported)?;
                             let mode = match instruction {
                                 I::LoadLocal { use_mode, .. } => *use_mode,
                                 _ => ParameterUse::Unrestricted,
                             };
-                            match (ty, mode) {
-                                (6 | 134, ParameterUse::Borrow) => {
+                            match (ty.identity, ty.borrowed, mode) {
+                                (6, _, ParameterUse::Borrow) => {
                                     node.b = 1;
-                                    after.stack.push(134);
+                                    after.stack.push(ValueType::borrowed_buffer());
                                 }
-                                (6, ParameterUse::Consume) => {
-                                    if after.stack.contains(&134) {
+                                (6, false, ParameterUse::Consume) => {
+                                    if after.stack.iter().any(|ty| ty.borrowed) {
                                         return Err(unsupported());
                                     }
                                     node.tag = 16;
                                     after.initialized[*local as usize] = 0;
-                                    after.stack.push(6);
+                                    after.stack.push(ValueType::owned(6));
                                 }
-                                (6 | 134, _) => return Err(unsupported()),
-                                (_, ParameterUse::Unrestricted) => after.stack.push(ty),
+                                (6, _, _) => return Err(unsupported()),
+                                (_, false, ParameterUse::Unrestricted) => after.stack.push(ty),
                                 _ => return Err(unsupported()),
                             }
                         }
                         I::StoreLocal(local) => {
                             node.tag = 5;
-                            node.a = *local;
+                            node.a = u64::from(*local);
                             let ty = after.stack.pop().ok_or_else(unsupported)?;
                             let slot = function
                                 .locals
                                 .get_mut(*local as usize)
                                 .ok_or_else(unsupported)?;
-                            if ty == 134
-                                || (*slot == 6
+                            if ty.borrowed
+                                || (*slot == ValueType::owned(6)
                                     && after.initialized[*local as usize] == 1
-                                    && (ty != 3 || after.stack.contains(&134)))
+                                    && (ty != ValueType::owned(3) || after.stack.iter().any(|ty| ty.borrowed)))
                             {
                                 return Err(unsupported());
                             }
-                            if ty == 3 && *slot != 0 && *slot != 3 {
+                            if ty == ValueType::owned(3) && slot.identity != 0 && *slot != ValueType::owned(3) {
                                 after.initialized[*local as usize] = 0;
                             } else {
-                                if *slot != 0 && *slot != ty {
+                                if slot.identity != 0 && *slot != ty {
                                     return Err(unsupported());
                                 }
                                 *slot = ty;
@@ -458,20 +470,20 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                         }
                         I::Drop => {
                             node.tag = 6;
-                            if after.stack.pop().ok_or_else(unsupported)? == 6
-                                && after.stack.contains(&134)
+                            if after.stack.pop().ok_or_else(unsupported)? == ValueType::owned(6)
+                                && after.stack.iter().any(|ty| ty.borrowed)
                             {
                                 return Err(unsupported());
                             }
                         }
                         I::Jump(target) | I::JumpIfFalse(target) => {
-                            node.a = *target;
+                            node.a = u64::from(*target);
                             if *target as usize <= ip {
                                 return Err(unsupported());
                             }
                             if matches!(instruction, I::JumpIfFalse(_)) {
                                 node.tag = 8;
-                                if after.stack.pop() != Some(2) {
+                                if after.stack.pop() != Some(ValueType::owned(2)) {
                                     return Err(unsupported());
                                 }
                                 successors.push(*target as usize);
@@ -507,7 +519,7 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                             let callee =
                                 *indices.get(&(target.0 as usize)).ok_or_else(unsupported)?;
                             let signature = &signatures[callee as usize];
-                            if *arguments != signature.parameters
+                            if u64::from(*arguments) != signature.parameters
                                 || after.stack.len() < *arguments as usize
                             {
                                 return Err(unsupported());
@@ -517,7 +529,7 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                                 return Err(unsupported());
                             }
                             after.stack.truncate(start);
-                            after.stack.push(signature.result as u8);
+                            after.stack.push(ValueType::owned(signature.result));
                             // TailCall is a derived dispatch hint. Keep its original
                             // continuation when an owned local needs lexical cleanup
                             // after a borrowed call, as the VM's fallback does.
@@ -529,7 +541,7 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                                 9
                             };
                             node.a = callee;
-                            node.b = *arguments;
+                            node.b = u64::from(*arguments);
                             if node.tag == 10 {
                                 if start != 0
                                     || signature.result != function.result
@@ -542,7 +554,7 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                         }
                         I::Return => {
                             node.tag = 11;
-                            if after.stack != [function.result as u8]
+                            if after.stack != [ValueType::owned(function.result)]
                                 || live_buffers(function, &after)
                             {
                                 return Err(unsupported());
@@ -550,9 +562,6 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                             successors.clear();
                         }
                         _ => return Err(unsupported()),
-                    }
-                    if before.stack.len() > MAX_STACK || after.stack.len() > MAX_STACK {
-                        return Err(unsupported());
                     }
                     for successor in successors {
                         let state = states.get_mut(successor).ok_or_else(unsupported)?;
@@ -566,7 +575,7 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                                 .zip(&after.initialized)
                                 .zip(&function.locals)
                             {
-                                if *ty == 6 && current != other {
+                                if *ty == ValueType::owned(6) && current != other {
                                     return Err(unsupported());
                                 }
                                 *current &= *other;
@@ -580,8 +589,8 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                 }
                 // Unused local slots have a canonical scalar storage type; no read can be admitted without initialization.
                 for ty in &mut function.locals {
-                    if *ty == 0 {
-                        *ty = 1;
+                    if ty.identity == 0 {
+                        *ty = ValueType::owned(1);
                     }
                 }
             }
@@ -590,7 +599,7 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
     let root = *indices.get(&entry).ok_or_else(unsupported)?;
     let root_function = &functions[root as usize];
     let filter = root_function.parameters == 1
-        && root_function.locals.first() == Some(&5)
+        && root_function.locals.first() == Some(&ValueType::owned(5))
         && types
             .records
             .get((root_function.result as usize).wrapping_sub(8))
@@ -606,204 +615,143 @@ fn live_buffers(function: &Function, state: &State) -> bool {
         .locals
         .iter()
         .zip(&state.initialized)
-        .any(|(ty, initialized)| *ty == 6 && *initialized != 0)
+        .any(|(ty, initialized)| *ty == ValueType::owned(6) && *initialized != 0)
 }
 
-pub(crate) fn encode(functions: &[Function], entry: u32) -> Result<Vec<u8>, Diagnostic> {
+pub(crate) fn encode(functions: &[Function], entry: u64) -> Result<Vec<u8>, Diagnostic> {
     encode_records(functions, &[], entry)
 }
 
+fn allocation() -> Diagnostic {
+    Diagnostic::new(DiagnosticClass::Source, "compiler_input_allocation",
+        "allocation of the complete normalized compiler input failed")
+}
+
 fn checked_input_end(offset: usize, additional: usize) -> Result<usize, Diagnostic> {
-    offset
-        .checked_add(additional)
-        .filter(|end| *end <= MAX_INPUT)
+    offset.checked_add(additional)
+        .filter(|end| i64::try_from(*end).is_ok())
         .ok_or_else(unsupported)
 }
 
-// This is the largest possible node table after the function rows. Blob bytes
-// reduce the admitted count further; there is no independent node quota.
-fn node_capacity(function_count: usize) -> Result<usize, Diagnostic> {
-    let function_bytes = function_count.checked_mul(40).ok_or_else(unsupported)?;
-    let node_offset = checked_input_end(DECLARATIONS, function_bytes)?;
-    Ok((MAX_INPUT - node_offset) / 32)
+fn input_word(value: usize) -> Result<u64, Diagnostic> {
+    u64::try_from(value).map_err(|_| unsupported())
 }
 
-fn input_word(value: usize) -> Result<u32, Diagnostic> {
-    u32::try_from(value).map_err(|_| unsupported())
-}
-
-pub(crate) fn encode_records(
-    functions: &[Function],
-    records: &[Record],
-    entry: u32,
-) -> Result<Vec<u8>, Diagnostic> {
+pub(crate) fn encode_records(functions: &[Function], records: &[Record], entry: u64)
+    -> Result<Vec<u8>, Diagnostic> {
     let count = functions.len();
-    if count == 0 || count > MAX_FUNCTIONS || records.len() > 120 {
-        return Err(unsupported());
-    }
-    let capacity = node_capacity(count)?;
+    if count == 0 { return Err(unsupported()); }
     let node_count = functions.iter().try_fold(0usize, |total, function| {
-        total
-            .checked_add(function.nodes.len())
-            .filter(|nodes| *nodes <= capacity)
-            .ok_or_else(unsupported)
+        total.checked_add(function.nodes.len()).ok_or_else(unsupported)
     })?;
-    if node_count == 0 {
-        return Err(unsupported());
-    }
-    let function_bytes = count.checked_mul(40).ok_or_else(unsupported)?;
-    let node_offset = checked_input_end(DECLARATIONS, function_bytes)?;
-    let node_bytes = node_count.checked_mul(32).ok_or_else(unsupported)?;
-    let blob_offset = checked_input_end(node_offset, node_bytes)?;
+    if node_count == 0 { return Err(unsupported()); }
+    let types = records.len().checked_add(7).ok_or_else(unsupported)?;
+    let declarations = checked_input_end(DESCRIPTORS,
+        types.checked_mul(DESCRIPTOR_BYTES).ok_or_else(unsupported)?)?;
+    let node_offset = checked_input_end(declarations,
+        count.checked_mul(FUNCTION_BYTES).ok_or_else(unsupported)?)?;
+    let blob_offset = checked_input_end(node_offset,
+        node_count.checked_mul(NODE_BYTES).ok_or_else(unsupported)?)?;
 
-    // Admit the complete layout before allocation or narrowing any offset.
+    // Check the complete physical extent before allocation. These are host
+    // representation boundaries, never configurable quotas or default policies.
     let mut length = blob_offset;
     for record in records {
-        let fields = record
-            .fields
-            .len()
-            .checked_mul(16)
-            .ok_or_else(unsupported)?;
-        length = checked_input_end(length, fields)?;
-        for (name, _) in &record.fields {
-            length = checked_input_end(length, name.len())?;
-        }
+        length = checked_input_end(length,
+            record.fields.len().checked_mul(32).ok_or_else(unsupported)?)?;
+        for (name, _) in &record.fields { length = checked_input_end(length, name.len())?; }
     }
     for function in functions {
-        if function.locals.len() > MAX_LOCALS {
-            return Err(unsupported());
-        }
-        length = checked_input_end(length, function.locals.len())?;
+        length = checked_input_end(length,
+            function.locals.len().checked_mul(VALUE_TYPE_BYTES).ok_or_else(unsupported)?)?;
         for node in &function.nodes {
-            if node.initialized.len() != function.locals.len() || node.stack.len() > MAX_STACK {
-                return Err(unsupported());
-            }
+            if node.initialized.len() != function.locals.len() { return Err(unsupported()); }
             length = checked_input_end(length, node.data.len())?;
             length = checked_input_end(length, node.initialized.len())?;
-            length = checked_input_end(length, node.stack.len())?;
+            length = checked_input_end(length,
+                node.stack.len().checked_mul(VALUE_TYPE_BYTES).ok_or_else(unsupported)?)?;
         }
     }
     let blob_size = length.checked_sub(blob_offset).ok_or_else(unsupported)?;
-    let node_work = node_count.checked_mul(64).ok_or_else(unsupported)?;
-    let fuel = blob_size
-        .checked_mul(256)
-        .and_then(|work| work.checked_add(node_work))
-        .and_then(|work| work.checked_add(count))
-        .and_then(|work| work.checked_add(4096))
-        .filter(|work| *work <= 2_147_483_647)
-        .ok_or_else(unsupported)?;
-
     let mut bytes = Vec::new();
-    bytes.try_reserve_exact(length).map_err(|_| unsupported())?;
+    bytes.try_reserve_exact(length).map_err(|_| allocation())?;
     bytes.resize(blob_offset, 0);
     for (i, record) in records.iter().enumerate() {
-        let row = 128 + (7 + i) * 16;
+        let row = DESCRIPTORS + (7 + i) * DESCRIPTOR_BYTES;
         let offset = bytes.len();
         word(&mut bytes, row, 8);
-        word(&mut bytes, row + 4, input_word(record.fields.len())?);
-        word(&mut bytes, row + 8, input_word(offset)?);
-        bytes.resize(offset + record.fields.len() * 16, 0);
+        word(&mut bytes, row + 8, input_word(record.fields.len())?);
+        word(&mut bytes, row + 16, input_word(offset)?);
+        bytes.resize(offset + record.fields.len() * 32, 0);
         for (f, (name, ty)) in record.fields.iter().enumerate() {
-            let field = offset + f * 16;
+            let field = offset + f * 32;
             let name_offset = bytes.len();
-            word(&mut bytes, field, u32::from(*ty));
-            word(&mut bytes, field + 4, input_word(name_offset)?);
-            word(&mut bytes, field + 8, input_word(name.len())?);
+            word(&mut bytes, field, *ty);
+            word(&mut bytes, field + 8, input_word(name_offset)?);
+            word(&mut bytes, field + 16, input_word(name.len())?);
             bytes.extend_from_slice(name.as_bytes());
         }
     }
     let mut node_index = 0;
     for (index, function) in functions.iter().enumerate() {
-        let at = DECLARATIONS + index * 40;
+        let at = declarations + index * FUNCTION_BYTES;
         let local_offset = bytes.len();
-        for (i, value) in [
-            0,
-            function.result,
-            function.parameters,
-            input_word(function.locals.len())?,
-            input_word(node_index)?,
-            input_word(function.nodes.len())?,
-            function.external,
-            input_word(local_offset)?,
-            0,
-            0,
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            word(&mut bytes, at + i * 4, value);
+        for (i, value) in [0, function.result, function.parameters,
+            input_word(function.locals.len())?, input_word(node_index)?,
+            input_word(function.nodes.len())?, function.external,
+            input_word(local_offset)?, 0, 0].into_iter().enumerate() {
+            word(&mut bytes, at + i * 8, value);
         }
-        bytes.extend_from_slice(&function.locals);
+        value_types(&mut bytes, &function.locals);
         for node in &function.nodes {
-            let at = node_offset + node_index * 32;
+            let at = node_offset + node_index * NODE_BYTES;
             let payload_offset = bytes.len();
             bytes.extend_from_slice(&node.data);
             let state_offset = bytes.len();
             for (i, value) in [node.tag, node.a, node.b, node.c].into_iter().enumerate() {
-                word(&mut bytes, at + i * 4, value);
+                word(&mut bytes, at + i * 8, value);
             }
-            if node.tag == 12 {
-                word(&mut bytes, at + 4, input_word(payload_offset)?);
-            }
-            if node.tag == 14 {
-                word(&mut bytes, at + 12, input_word(payload_offset)?);
-            }
-            bytes[at + 16..at + 24].copy_from_slice(&node.immediate.to_le_bytes());
-            word(&mut bytes, at + 24, input_word(state_offset)?);
-            word(&mut bytes, at + 28, input_word(node.stack.len())?);
+            if node.tag == 12 { word(&mut bytes, at + 8, input_word(payload_offset)?); }
+            if node.tag == 14 { word(&mut bytes, at + 24, input_word(payload_offset)?); }
+            bytes[at + 32..at + 40].copy_from_slice(&node.immediate.to_le_bytes());
+            word(&mut bytes, at + 48, input_word(state_offset)?);
+            word(&mut bytes, at + 56, input_word(node.stack.len())?);
             bytes.extend_from_slice(&node.initialized);
-            bytes.extend_from_slice(&node.stack);
+            value_types(&mut bytes, &node.stack);
             node_index += 1;
         }
     }
-    if bytes.len() != length {
-        return Err(unsupported());
-    }
+    if bytes.len() != length { return Err(unsupported()); }
     bytes[..8].copy_from_slice(b"LKJCI001");
-    word(&mut bytes, 8, 4);
-    word(&mut bytes, 12, entry);
-    let length = u64::try_from(length).map_err(|_| unsupported())?;
-    bytes[16..24].copy_from_slice(&length.to_le_bytes());
-    bytes[24..32].copy_from_slice(
-        &u64::try_from(count)
-            .map_err(|_| unsupported())?
-            .to_le_bytes(),
-    );
-    bytes[32..40].copy_from_slice(
-        &u64::try_from(fuel)
-            .map_err(|_| unsupported())?
-            .to_le_bytes(),
-    );
-    for (i, value) in [
-        112,
-        1,
-        128,
-        7 + input_word(records.len())?,
-        input_word(DECLARATIONS)?,
-        input_word(count)?,
-        input_word(node_offset)?,
-        input_word(node_count)?,
-        input_word(blob_offset)?,
-        input_word(blob_size)?,
-        0,
-        input_word(count)?,
-        0,
-        0,
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        word(&mut bytes, HEADER + i * 4, value);
-    }
-    for tag in 1..=7 {
-        word(&mut bytes, 128 + (tag - 1) * 16, tag as u32);
-    }
-    word(&mut bytes, 128 + 6 * 16 + 4, 1);
+    bytes[8..12].copy_from_slice(&6u32.to_le_bytes());
+    // @12 tag 0 + @32 zero allowance means explicitly unbounded.
+    word(&mut bytes, 16, input_word(length)?);
+    word(&mut bytes, 24, input_word(count)?);
+    for (at, value) in [(72, input_word(DESCRIPTORS)?), (80, input_word(types)?),
+        (88, input_word(declarations)?), (96, input_word(count)?),
+        (104, input_word(node_offset)?), (120, input_word(node_count)?),
+        (128, input_word(blob_offset)?), (136, input_word(blob_size)?),
+        (144, entry)] { word(&mut bytes, at, value); }
+    for tag in 1..=7 { word(&mut bytes, DESCRIPTORS + (tag - 1) * DESCRIPTOR_BYTES, tag as u64); }
+    word(&mut bytes, DESCRIPTORS + 6 * DESCRIPTOR_BYTES + 8, 1);
     rechecksum(&mut bytes);
     Ok(bytes)
 }
-fn word(bytes: &mut [u8], at: usize, value: u32) {
-    bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
+
+pub(crate) fn set_allowance(bytes: &mut [u8], allowance: Option<u64>) {
+    bytes[12..16].copy_from_slice(&u32::from(allowance.is_some()).to_le_bytes());
+    word(bytes, 32, allowance.unwrap_or(0));
+    rechecksum(bytes);
+}
+
+fn value_types(bytes: &mut Vec<u8>, types: &[ValueType]) {
+    for ty in types {
+        bytes.extend_from_slice(&ty.identity.to_le_bytes());
+        bytes.extend_from_slice(&u64::from(ty.borrowed).to_le_bytes());
+    }
+}
+fn word(bytes: &mut [u8], at: usize, value: u64) {
+    bytes[at..at + 8].copy_from_slice(&value.to_le_bytes());
 }
 
 pub(crate) fn rechecksum(bytes: &mut [u8]) {
@@ -814,7 +762,7 @@ pub(crate) fn rechecksum(bytes: &mut [u8]) {
 }
 
 /// Small independent test builder. Arithmetic operation IDs are test notation,
-/// not a second wire reader; only profile 4 is emitted.
+/// not a second wire reader; only profile 6 is emitted.
 pub(crate) fn arithmetic(operations: &[(u32, i64)]) -> Result<Vec<u8>, Diagnostic> {
     let mut root = Function {
         result: 1,
@@ -830,17 +778,17 @@ pub(crate) fn arithmetic(operations: &[(u32, i64)]) -> Result<Vec<u8>, Diagnosti
         match op {
             1 => {
                 node.tag = 1;
-                stack.push(1);
+                stack.push(ValueType::owned(1));
             }
             2..=5 => {
                 node.tag = 9;
-                node.a = op - 1;
+                node.a = u64::from(op - 1);
                 node.b = 2;
                 stack.truncate(stack.len().saturating_sub(2));
-                stack.push(1);
+                stack.push(ValueType::owned(1));
             }
             6 => node.tag = 11,
-            _ => node.tag = op,
+            _ => node.tag = u64::from(op),
         }
         root.nodes.push(node);
     }
@@ -849,7 +797,7 @@ pub(crate) fn arithmetic(operations: &[(u32, i64)]) -> Result<Vec<u8>, Diagnosti
         functions.push(Function {
             result: 1,
             parameters: 2,
-            locals: vec![1, 1],
+            locals: vec![ValueType::owned(1), ValueType::owned(1)],
             external,
             nodes: vec![],
         });

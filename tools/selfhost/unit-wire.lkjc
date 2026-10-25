@@ -77,8 +77,8 @@ declarations.begin
       (returns I64)
       (body
         (let
-          (binding lo (call flow::field (local data) (local at) (i64 0)))
-          (binding hi (call flow::field (local data) (local at) (i64 4)))
+          (binding lo (call ci::field32 (local data) (local at) (i64 0)))
+          (binding hi (call ci::field32 (local data) (local at) (i64 4)))
           (in
             (call ci::add
               (call ci::mul
@@ -97,8 +97,8 @@ declarations.begin
       (returns ByteBuffer)
       (body
         (let
-          (binding offset (call flow::field (local data) (local at) (i64 0)))
-          (binding length (call flow::field (local data) (local at) (i64 4)))
+          (binding offset (call ci::field32 (local data) (local at) (i64 0)))
+          (binding length (call ci::field32 (local data) (local at) (i64 4)))
           (binding a (type ByteBuffer) (call wire::unsigned (local length) (local out)))
           (in
             (call wire::range
@@ -128,7 +128,7 @@ declarations.begin
                 (call ci::push (i64 1) (local out))))
             (binding b
               (type ByteBuffer)
-              (call wire::unsigned (call flow::field (local data) (local at) (i64 0)) (local a)))
+              (call wire::unsigned (call ci::field32 (local data) (local at) (i64 0)) (local a)))
             (in
               (call numbers
                 (local data)
@@ -177,8 +177,8 @@ declarations.begin
           (call ci::eq (local i) (i64 10))
           (local out)
           (let
-            (binding offset (call flow::field (local data) (local at) (i64 0)))
-            (binding count (call flow::field (local data) (local at) (i64 4)))
+            (binding offset (call ci::field32 (local data) (local at) (i64 0)))
+            (binding count (call ci::field32 (local data) (local at) (i64 4)))
             (binding a (type ByteBuffer) (call wire::unsigned (local count) (local out)))
             (binding b
               (type ByteBuffer)
@@ -251,10 +251,10 @@ declarations.begin
               (call string (local data) (call ci::add (local at) (i64 16)) (local a)))
             (binding c
               (type ByteBuffer)
-              (call wire::unsigned (call flow::field (local data) (local at) (i64 24)) (local b)))
+              (call wire::unsigned (call ci::field32 (local data) (local at) (i64 24)) (local b)))
             (binding d
               (type ByteBuffer)
-              (call wire::unsigned (call flow::field (local data) (local at) (i64 28)) (local c)))
+              (call wire::unsigned (call ci::field32 (local data) (local at) (i64 28)) (local c)))
             (binding e (type ByteBuffer) (call ci::push (i64 0) (local d)))
             (in
               (call parameters
@@ -271,10 +271,10 @@ declarations.begin
       (returns ByteBuffer)
       (body
         (let
-          (binding types (call flow::field (local data) (local at) (i64 0)))
-          (binding type-count (call flow::field (local data) (local at) (i64 4)))
-          (binding params (call flow::field (local data) (local at) (i64 8)))
-          (binding param-count (call flow::field (local data) (local at) (i64 12)))
+          (binding types (call ci::field32 (local data) (local at) (i64 0)))
+          (binding type-count (call ci::field32 (local data) (local at) (i64 4)))
+          (binding params (call ci::field32 (local data) (local at) (i64 8)))
+          (binding param-count (call ci::field32 (local data) (local at) (i64 12)))
           (binding a (type ByteBuffer) (call ci::le (i64 0) (i64 4) (local out)))
           (binding b
             (type ByteBuffer)
@@ -311,7 +311,7 @@ declarations.begin
               (local e)))
           (binding h
             (type ByteBuffer)
-            (call wire::unsigned (call flow::field (local data) (local at) (i64 16)) (local g)))
+            (call wire::unsigned (call ci::field32 (local data) (local at) (i64 16)) (local g)))
           (in (call ci::le (i64 0) (i64 4) (local h))))))
     (function create source
       (visibility public)
@@ -340,7 +340,7 @@ declarations.begin
                   (local wire-temp-10)))))
           (binding b
             (type ByteBuffer)
-            (call wire::unsigned (call flow::field (local data) (local at) (i64 0)) (local a)))
+            (call wire::unsigned (call ci::field32 (local data) (local at) (i64 0)) (local a)))
           (binding c
             (type ByteBuffer)
             (let
@@ -350,7 +350,7 @@ declarations.begin
                 (type ByteBuffer)
                 (call ci::push
                   (if
-                    (call ci::eq (call flow::field (local data) (local at) (i64 0)) (i64 1))
+                    (call ci::eq (call ci::field32 (local data) (local at) (i64 0)) (i64 1))
                     (i64 3)
                     (i64 12))
                   (local b)))
@@ -362,7 +362,7 @@ declarations.begin
                   (local wire-temp-13)))))
           (binding d
             (type ByteBuffer)
-            (call wire::unsigned (call flow::field (local data) (local at) (i64 4)) (local c)))
+            (call wire::unsigned (call ci::field32 (local data) (local at) (i64 4)) (local c)))
           (binding e
             (type ByteBuffer)
             (call identities
@@ -395,11 +395,11 @@ declarations.begin
       (returns ByteBuffer)
       (body
         (let
-          (binding tag (call flow::field (local data) (local at) (i64 0)))
-          (binding x (call flow::field (local data) (local at) (i64 4)))
-          (binding y (call flow::field (local data) (local at) (i64 8)))
-          (binding extra (call flow::field (local data) (local at) (i64 24)))
-          (binding count (call flow::field (local data) (local at) (i64 28)))
+          (binding tag (call ci::field32 (local data) (local at) (i64 0)))
+          (binding x (call ci::field32 (local data) (local at) (i64 4)))
+          (binding y (call ci::field32 (local data) (local at) (i64 8)))
+          (binding extra (call ci::field32 (local data) (local at) (i64 24)))
+          (binding count (call ci::field32 (local data) (local at) (i64 28)))
           (binding a (type ByteBuffer) (call wire::unsigned (local tag) (local out)))
           (in
             (if
@@ -504,14 +504,14 @@ declarations.begin
       (returns ByteBuffer)
       (body
         (let
-          (binding offset (call flow::field (local data) (local at) (i64 8)))
-          (binding count (call flow::field (local data) (local at) (i64 12)))
+          (binding offset (call ci::field32 (local data) (local at) (i64 8)))
+          (binding count (call ci::field32 (local data) (local at) (i64 12)))
           (binding a
             (type ByteBuffer)
-            (call wire::unsigned (call flow::field (local data) (local at) (i64 0)) (local out)))
+            (call wire::unsigned (call ci::field32 (local data) (local at) (i64 0)) (local out)))
           (binding b
             (type ByteBuffer)
-            (call wire::unsigned (call flow::field (local data) (local at) (i64 4)) (local a)))
+            (call wire::unsigned (call ci::field32 (local data) (local at) (i64 4)) (local a)))
           (binding c (type ByteBuffer) (call wire::unsigned (local count) (local b)))
           (in
             (call instructions
@@ -534,14 +534,14 @@ declarations.begin
           (let
             (binding a
               (type ByteBuffer)
-              (call wire::unsigned (call flow::field (local data) (local at) (i64 0)) (local out)))
+              (call wire::unsigned (call ci::field32 (local data) (local at) (i64 0)) (local out)))
             (binding b
               (type ByteBuffer)
-              (call wire::unsigned (call flow::field (local data) (local at) (i64 4)) (local a)))
+              (call wire::unsigned (call ci::field32 (local data) (local at) (i64 4)) (local a)))
             (binding c (type ByteBuffer) (call ci::push (i64 0) (local b)))
             (binding d
               (type ByteBuffer)
-              (call wire::unsigned (call flow::field (local data) (local at) (i64 12)) (local c)))
+              (call wire::unsigned (call ci::field32 (local data) (local at) (i64 12)) (local c)))
             (in (call ports (local data) (call ci::add (local at) (i64 16)) (local end) (local d)))))))
     (function create payload
       (visibility public)
@@ -552,8 +552,8 @@ declarations.begin
       (returns ByteBuffer)
       (body
         (let
-          (binding tag (call flow::field (local data) (local at) (i64 248)))
-          (binding payload (call flow::field (local data) (local at) (i64 252)))
+          (binding tag (call ci::field32 (local data) (local at) (i64 248)))
+          (binding payload (call ci::field32 (local data) (local at) (i64 252)))
           (binding a (type ByteBuffer) (call wire::unsigned (local tag) (local out)))
           (in
             (if
@@ -563,7 +563,7 @@ declarations.begin
                   (type ByteBuffer)
                   (call signature
                     (local data)
-                    (call flow::field (local data) (local at) (i64 244))
+                    (call ci::field32 (local data) (local at) (i64 244))
                     (local a)))
                 (in
                   (if
@@ -573,8 +573,8 @@ declarations.begin
               (if
                 (call ci::eq (local tag) (i64 9))
                 (let
-                  (binding offset (call flow::field (local data) (local payload) (i64 0)))
-                  (binding count (call flow::field (local data) (local payload) (i64 4)))
+                  (binding offset (call ci::field32 (local data) (local payload) (i64 0)))
+                  (binding count (call ci::field32 (local data) (local payload) (i64 4)))
                   (binding b
                     (type ByteBuffer)
                     (let
@@ -590,25 +590,25 @@ declarations.begin
                   (binding b
                     (type ByteBuffer)
                     (call wire::unsigned
-                      (call flow::field (local data) (local payload) (i64 0))
+                      (call ci::field32 (local data) (local payload) (i64 0))
                       (local a)))
                   (binding c
                     (type ByteBuffer)
                     (call ci::push
-                      (call flow::field (local data) (local payload) (i64 4))
+                      (call ci::field32 (local data) (local payload) (i64 4))
                       (local b)))
                   (binding d
                     (type ByteBuffer)
                     (if
-                      (call ci::eq (call flow::field (local data) (local payload) (i64 4)) (i64 0))
+                      (call ci::eq (call ci::field32 (local data) (local payload) (i64 4)) (i64 0))
                       (local c)
                       (call wire::unsigned
-                        (call flow::field (local data) (local payload) (i64 8))
+                        (call ci::field32 (local data) (local payload) (i64 8))
                         (local c))))
                   (binding e (type ByteBuffer) (call ci::push (i64 0) (local d)))
                   (in
                     (call wire::unsigned
-                      (call flow::field (local data) (local payload) (i64 12))
+                      (call ci::field32 (local data) (local payload) (i64 12))
                       (local e))))))))))
     (function create encode-unit
       (visibility public)
@@ -659,7 +659,7 @@ declarations.begin
             (type ByteBuffer)
             (call tables
               (local data)
-              (call flow::field (local data) (local at) (i64 240))
+              (call ci::field32 (local data) (local at) (i64 240))
               (i64 0)
               (local i)))
           (binding k (type ByteBuffer) (call payload (local data) (local at) (local j)))

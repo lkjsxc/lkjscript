@@ -729,14 +729,14 @@ fn assert_production(source: &KernelSnapshot, finite: bool) {
     for eager in [false, true] {
         let mut work = 0;
         let result = if eager {
-            callable_flow::validate_snapshot_callable_closure_eager(
+            crate::platform::kernel::test_work::validate_snapshot_callable_closure_eager(
                 &[source],
                 &|| Ok(()),
                 &mut work,
                 Some(contract::MAXIMUM_VALIDATION_WORK),
             )
         } else {
-            callable_flow::validate_snapshot_callable_closure(
+            crate::platform::kernel::test_work::validate_snapshot_callable_closure(
                 &[source],
                 &|| Ok(()),
                 &mut work,
@@ -916,14 +916,14 @@ fn assert_bad_projection_scope(family: &Family) {
     );
     for eager in [false, true] {
         let result = if eager {
-            callable_flow::validate_snapshot_callable_closure_eager(
+            crate::platform::kernel::test_work::validate_snapshot_callable_closure_eager(
                 &[&source],
                 &|| Ok(()),
                 &mut 0,
                 Some(contract::MAXIMUM_VALIDATION_WORK),
             )
         } else {
-            callable_flow::validate_snapshot_callable_closure(
+            crate::platform::kernel::test_work::validate_snapshot_callable_closure(
                 &[&source],
                 &|| Ok(()),
                 &mut 0,
@@ -944,7 +944,7 @@ fn assert_limits_cancel_retry(family: &Family) {
             Ok(())
         };
         let mut work = 0;
-        let measured = callable_flow::validate_snapshot_callable_closure_with_limits(
+        let measured = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
             &[&family.common.source],
             &checkpoint,
             &mut work,
@@ -955,7 +955,7 @@ fn assert_limits_cancel_retry(family: &Family) {
         .unwrap();
         let complete_checks = checks.get();
         assert!(work > 1 && measured.metadata_bytes > 1 && complete_checks > 1);
-        let exact = callable_flow::validate_snapshot_callable_closure_with_limits(
+        let exact = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
             &[&family.common.source],
             &|| Ok(()),
             &mut 0,
@@ -969,7 +969,7 @@ fn assert_limits_cancel_retry(family: &Family) {
             (work - 1, measured.metadata_bytes),
             (work, measured.metadata_bytes - 1),
         ] {
-            let error = callable_flow::validate_snapshot_callable_closure_with_limits(
+            let error = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
                 &[&family.common.source],
                 &|| Ok(()),
                 &mut 0,
@@ -994,7 +994,7 @@ fn assert_limits_cancel_retry(family: &Family) {
                 Ok(())
             }
         };
-        let error = callable_flow::validate_snapshot_callable_closure_with_limits(
+        let error = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
             &[&family.common.source],
             &cancel,
             &mut 0,
@@ -1006,7 +1006,7 @@ fn assert_limits_cancel_retry(family: &Family) {
         assert_eq!(error.class, DiagnosticClass::Cancelled);
         assert_eq!(error.code, "canonical_family_cancelled");
         let mut retry_work = 0;
-        let retry = callable_flow::validate_snapshot_callable_closure_with_limits(
+        let retry = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
             &[&family.common.source],
             &|| Ok(()),
             &mut retry_work,

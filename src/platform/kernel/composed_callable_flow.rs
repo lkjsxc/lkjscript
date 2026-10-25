@@ -9,7 +9,10 @@ mod prerequisites;
 #[path = "recursive_callable_flow.rs"]
 mod recursive;
 
-use super::{CallableFlowWork, MAXIMUM_ANALYSIS_BYTES, MAXIMUM_DIAGNOSTIC_PATH, semantic};
+use super::{CallableFlowWork, MAXIMUM_DIAGNOSTIC_PATH, semantic};
+#[cfg(test)]
+use super::MAXIMUM_ANALYSIS_BYTES;
+use crate::platform::kernel::work::ValidationWork;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     AssociatedTypeBindingValue, AssociatedTypeBound, BindingKind, DeclarationPayload,
@@ -111,7 +114,7 @@ impl CallableClosureRead for Snapshots<'_> {
 pub(crate) fn validate_snapshot_callable_closure(
     snapshots: &[&KernelSnapshot],
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
-    work: &mut usize,
+    work: &mut ValidationWork,
     maximum_work: Option<usize>,
 ) -> Result<CallableFlowWork, Diagnostic> {
     validate_callable_closure(
@@ -128,7 +131,7 @@ pub(crate) fn validate_snapshot_callable_closure(
 pub(crate) fn validate_snapshot_callable_closure_eager(
     snapshots: &[&KernelSnapshot],
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
-    work: &mut usize,
+    work: &mut ValidationWork,
     maximum_work: Option<usize>,
 ) -> Result<CallableFlowWork, Diagnostic> {
     validate_callable_closure_with_scope(
@@ -146,9 +149,9 @@ pub(crate) fn validate_snapshot_callable_closure_eager(
 pub(crate) fn validate_snapshot_callable_closure_with_limits(
     snapshots: &[&KernelSnapshot],
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
-    work: &mut usize,
+    work: &mut ValidationWork,
     maximum_work: Option<usize>,
-    maximum_metadata_bytes: usize,
+    maximum_metadata_bytes: Option<usize>,
     eager: bool,
 ) -> Result<CallableFlowWork, Diagnostic> {
     validate_callable_closure_with_limits(
@@ -158,7 +161,7 @@ pub(crate) fn validate_snapshot_callable_closure_with_limits(
         },
         work,
         maximum_work,
-        maximum_metadata_bytes.min(MAXIMUM_ANALYSIS_BYTES),
+        maximum_metadata_bytes,
         if eager {
             recursive::ProofScope::All
         } else {
@@ -300,9 +303,9 @@ struct WorkContext {
 
 struct Analysis<'a, R: ?Sized> {
     read: &'a R,
-    work: &'a mut usize,
+    work: &'a mut ValidationWork,
     maximum_work: Option<usize>,
-    maximum_metadata_bytes: usize,
+    maximum_metadata_bytes: Option<usize>,
     observation: CallableFlowWork,
     contexts: Vec<ContextInfo>,
     indexes: BTreeMap<Context, usize>,
@@ -329,20 +332,31 @@ fn implementation_parameters(
 }
 fn reserve_metadata<T>(
     observation: &mut CallableFlowWork,
-    maximum: usize,
+    maximum: Option<usize>,
     count: usize,
 ) -> Result<(), Diagnostic> {
-    observation.metadata_bytes = count
-        .checked_mul(std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>())
-        .and_then(|n| observation.metadata_bytes.checked_add(n))
-        .filter(|n| *n <= maximum)
-        .ok_or_else(|| {
-            Diagnostic::new(
-                DiagnosticClass::Resource,
-                "kernel_callable_flow_storage",
-                "composed callable flow exhausted its metadata admission",
-            )
-        })?;
+    reserve_metadata_product::<T>(observation, maximum, count, 1)
+}
+
+fn reserve_metadata_product<T>(
+    observation: &mut CallableFlowWork,
+    maximum: Option<usize>,
+    count: usize,
+    multiple: usize,
+) -> Result<(), Diagnostic> {
+    let mut observed = ValidationWork {
+        consumed: observation.metadata_bytes,
+        saturated: observation.metadata_saturated,
+    };
+    if !observed.charge_factors(&[count, std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>(), multiple], maximum) {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Resource,
+            "kernel_callable_flow_storage",
+            "composed callable flow exhausted its explicit metadata admission",
+        ));
+    }
+    observation.metadata_bytes = observed.consumed;
+    observation.metadata_saturated = observed.saturated;
     Ok(())
 }
 
@@ -1152,31 +1166,31 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         self.steps(1)
     }
     fn steps(&mut self, count: usize) -> Result<(), Diagnostic> {
+        self.steps_checked(Some(count))
+    }
+    fn steps_checked(&mut self, count: Option<usize>) -> Result<(), Diagnostic> {
         self.read.validation_checkpoint()?;
-        *self.work = match self.maximum_work {
-            None => self.work.saturating_add(count),
-            Some(maximum) => self
-                .work
-                .checked_add(count)
-                .filter(|n| *n <= maximum)
-                .ok_or_else(|| {
-                    let mut diagnostic = Diagnostic::new(
-                        DiagnosticClass::Resource,
-                        "kernel_callable_flow_work",
-                        "composed callable flow exhausted its work admission",
-                    );
-                    let context = self.diagnostic_context;
-                    let root_context = context.context.and_then(|index| self.contexts.get(index));
-                    let method = root_context.and_then(|info| info.key.method);
-                    let root_owner = root_context.map(|info| info.key.owner);
-                    diagnostic.notes.push(format!(
-                        "operation={} owner={:?} context={:?} context_owner={:?} method={:?} expression={:?} root={:?} consumed={} requested={} maximum={}",
-                        context.phase, context.owner, context.context, root_owner, method,
-                        context.expression, context.query, *self.work, count, maximum,
-                    ));
-                    diagnostic
-                })?,
+        let admitted = match count {
+            Some(count) => self.work.charge(count, self.maximum_work),
+            None => self.work.charge_product(usize::MAX, 2, self.maximum_work),
         };
+        if !admitted {
+            let mut diagnostic = Diagnostic::new(
+                DiagnosticClass::Resource,
+                "kernel_callable_flow_work",
+                "composed callable flow exhausted its work admission",
+            );
+            let context = self.diagnostic_context;
+            let root_context = context.context.and_then(|index| self.contexts.get(index));
+            let method = root_context.and_then(|info| info.key.method);
+            let root_owner = root_context.map(|info| info.key.owner);
+            diagnostic.notes.push(format!(
+                "operation={} owner={:?} context={:?} context_owner={:?} method={:?} expression={:?} root={:?} consumed={} requested={} maximum={:?}",
+                context.phase, context.owner, context.context, root_owner, method,
+                context.expression, context.query, self.work.consumed, count.map_or_else(|| "overflow".to_owned(), |count| count.to_string()), self.maximum_work,
+            ));
+            return Err(diagnostic);
+        }
         Ok(())
     }
     fn comparison_work(&mut self, width: usize, keys: usize) -> Result<(), Diagnostic> {
@@ -1194,13 +1208,9 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         let comparisons = levels
             .checked_mul(12)
             .and_then(|n| n.checked_add(1))
-            .and_then(|n| n.checked_mul(searches))
-            .ok_or_else(super::storage_overflow)?;
-        self.steps(
-            width
-                .saturating_add(1)
-                .checked_mul(comparisons)
-                .ok_or_else(super::storage_overflow)?,
+            .and_then(|n| n.checked_mul(searches));
+        self.steps_checked(
+            width.checked_add(1).and_then(|width| comparisons.and_then(|comparisons| width.checked_mul(comparisons))),
         )
     }
     fn intern_selection(
@@ -1273,15 +1283,14 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
     ) -> Result<&'c [usize], Diagnostic> {
         let comparisons =
             (usize::BITS - context.witnesses.len().saturating_add(1).leading_zeros()) as usize + 1;
-        self.steps(
-            (path.len() + 1)
-                .checked_mul(comparisons)
-                .ok_or_else(super::storage_overflow)?,
-        )?;
+        self.steps_checked(path.len().checked_add(1).and_then(|width| width.checked_mul(comparisons)))?;
         Ok(context.witness_slots(path))
     }
     fn reserve<T>(&mut self, count: usize) -> Result<(), Diagnostic> {
         reserve_metadata::<T>(&mut self.observation, self.maximum_metadata_bytes, count)
+    }
+    fn reserve_product<T>(&mut self, count: usize, multiple: usize) -> Result<(), Diagnostic> {
+        reserve_metadata_product::<T>(&mut self.observation, self.maximum_metadata_bytes, count, multiple)
     }
     fn declaration(
         &mut self,
@@ -2470,14 +2479,9 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
     }
     fn admit(&mut self) -> Result<(), Diagnostic> {
         let count = self.slot_owners.len();
-        self.reserve::<Vec<usize>>(count.checked_mul(2).ok_or_else(super::storage_overflow)?)?;
-        self.reserve::<usize>(count.checked_mul(10).ok_or_else(super::storage_overflow)?)?;
-        self.reserve::<usize>(
-            self.edges
-                .len()
-                .checked_mul(2)
-                .ok_or_else(super::storage_overflow)?,
-        )?;
+        self.reserve_product::<Vec<usize>>(count, 2)?;
+        self.reserve_product::<usize>(count, 10)?;
+        self.reserve_product::<usize>(self.edges.len(), 2)?;
         let mut outgoing = vec![Vec::new(); count];
         let mut incoming = vec![Vec::new(); count];
         for i in 0..self.edges.len() {
@@ -2561,7 +2565,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
 
 pub(crate) fn validate_callable_closure<R: CallableClosureRead + ?Sized>(
     read: &R,
-    work: &mut usize,
+    work: &mut ValidationWork,
     maximum_work: Option<usize>,
 ) -> Result<CallableFlowWork, Diagnostic> {
     validate_callable_closure_with_scope(read, work, maximum_work, recursive::ProofScope::Recursive)
@@ -2569,23 +2573,23 @@ pub(crate) fn validate_callable_closure<R: CallableClosureRead + ?Sized>(
 
 fn validate_callable_closure_with_scope<R: CallableClosureRead + ?Sized>(
     read: &R,
-    work: &mut usize,
+    work: &mut ValidationWork,
     maximum_work: Option<usize>,
     scope: recursive::ProofScope,
 ) -> Result<CallableFlowWork, Diagnostic> {
-    validate_callable_closure_with_limits(read, work, maximum_work, MAXIMUM_ANALYSIS_BYTES, scope)
+    validate_callable_closure_with_limits(read, work, maximum_work, None, scope)
 }
 
 fn validate_callable_closure_with_limits<R: CallableClosureRead + ?Sized>(
     read: &R,
-    work: &mut usize,
+    work: &mut ValidationWork,
     maximum_work: Option<usize>,
-    maximum_metadata_bytes: usize,
+    maximum_metadata_bytes: Option<usize>,
     scope: recursive::ProofScope,
 ) -> Result<CallableFlowWork, Diagnostic> {
     // The caller may enter with work already spent admitting exact supplier sources.
     // Retain only scalar phase boundaries; this is error context, never proof reuse.
-    let entry_work = *work;
+    let entry_work = work.consumed;
     let mut after_prerequisites = None;
     let mut after_inventory = None;
     let mut after_scan = None;
@@ -2618,7 +2622,7 @@ fn validate_callable_closure_with_limits<R: CallableClosureRead + ?Sized>(
         analysis.tick()?;
         analysis.diagnostic_context.phase = "prerequisite closure";
         prerequisites::validate(&mut analysis)?;
-        after_prerequisites = Some(*analysis.work);
+        after_prerequisites = Some(analysis.work.consumed);
         read.visit_callable_owners(&mut |owner| {
             analysis.diagnostic_context = WorkContext {
                 phase: "declaration inventory",
@@ -2670,11 +2674,11 @@ fn validate_callable_closure_with_limits<R: CallableClosureRead + ?Sized>(
             }
             Ok(())
         })?;
-        after_inventory = Some(*analysis.work);
+        after_inventory = Some(analysis.work.consumed);
         while let Some(context) = analysis.pending.pop() {
             analysis.scan(context)?;
         }
-        after_scan = Some(*analysis.work);
+        after_scan = Some(analysis.work.consumed);
         analysis.diagnostic_context = WorkContext {
             phase: "recursive callable relation",
             owner: None,
@@ -2683,18 +2687,19 @@ fn validate_callable_closure_with_limits<R: CallableClosureRead + ?Sized>(
             query: None,
         };
         recursive::connect(&mut analysis, scope)?;
-        after_recursive = Some(*analysis.work);
+        after_recursive = Some(analysis.work.consumed);
         analysis.diagnostic_context.phase = "composed type SCC";
         analysis.admit()?;
         analysis.observation.slots = analysis.slot_owners.len();
         analysis.observation.edges = analysis.edges.len();
+        analysis.observation.work_saturated = analysis.work.saturated;
         Ok(analysis.observation)
     })();
     result.map_err(|mut diagnostic: Diagnostic| {
         if diagnostic.code == "kernel_callable_flow_work" {
             diagnostic.notes.push(format!(
                 "composed_work entry={} after_prerequisites={:?} after_inventory={:?} after_scan={:?} after_recursive={:?} consumed={}",
-                entry_work, after_prerequisites, after_inventory, after_scan, after_recursive, *work,
+                entry_work, after_prerequisites, after_inventory, after_scan, after_recursive, work.consumed,
             ));
         }
         diagnostic
@@ -2752,7 +2757,7 @@ mod read_view_tests {
     }
 
     fn proof(read: &Read, eager: bool) -> Result<CallableFlowWork, Diagnostic> {
-        validate_callable_closure_with_scope(
+        test_validate_callable_closure_with_scope(
             read,
             &mut 0,
             Some(1_000_000),
@@ -3354,4 +3359,17 @@ mod read_view_tests {
             );
         }
     }
+}
+
+
+#[cfg(test)]
+fn test_validate_callable_closure_with_scope<R: CallableClosureRead + ?Sized>(
+    read: &R,
+    work: &mut usize,
+    maximum_work: Option<usize>,
+    scope: recursive::ProofScope,
+) -> Result<CallableFlowWork, Diagnostic> {
+    crate::platform::kernel::test_work::observe(work, |work| {
+        validate_callable_closure_with_scope(read, work, maximum_work, scope)
+    })
 }

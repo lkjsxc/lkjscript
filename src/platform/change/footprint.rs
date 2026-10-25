@@ -4,7 +4,7 @@
 //! while decoding and lowering the original proposal belong to this conflict footprint.
 
 use super::{
-    BoundOwnerSummary, BudgetedCanonicalBase, BudgetedWitnessBase, CanonicalBaseRead,
+    BoundOwnerSummary, BudgetCounter, BudgetDimension, BudgetedCanonicalBase, BudgetedWitnessBase, CanonicalBaseRead, minimum_limit, optional_usize,
     CanonicalReadWork, ChangeBudget, WitnessBaseRead, WitnessReadWork,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -20,9 +20,7 @@ use crate::platform::witness::{
 };
 use std::collections::BTreeMap;
 
-pub const MAXIMUM_REFRESH_GUARDS: usize = 1_000_000;
-pub const MAXIMUM_REFRESH_GUARD_BYTES: usize = 64 * 1_048_576;
-const FOOTPRINT_DOMAIN: &str = "lkjscript.authored-intent-footprint.v1";
+const FOOTPRINT_DOMAIN: &str = "lkjscript.authored-intent-footprint.v2";
 const VALUE_DOMAIN: &str = "lkjscript.authored-intent-observation.v1";
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -38,15 +36,15 @@ enum ReadKey {
         owner: OwnerKey,
         kind: Option<RelationKind>,
         incoming: bool,
-        maximum: usize,
+        maximum: Option<usize>,
     },
     PackageRelations {
         package: PackageId,
-        maximum: usize,
+        maximum: Option<usize>,
     },
     TestDependencies {
         test: OwnerKey,
-        maximum: usize,
+        maximum: Option<usize>,
     },
     Interface {
         package: PackageId,
@@ -109,7 +107,6 @@ impl AuthoredReadFootprint {
 
     pub fn merge(&mut self, other: &Self) -> Result<(), Diagnostic> {
         // Admit the complete union before any mutation, including all duplicate observations.
-        let mut records = self.len();
         let mut bytes = self.bytes;
         for (key, observed) in &other.guards {
             if let Some(previous) = self.guards.get(key) {
@@ -117,9 +114,7 @@ impl AuthoredReadFootprint {
                     return Err(inconsistent(key));
                 }
             } else {
-                records = records.checked_add(1).ok_or_else(capacity)?;
                 bytes = bytes.checked_add(key.size()).ok_or_else(capacity)?;
-                admit(records, bytes)?;
             }
         }
         self.guards.extend(
@@ -141,7 +136,6 @@ impl AuthoredReadFootprint {
             };
         }
         let bytes = self.bytes.checked_add(key.size()).ok_or_else(capacity)?;
-        admit(self.len().checked_add(1).ok_or_else(capacity)?, bytes)?;
         self.guards.insert(key, observed);
         self.bytes = bytes;
         Ok(())
@@ -289,7 +283,7 @@ impl AuthoredReadFootprint {
         owner: OwnerKey,
         kind: Option<RelationKind>,
         incoming: bool,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         edges: &[RelationEdge],
         truncated: bool,
     ) -> Result<(), Diagnostic> {
@@ -313,7 +307,7 @@ impl AuthoredReadFootprint {
     pub fn record_package_relations(
         &mut self,
         package: PackageId,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         edges: &[RelationEdge],
         truncated: bool,
     ) -> Result<(), Diagnostic> {
@@ -329,7 +323,7 @@ impl AuthoredReadFootprint {
     pub fn record_test_dependencies(
         &mut self,
         test: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         values: &[TestDependency],
         truncated: bool,
     ) -> Result<(), Diagnostic> {
@@ -451,7 +445,7 @@ impl AuthoredReadFootprint {
                     maximum,
                 } => {
                     let admitted =
-                        range_admission(*maximum, expected.items, prior.relation_edges, budget)?;
+                        range_admission(*maximum, expected.items, prior.observation_saturation().counter(BudgetDimension::RelationEdges, prior.relation_edges), budget)?;
                     let read = match (*incoming, *kind) {
                         (false, None) => witness.read_outgoing_relations(*owner, admitted)?,
                         (true, None) => witness.read_incoming_relations(*owner, admitted)?,
@@ -475,7 +469,7 @@ impl AuthoredReadFootprint {
                 }
                 ReadKey::PackageRelations { package, maximum } => {
                     let admitted =
-                        range_admission(*maximum, expected.items, prior.relation_edges, budget)?;
+                        range_admission(*maximum, expected.items, prior.observation_saturation().counter(BudgetDimension::RelationEdges, prior.relation_edges), budget)?;
                     let read = witness.read_incoming_package_relations(*package, admitted)?;
                     charge_range(&mut prior, read.value.edges.len(), budget)?;
                     if read.value.truncated {
@@ -490,7 +484,7 @@ impl AuthoredReadFootprint {
                 }
                 ReadKey::TestDependencies { test, maximum } => {
                     let admitted =
-                        range_admission(*maximum, expected.items, prior.relation_edges, budget)?;
+                        range_admission(*maximum, expected.items, prior.observation_saturation().counter(BudgetDimension::RelationEdges, prior.relation_edges), budget)?;
                     let read = witness.read_test_dependencies(*test, admitted)?;
                     charge_range(&mut prior, read.value.dependencies.len(), budget)?;
                     if read.value.truncated {
@@ -620,17 +614,17 @@ impl ReadKey {
                 bytes.extend_from_slice(&EncodedOwnerKey::new(*owner).bytes());
                 bytes.push(kind.map_or(0, |kind| kind.tag()));
                 bytes.push(u8::from(*incoming));
-                bytes.extend_from_slice(&(*maximum as u64).to_be_bytes());
+                encode_limit(&mut bytes, *maximum);
             }
             Self::PackageRelations { package, maximum } => {
                 bytes.push(9);
                 bytes.extend_from_slice(&package.bytes());
-                bytes.extend_from_slice(&(*maximum as u64).to_be_bytes());
+                encode_limit(&mut bytes, *maximum);
             }
             Self::TestDependencies { test, maximum } => {
                 bytes.push(10);
                 bytes.extend_from_slice(&EncodedOwnerKey::new(*test).bytes());
-                bytes.extend_from_slice(&(*maximum as u64).to_be_bytes());
+                encode_limit(&mut bytes, *maximum);
             }
             Self::Interface {
                 package,
@@ -692,22 +686,13 @@ fn range_observation(values: impl Iterator<Item = Vec<u8>>) -> Result<Observatio
     let maximum = maximum
         .filter(|maximum| *maximum == minimum)
         .ok_or_else(capacity)?;
-    if maximum > MAXIMUM_REFRESH_GUARDS {
-        return Err(capacity());
-    }
     let mut bytes = maximum
         .checked_mul(std::mem::size_of::<Vec<u8>>())
         .ok_or_else(capacity)?;
-    if bytes > MAXIMUM_REFRESH_GUARD_BYTES {
-        return Err(capacity());
-    }
     let mut keys = Vec::new();
     keys.try_reserve_exact(maximum).map_err(|_| capacity())?;
     for value in values {
         bytes = bytes.checked_add(value.len()).ok_or_else(capacity)?;
-        if bytes > MAXIMUM_REFRESH_GUARD_BYTES {
-            return Err(capacity());
-        }
         keys.push(value);
     }
     keys.sort_unstable();
@@ -731,39 +716,40 @@ fn range_observation(values: impl Iterator<Item = Vec<u8>>) -> Result<Observatio
         items: count,
     })
 }
+fn encode_limit(bytes: &mut Vec<u8>, maximum: Option<usize>) {
+    match maximum {
+        None => bytes.push(0),
+        Some(maximum) => {
+            bytes.push(1);
+            bytes.extend_from_slice(&(maximum as u64).to_be_bytes());
+        }
+    }
+}
+
 fn range_admission(
-    maximum: usize,
+    maximum: Option<usize>,
     expected: u64,
-    previous: u64,
+    previous: BudgetCounter,
     budget: ChangeBudget,
-) -> Result<usize, Diagnostic> {
-    let remaining = budget
-        .impact
-        .maximum_relation_edges
-        .checked_sub(previous)
-        .ok_or_else(range_capacity)?;
-    if expected > remaining {
+) -> Result<Option<usize>, Diagnostic> {
+    let remaining = previous.remaining(budget.impact.maximum_relation_edges,
+        "reviewed refresh range traversal", "relation_edges")?;
+    if remaining.is_some_and(|remaining| expected > remaining) {
         return Err(range_capacity());
     }
-    // A zero-result existence probe retains at most one sentinel under the independent
-    // witness/object-read admissions. Empty prefixes traverse zero semantic edges; any
-    // observed sentinel is charged and rejected before footprint encoding or acceptance.
-    if remaining == 0 {
-        return Ok(1);
-    }
-    Ok(maximum.min(usize::try_from(remaining).unwrap_or(usize::MAX)))
+    Ok(minimum_limit(maximum, optional_usize(remaining, "relation_edges")?))
 }
+
 fn charge_range(
     prior: &mut super::ChangeBudgetWork,
     items: usize,
     budget: ChangeBudget,
 ) -> Result<(), Diagnostic> {
-    prior.relation_edges = prior
-        .relation_edges
-        .checked_add(items as u64)
-        .ok_or_else(range_capacity)?;
+    prior.charge(BudgetDimension::RelationEdges, BudgetCounter::exact(items as u64),
+        budget.impact.maximum_relation_edges, "reviewed refresh range traversal")?;
     budget.check_observed(*prior, "reviewed refresh range traversal")
 }
+
 fn range_capacity() -> Diagnostic {
     Diagnostic::new(
         DiagnosticClass::Resource,
@@ -778,13 +764,6 @@ fn complete(truncated: bool) -> Result<(), Diagnostic> {
             "change_refresh_incomplete_footprint",
             "a truncated intent range cannot certify a complete conflict footprint",
         ))
-    } else {
-        Ok(())
-    }
-}
-fn admit(records: usize, bytes: usize) -> Result<(), Diagnostic> {
-    if records > MAXIMUM_REFRESH_GUARDS || bytes > MAXIMUM_REFRESH_GUARD_BYTES {
-        Err(capacity())
     } else {
         Ok(())
     }
@@ -843,7 +822,7 @@ mod tests {
         let canonical = BudgetedCanonicalBase::new(
             &base,
             CanonicalReadAdmission {
-                maximum_point_reads: 2,
+                maximum_point_reads: Some(2),
                 ..CanonicalReadAdmission::unbounded()
             },
             CanonicalReadWork::default(),
@@ -911,7 +890,7 @@ mod tests {
         let zero = BudgetedCanonicalBase::new(
             &base,
             CanonicalReadAdmission {
-                maximum_point_reads: 0,
+                maximum_point_reads: Some(0),
                 ..CanonicalReadAdmission::unbounded()
             },
             CanonicalReadWork::default(),
@@ -972,10 +951,10 @@ mod tests {
         let mut first = AuthoredReadFootprint::default();
         let mut second = AuthoredReadFootprint::default();
         first
-            .record_relations(owner, None, true, 2, edges, false)
+            .record_relations(owner, None, true, Some(2), edges, false)
             .unwrap();
         second
-            .record_relations(owner, None, true, 2, &[edges[1], edges[0]], false)
+            .record_relations(owner, None, true, Some(2), &[edges[1], edges[0]], false)
             .unwrap();
         assert_eq!(first.digest(), second.digest());
     }
@@ -985,11 +964,11 @@ mod tests {
         let base = crate::platform::kernel::tests::witness_snapshot();
         let witness = rebuild_full_witness(&base).unwrap();
         let mut budget = ChangeBudget::default();
-        budget.impact.maximum_relation_edges = 0;
+        budget.impact.maximum_relation_edges = Some(0);
         let absent = OwnerKey::Module(ModuleId::migrate(b"intent-range-empty", 0));
         let mut empty = AuthoredReadFootprint::default();
         empty
-            .record_relations(absent, None, true, 1, &[], false)
+            .record_relations(absent, None, true, Some(1), &[], false)
             .unwrap();
         empty.check_against(&base, &witness, budget).unwrap();
 
@@ -1006,7 +985,7 @@ mod tests {
             .unwrap();
         let mut changed = AuthoredReadFootprint::default();
         changed
-            .record_relations(existing, None, true, 1, &[], false)
+            .record_relations(existing, None, true, Some(1), &[], false)
             .unwrap();
         let error = changed.check_against(&base, &witness, budget).unwrap_err();
         assert_eq!(error.class, DiagnosticClass::Resource);

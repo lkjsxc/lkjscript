@@ -60,7 +60,7 @@ fn raw_packet(
     );
     let name = root.package_name.as_str().as_bytes();
     let mut bytes = vec![0; 128];
-    bytes[..8].copy_from_slice(b"LKJSG001");
+    bytes[..8].copy_from_slice(b"LKJSG002");
     word(&mut bytes, 12, source.owners.len());
     word(&mut bytes, 16, types.len());
     word(&mut bytes, 20, source.retirements.len());
@@ -90,9 +90,7 @@ fn raw_packet(
     }
     let length = bytes.len();
     word(&mut bytes, 8, length);
-    let allowance =
-        4096 + 128 * length + 1024 * (source.owners.len() + types.len() + source.retirements.len());
-    word(&mut bytes, 100, allowance);
+    graph::set_allowance(&mut bytes, None);
     bytes
 }
 

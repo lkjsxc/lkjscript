@@ -847,7 +847,7 @@ declarations.end"#,
         let (steps, _) = healthy.work();
         assert!(steps > 0);
         let exact = OwnedAssociatedAdmission::with_limits(AssociatedAdmissionLimits {
-            maximum_steps: steps,
+            maximum_steps: Some(steps),
             ..AssociatedAdmissionLimits::default()
         });
         assert!(

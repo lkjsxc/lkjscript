@@ -42,6 +42,8 @@ pub struct ChangeCounts {
     pub dependencies_changed: u64,
     pub retirements_changed: u64,
     pub witness_entries_changed: u64,
+    /// One or more cumulative counts are lower bounds.
+    pub saturated: bool,
 }
 
 #[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
@@ -56,11 +58,13 @@ pub struct ValidationEvidence {
     pub tests_passed: u64,
     pub compiler_units_planned: u64,
     pub full_oracle: FullOracleStatus,
+    /// One or more cumulative work counts in this evidence are lower bounds.
+    pub saturated: bool,
 }
 
 #[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
 pub struct WorkObservation {
-    /// Exact multidimensional change-meter observation before this receipt and its enclosing
+    /// Multidimensional change-meter observation, with per-dimension exactness flags, before this receipt and its enclosing
     /// revision are encoded. Bootstrap receipts retain the all-zero observation.
     pub budget: crate::platform::change::ChangeBudgetWork,
     /// Complete validator work when its implementation exposes one aggregate count.
@@ -82,6 +86,8 @@ pub struct WorkObservation {
     pub bytes_read: u64,
     /// Bytes corresponding to `objects_staged`, with the same deliberate enclosure exclusion.
     pub bytes_staged: u64,
+    /// One or more observations are lower bounds. This never grants resource capacity.
+    pub saturated: bool,
 }
 
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
@@ -191,6 +197,12 @@ impl PublicationReceipt {
                 "publication_receipt_intent",
                 "bounded nonsemantic intent exceeds the current byte limit",
             ));
+        }
+        if !self.work.budget.observation_flags_valid()
+            || (self.work.budget.observation_saturation().any() && !self.work.saturated)
+        {
+            return Err(receipt_error(DiagnosticClass::Corrupt, "publication_receipt_work_flags",
+                "receipt work exactness flags are invalid or omit saturated budget observations"));
         }
         if self.validation.tests_passed > self.validation.tests_executed
             || self.validation.tests_executed > self.validation.tests_selected

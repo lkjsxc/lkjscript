@@ -171,7 +171,7 @@ fn current_validation_and_preparation_propagate_cancellation_without_writes() {
         let snapshot = view.reconstruct_full_oracle().unwrap().value;
         let checks = std::cell::Cell::new(0);
         let mut work = 0;
-        let errors = crate::platform::kernel::validate_full_checked(
+        let errors = crate::platform::kernel::test_work::validate_full_checked(
             &snapshot,
             crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
             &mut work,

@@ -5,6 +5,7 @@ mod history;
 mod memory;
 mod pure_batch;
 mod refresh;
+mod republish;
 mod source_batch;
 mod tx;
 
@@ -32,7 +33,7 @@ use super::contract::{
     FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES, FUNCTION_DEFINITION_LOGICAL_DIGEST_DOMAIN,
     FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY,
     FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION, FUNCTION_DEFINITION_RECORD_KEY_DOMAIN,
-    FUNCTION_DEFINITION_RESPONSE_FIELDS, MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS,
+    FUNCTION_DEFINITION_RESPONSE_FIELDS,
     MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS, MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES,
     MAXIMUM_FUNCTION_DEFINITION_DEPTH, MAXIMUM_FUNCTION_DEFINITION_EDGES,
     MAXIMUM_FUNCTION_DEFINITION_FACT_READS, MAXIMUM_FUNCTION_DEFINITION_ITEMS,
@@ -46,7 +47,7 @@ use super::control::decode_compact_change;
 use super::control::{
     ChangePlanToken, CompactChangeOperation, CompactResponseLimits, CompactResponseWriter,
     LogicalChangePlan, LogicalPlanEncoding, MAXIMUM_COMPACT_INPUT_BYTES,
-    MAXIMUM_LOGICAL_PLAN_BYTES, NormalizedChangeRequest, compact_change_operation_descriptor,
+    NormalizedChangeRequest, compact_change_operation_descriptor,
     encode_logical_change_plan, normalize_change_request, render_record,
 };
 use super::data::{DataLimits, DataStore};
@@ -732,7 +733,7 @@ pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
             super::owned_output::publish_executable_create_new(
                 Path::new(path),
                 &image.bytes,
-                maximum_artifact_output_bytes()?,
+                None,
                 "native Linux x86_64 ELF",
             )?,
             None,
@@ -746,7 +747,7 @@ pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
             publish_create_new(
                 Path::new(&output_path),
                 &prepared.artifact_bytes,
-                maximum_artifact_output_bytes()?,
+                Some(maximum_artifact_output_bytes()?),
                 "normalized graph artifact",
             )?,
             None,
@@ -892,7 +893,7 @@ fn publish_run_result(
     let publication = publish_create_new(
         &path,
         result.as_bytes(),
-        super::json::JsonLimits::default().maximum_bytes,
+        Some(super::json::JsonLimits::default().maximum_bytes),
         "typed command result",
     )?;
     append_compact_record(
@@ -1589,6 +1590,9 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
     }
     match arguments.get(1).map(String::as_str) {
         Some("current") => {
+            if arguments.get(2).map(String::as_str) == Some("republish") {
+                return republish::execute(&arguments[3..], project);
+            }
             if arguments.get(2).map(String::as_str) != Some("export") {
                 return Err(usage_error(
                     "package current requires the exact export action",
@@ -1606,7 +1610,7 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
             let publication = publish_create_new(
                 Path::new(&path),
                 &exported.container,
-                crate::platform::package_transport::source::MAXIMUM_CONTAINER_BYTES,
+                Some(crate::platform::package_transport::source::MAXIMUM_CONTAINER_BYTES),
                 "current package source container",
             )?;
             let mut output = compact_response_writer()?;
@@ -1938,7 +1942,7 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
                 }
             };
             let publication =
-                publish_create_new(Path::new(&path), bytes, maximum, "built-in standard asset")?;
+                publish_create_new(Path::new(&path), bytes, Some(maximum), "built-in standard asset")?;
             append_compact_record(
                 &mut output,
                 "output",
@@ -2234,6 +2238,7 @@ pub fn execute_status(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
                 view.validation_work().0.bytes_read.to_string(),
             ),
             ("semantic-work", view.validation_work().1.to_string()),
+            ("work-saturated", view.validation_work().2.to_string()),
             (
                 "validator",
                 crate::platform::witness::contract::validator_contract_digest().to_string(),
@@ -2395,9 +2400,9 @@ fn execute_change_draft(
             }
             "--output" if destination.is_none() => destination = Some(PathBuf::from(value)),
             "--bytes" if !maximum_seen => {
-                maximum = value.parse::<usize>().map_err(|_| {
-                    single_diagnostic(usage_error("draft --bytes requires a positive byte count"))
-                })?;
+                maximum = Some(value.parse::<usize>().map_err(|_| {
+                    single_diagnostic(usage_error("draft --bytes requires a non-negative byte count"))
+                })?);
                 maximum_seen = true;
             }
             _ => {
@@ -2407,11 +2412,6 @@ fn execute_change_draft(
             }
         }
         cursor += 2;
-    }
-    if maximum == 0 || maximum > MAXIMUM_COMPACT_INPUT_BYTES {
-        return Err(single_diagnostic(usage_error(
-            "draft byte admission must fit one complete change input",
-        )));
     }
     let destination = destination
         .ok_or_else(|| single_diagnostic(usage_error("change draft requires --output PATH")))?;
@@ -2497,22 +2497,11 @@ fn decode_record_change(
     let inline = option_value(options, "--input").map_err(single_diagnostic)?;
     let file = option_value(options, "--input-file").map_err(single_diagnostic)?;
     let (source, bytes) = match (inline, file) {
-        (Some(value), None) if value.len() <= MAXIMUM_COMPACT_INPUT_BYTES => {
-            ("<change-input>".to_owned(), value.into_bytes())
-        }
-        (Some(_), None) => {
-            return Err(single_diagnostic(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "control_input_bytes",
-                format!(
-                    "compact change input exceeds the {MAXIMUM_COMPACT_INPUT_BYTES}-byte format bound"
-                ),
-            )));
-        }
+        (Some(value), None) => ("<change-input>".to_owned(), value.into_bytes()),
         (None, Some(path)) => {
-            let bytes = read_bounded(
+            let bytes = read_with_limit(
                 Path::new(&path),
-                MAXIMUM_COMPACT_INPUT_BYTES,
+                None,
                 "compact change input",
             )
             .map_err(single_diagnostic)?;
@@ -3076,6 +3065,7 @@ struct LogicalPlanOutputPublication {
     status: &'static str,
     bytes: u64,
     records: u64,
+    saturated: bool,
 }
 
 fn write_logical_plan_output(
@@ -3159,6 +3149,7 @@ fn write_logical_plan_output(
                 status,
                 bytes: encoding.bytes,
                 records: encoding.records,
+                saturated: encoding.saturated,
             },
         ))
     })();
@@ -3204,16 +3195,7 @@ fn plan_output_files_equal(left: &Path, right: &Path) -> Result<bool, Diagnostic
             ),
         ));
     }
-    if right_metadata.len() > MAXIMUM_LOGICAL_PLAN_BYTES {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "change_plan_output_existing_bytes",
-            format!(
-                "existing logical plan output '{}' exceeds the {MAXIMUM_LOGICAL_PLAN_BYTES}-byte comparison bound",
-                right.display()
-            ),
-        ));
-    }
+
     let left_metadata = fs::metadata(left).map_err(|error| {
         plan_output_io_error("change_plan_output_compare_metadata", left, error)
     })?;
@@ -3243,13 +3225,7 @@ fn plan_output_files_equal(left: &Path, right: &Path) -> Result<bool, Diagnostic
                     "logical plan output comparison byte count overflowed",
                 )
             })?;
-        if compared > MAXIMUM_LOGICAL_PLAN_BYTES {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "change_plan_output_existing_bytes",
-                "logical plan output changed beyond its bounded comparison size",
-            ));
-        }
+
         if left_read != right_read || left_buffer[..left_read] != right_buffer[..right_read] {
             return Ok(false);
         }
@@ -3333,6 +3309,7 @@ fn compact_change_response(
             ("token", plan.token.to_string()),
             ("request-commitment", plan.token.request.to_string()),
             ("prepared-commitment", plan.token.prepared.to_string()),
+            ("saturated", plan.saturated.to_string()),
         ],
     )?;
     if let Some(refresh) = plan.token.refresh {
@@ -3364,6 +3341,7 @@ fn compact_change_response(
                 ("status", plan_output.status.to_owned()),
                 ("bytes", plan_output.bytes.to_string()),
                 ("records", plan_output.records.to_string()),
+                ("saturated", plan_output.saturated.to_string()),
             ],
         )?;
     }
@@ -3397,6 +3375,7 @@ fn compact_change_response(
             ("dependencies", counts.dependencies_changed.to_string()),
             ("retirements", counts.retirements_changed.to_string()),
             ("witness", counts.witness_entries_changed.to_string()),
+            ("saturated", counts.saturated.to_string()),
         ],
     )?;
     if !prepared.logical_plan.package_closure_before.is_empty()
@@ -3514,6 +3493,8 @@ fn compact_change_response(
             ),
             ("tests-selected", validation.tests_selected.to_string()),
             ("tests-passed", validation.tests_passed.to_string()),
+            ("saturated", validation.saturated.to_string()),
+            ("preparation-work-saturated", publication.receipt.work.saturated.to_string()),
             (
                 "compiler-units",
                 validation.compiler_units_planned.to_string(),
@@ -3703,8 +3684,8 @@ pub fn execute_inspect_owner(arguments: Vec<String>) -> Result<Vec<u8>, Diagnost
     execute_inspect_owner_with_limits(
         arguments,
         CompactResponseLimits {
-            maximum_bytes: MAXIMUM_CLI_RESPONSE_BYTES,
-            maximum_records: MAXIMUM_CLI_RESPONSE_RECORDS,
+            maximum_bytes: None,
+            maximum_records: None,
         },
     )
 }
@@ -4738,7 +4719,7 @@ fn http_topology_inspection_fields(
             let relations = view.incoming_relations(
                 endpoint,
                 Some(RelationKind::HttpRouteTarget),
-                super::kernel::contract::MAXIMUM_HTTP_ROUTES_PER_TARGET + 1,
+                Some(super::kernel::contract::MAXIMUM_HTTP_ROUTES_PER_TARGET + 1),
             )?;
             if relations.revision != view.revision() || relations.value.truncated {
                 return Err(owner_inspection_error(
@@ -8803,14 +8784,10 @@ fn execute_function_definition(
             message,
         )
     })?;
-    let output_limit = request
-        .output_bytes
-        .min(response_limits.maximum_bytes)
-        .min(MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES)
-        .min(MAXIMUM_CLI_RESPONSE_BYTES);
-    let record_limit = response_limits
-        .maximum_records
-        .min(MAXIMUM_CLI_RESPONSE_RECORDS);
+    let output_limit = response_limits.maximum_bytes.map_or(request.output_bytes, |limit| {
+        request.output_bytes.min(limit)
+    });
+    let record_limit = response_limits.maximum_records;
     render_definition_page(
         repository,
         view,
@@ -8836,7 +8813,7 @@ fn render_definition_page(
     start: usize,
     requested_items: u64,
     output_limit: usize,
-    record_limit: usize,
+    record_limit: Option<usize>,
     capabilities_digest: &str,
     cancellation: &mut dyn FnMut() -> Result<(), Diagnostic>,
 ) -> Result<Vec<u8>, Diagnostic> {
@@ -8850,22 +8827,32 @@ fn render_definition_page(
     }
     const FIXED_RECORDS_WITH_CONTINUATION: usize = 8;
     let item_record_capacity = record_limit
-        .checked_sub(FIXED_RECORDS_WITH_CONTINUATION)
-        .ok_or_else(|| {
-            owner_inspection_error(
-                DiagnosticClass::Resource,
-                "definition_output_envelope_too_large",
-                "compact response record capacity cannot hold the definition page envelope",
-            )
-        })?;
-    if item_record_capacity == 0 {
+        .map(|limit| {
+            limit.checked_sub(FIXED_RECORDS_WITH_CONTINUATION).ok_or_else(|| {
+                owner_inspection_error(
+                    DiagnosticClass::Resource,
+                    "definition_output_envelope_too_large",
+                    "compact response record capacity cannot hold the definition page envelope",
+                )
+            })
+        })
+        .transpose()?;
+    if item_record_capacity == Some(0) {
         return Err(owner_inspection_error(
             DiagnosticClass::Resource,
             "definition_output_item_too_large",
             "compact response record capacity cannot hold one definition item",
         ));
     }
-    let requested_items = usize::try_from(requested_items).map_err(|_| {
+    let available = projection.records.len() - start;
+    let available = u64::try_from(available).map_err(|_| {
+        owner_inspection_error(
+            DiagnosticClass::Resource,
+            "definition_invalid_limit",
+            "definition projection length cannot be represented",
+        )
+    })?;
+    let requested_items = usize::try_from(requested_items.min(available)).map_err(|_| {
         owner_inspection_error(
             DiagnosticClass::Resource,
             "definition_invalid_limit",
@@ -8873,7 +8860,7 @@ fn render_definition_page(
         )
     })?;
     let maximum_end = start
-        .checked_add(requested_items.min(item_record_capacity))
+        .checked_add(item_record_capacity.map_or(requested_items, |limit| requested_items.min(limit)))
         .map(|end| end.min(projection.records.len()))
         .ok_or_else(|| {
             owner_inspection_error(
@@ -8950,7 +8937,7 @@ fn render_definition_page_exact(
     start: usize,
     end: usize,
     output_limit: usize,
-    record_limit: usize,
+    record_limit: Option<usize>,
     capabilities_digest: &str,
 ) -> Result<Vec<u8>, Diagnostic> {
     let mut rendered_bytes = 0_usize;
@@ -8988,7 +8975,7 @@ fn render_definition_page_once(
     start: usize,
     end: usize,
     output_limit: usize,
-    record_limit: usize,
+    record_limit: Option<usize>,
     capabilities_digest: &str,
     rendered_bytes: usize,
 ) -> Result<Vec<u8>, Diagnostic> {
@@ -9022,7 +9009,7 @@ fn render_definition_page_once(
             )
         })?;
     let mut writer = CompactResponseWriter::new(CompactResponseLimits {
-        maximum_bytes: output_limit,
+        maximum_bytes: Some(output_limit),
         maximum_records: record_limit,
     })?;
     append_definition_fields(
@@ -9081,6 +9068,7 @@ fn render_definition_page_once(
             ("fact-records", projection.fact_records.to_string()),
             ("structural-edges", projection.structural_edges.to_string()),
             ("reference-edges", projection.reference_edges.to_string()),
+            ("saturated", projection.work.saturated().to_string()),
             ("fact-reads", projection.fact_reads.to_string()),
             ("maximum-depth", projection.maximum_depth.to_string()),
             ("logical-bytes", projection.logical_bytes.to_string()),
@@ -9397,12 +9385,11 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
             ],
         )?;
         for document in documents {
-            ensure_capability_export_bound(&document.bytes)?;
             let path = directory.join(document.relative_path);
             let status = write_derived_output(
                 &path,
                 &document.bytes,
-                MAXIMUM_CLI_RESPONSE_BYTES,
+                None,
                 "generated public guide",
             )?;
             append_file_record(
@@ -9432,7 +9419,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
         for document in &documents {
             let path = directory.join(document.relative_path);
             let observed =
-                read_bounded(&path, MAXIMUM_CLI_RESPONSE_BYTES, "generated public guide")?;
+                read_with_limit(&path, None, "generated public guide")?;
             if observed != document.bytes {
                 return Err(Diagnostic::new(
                     DiagnosticClass::Source,
@@ -9474,12 +9461,11 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
                 snapshot.digest.as_str(),
             ),
         };
-        ensure_capability_export_bound(bytes)?;
         let path = PathBuf::from(path);
         let status = write_derived_output(
             &path,
             bytes,
-            MAXIMUM_CLI_RESPONSE_BYTES,
+            None,
             "compact capabilities output",
         )?;
         let mut output = capabilities_response_writer(&snapshot, None)?;
@@ -9800,23 +9786,11 @@ fn parse_usize_option(
 
 fn compact_response_writer() -> Result<CompactResponseWriter, Diagnostic> {
     CompactResponseWriter::new(CompactResponseLimits {
-        maximum_bytes: MAXIMUM_CLI_RESPONSE_BYTES,
-        maximum_records: MAXIMUM_CLI_RESPONSE_RECORDS,
+        maximum_bytes: None,
+        maximum_records: None,
     })
 }
 
-fn ensure_capability_export_bound(bytes: &[u8]) -> Result<(), Diagnostic> {
-    if bytes.len() > MAXIMUM_CLI_RESPONSE_BYTES {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "capabilities_output_budget",
-            format!(
-                "compact capabilities output exceeds the hard {MAXIMUM_CLI_RESPONSE_BYTES}-byte bound"
-            ),
-        ));
-    }
-    Ok(())
-}
 
 fn validate_capability_digest(value: &str, option: &str) -> Result<(), Diagnostic> {
     if value.len() != 64
@@ -9962,7 +9936,7 @@ fn exact_arguments(arguments: &[String], expected: usize, command: &str) -> Resu
 fn write_derived_output(
     path: &Path,
     bytes: &[u8],
-    maximum_existing_bytes: usize,
+    maximum_existing_bytes: Option<usize>,
     label: &str,
 ) -> Result<&'static str, Diagnostic> {
     let parent = path.parent().ok_or_else(|| {
@@ -9982,7 +9956,7 @@ fn write_derived_output(
                 format!("output '{}' is not a regular file", path.display()),
             ));
         }
-        if read_bounded(path, maximum_existing_bytes, label)? == bytes {
+        if read_with_limit(path, maximum_existing_bytes, label)? == bytes {
             return Ok("unchanged");
         }
     }
@@ -10015,6 +9989,14 @@ fn write_derived_output(
 }
 
 fn read_bounded(path: &Path, maximum: usize, label: &str) -> Result<Vec<u8>, Diagnostic> {
+    read_with_limit(path, Some(maximum), label)
+}
+
+fn read_with_limit(
+    path: &Path,
+    maximum: Option<usize>,
+    label: &str,
+) -> Result<Vec<u8>, Diagnostic> {
     let metadata =
         fs::symlink_metadata(path).map_err(|error| io_error("read_open", path, error))?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
@@ -10044,32 +10026,43 @@ fn read_bounded(path: &Path, maximum: usize, label: &str) -> Result<Vec<u8>, Dia
             format!("{label} '{}' is not a regular file", path.display()),
         ));
     }
-    if opened.len() > maximum as u64 {
+    if let Some(maximum) = maximum
+        && u128::from(opened.len()) > maximum as u128
+    {
         return Err(Diagnostic::new(
             DiagnosticClass::Resource,
             "read_limit",
             format!("{label} exceeds {maximum} bytes"),
         ));
     }
-    let mut bytes = Vec::with_capacity(usize::try_from(opened.len()).map_err(|_| {
-        Diagnostic::new(
-            DiagnosticClass::Resource,
-            "read_limit",
-            "bounded input length exceeds this platform",
-        )
-    })?);
-    Read::by_ref(&mut file)
-        .take((maximum as u64).saturating_add(1))
-        .read_to_end(&mut bytes)
-        .map_err(|error| io_error("read_bytes", path, error))?;
-    if bytes.len() > maximum {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "read_limit",
-            format!("{label} exceeds {maximum} bytes"),
-        ));
+    let mut bytes = Vec::new();
+    let mut remaining = maximum;
+    let mut chunk = [0_u8; 65_536];
+    loop {
+        let count = file
+            .read(&mut chunk)
+            .map_err(|error| io_error("read_bytes", path, error))?;
+        if count == 0 {
+            return Ok(bytes);
+        }
+        if let Some(available) = remaining {
+            remaining = Some(available.checked_sub(count).ok_or_else(|| {
+                Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "read_limit",
+                    format!("{label} exceeds its configured byte allowance"),
+                )
+            })?);
+        }
+        bytes.try_reserve(count).map_err(|error| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "read_allocation",
+                format!("cannot allocate complete {label}: {error}"),
+            )
+        })?;
+        bytes.extend_from_slice(&chunk[..count]);
     }
-    Ok(bytes)
 }
 
 fn usage_error(message: impl Into<String>) -> Diagnostic {
@@ -10094,6 +10087,31 @@ mod tests {
     use crate::platform::control::parse_records;
     use crate::platform::semantic_id::ModuleId;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn complete_file_reader_preserves_optional_byte_policies() {
+        let temporary = tempfile::TempDir::new().expect("temporary reader input");
+        let input = temporary.path().join("input");
+        fs::write(&input, b"payload").expect("write input");
+        for maximum in [None, Some(7), Some(usize::MAX)] {
+            assert_eq!(
+                read_with_limit(&input, maximum, "test input").expect("complete read"),
+                b"payload",
+            );
+        }
+        for maximum in [0, 6] {
+            assert_eq!(
+                read_with_limit(&input, Some(maximum), "test input")
+                    .expect_err("exact finite rejection").code,
+                "read_limit",
+            );
+        }
+        fs::write(&input, b"").expect("write empty input");
+        assert!(read_with_limit(&input, Some(0), "empty input").expect("zero fit").is_empty());
+        let bytes = vec![0x51; 4 * 1024 * 1024 + 1];
+        fs::write(&input, &bytes).expect("write historical-limit input");
+        assert_eq!(read_with_limit(&input, None, "complete input").expect("unbounded read"), bytes);
+    }
 
     #[test]
     fn unknown_options_reject_before_repository_access() {
@@ -10208,8 +10226,8 @@ mod tests {
         let record_error = execute_inspect_owner_with_limits(
             arguments.clone(),
             CompactResponseLimits {
-                maximum_bytes: MAXIMUM_CLI_RESPONSE_BYTES,
-                maximum_records: 3,
+                maximum_bytes: None,
+                maximum_records: Some(3),
             },
         )
         .expect_err("record budget");
@@ -10217,8 +10235,8 @@ mod tests {
         let byte_error = execute_inspect_owner_with_limits(
             arguments,
             CompactResponseLimits {
-                maximum_bytes: 1,
-                maximum_records: MAXIMUM_CLI_RESPONSE_RECORDS,
+                maximum_bytes: Some(1),
+                maximum_records: None,
             },
         )
         .expect_err("byte budget");
@@ -10829,7 +10847,7 @@ mod tests {
             0,
             1,
             MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES,
-            MAXIMUM_CLI_RESPONSE_RECORDS,
+            None,
             &capabilities.digest,
             &mut render_cancellation,
         )

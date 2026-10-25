@@ -42,6 +42,7 @@ fn decode_inner(
     let mut declares_standard_module = false;
     let mut units = Vec::new();
     let mut base = None;
+    let mut policies = Vec::new();
     for id in &parts[1..] {
         if block.head(*id) == Some("base") {
             let fields = block.list(*id)?;
@@ -66,6 +67,16 @@ fn decode_inner(
                 ));
             }
             base = Some(revision);
+        } else if block.head(*id) == Some("policy") {
+            let fields = block.list(*id)?;
+            if fields.len() != 3 {
+                return Err(block.error(*id, "transaction_policy", "policy requires one dimension and unbounded or an exact u64 allowance"));
+            }
+            let location = block.syntax[*id].location.clone();
+            policies.push(CompactRecord { operation: "change.policy".into(), fields: vec![
+                CompactField { name: "name".into(), value: block.atom(fields[1])?.to_owned(), location: location.clone() },
+                CompactField { name: "limit".into(), value: block.atom(fields[2])?.to_owned(), location: location.clone() },
+            ], location });
         } else {
             units.push(*id);
         }
@@ -306,8 +317,7 @@ fn decode_inner(
             input::reserve_labels(value, &mut public_labels);
         }
     }
-    let parsed = ChangeInput {
-        records: vec![CompactRecord {
+    let mut records = vec![CompactRecord {
             operation: "request".into(),
             fields: vec![CompactField {
                 name: "base".into(),
@@ -315,7 +325,10 @@ fn decode_inner(
                 location: location.clone(),
             }],
             location,
-        }],
+        }];
+    records.extend(policies);
+    let parsed = ChangeInput {
+        records,
         blocks: BTreeMap::new(),
         units: vec![block],
         public_labels,
@@ -432,13 +445,7 @@ fn atom(block: &mut Block, at: usize, value: &str) -> Result<usize, Diagnostic> 
 }
 
 fn node(block: &mut Block, at: usize, kind: SyntaxKind) -> Result<usize, Diagnostic> {
-    if block.syntax.len() >= input::MAXIMUM_STRUCTURAL_SYNTAX_NODES {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "transaction_syntax_capacity",
-            "transaction expansion exceeds the structural syntax bound",
-        ));
-    }
+
     block.syntax.try_reserve(1).map_err(|_| {
         Diagnostic::new(
             DiagnosticClass::Resource,

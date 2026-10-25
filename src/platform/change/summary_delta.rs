@@ -2,7 +2,7 @@
 
 use super::relation_view::CandidateRelations;
 use super::{
-    BoundOwnerSummary, CanonicalBaseRead, DerivedDelta, ImpactAdmission, KernelOverlay,
+    BoundOwnerSummary, BudgetCounter, BudgetDimension, CanonicalBaseRead, DerivedDelta, ImpactAdmission, KernelOverlay, WorkSaturation,
     WitnessBaseRead, WitnessReadWork,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -30,6 +30,7 @@ pub struct SummaryDelta {
     pub new_objects: BTreeMap<OwnerSummaryDigest, Vec<u8>>,
     pub read_work: WitnessReadWork,
     pub relation_edges_read: u64,
+    pub saturation: WorkSaturation,
 }
 
 pub fn derive_summary_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
@@ -71,8 +72,8 @@ pub(crate) fn derive_summary_delta_for_with_relation_limit<
     derived: &DerivedDelta,
     base_witness: &W,
     selected: BTreeSet<OwnerKey>,
-    maximum_relation_edges: u64,
-    maximum_relation_fanout: u64,
+    maximum_relation_edges: Option<u64>,
+    maximum_relation_fanout: Option<u64>,
 ) -> Result<SummaryDelta, Diagnostic> {
     let view = CandidateSummaryView::new(
         overlay,
@@ -133,7 +134,12 @@ pub(crate) fn derive_summary_delta_for_with_relation_limit<
         edits,
         new_objects,
         read_work: view.work(),
-        relation_edges_read: view.relation_edges_read(),
+        relation_edges_read: view.relation_edges_read().consumed,
+        saturation: {
+            let mut saturation = WorkSaturation::default();
+            if view.relation_edges_read().saturated { saturation.mark(BudgetDimension::RelationEdges); }
+            saturation
+        },
     })
 }
 
@@ -145,9 +151,9 @@ struct CandidateSummaryView<'a, B: ?Sized, W: ?Sized> {
     summary_cache: RefCell<BTreeMap<OwnerKey, Option<BoundOwnerSummary>>>,
     relations: RefCell<CandidateRelations<'a, W>>,
     read_work: RefCell<WitnessReadWork>,
-    remaining_relation_edges: RefCell<u64>,
-    maximum_relation_fanout: u64,
-    relation_edges_read: RefCell<u64>,
+    remaining_relation_edges: RefCell<Option<u64>>,
+    maximum_relation_fanout: Option<u64>,
+    relation_edges_read: RefCell<BudgetCounter>,
 }
 
 impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>
@@ -157,8 +163,8 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>
         overlay: &'a KernelOverlay<'a, B>,
         derived: &'a DerivedDelta,
         base_witness: &'a W,
-        maximum_relation_edges: u64,
-        maximum_relation_fanout: u64,
+        maximum_relation_edges: Option<u64>,
+        maximum_relation_fanout: Option<u64>,
     ) -> Self {
         Self {
             overlay,
@@ -178,7 +184,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>
             read_work: RefCell::new(WitnessReadWork::default()),
             remaining_relation_edges: RefCell::new(maximum_relation_edges),
             maximum_relation_fanout,
-            relation_edges_read: RefCell::new(0),
+            relation_edges_read: RefCell::new(BudgetCounter::default()),
         }
     }
 
@@ -206,7 +212,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>
         work
     }
 
-    fn relation_edges_read(&self) -> u64 {
+    fn relation_edges_read(&self) -> BudgetCounter {
         *self.relation_edges_read.borrow()
     }
 }
@@ -247,19 +253,8 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> SummaryRead
                 .outgoing(owner, remaining, self.maximum_relation_fanout)?;
         let observed = read.edges_examined;
         *self.remaining_relation_edges.borrow_mut() =
-            remaining.checked_sub(observed).ok_or_else(|| {
-                Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "change_budget_relation_edges",
-                    "summary relation traversal exceeded its declared edge budget",
-                )
-            })?;
-        let total = self
-            .relation_edges_read
-            .borrow()
-            .checked_add(observed)
-            .unwrap_or(u64::MAX);
-        *self.relation_edges_read.borrow_mut() = total;
+            observed.remaining(remaining, "summary relation traversal", "relation_edges")?;
+        self.relation_edges_read.borrow_mut().observe(observed);
         Ok(read.edges)
     }
 

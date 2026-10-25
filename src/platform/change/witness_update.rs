@@ -1,6 +1,6 @@
 //! Exact path-copy updates for all six committed validation-witness maps.
 
-use super::{DerivedDelta, SummaryDelta, TestDependencyDelta, WitnessBaseRead, WitnessReadWork};
+use super::{BudgetCounter, BudgetDimension, DerivedDelta, SummaryDelta, TestDependencyDelta, WitnessBaseRead, WitnessReadWork, WorkSaturation};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::persistent_map::{
     BatchOutcome, MapAdmission, MapEdit, MapError, MapErrorClass, MapWork, MemoryPageStore,
@@ -19,24 +19,26 @@ pub struct WitnessEditCounts {
     pub replaced: u64,
     pub removed: u64,
     pub unchanged: u64,
+    /// At least one edit count is a lower bound.
+    pub saturated: bool,
 }
 
 /// Independent logical-map and accepted-object read limits for one witness path-copy update.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WitnessMapAdmission {
     pub map: MapAdmission,
-    pub maximum_catalog_lookups: u64,
-    pub maximum_objects: u64,
-    pub maximum_bytes: u64,
+    pub maximum_catalog_lookups: Option<u64>,
+    pub maximum_objects: Option<u64>,
+    pub maximum_bytes: Option<u64>,
 }
 
 impl WitnessMapAdmission {
     pub const fn unbounded() -> Self {
         Self {
             map: MapAdmission::unbounded(),
-            maximum_catalog_lookups: u64::MAX,
-            maximum_objects: u64::MAX,
-            maximum_bytes: u64::MAX,
+            maximum_catalog_lookups: None,
+            maximum_objects: None,
+            maximum_bytes: None,
         }
     }
 }
@@ -179,10 +181,20 @@ pub fn update_witness_maps_from<P: PageStore + ?Sized>(
         &mut counts,
     )?;
 
+    let mut saturation = WorkSaturation::default();
+    use crate::platform::persistent_map::MapWorkCounter;
+    for (counter, dimension) in [
+        (MapWorkCounter::PagesRead, BudgetDimension::WitnessMapPages),
+        (MapWorkCounter::EntriesVisited, BudgetDimension::WitnessMapEntries),
+        (MapWorkCounter::BytesRead, BudgetDimension::WitnessBytes),
+    ] {
+        if work.counter_saturated(counter) { saturation.mark(dimension); }
+    }
     let read_work = WitnessReadWork {
         map_pages_read: work.pages_read,
         map_entries_visited: work.entries_visited,
         bytes_read: work.bytes_read,
+        saturation,
         ..WitnessReadWork::default()
     };
     Ok(WitnessMapUpdate {
@@ -321,10 +333,17 @@ fn apply_map<P: PageStore + ?Sized>(
 }
 
 fn add_counts(counts: &mut WitnessEditCounts, outcome: BatchOutcome) {
-    counts.inserted = counts.inserted.saturating_add(outcome.inserted);
-    counts.replaced = counts.replaced.saturating_add(outcome.replaced);
-    counts.removed = counts.removed.saturating_add(outcome.removed);
-    counts.unchanged = counts.unchanged.saturating_add(outcome.unchanged);
+    for (value, amount) in [
+        (&mut counts.inserted, outcome.inserted),
+        (&mut counts.replaced, outcome.replaced),
+        (&mut counts.removed, outcome.removed),
+        (&mut counts.unchanged, outcome.unchanged),
+    ] {
+        let mut counter = BudgetCounter::exact(*value);
+        counter.observe(BudgetCounter::exact(amount));
+        *value = counter.consumed;
+        counts.saturated |= counter.saturated;
+    }
 }
 
 fn map_diagnostic(error: MapError) -> Diagnostic {
@@ -423,35 +442,35 @@ mod tests {
         for (map, code) in [
             (
                 MapAdmission {
-                    maximum_pages_read: 0,
+                    maximum_pages_read: Some(0),
                     ..MapAdmission::unbounded()
                 },
                 "change_budget_witness_map_pages",
             ),
             (
                 MapAdmission {
-                    maximum_bytes_read: 0,
+                    maximum_bytes_read: Some(0),
                     ..MapAdmission::unbounded()
                 },
                 "change_budget_witness_bytes",
             ),
             (
                 MapAdmission {
-                    maximum_entries_visited: 0,
+                    maximum_entries_visited: Some(0),
                     ..MapAdmission::unbounded()
                 },
                 "change_budget_witness_map_entries",
             ),
             (
                 MapAdmission {
-                    maximum_pages_encoded: 1,
+                    maximum_pages_encoded: Some(1),
                     ..MapAdmission::unbounded()
                 },
                 "change_budget_witness_map_pages_encoded",
             ),
             (
                 MapAdmission {
-                    maximum_bytes_encoded: baseline.work.bytes_encoded - 1,
+                    maximum_bytes_encoded: Some(baseline.work.bytes_encoded - 1),
                     ..MapAdmission::unbounded()
                 },
                 "change_budget_witness_map_bytes_encoded",
@@ -473,11 +492,11 @@ mod tests {
             &tests,
             WitnessMapAdmission {
                 map: MapAdmission {
-                    maximum_pages_read: baseline.work.pages_read,
-                    maximum_bytes_read: baseline.work.bytes_read,
-                    maximum_entries_visited: baseline.work.entries_visited,
-                    maximum_pages_encoded: baseline.work.pages_encoded,
-                    maximum_bytes_encoded: baseline.work.bytes_encoded,
+                    maximum_pages_read: Some(baseline.work.pages_read),
+                    maximum_bytes_read: Some(baseline.work.bytes_read),
+                    maximum_entries_visited: Some(baseline.work.entries_visited),
+                    maximum_pages_encoded: Some(baseline.work.pages_encoded),
+                    maximum_bytes_encoded: Some(baseline.work.bytes_encoded),
                 },
                 ..WitnessMapAdmission::unbounded()
             },

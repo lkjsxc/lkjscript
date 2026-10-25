@@ -55,7 +55,7 @@ mod value_schema;
 mod vm;
 mod worker;
 
-pub(crate) use value::{MAXIMUM_ADMISSION_ITEMS, MAXIMUM_VALUE_ALLOCATION_BYTES};
+pub(crate) use value::MAXIMUM_ADMISSION_ITEMS;
 
 pub(crate) use capability::{
     CAPABILITY_GRANT_CONTRACT_VERSION, NormalizedGrantAuthorityRevision, NormalizedGrantLimit,

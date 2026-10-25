@@ -1,61 +1,248 @@
 declarations.begin
-(units (module create values
-  (function create top (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create f (type I64)) (parameter create at (type I64)) (returns I64)
-    (body (call ci::get (local data) (call ci::sub
-      (call ci::add (call flow::field (local data) (local at) (i64 24))
-        (call ci::add (call flow::field (local data) (local f) (i64 12)) (call flow::field (local data) (local at) (i64 28)))) (i64 1)))))
-  (function create integers (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create at (type I64)) (parameter create count (type I64)) (returns Bool)
-    (body (if (call ci::eq (local count) (i64 0)) (bool true)
-      (if (call ci::eq (call ci::get (local data) (local at)) (i64 1))
-        (call integers (local data) (call ci::add (local at) (i64 1)) (call ci::sub (local count) (i64 1))) (bool false)))))
-  (function create distinct (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create at (type I64)) (parameter create count (type I64))
-    (parameter create value (type I64)) (returns Bool)
-    (body (if (call ci::eq (local count) (i64 0)) (bool true)
-      (if (call ci::eq (call ci::get (local data) (local at)) (local value)) (bool false)
-        (call distinct (local data) (call ci::add (local at) (i64 1)) (call ci::sub (local count) (i64 1)) (local value))))))
-  (function create fields (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create ty (type I64)) (parameter create map (type I64))
-    (parameter create state (type I64)) (parameter create count (type I64)) (parameter create i (type I64)) (returns Bool)
-    (body (if (call ci::eq (local i) (local count)) (bool true)
-      (let (binding member (call ci::get (local data) (call ci::add (local map) (local i))))
-        (in (if (call ci::lt (local member) (local count))
-          (if (call ci::both (call distinct (local data) (local map) (local i) (local member))
-                (call ci::eq (call ci::get (local data) (call ci::add (local state) (local i)))
-                  (call ci::u32 (local data) (call types::field (local data) (local ty) (local member)))))
-            (call fields (local data) (local ty) (local map) (local state) (local count) (call ci::add (local i) (i64 1))) (bool false)) (bool false)))))))
-  (function create aggregate (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create f (type I64)) (parameter create at (type I64))
-    (parameter create i (type I64)) (parameter create record (type Bool)) (returns Bool)
-    (body (let (binding count (call flow::field (local data) (local at) (i64 8)))
-      (binding ty (call flow::field (local data) (local at) (i64 4)))
-      (binding depth (call flow::field (local data) (local at) (i64 28)))
-      (in (if (call ci::lt (local count) (call ci::add (local depth) (i64 1)))
-        (let (binding state (call ci::add (call flow::field (local data) (local at) (i64 24))
-            (call ci::add (call flow::field (local data) (local f) (i64 12)) (call ci::sub (local depth) (local count)))))
-          (binding valid (if (local record)
-            (if (call ci::both (call ci::lt (i64 7) (local ty)) (call types::valid (local data) (local ty) (bool false)))
-              (if (call ci::eq (call ci::u32 (local data) (call ci::add (call types::row (local ty)) (i64 4))) (local count))
-                (call fields (local data) (local ty) (call flow::field (local data) (local at) (i64 12)) (local state) (local count) (i64 0)) (bool false)) (bool false))
-            (if (call ci::eq (local ty) (i64 7)) (call integers (local data) (local state) (local count)) (bool false))))
-          (in (if (local valid) (call flow::regular (local data) (local f) (local at) (local i) (local count) (local ty) (i64 -1)) (bool false)))) (bool false))))))
-  (function create step (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create f (type I64)) (parameter create at (type I64))
-    (parameter create i (type I64)) (parameter create tag (type I64)) (returns Bool)
-    (body (if (call ci::eq (local tag) (i64 12))
-      (let (binding start (call flow::field (local data) (local at) (i64 4)))
-        (in (if (call types::utf8 (local data) (local start) (call ci::add (local start) (call flow::field (local data) (local at) (i64 8))))
-          (call flow::regular (local data) (local f) (local at) (local i) (i64 0) (i64 4) (i64 -1)) (bool false))))
-      (if (call ci::lt (local tag) (i64 15)) (call aggregate (local data) (local f) (local at) (local i) (call ci::eq (local tag) (i64 14)))
-        (if (call ci::lt (i64 0) (call flow::field (local data) (local at) (i64 28)))
-          (let (binding ty (call flow::field (local data) (local at) (i64 4)))
-            (binding field (call flow::field (local data) (local at) (i64 8)))
-            (in (if (call ci::both (call ci::lt (i64 7) (local ty)) (call types::valid (local data) (local ty) (bool false)))
-              (if (call ci::both (call ci::eq (call top (local data) (local f) (local at)) (local ty))
-                    (call ci::lt (local field) (call ci::u32 (local data) (call ci::add (call types::row (local ty)) (i64 4)))))
-                (call flow::regular (local data) (local f) (local at) (local i) (i64 1)
-                  (call ci::u32 (local data) (call types::field (local data) (local ty) (local field))) (i64 -1)) (bool false)) (bool false)))) (bool false))))))
-))
+(units
+  (module create values
+    (function create top
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create f (type I64))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (call types::identity
+          (local data)
+          (call flow::stack-cell
+            (local data)
+            (local f)
+            (local at)
+            (call ci::sub (call flow::field (local data) (local at) (i64 56)) (i64 1))))))
+    (function create integers
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create count (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local count) (i64 0))
+          (bool true)
+          (if
+            (call ci::eq (call types::identity (local data) (local at)) (i64 1))
+            (call integers
+              (local data)
+              (call ci::add (local at) (i64 16))
+              (call ci::sub (local count) (i64 1)))
+            (bool false)))))
+    (function create distinct
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create count (type I64))
+      (parameter create value (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local count) (i64 0))
+          (bool true)
+          (if
+            (call ci::eq (call ci::u64 (local data) (local at)) (local value))
+            (bool false)
+            (call distinct
+              (local data)
+              (call ci::add (local at) (i64 8))
+              (call ci::sub (local count) (i64 1))
+              (local value))))))
+    (function create fields
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (parameter create map (type I64))
+      (parameter create state (type I64))
+      (parameter create count (type I64))
+      (parameter create i (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local i) (local count))
+          (bool true)
+          (let
+            (binding member
+              (call ci::u64 (local data) (call ci::add (local map) (call ci::mul (local i) (i64 8)))))
+            (binding cell (call ci::add (local state) (call ci::mul (local i) (i64 16))))
+            (in
+              (if
+                (call ci::both
+                  (call ci::lt (i64 -1) (local member))
+                  (call ci::lt (local member) (local count)))
+                (if
+                  (call ci::both
+                    (call distinct (local data) (local map) (local i) (local member))
+                    (call ci::both
+                      (if (call types::borrowed (local data) (local cell)) (bool false) (bool true))
+                      (call ci::eq
+                        (call types::identity (local data) (local cell))
+                        (call ci::u64
+                          (local data)
+                          (call types::field (local data) (local ty) (local member))))))
+                  (call fields
+                    (local data)
+                    (local ty)
+                    (local map)
+                    (local state)
+                    (local count)
+                    (call ci::add (local i) (i64 1)))
+                  (bool false))
+                (bool false)))))))
+    (function create aggregate
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create f (type I64))
+      (parameter create at (type I64))
+      (parameter create i (type I64))
+      (parameter create record (type Bool))
+      (returns Bool)
+      (body
+        (let
+          (binding count (call flow::field (local data) (local at) (i64 16)))
+          (binding ty (call flow::field (local data) (local at) (i64 8)))
+          (binding depth (call flow::field (local data) (local at) (i64 56)))
+          (in
+            (if
+              (call ci::lt (local count) (call ci::add (local depth) (i64 1)))
+              (let
+                (binding state
+                  (call flow::stack-cell
+                    (local data)
+                    (local f)
+                    (local at)
+                    (call ci::sub (local depth) (local count))))
+                (binding valid
+                  (if
+                    (local record)
+                    (if
+                      (call ci::both
+                        (call ci::lt (i64 7) (local ty))
+                        (call types::valid (local data) (local ty) (bool false)))
+                      (if
+                        (call ci::eq
+                          (call ci::u64
+                            (local data)
+                            (call ci::add (call types::row (local data) (local ty)) (i64 8)))
+                          (local count))
+                        (call fields
+                          (local data)
+                          (local ty)
+                          (call flow::field (local data) (local at) (i64 24))
+                          (local state)
+                          (local count)
+                          (i64 0))
+                        (bool false))
+                      (bool false))
+                    (if
+                      (call ci::eq (local ty) (i64 7))
+                      (call integers (local data) (local state) (local count))
+                      (bool false))))
+                (in
+                  (if
+                    (local valid)
+                    (call flow::regular
+                      (local data)
+                      (local f)
+                      (local at)
+                      (local i)
+                      (local count)
+                      (local ty)
+                      (bool false)
+                      (i64 -1))
+                    (bool false))))
+              (bool false))))))
+    (function create step
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create f (type I64))
+      (parameter create at (type I64))
+      (parameter create i (type I64))
+      (parameter create tag (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local tag) (i64 12))
+          (let
+            (binding start (call flow::field (local data) (local at) (i64 8)))
+            (in
+              (if
+                (call types::utf8
+                  (local data)
+                  (local start)
+                  (call ci::add (local start) (call flow::field (local data) (local at) (i64 16))))
+                (call flow::regular
+                  (local data)
+                  (local f)
+                  (local at)
+                  (local i)
+                  (i64 0)
+                  (i64 4)
+                  (bool false)
+                  (i64 -1))
+                (bool false))))
+          (if
+            (call ci::lt (local tag) (i64 15))
+            (call aggregate
+              (local data)
+              (local f)
+              (local at)
+              (local i)
+              (call ci::eq (local tag) (i64 14)))
+            (if
+              (call ci::lt (i64 0) (call flow::field (local data) (local at) (i64 56)))
+              (let
+                (binding ty (call flow::field (local data) (local at) (i64 8)))
+                (binding field (call flow::field (local data) (local at) (i64 16)))
+                (in
+                  (if
+                    (call ci::both
+                      (call ci::lt (i64 7) (local ty))
+                      (call types::valid (local data) (local ty) (bool false)))
+                    (if
+                      (call ci::both
+                        (call ci::eq (call top (local data) (local f) (local at)) (local ty))
+                        (call ci::lt
+                          (local field)
+                          (call ci::u64
+                            (local data)
+                            (call ci::add (call types::row (local data) (local ty)) (i64 8)))))
+                      (call flow::regular
+                        (local data)
+                        (local f)
+                        (local at)
+                        (local i)
+                        (i64 1)
+                        (call ci::u64
+                          (local data)
+                          (call types::field (local data) (local ty) (local field)))
+                        (bool false)
+                        (i64 -1))
+                      (bool false))
+                    (bool false))))
+              (bool false))))))
+    (function create top-borrow
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create f (type I64))
+      (parameter create at (type I64))
+      (returns Bool)
+      (body
+        (call types::borrowed
+          (local data)
+          (call flow::stack-cell
+            (local data)
+            (local f)
+            (local at)
+            (call ci::sub (call flow::field (local data) (local at) (i64 56)) (i64 1))))))))
 declarations.end

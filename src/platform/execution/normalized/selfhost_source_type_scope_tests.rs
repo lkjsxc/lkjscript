@@ -261,6 +261,7 @@ fn dag(count: u32, edges: &[(u32, u32)], work: u32, code: i64) {
 fn selfhost_source_type_dag_rejects_cycles_and_preserves_shared_subgraphs() {
     dag(0, &[], 0, 0);
     dag(1, &[], 0, 6);
+    dag(100_001, &[], 0, 6); // Extent-valid count reaches the explicit policy.
     dag(1, &[], 1, 0);
     dag(1, &[(0, 0)], 100, 17);
     dag(3, &[(0, 1), (1, 2), (2, 0)], 1000, 17);

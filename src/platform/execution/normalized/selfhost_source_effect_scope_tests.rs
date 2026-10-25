@@ -240,11 +240,9 @@ fn selfhost_source_effect_types_enforce_depth_on_unused_input_and_result_edges()
                 .any(|ty| ty == child)
         );
         let mut bytes = graph::packet(&source);
-        let minimum = u32::from_le_bytes(bytes[100..104].try_into().unwrap());
-        assert!(minimum < DEPTH_ALLOWANCE);
-        bytes[100..104].copy_from_slice(&DEPTH_ALLOWANCE.to_le_bytes());
+        graph::set_allowance(&mut bytes, Some(u64::from(DEPTH_ALLOWANCE)));
         eprintln!(
-            "selfhost TaskFunction raw depth={depth} types={} bytes={} sha256={} minimum_allowance={minimum} selected_allowance={DEPTH_ALLOWANCE}",
+            "selfhost TaskFunction raw depth={depth} types={} bytes={} sha256={} selected_allowance={DEPTH_ALLOWANCE}",
             source.types.len(),
             bytes.len(),
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&bytes)),

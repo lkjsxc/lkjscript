@@ -933,8 +933,8 @@ fn artifact_associated_table_helper_measures_exact_cumulative_work_and_storage()
     let (steps, bytes) = measured.work();
     assert!(steps > 1 && bytes > 1);
     let limits = AssociatedAdmissionLimits {
-        maximum_steps: steps,
-        maximum_metadata_bytes: bytes,
+        maximum_steps: Some(steps),
+        maximum_metadata_bytes: Some(bytes),
         ..AssociatedAdmissionLimits::default()
     };
     let exact = OwnedAssociatedAdmission::with_limits(limits);
@@ -942,19 +942,19 @@ fn artifact_associated_table_helper_measures_exact_cumulative_work_and_storage()
     assert_eq!(exact.work(), (steps, bytes));
     for limits in [
         AssociatedAdmissionLimits {
-            maximum_steps: steps.checked_sub(1).unwrap(),
+            maximum_steps: Some(steps.checked_sub(1).unwrap()),
             ..limits
         },
         AssociatedAdmissionLimits {
-            maximum_metadata_bytes: bytes.checked_sub(1).unwrap(),
+            maximum_metadata_bytes: Some(bytes.checked_sub(1).unwrap()),
             ..limits
         },
     ] {
         let admission = OwnedAssociatedAdmission::with_limits(limits);
         let error = validate_unit_types(&f.read, &unit, &admission).unwrap_err();
         assert_eq!(error.class, DiagnosticClass::Resource);
-        assert!(admission.work().0 <= limits.maximum_steps);
-        assert!(admission.work().1 <= limits.maximum_metadata_bytes);
+        assert!(admission.work().0 <= limits.maximum_steps.expect("explicit test allowance"));
+        assert!(admission.work().1 <= limits.maximum_metadata_bytes.expect("explicit test allowance"));
     }
     // A fresh unit reader or repeated table hit must not reset the shared budget.
     let error = validate_unit_types(&f.read, &unit, &exact).unwrap_err();
@@ -962,7 +962,7 @@ fn artifact_associated_table_helper_measures_exact_cumulative_work_and_storage()
     assert_eq!(exact.work(), (steps, bytes));
     f.read.reads.borrow_mut().clear();
     let empty = OwnedAssociatedAdmission::with_limits(AssociatedAdmissionLimits {
-        maximum_steps: 0,
+        maximum_steps: Some(0),
         ..AssociatedAdmissionLimits::default()
     });
     assert_eq!(
@@ -1021,30 +1021,30 @@ fn artifact_associated_discovery_inherits_work_and_refuses_before_the_next_objec
         .collect();
     let inherited = 17;
     let maximum = inherited + ordinary.len();
-    let mut exact = inherited;
-    assert!(!contains_associated_types(&ordinary, &mut exact, maximum).unwrap());
-    assert_eq!(exact, maximum);
-    let mut short = inherited;
-    let error = contains_associated_types(&ordinary, &mut short, maximum - 1).unwrap_err();
+    let mut exact = crate::platform::kernel::ValidationWork::exact(inherited);
+    assert!(!contains_associated_types(&ordinary, &mut exact, Some(maximum)).unwrap());
+    assert_eq!(exact.consumed, maximum);
+    let mut short = crate::platform::kernel::ValidationWork::exact(inherited);
+    let error = contains_associated_types(&ordinary, &mut short, Some(maximum - 1)).unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Resource);
     assert_eq!(error.code, "artifact_associated_work");
-    assert_eq!(short, maximum - 1);
+    assert_eq!(short.consumed, maximum - 1);
     let associated = BTreeMap::from([(f.projection, f.read.types[&f.projection].clone())]);
-    let mut work = maximum;
-    assert!(contains_associated_types(&associated, &mut work, maximum + 1).unwrap());
-    assert_eq!(work, maximum + 1);
-    let mut short = maximum;
+    let mut work = crate::platform::kernel::ValidationWork::exact(maximum);
+    assert!(contains_associated_types(&associated, &mut work, Some(maximum + 1)).unwrap());
+    assert_eq!(work.consumed, maximum + 1);
+    let mut short = crate::platform::kernel::ValidationWork::exact(maximum);
     assert_eq!(
-        contains_associated_types(&associated, &mut short, maximum)
+        contains_associated_types(&associated, &mut short, Some(maximum))
             .unwrap_err()
             .class,
         DiagnosticClass::Resource
     );
-    assert_eq!(short, maximum);
-    let mut ceiling = usize::MAX;
+    assert_eq!(short.consumed, maximum);
+    let mut ceiling = crate::platform::kernel::ValidationWork::exact(usize::MAX);
     assert_eq!(
-        admit_work(&mut ceiling, usize::MAX).unwrap_err().class,
+        admit_work(&mut ceiling, Some(usize::MAX)).unwrap_err().class,
         DiagnosticClass::Resource
     );
-    assert_eq!(ceiling, usize::MAX);
+    assert_eq!(ceiling.consumed, usize::MAX);
 }

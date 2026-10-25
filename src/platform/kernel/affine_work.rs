@@ -1,15 +1,16 @@
 //! One request-local admission for affine expression visits and metadata reads.
 use super::*;
+use crate::platform::kernel::work::ValidationWork;
 use crate::platform::kernel::TypeObject;
 use std::cell::Cell;
 
 pub(super) struct Meter<'a> {
-    used: &'a Cell<usize>,
-    maximum: usize,
+    used: &'a Cell<ValidationWork>,
+    maximum: Option<usize>,
 }
 
 impl<'a> Meter<'a> {
-    pub(super) fn new(used: &'a mut usize, maximum: usize) -> Self {
+    pub(super) fn new(used: &'a mut ValidationWork, maximum: Option<usize>) -> Self {
         Self {
             used: Cell::from_mut(used),
             maximum,
@@ -17,12 +18,11 @@ impl<'a> Meter<'a> {
     }
 
     pub(super) fn step(&self) -> Result<(), Diagnostic> {
-        let used = self.used.get();
-        if used >= self.maximum {
+        let mut used = self.used.get();
+        if !used.charge(1, self.maximum) {
             return Err(exhaustion());
         }
-        // The pre-admission comparison also proves this increment cannot overflow.
-        self.used.set(used + 1);
+        self.used.set(used);
         Ok(())
     }
 }

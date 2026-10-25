@@ -1,42 +1,166 @@
 declarations.begin
-(units (module create source-namespace
-  (function create unique (visibility private) (effect pure)
-    (parameter create graph (type Bytes)) (parameter create rows (type Bytes))
-    (parameter create at (type I64)) (parameter create work (type I64)) (returns I64)
-    (body (if (call ci::lt (local at) (call ci::length (local rows)))
-      (let
-        (binding comparison (call source-namespace-key::order (local graph)
-          (local rows) (call ci::sub (local at) (i64 16)) (local rows) (local at) (local work)))
-        (binding remaining (field (local comparison) (name work)))
-        (in (if (call ci::lt (local remaining) (i64 0)) (local remaining)
-          (if (call ci::eq (field (local comparison) (name order)) (i64 0)) (i64 -16)
-            (call unique (local graph) (local rows) (call ci::add (local at) (i64 16)) (local remaining))))))
-      (local work))))
-  (function create check (visibility package) (effect pure)
-    (parameter create graph (type Bytes)) (parameter create work (type I64))
-    (parameter create rows (type Bytes)) (returns I64)
-    (body (let
-      (binding empty (type ByteBuffer) (call ci::empty))
-      (binding keys (call source-namespace-key::collect (local graph) (i64 0) (local work) (local rows) (local empty)))
-      (in (if (call ci::lt (field (local keys) (name work)) (i64 0)) (field (local keys) (name work))
-        (let (binding sorted (call source-namespace-sort::rows (local graph)
-          (field (local keys) (name rows)) (field (local keys) (name work))))
-          (in (if (call ci::lt (field (local sorted) (name work)) (i64 0)) (field (local sorted) (name work))
-            (call unique (local graph) (field (local sorted) (name rows)) (i64 16)
-              (field (local sorted) (name work)))))))))))
-  (function create with-work (visibility public) (effect pure)
-    (parameter create graph (type Bytes)) (parameter create work (type I64)) (returns I64)
-    (body (let (binding prepared (call source-members::prepare (local graph)))
-      (in (if (call ci::eq (field (local prepared) (name code)) (i64 0))
-        (if (call ci::either (call ci::lt (local work) (i64 0)) (call ci::lt (i64 2147483647) (local work))) (i64 6)
+(units
+  (module create source-namespace
+    (function create unique
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create rows (type Bytes))
+      (parameter create at (type I64))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
+      (body
+        (if
+          (call ci::lt (local at) (call ci::length (local rows)))
           (let
-            (binding previous (call source-scope::check (local graph) (field (local prepared) (name rows)) (local work)))
-            (binding checked (if (call ci::lt (local previous) (i64 0)) (local previous)
-              (call check (local graph) (local previous) (field (local prepared) (name rows)))))
-            (in (if (call ci::lt (local checked) (i64 0)) (call ci::sub (i64 0) (local checked)) (i64 0)))))
-        (field (local prepared) (name code)))))))
-  (function create validate (visibility public) (effect pure)
-    (parameter create graph (type Bytes)) (returns I64)
-    (body (if (call ci::lt (call ci::length (local graph)) (i64 128)) (i64 12)
-      (call with-work (local graph) (call ci::u32 (local graph) (i64 100))))))))
+            (binding comparison
+              (call source-namespace-key::order
+                (local graph)
+                (local rows)
+                (call ci::sub (local at) (i64 16))
+                (local rows)
+                (local at)
+                (local work)))
+            (binding remaining (field (local comparison) (name work)))
+            (in
+              (if
+                (call source-budget::failed (local remaining))
+                (local remaining)
+                (if
+                  (call ci::eq (field (local comparison) (name order)) (i64 0))
+                  (call source-budget::fail (local remaining) (i64 16))
+                  (call unique
+                    (local graph)
+                    (local rows)
+                    (call ci::add (local at) (i64 16))
+                    (local remaining))))))
+          (local work))))
+    (function create check
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (parameter create rows (type Bytes))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
+      (body
+        (let
+          (binding empty (type ByteBuffer) (call ci::empty))
+          (binding keys
+            (call source-namespace-key::collect
+              (local graph)
+              (i64 0)
+              (local work)
+              (local rows)
+              (local empty)))
+          (in
+            (if
+              (call source-budget::failed (field (local keys) (name work)))
+              (field (local keys) (name work))
+              (let
+                (binding sorted
+                  (call source-namespace-sort::rows
+                    (local graph)
+                    (field (local keys) (name rows))
+                    (field (local keys) (name work))))
+                (in
+                  (if
+                    (call source-budget::failed (field (local sorted) (name work)))
+                    (field (local sorted) (name work))
+                    (call unique
+                      (local graph)
+                      (field (local sorted) (name rows))
+                      (i64 16)
+                      (field (local sorted) (name work)))))))))))
+    (function create with-policy
+      (visibility public)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns I64)
+      (body
+        (let
+          (binding prepared (call source-members::prepare (local graph)))
+          (in
+            (if
+              (call ci::eq (field (local prepared) (name code)) (i64 0))
+              (if
+                (call source-budget::failed (local work))
+                (i64 6)
+                (let
+                  (binding previous
+                    (call source-scope::check
+                      (local graph)
+                      (field (local prepared) (name rows))
+                      (local work)))
+                  (binding checked
+                    (if
+                      (call source-budget::failed (local previous))
+                      (local previous)
+                      (call check (local graph) (local previous) (field (local prepared) (name rows)))))
+                  (in
+                    (if
+                      (call source-budget::failed (local checked))
+                      (field (local checked) (name code))
+                      (i64 0)))))
+              (field (local prepared) (name code)))))))
+    (function create validate
+      (visibility public)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (call ci::length (local graph)) (i64 128))
+          (i64 12)
+          (call with-policy (local graph) (call source-budget::from-carrier (local graph))))))
+    (function create with-work
+      (visibility public)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create work (type I64))
+      (returns I64)
+      (body (call with-policy (local graph) (call source-budget::finite (local work)))))))
 declarations.end

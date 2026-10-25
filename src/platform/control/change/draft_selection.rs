@@ -178,8 +178,8 @@ mod tests {
         let view = created.repository.view_current().unwrap();
         let mut reader = Reader::new(&view, ExecutionControl::uncancelled());
         let mut limits = RepositoryDefinitionAdmission::maximum();
-        limits.ownership_records = 1;
-        limits.summary_records = 0;
+        limits.ownership_records = Some(1);
+        limits.summary_records = Some(0);
         reader.reader = view.definition_reader_with_admission(limits);
         assert_eq!(selection.resolve(&mut reader).unwrap(), owner);
         assert_eq!(

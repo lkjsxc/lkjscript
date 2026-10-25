@@ -323,7 +323,7 @@ async fn finish_source_batch(
     let publication = publish_create_new(
         output_path,
         encoded,
-        MAXIMUM_BATCH_BYTES,
+        Some(MAXIMUM_BATCH_BYTES),
         "source batch result",
     )?;
     append_compact_record(

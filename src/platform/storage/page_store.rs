@@ -196,27 +196,27 @@ mod tests {
         for (limits, code, expected_catalog_lookups) in [
             (
                 StoreReadLimits {
-                    maximum_catalog_lookups: 0,
-                    maximum_objects: 1,
-                    maximum_bytes: bytes.len() as u64,
+                    maximum_catalog_lookups: Some(0),
+                    maximum_objects: Some(1),
+                    maximum_bytes: Some(bytes.len() as u64),
                 },
                 "object_read_catalog_lookups_exhausted",
                 0,
             ),
             (
                 StoreReadLimits {
-                    maximum_catalog_lookups: 1,
-                    maximum_objects: 0,
-                    maximum_bytes: bytes.len() as u64,
+                    maximum_catalog_lookups: Some(1),
+                    maximum_objects: Some(0),
+                    maximum_bytes: Some(bytes.len() as u64),
                 },
                 "object_read_objects_exhausted",
                 1,
             ),
             (
                 StoreReadLimits {
-                    maximum_catalog_lookups: 1,
-                    maximum_objects: 1,
-                    maximum_bytes: 0,
+                    maximum_catalog_lookups: Some(1),
+                    maximum_objects: Some(1),
+                    maximum_bytes: Some(0),
                 },
                 "object_read_bytes_exhausted",
                 1,
@@ -239,9 +239,9 @@ mod tests {
         let reader = ObjectPageReader::new_admitted(
             &store,
             StoreReadAdmission::new(StoreReadLimits {
-                maximum_catalog_lookups: 1,
-                maximum_objects: 1,
-                maximum_bytes: bytes.len() as u64,
+                maximum_catalog_lookups: Some(1),
+                maximum_objects: Some(1),
+                maximum_bytes: Some(bytes.len() as u64),
             }),
         );
         assert_eq!(

@@ -1,61 +1,212 @@
 declarations.begin
-(units (module create source-namespace-sort
-  (function create merge (visibility private) (effect pure)
-    (parameter create graph (type Bytes))
-    (parameter create left (type Bytes)) (parameter create a (type I64))
-    (parameter create right (type Bytes)) (parameter create b (type I64))
-    (parameter create work (type I64)) (parameter create out (type ByteBuffer) (use consume))
-    (returns (record (work I64) (rows Bytes)))
-    (body (if (call ci::eq (local a) (call ci::length (local left)))
-      (call finish (local right) (local b) (local work) (local out))
-      (if (call ci::eq (local b) (call ci::length (local right)))
-        (call finish (local left) (local a) (local work) (local out))
+(units
+  (module create source-namespace-sort
+    (function create merge
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create left (type Bytes))
+      (parameter create a (type I64))
+      (parameter create right (type Bytes))
+      (parameter create b (type I64))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns
+        (record
+          (work
+            (record
+              (code I64)
+              (finite Bool)
+              (high I64)
+              (low I64)
+              (observed-high I64)
+              (observed-low I64)
+              (saturated Bool)))
+          (rows Bytes)))
+      (body
+        (if
+          (call ci::eq (local a) (call ci::length (local left)))
+          (call finish (local right) (local b) (local work) (local out))
+          (if
+            (call ci::eq (local b) (call ci::length (local right)))
+            (call finish (local left) (local a) (local work) (local out))
+            (let
+              (binding comparison
+                (call source-namespace-key::order
+                  (local graph)
+                  (local left)
+                  (local a)
+                  (local right)
+                  (local b)
+                  (local work)))
+              (binding remaining (field (local comparison) (name work)))
+              (in
+                (if
+                  (call source-budget::insufficient (local remaining) (i64 1))
+                  (record structural
+                    (field work (call source-budget::fail (local remaining) (i64 6)))
+                    (field rows (call ci::freeze (local out))))
+                  (if
+                    (call ci::lt (field (local comparison) (name order)) (i64 0))
+                    (let
+                      (binding next
+                        (type ByteBuffer)
+                        (call wire::range
+                          (local left)
+                          (local a)
+                          (call ci::add (local a) (i64 16))
+                          (local out)))
+                      (in
+                        (call merge
+                          (local graph)
+                          (local left)
+                          (call ci::add (local a) (i64 16))
+                          (local right)
+                          (local b)
+                          (call source-budget::charge (local remaining) (i64 1))
+                          (local next))))
+                    (let
+                      (binding next
+                        (type ByteBuffer)
+                        (call wire::range
+                          (local right)
+                          (local b)
+                          (call ci::add (local b) (i64 16))
+                          (local out)))
+                      (in
+                        (call merge
+                          (local graph)
+                          (local left)
+                          (local a)
+                          (local right)
+                          (call ci::add (local b) (i64 16))
+                          (call source-budget::charge (local remaining) (i64 1))
+                          (local next))))))))))))
+    (function create finish
+      (visibility private)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create at (type I64))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns
+        (record
+          (work
+            (record
+              (code I64)
+              (finite Bool)
+              (high I64)
+              (low I64)
+              (observed-high I64)
+              (observed-low I64)
+              (saturated Bool)))
+          (rows Bytes)))
+      (body
         (let
-          (binding comparison (call source-namespace-key::order (local graph)
-            (local left) (local a) (local right) (local b) (local work)))
-          (binding remaining (field (local comparison) (name work)))
-          (in (if (call ci::lt (local remaining) (i64 1))
-            (record structural (field work (i64 -6)) (field rows (call ci::freeze (local out))))
-            (if (call ci::lt (field (local comparison) (name order)) (i64 0))
-              (let (binding next (type ByteBuffer)
-                (call wire::range (local left) (local a) (call ci::add (local a) (i64 16)) (local out)))
-                (in (call merge (local graph) (local left) (call ci::add (local a) (i64 16))
-                  (local right) (local b) (call ci::sub (local remaining) (i64 1)) (local next))))
-              (let (binding next (type ByteBuffer)
-                (call wire::range (local right) (local b) (call ci::add (local b) (i64 16)) (local out)))
-                (in (call merge (local graph) (local left) (local a)
-                  (local right) (call ci::add (local b) (i64 16))
-                  (call ci::sub (local remaining) (i64 1)) (local next))))))))))))
-  (function create finish (visibility private) (effect pure)
-    (parameter create rows (type Bytes)) (parameter create at (type I64))
-    (parameter create work (type I64)) (parameter create out (type ByteBuffer) (use consume))
-    (returns (record (work I64) (rows Bytes)))
-    (body (let (binding cost (call ci::div (call ci::sub (call ci::length (local rows)) (local at)) (i64 16)))
-      (in (if (call ci::lt (local work) (local cost))
-        (record structural (field work (i64 -6)) (field rows (call ci::freeze (local out))))
-        (let (binding next (type ByteBuffer)
-          (call wire::range (local rows) (local at) (call ci::length (local rows)) (local out)))
-          (in (record structural (field work (call ci::sub (local work) (local cost)))
-            (field rows (call ci::freeze (local next)))))))))))
-  (function create rows (visibility package) (effect pure)
-    (parameter create graph (type Bytes)) (parameter create data (type Bytes))
-    (parameter create work (type I64)) (returns (record (work I64) (rows Bytes)))
-    (body (if (call ci::lt (local work) (i64 1))
-      (record structural (field work (i64 -6)) (field rows (local data)))
-      (if (call ci::lt (call ci::length (local data)) (i64 32))
-        (record structural (field work (call ci::sub (local work) (i64 1))) (field rows (local data)))
-        (let
-          (binding middle (call ci::mul
-            (call ci::div (call ci::div (call ci::length (local data)) (i64 16)) (i64 2)) (i64 16)))
-          (binding left (call rows (local graph) (call ci::slice (local data) (i64 0) (local middle))
-            (call ci::sub (local work) (i64 1))))
-          (in (if (call ci::lt (field (local left) (name work)) (i64 0)) (local left)
-            (let (binding right (call rows (local graph)
-              (call ci::slice (local data) (local middle) (call ci::length (local data)))
-              (field (local left) (name work))))
-              (in (if (call ci::lt (field (local right) (name work)) (i64 0)) (local right)
-                (let (binding empty (type ByteBuffer) (call ci::empty))
-                  (in (call merge (local graph) (field (local left) (name rows)) (i64 0)
-                    (field (local right) (name rows)) (i64 0)
-                    (field (local right) (name work)) (local empty))))))))))))))))
+          (binding cost (call ci::div (call ci::sub (call ci::length (local rows)) (local at)) (i64 16)))
+          (in
+            (if
+              (call source-budget::insufficient (local work) (local cost))
+              (record structural
+                (field work (call source-budget::fail (local work) (i64 6)))
+                (field rows (call ci::freeze (local out))))
+              (let
+                (binding next
+                  (type ByteBuffer)
+                  (call wire::range (local rows) (local at) (call ci::length (local rows)) (local out)))
+                (in
+                  (record structural
+                    (field work (call source-budget::charge (local work) (local cost)))
+                    (field rows (call ci::freeze (local next)))))))))))
+    (function create rows
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (work
+            (record
+              (code I64)
+              (finite Bool)
+              (high I64)
+              (low I64)
+              (observed-high I64)
+              (observed-low I64)
+              (saturated Bool)))
+          (rows Bytes)))
+      (body
+        (if
+          (call source-budget::insufficient (local work) (i64 1))
+          (record structural
+            (field work (call source-budget::fail (local work) (i64 6)))
+            (field rows (local data)))
+          (if
+            (call ci::lt (call ci::length (local data)) (i64 32))
+            (record structural
+              (field work (call source-budget::charge (local work) (i64 1)))
+              (field rows (local data)))
+            (let
+              (binding middle
+                (call ci::mul
+                  (call ci::div (call ci::div (call ci::length (local data)) (i64 16)) (i64 2))
+                  (i64 16)))
+              (binding left
+                (call rows
+                  (local graph)
+                  (call ci::slice (local data) (i64 0) (local middle))
+                  (call source-budget::charge (local work) (i64 1))))
+              (in
+                (if
+                  (call source-budget::failed (field (local left) (name work)))
+                  (local left)
+                  (let
+                    (binding right
+                      (call rows
+                        (local graph)
+                        (call ci::slice (local data) (local middle) (call ci::length (local data)))
+                        (field (local left) (name work))))
+                    (in
+                      (if
+                        (call source-budget::failed (field (local right) (name work)))
+                        (local right)
+                        (let
+                          (binding empty (type ByteBuffer) (call ci::empty))
+                          (in
+                            (call merge
+                              (local graph)
+                              (field (local left) (name rows))
+                              (i64 0)
+                              (field (local right) (name rows))
+                              (i64 0)
+                              (field (local right) (name work))
+                              (local empty))))))))))))))))
 declarations.end

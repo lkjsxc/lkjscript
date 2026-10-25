@@ -17,7 +17,7 @@ fn measure(
     shared: bool,
 ) -> Observation {
     source.reset(None);
-    let mut used = 0;
+    let mut used = ValidationWork::default();
     let mut analysis = analysis(source, &mut used);
     let mut scopes = Scopes::default();
     let start = Instant::now();
@@ -54,7 +54,7 @@ fn measure(
     }
     Observation {
         reads: source.reads.get(),
-        work: *analysis.work,
+        work: analysis.work.consumed,
         metadata: analysis.observation.metadata_bytes,
         elapsed_ns,
     }

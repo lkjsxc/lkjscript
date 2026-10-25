@@ -12,6 +12,7 @@ mod budget_tests;
 mod associated_shape_tests;
 
 use super::contract::MAXIMUM_EXPRESSION_DEPTH;
+use super::work::ValidationWork;
 use super::infer::{ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits};
 use super::owned_associated::{OwnedAssociatedAdmission, OwnedTypeOccurrence};
 use super::{
@@ -69,8 +70,8 @@ pub(super) fn validate_affine_meaning(
     snapshot: &super::KernelSnapshot,
     read: &impl ExpressionRead,
     diagnostics: &mut Vec<Diagnostic>,
-    work: &mut usize,
-    maximum_steps: usize,
+    work: &mut ValidationWork,
+    maximum_steps: Option<usize>,
 ) {
     let roots = snapshot.owners.keys().copied().collect::<Vec<_>>();
     if validate_affine_roots_with_limits(
@@ -80,7 +81,7 @@ pub(super) fn validate_affine_meaning(
         work,
         ExpressionValidationLimits {
             maximum_steps,
-            maximum_diagnostics: usize::MAX,
+            maximum_diagnostics: None,
         },
     ) == Err(ExpressionValidationExhaustion::Steps)
     {
@@ -92,7 +93,7 @@ pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
     read: &R,
     roots: impl IntoIterator<Item = OwnerKey>,
     diagnostics: &mut Vec<Diagnostic>,
-    work: &mut usize,
+    work: &mut ValidationWork,
     limits: ExpressionValidationLimits,
 ) -> Result<(), ExpressionValidationExhaustion> {
     let work = work::Meter::new(work, limits.maximum_steps);
@@ -154,14 +155,14 @@ pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
 fn push_diagnostic(
     diagnostics: &mut Vec<Diagnostic>,
     diagnostic: Diagnostic,
-    maximum: usize,
+    maximum: Option<usize>,
 ) -> Result<(), ExpressionValidationExhaustion> {
     // Work exhaustion may arise while reading a root, its shape/signature, or
     // its body. It is control flow, never a semantic diagnostic-sink entry.
     if diagnostic.code == "kernel_affine_work" {
         return Err(ExpressionValidationExhaustion::Steps);
     }
-    if diagnostics.len() >= maximum {
+    if maximum.is_some_and(|maximum| diagnostics.len() >= maximum) {
         return Err(ExpressionValidationExhaustion::Diagnostics);
     }
     diagnostics.push(diagnostic);

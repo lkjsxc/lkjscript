@@ -25,90 +25,104 @@ retain compact evidence before removing task-owned stage binaries.
 
 ## Current canonical input: LKJCI1
 
-All integers are little-endian. Magic is `LKJCI001`. The u32 at offset 112 selects
-ELF (0, profile `4`) or artifact (1, profile `5`) emission. Each selector admits
-only its current profile; mode-1 profile-4 inputs reject. The Tier 1 route retains
-Rust semantic admission and IR export. The restricted scalar source route below
-instead constructs mode-0 input inside lkjscript after its own source checks.
-The ELF layout follows;
-the [artifact layout](selfhosting-artifact-input.md) supplies canonical unit
-fields and source objects, with explicit unmetered or positive-u64 admission
-allowances. Neither is the final semantic graph profile.
+All integers are little-endian. Magic is `LKJCI001`. The selector at offset 112
+chooses ELF (0, profile `6`) or artifact (1, profile `5`). Each selector admits
+only its current profile. Mode-0 profile 4 is rejected; there is no legacy parser.
+The Tier 1 route retains Rust semantic admission and IR export. The restricted
+scalar source route constructs profile-6 input inside lkjscript after complete
+source admission. The [artifact layout](selfhosting-artifact-input.md) remains a
+separate current format with its own checked u32 framing and allowance convention.
+
+Mode 0 has a 160-byte header and dynamically placed descriptor, function,
+instruction and byte-pool sections. All counts, offsets, lengths and identities
+are eight-byte unsigned fields. Physical extents must fit nonnegative I64 because
+the language byte-index API uses I64; words with bit 63 set are rejected before
+arithmetic or indexing. This is a checked representation boundary, not a default
+quota. Full-u64 policy allowances use two u32 limbs and are not restricted by this
+physical-index domain.
 
 | Header offset | Width | Meaning |
 | --- | --- | --- |
 | 0 | 8 | Magic |
-| 8 | 4 | Profile and flags, exactly 4 |
-| 12 | 4 | Root function index |
+| 8 | 4 | Profile, exactly 6 |
+| 12 | 4 | Admission policy tag: 0 unbounded, 1 finite |
 | 16 | 8 | Actual complete input byte length |
-| 24 | 8 | Function count F, 1 through 1024 |
-| 32 | 8 | Traversal fuel |
+| 24 | 8 | Function count F, positive |
+| 32 | 8 | Exact finite allowance; zero required with tag 0 |
 | 40 | 32 | BLAKE3 of bytes `[0,40)` concatenated with `[72,length)` |
+| 72 | 8 | Descriptor start, exactly 160 |
+| 80 | 8 | Total descriptor rows T = 7 primitives + R structural records |
+| 88 | 8 | Function start D = 160 + 32*T |
+| 96 | 8 | Function count, exactly F |
+| 104 | 8 | Instruction start Q = D + 80*F |
+| 112 | 8 | Emission selector, exactly zero in Mode 0 |
+| 120 | 8 | Instruction count N, positive |
+| 128 | 8 | Byte-pool start P = Q + 64*N |
+| 136 | 8 | Byte-pool length B = length - P |
+| 144 | 8 | Root function index, less than F |
+| 152 | 8 | Reserved zero |
 
-The common decoder requires at least 160 bytes, checks magic, then dispatches by
-selector. ELF mode retains its 8,388,608-byte maximum before hashing and additionally
-requires at least 2248 bytes. Artifact mode uses its own checked u32 extent domain
-and has no default aggregate 8 MiB quota.
-Header lengths, counts and fuel require zero high words. ELF mode requires a
-positive instruction count and the complete layout
-`2176 + 40*F + 32*N + B <= 8,388,608`; there is no separate instruction-count
-quota. Locals, operand depth and record fields are each bounded by 128. The root
-is either `() -> I64` or the exact binary-filter signature
-`(Bytes) -> {diagnostic: I64, image: Bytes}`; other signatures reject with code 9.
+The common decoder requires 128 bytes for dispatch; Mode 0 then requires its
+complete 160-byte header. Every section is checked using remaining extent divided
+by stride before multiplication, including malformed high words and excessive
+counts. There are no default input-byte, function, instruction, descriptor,
+parameter, local, stack or record-field quotas. The root is either `() -> I64`
+or the exact binary-filter signature `(Bytes) -> {diagnostic: I64, image: Bytes}`;
+other signatures reject with code 9.
 
-Let N be instruction count and B blob byte length. Fuel must be at least
-`4096 + F + 64*N + 256*B` and at most 2,147,483,647. This conservative work
-certificate covers bounded descriptor/state visits, UTF-8 checks, field-name
-comparisons and record permutation scans; it is separate from evaluator steps.
-All scans advance monotonically. Calls may recurse, but input admission neither
-executes nor recursively traverses the call graph.
+Tag 0 is explicitly unbounded. It does not compute or reject against a synthetic
+finite estimate. Tag 1 preserves `Some(0)` and every other exact u64 allowance,
+including `Some(u64::MAX)`. The current modeled admission charge is
+`4096 + F + 64*N + 256*B`; the implementation subtracts checked charges from
+`source-budget`'s u64 limbs, so neither multiplication overflow nor saturating
+comparison can admit a finite overrun. A finite zero allowance rejects with code 6.
+This allowance is distinct from evaluator instructions, allocation policies and
+cancellation. Admission termination follows advancing section/row cursors,
+strictly earlier record child types, finite permutation scans and checked forward
+control edges; it does not depend on the allowance. Calls may recurse, but
+admission neither executes nor recursively traverses the call graph.
 
-The Rust exporter preflights the encoded input buffer's complete section and
-blob sizes with checked arithmetic before reserving it, then serializes counts
-and offsets with checked u32 conversions. A failed output-buffer reservation
-returns `compiler_input_unsupported`.
-Its early per-function check derives from the space available after the function
-table; it is not an independent per-function instruction quota. The source scalar
-planner bounds intermediate counts by the space available with one function,
-then checks the aggregate against the actual function count. The source packer
-checks the complete blob extent. These checks admit every instruction count that
-fits the retained byte bound and the other unchanged profile restrictions;
-none substitutes a larger fixed instruction ceiling.
+The Rust exporter preflights complete section and pool sizes with checked
+arithmetic before `try_reserve_exact`, then serializes checked u64 fields. A failed
+buffer reservation reports `compiler_input_allocation`; representation/profile
+failures report `compiler_input_unsupported`. Descriptor discovery uses explicit
+enter/exit frames and an active set. Its code path has no fixed descriptor count
+or recursive host type walk. The existing normalized IR still supplies u32 function,
+local and instruction identities; widening that independent host representation
+is not claimed by this wire-format cut.
 
-| Offset | Table | Encoding |
-| --- | --- | --- |
-| 72 | Directory | Five u32 offset/count pairs: `(112,1)`, `(128,T)`, `(2176,F)`, `(2176+40*F,N)`, `(2176+40*F+32*N,B)` |
-| 112 | Module | Four u32 words: first function 0, count F, two zeros |
-| 128 | Types | T sixteen-byte rows; T is 7 through 127; reserved space ends at 2176 and all unused words are zero |
-| 2176 | Functions | Forty-byte rows |
-| 2176+40*F | Instructions | Thirty-two-byte rows |
-| 2176+40*F+32*N | Blob | Exactly B bytes, ending at actual input length |
+Descriptors have four u64 words, at `160 + 32*(type_identity - 1)`. IDs 1–6 are
+I64, Bool, Unit, Text, Bytes and ByteBuffer, with rows `[id,0,0,0]`. ID 7 is
+List<I64>, row `[7,1,0,0]`. Every ID from 8 through T denotes a structural record,
+row `[8,field_count,metadata_offset,0]`. Record metadata begins the byte pool in
+type order. Each record has 32-byte field rows
+`[child_type,name_offset,name_length,0]`, followed by its consecutive names.
+Names are nonempty UTF-8 in strictly increasing byte order. Child identities must
+be smaller than the containing identity and cannot be ByteBuffer; this preserves
+cycle rejection and excludes affine aggregates. Empty records are permitted.
+Every supplied descriptor, including unused ones, is validated.
 
-Type IDs are one-based. IDs 1–6 are I64, Bool, Unit, Text, Bytes and ByteBuffer;
-their rows are `[id,0,0,0]`. ID 7 is List<I64>, row `[7,1,0,0]`. IDs 8–127 are
-structural records, row `[8,field_count,metadata_offset,0]`. Record metadata comes
-first in the blob, in type order. Each record has sixteen-byte field rows
-`[child_type,name_offset,name_length,0]`, followed by its consecutive field names.
-Names are nonempty UTF-8 in strictly increasing byte order. Child types must be
-smaller IDs and cannot be ByteBuffer; this excludes cycles and affine aggregates.
-Empty records are permitted. Every offset is the next canonical position.
-
-Function rows contain ten u32 words: module (0), result type, parameter count,
+Function rows have ten u64 words: reserved zero, result identity, parameter count,
 local count, first instruction, instruction count, external code, absolute
-local-type byte offset, and two zeros. Instruction ranges partition the table in
-function order. A code function has external code zero and at least one instruction.
-An external has no instructions and exactly as many locals as parameters; its
-signature must match its primitive.
+local-type offset and two reserved zeros. Instruction ranges partition the table
+in function order. Code functions have external code zero and at least one
+instruction. Externals have no instructions and exactly as many locals as
+parameters; signatures must match their semantic intrinsic.
 
-After record metadata, each function contributes local-type bytes, followed by
-each instruction's optional payload, initialization flags (0 or 1) per local,
-and type bytes per incoming operand. Type 134 denotes a borrowed ByteBuffer and
-is permitted only in parameter locals and operand stacks. Owned ByteBuffer type 6
-parameters consume custody. Other parameter types are unrestricted. Results cannot
-be borrowed buffers. Layout checks all descriptors and ranges before transfers.
+After record metadata, each function contributes local value-type cells followed
+by each instruction's payload, one initialization flag (0 or 1) per local and
+incoming operand value-type cells. A cell is 16 bytes: `[identity:u64, qualifier:u64]`.
+Qualifier 0 is ordinary/owned; qualifier 1 is a borrowed ByteBuffer and requires
+identity 6. All other qualifiers reject. Borrowed cells occur only in parameter
+locals and operand stacks; results carry an ordinary identity. Identity 134 is
+an ordinary descriptor, as are identities above 255. Owned ByteBuffer parameters
+consume custody; other parameter identities are unrestricted. Layout validates
+all cells and extents before any transfer certificate is trusted.
 
-Instruction rows contain u32 tag, operands A, B and C, an eight-byte immediate,
-u32 absolute state offset, and u32 incoming stack depth.
+Instruction rows are 64 bytes: u64 tag/A/B/C at offsets 0/8/16/24, signed I64
+immediate at 32, reserved u64 zero at 40, absolute state offset at 48 and incoming
+stack depth at 56. State offsets, pool payloads and diagnostic input positions no
+longer discard high words. Record permutations contain u64 field indices.
 
 | Tag | Operation | Operands |
 | --- | --- | --- |
@@ -123,7 +137,7 @@ u32 absolute state offset, and u32 incoming stack depth.
 | 11 | Return | None |
 | 12 | Text | A blob offset; B UTF-8 byte length; payload precedes state |
 | 13 | List<I64> | A=7; B element count |
-| 14 | Structural record | A type; B field count; C blob offset of B-byte field permutation |
+| 14 | Structural record | A type; B field count; C blob offset of 8*B-byte field permutation |
 | 15 | Field | A record type; B canonical field index |
 | 16 | Move buffer local | A initialized owned-buffer local index |
 
@@ -197,57 +211,76 @@ empty bytes before the binary filter writes stdout.
 | 3 | Input extent/count or generated artifact-pool extent bound |
 | 4 | Content digest |
 | 5 | Noncanonical table, index, state extent, reserved word or root |
-| 6 | ELF traversal fuel or insufficient explicit artifact allowance |
+| 6 | Insufficient explicit Mode-0 modeled admission or artifact allowance |
 | 7 | Unsupported/malformed instruction form |
 | 8 | Invalid types, UTF-8 literal, stack, custody, primitive signature, call or edge |
 | 9 | Unsupported root signature |
 | 10 | Artifact projection layout, unit form, owner metadata or required reference |
 | 11 | Artifact source-object domain, order, extent or digest |
 
-ELF validation order is minimum common extent, magic, selector, mode extent and
-profile, header lengths/counts, digest, directory/module extents and root index,
-fuel, types and complete layout, root
-signature, then every function's
-entry and instruction transfers. Offsets use checked I64 arithmetic over bounded
-counts. ELF output is exactly `65536 + 512*F + 128*N + B` bytes. A ByteBuffer owns
-it until freeze. Header/data padding is zero and code padding is NOP. It contains
-no paths, timestamps, random IDs or host addresses. Literal bytes and record
-permutations are copied from the canonical blob as read-only data; this is data,
-not a precompiled program or an executable template.
+ELF validation checks common extent, magic, selector and current profile, exact
+length and digest, dynamic table extents and root index, explicit policy encoding,
+types and complete layout, root signature, then every supplied function's entry
+and instruction transfers. No output is published before this admission succeeds.
 
-The ELF has an RX load segment, non-executable stack, entry address `0x401000`,
-and no interpreter or dynamic dependencies. Runtime code occupies the first
-65536 bytes; each function has a 512-byte header and each instruction a 128-byte
-slot. Calls align RSP to 16 before CALL and preserve the original argument base;
-callees observe RSP modulo 16 equal to 8. Self-tail calls replace parameters and
-jump to the first instruction without growing the stack. Other recursion uses
-ordinary frames.
+A deterministic measurement pass emits each function prologue and instruction
+into temporary owned buffers, records exact offsets and discards the buffers.
+The final pass emits the same selections and checks actual length against the
+plan. For measured header lengths H_i and instruction lengths L_j, output size is
+`65536 + sum(H_i) + sum(L_j) + B`; no per-user-function 512-byte or
+per-user-instruction 128-byte padding remains. The layout table is derived inside
+lkjscript from admitted input, not a caller certificate. Header/data padding is
+zero; bounded runtime templates retain their intentional padding. Emission has no
+paths, timestamps, random IDs or host-dependent addresses. Literals and record
+permutations are copied from the canonical pool as read-only data.
 
-With `F <= 1024` and the retained complete-input bound, the padded image is at
-most 33,971,712 bytes. Relative calls and branches therefore fit signed rel32,
-and absolute data addresses from base `0x400000` fit the current u32 encoding.
-The decoder reads node counts as u32 before multiplying by 32, which also fits
-I64 for malformed inputs; it rejects a fixed-table extent outside the actual
-input before traversal. The count expansion does not change the 128-local stack
-displacement domain. Explicit launcher output quotas remain independent. A future
-input-byte expansion must re-audit this layout argument before claiming a wider
-native domain. Canonical artifact table and per-unit instruction limits are
-separate from this mode-0 aggregate count.
+The ELF has an RX load segment, non-executable stack, entry address `0x401000`
+and no interpreter or dynamic dependencies. The runtime occupies the first
+65536 bytes. Its 28 semantic intrinsic implementations are shared at
+`32768 + 512*(intrinsic - 1)`; they are emitted once, independently of function
+count. Every runtime section end and every intrinsic slot is checked before the
+final runtime extent is accepted. Internal runtime rel32 edges therefore span
+less than 65536 bytes. Local generated copy-loop edges have constant measured
+widths. These finite physical templates do not bound the number of user functions
+or instructions.
+
+User calls, jumps and conditional edges use fixed-width absolute R11 transfers.
+A conditional uses an inverted two-byte short condition over a 13-byte absolute
+jump; arbitrary user-code distance does not rely on rel32. All image addresses
+are checked against `I64::MAX - 0x400000`. Frame sizes and local/argument offsets
+use signed 64-bit arithmetic after checked admission. Values outside signed disp32
+use `movabs R11` plus indexed LEA followed by the requested memory operation;
+LEA preserves flags. R11 is the assembler scratch register. The only source
+callers with unbounded frame offsets are `machine`/`aggregate`, which use
+RBP/RSP/RAX/RDI bases and never R11 as a store source or group destination.
+The `hash`/`objects` helpers use fixed runtime offsets and their checked small
+register alphabet. Native encoding controls cover both signed32 boundaries and
+64-bit absolute targets without allocating multi-gigabyte fixtures.
+
+Calls align RSP to 16 before CALL and preserve the original argument base;
+callees observe RSP modulo 16 equal to 8. A count-driven prologue copies all
+parameters into variable local storage. Self-tail calls replace parameters and
+jump to the first instruction without growing the stack; other recursion uses
+ordinary frames. The local/stack tests independently exercise 256 arguments,
+257 local slots and 256 operand cells. Explicit launcher output quotas and host
+OS/stack failures remain separate from admission. Mode-1 table and per-unit
+instruction widths remain a separate dependency.
 
 I64, Bool and Unit are unboxed. Bytes/Text use a length and data pointer;
 ByteBuffer adds capacity. Lists and records use a count followed by scalar or
 pointer values. The process-owned native heap uses aligned bump allocation into
 RW mmap chunks, with a minimum chunk size of 65536 bytes. Buffer growth retains
 old backing storage until process exit; freeze and byte-producing operations make
-owned copies. Byte payloads have a 256 MiB per-value limit. This runtime does not
+owned copies. Byte lengths use checked signed-I64 layout and allocation extents, without the former
+256 MiB policy ceiling. This runtime does not
 claim lexical region reclamation, bounded process RSS or whole-program zero-copy.
 
 A scalar root prints I64 without a newline. A binary-filter root reads stdin to
 EOF without a default transport quota, then writes the successful image as raw
 bytes; rejection writes
 `compiler_rejected:<code>\n` with empty stdout and exits 65. Usage exits 64;
-native traps exit 70. ELF mode retains its tighter 8 MiB bound before hashing;
-artifact mode uses profile 5's checked framing and optional allowance.
+native traps exit 70. Neither ELF nor artifact mode imposes a default aggregate
+input-byte quota; each uses its own checked framing and explicit allowance.
 Read/write loops handle partial transfers and retry EINTR; other I/O errors exit
 nonzero. An external launcher owns atomic file publication. Native execution is
 unmetered and subject to process limits. Input bounds and admission allowances differ
@@ -307,8 +340,7 @@ remain deferred.
 ## Source-record decoding groundwork
 
 The source readers consume current kernel object bytes, before a semantic graph
-profile replaces the host-normalized LKJCI1 input. They do not change profile 4 or
-make its `compile-elf` entrypoint a semantic compiler. `source-shape::type` and
+profile replaces the host-normalized LKJCI1 input. They do not make the normalized profile-6 `compile-elf` entrypoint a semantic compiler. `source-shape::type` and
 `source-owner::owner` return 0 for supported record shapes, 12 for malformed
 encoding and 13 for a recognized unsupported form. Rejection produces no artifact.
 A supported shape is not permission to execute or a proof of semantic validity.
@@ -357,7 +389,8 @@ The next source helpers recompute current logical identities without relying on
 physical map page locators. `source-map::root` takes sorted fixed-width key/value
 rows, validates their exact partition and strict ordering, and returns the current
 radix-map content digest. Key widths are 1 through 32 bytes and value widths 1
-through 128 bytes; entry count is at most 100,000 and table bytes at most 8 MiB.
+through 128 bytes; logical entry and table-byte counts have no separate quota.
+The checked backing extent and canonical key domain bound each supplied table.
 Empty maps are supported. Duplicate and reversed keys reject before hashing.
 Private recursion receives only these checked extents and widths.
 
@@ -386,7 +419,7 @@ Region tables remain required before the Tier 2 source-graph fixed point.
 
 ### Bounded source carrier and endpoint closure
 
-The [canonical source carrier](selfhosting-source-input.md), `LKJSG001`, holds raw
+The [canonical source carrier](selfhosting-source-input.md), `LKJSG002`, holds raw
 current owner/type/retirement objects, exact logical directories, span boundaries
 and a claimed semantic state. It contains no host-derived reference inventory or
 normalized IR. `source-graph::validate` bounds the complete input and traversal
@@ -480,7 +513,7 @@ E2/E3 obligations.
 
 `source-elf::compile`, exposed by the `compile-source-elf` command target, consumes
 only a `LKJSRQ01` profile-1 request: an explicit typed TargetId and the complete
-unchanged `LKJSG001` carrier. Raw-only calls reject. `source-scalar::prepare`
+unchanged `LKJSG002` carrier. Raw-only calls reject. `source-scalar::prepare`
 continues to inspect raw carriers and performs the composed E1 checks, scalar
 profile admission and expression typing before selection or lowering.
 The profile admits unrestricted Unit, Bool and I64, pure monomorphic function
@@ -496,12 +529,14 @@ defines the exact request header, complete restricted profile and diagnostics 12
 
 The `source-scalar-plan/cursor/state/trace/emit/pack` modules derive stable function
 and local indexes, control flow, operand/local state certificates and current
-mode-0/profile-4 bytes. They then invoke `elf::compile-elf`; this internal
+mode-0/profile-6 bytes. They then invoke `elf::compile-elf`; this internal
 normalized representation is produced entirely inside lkjscript. Calls use
 ordinary Call and each function returns through Return. There is no tail-call
-optimization or owned-value cleanup in this scalar profile. Generated mode-0 input
-retains its 8 MiB bound. `LKJSG001` has no separate aggregate byte quota; its u32
-length, proof allowance and object constraints define the supported carrier domain.
+optimization or owned-value cleanup in this scalar profile. Its function/local plan
+rows and trace headers use u64 fields; the no-local sentinel is the complete owner
+count, outside every valid local index. Generated Mode-0 input uses the unbounded
+policy tag and checked I64 extents. `LKJSG002` still has u32 carrier framing and
+per-object bounds; this backend cut does not widen those source fields.
 
 Rust may build the initial native compiler executable, serialize the caller's
 TargetId beside the unchanged carrier, and provide transport and independent test
@@ -528,9 +563,9 @@ bootstrap exporter and both output paths to support the adopted construct.
 
 | Family | Host execution | Selfhost IR/output | E1 decoding/references | E1 containment/names/binders | E2 semantics | E3 lowering | Independent source-driven controls | Compiler adoption |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Unit, Bool, I64, If, Let, Sequence and direct monomorphic recursion | VM/reference/native | Profile 4 | Current restricted profile | Current restricted profile | Scalar whole-inventory typing implemented | Scalar mode-0 lowering implemented; ordinary Call/Return | Eight executed positive cases; ten semantic/profile and two raw structural rejection controls | Current source use; complete source compilation pending |
-| Text/StaticText, Bytes, List<I64> and structural records | VM/reference/native | Profile 4 | Current restricted profile | Current restricted profile | Pending | Pending | Pending; Tier 1 controls exist | Current |
-| Affine ByteBuffer and borrowed buffer reads | VM/reference/native | Profile 4, including borrowed tag 134 and cleanup fallback | Current restricted profile | Current restricted profile | Custody/borrow pending | Pending | Pending; Tier 1 controls exist | Current |
+| Unit, Bool, I64, If, Let, Sequence and direct monomorphic recursion | VM/reference/native | Profile 6 | Current restricted profile | Current restricted profile | Scalar whole-inventory typing implemented | Scalar mode-0 lowering implemented; ordinary Call/Return | Eight executed positive cases; ten semantic/profile and two raw structural rejection controls | Current source use; complete source compilation pending |
+| Text/StaticText, Bytes, List<I64> and structural records | VM/reference/native | Profile 6 | Current restricted profile | Current restricted profile | Pending | Pending | Pending; Tier 1 controls exist | Current |
+| Affine ByteBuffer and borrowed buffer reads | VM/reference/native | Profile 6, with separate borrowed qualifier and cleanup fallback | Current restricted profile | Current restricted profile | Custody/borrow pending | Pending | Pending; Tier 1 controls exist | Current |
 | Interface, Operation and operation Parameters, Requirement, effect/requirement binders | VM/reference | Effectful forms need extension | Owners, constraints and pure/task rows admitted; R/E applications pending | All 12 namespace classes; direct/nested R/E scope | Compatibility/substitution pending | Pending | Four-engine raw-carrier E1 controls; source-driven execution pending | Optional; compiler remains pure |
 | Nominal owned records/choices, Match and general List<T> | VM/reference; native portions restricted | Nominal/match extension needed | Ordinary Record/Variant members decoded; owned forms and Match pending | Field/Case admission and nominal slot flow present; match binders pending | Pending | Pending | Pending | Optional |
 | First-class functions, binding and Invoke | VM/reference/host ELF | Selfhost closure/invoke parity pending | Decoded restricted forms | Current lexical checks | Signature/capture/effect pending | Pending | Pending; host/Tier 1 closure controls exist | Optional |
@@ -549,14 +584,14 @@ standard declarations, plus independent programs exercising I64 traps, Bool,
 Unit, Text, Bytes, structural/nominal records and choices, sequences/buffers,
 lexical region allocation/read/write/freeze, recursion, self-tail calls, closures
 and explicit contract/implementation witnesses. Missing features remain known
-limitations; profile 4 does not reduce these final requirements. Unsupported
+limitations; profile 6 does not reduce these final requirements. Unsupported
 broader constructs, including F64 and service capabilities, must reject before
 publication with deterministic diagnostics.
 
 Let S be the immutable source-graph closure, E the declared deterministic target
 and flags, C0 the Rust bootstrap, C1=C0(S,E), C2=C1(S,E), C3=C2(S,E). Required native
-identity is bytes(C2)==bytes(C3). With Ai=Ci(S,lkja), require A2==A3 and A1==A2 for
-the same compiler source. C1==C2 is optional host-backend parity. The self-produced
+identity is bytes(C2)==bytes(C3). With A_host=C0(S,lkja) and Ai=Ci(S,lkja), require
+A_host==A1==A2==A3 for the same complete raw source. C1==C2 is optional host-backend parity. The self-produced
 native stages may use neither Rust semantic preprocessing nor an external VM.
 The exporter, initial Rust bootstrap and external atomic launcher are separately
 recorded boundaries. Digests prove identity, not universal correctness.
@@ -564,7 +599,7 @@ recorded boundaries. Digests prove identity, not universal correctness.
 Every slice requires VM/reference/native compiler output identity,
 strict `.lkja`/ELF admission, and independent execution of produced programs.
 Preserve minimized mismatches before fixes. The current tests cover malformed
-framing/tables/fuel/opcodes/states, signed limits, arithmetic trap order, calls,
+framing/tables/exact allowances/opcodes/states, signed limits, arithmetic trap order, calls,
 branches, recursive and self-tail calls, initialization and stack alignment,
 deterministic compilation and a changed compiler diagnostic. Those are Tier 1
 tests. Native reproduction from normalized input is a Tier 1 fixed point; it does

@@ -1,39 +1,133 @@
 declarations.begin
-(units (module create profile
-  (function create signature (visibility private) (effect pure)
-    (parameter create code (type I64)) (returns (list I64))
-    (body (if (call ci::lt (local code) (i64 5)) (list I64 (i64 1) (i64 1) (i64 1))
-      (if (call ci::lt (local code) (i64 8)) (list I64 (i64 2) (i64 1) (i64 1))
-        (if (call ci::eq (local code) (i64 8)) (list I64 (i64 2) (i64 2))
-          (if (call ci::lt (local code) (i64 11)) (list I64 (i64 2) (i64 2) (i64 2))
-            (if (call ci::eq (local code) (i64 11)) (list I64 (i64 1) (i64 5))
-              (if (call ci::eq (local code) (i64 12)) (list I64 (i64 1) (i64 5) (i64 1))
-                (if (call ci::eq (local code) (i64 13)) (list I64 (i64 5) (i64 7))
-                  (if (call ci::eq (local code) (i64 14)) (list I64 (i64 5) (i64 4))
-                    (if (call ci::either (call ci::eq (local code) (i64 15)) (call ci::eq (local code) (i64 19))) (list I64 (i64 5) (i64 5))
-                      (if (call ci::eq (local code) (i64 16)) (list I64 (i64 5) (i64 5) (i64 1) (i64 1))
-                        (if (call ci::eq (local code) (i64 17)) (list I64 (i64 5) (i64 5) (i64 5))
-                          (if (call ci::eq (local code) (i64 18)) (list I64 (i64 2) (i64 5) (i64 5))
-                            (if (call ci::eq (local code) (i64 20)) (list I64 (i64 6))
-                              (if (call ci::eq (local code) (i64 21)) (list I64 (i64 6) (i64 1) (i64 6))
-                                (if (call ci::eq (local code) (i64 22)) (list I64 (i64 1) (i64 134))
-                                  (if (call ci::eq (local code) (i64 23)) (list I64 (i64 1) (i64 1) (i64 134))
-                                    (if (call ci::eq (local code) (i64 24)) (list I64 (i64 5) (i64 6))
-                                      (if (call ci::eq (local code) (i64 25)) (list I64 (i64 3) (i64 6))
-                                        (if (call ci::eq (local code) (i64 26)) (list I64 (i64 1) (i64 7))
-                                          (if (call ci::eq (local code) (i64 27)) (list I64 (i64 1) (i64 7) (i64 1))
-                                            (list I64 (i64 5) (i64 4) (i64 5))))))))))))))))))))))))
-  (function create parameters (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create at (type I64)) (parameter create sig (type (list I64)))
-    (parameter create i (type I64)) (returns Bool)
-    (body (if (call ci::eq (local i) (call ci::list-size (types I64) (local sig))) (bool true)
-      (if (call ci::eq (call ci::get (local data) (local at)) (call ci::list-get (types I64) (local sig) (local i)))
-        (call parameters (local data) (call ci::add (local at) (i64 1)) (local sig) (call ci::add (local i) (i64 1))) (bool false)))))
-  (function create external (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create f (type I64)) (returns Bool)
-    (body (let (binding sig (call signature (call flow::field (local data) (local f) (i64 24))))
-      (in (if (call ci::both (call ci::eq (call flow::field (local data) (local f) (i64 4)) (call ci::list-get (types I64) (local sig) (i64 0)))
-            (call ci::eq (call ci::add (call flow::field (local data) (local f) (i64 8)) (i64 1)) (call ci::list-size (types I64) (local sig))))
-        (call parameters (local data) (call flow::field (local data) (local f) (i64 28)) (local sig) (i64 1)) (bool false))))))
-))
+(units
+  (module create profile
+    (function create signature
+      (visibility private)
+      (effect pure)
+      (parameter create code (type I64))
+      (returns (list I64))
+      (body
+        (if
+          (call ci::lt (local code) (i64 5))
+          (list I64 (i64 1) (i64 1) (i64 1))
+          (if
+            (call ci::lt (local code) (i64 8))
+            (list I64 (i64 2) (i64 1) (i64 1))
+            (if
+              (call ci::eq (local code) (i64 8))
+              (list I64 (i64 2) (i64 2))
+              (if
+                (call ci::lt (local code) (i64 11))
+                (list I64 (i64 2) (i64 2) (i64 2))
+                (if
+                  (call ci::eq (local code) (i64 11))
+                  (list I64 (i64 1) (i64 5))
+                  (if
+                    (call ci::eq (local code) (i64 12))
+                    (list I64 (i64 1) (i64 5) (i64 1))
+                    (if
+                      (call ci::eq (local code) (i64 13))
+                      (list I64 (i64 5) (i64 7))
+                      (if
+                        (call ci::eq (local code) (i64 14))
+                        (list I64 (i64 5) (i64 4))
+                        (if
+                          (call ci::either
+                            (call ci::eq (local code) (i64 15))
+                            (call ci::eq (local code) (i64 19)))
+                          (list I64 (i64 5) (i64 5))
+                          (if
+                            (call ci::eq (local code) (i64 16))
+                            (list I64 (i64 5) (i64 5) (i64 1) (i64 1))
+                            (if
+                              (call ci::eq (local code) (i64 17))
+                              (list I64 (i64 5) (i64 5) (i64 5))
+                              (if
+                                (call ci::eq (local code) (i64 18))
+                                (list I64 (i64 2) (i64 5) (i64 5))
+                                (if
+                                  (call ci::eq (local code) (i64 20))
+                                  (list I64 (i64 6))
+                                  (if
+                                    (call ci::eq (local code) (i64 21))
+                                    (list I64 (i64 6) (i64 1) (i64 6))
+                                    (if
+                                      (call ci::eq (local code) (i64 22))
+                                      (list I64 (i64 1) (i64 6))
+                                      (if
+                                        (call ci::eq (local code) (i64 23))
+                                        (list I64 (i64 1) (i64 1) (i64 6))
+                                        (if
+                                          (call ci::eq (local code) (i64 24))
+                                          (list I64 (i64 5) (i64 6))
+                                          (if
+                                            (call ci::eq (local code) (i64 25))
+                                            (list I64 (i64 3) (i64 6))
+                                            (if
+                                              (call ci::eq (local code) (i64 26))
+                                              (list I64 (i64 1) (i64 7))
+                                              (if
+                                                (call ci::eq (local code) (i64 27))
+                                                (list I64 (i64 1) (i64 7) (i64 1))
+                                                (list I64 (i64 5) (i64 4) (i64 5))))))))))))))))))))))))
+    (function create parameters
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create sig (type (list I64)))
+      (parameter create i (type I64))
+      (parameter create code (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local i) (call ci::list-size (types I64) (local sig)))
+          (bool true)
+          (let
+            (binding borrow
+              (call ci::either
+                (call ci::both (call ci::eq (local code) (i64 22)) (call ci::eq (local i) (i64 1)))
+                (call ci::both (call ci::eq (local code) (i64 23)) (call ci::eq (local i) (i64 2)))))
+            (in
+              (if
+                (call ci::both
+                  (call ci::eq
+                    (call types::identity (local data) (local at))
+                    (call ci::list-get (types I64) (local sig) (local i)))
+                  (if
+                    (local borrow)
+                    (call types::borrowed (local data) (local at))
+                    (if (call types::borrowed (local data) (local at)) (bool false) (bool true))))
+                (call parameters
+                  (local data)
+                  (call ci::add (local at) (i64 16))
+                  (local sig)
+                  (call ci::add (local i) (i64 1))
+                  (local code))
+                (bool false)))))))
+    (function create external
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create f (type I64))
+      (returns Bool)
+      (body
+        (let
+          (binding sig (call signature (call flow::field (local data) (local f) (i64 48))))
+          (in
+            (if
+              (call ci::both
+                (call ci::eq
+                  (call flow::field (local data) (local f) (i64 8))
+                  (call ci::list-get (types I64) (local sig) (i64 0)))
+                (call ci::eq
+                  (call ci::add (call flow::field (local data) (local f) (i64 16)) (i64 1))
+                  (call ci::list-size (types I64) (local sig))))
+              (call parameters
+                (local data)
+                (call flow::field (local data) (local f) (i64 56))
+                (local sig)
+                (i64 1)
+                (call flow::field (local data) (local f) (i64 48)))
+              (bool false))))))))
 declarations.end

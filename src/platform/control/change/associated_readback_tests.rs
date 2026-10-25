@@ -8,7 +8,7 @@ use crate::platform::publication::GraphRepository;
 use crate::platform::semantic_id::{AssociatedTypeMemberId, ImplementationParameterId};
 
 #[test]
-fn raw_candidate_associated_readback_preserves_exact_coordinates_unused_inventory_and_shared_limits()
+fn raw_candidate_associated_readback_preserves_exact_coordinates_unused_inventory_and_observations()
  {
     let temporary = tempfile::tempdir().unwrap();
     let base = k::tests::witness_snapshot();
@@ -102,26 +102,19 @@ fn raw_candidate_associated_readback_preserves_exact_coordinates_unused_inventor
         }
     );
     // Two member entries, two bindings, and each of the two raw type occurrences.
-    assert_eq!(
-        reader.remaining_type_nodes,
-        crate::platform::change::MAXIMUM_CHANGE_AUTHORED_TYPE_NODES - 6
-    );
-    for maximum in [5, 6] {
+    assert_eq!(reader.type_nodes, crate::platform::change::budget::BudgetCounter::exact(6));
+    for available in [5, 6] {
         let mut reader = Reader::for_raw_lowered_candidate(
             &view,
             ExecutionControl::uncancelled(),
             BTreeMap::new(),
             types.clone(),
         );
-        reader.remaining_type_nodes = maximum;
+        reader.type_nodes = crate::platform::change::budget::BudgetCounter::exact(u64::MAX - available);
         reader.associated_members(&members).unwrap();
-        let result = reader.associated_bindings(&bindings);
-        if maximum == 5 {
-            assert_eq!(result.unwrap_err().class, DiagnosticClass::Resource);
-        } else {
-            assert_eq!(result.unwrap(), authored_bindings);
-            assert_eq!(reader.remaining_type_nodes, 0);
-        }
+        assert_eq!(reader.associated_bindings(&bindings).unwrap(), authored_bindings);
+        assert_eq!(reader.type_nodes.consumed, u64::MAX);
+        assert_eq!(reader.type_nodes.saturated, available < 6);
     }
     let mut cancelled = Reader::for_raw_lowered_candidate(
         &view,

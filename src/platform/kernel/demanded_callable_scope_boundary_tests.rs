@@ -14,11 +14,11 @@ fn cold_cost(
     id: ImplementationParameterId,
 ) -> (usize, usize, usize) {
     source.reset(None);
-    let mut work = 0;
+    let mut work = ValidationWork::default();
     let mut analysis = analysis(source, &mut work);
     Scopes::default().ordinal(&mut analysis, owner, id).unwrap();
     (
-        *analysis.work,
+        analysis.work.consumed,
         analysis.observation.metadata_bytes,
         source.checkpoints.get(),
     )
@@ -31,14 +31,14 @@ fn cold_scope_projection_keeps_exact_work_and_metadata_admission() {
     assert!(work > 0 && bytes > 0);
     for extra in [0, 1] {
         source.reset(None);
-        let mut used = 0;
+        let mut used = ValidationWork::default();
         let mut analysis = analysis(&source, &mut used);
         analysis.maximum_work = Some(work - extra);
         let mut scopes = Scopes::default();
         let result = scopes.ordinal(&mut analysis, owner, id);
         if extra == 0 {
             assert_eq!(result.unwrap(), 7);
-            assert_eq!(*analysis.work, work);
+            assert_eq!(analysis.work.consumed, work);
             assert_eq!(scopes.entries.len(), 1);
         } else {
             assert_eq!(result.unwrap_err().class, DiagnosticClass::Resource);
@@ -47,7 +47,7 @@ fn cold_scope_projection_keeps_exact_work_and_metadata_admission() {
     }
     for extra in [0, 1] {
         source.reset(None);
-        let mut used = 0;
+        let mut used = ValidationWork::default();
         let mut analysis = analysis(&source, &mut used);
         analysis.observation.metadata_bytes = MAXIMUM_ANALYSIS_BYTES - bytes + extra;
         let mut scopes = Scopes::default();
@@ -61,7 +61,7 @@ fn cold_scope_projection_keeps_exact_work_and_metadata_admission() {
         }
     }
     source.reset(None);
-    let mut used = 0;
+    let mut used = ValidationWork::default();
     let mut analysis = analysis(&source, &mut used);
     assert_eq!(
         Scopes::default().ordinal(&mut analysis, owner, id).unwrap(),
@@ -76,7 +76,7 @@ fn every_cold_projection_checkpoint_refuses_without_a_partial_entry() {
     assert!(checkpoints > 3);
     for cutoff in 1..=checkpoints {
         source.reset(Some(cutoff));
-        let mut used = 0;
+        let mut used = ValidationWork::default();
         let mut analysis = analysis(&source, &mut used);
         let mut scopes = Scopes::default();
         let error = scopes.ordinal(&mut analysis, owner, id).unwrap_err();
@@ -94,15 +94,15 @@ fn every_cold_projection_checkpoint_refuses_without_a_partial_entry() {
 #[test]
 fn warm_scope_hits_keep_cancellation_work_and_the_original_projection() {
     let (source, owner, id) = sample();
-    let mut used = 0;
+    let mut used = ValidationWork::default();
     let mut analysis = analysis(&source, &mut used);
     let mut scopes = Scopes::default();
     scopes.ordinal(&mut analysis, owner, id).unwrap();
     let bytes = analysis.observation.metadata_bytes;
     source.reset(None);
-    let before = *analysis.work;
+    let before = analysis.work.consumed;
     assert_eq!(scopes.ordinal(&mut analysis, owner, id).unwrap(), 7);
-    let hit_work = *analysis.work - before;
+    let hit_work = analysis.work.consumed - before;
     let checkpoints = source.checkpoints.get();
     assert_eq!(source.reads.get(), 0);
     for cutoff in 1..=checkpoints {
@@ -117,7 +117,7 @@ fn warm_scope_hits_keep_cancellation_work_and_the_original_projection() {
         assert_eq!(analysis.observation.metadata_bytes, bytes);
     }
     source.reset(None);
-    analysis.maximum_work = Some(*analysis.work + hit_work - 1);
+    analysis.maximum_work = Some(analysis.work.consumed + hit_work - 1);
     let error = scopes.ordinal(&mut analysis, owner, id).unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Resource);
     assert_eq!(scopes.entries.len(), 1);

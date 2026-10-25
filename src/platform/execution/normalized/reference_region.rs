@@ -2,6 +2,7 @@
 //! or prepared classification supplies the reference evaluator's type decisions.
 use super::super::region_value::{self, Layout};
 use super::*;
+use super::super::value::RawValue;
 use crate::platform::kernel::{BindingKind, RegionExpression as E, RegionMode};
 
 impl ReferenceState<'_> {
@@ -27,11 +28,11 @@ impl ReferenceState<'_> {
                 capacity,
                 body,
             } => {
-                let capacity = self.evaluate(capacity, locals)?;
-                let NormalizedValue::I64(capacity) = capacity.raw() else {
+                let capacity = RawValue::new(self.evaluate(capacity, locals)?.release());
+                let NormalizedValue::I64(capacity) = capacity.as_raw() else {
                     return Err(region_value::error());
                 };
-                let capacity = u32::try_from(*capacity).map_err(|_| region_value::error())?;
+                let capacity = u64::try_from(*capacity).map_err(|_| region_value::error())?;
                 let Some(OwnerRecord::Binding(record)) = self.owner(OwnerKey::Binding(binding))?
                 else {
                     return Err(region_value::error());
@@ -83,13 +84,13 @@ impl ReferenceState<'_> {
                 }
             }
             E::Offset { pointer } => {
-                let value = self.evaluate(pointer, locals)?;
-                let NormalizedValue::RegionPointer { pointer, .. } = value.raw() else {
+                let value = RawValue::new(self.evaluate(pointer, locals)?.release());
+                let NormalizedValue::RegionPointer { pointer, .. } = value.as_raw() else {
                     return Err(region_value::error());
                 };
                 CheckedValue::primitive(
                     &self.schema,
-                    NormalizedValue::I64(i64::from(pointer.offset())),
+                    NormalizedValue::I64(i64::try_from(pointer.offset()).map_err(|_| region_value::error())?),
                 )
             }
             E::Freeze {
@@ -147,11 +148,11 @@ impl ReferenceState<'_> {
                 let mut inputs = operation.expressions().into_iter().flatten();
                 let first = inputs
                     .next()
-                    .map(|id| self.evaluate(*id, locals))
+                    .map(|id| self.evaluate(*id, locals).map(|value| RawValue::new(value.release())))
                     .transpose()?;
                 let second = inputs
                     .next()
-                    .map(|id| self.evaluate(*id, locals))
+                    .map(|id| self.evaluate(*id, locals).map(|value| RawValue::new(value.release())))
                     .transpose()?;
                 let capability = operation.capability().ok_or_else(region_value::error)?;
                 let source = locals.get(capability).ok_or_else(region_value::error)?;
@@ -168,7 +169,7 @@ impl ReferenceState<'_> {
                 let (raw, result_type) = match operation {
                     E::Alloc { .. } => {
                         let bytes = layout.encode(
-                            first.as_ref().ok_or_else(region_value::error)?.raw(),
+                            first.as_ref().ok_or_else(region_value::error)?.as_raw(),
                             identity,
                             control,
                             &mut reserve,
@@ -185,7 +186,7 @@ impl ReferenceState<'_> {
                     }
                     E::Read { .. } | E::Write { .. } => {
                         let NormalizedValue::RegionPointer { ty, pointer } =
-                            first.as_ref().ok_or_else(region_value::error)?.raw()
+                            first.as_ref().ok_or_else(region_value::error)?.as_raw()
                         else {
                             return Err(region_value::error());
                         };
@@ -194,7 +195,7 @@ impl ReferenceState<'_> {
                         }
                         if matches!(operation, E::Write { .. }) {
                             let bytes = layout.encode(
-                                second.as_ref().ok_or_else(region_value::error)?.raw(),
+                                second.as_ref().ok_or_else(region_value::error)?.as_raw(),
                                 identity,
                                 control,
                                 &mut reserve,
@@ -223,7 +224,7 @@ impl ReferenceState<'_> {
                     }
                     E::Resolve { .. } => {
                         let NormalizedValue::I64(offset) =
-                            first.as_ref().ok_or_else(region_value::error)?.raw()
+                            first.as_ref().ok_or_else(region_value::error)?.as_raw()
                         else {
                             return Err(region_value::error());
                         };
@@ -231,7 +232,7 @@ impl ReferenceState<'_> {
                             token,
                             domain,
                             layout.storage,
-                            u32::try_from(*offset).map_err(|_| region_value::error())?,
+                            u64::try_from(*offset).map_err(|_| region_value::error())?,
                             control,
                         )?;
                         (

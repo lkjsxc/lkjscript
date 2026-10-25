@@ -468,7 +468,7 @@ pub fn offline_package_owner_bytes(
     })
 }
 
-/// Bounded typed reconstruction of one accepted current semantic revision.
+/// Typed reconstruction of one accepted current semantic revision.
 ///
 /// This operation opens a revision-pinned `GraphRepository` view and calls its complete typed
 /// oracle. It does not call a public result formatter, mutate authority, or read compiler caches.
@@ -491,10 +491,16 @@ pub struct SemanticInventory {
     pub validation_expression_records: u64,
     pub validation_relation_edges: u64,
     pub validation_work: u64,
+    /// When true, validation work is a lower bound.
+    pub validation_work_saturated: bool,
     pub map_pages_read: u64,
     pub map_bytes_read: u64,
+    /// When true, one or more persistent-map counters are lower bounds.
+    pub map_work_saturated: bool,
     pub store_objects_read: u64,
     pub store_bytes_read: u64,
+    /// When true, one or more object-store counters are lower bounds.
+    pub store_work_saturated: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -722,7 +728,7 @@ pub struct FunctionExtractionOracle {
 }
 
 /// The operation admission used when the current compact public request omits a custom budget.
-pub fn compact_change_default_maximum_operations() -> u64 {
+pub fn compact_change_default_maximum_operations() -> Option<u64> {
     ChangeBudget::default().authored.maximum_operations
 }
 
@@ -800,10 +806,13 @@ pub fn semantic_inventory(project: &Path) -> Result<SemanticInventory, Diagnosti
         validation_expression_records: validation.expression_records_checked,
         validation_relation_edges: validation.relation_edges,
         validation_work: validation.work_consumed,
+        validation_work_saturated: validation.work_saturated,
         map_pages_read: read.work.map.pages_read,
         map_bytes_read: read.work.map.bytes_read,
+        map_work_saturated: read.work.map.saturated,
         store_objects_read: read.work.store.objects_read,
         store_bytes_read: read.work.store.bytes_read,
+        store_work_saturated: read.work.store.saturated,
     })
 }
 
@@ -1412,14 +1421,14 @@ fn reconstruct_function_extraction(
             }
             ExpressionOperation::Parallel { .. } => task_computation = true,
             ExpressionOperation::Invoke { callee, .. } => {
-                let mut work = 0;
+                let mut work = crate::platform::kernel::ValidationWork::default();
                 let object = infer_function_expression_type_object(
                     snapshot,
                     function,
                     *callee,
                     &function_record.effect,
                     &mut work,
-                    super::kernel::contract::MAXIMUM_VALIDATION_WORK,
+                    None,
                 )?;
                 match object.form {
                     TypeForm::Function { .. } => {}
@@ -1667,14 +1676,14 @@ fn oracle_infer_expression_type(
     expression: ExpressionId,
     effect: &FunctionEffect,
 ) -> Result<TypeObjectDigest, Diagnostic> {
-    let mut work = 0_usize;
+    let mut work = crate::platform::kernel::ValidationWork::default();
     infer_function_expression_type(
         snapshot,
         function,
         expression,
         effect,
         &mut work,
-        super::kernel::contract::MAXIMUM_VALIDATION_WORK,
+        None,
     )
     .map_err(|diagnostic| {
         oracle_error(
@@ -3567,7 +3576,7 @@ mod tests {
 
     #[test]
     fn compact_change_default_is_the_current_batch_authority() {
-        assert_eq!(compact_change_default_maximum_operations(), 1_000);
+        assert_eq!(compact_change_default_maximum_operations(), None);
     }
 
     #[test]

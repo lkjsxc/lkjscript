@@ -19,6 +19,7 @@ pub(crate) use composed::{
     validate_snapshot_callable_closure_eager, validate_snapshot_callable_closure_with_limits,
 };
 
+use super::work::ValidationWork;
 use super::{
     DeclarationPayload, DeclarationReference, ExpressionOperation, ExpressionRead, OwnerKey,
     OwnerRecord, TypeForm, TypeObjectDigest,
@@ -27,6 +28,7 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{ExpressionId, TypeParameterId};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[cfg(test)]
 const MAXIMUM_ANALYSIS_BYTES: usize = 64 * 1_048_576;
 const MAXIMUM_DIAGNOSTIC_PATH: usize = 8;
 
@@ -53,12 +55,14 @@ pub(crate) struct CallableFlowWork {
     pub slots: usize,
     pub edges: usize,
     pub metadata_bytes: usize,
+    pub metadata_saturated: bool,
+    pub work_saturated: bool,
 }
 
 struct Flow<'a, R> {
     read: &'a R,
-    work: &'a mut usize,
-    maximum_work: usize,
+    work: &'a mut ValidationWork,
+    maximum_work: Option<usize>,
     observation: CallableFlowWork,
     slots: Vec<Slot>,
     indexes: BTreeMap<Slot, usize>,
@@ -68,32 +72,28 @@ struct Flow<'a, R> {
 impl<R: ExpressionRead> Flow<'_, R> {
     fn tick(&mut self) -> Result<(), Diagnostic> {
         self.read.validation_checkpoint()?;
-        *self.work = self
-            .work
-            .checked_add(1)
-            .filter(|next| *next <= self.maximum_work)
-            .ok_or_else(|| {
-                Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "kernel_callable_flow_work",
-                    "callable parameter-flow analysis exhausted its work admission",
-                )
-            })?;
+        if !self.work.charge(1, self.maximum_work) {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Resource,
+                "kernel_callable_flow_work",
+                "callable parameter-flow analysis exhausted its work admission",
+            ));
+        }
         Ok(())
     }
 
     fn reserve<T>(&mut self, count: usize) -> Result<(), Diagnostic> {
-        self.observation.metadata_bytes = count
-            .checked_mul(std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>())
-            .and_then(|size| self.observation.metadata_bytes.checked_add(size))
-            .filter(|size| *size <= MAXIMUM_ANALYSIS_BYTES)
-            .ok_or_else(|| {
-                Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "kernel_callable_flow_storage",
-                    "callable parameter-flow analysis exceeded its metadata admission",
-                )
-            })?;
+        self.reserve_product::<T>(count, 1)
+    }
+
+    fn reserve_product<T>(&mut self, count: usize, multiple: usize) -> Result<(), Diagnostic> {
+        let mut observed = ValidationWork {
+            consumed: self.observation.metadata_bytes,
+            saturated: self.observation.metadata_saturated,
+        };
+        observed.charge_factors(&[count, std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>(), multiple], None);
+        self.observation.metadata_bytes = observed.consumed;
+        self.observation.metadata_saturated = observed.saturated;
         Ok(())
     }
 
@@ -545,14 +545,9 @@ impl<R: ExpressionRead> Flow<'_, R> {
 
     fn admit(&mut self) -> Result<(), Diagnostic> {
         let count = self.slots.len();
-        self.reserve::<Vec<usize>>(count.checked_mul(2).ok_or_else(storage_overflow)?)?;
-        self.reserve::<usize>(count.checked_mul(10).ok_or_else(storage_overflow)?)?;
-        self.reserve::<usize>(
-            self.edges
-                .len()
-                .checked_mul(2)
-                .ok_or_else(storage_overflow)?,
-        )?;
+        self.reserve_product::<Vec<usize>>(count, 2)?;
+        self.reserve_product::<usize>(count, 10)?;
+        self.reserve_product::<usize>(self.edges.len(), 2)?;
         let mut outgoing = vec![Vec::new(); count];
         let mut incoming = vec![Vec::new(); count];
         for index in 0..self.edges.len() {
@@ -662,8 +657,8 @@ fn storage_overflow() -> Diagnostic {
 pub(crate) fn validate_callable_flow<R: ExpressionRead>(
     read: &R,
     roots: impl IntoIterator<Item = OwnerKey>,
-    work: &mut usize,
-    maximum_work: usize,
+    work: &mut ValidationWork,
+    maximum_work: Option<usize>,
 ) -> Result<CallableFlowWork, Diagnostic> {
     let mut flow = Flow {
         read,
@@ -678,6 +673,7 @@ pub(crate) fn validate_callable_flow<R: ExpressionRead>(
     flow.admit()?;
     flow.observation.slots = flow.slots.len();
     flow.observation.edges = flow.edges.len();
+    flow.observation.work_saturated = flow.work.saturated;
     Ok(flow.observation)
 }
 
@@ -851,7 +847,7 @@ pub(super) mod read_view_tests {
         }
 
         fn admit(&self) -> Result<CallableFlowWork, Diagnostic> {
-            validate_callable_flow(self, self.owners.keys().copied(), &mut 0, 100_000)
+            crate::platform::kernel::test_work::validate_callable_flow(self, self.owners.keys().copied(), &mut 0, 100_000)
         }
     }
 
@@ -937,7 +933,7 @@ pub(super) mod read_view_tests {
                 }),
             }),
         );
-        let error = validate_callable_flow(&read, read.owners.keys().copied(), &mut 0, 64)
+        let error = crate::platform::kernel::test_work::validate_callable_flow(&read, read.owners.keys().copied(), &mut 0, 64)
             .expect_err("unused inline fields remain within work admission");
         assert_eq!(error.class, DiagnosticClass::Resource);
         assert_eq!(error.code, "kernel_callable_flow_work");

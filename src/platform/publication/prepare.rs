@@ -16,7 +16,7 @@ use super::{
     ValidationEvidenceBinding, ValidationProfile, WorkObservation,
 };
 use crate::platform::change::{
-    BudgetedCanonicalBase, CanonicalBaseRead, CanonicalDelta, CanonicalReadWork, PreparedAuthority,
+    BudgetCounter, BudgetDimension, BudgetedCanonicalBase, CanonicalBaseRead, CanonicalDelta, CanonicalReadWork, ChangeBudgetWork, PreparedAuthority, WorkSaturation,
     PreparedChangeAnalysis, WitnessBaseRead, prepare_owner_map_edits, stage_full_authority,
     stage_prepared_authority, summary_dimension_change,
 };
@@ -25,10 +25,10 @@ use crate::platform::kernel::{
     KernelSnapshot, OwnerKey, OwnerObjectDigest, OwnerRecord, encode_owner, encode_root,
     semantic_state_digest_from_root,
 };
-use crate::platform::persistent_map::{MapAdmission, MapRoot, MapWork};
+use crate::platform::persistent_map::{MapAdmission, MapRoot, MapWork, MapWorkCounter};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, ObjectStageLimits, StoreError,
-    StoreErrorClass, StoreWork,
+    StoreErrorClass, StoreWork, StoreWorkCounter,
 };
 use crate::platform::storage::page_store::ObjectPageStore;
 use crate::platform::witness::{FullWitness, encode_witness_manifest};
@@ -92,14 +92,13 @@ impl super::PreparedAuthoredPublication {
         // The two zero counts can each grow by at most eight canonical integer bytes.
         // Reserve replacement staging before encoding or growing the candidate overlay.
         let mut work = prepared.budget_work;
-        work.staging.objects = work.staging.objects.saturating_add(2);
-        work.staging.bytes = work
-            .staging
-            .bytes
-            .saturating_add(prepared.receipt_bytes.len() as u64)
-            .saturating_add(16)
-            .saturating_add(prepared.revision_bytes.len() as u64);
-        budget.check_observed(work, "transaction test receipt")?;
+        work.charge(BudgetDimension::StagedObjects, BudgetCounter::exact(2),
+            budget.staging.maximum_objects, "transaction test receipt")?;
+        let mut reserved_bytes = BudgetCounter::exact(prepared.receipt_bytes.len() as u64);
+        reserved_bytes.observe(BudgetCounter::exact(16));
+        reserved_bytes.observe(BudgetCounter::exact(prepared.revision_bytes.len() as u64));
+        work.charge(BudgetDimension::StagedBytes, reserved_bytes,
+            budget.staging.maximum_bytes, "transaction test receipt")?;
         let mut receipt = prepared.receipt.clone();
         receipt.validation.tests_executed = passed;
         receipt.validation.tests_passed = passed;
@@ -116,13 +115,13 @@ impl super::PreparedAuthoredPublication {
             prepared.authority.witness.digest,
             &prepared.authority.witness.manifest,
         )?;
-        work.staging.bytes = prepared
-            .budget_work
-            .staging
-            .bytes
-            .saturating_add(receipt_bytes.len() as u64)
-            .saturating_add(revision_bytes.len() as u64);
-        budget.check_observed(work, "transaction test receipt")?;
+        work = prepared.budget_work;
+        work.charge(BudgetDimension::StagedObjects, BudgetCounter::exact(2),
+            budget.staging.maximum_objects, "transaction test receipt")?;
+        let mut retained_bytes = BudgetCounter::exact(receipt_bytes.len() as u64);
+        retained_bytes.observe(BudgetCounter::exact(revision_bytes.len() as u64));
+        work.charge(BudgetDimension::StagedBytes, retained_bytes,
+            budget.staging.maximum_bytes, "transaction test receipt")?;
         prepared.objects.remove(&ObjectKey::from_digest(
             ObjectDomain::Receipt,
             prepared.receipt_digest.bytes(),
@@ -179,12 +178,14 @@ pub fn prepare_initial_publication<S: ImmutableObjectStore + ?Sized>(
             retirements: full.snapshot.retirements.len() as u64,
         },
     };
+    let witness_entries = witness_entry_count(&full.witness);
     let counts = ChangeCounts {
         owners_created: full.snapshot.owners.len() as u64,
         type_objects_supplied: full.snapshot.types.len() as u64,
         dependencies_changed: full.snapshot.dependencies.len() as u64,
         retirements_changed: full.snapshot.retirements.len() as u64,
-        witness_entries_changed: witness_entry_count(&full.witness),
+        witness_entries_changed: witness_entries.consumed,
+        saturated: witness_entries.saturated,
         ..ChangeCounts::default()
     };
     let validation = ValidationEvidence {
@@ -198,6 +199,7 @@ pub fn prepare_initial_publication<S: ImmutableObjectStore + ?Sized>(
         tests_passed: 0,
         compiler_units_planned: 0,
         full_oracle: FullOracleStatus::NotApplicable,
+        saturated: false,
     };
     let work = full_work(&full);
     let bound = bind_history(
@@ -313,13 +315,13 @@ pub(crate) fn prepare_change_publication_with_facts<
         .budget
         .check_observed(analysis.budget_work, "retained refresh candidate staging")
         .map_err(single)?;
-    let prior_staging = analysis.budget_work.staging;
+    let prior_staging = analysis.budget_work;
     let mut stage = ObjectStage::with_limits_and_read_admission(
         store,
         ObjectStageLimits {
-            maximum_objects: analysis.budget.staging.maximum_objects - prior_staging.objects,
-            maximum_bytes: analysis.budget.staging.maximum_bytes - prior_staging.bytes,
-            maximum_pages: analysis.budget.staging.maximum_pages - prior_staging.pages,
+            maximum_objects: prior_staging.observation_saturation().counter(BudgetDimension::StagedObjects, prior_staging.staging.objects).remaining(analysis.budget.staging.maximum_objects, "publication staging", "staged_objects").map_err(single)?,
+            maximum_bytes: prior_staging.observation_saturation().counter(BudgetDimension::StagedBytes, prior_staging.staging.bytes).remaining(analysis.budget.staging.maximum_bytes, "publication staging", "staged_bytes").map_err(single)?,
+            maximum_pages: prior_staging.observation_saturation().counter(BudgetDimension::StagedPages, prior_staging.staging.pages).remaining(analysis.budget.staging.maximum_pages, "publication staging", "staged_pages").map_err(single)?,
         },
         read_admission,
     );
@@ -371,34 +373,17 @@ pub(crate) fn prepare_change_publication_with_facts<
     budget_work
         .canonical_reads
         .add(authority.semantic.canonical_read_work);
-    budget_work.canonical_reads.map_pages_read = budget_work
-        .canonical_reads
-        .map_pages_read
-        .saturating_add(authority.semantic.map_work.pages_read);
-    budget_work.canonical_reads.map_entries_visited = budget_work
-        .canonical_reads
-        .map_entries_visited
-        .saturating_add(authority.semantic.map_work.entries_visited);
-    budget_work.canonical_map_update.pages_encoded = budget_work
-        .canonical_map_update
-        .pages_encoded
-        .saturating_add(authority.semantic.map_work.pages_encoded);
-    budget_work.canonical_map_update.bytes_encoded = budget_work
-        .canonical_map_update
-        .bytes_encoded
-        .saturating_add(authority.semantic.map_work.bytes_encoded);
-    budget_work.canonical_reads.catalog_lookups = budget_work
-        .canonical_reads
-        .catalog_lookups
-        .saturating_add(authority.store_work.catalog_lookups);
-    budget_work.canonical_reads.objects_read = budget_work
-        .canonical_reads
-        .objects_read
-        .saturating_add(authority.store_work.objects_read);
-    budget_work.canonical_reads.bytes_read = budget_work
-        .canonical_reads
-        .bytes_read
-        .saturating_add(authority.store_work.bytes_read);
+    for (dimension, observed) in [
+        (BudgetDimension::CanonicalMapPages, map_counter(authority.semantic.map_work, MapWorkCounter::PagesRead, authority.semantic.map_work.pages_read)),
+        (BudgetDimension::CanonicalMapEntries, map_counter(authority.semantic.map_work, MapWorkCounter::EntriesVisited, authority.semantic.map_work.entries_visited)),
+        (BudgetDimension::CanonicalMapPagesEncoded, map_counter(authority.semantic.map_work, MapWorkCounter::PagesEncoded, authority.semantic.map_work.pages_encoded)),
+        (BudgetDimension::CanonicalMapBytesEncoded, map_counter(authority.semantic.map_work, MapWorkCounter::BytesEncoded, authority.semantic.map_work.bytes_encoded)),
+        (BudgetDimension::CanonicalCatalogLookups, store_counter(authority.store_work, StoreWorkCounter::CatalogLookups, authority.store_work.catalog_lookups)),
+        (BudgetDimension::CanonicalObjects, store_counter(authority.store_work, StoreWorkCounter::ObjectsRead, authority.store_work.objects_read)),
+        (BudgetDimension::CanonicalBytes, store_counter(authority.store_work, StoreWorkCounter::BytesRead, authority.store_work.bytes_read)),
+    ] {
+        budget_work.charge(dimension, observed, analysis.budget.maximum(dimension), "publication authority staging").map_err(single)?;
+    }
     analysis
         .budget
         .check_observed(budget_work, "publication authority staging")
@@ -425,15 +410,13 @@ pub(crate) fn prepare_change_publication_with_facts<
         &mut stage,
     )?;
     budget_work.canonical_reads.add(bound.history_read_work);
-    budget_work.canonical_map_update.pages_encoded = budget_work
-        .canonical_map_update
-        .pages_encoded
-        .saturating_add(bound.history_map_work.pages_encoded);
-    budget_work.canonical_map_update.bytes_encoded = budget_work
-        .canonical_map_update
-        .bytes_encoded
-        .saturating_add(bound.history_map_work.bytes_encoded);
-    budget_work.staging = retained_stage_work(prior_staging, &stage).map_err(single)?;
+    for (dimension, observed) in [
+        (BudgetDimension::CanonicalMapPagesEncoded, map_counter(bound.history_map_work, MapWorkCounter::PagesEncoded, bound.history_map_work.pages_encoded)),
+        (BudgetDimension::CanonicalMapBytesEncoded, map_counter(bound.history_map_work, MapWorkCounter::BytesEncoded, bound.history_map_work.bytes_encoded)),
+    ] {
+        budget_work.charge(dimension, observed, analysis.budget.maximum(dimension), "publication history maps").map_err(single)?;
+    }
+    observe_retained_stage(&mut budget_work, prior_staging, &stage).map_err(single)?;
     analysis
         .budget
         .check_observed(budget_work, "publication object staging")
@@ -467,27 +450,39 @@ struct BoundHistory {
     history_map_work: MapWork,
 }
 
-fn retained_stage_work<S: ImmutableObjectStore + ?Sized>(
-    prior: crate::platform::change::StagingBudgetWork,
+fn observe_retained_stage<S: ImmutableObjectStore + ?Sized>(
+    work: &mut ChangeBudgetWork,
+    prior: ChangeBudgetWork,
     stage: &ObjectStage<'_, S>,
-) -> Result<crate::platform::change::StagingBudgetWork, Diagnostic> {
-    let add = |before: u64, after: u64| {
-        before.checked_add(after).ok_or_else(|| {
-            publication_error(
-                DiagnosticClass::Resource,
-                "change_refresh_preparation_capacity",
-                "retained original and refreshed candidate staging observation overflowed",
-            )
-        })
-    };
-    Ok(crate::platform::change::StagingBudgetWork {
-        objects: add(
-            prior.objects,
-            u64::try_from(stage.len()).unwrap_or(u64::MAX),
-        )?,
-        bytes: add(prior.bytes, stage.staged_byte_count())?,
-        pages: add(prior.pages, stage.staged_page_count())?,
-    })
+) -> Result<(), Diagnostic> {
+    let mut retained = prior;
+    for (dimension, consumed) in [
+        (BudgetDimension::StagedObjects, stage.len() as u64),
+        (BudgetDimension::StagedBytes, stage.staged_byte_count()),
+        (BudgetDimension::StagedPages, stage.staged_page_count()),
+    ] {
+        retained.charge(dimension, BudgetCounter::exact(consumed), None, "retained candidate staging")?;
+    }
+    work.staging = retained.staging;
+    for dimension in [BudgetDimension::StagedObjects, BudgetDimension::StagedBytes, BudgetDimension::StagedPages] {
+        if retained.observation_saturation().contains(dimension) { work.saturation.mark(dimension); }
+    }
+    Ok(())
+}
+
+fn map_counter(work: MapWork, counter: MapWorkCounter, consumed: u64) -> BudgetCounter {
+    BudgetCounter { consumed, saturated: work.counter_saturated(counter) }
+}
+
+fn store_counter(work: StoreWork, counter: StoreWorkCounter, consumed: u64) -> BudgetCounter {
+    BudgetCounter { consumed, saturated: work.counter_saturated(counter) }
+}
+
+fn sum_observed<const N: usize>(saturated: &mut bool, values: [BudgetCounter; N]) -> u64 {
+    let mut total = BudgetCounter::default();
+    for value in values { total.observe(value); }
+    *saturated |= total.saturated;
+    total.consumed
 }
 
 #[allow(
@@ -508,7 +503,7 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
     history_map_admission: MapAdmission,
     stage: &mut ObjectStage<'_, S>,
 ) -> Result<BoundHistory, Vec<Diagnostic>> {
-    let prior_staging = work.budget.staging;
+    let prior_staging = work.budget;
     let repository_id = authority.semantic.root.repository_id;
     if transaction.repository_id != repository_id
         || semantic_diff.repository_id != repository_id
@@ -525,7 +520,7 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
     let (transaction_digest, transaction_bytes) = transaction.encode().map_err(single)?;
     let (semantic_diff_digest, semantic_diff_bytes) = semantic_diff.encode().map_err(single)?;
     let authority_store_work = authority.store_work;
-    let mut store_work = authority_store_work;
+    let mut store_work = StoreWork::default();
     stage_object(
         stage,
         ObjectDomain::Transaction,
@@ -541,14 +536,28 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
         &mut store_work,
     )?;
 
+    if base.is_some() {
+        // Admit the known receipt lookup and decode before either operation starts. The actual
+        // completed read is added below once; this local probe does not double-charge the receipt.
+        for (dimension, consumed) in [
+            (BudgetDimension::CanonicalPointReads, work.budget.canonical_reads.point_reads),
+            (BudgetDimension::CanonicalDecodedRecords, work.budget.canonical_reads.canonical_records_decoded),
+        ] {
+            let mut observed = work.budget.observation_saturation().counter(dimension, consumed);
+            observed.charge(BudgetCounter::exact(1), budget.and_then(|budget| budget.maximum(dimension)),
+                "publication base receipt", dimension.name()).map_err(single)?;
+        }
+    }
     let (idempotency_receipts, idempotency_map_work) =
         prepare_idempotency_history(base, stage, &mut store_work, history_map_admission)?;
-    work.map_pages_read = work
-        .map_pages_read
-        .saturating_add(idempotency_map_work.pages_read);
-    work.map_pages_written = work
-        .map_pages_written
-        .saturating_add(idempotency_map_work.pages_written);
+    work.map_pages_read = sum_observed(&mut work.saturated, [
+        BudgetCounter::exact(work.map_pages_read),
+        map_counter(idempotency_map_work, MapWorkCounter::PagesRead, idempotency_map_work.pages_read),
+    ]);
+    work.map_pages_written = sum_observed(&mut work.saturated, [
+        BudgetCounter::exact(work.map_pages_written),
+        map_counter(idempotency_map_work, MapWorkCounter::PagesWritten, idempotency_map_work.pages_written),
+    ]);
 
     let parent_bindings = base
         .into_iter()
@@ -566,46 +575,49 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
         semantic_state: authority.semantic.state,
     };
     let revision_id = core.revision_id().map_err(single)?;
-    work.objects_staged = store_work.objects_staged;
-    work.pages_staged = store_work.pages_staged;
-    work.objects_read = work.objects_read.saturating_add(
-        store_work
-            .objects_read
-            .saturating_sub(authority_store_work.objects_read),
-    );
-    work.bytes_staged = store_work.bytes_staged;
-    work.bytes_read = work.bytes_read.saturating_add(
-        store_work
-            .bytes_read
-            .saturating_sub(authority_store_work.bytes_read),
-    );
+    let mut combined_store_work = authority_store_work;
+    combined_store_work.add(store_work);
+    work.objects_staged = combined_store_work.objects_staged;
+    work.pages_staged = combined_store_work.pages_staged;
+    work.bytes_staged = combined_store_work.bytes_staged;
+    work.saturated |= combined_store_work.saturated;
+    work.objects_read = sum_observed(&mut work.saturated, [
+        BudgetCounter::exact(work.objects_read),
+        store_counter(store_work, StoreWorkCounter::ObjectsRead, store_work.objects_read),
+    ]);
+    work.bytes_read = sum_observed(&mut work.saturated, [
+        BudgetCounter::exact(work.bytes_read),
+        store_counter(store_work, StoreWorkCounter::BytesRead, store_work.bytes_read),
+    ]);
+    let mut history_saturation = WorkSaturation::default();
+    for (dimension, observed) in [
+        (BudgetDimension::CanonicalMapPages, map_counter(idempotency_map_work, MapWorkCounter::PagesRead, idempotency_map_work.pages_read)),
+        (BudgetDimension::CanonicalMapEntries, map_counter(idempotency_map_work, MapWorkCounter::EntriesVisited, idempotency_map_work.entries_visited)),
+        (BudgetDimension::CanonicalCatalogLookups, store_counter(store_work, StoreWorkCounter::CatalogLookups, store_work.catalog_lookups)),
+        (BudgetDimension::CanonicalObjects, store_counter(store_work, StoreWorkCounter::ObjectsRead, store_work.objects_read)),
+        (BudgetDimension::CanonicalBytes, store_counter(store_work, StoreWorkCounter::BytesRead, store_work.bytes_read)),
+    ] {
+        if observed.saturated { history_saturation.mark(dimension); }
+    }
     let history_read_work = CanonicalReadWork {
         point_reads: u64::from(base.is_some()),
         map_pages_read: idempotency_map_work.pages_read,
         map_entries_visited: idempotency_map_work.entries_visited,
-        catalog_lookups: store_work
-            .catalog_lookups
-            .saturating_sub(authority_store_work.catalog_lookups),
-        objects_read: store_work
-            .objects_read
-            .saturating_sub(authority_store_work.objects_read),
-        bytes_read: store_work
-            .bytes_read
-            .saturating_sub(authority_store_work.bytes_read),
+        catalog_lookups: store_work.catalog_lookups,
+        objects_read: store_work.objects_read,
+        bytes_read: store_work.bytes_read,
         canonical_records_decoded: u64::from(base.is_some()),
+        saturation: history_saturation,
     };
     work.budget.canonical_reads.add(history_read_work);
-    work.budget.canonical_map_update.pages_encoded = work
-        .budget
-        .canonical_map_update
-        .pages_encoded
-        .saturating_add(idempotency_map_work.pages_encoded);
-    work.budget.canonical_map_update.bytes_encoded = work
-        .budget
-        .canonical_map_update
-        .bytes_encoded
-        .saturating_add(idempotency_map_work.bytes_encoded);
-    work.budget.staging = retained_stage_work(prior_staging, stage).map_err(single)?;
+    for (dimension, observed) in [
+        (BudgetDimension::CanonicalMapPagesEncoded, map_counter(idempotency_map_work, MapWorkCounter::PagesEncoded, idempotency_map_work.pages_encoded)),
+        (BudgetDimension::CanonicalMapBytesEncoded, map_counter(idempotency_map_work, MapWorkCounter::BytesEncoded, idempotency_map_work.bytes_encoded)),
+    ] {
+        work.budget.charge(dimension, observed, budget.and_then(|budget| budget.maximum(dimension)), "publication history maps").map_err(single)?;
+    }
+    observe_retained_stage(&mut work.budget, prior_staging, stage).map_err(single)?;
+    work.saturated |= work.budget.observation_saturation().any();
     if let Some(budget) = budget {
         budget
             .check_observed(work.budget, "publication receipt observation")
@@ -674,6 +686,7 @@ fn bind_history<S: ImmutableObjectStore + ?Sized>(
         &authority.witness.manifest,
     )
     .map_err(single)?;
+    store_work.add(authority_store_work);
     Ok(BoundHistory {
         expected_base: base.map(|binding| binding.head),
         authority,
@@ -1191,12 +1204,11 @@ fn change_counts(analysis: &PreparedChangeAnalysis) -> ChangeCounts {
     counts.type_objects_supplied = analysis.canonical.type_additions.len() as u64;
     counts.dependencies_changed = analysis.canonical.dependencies.len() as u64;
     counts.retirements_changed = analysis.canonical.retirements.len() as u64;
-    counts.witness_entries_changed = analysis
-        .witness
-        .edits
-        .inserted
-        .saturating_add(analysis.witness.edits.replaced)
-        .saturating_add(analysis.witness.edits.removed);
+    counts.witness_entries_changed = sum_observed(&mut counts.saturated, [
+        BudgetCounter { consumed: analysis.witness.edits.inserted, saturated: analysis.witness.edits.saturated },
+        BudgetCounter::exact(analysis.witness.edits.replaced),
+        BudgetCounter::exact(analysis.witness.edits.removed),
+    ]);
     counts
 }
 
@@ -1213,6 +1225,7 @@ fn change_validation(analysis: &PreparedChangeAnalysis) -> ValidationEvidence {
             tests_passed: 0,
             compiler_units_planned: analysis.summaries.plan.compiler_units.len() as u64,
             full_oracle: FullOracleStatus::NotApplicable,
+            saturated: false,
         };
     }
     ValidationEvidence {
@@ -1226,94 +1239,98 @@ fn change_validation(analysis: &PreparedChangeAnalysis) -> ValidationEvidence {
         tests_passed: 0,
         compiler_units_planned: analysis.summaries.plan.compiler_units.len() as u64,
         full_oracle: FullOracleStatus::NotRun,
+        saturated: analysis.summaries.plan.work.saturation.contains(BudgetDimension::RelationEdges),
     }
 }
 
 fn change_work(
     authority: &PreparedAuthority,
     analysis: &PreparedChangeAnalysis,
-    budget: crate::platform::change::ChangeBudgetWork,
+    budget: ChangeBudgetWork,
 ) -> WorkObservation {
-    let validation_work = analysis
-        .validation
-        .work
-        .owner_records_checked
-        .saturating_add(analysis.validation.work.ownership_entries_checked)
-        .saturating_add(analysis.validation.work.type_objects_checked)
-        .saturating_add(analysis.validation.work.expression_work);
+    let validation = analysis.validation.work;
     let mut witness_reads = analysis.derived.read_work;
     witness_reads.add(analysis.witness_read_work);
     witness_reads.add(analysis.summaries.initial.read_work);
     witness_reads.add(analysis.summaries.final_delta.read_work);
     witness_reads.add(analysis.summaries.plan.work.witness_reads);
     witness_reads.add(analysis.tests.work.witness_reads);
-    witness_reads.add(analysis.validation.work.witness_reads);
-    WorkObservation {
+    witness_reads.add(validation.witness_reads);
+    let mut saturated = budget.observation_saturation().any()
+        || authority.store_work.saturated || validation.saturation.any();
+    let mut work = WorkObservation {
         budget,
-        validation_work,
-        map_pages_read: authority
-            .semantic
-            .map_work
-            .pages_read
-            .saturating_add(analysis.witness.work.pages_read)
-            .saturating_add(witness_reads.map_pages_read)
-            .saturating_add(analysis.canonical_read_work.map_pages_read)
-            .saturating_add(authority.semantic.canonical_read_work.map_pages_read),
-        map_pages_written: authority
-            .semantic
-            .map_work
-            .pages_written
-            .saturating_add(analysis.witness.work.pages_written),
-        owner_records_checked: analysis.validation.work.owner_records_checked,
-        ownership_entries_checked: analysis.validation.work.ownership_entries_checked,
-        type_objects_checked: analysis.validation.work.type_objects_checked,
-        expression_work: analysis.validation.work.expression_work,
+        validation_work: sum_observed(&mut saturated, [
+            validation.saturation.counter(BudgetDimension::ValidationOwnerRecords, validation.owner_records_checked),
+            validation.saturation.counter(BudgetDimension::ValidationOwnershipEntries, validation.ownership_entries_checked),
+            validation.saturation.counter(BudgetDimension::ValidationTypeObjects, validation.type_objects_checked),
+            validation.saturation.counter(BudgetDimension::ValidationExpressionSteps, validation.expression_work),
+        ]),
+        map_pages_read: sum_observed(&mut saturated, [
+            map_counter(authority.semantic.map_work, MapWorkCounter::PagesRead, authority.semantic.map_work.pages_read),
+            map_counter(analysis.witness.work, MapWorkCounter::PagesRead, analysis.witness.work.pages_read),
+            witness_reads.observation(BudgetDimension::WitnessMapPages, witness_reads.map_pages_read),
+            analysis.canonical_read_work.observation(BudgetDimension::CanonicalMapPages, analysis.canonical_read_work.map_pages_read),
+            authority.semantic.canonical_read_work.observation(BudgetDimension::CanonicalMapPages, authority.semantic.canonical_read_work.map_pages_read),
+        ]),
+        map_pages_written: sum_observed(&mut saturated, [
+            map_counter(authority.semantic.map_work, MapWorkCounter::PagesWritten, authority.semantic.map_work.pages_written),
+            map_counter(analysis.witness.work, MapWorkCounter::PagesWritten, analysis.witness.work.pages_written),
+        ]),
+        owner_records_checked: validation.owner_records_checked,
+        ownership_entries_checked: validation.ownership_entries_checked,
+        type_objects_checked: validation.type_objects_checked,
+        expression_work: validation.expression_work,
         relation_edges_visited: budget.relation_edges,
-        objects_read: authority
-            .store_work
-            .objects_read
-            .saturating_add(witness_reads.objects_read)
-            .saturating_add(analysis.canonical_read_work.objects_read)
-            .saturating_add(authority.semantic.canonical_read_work.objects_read),
+        objects_read: sum_observed(&mut saturated, [
+            store_counter(authority.store_work, StoreWorkCounter::ObjectsRead, authority.store_work.objects_read),
+            witness_reads.observation(BudgetDimension::WitnessObjects, witness_reads.objects_read),
+            analysis.canonical_read_work.observation(BudgetDimension::CanonicalObjects, analysis.canonical_read_work.objects_read),
+            authority.semantic.canonical_read_work.observation(BudgetDimension::CanonicalObjects, authority.semantic.canonical_read_work.objects_read),
+        ]),
         objects_staged: authority.store_work.objects_staged,
         pages_staged: authority.store_work.pages_staged,
-        bytes_read: authority
-            .store_work
-            .bytes_read
-            .saturating_add(witness_reads.bytes_read)
-            .saturating_add(analysis.canonical_read_work.bytes_read)
-            .saturating_add(authority.semantic.canonical_read_work.bytes_read),
+        bytes_read: sum_observed(&mut saturated, [
+            store_counter(authority.store_work, StoreWorkCounter::BytesRead, authority.store_work.bytes_read),
+            witness_reads.observation(BudgetDimension::WitnessBytes, witness_reads.bytes_read),
+            analysis.canonical_read_work.observation(BudgetDimension::CanonicalBytes, analysis.canonical_read_work.bytes_read),
+            authority.semantic.canonical_read_work.observation(BudgetDimension::CanonicalBytes, authority.semantic.canonical_read_work.bytes_read),
+        ]),
         bytes_staged: authority.store_work.bytes_staged,
-    }
+        saturated: false,
+    };
+    work.saturated = saturated;
+    work
 }
 
 fn full_work(full: &crate::platform::change::FullStagedAuthority) -> WorkObservation {
+    let mut saturated = full.witness.report.full_validation.work_saturated
+        || full.binding.semantic.map_work.saturated || full.witness.report.map_work.saturated;
+    let map_pages_written = sum_observed(&mut saturated, [
+        map_counter(full.binding.semantic.map_work, MapWorkCounter::PagesWritten, full.binding.semantic.map_work.pages_written),
+        map_counter(full.witness.report.map_work, MapWorkCounter::PagesWritten, full.witness.report.map_work.pages_written),
+    ]);
     WorkObservation {
         validation_work: full.witness.report.full_validation.work_consumed,
         map_pages_read: full.binding.semantic.map_work.pages_read,
-        map_pages_written: full
-            .binding
-            .semantic
-            .map_work
-            .pages_written
-            .saturating_add(full.witness.report.map_work.pages_written),
+        map_pages_written,
         owner_records_checked: full.witness.report.full_validation.owners_checked,
         type_objects_checked: full.witness.report.full_validation.type_objects_checked,
         relation_edges_visited: full.witness.report.relation_edges,
+        saturated,
         ..WorkObservation::default()
     }
 }
 
-fn witness_entry_count(witness: &FullWitness) -> u64 {
+fn witness_entry_count(witness: &FullWitness) -> BudgetCounter {
     let roots = witness.manifest.roots;
-    roots
-        .owner_summaries
-        .entries()
-        .saturating_add(roots.namespaces.entries())
-        .saturating_add(roots.ownership.entries())
-        .saturating_add(roots.forward_relations.entries())
-        .saturating_add(roots.reverse_relations.entries())
-        .saturating_add(roots.test_dependencies.entries())
+    let mut total = BudgetCounter::default();
+    for count in [roots.owner_summaries.entries(), roots.namespaces.entries(), roots.ownership.entries(),
+        roots.forward_relations.entries(), roots.reverse_relations.entries(), roots.test_dependencies.entries()]
+    {
+        total.observe(BudgetCounter::exact(count));
+    }
+    total
 }
 
 fn stage_object<S: ImmutableObjectStore + ?Sized>(

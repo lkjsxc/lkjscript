@@ -254,7 +254,7 @@ fn dependency_publication_interruptions_recheck_readiness_and_reconcile_complete
             .prepare_authored_change(&request, PublicationOptions::default())
             .unwrap();
         let mut exhausted = request.clone();
-        exhausted.budget.canonical_reads.maximum_point_reads = 1;
+        exhausted.budget.canonical_reads.maximum_point_reads = Some(1);
         assert!(
             target
                 .repository
@@ -1091,37 +1091,37 @@ fn staged_package_interface_validates_an_exact_cross_package_pure_call() {
     type SetPackageReadLimit = fn(&mut CanonicalReadAdmission, u64);
     let package_read_dimensions: &[(SetPackageReadLimit, u64, &str)] = &[
         (
-            |admission, value| admission.maximum_point_reads = value,
+            |admission, value| admission.maximum_point_reads = Some(value),
             package_read.work.point_reads,
             "change_budget_canonical_point_reads",
         ),
         (
-            |admission, value| admission.maximum_map_pages = value,
+            |admission, value| admission.maximum_map_pages = Some(value),
             package_read.work.map_pages_read,
             "change_budget_canonical_map_pages",
         ),
         (
-            |admission, value| admission.maximum_map_entries = value,
+            |admission, value| admission.maximum_map_entries = Some(value),
             package_read.work.map_entries_visited,
             "change_budget_canonical_map_entries",
         ),
         (
-            |admission, value| admission.maximum_catalog_lookups = value,
+            |admission, value| admission.maximum_catalog_lookups = Some(value),
             package_read.work.catalog_lookups,
             "change_budget_canonical_catalog_lookups",
         ),
         (
-            |admission, value| admission.maximum_objects = value,
+            |admission, value| admission.maximum_objects = Some(value),
             package_read.work.objects_read,
             "change_budget_canonical_objects",
         ),
         (
-            |admission, value| admission.maximum_bytes = value,
+            |admission, value| admission.maximum_bytes = Some(value),
             package_read.work.bytes_read,
             "change_budget_canonical_bytes",
         ),
         (
-            |admission, value| admission.maximum_decoded_records = value,
+            |admission, value| admission.maximum_decoded_records = Some(value),
             package_read.work.canonical_records_decoded,
             "change_budget_canonical_decoded_records",
         ),
@@ -1605,7 +1605,6 @@ fn revision_view_reads_exact_canonical_and_witness_records_with_local_work() {
     assert!(view.dependency(foreign_package).unwrap().value.is_none());
     assert!(view.retirement(absent).unwrap().value.is_none());
 
-    let package = view.package();
     let source = created
         .initial
         .witness
@@ -1635,7 +1634,7 @@ fn revision_view_reads_exact_canonical_and_witness_records_with_local_work() {
         .copied()
         .collect::<Vec<_>>();
     let relations = view
-        .outgoing_relations(source, None, MAXIMUM_RELATION_READ_ITEMS)
+        .outgoing_relations(source, None, None)
         .expect("bounded outgoing relations");
     assert_eq!(relations.value.edges, expected);
     assert!(!relations.value.truncated);
@@ -1661,31 +1660,26 @@ fn revision_view_reads_exact_canonical_and_witness_records_with_local_work() {
         .incoming_relations(
             incoming_target,
             Some(incoming_kind),
-            MAXIMUM_RELATION_READ_ITEMS,
+            None,
         )
         .expect("bounded incoming relations");
     assert_eq!(incoming.value.edges, expected_incoming);
     assert!(!incoming.value.truncated);
 
     let bounded = view
-        .outgoing_relations(source, None, 1)
+        .outgoing_relations(source, None, Some(1))
         .expect("truncated relation read");
     assert_eq!(bounded.value.edges, expected[..1]);
     assert!(bounded.value.truncated);
     assert_eq!(bounded.work.items_returned, 1);
-    assert_eq!(
-        view.outgoing_relations(
-            RelationEndpoint::Owner(ExactOwnerKey {
-                package,
-                owner: callee,
-            }),
-            None,
-            0,
-        )
-        .expect_err("zero item budget must reject")
-        .code,
-        "publication_relation_item_budget"
-    );
+    let zero = view.outgoing_relations(source, None, Some(0)).unwrap();
+    assert!(zero.value.edges.is_empty());
+    assert!(zero.value.truncated);
+    let exact = view.outgoing_relations(source, None, Some(expected.len())).unwrap();
+    assert_eq!(exact.value.edges, expected);
+    assert!(!exact.value.truncated);
+    let above_old_limit = view.outgoing_relations(source, None, Some(MAXIMUM_RELATION_READ_ITEMS + 1)).unwrap();
+    assert_eq!(above_old_limit.value.edges, expected);
 
     let test = owner_named(&created.initial.snapshot, "caller_test");
     let expected_dependencies = created.initial.witness.entries.test_dependencies_by_test[&test]
@@ -1693,7 +1687,7 @@ fn revision_view_reads_exact_canonical_and_witness_records_with_local_work() {
         .copied()
         .collect::<Vec<_>>();
     let dependencies = view
-        .test_dependencies(test, MAXIMUM_TEST_DEPENDENCY_READ_ITEMS)
+        .test_dependencies(test, None)
         .expect("bounded test dependencies");
     assert_eq!(dependencies.value.dependencies, expected_dependencies);
     assert!(!dependencies.value.truncated);
@@ -1702,12 +1696,12 @@ fn revision_view_reads_exact_canonical_and_witness_records_with_local_work() {
         expected_dependencies.len() as u64
     );
     assert!(dependencies.work.map.pages_read > 0);
-    assert_eq!(
-        view.test_dependencies(callee, 0)
-            .expect_err("zero test-dependency budget must reject")
-            .code,
-        "publication_test_dependency_item_budget"
-    );
+    let zero = view.test_dependencies(test, Some(0)).unwrap();
+    assert!(zero.value.dependencies.is_empty());
+    assert!(zero.value.truncated);
+    let empty = view.test_dependencies(callee, Some(0)).unwrap();
+    assert!(empty.value.dependencies.is_empty());
+    assert!(!empty.value.truncated);
 }
 
 #[test]
@@ -2272,7 +2266,7 @@ fn authored_allocation_ignores_local_labels_budgets_and_operational_options() {
         )
         .expect("prepare first spelling");
     let mut changed_budget = ChangeBudget::default();
-    changed_budget.canonical_reads.maximum_bytes -= 1;
+    changed_budget.canonical_reads.maximum_bytes = Some(u64::MAX);
     let second = created
         .repository
         .prepare_authored_change(
@@ -3737,31 +3731,31 @@ fn authored_owned_closure_charges_independent_selection_admissions() {
     type Exhaust = fn(&mut ChangeBudget);
     let exhaustions: &[(Exhaust, &str)] = &[
         (
-            |budget| budget.canonical_edits.maximum_owner_edits = 0,
+            |budget| budget.canonical_edits.maximum_owner_edits = Some(0),
             "change_budget_canonical_owner_edits",
         ),
         (
-            |budget| budget.canonical_edits.maximum_retirement_edits = 0,
+            |budget| budget.canonical_edits.maximum_retirement_edits = Some(0),
             "change_budget_canonical_retirement_edits",
         ),
         (
-            |budget| budget.canonical_reads.maximum_point_reads = 0,
+            |budget| budget.canonical_reads.maximum_point_reads = Some(0),
             "change_budget_canonical_point_reads",
         ),
         (
-            |budget| budget.witness_reads.maximum_point_reads = 0,
+            |budget| budget.witness_reads.maximum_point_reads = Some(0),
             "change_budget_witness_point_reads",
         ),
         (
-            |budget| budget.impact.maximum_ownership_steps = 0,
+            |budget| budget.impact.maximum_ownership_steps = Some(0),
             "change_budget_impact_ownership_steps",
         ),
         (
-            |budget| budget.impact.maximum_relation_edges = 0,
+            |budget| budget.impact.maximum_relation_edges = Some(0),
             "change_budget_relation_edges",
         ),
         (
-            |budget| budget.impact.maximum_relation_fanout = 0,
+            |budget| budget.impact.maximum_relation_fanout = Some(0),
             "change_budget_relation_fanout",
         ),
     ];
@@ -3776,7 +3770,7 @@ fn authored_owned_closure_charges_independent_selection_admissions() {
     }
 
     let mut truncated_prefix = ChangeBudget::default();
-    truncated_prefix.impact.maximum_relation_fanout = 1;
+    truncated_prefix.impact.maximum_relation_fanout = Some(1);
     let diagnostic = lower_authored_changes(&pinned, &pinned, &request(truncated_prefix))
         .expect_err("a nonempty truncated incoming prefix must fail closed");
     assert_eq!(diagnostic.class, DiagnosticClass::Resource);
@@ -4771,7 +4765,7 @@ fn reviewed_function_extraction_matches_disjoint_oracle_and_preserves_moved_iden
         }],
     };
     let mut exhausted_request = request.clone();
-    exhausted_request.budget.validation.maximum_expression_steps = 1;
+    exhausted_request.budget.validation.maximum_expression_steps = Some(1);
     let exhausted = created
         .repository
         .prepare_authored_change(&exhausted_request, PublicationOptions::default())
@@ -5316,7 +5310,7 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
     };
 
     let mut invalid_budget = ChangeBudget::default();
-    invalid_budget.authored.maximum_operations = 0;
+    invalid_budget.authored.maximum_operations = Some(0);
     let invalid = AuthoredChangeSet {
         base,
         preconditions: Vec::new(),
@@ -5333,7 +5327,7 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
     );
 
     let mut operation_budget = ChangeBudget::default();
-    operation_budget.authored.maximum_operations = 1;
+    operation_budget.authored.maximum_operations = Some(1);
     let too_many_operations = AuthoredChangeSet {
         base,
         preconditions: Vec::new(),
@@ -5357,7 +5351,7 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
         ],
         budget: {
             let mut budget = operation_budget;
-            budget.authored.maximum_preconditions = 1;
+            budget.authored.maximum_preconditions = Some(1);
             budget
         },
         changes: vec![rename()],
@@ -5372,7 +5366,7 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
     );
 
     let mut work_budget = ChangeBudget::default();
-    work_budget.canonical_reads.maximum_point_reads = 0;
+    work_budget.canonical_reads.maximum_point_reads = Some(0);
     let exhausted_work = AuthoredChangeSet {
         base,
         preconditions: Vec::new(),
@@ -5389,8 +5383,8 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
     );
 
     let mut affected_budget = ChangeBudget::default();
-    affected_budget.authored.maximum_operations = 2;
-    affected_budget.impact.maximum_affected_owners = 1;
+    affected_budget.authored.maximum_operations = Some(2);
+    affected_budget.impact.maximum_affected_owners = Some(1);
     let exhausted_owners = AuthoredChangeSet {
         base,
         preconditions: Vec::new(),
@@ -5416,7 +5410,7 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
     );
 
     let mut relation_budget = ChangeBudget::default();
-    relation_budget.impact.maximum_relation_edges = 1;
+    relation_budget.impact.maximum_relation_edges = Some(1);
     let caller = owner_named(&created.initial.snapshot, "caller");
     let OwnerKey::Declaration(caller) = caller else {
         panic!("caller must be a function declaration")
@@ -5481,162 +5475,162 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
     type SetLimit = fn(&mut ChangeBudget, u64);
     let rename_dimensions: &[(SetLimit, u64, &str)] = &[
         (
-            |budget, value| budget.canonical_edits.maximum_owner_edits = value,
+            |budget, value| budget.canonical_edits.maximum_owner_edits = Some(value),
             work.canonical_edits.owner_edits,
             "change_budget_canonical_owner_edits",
         ),
         (
-            |budget, value| budget.canonical_reads.maximum_point_reads = value,
+            |budget, value| budget.canonical_reads.maximum_point_reads = Some(value),
             work.canonical_reads.point_reads,
             "change_budget_canonical_point_reads",
         ),
         (
-            |budget, value| budget.canonical_reads.maximum_map_pages = value,
+            |budget, value| budget.canonical_reads.maximum_map_pages = Some(value),
             work.canonical_reads.map_pages_read,
             "change_budget_canonical_map_pages",
         ),
         (
-            |budget, value| budget.canonical_reads.maximum_map_entries = value,
+            |budget, value| budget.canonical_reads.maximum_map_entries = Some(value),
             work.canonical_reads.map_entries_visited,
             "change_budget_canonical_map_entries",
         ),
         (
-            |budget, value| budget.canonical_reads.maximum_catalog_lookups = value,
+            |budget, value| budget.canonical_reads.maximum_catalog_lookups = Some(value),
             work.canonical_reads.catalog_lookups,
             "change_budget_canonical_catalog_lookups",
         ),
         (
-            |budget, value| budget.canonical_reads.maximum_objects = value,
+            |budget, value| budget.canonical_reads.maximum_objects = Some(value),
             work.canonical_reads.objects_read,
             "change_budget_canonical_objects",
         ),
         (
-            |budget, value| budget.canonical_reads.maximum_bytes = value,
+            |budget, value| budget.canonical_reads.maximum_bytes = Some(value),
             work.canonical_reads.bytes_read,
             "change_budget_canonical_bytes",
         ),
         (
-            |budget, value| budget.canonical_reads.maximum_decoded_records = value,
+            |budget, value| budget.canonical_reads.maximum_decoded_records = Some(value),
             work.canonical_reads.canonical_records_decoded,
             "change_budget_canonical_decoded_records",
         ),
         (
-            |budget, value| budget.canonical_map_update.maximum_pages_encoded = value,
+            |budget, value| budget.canonical_map_update.maximum_pages_encoded = Some(value),
             work.canonical_map_update.pages_encoded,
             "change_budget_canonical_map_pages_encoded",
         ),
         (
-            |budget, value| budget.canonical_map_update.maximum_bytes_encoded = value,
+            |budget, value| budget.canonical_map_update.maximum_bytes_encoded = Some(value),
             work.canonical_map_update.bytes_encoded,
             "change_budget_canonical_map_bytes_encoded",
         ),
         (
-            |budget, value| budget.witness_reads.maximum_point_reads = value,
+            |budget, value| budget.witness_reads.maximum_point_reads = Some(value),
             work.witness_reads.point_reads,
             "change_budget_witness_point_reads",
         ),
         (
-            |budget, value| budget.witness_reads.maximum_map_pages = value,
+            |budget, value| budget.witness_reads.maximum_map_pages = Some(value),
             work.witness_reads.map_pages_read,
             "change_budget_witness_map_pages",
         ),
         (
-            |budget, value| budget.witness_reads.maximum_map_entries = value,
+            |budget, value| budget.witness_reads.maximum_map_entries = Some(value),
             work.witness_reads.map_entries_visited,
             "change_budget_witness_map_entries",
         ),
         (
-            |budget, value| budget.witness_reads.maximum_catalog_lookups = value,
+            |budget, value| budget.witness_reads.maximum_catalog_lookups = Some(value),
             work.witness_reads.catalog_lookups,
             "change_budget_witness_catalog_lookups",
         ),
         (
-            |budget, value| budget.witness_reads.maximum_objects = value,
+            |budget, value| budget.witness_reads.maximum_objects = Some(value),
             work.witness_reads.objects_read,
             "change_budget_witness_objects",
         ),
         (
-            |budget, value| budget.witness_reads.maximum_bytes = value,
+            |budget, value| budget.witness_reads.maximum_bytes = Some(value),
             work.witness_reads.bytes_read,
             "change_budget_witness_bytes",
         ),
         (
-            |budget, value| budget.witness_reads.maximum_decoded_records = value,
+            |budget, value| budget.witness_reads.maximum_decoded_records = Some(value),
             work.witness_reads.witness_records_decoded,
             "change_budget_witness_decoded_records",
         ),
         (
-            |budget, value| budget.impact.maximum_affected_owners = value,
+            |budget, value| budget.impact.maximum_affected_owners = Some(value),
             work.affected_frontier_owners,
             "change_budget_affected_frontier_owners",
         ),
         (
-            |budget, value| budget.impact.maximum_summary_owners = value,
+            |budget, value| budget.impact.maximum_summary_owners = Some(value),
             work.impact_summary_owners,
             "change_budget_impact_summary_owners",
         ),
         (
-            |budget, value| budget.impact.maximum_summary_edits = value,
+            |budget, value| budget.impact.maximum_summary_edits = Some(value),
             work.impact_summary_edits,
             "change_budget_impact_summary_edits",
         ),
         (
-            |budget, value| budget.impact.maximum_ownership_steps = value,
+            |budget, value| budget.impact.maximum_ownership_steps = Some(value),
             work.impact_ownership_steps,
             "change_budget_impact_ownership_steps",
         ),
         (
-            |budget, value| budget.impact.maximum_relation_edges = value,
+            |budget, value| budget.impact.maximum_relation_edges = Some(value),
             work.relation_edges,
             "change_budget_relation_edges",
         ),
         (
-            |budget, value| budget.validation.maximum_owner_records = value,
+            |budget, value| budget.validation.maximum_owner_records = Some(value),
             work.validation.owner_records,
             "change_budget_validation_owner_records",
         ),
         (
-            |budget, value| budget.validation.maximum_ownership_entries = value,
+            |budget, value| budget.validation.maximum_ownership_entries = Some(value),
             work.validation.ownership_entries,
             "change_budget_validation_ownership_entries",
         ),
         (
-            |budget, value| budget.validation.maximum_type_objects = value,
+            |budget, value| budget.validation.maximum_type_objects = Some(value),
             work.validation.type_objects,
             "change_budget_validation_type_objects",
         ),
         (
-            |budget, value| budget.tests.maximum_ownership_steps = value,
+            |budget, value| budget.tests.maximum_ownership_steps = Some(value),
             work.tests.ownership_steps,
             "change_budget_test_ownership_steps",
         ),
         (
-            |budget, value| budget.witness_update.maximum_edits = value,
+            |budget, value| budget.witness_update.maximum_edits = Some(value),
             work.witness_update.edits,
             "change_budget_witness_edits",
         ),
         (
-            |budget, value| budget.witness_update.maximum_pages_encoded = value,
+            |budget, value| budget.witness_update.maximum_pages_encoded = Some(value),
             work.witness_update.pages_encoded,
             "change_budget_witness_map_pages_encoded",
         ),
         (
-            |budget, value| budget.witness_update.maximum_bytes_encoded = value,
+            |budget, value| budget.witness_update.maximum_bytes_encoded = Some(value),
             work.witness_update.bytes_encoded,
             "change_budget_witness_map_bytes_encoded",
         ),
         (
-            |budget, value| budget.staging.maximum_objects = value,
+            |budget, value| budget.staging.maximum_objects = Some(value),
             work.staging.objects,
             "change_budget_staged_objects",
         ),
         (
-            |budget, value| budget.staging.maximum_bytes = value,
+            |budget, value| budget.staging.maximum_bytes = Some(value),
             work.staging.bytes,
             "change_budget_staged_bytes",
         ),
         (
-            |budget, value| budget.staging.maximum_pages = value,
+            |budget, value| budget.staging.maximum_pages = Some(value),
             work.staging.pages,
             "change_budget_staged_pages",
         ),
@@ -5649,7 +5643,7 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
     }
 
     let mut identity_budget = ChangeBudget::default();
-    identity_budget.authored.maximum_allocated_identities = 0;
+    identity_budget.authored.maximum_allocated_identities = Some(0);
     reject(
         identity_budget,
         vec![AuthoredChange::CreateModule {
@@ -5662,7 +5656,7 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
     let mut anonymous_identity_budget = ChangeBudget::default();
     anonymous_identity_budget
         .authored
-        .maximum_allocated_identities = 1;
+        .maximum_allocated_identities = Some(1);
     reject(
         anonymous_identity_budget,
         vec![AuthoredChange::CreateFunction {
@@ -5705,13 +5699,13 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
         read_scope_sources: Vec::new(),
     };
     let mut existing_type_budget = ChangeBudget::default();
-    existing_type_budget.canonical_edits.maximum_type_edits = 0;
+    existing_type_budget.canonical_edits.maximum_type_edits = Some(0);
     reject(
         existing_type_budget,
         vec![create_with_unit.clone()],
         "change_budget_canonical_type_edits",
     );
-    existing_type_budget.canonical_edits.maximum_type_edits = 1;
+    existing_type_budget.canonical_edits.maximum_type_edits = Some(1);
     let existing_type = created
         .repository
         .prepare_authored_change(
@@ -5730,7 +5724,7 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
     assert_eq!(existing_type.publication.budget_work.authored_type_nodes, 1);
 
     let mut authored_type_budget = ChangeBudget::default();
-    authored_type_budget.authored.maximum_type_nodes = 0;
+    authored_type_budget.authored.maximum_type_nodes = Some(0);
     reject(
         authored_type_budget,
         vec![AuthoredChange::CreateFunction {
@@ -5774,12 +5768,12 @@ fn authored_budget_dimensions_exhaust_independently_without_advancing_head() {
     let expression_work = expression_baseline.publication.budget_work;
     let expression_dimensions: &[(SetLimit, u64, &str)] = &[
         (
-            |budget, value| budget.validation.maximum_expression_steps = value,
+            |budget, value| budget.validation.maximum_expression_steps = Some(value),
             expression_work.validation.expression_steps,
             "change_budget_validation_expression_steps",
         ),
         (
-            |budget, value| budget.tests.maximum_selected = value,
+            |budget, value| budget.tests.maximum_selected = Some(value),
             expression_work.tests.selected,
             "change_budget_tests_selected",
         ),
@@ -8895,7 +8889,7 @@ fn constraint_interface_edit_accounts_validation_and_cancels_review_without_publ
     );
     for limit in [work - 1, work] {
         let mut request = decoded.semantic.clone();
-        request.budget.validation.maximum_expression_steps = limit;
+        request.budget.validation.maximum_expression_steps = Some(limit);
         let result = created
             .repository
             .prepare_authored_change(&request, PublicationOptions::default());

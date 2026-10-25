@@ -34,6 +34,28 @@ pub(crate) struct Work {
     pub fresh_buffers: u64,
     pub payload_bytes_copied: u64,
     pub requested_capacity_bytes: u64,
+    /// At least one observation is a saturated lower bound.
+    pub saturated: bool,
+}
+
+impl Work {
+    pub(super) fn include(&mut self, child: &Self) {
+        self.saturated |= child.saturated;
+        macro_rules! add {
+            ($($field:ident),* $(,)?) => {
+                $(observe(&mut self.$field, child.$field, &mut self.saturated);)*
+            };
+        }
+        add!(
+            concatenations,
+            empty_operand_reuses,
+            in_place_appends,
+            buffer_growths,
+            fresh_buffers,
+            payload_bytes_copied,
+            requested_capacity_bytes
+        );
+    }
 }
 
 impl BytePayload {
@@ -48,7 +70,7 @@ impl BytePayload {
     pub(crate) fn concat(
         mut self,
         right: Self,
-        maximum: u64,
+        maximum: Option<u64>,
         control: &ExecutionControl,
         reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
         work: &mut Work,
@@ -60,15 +82,10 @@ impl BytePayload {
                 "byte concatenation length overflowed",
             )
         })?;
-        if length as u64 > maximum {
-            return Err(ExecutionError::resource(
-                "normalized_allocation",
-                "byte result exceeds finite value storage",
-            ));
-        }
-        work.concatenations = work.concatenations.saturating_add(1);
+        admit_length(length, maximum)?;
+        observe(&mut work.concatenations, 1, &mut work.saturated);
         if self.is_empty() || right.is_empty() {
-            work.empty_operand_reuses = work.empty_operand_reuses.saturating_add(1);
+            observe(&mut work.empty_operand_reuses, 1, &mut work.saturated);
             return Ok(if self.is_empty() { right } else { self });
         }
         if let Storage::Buffer(shared) = &mut self.0
@@ -78,13 +95,13 @@ impl BytePayload {
             // No mutable view escapes this synchronous operation.
             if length <= buffer.capacity() {
                 append(buffer, &right, control, work)?;
-                work.in_place_appends = work.in_place_appends.saturating_add(1);
+                observe(&mut work.in_place_appends, 1, &mut work.saturated);
             } else {
-                let maximum = usize::try_from(maximum).unwrap_or(usize::MAX);
-                let capacity = buffer.capacity().saturating_mul(2).max(length).min(maximum);
+                let capacity = growth_capacity(buffer.capacity(), length, maximum)?;
                 reserve(capacity as u64)?;
+                control.check()?;
                 let mut grown = allocate(capacity, work)?;
-                work.buffer_growths = work.buffer_growths.saturating_add(1);
+                observe(&mut work.buffer_growths, 1, &mut work.saturated);
                 append(&mut grown, buffer, control, work)?;
                 append(&mut grown, &right, control, work)?;
                 *buffer = grown;
@@ -95,8 +112,9 @@ impl BytePayload {
         // is exact-sized; only a subsequently unique growing buffer gets spare space.
         reserve(Self::DESCRIPTOR_BYTES)?;
         reserve(length as u64)?;
+        control.check()?;
         let mut buffer = allocate(length, work)?;
-        work.fresh_buffers = work.fresh_buffers.saturating_add(1);
+        observe(&mut work.fresh_buffers, 1, &mut work.saturated);
         append(&mut buffer, &self, control, work)?;
         append(&mut buffer, &right, control, work)?;
         control.check()?;
@@ -104,10 +122,63 @@ impl BytePayload {
     }
 }
 
+fn length_error() -> ExecutionError {
+    ExecutionError::resource(
+        "normalized_bytes_length",
+        "byte length or allocation extent is not representable",
+    )
+}
+
+fn admit_length(length: usize, maximum: Option<u64>) -> Result<(), ExecutionError> {
+    if isize::try_from(length).is_err() || i64::try_from(length).is_err() {
+        return Err(length_error());
+    }
+    if maximum.is_some_and(|maximum| length as u64 > maximum) {
+        return Err(ExecutionError::resource(
+            "normalized_allocation",
+            "byte result exceeds its explicit value limit",
+        ));
+    }
+    Ok(())
+}
+
+fn growth_capacity(
+    current: usize,
+    length: usize,
+    maximum: Option<u64>,
+) -> Result<usize, ExecutionError> {
+    admit_length(length, maximum)?;
+    let mut capacity = current
+        .checked_mul(2)
+        .filter(|capacity| isize::try_from(*capacity).is_ok())
+        .filter(|capacity| i64::try_from(*capacity).is_ok())
+        .unwrap_or(length)
+        .max(length);
+    if let Some(maximum) = maximum
+        && capacity as u64 > maximum
+    {
+        // This conversion is exact: maximum is below an existing usize value.
+        capacity = usize::try_from(maximum).map_err(|_| length_error())?;
+    }
+    Ok(capacity)
+}
+
+fn observe(counter: &mut u64, amount: u64, saturated: &mut bool) {
+    let (value, overflow) = counter.overflowing_add(amount);
+    if overflow {
+        *counter = u64::MAX;
+        *saturated = true;
+    } else {
+        *counter = value;
+    }
+}
+
 fn allocate(capacity: usize, work: &mut Work) -> Result<Vec<u8>, ExecutionError> {
-    work.requested_capacity_bytes = work
-        .requested_capacity_bytes
-        .saturating_add(capacity as u64);
+    observe(
+        &mut work.requested_capacity_bytes,
+        capacity as u64,
+        &mut work.saturated,
+    );
     let mut buffer = Vec::new();
     buffer.try_reserve_exact(capacity).map_err(|_| {
         ExecutionError::resource(
@@ -128,7 +199,11 @@ fn append(
     for chunk in input.chunks(65_536) {
         control.check()?;
         output.extend_from_slice(chunk);
-        work.payload_bytes_copied = work.payload_bytes_copied.saturating_add(chunk.len() as u64);
+        observe(
+            &mut work.payload_bytes_copied,
+            chunk.len() as u64,
+            &mut work.saturated,
+        );
     }
     control.check()
 }
@@ -211,5 +286,28 @@ mod adoption_tests {
         assert_eq!(backing.capacity(), capacity);
         let alias = payload.clone();
         assert_eq!(alias.as_ptr(), pointer);
+    }
+}
+
+
+#[cfg(test)]
+mod aggregation_tests {
+    use super::*;
+
+    #[test]
+    fn byte_work_merge_preserves_child_saturation_and_records_sum_overflow() {
+        let mut parent = Work { concatenations: u64::MAX - 1, ..Work::default() };
+        let child = Work { concatenations: 1, ..Work::default() };
+        parent.include(&child);
+        assert_eq!(parent.concatenations, u64::MAX);
+        assert!(!parent.saturated);
+        parent.include(&child);
+        assert_eq!(parent.concatenations, u64::MAX);
+        assert!(parent.saturated);
+        let mut parent = Work::default();
+        parent.include(&Work { saturated: true, ..Work::default() });
+        assert!(parent.saturated);
+        parent.include(&Work::default());
+        assert!(parent.saturated);
     }
 }

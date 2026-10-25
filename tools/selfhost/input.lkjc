@@ -1,124 +1,336 @@
 declarations.begin
-(units (module create ci
-  (external create add (visibility public) (implementation core.i64.add)
-    (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
-  (external create sub (visibility public) (implementation core.i64.subtract)
-    (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
-  (external create mul (visibility public) (implementation core.i64.multiply)
-    (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
-  (external create div (visibility public) (implementation core.i64.divide)
-    (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
-  (external create eq (visibility public) (implementation core.i64.equal)
-    (parameter create a (type I64)) (parameter create b (type I64)) (returns Bool))
-  (external create lt (visibility public) (implementation core.i64.less)
-    (parameter create a (type I64)) (parameter create b (type I64)) (returns Bool))
-  (external create both (visibility public) (implementation core.bool.and)
-    (parameter create a (type Bool)) (parameter create b (type Bool)) (returns Bool))
-  (external create either (visibility public) (implementation core.bool.or)
-    (parameter create a (type Bool)) (parameter create b (type Bool)) (returns Bool))
-  (external create same (visibility public) (implementation core.bytes.equal)
-    (parameter create a (type Bytes)) (parameter create b (type Bytes)) (returns Bool))
-  (external create get (visibility public) (implementation core.bytes.get)
-    (parameter create data (type Bytes)) (parameter create i (type I64)) (returns I64))
-  (external create length (visibility public) (implementation core.bytes.length)
-    (parameter create data (type Bytes)) (returns I64))
-  (external create slice (visibility public) (implementation core.bytes.slice)
-    (parameter create data (type Bytes)) (parameter create start (type I64))
-    (parameter create end (type I64)) (returns Bytes))
-  (external create concat (visibility public) (implementation core.bytes.concat)
-    (parameter create a (type Bytes)) (parameter create b (type Bytes)) (returns Bytes))
-  (external create octets (visibility public) (implementation core.bytes.from-list)
-    (parameter create values (type (list I64))) (returns Bytes))
-  (external create text-bytes (visibility public) (implementation core.bytes.from-text)
-    (parameter create value (type Text)) (returns Bytes))
-  (external create digest (visibility public) (implementation core.bytes.blake3)
-    (parameter create data (type Bytes)) (returns Bytes))
-  (external create derive (visibility public) (implementation core.bytes.blake3-derive-key)
-    (parameter create context (type Text)) (parameter create data (type Bytes)) (returns Bytes))
-  (external create empty (visibility public) (implementation core.buffer.empty) (returns ByteBuffer))
-  (external create push (visibility public) (implementation core.buffer.push)
-    (parameter create byte (type I64)) (parameter create buffer (type ByteBuffer) (use consume))
-    (returns ByteBuffer))
-  (external create size (visibility public) (implementation core.buffer.length)
-    (parameter create buffer (type ByteBuffer) (use borrow)) (returns I64))
-  (external create freeze (visibility public) (implementation core.buffer.freeze)
-    (parameter create buffer (type ByteBuffer) (use consume)) (returns Bytes))
-  (external create discard (visibility public) (implementation core.buffer.discard)
-    (parameter create buffer (type ByteBuffer) (use consume)) (returns Unit))
-  (function create u32 (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create at (type I64)) (returns I64)
-    (body (call add (call get (local data) (local at))
-      (call mul (i64 256) (call add (call get (local data) (call add (local at) (i64 1)))
-        (call mul (i64 256) (call add (call get (local data) (call add (local at) (i64 2)))
-          (call mul (i64 256) (call get (local data) (call add (local at) (i64 3)))))))))))
-  (function create word-is (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create at (type I64))
-    (parameter create value (type I64)) (returns Bool)
-    (body (call both (call eq (call u32 (local data) (local at)) (local value))
-      (call eq (call u32 (local data) (call add (local at) (i64 4))) (i64 0)))))
-  (function create table-is (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create at (type I64))
-    (parameter create values (type (list I64))) (parameter create i (type I64)) (returns Bool)
-    (body (if (call eq (local i) (call list-size (types I64) (local values))) (bool true)
-      (if (call eq (call u32 (local data) (call add (local at) (call mul (local i) (i64 4))))
-            (call list-get (types I64) (local values) (local i)))
-        (call table-is (local data) (local at) (local values) (call add (local i) (i64 1)))
-        (bool false)))))
-  (external create list-size (visibility public) (implementation core.list.length)
-    (type-parameter create T) (parameter create values (type (list T))) (returns I64))
-  (external create list-get (visibility public) (implementation core.list.get)
-    (type-parameter create T) (parameter create values (type (list T)))
-    (parameter create i (type I64)) (returns T))
-  (function create validate (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (returns I64)
-    (body
+(units
+  (module create ci
+    (external create add
+      (visibility public)
+      (implementation core.i64.add)
+      (parameter create a (type I64))
+      (parameter create b (type I64))
+      (returns I64))
+    (external create sub
+      (visibility public)
+      (implementation core.i64.subtract)
+      (parameter create a (type I64))
+      (parameter create b (type I64))
+      (returns I64))
+    (external create mul
+      (visibility public)
+      (implementation core.i64.multiply)
+      (parameter create a (type I64))
+      (parameter create b (type I64))
+      (returns I64))
+    (external create div
+      (visibility public)
+      (implementation core.i64.divide)
+      (parameter create a (type I64))
+      (parameter create b (type I64))
+      (returns I64))
+    (external create eq
+      (visibility public)
+      (implementation core.i64.equal)
+      (parameter create a (type I64))
+      (parameter create b (type I64))
+      (returns Bool))
+    (external create lt
+      (visibility public)
+      (implementation core.i64.less)
+      (parameter create a (type I64))
+      (parameter create b (type I64))
+      (returns Bool))
+    (external create both
+      (visibility public)
+      (implementation core.bool.and)
+      (parameter create a (type Bool))
+      (parameter create b (type Bool))
+      (returns Bool))
+    (external create either
+      (visibility public)
+      (implementation core.bool.or)
+      (parameter create a (type Bool))
+      (parameter create b (type Bool))
+      (returns Bool))
+    (external create same
+      (visibility public)
+      (implementation core.bytes.equal)
+      (parameter create a (type Bytes))
+      (parameter create b (type Bytes))
+      (returns Bool))
+    (external create get
+      (visibility public)
+      (implementation core.bytes.get)
+      (parameter create data (type Bytes))
+      (parameter create i (type I64))
+      (returns I64))
+    (external create length
+      (visibility public)
+      (implementation core.bytes.length)
+      (parameter create data (type Bytes))
+      (returns I64))
+    (external create slice
+      (visibility public)
+      (implementation core.bytes.slice)
+      (parameter create data (type Bytes))
+      (parameter create start (type I64))
+      (parameter create end (type I64))
+      (returns Bytes))
+    (external create concat
+      (visibility public)
+      (implementation core.bytes.concat)
+      (parameter create a (type Bytes))
+      (parameter create b (type Bytes))
+      (returns Bytes))
+    (external create octets
+      (visibility public)
+      (implementation core.bytes.from-list)
+      (parameter create values (type (list I64)))
+      (returns Bytes))
+    (external create text-bytes
+      (visibility public)
+      (implementation core.bytes.from-text)
+      (parameter create value (type Text))
+      (returns Bytes))
+    (external create digest
+      (visibility public)
+      (implementation core.bytes.blake3)
+      (parameter create data (type Bytes))
+      (returns Bytes))
+    (external create derive
+      (visibility public)
+      (implementation core.bytes.blake3-derive-key)
+      (parameter create context (type Text))
+      (parameter create data (type Bytes))
+      (returns Bytes))
+    (external create empty (visibility public) (implementation core.buffer.empty) (returns ByteBuffer))
+    (external create push
+      (visibility public)
+      (implementation core.buffer.push)
+      (parameter create byte (type I64))
+      (parameter create buffer (type ByteBuffer) (use consume))
+      (returns ByteBuffer))
+    (external create size
+      (visibility public)
+      (implementation core.buffer.length)
+      (parameter create buffer (type ByteBuffer) (use borrow))
+      (returns I64))
+    (external create freeze
+      (visibility public)
+      (implementation core.buffer.freeze)
+      (parameter create buffer (type ByteBuffer) (use consume))
+      (returns Bytes))
+    (external create discard
+      (visibility public)
+      (implementation core.buffer.discard)
+      (parameter create buffer (type ByteBuffer) (use consume))
+      (returns Unit))
+    (function create u32
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (call add
+          (call get (local data) (local at))
+          (call mul
+            (i64 256)
+            (call add
+              (call get (local data) (call add (local at) (i64 1)))
+              (call mul
+                (i64 256)
+                (call add
+                  (call get (local data) (call add (local at) (i64 2)))
+                  (call mul (i64 256) (call get (local data) (call add (local at) (i64 3)))))))))))
+    (function create word-is
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create value (type I64))
+      (returns Bool)
+      (body
+        (call both
+          (call eq (call u32 (local data) (local at)) (local value))
+          (call eq (call u32 (local data) (call add (local at) (i64 4))) (i64 0)))))
+    (function create table-is
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create values (type (list I64)))
+      (parameter create i (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call eq (local i) (call list-size (types I64) (local values)))
+          (bool true)
+          (if
+            (call eq
+              (call u32 (local data) (call add (local at) (call mul (local i) (i64 4))))
+              (call list-get (types I64) (local values) (local i)))
+            (call table-is (local data) (local at) (local values) (call add (local i) (i64 1)))
+            (bool false)))))
+    (external create list-size
+      (visibility public)
+      (implementation core.list.length)
+      (type-parameter create T)
+      (parameter create values (type (list T)))
+      (returns I64))
+    (external create list-get
+      (visibility public)
+      (implementation core.list.get)
+      (type-parameter create T)
+      (parameter create values (type (list T)))
+      (parameter create i (type I64))
+      (returns T))
+    (function create validate
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (if
+          (call lt (call length (local data)) (i64 128))
+          (i64 3)
+          (if
+            (call same (call slice (local data) (i64 0) (i64 8)) (call text-bytes (text "LKJCI001")))
+            (if
+              (call eq (call u32 (local data) (i64 112)) (i64 0))
+              (if
+                (call eq (call u32 (local data) (i64 8)) (i64 6))
+                (call flow::validate (local data))
+                (i64 2))
+              (if
+                (call eq (call u32 (local data) (i64 112)) (i64 1))
+                (call artifact-input::validate (local data))
+                (i64 2)))
+            (i64 1)))))
+    (function create append
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create i (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call eq (local i) (call length (local data)))
+          (local out)
+          (let
+            (binding next (type ByteBuffer) (call push (call get (local data) (local i)) (local out)))
+            (in (call append (local data) (call add (local i) (i64 1)) (local next)))))))
+    (function create pad
+      (visibility public)
+      (effect pure)
+      (parameter create end (type I64))
+      (parameter create byte (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call lt (call size (local out)) (local end))
+          (let
+            (binding next (type ByteBuffer) (call push (local byte) (local out)))
+            (in (call pad (local end) (local byte) (local next))))
+          (local out))))
+    (function create le
+      (visibility public)
+      (effect pure)
+      (parameter create value (type I64))
+      (parameter create count (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call eq (local count) (i64 0))
+          (local out)
+          (let
+            (binding rest (call div (local value) (i64 256)))
+            (binding next
+              (type ByteBuffer)
+              (call push (call sub (local value) (call mul (local rest) (i64 256))) (local out)))
+            (in (call le (local rest) (call sub (local count) (i64 1)) (local next)))))))
+    (function create rel
+      (visibility public)
+      (effect pure)
+      (parameter create target (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
         (let
-          (binding length (call ci::length (local data)))
+          (binding delta (call sub (local target) (call add (call size (local out)) (i64 4))))
+          (in
+            (call le
+              (if
+                (call lt (local delta) (i64 0))
+                (call add (local delta) (i64 4294967296))
+                (local delta))
+              (i64 4)
+              (local out))))))
+    (function create u64
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding high (call u32 (local data) (call add (local at) (i64 4))))
           (in
             (if
-              (call ci::lt (local length) (i64 160))
-              (i64 3)
-              (if
-                (call
-                  ci::same
-                  (call ci::slice (local data) (i64 0) (i64 8))
-                  (call ci::text-bytes (text "LKJCI001")))
-                (if
-                  (call ci::eq (call ci::u32 (local data) (i64 112)) (i64 0))
-                  (if
-                    (call ci::lt (i64 8388608) (local length))
-                    (i64 3)
-                    (if
-                      (call ci::eq (call ci::u32 (local data) (i64 8)) (i64 4))
-                      (call flow::validate (local data))
-                      (i64 2)))
-                  (if
-                    (call ci::eq (call ci::u32 (local data) (i64 112)) (i64 1))
-                    (call artifact-input::validate (local data))
-                    (i64 2)))
-                (i64 1)))))))
-  (function create append (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create i (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (if (call eq (local i) (call length (local data))) (local out)
-      (let (binding next (type ByteBuffer) (call push (call get (local data) (local i)) (local out)))
-        (in (call append (local data) (call add (local i) (i64 1)) (local next)))))))
-  (function create pad (visibility public) (effect pure)
-    (parameter create end (type I64)) (parameter create byte (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (if (call lt (call size (local out)) (local end))
-      (let (binding next (type ByteBuffer) (call push (local byte) (local out)))
-        (in (call pad (local end) (local byte) (local next)))) (local out))))
-  (function create le (visibility public) (effect pure)
-    (parameter create value (type I64)) (parameter create count (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (if (call eq (local count) (i64 0)) (local out)
-      (let (binding rest (call div (local value) (i64 256)))
-        (binding next (type ByteBuffer) (call push (call sub (local value) (call mul (local rest) (i64 256))) (local out)))
-        (in (call le (local rest) (call sub (local count) (i64 1)) (local next)))))))
-  (function create rel (visibility public) (effect pure)
-    (parameter create target (type I64)) (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let (binding delta (call sub (local target) (call add (call size (local out)) (i64 4))))
-      (in (call le (if (call lt (local delta) (i64 0)) (call add (local delta) (i64 4294967296)) (local delta))
-        (i64 4) (local out))))))))
+              (call lt (local high) (i64 2147483648))
+              (call add (call u32 (local data) (local at)) (call mul (local high) (i64 4294967296)))
+              (i64 -1))))))
+    (function create extent
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create count (type I64))
+      (parameter create stride (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call both
+            (call lt (i64 -1) (local at))
+            (call both (call lt (i64 -1) (local count)) (call lt (i64 0) (local stride))))
+          (if
+            (call lt (call length (local data)) (local at))
+            (bool false)
+            (call lte
+              (local count)
+              (call div (call sub (call length (local data)) (local at)) (local stride))))
+          (bool false))))
+    (function create table64-is
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create values (type (list I64)))
+      (parameter create i (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call eq (local i) (call list-size (types I64) (local values)))
+          (bool true)
+          (if
+            (call eq
+              (call u64 (local data) (call add (local at) (call mul (local i) (i64 8))))
+              (call list-get (types I64) (local values) (local i)))
+            (call table64-is (local data) (local at) (local values) (call add (local i) (i64 1)))
+            (bool false)))))
+    (function create lte
+      (visibility public)
+      (effect pure)
+      (parameter create left (type I64))
+      (parameter create right (type I64))
+      (returns Bool)
+      (body (call either (call lt (local left) (local right)) (call eq (local left) (local right)))))
+    (function create field32
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create offset (type I64))
+      (returns I64)
+      (body (call u32 (local data) (call add (local at) (local offset)))))))
 declarations.end

@@ -4,6 +4,31 @@
 use super::Emitter;
 use super::asm::{R::*, *};
 
+/// Bx is the current language length; Dx receives its checked successor.
+pub(super) fn push_length(a: &mut Asm, trap: Label) {
+    a.mov(Dx, Bx);
+    a.group(0, Dx, 1);
+    a.when(O, trap);
+    a.group(7, Dx, 0);
+    a.when(LE, trap);
+}
+
+/// Ax is the old capacity and Dx is the required positive I64 length. If
+/// geometric growth cannot be represented, request the exact required extent.
+pub(super) fn grow_capacity(a: &mut Asm) {
+    let exact = a.label();
+    let ready = a.label();
+    a.bin(0x01, Ax, Ax);
+    a.when(O, exact);
+    a.group(7, Ax, 8);
+    a.when(AE, ready);
+    a.imm(Ax, 8);
+    a.jump(ready);
+    a.bind(exact);
+    a.mov(Ax, Dx);
+    a.bind(ready);
+}
+
 impl Emitter<'_> {
     pub(super) fn buffer_external(&mut self, name: &str) -> bool {
         match name {
@@ -54,21 +79,17 @@ impl Emitter<'_> {
         self.a.when(AE, self.runtime.buffer_octet);
         self.a.mov(R12, Cx);
         self.a.load(Bx, R12, 8);
-        self.a.group(7, Bx, 256 * 1024 * 1024);
-        self.a.when(AE, self.runtime.buffer_capacity);
+        push_length(&mut self.a, self.runtime.buffer_capacity);
         self.a.load(Ax, R12, 24);
         self.a.bin(0x39, Bx, Ax);
         let space = self.a.label();
         self.a.when(B, space);
-        self.a.shift(4, Ax, 1);
-        self.a.group(7, Ax, 8);
-        let capacity = self.a.label();
-        self.a.when(AE, capacity);
-        self.a.imm(Ax, 8);
-        self.a.bind(capacity);
-        self.a.store(R12, 24, Ax);
+        grow_capacity(&mut self.a);
+        self.a.push(Ax);
         self.a.mov(Di, Ax);
         self.a.call(self.runtime.alloc);
+        self.a.pop(Dx);
+        self.a.store(R12, 24, Dx);
         self.a.load(R8, R12, 16);
         self.a.store(R12, 16, Ax);
         self.a.mov(R9, Ax);

@@ -49,11 +49,8 @@ declarations.begin
               (call source-type-dag::prove
                 (call ci::slice (local data) (i64 80) (call ci::length (local data)))
                 (call ci::u32 (local data) (i64 0))
-                (call ci::u32 (local data) (i64 4))))
-            (in
-              (call result
-                (local data)
-                (if (call ci::lt (local checked) (i64 0)) (call ci::sub (i64 0) (local checked)) (i64 0))))))))
+                (call source-budget::finite (call ci::u32 (local data) (i64 4)))))
+            (in (call result (local data) (field (local checked) (name code))))))))
     (function create read-type-structure
       (visibility public)
       (effect pure)
@@ -67,13 +64,9 @@ declarations.begin
               (call ci::eq (local code) (i64 0))
               (let
                 (binding checked
-                  (call source-type-dag::check (local graph) (call ci::u32 (local graph) (i64 100))))
-                (in
-                  (call result
+                  (call source-type-dag::check
                     (local graph)
-                    (if
-                      (call ci::lt (local checked) (i64 0))
-                      (call ci::sub (i64 0) (local checked))
-                      (i64 0)))))
+                    (call source-budget::from-carrier (local graph))))
+                (in (call result (local graph) (field (local checked) (name code)))))
               (call result (local graph) (local code)))))))))
 declarations.end

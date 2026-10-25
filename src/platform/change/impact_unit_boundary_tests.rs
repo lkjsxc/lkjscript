@@ -23,8 +23,8 @@ fn shared_checked_unit_projection_charges_one_walk_and_refuses_before_overrun() 
             &mut work,
             &mut admitted,
             OwningUnitAdmission {
-                maximum_affected: 1,
-                maximum_ownership_steps: limit,
+                maximum_affected: Some(1),
+                maximum_ownership_steps: Some(limit),
             },
         );
         assert_eq!(work.ownership_steps, limit);
@@ -66,7 +66,7 @@ fn before_and_candidate_ownership_cycles_never_become_unit_sets() {
         };
         let derived = delta(&witness.entries.ownership, &after);
         let mut ownership = CandidateOwnership::new(&derived, &witness);
-        let error = owning_units(a, &mut ownership, &mut ImpactWork::default(), 8).unwrap_err();
+        let error = owning_units(a, &mut ownership, &mut ImpactWork::default(), Some(8)).unwrap_err();
         assert_eq!(error.class, DiagnosticClass::Corrupt);
         assert_eq!(error.code, "change_impact_unit_cycle");
     }

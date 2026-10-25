@@ -13,70 +13,70 @@ use crate::platform::semantic_id::{MethodId, RequirementParameterId, TypeParamet
 fn bounded_budget() -> ChangeBudget {
     ChangeBudget {
         authored: AuthoredChangeAdmission {
-            maximum_operations: 100,
-            maximum_preconditions: 100,
-            maximum_allocated_identities: 100,
-            maximum_type_nodes: 100,
+            maximum_operations: Some(100),
+            maximum_preconditions: Some(100),
+            maximum_allocated_identities: Some(100),
+            maximum_type_nodes: Some(100),
         },
         canonical_edits: CanonicalEditAdmission {
-            maximum_owner_edits: 100,
-            maximum_type_edits: 100,
-            maximum_dependency_edits: 100,
-            maximum_retirement_edits: 100,
+            maximum_owner_edits: Some(100),
+            maximum_type_edits: Some(100),
+            maximum_dependency_edits: Some(100),
+            maximum_retirement_edits: Some(100),
         },
         canonical_reads: CanonicalReadAdmission {
-            maximum_point_reads: 100,
-            maximum_map_pages: 100,
-            maximum_map_entries: 100,
-            maximum_catalog_lookups: 100,
-            maximum_objects: 100,
-            maximum_bytes: 100,
-            maximum_decoded_records: 100,
+            maximum_point_reads: Some(100),
+            maximum_map_pages: Some(100),
+            maximum_map_entries: Some(100),
+            maximum_catalog_lookups: Some(100),
+            maximum_objects: Some(100),
+            maximum_bytes: Some(100),
+            maximum_decoded_records: Some(100),
         },
         canonical_map_update: CanonicalMapUpdateAdmission {
-            maximum_pages_encoded: 100,
-            maximum_bytes_encoded: 100,
+            maximum_pages_encoded: Some(100),
+            maximum_bytes_encoded: Some(100),
         },
         witness_reads: WitnessReadAdmission {
-            maximum_point_reads: 100,
-            maximum_map_pages: 100,
-            maximum_map_entries: 100,
-            maximum_catalog_lookups: 100,
-            maximum_objects: 100,
-            maximum_bytes: 100,
-            maximum_decoded_records: 100,
+            maximum_point_reads: Some(100),
+            maximum_map_pages: Some(100),
+            maximum_map_entries: Some(100),
+            maximum_catalog_lookups: Some(100),
+            maximum_objects: Some(100),
+            maximum_bytes: Some(100),
+            maximum_decoded_records: Some(100),
         },
         impact: ImpactAdmission {
-            maximum_affected_owners: 100,
-            maximum_summary_owners: 100,
-            maximum_summary_edits: 100,
-            maximum_ownership_steps: 100,
-            maximum_behavior_owners: 100,
-            maximum_relation_edges: 100,
-            maximum_relation_fanout: 100,
+            maximum_affected_owners: Some(100),
+            maximum_summary_owners: Some(100),
+            maximum_summary_edits: Some(100),
+            maximum_ownership_steps: Some(100),
+            maximum_behavior_owners: Some(100),
+            maximum_relation_edges: Some(100),
+            maximum_relation_fanout: Some(100),
         },
         validation: ValidationAdmission {
-            maximum_owner_records: 100,
-            maximum_ownership_entries: 100,
-            maximum_type_objects: 100,
-            maximum_expression_steps: 100,
-            maximum_diagnostics: 100,
+            maximum_owner_records: Some(100),
+            maximum_ownership_entries: Some(100),
+            maximum_type_objects: Some(100),
+            maximum_expression_steps: Some(100),
+            maximum_diagnostics: Some(100),
         },
         tests: TestAdmission {
-            maximum_selected: 100,
-            maximum_dependencies_per_test: 100,
-            maximum_ownership_steps: 100,
-            maximum_owners_visited: 100,
+            maximum_selected: Some(100),
+            maximum_dependencies_per_test: Some(100),
+            maximum_ownership_steps: Some(100),
+            maximum_owners_visited: Some(100),
         },
         witness_update: WitnessUpdateAdmission {
-            maximum_edits: 100,
-            maximum_pages_encoded: 100,
-            maximum_bytes_encoded: 100,
+            maximum_edits: Some(100),
+            maximum_pages_encoded: Some(100),
+            maximum_bytes_encoded: Some(100),
         },
         staging: StagingAdmission {
-            maximum_objects: 100,
-            maximum_bytes: 100,
-            maximum_pages: 100,
+            maximum_objects: Some(100),
+            maximum_bytes: Some(100),
+            maximum_pages: Some(100),
         },
     }
 }
@@ -137,7 +137,7 @@ fn independent_commitment(
         hasher.update(&(bytes.len() as u64).to_be_bytes());
         hasher.update(bytes);
     }
-    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.change-request-commitment.v1");
+    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.change-request-commitment.v2");
     field(&mut hasher, b"lkjscript-authored-change");
     field(&mut hasher, intent);
     field(&mut hasher, budget);
@@ -160,9 +160,9 @@ fn assert_golden(change: AuthoredChange, current_body: &str) {
         intent: Some("current-options".to_owned()),
     };
     let expected_budget = [
-        b"LKJABUDG".as_slice(),
-        &SCHEMA_EPOCH.to_le_bytes(),
-        &[0, 0, 0, 0, 0, 0, 0, 100].repeat(46),
+        b"LKJABDG2".as_slice(),
+        &[2, 0],
+        &[1, 0, 0, 0, 0, 0, 0, 0, 100].repeat(46),
     ]
     .concat();
     assert_eq!(

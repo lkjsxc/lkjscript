@@ -174,9 +174,9 @@ fn publish_with_access(
     owner_only: bool,
 ) -> Result<OwnedOutputReceipt, Diagnostic> {
     let result = if owner_only {
-        publish_private_create_new(path, bytes, maximum, "immutable private build output")
+        publish_private_create_new(path, bytes, Some(maximum), "immutable private build output")
     } else {
-        publish_create_new(path, bytes, maximum, "immutable build output")
+        publish_create_new(path, bytes, Some(maximum), "immutable build output")
     };
     match result {
         Ok(receipt) => Ok(receipt),

@@ -214,7 +214,7 @@ fn public_record_initializers_preserve_effect_sites_and_canonical_types() {
         let DeclarationPayload::Function(function) = &owner.payload else {
             panic!("function payload")
         };
-        let ty = crate::platform::kernel::infer_function_expression_type(
+        let ty = crate::platform::kernel::test_work::infer_function_expression_type(
             &snapshot,
             id,
             function.body,
@@ -386,7 +386,7 @@ fn record_temporaries_obey_identity_budget_without_publication() {
         .semantic
         .budget
         .authored
-        .maximum_allocated_identities = prepared.lowering_work.allocated_identities - 1;
+        .maximum_allocated_identities = Some(prepared.lowering_work.allocated_identities - 1);
     let before = created.repository.view_current().unwrap().revision();
     let errors = created
         .repository

@@ -273,12 +273,6 @@ impl OwnedStorage {
                 std::mem::size_of::<NormalizedValue>() as u64,
                 "normalized_sequence_storage",
             )?;
-            if bytes > super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
-                return Err(ExecutionError::resource(
-                    "normalized_sequence_storage",
-                    "owned sequence exceeds its finite storage bound",
-                ));
-            }
             reserve(bytes)?;
             control.check()?;
             fields

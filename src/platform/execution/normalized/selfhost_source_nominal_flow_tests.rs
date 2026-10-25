@@ -121,7 +121,7 @@ fn rebind_owner_inventory(source: &mut KernelSnapshot) {
     );
 }
 
-// LKJSG001 binds every supplied descriptor, including unused ones. The Rust
+// LKJSG002 binds every supplied descriptor, including unused ones. The Rust
 // snapshot oracle instead requires exactly the types reachable from live owners.
 // Project only that neutral inventory boundary; preserve all owner meaning and
 // leave the raw carrier unchanged so both validators inspect the same mutation.
@@ -315,11 +315,14 @@ fn selfhost_source_nominal_flow_requires_exact_ordered_argument_arity() {
 fn selfhost_source_nominal_flow_preserves_resource_refusal() {
     let source = fixture();
     let bytes = graph::packet(&source);
-    for work in [0_u32, 1, u32::MAX] {
+    for work in [0_u32, 1] {
         let packet = [work.to_le_bytes().as_slice(), bytes.as_slice()].concat();
         assert_eq!(result("read-nominal-budget", &packet), (6, vec![]));
         emitted_result("read-nominal-budget", &packet, 6);
     }
+    let large = [u32::MAX.to_le_bytes().as_slice(), bytes.as_slice()].concat();
+    assert_eq!(result("read-nominal-budget", &large), (0, bytes[48..80].to_vec()));
+    emitted_result("read-nominal-budget", &large, 0);
     expect(&source, 0, None);
     exact_budget_boundary("read-nominal-budget", &source);
 }

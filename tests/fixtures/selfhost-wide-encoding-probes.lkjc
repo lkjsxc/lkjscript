@@ -1,0 +1,20 @@
+declarations.begin
+(units
+  (module create wide-encoding-probe
+    (function create assemble
+      (visibility public)
+      (effect pure)
+      (parameter create input (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::empty))
+          (binding b (type ByteBuffer) (call asm::load (i64 0) (i64 5) (i64 2147483647) (local a)))
+          (binding c (type ByteBuffer) (call asm::load (i64 0) (i64 5) (i64 -2147483648) (local b)))
+          (binding d (type ByteBuffer) (call asm::load (i64 0) (i64 5) (i64 2147483648) (local c)))
+          (binding e (type ByteBuffer) (call asm::store (i64 5) (i64 -2147483649) (i64 0) (local d)))
+          (binding f (type ByteBuffer) (call asm::group (i64 0) (i64 4) (i64 4294967296) (local e)))
+          (binding g (type ByteBuffer) (call elf::wide-jump (i64 4294967296) (local f)))
+          (binding h (type ByteBuffer) (call elf::wide-condition (i64 132) (i64 4294967296) (local g)))
+          (in (record structural (field diagnostic (i64 0)) (field image (call ci::freeze (local h))))))))))
+declarations.end

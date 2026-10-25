@@ -68,7 +68,7 @@ pub(super) fn validate(
         runtime,
         types,
     };
-    let mut work = 0;
+    let mut work = crate::platform::kernel::ValidationWork::default();
     let analysis = validate_callable_closure(&read, &mut work, None)?;
-    Ok((work, analysis))
+    Ok((work.consumed, analysis))
 }

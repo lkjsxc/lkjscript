@@ -134,7 +134,7 @@ fn selfhost_source_profile_inventories_every_owner_and_type() {
         );
     assert!(!requires_associated_preparation);
     let mut composed_work = 0;
-    let composed = kernel::callable_flow::validate_snapshot_callable_closure(
+    let composed = crate::platform::kernel::test_work::validate_snapshot_callable_closure(
         &[source],
         &|| Ok(()),
         &mut composed_work,
@@ -152,7 +152,7 @@ fn selfhost_source_profile_inventories_every_owner_and_type() {
     let word = |at: usize| {
         usize::try_from(u32::from_le_bytes(carrier[at..at + 4].try_into().unwrap())).unwrap()
     };
-    assert_eq!(&carrier[..8], b"LKJSG001");
+    assert_eq!(&carrier[..8], b"LKJSG002");
     assert_eq!(word(8), carrier.len());
     assert_eq!(word(12), source.owners.len());
     assert_eq!(word(16), source.types.len());
@@ -427,7 +427,7 @@ fn selfhost_source_profile_inventories_every_owner_and_type() {
     });
     let report = json!({
         "schema": "lkjscript.selfhost.canonical-source-profile.v1",
-        "scope": "Complete authoritative compiler snapshot and exact LKJSG001 carrier",
+        "scope": "Complete authoritative compiler snapshot and exact LKJSG002 carrier",
         "summary": &summary,
         "control_flow": &control_flow,
         "repository": source.root.repository_id,

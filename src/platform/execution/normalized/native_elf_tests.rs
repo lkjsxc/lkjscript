@@ -10,7 +10,7 @@ fn execute(bytes: &[u8], arguments: &[i64]) -> Output {
     crate::platform::owned_output::publish_executable_create_new(
         &path,
         bytes,
-        32 * 1024 * 1024,
+        Some(32 * 1024 * 1024),
         "test ELF",
     )
     .unwrap();
@@ -398,4 +398,73 @@ fn native_egraph_fuses_exact_standard_map_fold_only_after_trap_free_proof() {
             assert_eq!(output.stdout, b"42");
         }
     }
+}
+
+
+#[test]
+fn native_elf_compiles_beyond_former_function_and_instruction_inventories() {
+    use std::fmt::Write as _;
+    let count = 4097;
+    let mut input = String::from(
+        "declarations.begin\n(units (module create native-capacity\n         (external create length (visibility private) (implementation core.list.length)          (type-parameter create T) (parameter create values (type (list T))) (returns I64))\n"
+    );
+    let items = " (i64 0)".repeat(16);
+    for index in 0..count {
+        writeln!(input,
+            "(function create f{index} (visibility private) (effect pure) (returns I64)              (body (call length (types I64) (list I64{items}))))"
+        ).unwrap();
+    }
+    input.push_str(
+        "(function create entry (visibility public) (effect pure) (returns I64)          (body (call length (types I64) (list I64"
+    );
+    for index in 0..count {
+        write!(input, " (call f{index})").unwrap();
+    }
+    input.push_str("))))\n))\ndeclarations.end\n");
+    // This intentionally large fixture selects a finite authoring allowance;
+    // ordinary helper defaults remain independent of the native inventory test.
+    let empty = empty_normalized_snapshot(b"native-capacity");
+    let memory = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+    let repository = GraphRepository::create_memory(&memory, &empty, None)
+        .unwrap()
+        .repository;
+    let base = repository.view_current().unwrap().revision();
+    let request = format!("request base={base}\nchange.policy name=operations limit=5000\n{input}");
+    let decoded = crate::platform::control::decode_compact_change(
+        "native-capacity",
+        request.as_bytes(),
+    )
+    .unwrap();
+    let prepared = repository
+        .prepare_authored_change(&decoded.semantic, decoded.options)
+        .unwrap();
+    repository.publish(&prepared.publication).unwrap();
+    let source = repository
+        .view_current()
+        .unwrap()
+        .reconstruct_full_oracle()
+        .unwrap()
+        .value;
+    let program = prepare_snapshot(&source);
+    let instructions: usize = program.functions.iter().map(|function| match &function.body {
+        NormalizedFunctionBody::Code(code) => code.instructions.len(),
+        _ => 0,
+    }).sum();
+    assert!(instructions > 65_536);
+    let declaration = declaration_named(&source, "entry");
+    let index = program.function(declaration).unwrap().0 as usize;
+    let (image, functions, _) = elf_x86_64::compile_function(&program, index).unwrap();
+    assert!(functions > 4096);
+    let output = execute(&image, &[]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"4097");
+    assert!(output.stderr.is_empty());
+    let policy = NormalizedRunPolicy::default();
+    let control = ExecutionControl::uncancelled();
+    let vm = NormalizedVm::for_test(&program, policy)
+        .invoke(declaration, vec![], None, &control).unwrap().0;
+    let reference = NormalizedReferenceInterpreter::new(&source, &program, policy)
+        .invoke(declaration, vec![], None, &control).unwrap().0;
+    assert_eq!(vm, NormalizedValue::I64(4097));
+    assert_eq!(reference, vm);
 }

@@ -49,7 +49,7 @@ fn relative_cycles_round_trip_through_memory_and_disk_data_transactions() {
                 for (pointer, next, value) in [(a, b, 11_i64), (b, a, 29_i64)] {
                     let mut node = [0; 16];
                     node[..8].copy_from_slice(&value.to_le_bytes());
-                    node[8..12].copy_from_slice(&next.offset().to_le_bytes());
+                    node[8..16].copy_from_slice(&next.offset().to_le_bytes());
                     region.write(layout, pointer, &node, &control)?;
                 }
                 let frozen = region.freeze(&control)?;
@@ -127,7 +127,7 @@ fn relative_cycles_round_trip_through_memory_and_disk_data_transactions() {
                         sum += i64::from_le_bytes(node[..8].try_into().unwrap());
                         current = read.resolve(
                             layout,
-                            u32::from_le_bytes(node[8..12].try_into().unwrap()),
+                            u64::from_le_bytes(node[8..16].try_into().unwrap()),
                             &control,
                         )?;
                     }
@@ -151,7 +151,7 @@ fn digest_layout_and_capacity_are_independent_load_requirements() {
     let image = image();
     let expected = digest(&image, &control).unwrap();
     let mut changed = image.clone();
-    changed[176] ^= 1;
+    changed[192] ^= 1;
     let mut charged = false;
     let error = RegionImage::from_bytes(&changed, expected, 1024, &control, |_| {
         charged = true;
@@ -169,7 +169,7 @@ fn digest_layout_and_capacity_are_independent_load_requirements() {
     .unwrap();
     assert_eq!(error.code, "region_capacity");
     assert!(!charged);
-    for (offset, byte) in [(0, 0), (8, 2), (16, 0), (24, 0), (64, 0), (172, 1)] {
+    for (offset, byte) in [(0, 0), (8, image[8] ^ 1), (24, 0), (32, 0), (65, 0), (184, 1)] {
         let mut corrupted = image.clone();
         corrupted[offset] = byte;
         let digest = digest(&corrupted, &control).unwrap();
@@ -255,7 +255,7 @@ fn changed_keys_cannot_satisfy_an_older_image_digest() {
     let prior = store.begin().unwrap();
     let entry = prior.get_ref("graphs", &key()).unwrap().unwrap();
     let mut second = first.clone();
-    second[176..184].copy_from_slice(&99_i64.to_le_bytes());
+    second[192..200].copy_from_slice(&99_i64.to_le_bytes());
     let mut next = store.begin().unwrap();
     assert!(
         next.put(

@@ -113,7 +113,7 @@ fn transition_matrix(routes: bool) {
             let mut ownership = CandidateOwnership::new(&derived, &witness);
             for query in &queries {
                 let actual =
-                    owning_units(*query, &mut ownership, &mut ImpactWork::default(), 64).unwrap();
+                    owning_units(*query, &mut ownership, &mut ImpactWork::default(), Some(64)).unwrap();
                 assert_eq!(
                     actual,
                     oracle(*query, &roots, &[&witness.entries.ownership, &after])

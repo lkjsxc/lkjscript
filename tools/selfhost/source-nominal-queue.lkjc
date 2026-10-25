@@ -1,49 +1,169 @@
 declarations.begin
-(units (module create source-nominal-queue
-  (function create contains (visibility package) (effect pure)
-    (parameter create rows (type Bytes)) (parameter create at (type I64))
-    (parameter create wanted (type I64)) (parameter create work (type I64))
-    (returns (record (work I64) (found Bool)))
-    (body (if (call ci::eq (local at) (call ci::length (local rows)))
-      (record structural (field work (local work)) (field found (bool false)))
-      (if (call ci::lt (local work) (i64 1))
-        (record structural (field work (i64 -6)) (field found (bool false)))
-        (if (call ci::eq (call ci::u32 (local rows) (local at)) (local wanted))
-          (record structural (field work (call ci::sub (local work) (i64 1))) (field found (bool true)))
-          (call contains (local rows) (call ci::add (local at) (i64 4))
-            (local wanted) (call ci::sub (local work) (i64 1))))))))
-  (function create push (visibility package) (effect pure)
-    (parameter create rows (type Bytes)) (parameter create value (type I64)) (returns Bytes)
-    (body (let
-      (binding empty (type ByteBuffer) (call ci::empty))
-      (binding word (type ByteBuffer) (call ci::le (local value) (i64 4) (local empty)))
-      (in (call ci::concat (local rows) (call ci::freeze (local word)))))))
-  (function create append (visibility package) (effect pure)
-    (parameter create rows (type Bytes)) (parameter create value (type I64))
-    (parameter create work (type I64)) (returns (record (work I64) (rows Bytes)))
-    (body (let (binding cost (call ci::add (call ci::div (call ci::length (local rows)) (i64 4)) (i64 1)))
-      (in (if (call ci::lt (local work) (local cost))
-        (record structural (field work (i64 -6)) (field rows (local rows)))
-        (record structural (field work (call ci::sub (local work) (local cost)))
-          (field rows (call push (local rows) (local value)))))))))
-  (function create extend (visibility package) (effect pure)
-    (parameter create input (type Bytes)) (parameter create at (type I64))
-    (parameter create rows (type Bytes)) (parameter create work (type I64))
-    (returns (record (work I64) (rows Bytes)))
-    (body (if (call ci::eq (local at) (call ci::length (local input)))
-      (record structural (field work (local work)) (field rows (local rows)))
-      (if (call ci::lt (local work) (i64 1))
-        (record structural (field work (i64 -6)) (field rows (local rows)))
+(units
+  (module create source-nominal-queue
+    (function create contains
+      (visibility package)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create at (type I64))
+      (parameter create wanted (type I64))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (work
+            (record
+              (code I64)
+              (finite Bool)
+              (high I64)
+              (low I64)
+              (observed-high I64)
+              (observed-low I64)
+              (saturated Bool)))
+          (found Bool)))
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local rows)))
+          (record structural (field work (local work)) (field found (bool false)))
+          (if
+            (call source-budget::insufficient (local work) (i64 1))
+            (record structural
+              (field work (call source-budget::fail (local work) (i64 6)))
+              (field found (bool false)))
+            (if
+              (call ci::eq (call ci::u32 (local rows) (local at)) (local wanted))
+              (record structural
+                (field work (call source-budget::charge (local work) (i64 1)))
+                (field found (bool true)))
+              (call contains
+                (local rows)
+                (call ci::add (local at) (i64 4))
+                (local wanted)
+                (call source-budget::charge (local work) (i64 1))))))))
+    (function create push
+      (visibility package)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create value (type I64))
+      (returns Bytes)
+      (body
         (let
-          (binding value (call ci::u32 (local input) (local at)))
-          (binding found (call contains (local rows) (i64 0) (local value)
-            (call ci::sub (local work) (i64 1))))
-          (in (if (call ci::lt (field (local found) (name work)) (i64 0))
-            (record structural (field work (field (local found) (name work))) (field rows (local rows)))
-            (let (binding next (if (field (local found) (name found))
-              (record structural (field work (field (local found) (name work))) (field rows (local rows)))
-              (call append (local rows) (local value) (field (local found) (name work)))))
-              (in (if (call ci::lt (field (local next) (name work)) (i64 0)) (local next)
-                (call extend (local input) (call ci::add (local at) (i64 4))
-                  (field (local next) (name rows)) (field (local next) (name work)))))))))))))))
+          (binding empty (type ByteBuffer) (call ci::empty))
+          (binding word (type ByteBuffer) (call ci::le (local value) (i64 4) (local empty)))
+          (in (call ci::concat (local rows) (call ci::freeze (local word)))))))
+    (function create append
+      (visibility package)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create value (type I64))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (work
+            (record
+              (code I64)
+              (finite Bool)
+              (high I64)
+              (low I64)
+              (observed-high I64)
+              (observed-low I64)
+              (saturated Bool)))
+          (rows Bytes)))
+      (body
+        (let
+          (binding cost (call ci::add (call ci::div (call ci::length (local rows)) (i64 4)) (i64 1)))
+          (in
+            (if
+              (call source-budget::insufficient (local work) (local cost))
+              (record structural
+                (field work (call source-budget::fail (local work) (i64 6)))
+                (field rows (local rows)))
+              (record structural
+                (field work (call source-budget::charge (local work) (local cost)))
+                (field rows (call push (local rows) (local value)))))))))
+    (function create extend
+      (visibility package)
+      (effect pure)
+      (parameter create input (type Bytes))
+      (parameter create at (type I64))
+      (parameter create rows (type Bytes))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (work
+            (record
+              (code I64)
+              (finite Bool)
+              (high I64)
+              (low I64)
+              (observed-high I64)
+              (observed-low I64)
+              (saturated Bool)))
+          (rows Bytes)))
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local input)))
+          (record structural (field work (local work)) (field rows (local rows)))
+          (if
+            (call source-budget::insufficient (local work) (i64 1))
+            (record structural
+              (field work (call source-budget::fail (local work) (i64 6)))
+              (field rows (local rows)))
+            (let
+              (binding value (call ci::u32 (local input) (local at)))
+              (binding found
+                (call contains
+                  (local rows)
+                  (i64 0)
+                  (local value)
+                  (call source-budget::charge (local work) (i64 1))))
+              (in
+                (if
+                  (call source-budget::failed (field (local found) (name work)))
+                  (record structural
+                    (field work (field (local found) (name work)))
+                    (field rows (local rows)))
+                  (let
+                    (binding next
+                      (if
+                        (field (local found) (name found))
+                        (record structural
+                          (field work (field (local found) (name work)))
+                          (field rows (local rows)))
+                        (call append (local rows) (local value) (field (local found) (name work)))))
+                    (in
+                      (if
+                        (call source-budget::failed (field (local next) (name work)))
+                        (local next)
+                        (call extend
+                          (local input)
+                          (call ci::add (local at) (i64 4))
+                          (field (local next) (name rows))
+                          (field (local next) (name work)))))))))))))))
 declarations.end

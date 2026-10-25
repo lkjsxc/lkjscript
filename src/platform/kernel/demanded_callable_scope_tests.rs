@@ -18,7 +18,7 @@ fn owner_local_projection_keeps_exact_packages_declarations_and_order() {
         ordered.rotate_left(offset);
         source.add(*owner, &ordered);
     }
-    let mut work = 0;
+    let mut work = ValidationWork::default();
     let mut analysis = analysis(&source, &mut work);
     let mut scopes = Scopes::default();
     for _ in 0..3 {
@@ -48,7 +48,7 @@ fn missing_parameter_keeps_the_original_diagnostic_without_partial_publication()
     let mut source = Source::default();
     source.add(owner, &ids);
     for warm in [false, true] {
-        let mut work = 0;
+        let mut work = ValidationWork::default();
         let mut analysis = analysis(&source, &mut work);
         let record = analysis.declaration(owner).unwrap();
         let expected = analysis
@@ -71,14 +71,14 @@ fn new_operation_reloads_the_same_owner_after_a_source_change() {
     let owner = owner(1, 1);
     let mut old_source = Source::default();
     old_source.add(owner, &ids);
-    let mut work = 0;
+    let mut work = ValidationWork::default();
     let mut old = analysis(&old_source, &mut work);
     let mut old_scopes = Scopes::default();
     assert_eq!(old_scopes.ordinal(&mut old, owner, selected).unwrap(), 0);
     ids.rotate_left(1);
     let mut new_source = Source::default();
     new_source.add(owner, &ids);
-    let mut work = 0;
+    let mut work = ValidationWork::default();
     let mut new = analysis(&new_source, &mut work);
     let mut new_scopes = Scopes::default();
     assert_eq!(new_scopes.ordinal(&mut new, owner, selected).unwrap(), 3);
@@ -95,7 +95,7 @@ fn local_projection_does_not_invent_a_new_duplicate_identifier_policy() {
     let owner = owner(1, 1);
     let mut source = Source::default();
     source.add(owner, &ordered);
-    let mut work = 0;
+    let mut work = ValidationWork::default();
     let mut analysis = analysis(&source, &mut work);
     let record = analysis.declaration(owner).unwrap();
     let mut scopes = Scopes::default();
@@ -113,7 +113,7 @@ fn local_projection_does_not_invent_a_new_duplicate_identifier_policy() {
 fn missing_declaration_does_not_publish_a_projection() {
     let source = Source::default();
     let owner = owner(1, 1);
-    let mut work = 0;
+    let mut work = ValidationWork::default();
     let mut analysis = analysis(&source, &mut work);
     let expected = analysis.declaration(owner).unwrap_err();
     let mut scopes = Scopes::default();

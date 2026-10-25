@@ -410,7 +410,7 @@ fn associated_surface_raw_candidate_draft_normalization_preserves_full_bytes() {
     let draft = draft::render_raw_lowered_candidate(
         &view,
         &selected,
-        4 * 1_048_576,
+        Some(4 * 1_048_576),
         ExecutionControl::uncancelled(),
         owners.clone(),
         types.clone(),

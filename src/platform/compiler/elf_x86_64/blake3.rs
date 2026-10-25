@@ -1,6 +1,6 @@
-//! Unkeyed and derive-key 32-byte BLAKE3 emitted as native integer instructions. The bounded
-//! input is split into the algorithm's left-complete chunk tree; at most 19
-//! frames are live for a 256 MiB value. No host hashing runs in the executable.
+//! Unkeyed and derive-key 32-byte BLAKE3 emitted as native integer instructions.
+//! The left-complete chunk tree has at most 54 live frames for any nonnegative
+//! I64 byte length. No host hashing runs in the executable.
 //! Algorithm and independent vectors: https://github.com/BLAKE3-team/BLAKE3
 use super::asm::{R::*, *};
 

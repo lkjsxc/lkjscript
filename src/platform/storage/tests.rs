@@ -26,9 +26,9 @@ fn object(domain: ObjectDomain, value: &[u8]) -> (ObjectKey, Vec<u8>) {
 
 fn read_admission(catalog_lookups: u64, objects: u64, bytes: u64) -> StoreReadAdmission {
     StoreReadAdmission::new(StoreReadLimits {
-        maximum_catalog_lookups: catalog_lookups,
-        maximum_objects: objects,
-        maximum_bytes: bytes,
+        maximum_catalog_lookups: Some(catalog_lookups),
+        maximum_objects: Some(objects),
+        maximum_bytes: Some(bytes),
     })
 }
 
@@ -198,8 +198,8 @@ fn admitted_memory_reads_reject_before_payload_consumption() {
     assert_eq!(work.packs_opened, 0);
     assert_eq!(work.objects_read, 0);
     assert_eq!(work.bytes_read, 0);
-    assert_eq!(admission.remaining().maximum_objects, 1);
-    assert_eq!(admission.remaining().maximum_bytes, byte_count - 1);
+    assert_eq!(admission.remaining().maximum_objects, Some(1));
+    assert_eq!(admission.remaining().maximum_bytes, Some(byte_count - 1));
 
     let mut admission = read_admission(1, 1, byte_count);
     let mut work = StoreWork::default();
@@ -253,7 +253,7 @@ fn admitted_object_stage_reads_local_objects_without_catalog_work() {
         .expect_err("short byte allowance must reject the staged payload");
     assert_eq!(error.code, "object_read_bytes_exhausted");
     assert_eq!(work, StoreWork::default());
-    assert_eq!(admission.remaining().maximum_objects, 1);
+    assert_eq!(admission.remaining().maximum_objects, Some(1));
 
     let mut admission = read_admission(0, 1, byte_count);
     let mut work = StoreWork::default();
@@ -332,9 +332,9 @@ fn request_local_object_stage_shares_one_base_read_admission() {
     let mut stage = ObjectStage::with_limits_and_read_admission(
         &base,
         ObjectStageLimits {
-            maximum_objects: 4,
-            maximum_bytes: 4 * 1024,
-            maximum_pages: 0,
+            maximum_objects: Some(4),
+            maximum_bytes: Some(4 * 1024),
+            maximum_pages: Some(0),
         },
         read_admission(4, 2, admitted_bytes),
     );
@@ -894,7 +894,7 @@ fn admitted_directory_reads_reject_before_opening_pack_payload() {
     assert_eq!(work.packs_opened, 0);
     assert_eq!(work.objects_read, 0);
     assert_eq!(work.bytes_read, 0);
-    assert_eq!(admission.remaining().maximum_objects, 1);
+    assert_eq!(admission.remaining().maximum_objects, Some(1));
 }
 
 #[test]

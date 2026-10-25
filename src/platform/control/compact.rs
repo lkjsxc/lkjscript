@@ -3,12 +3,11 @@
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
 use std::collections::BTreeSet;
 
-pub const MAXIMUM_COMPACT_INPUT_BYTES: usize = 4 * 1_048_576;
-pub const MAXIMUM_COMPACT_RECORDS: usize = 10_000;
-const MAXIMUM_COMPACT_RECORD_BYTES: usize = 64 * 1_024;
-pub(super) const MAXIMUM_COMPACT_FIELDS: usize = 256;
+/// Ordinary compact operations have no configured byte or record quota.
+pub const MAXIMUM_COMPACT_INPUT_BYTES: Option<usize> = None;
+pub const MAXIMUM_COMPACT_RECORDS: Option<usize> = None;
+// Closed operation/field identifiers are part of the compact grammar.
 const MAXIMUM_COMPACT_NAME_BYTES: usize = 64;
-const MAXIMUM_COMPACT_VALUE_BYTES: usize = 1_048_576;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CompactField {
@@ -24,28 +23,11 @@ pub struct CompactRecord {
     pub location: SourceLocation,
 }
 
-/// Independent deterministic bounds for one finite compact response.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Independent caller-selected bounds; None leaves a dimension unmetered.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CompactResponseLimits {
-    pub maximum_bytes: usize,
-    pub maximum_records: usize,
-}
-
-impl CompactResponseLimits {
-    fn validate(self) -> Result<Self, Diagnostic> {
-        if self.maximum_bytes == 0
-            || self.maximum_bytes > isize::MAX as usize
-            || self.maximum_records == 0
-            || self.maximum_records > isize::MAX as usize
-        {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Infrastructure,
-                "control_response_limits",
-                "compact response limits require nonzero addressable byte and record maxima",
-            ));
-        }
-        Ok(self)
-    }
+    pub maximum_bytes: Option<usize>,
+    pub maximum_records: Option<usize>,
 }
 
 /// Bounded owner of one finite compact response.
@@ -62,7 +44,7 @@ pub struct CompactResponseWriter {
 impl CompactResponseWriter {
     pub fn new(limits: CompactResponseLimits) -> Result<Self, Diagnostic> {
         Ok(Self {
-            limits: limits.validate()?,
+            limits,
             bytes: Vec::new(),
             records: 0,
         })
@@ -130,12 +112,14 @@ impl CompactResponseWriter {
                     "compact response record accounting overflowed",
                 )
             })?;
-        if records > self.limits.maximum_records {
+        if let Some(maximum) = self.limits.maximum_records
+            && records > maximum
+        {
             return Err(response_budget_error(
                 "control_response_record_budget",
                 format!(
                     "compact response requires {records} records, exceeding its {}-record budget",
-                    self.limits.maximum_records
+                    maximum
                 ),
             ));
         }
@@ -149,12 +133,14 @@ impl CompactResponseWriter {
                     "compact response byte accounting overflowed",
                 )
             })?;
-        if bytes > self.limits.maximum_bytes {
+        if let Some(maximum) = self.limits.maximum_bytes
+            && bytes > maximum
+        {
             return Err(response_budget_error(
                 "control_response_byte_budget",
                 format!(
                     "compact response requires {bytes} bytes, exceeding its {}-byte budget",
-                    self.limits.maximum_bytes
+                    maximum
                 ),
             ));
         }
@@ -205,17 +191,6 @@ fn response_budget_error(code: &'static str, message: impl Into<String>) -> Diag
 /// record. Records never span lines, so a malformed record cannot hide the location of later
 /// independent records.
 pub fn parse_records(path: &str, input: &[u8]) -> Result<Vec<CompactRecord>, Vec<Diagnostic>> {
-    if input.len() > MAXIMUM_COMPACT_INPUT_BYTES {
-        return Err(vec![Diagnostic::new(
-            DiagnosticClass::Resource,
-            "control_input_bytes",
-            format!(
-                "compact input contains {} bytes, exceeding the {}-byte format bound",
-                input.len(),
-                MAXIMUM_COMPACT_INPUT_BYTES
-            ),
-        )]);
-    }
     let text = std::str::from_utf8(input).map_err(|error| {
         vec![source_error(
             path,
@@ -227,39 +202,37 @@ pub fn parse_records(path: &str, input: &[u8]) -> Result<Vec<CompactRecord>, Vec
     })?;
     let mut records = Vec::new();
     let mut diagnostics = Vec::new();
-    let mut record_count = 0_usize;
     let mut offset = 0_usize;
-    for line in text.split_inclusive('\n') {
+    for (line_index, line) in text.split_inclusive('\n').enumerate() {
         let body = line.strip_suffix('\n').unwrap_or(line);
         let body = body.strip_suffix('\r').unwrap_or(body);
         if body.as_bytes().iter().all(u8::is_ascii_whitespace) {
             offset = offset.saturating_add(line.len());
             continue;
         }
-        record_count = record_count.saturating_add(1);
-        if record_count > MAXIMUM_COMPACT_RECORDS {
-            return Err(vec![source_error(
-                path,
-                input,
-                offset,
-                "control_record_count",
-                format!("compact input exceeds the {MAXIMUM_COMPACT_RECORDS}-record format bound"),
-            )]);
-        }
-        if body.len() > MAXIMUM_COMPACT_RECORD_BYTES {
-            diagnostics.push(source_error(
-                path,
-                input,
-                offset,
-                "control_record_bytes",
-                format!(
-                    "compact record exceeds the {MAXIMUM_COMPACT_RECORD_BYTES}-byte format bound"
-                ),
-            ));
-        } else {
-            match parse_record(path, input, body, offset) {
-                Ok(record) => records.push(record),
-                Err(diagnostic) => diagnostics.push(diagnostic),
+        match parse_record(path, body) {
+            Ok(mut record) => {
+                // Relative positions are bounded by this physical line and the input slice.
+                record.location.byte_offset += offset;
+                record.location.line += line_index;
+                for field in &mut record.fields {
+                    field.location.byte_offset += offset;
+                    field.location.line += line_index;
+                }
+                records.try_reserve(1).map_err(|_| vec![response_budget_error(
+                    "control_input_allocation", "compact input record allocation failed",
+                )])?;
+                records.push(record);
+            }
+            Err(mut diagnostic) => {
+                if let Some(location) = &mut diagnostic.location {
+                    location.byte_offset += offset;
+                    location.line += line_index;
+                }
+                diagnostics.try_reserve(1).map_err(|_| vec![response_budget_error(
+                    "control_input_allocation", "compact diagnostic allocation failed",
+                )])?;
+                diagnostics.push(diagnostic);
             }
         }
         offset = offset.saturating_add(line.len());
@@ -280,13 +253,6 @@ pub fn render_record(operation: &str, fields: &[(&str, &str)]) -> Result<String,
             message,
         )
     })?;
-    if fields.len() > MAXIMUM_COMPACT_FIELDS {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "control_render_fields",
-            format!("compact record exceeds the {MAXIMUM_COMPACT_FIELDS}-field format bound"),
-        ));
-    }
     let mut names = BTreeSet::new();
     let mut rendered_bytes = operation
         .len()
@@ -307,29 +273,17 @@ pub fn render_record(operation: &str, fields: &[(&str, &str)]) -> Result<String,
                 format!("compact renderer received duplicate field '{name}'"),
             ));
         }
-        if value.len() > MAXIMUM_COMPACT_VALUE_BYTES {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "control_render_value_bytes",
-                format!(
-                    "compact field '{name}' exceeds the {MAXIMUM_COMPACT_VALUE_BYTES}-byte format bound"
-                ),
-            ));
-        }
         rendered_bytes = rendered_bytes
             .checked_add(2)
             .and_then(|bytes| bytes.checked_add(name.len()))
             .and_then(|bytes| bytes.checked_add(rendered_value_bytes(value)?))
             .ok_or_else(record_size_error)?;
-        if rendered_bytes > MAXIMUM_COMPACT_RECORD_BYTES {
-            return Err(record_size_error());
-        }
     }
     let mut output = String::new();
     output.try_reserve_exact(rendered_bytes).map_err(|_| {
         response_budget_error(
             "control_render_allocation",
-            "compact record buffer allocation failed within its format bound",
+            "compact record buffer allocation failed",
         )
     })?;
     output.push_str(operation);
@@ -375,18 +329,11 @@ fn record_size_error() -> Diagnostic {
     Diagnostic::new(
         DiagnosticClass::Resource,
         "control_render_record_bytes",
-        format!(
-            "compact output record exceeds the {MAXIMUM_COMPACT_RECORD_BYTES}-byte format bound"
-        ),
+"compact output record layout exceeds the host address space",
     )
 }
 
-fn parse_record(
-    path: &str,
-    complete: &[u8],
-    line: &str,
-    line_offset: usize,
-) -> Result<CompactRecord, Diagnostic> {
+fn parse_record(path: &str, line: &str) -> Result<CompactRecord, Diagnostic> {
     let bytes = line.as_bytes();
     let mut cursor = skip_ascii_whitespace(bytes, 0);
     let operation_start = cursor;
@@ -394,8 +341,8 @@ fn parse_record(
     if operation_start == cursor {
         return Err(source_error(
             path,
-            complete,
-            line_offset.saturating_add(cursor),
+            bytes,
+            cursor,
             "control_operation",
             "compact record requires a closed operation name",
         ));
@@ -404,12 +351,15 @@ fn parse_record(
     validate_operation(operation).map_err(|message| {
         source_error(
             path,
-            complete,
-            line_offset.saturating_add(operation_start),
+            bytes,
+            operation_start,
             "control_operation",
             message,
         )
     })?;
+    let operation_location = location(path, bytes, operation_start);
+    let mut location_cursor = operation_start;
+    let mut location_column = operation_location.column;
     let mut fields = Vec::new();
     let mut names = BTreeSet::new();
     loop {
@@ -421,28 +371,25 @@ fn parse_record(
         if cursor == before_space {
             return Err(source_error(
                 path,
-                complete,
-                line_offset.saturating_add(cursor),
+                bytes,
+                cursor,
                 "control_field_separator",
                 "compact fields must be separated by ASCII whitespace",
             ));
         }
-        if fields.len() == MAXIMUM_COMPACT_FIELDS {
-            return Err(source_error(
-                path,
-                complete,
-                line_offset.saturating_add(cursor),
-                "control_field_count",
-                format!("compact record exceeds the {MAXIMUM_COMPACT_FIELDS}-field format bound"),
-            ));
-        }
         let name_start = cursor;
+        // Each intervening UTF-8 source span is counted once, including source escapes.
+        location_column += line[location_cursor..name_start].chars().count();
+        location_cursor = name_start;
+        let field_location = SourceLocation {
+            path: path.to_owned(), byte_offset: name_start, line: 1, column: location_column,
+        };
         cursor = take_name(bytes, cursor, false);
         if name_start == cursor {
             return Err(source_error(
                 path,
-                complete,
-                line_offset.saturating_add(cursor),
+                bytes,
+                cursor,
                 "control_field_name",
                 "compact field requires a closed lowercase name",
             ));
@@ -451,8 +398,8 @@ fn parse_record(
         validate_field_name(name).map_err(|message| {
             source_error(
                 path,
-                complete,
-                line_offset.saturating_add(name_start),
+                bytes,
+                name_start,
                 "control_field_name",
                 message,
             )
@@ -460,8 +407,8 @@ fn parse_record(
         if !names.insert(name.to_owned()) {
             return Err(source_error(
                 path,
-                complete,
-                line_offset.saturating_add(name_start),
+                bytes,
+                name_start,
                 "control_duplicate_field",
                 format!("compact record repeats field '{name}'"),
             ));
@@ -469,41 +416,32 @@ fn parse_record(
         if bytes.get(cursor) != Some(&b'=') {
             return Err(source_error(
                 path,
-                complete,
-                line_offset.saturating_add(cursor),
+                bytes,
+                cursor,
                 "control_field_equals",
                 format!("compact field '{name}' requires '=' immediately after its name"),
             ));
         }
         cursor += 1;
-        let value_start = cursor;
         let (value, next) = if bytes.get(cursor) == Some(&b'"') {
-            parse_quoted(path, complete, line, line_offset, cursor)?
+            parse_quoted(path, bytes, line, 0, cursor)?
         } else {
-            parse_bare(path, complete, line, line_offset, cursor)?
+            parse_bare(path, bytes, line, 0, cursor)?
         };
-        if value.len() > MAXIMUM_COMPACT_VALUE_BYTES {
-            return Err(source_error(
-                path,
-                complete,
-                line_offset.saturating_add(value_start),
-                "control_value_bytes",
-                format!(
-                    "compact field '{name}' exceeds the {MAXIMUM_COMPACT_VALUE_BYTES}-byte format bound"
-                ),
-            ));
-        }
+        fields.try_reserve(1).map_err(|_| response_budget_error(
+            "control_input_allocation", "compact field allocation failed",
+        ))?;
         fields.push(CompactField {
             name: name.to_owned(),
             value,
-            location: location(path, complete, line_offset.saturating_add(name_start)),
+            location: field_location,
         });
         cursor = next;
     }
     Ok(CompactRecord {
         operation: operation.to_owned(),
         fields,
-        location: location(path, complete, line_offset.saturating_add(operation_start)),
+        location: operation_location,
     })
 }
 
@@ -540,7 +478,9 @@ fn parse_bare(
             "compact field value is missing; use \"\" for an empty value",
         ));
     }
-    Ok((line[start..cursor].to_owned(), cursor))
+    let mut value = String::new();
+    append_decoded_segment(&mut value, &line[start..cursor])?;
+    Ok((value, cursor))
 }
 
 pub(super) fn parse_quoted(
@@ -557,11 +497,11 @@ pub(super) fn parse_quoted(
     while cursor < bytes.len() {
         match bytes[cursor] {
             b'"' => {
-                value.push_str(&line[segment..cursor]);
+                append_decoded_segment(&mut value, &line[segment..cursor])?;
                 return Ok((value, cursor + 1));
             }
             b'\\' => {
-                value.push_str(&line[segment..cursor]);
+                append_decoded_segment(&mut value, &line[segment..cursor])?;
                 cursor += 1;
                 let escape_offset = cursor;
                 let escaped = bytes.get(cursor).copied().ok_or_else(|| {
@@ -574,11 +514,11 @@ pub(super) fn parse_quoted(
                     )
                 })?;
                 match escaped {
-                    b'"' => value.push('"'),
-                    b'\\' => value.push('\\'),
-                    b'n' => value.push('\n'),
-                    b'r' => value.push('\r'),
-                    b't' => value.push('\t'),
+                    b'"' => append_decoded_character(&mut value, '"')?,
+                    b'\\' => append_decoded_character(&mut value, '\\')?,
+                    b'n' => append_decoded_character(&mut value, '\n')?,
+                    b'r' => append_decoded_character(&mut value, '\r')?,
+                    b't' => append_decoded_character(&mut value, '\t')?,
                     b'u' => {
                         let (character, next) = parse_unicode_escape(
                             path,
@@ -587,7 +527,7 @@ pub(super) fn parse_quoted(
                             line_offset,
                             escape_offset,
                         )?;
-                        value.push(character);
+                        append_decoded_character(&mut value, character)?;
                         cursor = next;
                         segment = cursor;
                         continue;
@@ -624,6 +564,22 @@ pub(super) fn parse_quoted(
         "control_quote_unclosed",
         "compact quoted value is not closed on this record",
     ))
+}
+
+fn append_decoded_segment(value: &mut String, segment: &str) -> Result<(), Diagnostic> {
+    value.try_reserve(segment.len()).map_err(|_| {
+        response_budget_error("control_input_allocation", "compact value allocation failed")
+    })?;
+    value.push_str(segment);
+    Ok(())
+}
+
+fn append_decoded_character(value: &mut String, character: char) -> Result<(), Diagnostic> {
+    value.try_reserve(character.len_utf8()).map_err(|_| {
+        response_budget_error("control_input_allocation", "compact value allocation failed")
+    })?;
+    value.push(character);
+    Ok(())
 }
 
 fn parse_unicode_escape(
@@ -698,9 +654,9 @@ fn render_value(value: &str, output: &mut String) {
 
 /// Structural strings share escapes with records, but are admitted by their complete input
 /// instead of an unrelated physical compact-record line limit.
-pub(super) fn render_structural_string(value: &str, maximum: usize) -> Result<String, Diagnostic> {
+pub(super) fn render_structural_string(value: &str, maximum: Option<usize>) -> Result<String, Diagnostic> {
     let bytes = quoted_value_bytes(value)
-        .filter(|n| *n <= maximum)
+        .filter(|n| maximum.is_none_or(|maximum| *n <= maximum))
         .ok_or_else(|| {
             response_budget_error(
                 "change_draft_capacity",
@@ -898,6 +854,31 @@ mod tests {
     }
 
     #[test]
+    fn locations_follow_utf8_source_spans_across_complete_physical_records() {
+        let line = "result first=\"日本語\" second=\"\\u{1f642}\" third=last";
+        let input = format!("\r\n  \r\n{line}\r\n!\n");
+        let diagnostics = parse_records("utf8.lkjc", input.as_bytes()).unwrap_err();
+        let last = diagnostics[0].location.as_ref().unwrap();
+        assert_eq!(last.line, 4);
+        assert_eq!(last.column, 1);
+        assert_eq!(last.byte_offset, input.find('!').unwrap());
+        let complete = input.trim_end_matches("!\n");
+        let records = parse_records("utf8.lkjc", complete.as_bytes()).unwrap();
+        let record = &records[0];
+        let line_start = complete.find("result").unwrap();
+        assert_eq!(record.location.line, 3);
+        assert_eq!(record.location.column, 1);
+        for field in &record.fields {
+            let offset = line.find(&format!("{}=", field.name)).unwrap();
+            assert_eq!(field.location.byte_offset, line_start + offset);
+            assert_eq!(field.location.line, 3);
+            assert_eq!(field.location.column, line[..offset].chars().count() + 1);
+        }
+        assert_eq!(record.fields[0].value, "日本語");
+        assert_eq!(record.fields[1].value, "🙂");
+    }
+
+    #[test]
     fn parser_rejects_unknown_escape_non_ascii_bare_and_trailing_token() {
         let cases: &[(&[u8], &str)] = &[
             (b"result value=\"\\q\"\n", "control_escape_unknown"),
@@ -932,32 +913,38 @@ mod tests {
     }
 
     #[test]
-    fn record_bound_stops_before_unbounded_diagnostic_accumulation() {
-        let mut input = String::new();
-        for _ in 0..=MAXIMUM_COMPACT_RECORDS {
-            input.push_str("!\n");
-        }
-        let diagnostics = parse_records("large.lkjc", input.as_bytes())
-            .expect_err("record exhaustion must reject");
-        assert_eq!(diagnostics.len(), 1);
-        assert_eq!(diagnostics[0].code, "control_record_count");
-        assert_eq!(
-            diagnostics[0].location.as_ref().map(|value| value.line),
-            Some(MAXIMUM_COMPACT_RECORDS + 1)
-        );
+    fn default_parser_and_writer_exceed_historical_record_and_byte_quotas() {
+        let count = 10_001;
+        let input = "result value=ok\n".repeat(count);
+        let records = parse_records("large.lkjc", input.as_bytes()).unwrap();
+        assert_eq!(records.len(), count);
+        let mut writer = CompactResponseWriter::new(CompactResponseLimits::default()).unwrap();
+        writer.append_serialized_records(input.as_bytes()).unwrap();
+        assert_eq!(writer.record_count(), count);
+        let value = "x".repeat(4 * 1_048_576 + 1);
+        writer.append_record("result", &[("value", &value)]).unwrap();
+        let output = writer.finish();
+        assert!(output.len() > 4 * 1_048_576);
+        let records = parse_records("large-result.lkjc", &output).unwrap();
+        assert_eq!(records.len(), count + 1);
+        assert_eq!(records.last().unwrap().fields[0].value, value);
+    }
+
+    #[test]
+    fn complete_input_keeps_every_independent_diagnostic() {
+        let count = 10_001;
+        let input = "!\n".repeat(count);
+        let diagnostics = parse_records("large.lkjc", input.as_bytes()).unwrap_err();
+        assert_eq!(diagnostics.len(), count);
+        assert_eq!(diagnostics.last().unwrap().location.as_ref().unwrap().line, count);
     }
 
     #[test]
     fn response_writer_enforces_bytes_and_records_independently_before_append() {
-        let oversized_value = "x".repeat(MAXIMUM_COMPACT_RECORD_BYTES);
-        let error = render_record("result", &[("value", &oversized_value)])
-            .expect_err("record size must be checked before rendering its buffer");
-        assert_eq!(error.code, "control_render_record_bytes");
-
         let one = render_record("result", &[("status", "ok")]).expect("one record");
         let mut byte_limited = CompactResponseWriter::new(CompactResponseLimits {
-            maximum_bytes: one.len(),
-            maximum_records: 2,
+            maximum_bytes: Some(one.len()),
+            maximum_records: Some(2),
         })
         .expect("byte-limited writer");
         byte_limited
@@ -973,7 +960,7 @@ mod tests {
 
         let mut record_limited = CompactResponseWriter::new(CompactResponseLimits {
             maximum_bytes: MAXIMUM_COMPACT_INPUT_BYTES,
-            maximum_records: 1,
+            maximum_records: Some(1),
         })
         .expect("record-limited writer");
         record_limited
@@ -992,8 +979,8 @@ mod tests {
     fn response_writer_validates_and_counts_serialized_physical_records() {
         let section = b"owner.kind name=module\nowner.kind name=declaration\n";
         let mut writer = CompactResponseWriter::new(CompactResponseLimits {
-            maximum_bytes: section.len(),
-            maximum_records: 2,
+            maximum_bytes: Some(section.len()),
+            maximum_records: Some(2),
         })
         .expect("section writer");
         writer
@@ -1004,8 +991,8 @@ mod tests {
         assert_eq!(writer.finish(), section);
 
         let mut record_limited = CompactResponseWriter::new(CompactResponseLimits {
-            maximum_bytes: section.len(),
-            maximum_records: 1,
+            maximum_bytes: Some(section.len()),
+            maximum_records: Some(1),
         })
         .expect("record-limited section writer");
         let error = record_limited
@@ -1044,34 +1031,30 @@ mod tests {
     }
 
     #[test]
-    fn response_writer_rejects_invalid_limit_domains() {
-        for limits in [
-            CompactResponseLimits {
-                maximum_bytes: 0,
-                maximum_records: 1,
-            },
-            CompactResponseLimits {
-                maximum_bytes: 1,
-                maximum_records: 0,
-            },
-            CompactResponseLimits {
-                maximum_bytes: usize::MAX,
-                maximum_records: 1,
-            },
-            CompactResponseLimits {
-                maximum_bytes: 1,
-                maximum_records: usize::MAX,
-            },
+    fn response_writer_distinguishes_unbounded_zero_and_full_finite_domain() {
+        for (limits, code) in [
+            (CompactResponseLimits { maximum_bytes: Some(0), maximum_records: None },
+                "control_response_byte_budget"),
+            (CompactResponseLimits { maximum_bytes: None, maximum_records: Some(0) },
+                "control_response_record_budget"),
         ] {
-            let error = CompactResponseWriter::new(limits)
-                .expect_err("zero and unaddressable limits must reject");
-            assert_eq!(error.code, "control_response_limits");
+            let mut writer = CompactResponseWriter::new(limits).unwrap();
+            writer.append_serialized_records(&[]).unwrap();
+            assert_eq!(writer.append_record("result", &[("value", "x")]).unwrap_err().code, code);
+            assert_eq!(writer.byte_count(), 0);
+            assert_eq!(writer.record_count(), 0);
         }
-
-        CompactResponseWriter::new(CompactResponseLimits {
-            maximum_bytes: MAXIMUM_COMPACT_INPUT_BYTES + 1,
-            maximum_records: MAXIMUM_COMPACT_RECORDS + 1,
-        })
-        .expect("response budgets must be independent from compact input format bounds");
+        let mut writer = CompactResponseWriter::new(CompactResponseLimits {
+            maximum_bytes: Some(usize::MAX), maximum_records: Some(usize::MAX),
+        }).unwrap();
+        writer.append_record("result", &[("value", "x")]).unwrap();
+        // Probe arithmetic exhaustion without allocating an enormous fixture.
+        writer.records = usize::MAX;
+        let before = writer.byte_count();
+        assert_eq!(writer.append_record("result", &[]).unwrap_err().code,
+            "control_response_record_budget");
+        assert_eq!(writer.record_count(), usize::MAX);
+        assert_eq!(writer.byte_count(), before);
     }
+
 }

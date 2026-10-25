@@ -33,7 +33,7 @@ fn execute_filter_controlled(
     crate::platform::owned_output::publish_executable_create_new(
         &path,
         image,
-        32 * 1024 * 1024,
+        Some(32 * 1024 * 1024),
         "native compiler test",
     )
     .unwrap();

@@ -256,7 +256,6 @@ impl List {
             control.check()?;
             bytes = bytes
                 .checked_add(charge.bytes)
-                .filter(|n| *n <= 268_435_456)
                 .ok_or_else(failure)?;
             slots = slots
                 .checked_add(charge.slots)

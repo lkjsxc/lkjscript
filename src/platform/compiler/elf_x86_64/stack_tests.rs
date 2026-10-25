@@ -15,6 +15,8 @@ fn native_elf_calls_align_stack_and_restore_every_argument_depth() {
         a.call(probe);
         a.address(Ax, probe);
         a.indirect(Ax);
+        a.address(R11, probe);
+        a.indirect(R11);
         for i in (0..depth).rev() {
             a.pop(Ax);
             a.group(7, Ax, 100 + i as i32);
@@ -61,7 +63,7 @@ fn native_elf_calls_align_stack_and_restore_every_argument_depth() {
     crate::platform::owned_output::publish_executable_create_new(
         &path,
         &bytes,
-        128 * 1024,
+        Some(128 * 1024),
         "stack alignment test",
     )
     .unwrap();

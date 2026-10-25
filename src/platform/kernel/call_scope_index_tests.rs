@@ -33,7 +33,7 @@ fn previous(
 #[test]
 fn composed_call_scope_index_preserves_exact_inventory_with_one_descent() {
     let read = Read::default();
-    let (mut work, mut old_work) = (0, 0);
+    let (mut work, mut old_work) = (ValidationWork::default(), ValidationWork::default());
     let mut current = root_query_analysis(&read, &mut work, 10_000_000);
     let mut old = root_query_analysis(&read, &mut old_work, 10_000_000);
     let mut expected = BTreeMap::new();
@@ -59,15 +59,15 @@ fn composed_call_scope_index_preserves_exact_inventory_with_one_descent() {
         current.observation.metadata_bytes,
         old.observation.metadata_bytes
     );
-    let accepted_work = *current.work;
-    assert_eq!(*old.work, 2 * accepted_work);
+    let accepted_work = current.work.consumed;
+    assert_eq!(old.work.consumed, 2 * accepted_work);
     assert!(
         accepted_work < 2_500_000,
         "bounded 4096-site regression fixture"
     );
     eprintln!(
         "call-scope index sites=4096 previous_work={} current_work={} metadata_bytes={}",
-        old.work, current.work, current.observation.metadata_bytes
+        old.work.consumed, current.work.consumed, current.observation.metadata_bytes
     );
     for (key, scopes) in &ordered {
         current
@@ -79,7 +79,7 @@ fn composed_call_scope_index_preserves_exact_inventory_with_one_descent() {
         current.observation.metadata_bytes,
         old.observation.metadata_bytes
     );
-    let mut bounded_work = 0;
+    let mut bounded_work = ValidationWork::default();
     let mut bounded = root_query_analysis(&read, &mut bounded_work, accepted_work);
     for (key, scopes) in &ordered {
         bounded
@@ -87,7 +87,7 @@ fn composed_call_scope_index_preserves_exact_inventory_with_one_descent() {
             .unwrap();
     }
     assert_eq!(bounded.associated.call_scopes, expected);
-    let mut refused_work = 0;
+    let mut refused_work = ValidationWork::default();
     let mut refused = root_query_analysis(&read, &mut refused_work, accepted_work);
     assert!(ordered.iter().any(|(key, scopes)| {
         previous(&mut refused, *key, scopes.clone())
@@ -98,17 +98,17 @@ fn composed_call_scope_index_preserves_exact_inventory_with_one_descent() {
 #[test]
 fn composed_call_scope_index_refusals_do_not_expose_new_membership() {
     let read = Read::default();
-    let mut work = 0;
+    let mut work = ValidationWork::default();
     let mut analysis = root_query_analysis(&read, &mut work, 100_000);
     let key = (2, 3, Some(ExpressionId::migrate(SEED, 9)));
-    analysis.maximum_metadata_bytes = 0;
+    analysis.maximum_metadata_bytes = Some(0);
     let failure = analysis
         .retain_call_scopes(key.0, key.1, key.2, BTreeMap::new())
         .unwrap_err();
     assert_eq!(failure.code, "kernel_callable_flow_storage");
     assert!(analysis.associated.call_scopes.is_empty());
-    analysis.maximum_metadata_bytes = MAXIMUM_ANALYSIS_BYTES;
-    analysis.maximum_work = Some(*analysis.work);
+    analysis.maximum_metadata_bytes = Some(MAXIMUM_ANALYSIS_BYTES);
+    analysis.maximum_work = Some(analysis.work.consumed);
     let failure = analysis
         .retain_call_scopes(key.0, key.1, key.2, BTreeMap::new())
         .unwrap_err();
@@ -126,7 +126,7 @@ fn composed_call_scope_index_refusals_do_not_expose_new_membership() {
         .retain_call_scopes(key.0, key.1, key.2, BTreeMap::new())
         .unwrap();
     let metadata = analysis.observation.metadata_bytes;
-    analysis.maximum_metadata_bytes = metadata;
+    analysis.maximum_metadata_bytes = Some(metadata);
     analysis
         .retain_call_scopes(key.0, key.1, key.2, BTreeMap::new())
         .unwrap();

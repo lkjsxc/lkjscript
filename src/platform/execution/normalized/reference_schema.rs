@@ -51,6 +51,7 @@ pub struct NormalizedReferenceSchema {
     pub(super) associated_proof:
         Option<std::sync::Arc<super::reference_types::associated_preparation::Proof>>,
     pub(super) source_admission_steps: u64,
+    pub(super) source_admission_saturated: bool,
     pub(super) type_derivation_steps: u64,
     pub(super) type_metadata_bytes: u64,
     pub(super) affine_variants: Vec<bool>,
@@ -124,8 +125,8 @@ impl NormalizedReferenceSchema {
             // deriving any exact instances. The work allowance is shared across packages.
             let report = crate::platform::kernel::validate_full_checked(
                 snapshot,
-                crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK - source_work,
-                &mut 0,
+                Some(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK - source_work),
+                &mut crate::platform::kernel::ValidationWork::default(),
                 &|| {
                     control.check().map_err(|error| {
                         Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
@@ -322,6 +323,7 @@ impl NormalizedReferenceSchema {
                 Ok(affine)
             })
             .collect::<Result<_, ExecutionError>>()?;
+        let mut composed_work = crate::platform::kernel::ValidationWork::exact(source_work);
         crate::platform::kernel::callable_flow::validate_snapshot_callable_closure(
             &inputs,
             &|| {
@@ -329,11 +331,13 @@ impl NormalizedReferenceSchema {
                     Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
                 })
             },
-            &mut source_work,
+            &mut composed_work,
             super::reference_types::requires_associated_preparation(&inputs)
                 .then_some(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK),
         )
         .map_err(source_error)?;
+        source_work = composed_work.consumed;
+        schema.source_admission_saturated = composed_work.saturated;
         let after_composed = source_work;
         schema.source_admission_steps = source_work as u64;
         super::reference_types::complete(&mut schema, &inputs, control).map_err(|mut error| {

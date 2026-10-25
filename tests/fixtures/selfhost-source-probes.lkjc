@@ -1,6 +1,54 @@
 declarations.begin
 (units
   (module create source-probe
+    (function create work-image (visibility private) (effect pure)
+      (parameter create work (type (record (code I64) (finite Bool) (high I64) (low I64) (observed-high I64) (observed-low I64) (saturated Bool)))) (returns Bytes)
+      (body (let
+        (binding a (type ByteBuffer) (call ci::empty))
+        (binding b (type ByteBuffer) (call ci::le (field (local work) (name code)) (i64 4) (local a)))
+        (binding c (type ByteBuffer) (call ci::push
+          (if (field (local work) (name finite)) (i64 1) (i64 0)) (local b)))
+        (binding d (type ByteBuffer) (call ci::le (field (local work) (name low)) (i64 4) (local c)))
+        (binding e (type ByteBuffer) (call ci::le (field (local work) (name high)) (i64 4) (local d)))
+        (binding f (type ByteBuffer) (call ci::le (field (local work) (name observed-low)) (i64 4) (local e)))
+        (binding g (type ByteBuffer) (call ci::le (field (local work) (name observed-high)) (i64 4) (local f)))
+        (binding h (type ByteBuffer) (call ci::push
+          (if (field (local work) (name saturated)) (i64 1) (i64 0)) (local g)))
+        (in (call ci::freeze (local h))))))
+    (function create work-steps (visibility private) (effect pure)
+      (parameter create data (type Bytes)) (parameter create at (type I64))
+      (parameter create work (type (record (code I64) (finite Bool) (high I64) (low I64) (observed-high I64) (observed-low I64) (saturated Bool)))) (returns (record (code I64) (finite Bool) (high I64) (low I64) (observed-high I64) (observed-low I64) (saturated Bool)))
+      (body (if (call ci::either (call source-budget::failed (local work))
+          (call ci::eq (local at) (call ci::length (local data)))) (local work)
+        (let
+          (binding high (call ci::u32 (local data) (call ci::add (local at) (i64 4))))
+          (in (if (call ci::lt (local high) (i64 2147483648))
+            (call work-steps (local data) (call ci::add (local at) (i64 8))
+              (call source-budget::charge (local work)
+                (call ci::add (call ci::u32 (local data) (local at))
+                  (call ci::mul (local high) (i64 4294967296)))))
+            (call source-budget::fail (local work) (i64 12))))))))
+    (function create read-work (visibility public) (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body (if (call ci::lt (call ci::length (local data)) (i64 12))
+        (record structural (field diagnostic (i64 12)) (field image (call ci::text-bytes (text ""))))
+        (let
+          (binding size (call ci::sub (call ci::length (local data)) (i64 12)))
+          (binding tag (call ci::u32 (local data) (i64 0)))
+          (binding low (call ci::u32 (local data) (i64 4)))
+          (binding high (call ci::u32 (local data) (i64 8)))
+          (binding work (if (call ci::eq (local tag) (i64 0))
+            (if (call ci::both (call ci::eq (local low) (i64 0)) (call ci::eq (local high) (i64 0)))
+              (call source-budget::unbounded)
+              (call source-budget::fail (call source-budget::unbounded) (i64 12)))
+            (if (call ci::eq (local tag) (i64 1)) (call source-budget::finite-words (local high) (local low))
+              (call source-budget::fail (call source-budget::unbounded) (i64 12)))))
+          (in (if (call ci::eq (call ci::mul (call ci::div (local size) (i64 8)) (i64 8)) (local size))
+            (record structural (field diagnostic (i64 0))
+              (field image (call work-image (call work-steps (local data) (i64 12) (local work)))))
+            (record structural (field diagnostic (i64 12)) (field image (call ci::text-bytes (text ""))))))))))
+
     (function create read-signed
       (visibility public)
       (effect pure)

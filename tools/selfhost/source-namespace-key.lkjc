@@ -1,97 +1,264 @@
 declarations.begin
-(units (module create source-namespace-key
-  (function create class (visibility package) (effect pure)
-    (parameter create tag (type I64)) (returns I64)
-    (body (if (call ci::both (call ci::lt (i64 -1) (local tag)) (call ci::lt (local tag) (i64 3)))
-      (call ci::add (local tag) (i64 1))
-      (if (call ci::eq (local tag) (i64 3)) (i64 11)
-        (if (call ci::both (call ci::lt (i64 3) (local tag)) (call ci::lt (local tag) (i64 8)))
-          (local tag)
-          (if (call ci::both (call ci::lt (i64 9) (local tag)) (call ci::lt (local tag) (i64 13)))
-            (call ci::sub (local tag) (i64 2))
-            (if (call ci::eq (local tag) (i64 16)) (i64 12) (i64 0))))))))
-  (function create parent-domain (visibility package) (effect pure)
-    (parameter create tag (type I64)) (parameter create parent-tag (type I64)) (returns I64)
-    (body (if (call ci::either (call ci::eq (call class (local tag)) (i64 0))
-        (call ci::either (call ci::eq (local tag) (i64 0)) (call ci::eq (local tag) (i64 12))))
-      (i64 0)
-      (if (call ci::eq (local tag) (i64 1)) (i64 1)
-        (if (call ci::both (call ci::eq (local tag) (i64 7)) (call ci::eq (local parent-tag) (i64 1)))
-          (i64 6) (i64 2))))))
-  (function create append (visibility private) (effect pure)
-    (parameter create parent (type I64)) (parameter create class (type I64))
-    (parameter create start (type I64)) (parameter create length (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let
-      (binding a (type ByteBuffer) (call ci::le (local parent) (i64 4) (local out)))
-      (binding b (type ByteBuffer) (call ci::le (local class) (i64 4) (local a)))
-      (binding c (type ByteBuffer) (call ci::le (local start) (i64 4) (local b)))
-      (in (call ci::le (local length) (i64 4) (local c))))))
-  (function create add (visibility private) (effect pure)
-    (parameter create graph (type Bytes))
-    (parameter create start (type I64)) (parameter create tag (type I64))
-    (parameter create class (type I64))
-    (parameter create parent (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let
-      (binding root (call ci::either (call ci::eq (local tag) (i64 0)) (call ci::eq (local tag) (i64 12))))
-      (binding offset (if (call ci::eq (local tag) (i64 7)) (i64 40) (i64 39)))
-      (binding at (call ci::add (local start) (if (local root) (i64 39) (call ci::add (local offset) (i64 17)))))
-      (in (call append (local parent) (local class) (call ci::add (local at) (i64 1))
-        (call ci::get (local graph) (local at)) (local out))))))
-  (function create collect (visibility package) (effect pure)
-    (parameter create graph (type Bytes)) (parameter create row (type I64))
-    (parameter create work (type I64)) (parameter create parents (type Bytes))
-    (parameter create out (type ByteBuffer) (use consume))
-    (returns (record (work I64) (rows Bytes)))
-    (body (if (call ci::eq (local row) (call source-table::count (local graph)))
-      (record structural (field work (local work)) (field rows (call ci::freeze (local out))))
-      (if (call ci::lt (local work) (i64 1))
-        (record structural (field work (i64 -6)) (field rows (call ci::freeze (local out))))
+(units
+  (module create source-namespace-key
+    (function create class
+      (visibility package)
+      (effect pure)
+      (parameter create tag (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::both (call ci::lt (i64 -1) (local tag)) (call ci::lt (local tag) (i64 3)))
+          (call ci::add (local tag) (i64 1))
+          (if
+            (call ci::eq (local tag) (i64 3))
+            (i64 11)
+            (if
+              (call ci::both (call ci::lt (i64 3) (local tag)) (call ci::lt (local tag) (i64 8)))
+              (local tag)
+              (if
+                (call ci::both (call ci::lt (i64 9) (local tag)) (call ci::lt (local tag) (i64 13)))
+                (call ci::sub (local tag) (i64 2))
+                (if (call ci::eq (local tag) (i64 16)) (i64 12) (i64 0))))))))
+    (function create parent-domain
+      (visibility package)
+      (effect pure)
+      (parameter create tag (type I64))
+      (parameter create parent-tag (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::either
+            (call ci::eq (call class (local tag)) (i64 0))
+            (call ci::either (call ci::eq (local tag) (i64 0)) (call ci::eq (local tag) (i64 12))))
+          (i64 0)
+          (if
+            (call ci::eq (local tag) (i64 1))
+            (i64 1)
+            (if
+              (call ci::both (call ci::eq (local tag) (i64 7)) (call ci::eq (local parent-tag) (i64 1)))
+              (i64 6)
+              (i64 2))))))
+    (function create append
+      (visibility private)
+      (effect pure)
+      (parameter create parent (type I64))
+      (parameter create class (type I64))
+      (parameter create start (type I64))
+      (parameter create length (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
         (let
-          (binding span (call ci::add (call ci::u32 (local graph) (i64 92)) (call ci::mul (local row) (i64 8))))
-          (binding start (call ci::u32 (local graph) (local span)))
-          (binding tag (call ci::get (local graph) (call ci::add (local start) (i64 18))))
-          (binding class (call class (local tag)))
-          (binding next (type ByteBuffer) (if (call ci::eq (local class) (i64 0)) (local out)
-            (call add (local graph) (local start) (local tag) (local class)
-              (call source-table::parent (local parents) (local row)) (local out))))
-          (in (call collect (local graph) (call ci::add (local row) (i64 1))
-            (call ci::sub (local work) (i64 1)) (local parents) (local next))))))))
-  (function create order (visibility package) (effect pure)
-    (parameter create graph (type Bytes)) (parameter create left (type Bytes)) (parameter create a (type I64))
-    (parameter create right (type Bytes)) (parameter create b (type I64))
-    (parameter create work (type I64)) (returns (record (order I64) (work I64)))
-    (body (if (call ci::lt (local work) (i64 1))
-      (record structural (field order (i64 0)) (field work (i64 -6)))
-      (let
-        (binding ap (call ci::u32 (local left) (local a)))
-        (binding bp (call ci::u32 (local right) (local b)))
-        (binding ac (call ci::u32 (local left) (call ci::add (local a) (i64 4))))
-        (binding bc (call ci::u32 (local right) (call ci::add (local b) (i64 4))))
-        (binding remaining (call ci::sub (local work) (i64 1)))
-        (in (if (call ci::both (call ci::eq (local ap) (local bp)) (call ci::eq (local ac) (local bc)))
-          (call names (local graph) (local left) (local a) (local right) (local b) (local remaining))
-          (record structural (field order (if (call ci::eq (local ap) (local bp))
-            (if (call ci::lt (local ac) (local bc)) (i64 -1) (i64 1))
-            (if (call ci::lt (local ap) (local bp)) (i64 -1) (i64 1))))
-            (field work (local remaining)))))))))
-  (function create names (visibility private) (effect pure)
-    (parameter create graph (type Bytes)) (parameter create left (type Bytes)) (parameter create a (type I64))
-    (parameter create right (type Bytes)) (parameter create b (type I64))
-    (parameter create work (type I64)) (returns (record (order I64) (work I64)))
-    (body (let
-      (binding an (call ci::u32 (local left) (call ci::add (local a) (i64 12))))
-      (binding bn (call ci::u32 (local right) (call ci::add (local b) (i64 12))))
-      (binding count (if (call ci::lt (local an) (local bn)) (local an) (local bn)))
-      (in (if (call ci::lt (local work) (local count))
-        (record structural (field order (i64 0)) (field work (i64 -6)))
-        (let (binding compared (call artifact-input::bytes-order (local graph)
-          (call ci::u32 (local left) (call ci::add (local a) (i64 8)))
-          (call ci::u32 (local right) (call ci::add (local b) (i64 8))) (local count)))
-          (in (record structural
-            (field order (if (call ci::eq (local compared) (i64 0))
-              (if (call ci::eq (local an) (local bn)) (i64 0)
-                (if (call ci::lt (local an) (local bn)) (i64 -1) (i64 1))) (local compared)))
-            (field work (call ci::sub (local work) (local count)))))))))))))
+          (binding a (type ByteBuffer) (call ci::le (local parent) (i64 4) (local out)))
+          (binding b (type ByteBuffer) (call ci::le (local class) (i64 4) (local a)))
+          (binding c (type ByteBuffer) (call ci::le (local start) (i64 4) (local b)))
+          (in (call ci::le (local length) (i64 4) (local c))))))
+    (function create add
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create start (type I64))
+      (parameter create tag (type I64))
+      (parameter create class (type I64))
+      (parameter create parent (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding root
+            (call ci::either (call ci::eq (local tag) (i64 0)) (call ci::eq (local tag) (i64 12))))
+          (binding offset (if (call ci::eq (local tag) (i64 7)) (i64 40) (i64 39)))
+          (binding at
+            (call ci::add
+              (local start)
+              (if (local root) (i64 39) (call ci::add (local offset) (i64 17)))))
+          (in
+            (call append
+              (local parent)
+              (local class)
+              (call ci::add (local at) (i64 1))
+              (call ci::get (local graph) (local at))
+              (local out))))))
+    (function create collect
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (parameter create parents (type Bytes))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns
+        (record
+          (work
+            (record
+              (code I64)
+              (finite Bool)
+              (high I64)
+              (low I64)
+              (observed-high I64)
+              (observed-low I64)
+              (saturated Bool)))
+          (rows Bytes)))
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (record structural (field work (local work)) (field rows (call ci::freeze (local out))))
+          (if
+            (call source-budget::insufficient (local work) (i64 1))
+            (record structural
+              (field work (call source-budget::fail (local work) (i64 6)))
+              (field rows (call ci::freeze (local out))))
+            (let
+              (binding span
+                (call ci::add (call ci::u32 (local graph) (i64 92)) (call ci::mul (local row) (i64 8))))
+              (binding start (call ci::u32 (local graph) (local span)))
+              (binding tag (call ci::get (local graph) (call ci::add (local start) (i64 18))))
+              (binding class (call class (local tag)))
+              (binding next
+                (type ByteBuffer)
+                (if
+                  (call ci::eq (local class) (i64 0))
+                  (local out)
+                  (call add
+                    (local graph)
+                    (local start)
+                    (local tag)
+                    (local class)
+                    (call source-table::parent (local parents) (local row))
+                    (local out))))
+              (in
+                (call collect
+                  (local graph)
+                  (call ci::add (local row) (i64 1))
+                  (call source-budget::charge (local work) (i64 1))
+                  (local parents)
+                  (local next))))))))
+    (function create order
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create left (type Bytes))
+      (parameter create a (type I64))
+      (parameter create right (type Bytes))
+      (parameter create b (type I64))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (order I64)
+          (work
+            (record
+              (code I64)
+              (finite Bool)
+              (high I64)
+              (low I64)
+              (observed-high I64)
+              (observed-low I64)
+              (saturated Bool)))))
+      (body
+        (if
+          (call source-budget::insufficient (local work) (i64 1))
+          (record structural
+            (field order (i64 0))
+            (field work (call source-budget::fail (local work) (i64 6))))
+          (let
+            (binding ap (call ci::u32 (local left) (local a)))
+            (binding bp (call ci::u32 (local right) (local b)))
+            (binding ac (call ci::u32 (local left) (call ci::add (local a) (i64 4))))
+            (binding bc (call ci::u32 (local right) (call ci::add (local b) (i64 4))))
+            (binding remaining (call source-budget::charge (local work) (i64 1)))
+            (in
+              (if
+                (call ci::both (call ci::eq (local ap) (local bp)) (call ci::eq (local ac) (local bc)))
+                (call names
+                  (local graph)
+                  (local left)
+                  (local a)
+                  (local right)
+                  (local b)
+                  (local remaining))
+                (record structural
+                  (field order
+                    (if
+                      (call ci::eq (local ap) (local bp))
+                      (if (call ci::lt (local ac) (local bc)) (i64 -1) (i64 1))
+                      (if (call ci::lt (local ap) (local bp)) (i64 -1) (i64 1))))
+                  (field work (local remaining)))))))))
+    (function create names
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create left (type Bytes))
+      (parameter create a (type I64))
+      (parameter create right (type Bytes))
+      (parameter create b (type I64))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (order I64)
+          (work
+            (record
+              (code I64)
+              (finite Bool)
+              (high I64)
+              (low I64)
+              (observed-high I64)
+              (observed-low I64)
+              (saturated Bool)))))
+      (body
+        (let
+          (binding an (call ci::u32 (local left) (call ci::add (local a) (i64 12))))
+          (binding bn (call ci::u32 (local right) (call ci::add (local b) (i64 12))))
+          (binding count (if (call ci::lt (local an) (local bn)) (local an) (local bn)))
+          (in
+            (if
+              (call source-budget::insufficient (local work) (local count))
+              (record structural
+                (field order (i64 0))
+                (field work (call source-budget::fail (local work) (i64 6))))
+              (let
+                (binding compared
+                  (call artifact-input::bytes-order
+                    (local graph)
+                    (call ci::u32 (local left) (call ci::add (local a) (i64 8)))
+                    (call ci::u32 (local right) (call ci::add (local b) (i64 8)))
+                    (local count)))
+                (in
+                  (record structural
+                    (field order
+                      (if
+                        (call ci::eq (local compared) (i64 0))
+                        (if
+                          (call ci::eq (local an) (local bn))
+                          (i64 0)
+                          (if (call ci::lt (local an) (local bn)) (i64 -1) (i64 1)))
+                        (local compared)))
+                    (field work (call source-budget::charge (local work) (local count)))))))))))))
 declarations.end

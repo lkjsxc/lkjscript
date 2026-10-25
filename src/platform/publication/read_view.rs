@@ -6,6 +6,7 @@ use super::validation::{RevalidatedBase, ViewStore};
 mod link_read_reuse;
 use super::{CurrentPublication, PreparedPublication, PublicationOptions};
 use crate::platform::change::{
+    BudgetCounter, BudgetDimension, WorkSaturation,
     AuthoredAllocation, AuthoredChangeSet, AuthoredLoweringWork, AuthoredReadFootprint,
     BoundOwnerSummary, BudgetedCanonicalBase, BudgetedWitnessBase, CanonicalBaseRead,
     CanonicalDelta, CanonicalRead, CanonicalReadAdmission, CanonicalReadWork, ChangeBudget,
@@ -17,12 +18,7 @@ use crate::platform::change::{
     lower_authored_changes_with_publication_base, prepare_change_analysis_with_budget,
     remaining_refresh_budget, update_witness_maps_from,
 };
-use crate::platform::contract::{
-    MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS, MAXIMUM_FUNCTION_DEFINITION_FACT_READS,
-    MAXIMUM_FUNCTION_DEFINITION_MAP_BYTES, MAXIMUM_FUNCTION_DEFINITION_MAP_ENTRIES,
-    MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES, MAXIMUM_FUNCTION_DEFINITION_OWNERSHIP_READS,
-    MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES, MAXIMUM_FUNCTION_DEFINITION_STORE_OBJECTS,
-};
+
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     BlobObjectDigest, DependencyRecord, EncodedOwnerKey, KernelSnapshot, OwnerKey, OwnerKind,
@@ -43,14 +39,14 @@ use crate::platform::package_transport::{
     PackageTransportClosureValidation,
 };
 use crate::platform::persistent_map::{
-    MapAdmission, MapError, MapErrorClass, MapRangeControl, MapRoot, MapWork, PersistentMap,
+    MapAdmission, MapError, MapErrorClass, MapRangeControl, MapRoot, MapWork, MapWorkCounter, PersistentMap,
 };
 use crate::platform::semantic_id::RevisionId;
 use crate::platform::storage::backend::StorageBackend;
 use crate::platform::storage::contract::TARGET_PACK_BYTES;
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StageOutcome, StoreError,
-    StoreErrorClass, StoreReadAdmission, StoreReadLimits, StoreWork,
+    StoreErrorClass, StoreReadAdmission, StoreReadLimits, StoreWork, StoreWorkCounter,
 };
 use crate::platform::storage::pack::PackBuilder;
 use crate::platform::storage::page_store::ObjectPageReader;
@@ -80,68 +76,76 @@ pub struct RepositoryReadWork {
     pub canonical_records_decoded: u64,
     pub witness_records_decoded: u64,
     pub items_returned: u64,
+    pub saturation: WorkSaturation,
 }
 
 impl RepositoryReadWork {
-    fn add(&mut self, other: Self) {
+    pub(crate) fn add(&mut self, other: Self) {
         self.add_map(other.map);
         self.store.add(other.store);
-        self.canonical_records_decoded = self
-            .canonical_records_decoded
-            .saturating_add(other.canonical_records_decoded);
-        self.witness_records_decoded = self
-            .witness_records_decoded
-            .saturating_add(other.witness_records_decoded);
-        self.items_returned = self.items_returned.saturating_add(other.items_returned);
+        self.saturation.observe(&mut self.canonical_records_decoded, BudgetDimension::CanonicalDecodedRecords,
+            other.saturation.counter(BudgetDimension::CanonicalDecodedRecords, other.canonical_records_decoded));
+        self.saturation.observe(&mut self.witness_records_decoded, BudgetDimension::WitnessDecodedRecords,
+            other.saturation.counter(BudgetDimension::WitnessDecodedRecords, other.witness_records_decoded));
+        self.saturation.observe(&mut self.items_returned, BudgetDimension::CanonicalPointReads,
+            other.saturation.counter(BudgetDimension::CanonicalPointReads, other.items_returned));
     }
 
-    fn add_map(&mut self, other: MapWork) {
-        self.map.pages_read = self.map.pages_read.saturating_add(other.pages_read);
-        self.map.pages_decoded = self.map.pages_decoded.saturating_add(other.pages_decoded);
-        self.map.pages_encoded = self.map.pages_encoded.saturating_add(other.pages_encoded);
-        self.map.pages_written = self.map.pages_written.saturating_add(other.pages_written);
-        self.map.pages_reused = self.map.pages_reused.saturating_add(other.pages_reused);
-        self.map.bytes_read = self.map.bytes_read.saturating_add(other.bytes_read);
-        self.map.bytes_encoded = self.map.bytes_encoded.saturating_add(other.bytes_encoded);
-        self.map.bytes_written = self.map.bytes_written.saturating_add(other.bytes_written);
-        self.map.key_comparisons = self
-            .map
-            .key_comparisons
-            .saturating_add(other.key_comparisons);
-        self.map.entries_visited = self
-            .map
-            .entries_visited
-            .saturating_add(other.entries_visited);
-        self.map.differences_emitted = self
-            .map
-            .differences_emitted
-            .saturating_add(other.differences_emitted);
-        self.map.subtrees_skipped = self
-            .map
-            .subtrees_skipped
-            .saturating_add(other.subtrees_skipped);
-        self.map.entries_skipped = self
-            .map
-            .entries_skipped
-            .saturating_add(other.entries_skipped);
+    fn add_map(&mut self, other: MapWork) { self.map.add_observation(other); }
+
+    pub fn saturated(self) -> bool { self.map.saturated || self.store.saturated || self.saturation.any() }
+
+    fn observe_canonical_records(&mut self, count: BudgetCounter) {
+        self.saturation.observe(&mut self.canonical_records_decoded, BudgetDimension::CanonicalDecodedRecords, count);
     }
 
     pub(crate) fn add_canonical(&mut self, other: CanonicalReadWork) {
-        self.map.pages_read = self.map.pages_read.saturating_add(other.map_pages_read);
-        self.map.entries_visited = self
-            .map
-            .entries_visited
-            .saturating_add(other.map_entries_visited);
-        self.store.catalog_lookups = self
-            .store
-            .catalog_lookups
-            .saturating_add(other.catalog_lookups);
-        self.store.objects_read = self.store.objects_read.saturating_add(other.objects_read);
-        self.store.bytes_read = self.store.bytes_read.saturating_add(other.bytes_read);
-        self.canonical_records_decoded = self
-            .canonical_records_decoded
-            .saturating_add(other.canonical_records_decoded);
-        self.items_returned = self.items_returned.saturating_add(other.point_reads);
+        let mut map = MapWork::default();
+        map.pages_read = other.map_pages_read;
+        map.entries_visited = other.map_entries_visited;
+        for (dimension, counter) in [(BudgetDimension::CanonicalMapPages, MapWorkCounter::PagesRead),
+            (BudgetDimension::CanonicalMapEntries, MapWorkCounter::EntriesVisited)] {
+            if other.saturation.contains(dimension) { map.mark_counter_saturated(counter); }
+        }
+        let mut store = StoreWork { catalog_lookups: other.catalog_lookups,
+            objects_read: other.objects_read, bytes_read: other.bytes_read, ..StoreWork::default() };
+        for (dimension, counter) in [(BudgetDimension::CanonicalCatalogLookups, StoreWorkCounter::CatalogLookups),
+            (BudgetDimension::CanonicalObjects, StoreWorkCounter::ObjectsRead),
+            (BudgetDimension::CanonicalBytes, StoreWorkCounter::BytesRead)] {
+            if other.saturation.contains(dimension) {
+                store.saturated = true;
+                store.saturated_counters |= 1_u16 << counter as u8;
+            }
+        }
+        self.add(Self { map, store, canonical_records_decoded: other.canonical_records_decoded,
+            items_returned: other.point_reads, saturation: other.saturation, ..Self::default() });
+    }
+
+    fn canonical_saturation(self, inventory_points: bool) -> WorkSaturation {
+        let mut flags = WorkSaturation::default();
+        for (dimension, saturated) in [
+            (BudgetDimension::CanonicalPointReads, inventory_points && self.saturation.contains(BudgetDimension::CanonicalPointReads)),
+            (BudgetDimension::CanonicalMapPages, self.map.counter_saturated(MapWorkCounter::PagesRead)),
+            (BudgetDimension::CanonicalMapEntries, self.map.counter_saturated(MapWorkCounter::EntriesVisited)),
+            (BudgetDimension::CanonicalCatalogLookups, self.store.counter_saturated(StoreWorkCounter::CatalogLookups)),
+            (BudgetDimension::CanonicalObjects, self.store.counter_saturated(StoreWorkCounter::ObjectsRead)),
+            (BudgetDimension::CanonicalBytes, self.store.counter_saturated(StoreWorkCounter::BytesRead)),
+            (BudgetDimension::CanonicalDecodedRecords, self.saturation.contains(BudgetDimension::CanonicalDecodedRecords)),
+        ] { if saturated { flags.mark(dimension); } }
+        flags
+    }
+
+    fn witness_saturation(self) -> WorkSaturation {
+        let mut flags = WorkSaturation::default();
+        for (dimension, saturated) in [
+            (BudgetDimension::WitnessMapPages, self.map.counter_saturated(MapWorkCounter::PagesRead)),
+            (BudgetDimension::WitnessMapEntries, self.map.counter_saturated(MapWorkCounter::EntriesVisited)),
+            (BudgetDimension::WitnessCatalogLookups, self.store.counter_saturated(StoreWorkCounter::CatalogLookups)),
+            (BudgetDimension::WitnessObjects, self.store.counter_saturated(StoreWorkCounter::ObjectsRead)),
+            (BudgetDimension::WitnessBytes, self.store.counter_saturated(StoreWorkCounter::BytesRead)),
+            (BudgetDimension::WitnessDecodedRecords, self.saturation.contains(BudgetDimension::WitnessDecodedRecords)),
+        ] { if saturated { flags.mark(dimension); } }
+        flags
     }
 }
 
@@ -149,49 +153,57 @@ impl RepositoryReadWork {
 struct RepositoryReadAdmission {
     map: MapAdmission,
     store: StoreReadAdmission,
-    maximum_canonical_records: u64,
-    maximum_witness_records: u64,
+    maximum_canonical_records: Option<u128>,
+    maximum_witness_records: Option<u128>,
     canonical_code: &'static str,
     witness_code: &'static str,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct RepositoryQueryAdmission {
-    pub map_pages: u64,
-    pub map_bytes: u64,
-    pub map_entries: u64,
-    pub catalog_lookups: u64,
-    pub store_objects: u64,
-    pub store_bytes: u64,
-    pub canonical_records: u64,
-    pub witness_records: u64,
+    pub map_pages: Option<u64>,
+    pub map_bytes: Option<u64>,
+    pub map_entries: Option<u64>,
+    pub catalog_lookups: Option<u64>,
+    pub store_objects: Option<u64>,
+    pub store_bytes: Option<u64>,
+    pub canonical_records: Option<u64>,
+    pub witness_records: Option<u64>,
+}
+
+impl RepositoryQueryAdmission {
+    pub const fn unbounded() -> Self {
+        Self { map_pages: None, map_bytes: None, map_entries: None,
+            catalog_lookups: None, store_objects: None, store_bytes: None,
+            canonical_records: None, witness_records: None }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct RepositoryDefinitionAdmission {
-    pub map_pages: u64,
-    pub map_bytes: u64,
-    pub map_entries: u64,
-    pub catalog_lookups: u64,
-    pub store_objects: u64,
-    pub store_bytes: u64,
-    pub canonical_records: u64,
-    pub ownership_records: u64,
-    pub summary_records: u64,
+    pub map_pages: Option<u64>,
+    pub map_bytes: Option<u64>,
+    pub map_entries: Option<u64>,
+    pub catalog_lookups: Option<u64>,
+    pub store_objects: Option<u64>,
+    pub store_bytes: Option<u64>,
+    pub canonical_records: Option<u64>,
+    pub ownership_records: Option<u64>,
+    pub summary_records: Option<u64>,
 }
 
 impl RepositoryDefinitionAdmission {
     pub const fn maximum() -> Self {
         Self {
-            map_pages: MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES,
-            map_bytes: MAXIMUM_FUNCTION_DEFINITION_MAP_BYTES,
-            map_entries: MAXIMUM_FUNCTION_DEFINITION_MAP_ENTRIES,
-            catalog_lookups: MAXIMUM_FUNCTION_DEFINITION_STORE_OBJECTS,
-            store_objects: MAXIMUM_FUNCTION_DEFINITION_STORE_OBJECTS,
-            store_bytes: MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES,
-            canonical_records: MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS,
-            ownership_records: MAXIMUM_FUNCTION_DEFINITION_OWNERSHIP_READS,
-            summary_records: MAXIMUM_FUNCTION_DEFINITION_FACT_READS,
+            map_pages: None,
+            map_bytes: None,
+            map_entries: None,
+            catalog_lookups: None,
+            store_objects: None,
+            store_bytes: None,
+            canonical_records: None,
+            ownership_records: None,
+            summary_records: None,
         }
     }
 }
@@ -205,8 +217,8 @@ pub(crate) struct RepositoryDefinitionReader<'a> {
     view: &'a RepositoryView,
     admission: RepositoryReadAdmission,
     work: RepositoryReadWork,
-    remaining_ownership_records: u64,
-    remaining_summary_records: u64,
+    remaining_ownership_records: Option<u128>,
+    remaining_summary_records: Option<u128>,
     ownership_records: u64,
     summary_records: u64,
 }
@@ -217,8 +229,8 @@ pub(crate) struct RepositoryRelationQueryRange<'a> {
     pub kind: Option<RelationKind>,
     pub incoming: bool,
     pub exclusive_lower_bound: Option<&'a [u8]>,
-    pub maximum_scan: u64,
-    pub maximum_items: u64,
+    pub maximum_scan: Option<u64>,
+    pub maximum_items: Option<u64>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -236,16 +248,16 @@ impl RepositoryReadAdmission {
                 maximum_pages_read: admission.maximum_map_pages,
                 maximum_bytes_read: admission.maximum_bytes,
                 maximum_entries_visited: admission.maximum_map_entries,
-                maximum_pages_encoded: 0,
-                maximum_bytes_encoded: 0,
+                maximum_pages_encoded: Some(0),
+                maximum_bytes_encoded: Some(0),
             },
             store: StoreReadAdmission::new(StoreReadLimits {
                 maximum_catalog_lookups: admission.maximum_catalog_lookups,
                 maximum_objects: admission.maximum_objects,
                 maximum_bytes: admission.maximum_bytes,
             }),
-            maximum_canonical_records: admission.maximum_decoded_records,
-            maximum_witness_records: 0,
+            maximum_canonical_records: widen_optional(admission.maximum_decoded_records),
+            maximum_witness_records: Some(0),
             canonical_code: "change_budget_canonical_decoded_records",
             witness_code: "change_budget_witness_decoded_records",
         }
@@ -257,16 +269,16 @@ impl RepositoryReadAdmission {
                 maximum_pages_read: admission.maximum_map_pages,
                 maximum_bytes_read: admission.maximum_bytes,
                 maximum_entries_visited: admission.maximum_map_entries,
-                maximum_pages_encoded: 0,
-                maximum_bytes_encoded: 0,
+                maximum_pages_encoded: Some(0),
+                maximum_bytes_encoded: Some(0),
             },
             store: StoreReadAdmission::new(StoreReadLimits {
                 maximum_catalog_lookups: admission.maximum_catalog_lookups,
                 maximum_objects: admission.maximum_objects,
                 maximum_bytes: admission.maximum_bytes,
             }),
-            maximum_canonical_records: 0,
-            maximum_witness_records: admission.maximum_decoded_records,
+            maximum_canonical_records: Some(0),
+            maximum_witness_records: widen_optional(admission.maximum_decoded_records),
             canonical_code: "change_budget_canonical_decoded_records",
             witness_code: "change_budget_witness_decoded_records",
         }
@@ -276,8 +288,8 @@ impl RepositoryReadAdmission {
         Self {
             map: MapAdmission::unbounded(),
             store: StoreReadAdmission::unbounded(),
-            maximum_canonical_records: u64::MAX,
-            maximum_witness_records: u64::MAX,
+            maximum_canonical_records: None,
+            maximum_witness_records: None,
             canonical_code: "change_budget_canonical_decoded_records",
             witness_code: "change_budget_witness_decoded_records",
         }
@@ -289,16 +301,16 @@ impl RepositoryReadAdmission {
                 maximum_pages_read: admission.map_pages,
                 maximum_bytes_read: admission.map_bytes,
                 maximum_entries_visited: admission.map_entries,
-                maximum_pages_encoded: 0,
-                maximum_bytes_encoded: 0,
+                maximum_pages_encoded: Some(0),
+                maximum_bytes_encoded: Some(0),
             },
             store: StoreReadAdmission::new(StoreReadLimits {
                 maximum_catalog_lookups: admission.catalog_lookups,
                 maximum_objects: admission.store_objects,
                 maximum_bytes: admission.store_bytes,
             }),
-            maximum_canonical_records: admission.canonical_records,
-            maximum_witness_records: admission.witness_records,
+            maximum_canonical_records: widen_optional(admission.canonical_records),
+            maximum_witness_records: widen_optional(admission.witness_records),
             canonical_code: "query_admission_canonical_records",
             witness_code: "query_admission_witness_records",
         }
@@ -310,18 +322,19 @@ impl RepositoryReadAdmission {
                 maximum_pages_read: admission.map_pages,
                 maximum_bytes_read: admission.map_bytes,
                 maximum_entries_visited: admission.map_entries,
-                maximum_pages_encoded: 0,
-                maximum_bytes_encoded: 0,
+                maximum_pages_encoded: Some(0),
+                maximum_bytes_encoded: Some(0),
             },
             store: StoreReadAdmission::new(StoreReadLimits {
                 maximum_catalog_lookups: admission.catalog_lookups,
                 maximum_objects: admission.store_objects,
                 maximum_bytes: admission.store_bytes,
             }),
-            maximum_canonical_records: admission.canonical_records,
-            maximum_witness_records: admission
-                .ownership_records
-                .saturating_add(admission.summary_records),
+            maximum_canonical_records: widen_optional(admission.canonical_records),
+            maximum_witness_records: match (admission.ownership_records, admission.summary_records) {
+                (Some(owners), Some(summaries)) => Some(owners as u128 + summaries as u128),
+                _ => None,
+            },
             canonical_code: "definition_admission_canonical_records",
             witness_code: "definition_admission_witness_records",
         }
@@ -351,15 +364,17 @@ impl RepositoryReadAdmission {
 struct AdmittedRepositoryStore<'a> {
     base: &'a ViewStore,
     store: Cell<StoreReadAdmission>,
-    canonical_records: Cell<u64>,
+    canonical_records: Cell<Option<u128>>,
+    observed_records: Cell<BudgetCounter>,
 }
 
 impl<'a> AdmittedRepositoryStore<'a> {
-    const fn new(base: &'a ViewStore, store: StoreReadAdmission, canonical_records: u64) -> Self {
+    const fn new(base: &'a ViewStore, store: StoreReadAdmission, canonical_records: Option<u128>) -> Self {
         Self {
             base,
             store: Cell::new(store),
             canonical_records: Cell::new(canonical_records),
+            observed_records: Cell::new(BudgetCounter::exact(0)),
         }
     }
 
@@ -367,7 +382,7 @@ impl<'a> AdmittedRepositoryStore<'a> {
         self.store.get()
     }
 
-    fn remaining_canonical_records(&self) -> u64 {
+    fn remaining_canonical_records(&self) -> Option<u128> {
         self.canonical_records.get()
     }
 
@@ -382,15 +397,15 @@ impl<'a> AdmittedRepositoryStore<'a> {
         ) {
             return Ok(());
         }
-        let remaining = self.canonical_records.get();
-        let Some(remaining) = remaining.checked_sub(1) else {
-            return Err(StoreError::new(
-                StoreErrorClass::Resource,
-                "change_budget_canonical_decoded_records",
-                "package closure exhausted its canonical decoded-record admission",
-            ));
-        };
-        self.canonical_records.set(remaining);
+        if let Some(remaining) = self.canonical_records.get() {
+            let remaining = remaining.checked_sub(1).ok_or_else(|| StoreError::new(
+                StoreErrorClass::Resource, "change_budget_canonical_decoded_records",
+                "package closure exhausted its canonical decoded-record admission"))?;
+            self.canonical_records.set(Some(remaining));
+        }
+        let mut observed = self.observed_records.get();
+        observed.observe(BudgetCounter::exact(1));
+        self.observed_records.set(observed);
         Ok(())
     }
 }
@@ -838,6 +853,7 @@ pub struct RepositoryView {
     validation_reused: bool,
     validation_read_work: CanonicalReadWork,
     validation_steps: u64,
+    validation_work_saturated: bool,
     export_read_set: Option<(
         BTreeSet<ObjectKey>,
         Vec<crate::platform::package_transport::PackageTransportBinding>,
@@ -909,8 +925,10 @@ impl RepositoryView {
                 objects_read: 0,
                 bytes_read: 0,
                 canonical_records_decoded: 0,
+                saturation: WorkSaturation::default(),
             },
             validation_steps: 0,
+            validation_work_saturated: false,
             export_read_set: None,
             idempotent_result: None,
             link_transport_reuse: RefCell::new(None),
@@ -936,8 +954,10 @@ impl RepositoryView {
                 objects_read: 0,
                 bytes_read: 0,
                 canonical_records_decoded: 0,
+                saturation: WorkSaturation::default(),
             },
             validation_steps: 0,
+            validation_work_saturated: false,
             export_read_set: None,
             idempotent_result: Some(idempotent_result),
             link_transport_reuse: RefCell::new(None),
@@ -965,6 +985,7 @@ impl RepositoryView {
                     catalog_lookups: work.catalog_lookups,
                     objects_read: work.objects_read,
                     bytes_read: work.bytes_read,
+                    saturation: RepositoryReadWork { store: work, ..Default::default() }.canonical_saturation(false),
                     ..CanonicalReadWork::default()
                 };
                 validation
@@ -982,7 +1003,7 @@ impl RepositoryView {
                         &self.control,
                     )
                 } else {
-                    Ok(0)
+                    Ok((0, false))
                 };
                 let rebuild_work = self.store.rebuild_work();
                 self.store.bound_current_rebuild(false);
@@ -1005,12 +1026,20 @@ impl RepositoryView {
                     catalog_lookups: rebuild_work.catalog_lookups,
                     objects_read: rebuild_work.objects_read,
                     bytes_read: rebuild_work.bytes_read,
+                    saturation: RepositoryReadWork { store: rebuild_work, ..snapshot.work }.canonical_saturation(true),
                 };
                 let mut validation =
                     RevalidatedBase::rebuild(snapshot.value, &|| self.validation_checkpoint())?;
-                self.validation_steps = validation
-                    .semantic_work
-                    .saturating_add(dependencies.as_ref().copied().unwrap_or_default());
+                let (dependency_work, dependency_saturated) =
+                    dependencies.as_ref().copied().unwrap_or_default();
+                let (semantic_work, overflow) = validation.semantic_work.overflowing_add(dependency_work);
+                self.validation_steps = if overflow { u64::MAX } else { semantic_work };
+                self.validation_work_saturated = overflow
+                    || validation.semantic_work_saturated
+                    || dependency_saturated
+                    || rebuild_work.saturated
+                    || snapshot.work.map.saturated
+                    || snapshot.work.store.saturated;
                 if let Err(error) = dependencies {
                     if matches!(
                         error.class,
@@ -1062,8 +1091,8 @@ impl RepositoryView {
         }
     }
 
-    pub(crate) const fn validation_work(&self) -> (CanonicalReadWork, u64) {
-        (self.validation_read_work, self.validation_steps)
+    pub(crate) fn validation_work(&self) -> (CanonicalReadWork, u64, bool) {
+        (self.validation_read_work, self.validation_steps, self.validation_work_saturated || self.validation_read_work.saturated())
     }
 
     fn witness_roots(&self) -> crate::platform::witness::WitnessRoots {
@@ -1708,7 +1737,6 @@ impl RepositoryView {
             admission.store,
             admission.maximum_canonical_records,
         );
-        let initial_map_admission = admission.map;
         let validated = super::repository::resolve_package_transport_closure_admitted_with_control(
             &admitted_store,
             &self.store,
@@ -1721,22 +1749,11 @@ impl RepositoryView {
         )?;
         admission.store = admitted_store.remaining_store();
         let remaining_records = admitted_store.remaining_canonical_records();
-        work.canonical_records_decoded = admission
-            .maximum_canonical_records
-            .saturating_sub(remaining_records);
+        work.observe_canonical_records(admitted_store.observed_records.get());
         admission.maximum_canonical_records = remaining_records;
-        let mut interface_map_work = validated.interface_map_work;
-        interface_map_work.pages_read = initial_map_admission
-            .maximum_pages_read
-            .saturating_sub(admission.map.maximum_pages_read);
-        interface_map_work.pages_decoded = interface_map_work.pages_read;
-        interface_map_work.bytes_read = initial_map_admission
-            .maximum_bytes_read
-            .saturating_sub(admission.map.maximum_bytes_read);
-        interface_map_work.entries_visited = initial_map_admission
-            .maximum_entries_visited
-            .saturating_sub(admission.map.maximum_entries_visited);
-        work.add_map(interface_map_work);
+        // The validation result carries the work actually performed. Optional
+        // permission cannot be used as an observation by subtracting quotas.
+        work.add_map(validated.interface_map_work);
         work.items_returned = 1;
         Ok(self.read(validated, work))
     }
@@ -1815,30 +1832,6 @@ impl RepositoryView {
         attach_dependencies: bool,
     ) -> Result<RevisionRead<KernelSnapshot>, Diagnostic> {
         self.validation_checkpoint()?;
-        let declared_records = self
-            .current
-            .semantic_root
-            .owners
-            .entries()
-            .checked_add(self.current.semantic_root.dependencies.entries())
-            .and_then(|count| count.checked_add(self.current.semantic_root.retirements.entries()))
-            .ok_or_else(|| {
-                read_error(
-                    DiagnosticClass::Resource,
-                    "publication_full_oracle_record_count",
-                    "full-oracle canonical record count overflowed",
-                )
-            })?;
-        if declared_records > crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64 {
-            return Err(full_oracle_work_error());
-        }
-        let mut consumed = usize::try_from(declared_records).map_err(|_| {
-            read_error(
-                DiagnosticClass::Resource,
-                "publication_full_oracle_record_count",
-                "full-oracle canonical record count does not fit this platform",
-            )
-        })?;
         let mut work = RepositoryReadWork::default();
 
         let mut owners = BTreeMap::new();
@@ -1903,7 +1896,6 @@ impl RepositoryView {
             if types.contains_key(&digest) {
                 continue;
             }
-            consume_full_oracle_work(&mut consumed, 1)?;
             let read = self.type_object(digest)?;
             work.add(read.work);
             let object = read.value.ok_or_else(|| {
@@ -1934,7 +1926,6 @@ impl RepositoryView {
         let mut blobs = BTreeMap::new();
         for (digest, expected_bytes) in declared_blobs {
             self.validation_checkpoint()?;
-            consume_full_oracle_work(&mut consumed, 1)?;
             let bytes = self.read_required_object(
                 ObjectDomain::Blob,
                 digest.bytes(),
@@ -1979,8 +1970,7 @@ impl RepositoryView {
             interfaces.insert(dependency.package_revision, validated.root_interface);
             for (revision_digest, revision) in revisions {
                 self.validation_checkpoint()?;
-                consume_full_oracle_work(&mut consumed, 1)?;
-                let binding = DependencyRecord {
+                    let binding = DependencyRecord {
                     graph_contract_version:
                         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
                     package: revision.package,
@@ -2017,15 +2007,8 @@ impl RepositoryView {
                     map_work,
                 } = interface;
                 work.add_map(map_work);
-                let interface_items = interface_owners
-                    .len()
-                    .checked_add(interface_types.len())
-                    .ok_or_else(full_oracle_work_error)?;
-                consume_full_oracle_work(&mut consumed, interface_items)?;
-                work.canonical_records_decoded = work
-                    .canonical_records_decoded
-                    .saturating_add(interface_owners.len() as u64)
-                    .saturating_add(interface_types.len() as u64);
+                work.observe_canonical_records(BudgetCounter::exact(interface_owners.len() as u64));
+                work.observe_canonical_records(BudgetCounter::exact(interface_types.len() as u64));
                 let records: crate::platform::kernel::DependencyInterface = interface_owners
                     .into_iter()
                     .map(|(owner, value)| (owner, value.record))
@@ -2386,10 +2369,12 @@ impl RepositoryView {
             catalog_lookups: rebuild_work.catalog_lookups,
             objects_read: rebuild_work.objects_read,
             bytes_read: rebuild_work.bytes_read,
+            saturation: RepositoryReadWork { store: rebuild_work, ..local_work }.canonical_saturation(true),
         };
-        self.validation_steps = validation
-            .semantic_work
-            .saturating_add(built.admitted.validation_visits);
+        let (semantic_work, overflow) = validation.semantic_work.overflowing_add(built.admitted.validation_visits);
+        self.validation_steps = if overflow { u64::MAX } else { semantic_work };
+        self.validation_work_saturated = overflow || validation.semantic_work_saturated
+            || rebuild_work.saturated || local_work.map.saturated || local_work.store.saturated;
         let objects = self.store.take_rebuild_objects();
         // Export admission owns its private snapshot and dependency maps. Its collector
         // can also read optional physical objects absent from another repository with
@@ -2673,9 +2658,9 @@ impl RepositoryView {
         admission.map = map_work.remaining_admission();
         admission.store = StoreReadAdmission::new(reader.remaining_read_admission().unwrap_or(
             StoreReadLimits {
-                maximum_catalog_lookups: 0,
-                maximum_objects: 0,
-                maximum_bytes: 0,
+                maximum_catalog_lookups: Some(0),
+                maximum_objects: Some(0),
+                maximum_bytes: Some(0),
             },
         ));
         let mut work = RepositoryReadWork {
@@ -2869,21 +2854,14 @@ impl RepositoryView {
         &self,
         exclusive_lower_bound: Option<&[u8]>,
         kind: Option<OwnerKind>,
-        maximum_scan: u64,
-        maximum_items: u64,
+        maximum_scan: Option<u64>,
+        maximum_items: Option<u64>,
         query_admission: RepositoryQueryAdmission,
         mut visitor: F,
     ) -> Result<RevisionRead<RepositoryQueryRangeRead>, Diagnostic>
     where
         F: FnMut(OwnerKey, &OwnerRecord) -> Result<MapRangeControl, Diagnostic>,
     {
-        if maximum_scan == 0 || maximum_items == 0 {
-            return Err(read_error(
-                DiagnosticClass::Resource,
-                "query_admission_logical_range",
-                "query range scan and item admission must both be positive",
-            ));
-        }
         let mut admission = RepositoryReadAdmission::query(query_admission);
         let shared_store_admission = RefCell::new(admission.store);
         let reader = ObjectPageReader::new_shared_admission(&self.store, &shared_store_admission);
@@ -2899,7 +2877,7 @@ impl RepositoryView {
             &mut map_work,
             |key, binding_bytes| {
                 let operation = (|| {
-                    if value.visited >= maximum_scan {
+                    if maximum_scan.is_some_and(|limit| value.visited >= limit) {
                         return Ok(MapRangeControl::StopBefore);
                     }
                     let owner = EncodedOwnerKey::decode(key)?;
@@ -2909,7 +2887,7 @@ impl RepositoryView {
                         value.last_visited_key = Some(key.to_vec());
                         return Ok(MapRangeControl::Continue);
                     }
-                    if value.returned >= maximum_items {
+                    if maximum_items.is_some_and(|limit| value.returned >= limit) {
                         return Ok(MapRangeControl::StopBefore);
                     }
                     let bytes = self
@@ -2976,8 +2954,9 @@ impl RepositoryView {
             canonical_records_decoded: decoded_records,
             witness_records_decoded: 0,
             items_returned: value.returned,
+            ..RepositoryReadWork::default()
         };
-        add_query_store_work(&mut work.store, object_work)?;
+        work.store.add(object_work);
         Ok(self.read(value, work))
     }
 
@@ -3163,7 +3142,7 @@ impl RepositoryView {
         &self,
         source: RelationEndpoint,
         kind: Option<RelationKind>,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
         self.relations(
             source,
@@ -3191,13 +3170,6 @@ impl RepositoryView {
             maximum_scan,
             maximum_items,
         } = query;
-        if maximum_items == 0 {
-            return Err(read_error(
-                DiagnosticClass::Resource,
-                "query_admission_logical_range",
-                "query relation item admission must be positive",
-            ));
-        }
         let mut admission = RepositoryReadAdmission::query(query_admission);
         let prefix = if incoming {
             reverse_relation_prefix(endpoint, kind)
@@ -3221,7 +3193,8 @@ impl RepositoryView {
             &mut map_work,
             |key, relation_value| {
                 let operation = (|| {
-                    if value.visited >= maximum_scan || value.returned >= maximum_items {
+                    if maximum_scan.is_some_and(|limit| value.visited >= limit)
+                        || maximum_items.is_some_and(|limit| value.returned >= limit) {
                         return Ok(MapRangeControl::StopBefore);
                     }
                     admission.admit_witness_records(1)?;
@@ -3274,6 +3247,7 @@ impl RepositoryView {
             canonical_records_decoded: 0,
             witness_records_decoded: decoded_records,
             items_returned: value.returned,
+            ..RepositoryReadWork::default()
         };
         Ok(self.read(value, work))
     }
@@ -3282,7 +3256,7 @@ impl RepositoryView {
         &self,
         source: RelationEndpoint,
         kind: Option<RelationKind>,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: &mut RepositoryReadAdmission,
     ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
         self.relations(source, kind, maximum_items, false, admission)
@@ -3292,7 +3266,7 @@ impl RepositoryView {
         &self,
         target: RelationEndpoint,
         kind: Option<RelationKind>,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
         self.relations(
             target,
@@ -3307,7 +3281,7 @@ impl RepositoryView {
         &self,
         target: RelationEndpoint,
         kind: Option<RelationKind>,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: &mut RepositoryReadAdmission,
     ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
         self.relations(target, kind, maximum_items, true, admission)
@@ -3316,7 +3290,7 @@ impl RepositoryView {
     pub fn incoming_package_relations(
         &self,
         package: PackageId,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
         self.incoming_package_relations_admitted(
             package,
@@ -3328,19 +3302,12 @@ impl RepositoryView {
     fn incoming_package_relations_admitted(
         &self,
         package: PackageId,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: &mut RepositoryReadAdmission,
     ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
-        if maximum_items == 0 || maximum_items > MAXIMUM_RELATION_READ_ITEMS {
-            return Err(read_error(
-                DiagnosticClass::Resource,
-                "publication_relation_item_budget",
-                format!("relation item budget must be 1 through {MAXIMUM_RELATION_READ_ITEMS}"),
-            ));
-        }
         let prefix = reverse_relation_package_owner_prefix(package);
         let mut work = RepositoryReadWork::default();
-        let mut keys = Vec::with_capacity(maximum_items.min(64));
+        let mut keys = Vec::new();
         let mut truncated = false;
         let reader = ObjectPageReader::new_admitted(&self.store, admission.store);
         let mut map_work = MapWork::with_admission(admission.map);
@@ -3353,7 +3320,7 @@ impl RepositoryView {
                         message: "relation witness entry has a nonempty value".to_owned(),
                     });
                 }
-                if keys.len() == maximum_items {
+                if maximum_items.is_some_and(|limit| keys.len() >= limit) {
                     truncated = true;
                     return Err(MapError {
                         class: MapErrorClass::Resource,
@@ -3362,15 +3329,21 @@ impl RepositoryView {
                             .to_owned(),
                     });
                 }
-                keys.push(key.to_vec());
+                keys.try_reserve(1).map_err(|_| MapError { class: MapErrorClass::Resource,
+                    code: "publication_prefix_allocation", message: "cannot retain a witness prefix key".to_owned() })?;
+                let mut retained = Vec::new();
+                retained.try_reserve_exact(key.len()).map_err(|_| MapError { class: MapErrorClass::Resource,
+                    code: "publication_prefix_allocation", message: "cannot allocate a witness prefix key".to_owned() })?;
+                retained.extend_from_slice(key);
+                keys.push(retained);
                 Ok(())
             });
         admission.map = map_work.remaining_admission();
         admission.store = StoreReadAdmission::new(reader.remaining_read_admission().unwrap_or(
             StoreReadLimits {
-                maximum_catalog_lookups: 0,
-                maximum_objects: 0,
-                maximum_bytes: 0,
+                maximum_catalog_lookups: Some(0),
+                maximum_objects: Some(0),
+                maximum_bytes: Some(0),
             },
         ));
         work.add_map(map_work);
@@ -3407,7 +3380,7 @@ impl RepositoryView {
     pub fn test_dependencies(
         &self,
         test: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<RevisionRead<TestDependencyRead>, Diagnostic> {
         self.test_dependencies_admitted(
             test,
@@ -3419,18 +3392,9 @@ impl RepositoryView {
     fn test_dependencies_admitted(
         &self,
         test: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: &mut RepositoryReadAdmission,
     ) -> Result<RevisionRead<TestDependencyRead>, Diagnostic> {
-        if maximum_items == 0 || maximum_items > MAXIMUM_TEST_DEPENDENCY_READ_ITEMS {
-            return Err(read_error(
-                DiagnosticClass::Resource,
-                "publication_test_dependency_item_budget",
-                format!(
-                    "test-dependency item budget must be 1 through {MAXIMUM_TEST_DEPENDENCY_READ_ITEMS}"
-                ),
-            ));
-        }
         if !matches!(test, OwnerKey::Declaration(_)) {
             return Err(read_error(
                 DiagnosticClass::Source,
@@ -3440,7 +3404,7 @@ impl RepositoryView {
         }
         let prefix = test_dependency_forward_prefix(test);
         let mut work = RepositoryReadWork::default();
-        let mut keys = Vec::with_capacity(maximum_items.min(64));
+        let mut keys = Vec::new();
         let mut truncated = false;
         let reader = ObjectPageReader::new_admitted(&self.store, admission.store);
         let mut map_work = MapWork::with_admission(admission.map);
@@ -3453,7 +3417,7 @@ impl RepositoryView {
                         message: "test-dependency witness entry has a nonempty value".to_owned(),
                     });
                 }
-                if keys.len() == maximum_items {
+                if maximum_items.is_some_and(|limit| keys.len() >= limit) {
                     truncated = true;
                     return Err(MapError {
                         class: MapErrorClass::Resource,
@@ -3462,15 +3426,21 @@ impl RepositoryView {
                             .to_owned(),
                     });
                 }
-                keys.push(key.to_vec());
+                keys.try_reserve(1).map_err(|_| MapError { class: MapErrorClass::Resource,
+                    code: "publication_prefix_allocation", message: "cannot retain a witness prefix key".to_owned() })?;
+                let mut retained = Vec::new();
+                retained.try_reserve_exact(key.len()).map_err(|_| MapError { class: MapErrorClass::Resource,
+                    code: "publication_prefix_allocation", message: "cannot allocate a witness prefix key".to_owned() })?;
+                retained.extend_from_slice(key);
+                keys.push(retained);
                 Ok(())
             });
         admission.map = map_work.remaining_admission();
         admission.store = StoreReadAdmission::new(reader.remaining_read_admission().unwrap_or(
             StoreReadLimits {
-                maximum_catalog_lookups: 0,
-                maximum_objects: 0,
-                maximum_bytes: 0,
+                maximum_catalog_lookups: Some(0),
+                maximum_objects: Some(0),
+                maximum_bytes: Some(0),
             },
         ));
         work.add_map(map_work);
@@ -3508,17 +3478,10 @@ impl RepositoryView {
         &self,
         endpoint: RelationEndpoint,
         kind: Option<RelationKind>,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         reverse: bool,
         admission: &mut RepositoryReadAdmission,
     ) -> Result<RevisionRead<RelationRead>, Diagnostic> {
-        if maximum_items == 0 || maximum_items > MAXIMUM_RELATION_READ_ITEMS {
-            return Err(read_error(
-                DiagnosticClass::Resource,
-                "publication_relation_item_budget",
-                format!("relation item budget must be 1 through {MAXIMUM_RELATION_READ_ITEMS}"),
-            ));
-        }
         let prefix = if reverse {
             reverse_relation_prefix(endpoint, kind)
         } else {
@@ -3530,7 +3493,7 @@ impl RepositoryView {
             self.witness_roots().forward_relations
         };
         let mut work = RepositoryReadWork::default();
-        let mut keys = Vec::with_capacity(maximum_items.min(64));
+        let mut keys = Vec::new();
         let mut truncated = false;
         let reader = ObjectPageReader::new_admitted(&self.store, admission.store);
         let mut map_work = MapWork::with_admission(admission.map);
@@ -3546,7 +3509,7 @@ impl RepositoryView {
                         message: "relation witness entry has a nonempty value".to_owned(),
                     });
                 }
-                if keys.len() == maximum_items {
+                if maximum_items.is_some_and(|limit| keys.len() >= limit) {
                     truncated = true;
                     return Err(MapError {
                         class: MapErrorClass::Resource,
@@ -3554,16 +3517,22 @@ impl RepositoryView {
                         message: "bounded relation prefix has more matching entries".to_owned(),
                     });
                 }
-                keys.push(key.to_vec());
+                keys.try_reserve(1).map_err(|_| MapError { class: MapErrorClass::Resource,
+                    code: "publication_prefix_allocation", message: "cannot retain a witness prefix key".to_owned() })?;
+                let mut retained = Vec::new();
+                retained.try_reserve_exact(key.len()).map_err(|_| MapError { class: MapErrorClass::Resource,
+                    code: "publication_prefix_allocation", message: "cannot allocate a witness prefix key".to_owned() })?;
+                retained.extend_from_slice(key);
+                keys.push(retained);
                 Ok(())
             },
         );
         admission.map = map_work.remaining_admission();
         admission.store = StoreReadAdmission::new(reader.remaining_read_admission().unwrap_or(
             StoreReadLimits {
-                maximum_catalog_lookups: 0,
-                maximum_objects: 0,
-                maximum_bytes: 0,
+                maximum_catalog_lookups: Some(0),
+                maximum_objects: Some(0),
+                maximum_bytes: Some(0),
             },
         ));
         work.add_map(map_work);
@@ -3618,9 +3587,9 @@ impl RepositoryView {
         admission.map = map_work.remaining_admission();
         admission.store = StoreReadAdmission::new(reader.remaining_read_admission().unwrap_or(
             StoreReadLimits {
-                maximum_catalog_lookups: 0,
-                maximum_objects: 0,
-                maximum_bytes: 0,
+                maximum_catalog_lookups: Some(0),
+                maximum_objects: Some(0),
+                maximum_bytes: Some(0),
             },
         ));
         work.add_map(map_work);
@@ -3798,7 +3767,7 @@ impl<'a> RepositoryDefinitionReader<'a> {
         &mut self,
         owner: OwnerKey,
         kind: RelationKind,
-        maximum: usize,
+        maximum: Option<usize>,
     ) -> Result<Vec<RelationEdge>, Diagnostic> {
         let read = self.view.relations(
             RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
@@ -3826,8 +3795,8 @@ impl<'a> RepositoryDefinitionReader<'a> {
             view,
             admission: RepositoryReadAdmission::definition(admission),
             work: RepositoryReadWork::default(),
-            remaining_ownership_records: admission.ownership_records,
-            remaining_summary_records: admission.summary_records,
+            remaining_ownership_records: widen_optional(admission.ownership_records),
+            remaining_summary_records: widen_optional(admission.summary_records),
             ownership_records: 0,
             summary_records: 0,
         }
@@ -3950,75 +3919,6 @@ fn checked_query_count(value: u64, dimension: &'static str) -> Result<u64, Diagn
     })
 }
 
-fn add_query_store_work(total: &mut StoreWork, additional: StoreWork) -> Result<(), Diagnostic> {
-    total.catalog_lookups = checked_query_work_add(
-        total.catalog_lookups,
-        additional.catalog_lookups,
-        "catalog lookups",
-    )?;
-    total.packs_opened =
-        checked_query_work_add(total.packs_opened, additional.packs_opened, "packs opened")?;
-    total.objects_read =
-        checked_query_work_add(total.objects_read, additional.objects_read, "objects read")?;
-    total.objects_staged = checked_query_work_add(
-        total.objects_staged,
-        additional.objects_staged,
-        "objects staged",
-    )?;
-    total.objects_reused = checked_query_work_add(
-        total.objects_reused,
-        additional.objects_reused,
-        "objects reused",
-    )?;
-    total.bytes_read =
-        checked_query_work_add(total.bytes_read, additional.bytes_read, "store bytes read")?;
-    total.bytes_staged = checked_query_work_add(
-        total.bytes_staged,
-        additional.bytes_staged,
-        "store bytes staged",
-    )?;
-    total.pages_staged =
-        checked_query_work_add(total.pages_staged, additional.pages_staged, "pages staged")?;
-    total.packs_sealed =
-        checked_query_work_add(total.packs_sealed, additional.packs_sealed, "packs sealed")?;
-    Ok(())
-}
-
-fn checked_query_work_add(
-    total: u64,
-    additional: u64,
-    dimension: &'static str,
-) -> Result<u64, Diagnostic> {
-    total.checked_add(additional).ok_or_else(|| {
-        read_error(
-            DiagnosticClass::Resource,
-            "query_work_overflow",
-            format!("query {dimension} work overflowed"),
-        )
-    })
-}
-
-fn consume_full_oracle_work(consumed: &mut usize, additional: usize) -> Result<(), Diagnostic> {
-    *consumed = consumed
-        .checked_add(additional)
-        .ok_or_else(full_oracle_work_error)?;
-    if *consumed > crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK {
-        return Err(full_oracle_work_error());
-    }
-    Ok(())
-}
-
-fn full_oracle_work_error() -> Diagnostic {
-    read_error(
-        DiagnosticClass::Resource,
-        "publication_full_oracle_work",
-        format!(
-            "full-oracle reconstruction exceeds its explicit {}-item work budget",
-            crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK
-        ),
-    )
-}
-
 fn store_diagnostic(error: StoreError) -> Diagnostic {
     let class = match error.class {
         StoreErrorClass::Input => DiagnosticClass::Source,
@@ -4037,23 +3937,18 @@ fn read_error(
     Diagnostic::new(class, code, message)
 }
 
+const fn widen_optional(value: Option<u64>) -> Option<u128> {
+    match value { Some(value) => Some(value as u128), None => None }
+}
+
 fn admit_decoded_records(
-    remaining: &mut u64,
-    records: u64,
-    code: &'static str,
-    unit: &'static str,
+    remaining: &mut Option<u128>, records: u64, code: &'static str, unit: &'static str,
 ) -> Result<(), Diagnostic> {
-    if records > *remaining {
-        return Err(read_error(
-            DiagnosticClass::Resource,
-            code,
-            format!(
-                "read requires {records} {unit}, exceeding the remaining admission {}",
-                *remaining
-            ),
-        ));
-    }
-    *remaining -= records;
+    let Some(limit) = *remaining else { return Ok(()); };
+    let next = limit.checked_sub(u128::from(records)).ok_or_else(|| read_error(
+        DiagnosticClass::Resource, code,
+        format!("read requires {records} {unit}, exceeding the remaining admission {limit}")))?;
+    *remaining = Some(next);
     Ok(())
 }
 
@@ -4363,7 +4258,7 @@ impl WitnessBaseRead for RepositoryView {
     fn read_outgoing_relations(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         let endpoint = RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
             package: self.package(),
@@ -4376,7 +4271,7 @@ impl WitnessBaseRead for RepositoryView {
     fn read_outgoing_relations_admitted(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         let endpoint = RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
@@ -4395,7 +4290,7 @@ impl WitnessBaseRead for RepositoryView {
     fn read_incoming_relations(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         let endpoint = RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
             package: self.package(),
@@ -4408,7 +4303,7 @@ impl WitnessBaseRead for RepositoryView {
     fn read_incoming_relations_admitted(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         let endpoint = RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
@@ -4428,7 +4323,7 @@ impl WitnessBaseRead for RepositoryView {
         &self,
         owner: OwnerKey,
         kind: RelationKind,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         let endpoint = RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
             package: self.package(),
@@ -4442,7 +4337,7 @@ impl WitnessBaseRead for RepositoryView {
         &self,
         owner: OwnerKey,
         kind: RelationKind,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         let endpoint = RelationEndpoint::Owner(crate::platform::kernel::ExactOwnerKey {
@@ -4461,7 +4356,7 @@ impl WitnessBaseRead for RepositoryView {
     fn read_incoming_package_relations(
         &self,
         package: PackageId,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         RepositoryView::incoming_package_relations(self, package, maximum_items)
             .map(witness_relation_read)
@@ -4470,7 +4365,7 @@ impl WitnessBaseRead for RepositoryView {
     fn read_incoming_package_relations_admitted(
         &self,
         package: PackageId,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         self.incoming_package_relations_admitted(
@@ -4484,7 +4379,7 @@ impl WitnessBaseRead for RepositoryView {
     fn read_test_dependencies(
         &self,
         test: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic> {
         RepositoryView::test_dependencies(self, test, maximum_items)
             .map(witness_test_dependency_read)
@@ -4493,7 +4388,7 @@ impl WitnessBaseRead for RepositoryView {
     fn read_test_dependencies_admitted(
         &self,
         test: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic> {
         self.test_dependencies_admitted(
@@ -4529,6 +4424,7 @@ fn canonical_read<T>(read: RevisionRead<T>) -> CanonicalRead<T> {
             objects_read: read.work.store.objects_read,
             bytes_read: read.work.store.bytes_read,
             canonical_records_decoded: read.work.canonical_records_decoded,
+            saturation: read.work.canonical_saturation(false),
         },
     }
 }
@@ -4544,6 +4440,7 @@ fn witness_read<T>(read: RevisionRead<T>) -> WitnessRead<T> {
             objects_read: read.work.store.objects_read,
             bytes_read: read.work.store.bytes_read,
             witness_records_decoded: read.work.witness_records_decoded,
+            saturation: read.work.witness_saturation(),
         },
     }
 }
@@ -4562,6 +4459,7 @@ fn witness_relation_read(read: RevisionRead<RelationRead>) -> WitnessRead<Witnes
             objects_read: read.work.store.objects_read,
             bytes_read: read.work.store.bytes_read,
             witness_records_decoded: read.work.witness_records_decoded,
+            saturation: read.work.witness_saturation(),
         },
     }
 }
@@ -4582,6 +4480,7 @@ fn witness_test_dependency_read(
             objects_read: read.work.store.objects_read,
             bytes_read: read.work.store.bytes_read,
             witness_records_decoded: read.work.witness_records_decoded,
+            saturation: read.work.witness_saturation(),
         },
     }
 }
@@ -4594,84 +4493,56 @@ mod query_read_tests {
     use crate::platform::witness::{forward_relation_key, reverse_relation_key};
 
     #[test]
-    fn definition_physical_admissions_bind_exact_derived_maxima() {
-        let maximum = RepositoryDefinitionAdmission::maximum();
-        assert_eq!(
-            maximum.map_pages,
-            crate::platform::contract::MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES
-        );
-        assert_eq!(
-            maximum.map_bytes,
-            crate::platform::contract::MAXIMUM_FUNCTION_DEFINITION_MAP_BYTES
-        );
-        assert_eq!(
-            maximum.map_entries,
-            crate::platform::contract::MAXIMUM_FUNCTION_DEFINITION_MAP_ENTRIES
-        );
-        assert_eq!(
-            maximum.store_objects,
-            crate::platform::contract::MAXIMUM_FUNCTION_DEFINITION_STORE_OBJECTS
-        );
-        assert_eq!(
-            maximum.store_bytes,
-            crate::platform::contract::MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES
-        );
-        let mut decoded = RepositoryReadAdmission::definition(maximum);
-        decoded
-            .admit_canonical_records(maximum.canonical_records)
-            .expect("exact canonical decode admission");
-        assert_eq!(
-            decoded
-                .admit_canonical_records(1)
-                .expect_err("one-over canonical decode")
-                .code,
-            "definition_admission_canonical_records"
-        );
-        decoded
-            .admit_witness_records(
-                maximum
-                    .ownership_records
-                    .saturating_add(maximum.summary_records),
-            )
-            .expect("exact witness decode admission");
-        assert_eq!(
-            decoded
-                .admit_witness_records(1)
-                .expect_err("one-over witness decode")
-                .code,
-            "definition_admission_witness_records"
-        );
+    fn definition_and_change_read_admission_preserve_optional_and_full_width_limits() {
+        let defaults = RepositoryDefinitionAdmission::maximum();
+        assert_eq!(defaults.map_pages, None);
+        assert_eq!(defaults.store_bytes, None);
+        assert_eq!(defaults.canonical_records, None);
+        let mut ordinary = RepositoryReadAdmission::definition(defaults);
+        ordinary.admit_canonical_records(u64::MAX).unwrap();
+        ordinary.admit_canonical_records(1).unwrap();
+        assert_eq!(ordinary.maximum_canonical_records, None);
+        for allowance in [0, 1, u64::MAX] {
+            let mut canonical = RepositoryReadAdmission::canonical(CanonicalReadAdmission {
+                maximum_decoded_records: Some(allowance), ..Default::default()
+            });
+            canonical.admit_canonical_records(allowance).unwrap();
+            assert_eq!(canonical.maximum_canonical_records, Some(0));
+            assert!(canonical.admit_canonical_records(1).is_err());
+            assert_eq!(canonical.maximum_canonical_records, Some(0));
+            let mut witness = RepositoryReadAdmission::witness(WitnessReadAdmission {
+                maximum_decoded_records: Some(allowance), ..Default::default()
+            });
+            witness.admit_witness_records(allowance).unwrap();
+            assert!(witness.admit_witness_records(1).is_err());
+        }
+        let mut combined = RepositoryReadAdmission::definition(RepositoryDefinitionAdmission {
+            ownership_records: Some(u64::MAX), summary_records: Some(u64::MAX), ..defaults
+        });
+        combined.admit_witness_records(u64::MAX).unwrap();
+        combined.admit_witness_records(u64::MAX).unwrap();
+        assert!(combined.admit_witness_records(1).is_err());
+    }
 
-        let mut exact_store = StoreReadAdmission::new(StoreReadLimits {
-            maximum_catalog_lookups: 1,
-            maximum_objects: 1,
-            maximum_bytes: maximum.store_bytes,
-        });
-        exact_store
-            .admit_catalog_lookup()
-            .expect("exact store lookup admission");
-        exact_store
-            .admit_object_bytes(maximum.store_bytes)
-            .expect("exact store byte admission");
-        assert_eq!(
-            exact_store
-                .admit_object_bytes(1)
-                .expect_err("one-over store object")
-                .code,
-            "object_read_objects_exhausted"
-        );
-        let mut one_under = StoreReadAdmission::new(StoreReadLimits {
-            maximum_catalog_lookups: 1,
-            maximum_objects: 1,
-            maximum_bytes: maximum.store_bytes - 1,
-        });
-        assert_eq!(
-            one_under
-                .admit_object_bytes(maximum.store_bytes)
-                .expect_err("one-over store bytes")
-                .code,
-            "object_read_bytes_exhausted"
-        );
+    #[test]
+    fn read_work_projection_preserves_independent_saturation_flags() {
+        let mut canonical = CanonicalReadWork { map_pages_read: u64::MAX,
+            bytes_read: u64::MAX, ..Default::default() };
+        canonical.saturation.mark(BudgetDimension::CanonicalMapPages);
+        let mut work = RepositoryReadWork::default();
+        work.add_canonical(canonical);
+        let flags = work.canonical_saturation(false);
+        assert!(flags.contains(BudgetDimension::CanonicalMapPages));
+        assert!(!flags.contains(BudgetDimension::CanonicalBytes));
+        let witness = work.witness_saturation();
+        assert!(witness.contains(BudgetDimension::WitnessMapPages));
+        assert!(!witness.contains(BudgetDimension::WitnessBytes));
+        work.observe_canonical_records(BudgetCounter::exact(u64::MAX));
+        assert!(!work.saturation.contains(BudgetDimension::CanonicalDecodedRecords));
+        work.observe_canonical_records(BudgetCounter::exact(1));
+        assert!(work.saturation.contains(BudgetDimension::CanonicalDecodedRecords));
+        assert_eq!(work.canonical_records_decoded, u64::MAX);
+        assert!(work.saturated());
     }
 
     #[test]

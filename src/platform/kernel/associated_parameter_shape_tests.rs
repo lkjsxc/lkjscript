@@ -1,5 +1,6 @@
 //! Isolated resource-shape prerequisites; complete associated admission stays gated.
 use super::*;
+use crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
 use crate::platform::kernel::{
     AssociatedTypeBound, AssociatedTypeMember, DeclarationRecord, DeclarationVisibility,
     FunctionDeclaration, ImplementationParameter, Name, OwnedContract, OwnedMethod,
@@ -188,8 +189,9 @@ fn validator<'a>(
         },
         interrupted: false,
         diagnostics: Vec::new(),
-        work: 0,
-        maximum_work,
+        work: ValidationWork::default(),
+        work_exhausted: false,
+        maximum_work: Some(maximum_work),
         associated_admission: super::super::owned_associated::OwnedAssociatedAdmission::new(),
         relations: Vec::new(),
         expression_parents: BTreeMap::new(),
@@ -309,7 +311,7 @@ fn full_associated_parameter_shapes_reject_foreign_missing_scope_and_old_owner_g
         );
         if mutation != 4 {
             assert!(
-                validator.work > 0,
+                validator.work.consumed > 0,
                 "refused authority retains consumed work"
             );
         }
@@ -375,7 +377,7 @@ fn full_associated_parameter_shapes_preserve_work_cancellation_and_fresh_retry()
             .parameter_owns_storage(f.parameter, record)
             .expect("baseline")
     );
-    let work = baseline.work;
+    let work = baseline.work.consumed;
     assert!(work > 1);
     let mut exact = validator(&f.source, work, &healthy);
     assert!(
@@ -424,7 +426,7 @@ fn full_associated_parameter_shapes_preserve_work_cancellation_and_fresh_retry()
         .expect_err("cancelled owner read");
     assert_eq!(error.code, "parameter_cancelled");
     assert!(cancelled.interrupted);
-    assert_eq!(cancelled.work, 1, "work before the refusal is retained");
+    assert_eq!(cancelled.work.consumed, 1, "work before the refusal is retained");
     let mut retry = validator(&f.source, MAXIMUM_VALIDATION_WORK, &healthy);
     assert!(
         retry

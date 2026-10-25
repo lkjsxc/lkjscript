@@ -16,11 +16,11 @@ declarations.begin
               (if
                 (call ci::same
                   (call ci::slice (local data) (i64 0) (i64 8))
-                  (call ci::text-bytes (text "LKJSG001")))
+                  (call ci::text-bytes (text "LKJSG002")))
                 (if
                   (call ci::eq (call ci::u32 (local data) (i64 8)) (local length))
                   (if
-                    (call artifact-check::zeros (local data) (i64 104) (i64 128))
+                    (call artifact-check::zeros (local data) (i64 112) (i64 128))
                     (call header (local data))
                     (i64 12))
                   (i64 12))
@@ -32,52 +32,21 @@ declarations.begin
       (returns I64)
       (body
         (let
-          (binding owners (call ci::u32 (local data) (i64 12)))
-          (binding types (call ci::u32 (local data) (i64 16)))
-          (binding retired (call ci::u32 (local data) (i64 20)))
           (binding name-length (call ci::u32 (local data) (i64 24)))
-          (binding fuel (call ci::u32 (local data) (i64 100)))
+          (binding policy (call source-budget::from-carrier (local data)))
           (in
             (if
-              (call ci::lt (i64 100000) (local owners))
+              (call ci::either
+                (call ci::lt (local name-length) (i64 1))
+                (call ci::lt (i64 128) (local name-length)))
               (i64 12)
               (if
-                (call ci::lt (i64 100000) (local types))
-                (i64 12)
+                (call ci::eq (call ci::u32 (local data) (i64 28)) (i64 0))
                 (if
-                  (call ci::lt (i64 100000) (local retired))
-                  (i64 12)
-                  (if
-                    (call ci::lt (local name-length) (i64 1))
-                    (i64 12)
-                    (if
-                      (call ci::lt (i64 128) (local name-length))
-                      (i64 12)
-                      (let
-                        (binding count
-                          (call ci::add (local owners) (call ci::add (local types) (local retired))))
-                        (in
-                          (if
-                            (call ci::lt (i64 100000) (local count))
-                            (i64 12)
-                            (if
-                              (call ci::eq (call ci::u32 (local data) (i64 28)) (i64 0))
-                              (if
-                                (call ci::lt (i64 2147483647) (local fuel))
-                                (i64 6)
-                                (let
-                                  (binding minimum
-                                    (call ci::add
-                                      (i64 4096)
-                                      (call ci::add
-                                        (call ci::mul (i64 128) (call ci::length (local data)))
-                                        (call ci::mul (i64 1024) (local count)))))
-                                  (in
-                                    (if
-                                      (call ci::lt (local fuel) (local minimum))
-                                      (i64 6)
-                                      (call layout (local data))))))
-                              (i64 13))))))))))))))
+                  (call source-budget::failed (local policy))
+                  (field (local policy) (name code))
+                  (call layout (local data)))
+                (i64 13)))))))
     (function create layout
       (visibility private)
       (effect pure)
@@ -290,9 +259,7 @@ declarations.begin
             (i64 0)
             (let
               (binding at
-                (call ci::add
-                  (call ci::u32 (local data) (i64 80))
-                  (call ci::mul (local index) (i64 50))))
+                (call ci::add (call ci::u32 (local data) (i64 80)) (call ci::mul (local index) (i64 50))))
               (binding found
                 (call source-index::lookup
                   (local data)

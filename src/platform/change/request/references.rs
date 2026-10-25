@@ -91,7 +91,6 @@ pub(super) fn inventory(
             if bindings.packages.is_empty()
                 || bindings.raw_records != bindings.origins.len() as u64
                 || bindings.raw_records == 0
-                || bindings.raw_records > MAXIMUM_AUTHORED_CHANGES as u64
                 || bindings.owners.len() > bindings.origins.len()
                 || bindings.packages.len() > bindings.origins.len() + 1
                 || bindings.packages.windows(2).any(|pair| pair[0] >= pair[1])

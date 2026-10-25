@@ -9,15 +9,10 @@ use super::change::ChangeRequestCommitment;
 use super::{CompactRecord, parse_records, render_record};
 use crate::platform::change::{
     AuthoredAllocation, ChangeBudget, FunctionExtractionEvidence, HttpRoutePlanEvidence,
-    ImpactReason, ImpactReasonKind, LogicalChangePlanEvidence, MAXIMUM_REFRESH_GUARDS,
+    ImpactReason, ImpactReasonKind, LogicalChangePlanEvidence,
 };
-use crate::platform::contract::{
-    MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS, MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES,
-    MAXIMUM_FUNCTION_EXTRACTION_CAPTURES, MAXIMUM_FUNCTION_EXTRACTION_CHANGED_OWNERS,
-    MAXIMUM_FUNCTION_EXTRACTION_GENERATED_OWNERS, MAXIMUM_FUNCTION_EXTRACTION_MOVED_OWNERS,
-    MAXIMUM_FUNCTION_EXTRACTION_PRESERVED_OWNERS, MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS,
-    capabilities_snapshot, registry_snapshot,
-};
+use crate::platform::contract::{capabilities_snapshot, registry_snapshot};
+use crate::platform::change::budget::BudgetCounter;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ChangeDigest, DependencyObjectDigest, DependencyRecord, EncodedOwnerKey, ExactOwnerKey,
@@ -39,13 +34,12 @@ use crate::platform::semantic_id::{
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::io::{BufRead, Read};
+use std::io::BufRead;
 use std::str::FromStr;
 
 pub const LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY: &str = "lkjscript-logical-change-plan";
-pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 =
-    crate::platform::canonical_schema::SCHEMA_EPOCH;
-pub const PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN: &str = "lkjscript.logical-change-plan.v6";
+pub const LOGICAL_CHANGE_PLAN_CONTRACT_VERSION: u16 = 2;
+pub const PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN: &str = "lkjscript.logical-change-plan.v7";
 const INTERNAL_PLAN_BINDING_LABEL: &[u8] = b"lkjscript.logical-change-plan.internal-registry\0";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -64,7 +58,7 @@ macro_rules! plan_record {
 }
 
 pub(crate) const LOGICAL_PLAN_RECORD_DESCRIPTORS: &[LogicalPlanRecordDescriptor] = &[
-    plan_record!("logical-plan", ["product", "version"]),
+    plan_record!("logical-plan", ["product", "version", "profile"]),
     plan_record!("logical-plan.capabilities", ["digest"]),
     plan_record!(
         "logical-plan.authority",
@@ -431,86 +425,9 @@ pub(crate) const LOGICAL_PLAN_RECORD_DESCRIPTORS: &[LogicalPlanRecordDescriptor]
     plan_record!("logical-plan.digest", ["request", "prepared", "token"]),
 ];
 
-const FIXED_LOGICAL_PLAN_RECORDS: u64 = 18;
-const DEFAULT_EXTRACTION_OWNER_RECORDS: u64 = MAXIMUM_FUNCTION_EXTRACTION_MOVED_OWNERS
-    + MAXIMUM_FUNCTION_EXTRACTION_PRESERVED_OWNERS
-    + MAXIMUM_FUNCTION_EXTRACTION_CHANGED_OWNERS
-    + MAXIMUM_FUNCTION_EXTRACTION_GENERATED_OWNERS;
-const DEFAULT_EXTRACTION_RECORDS: u64 = 1
-    + MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS
-    + MAXIMUM_FUNCTION_EXTRACTION_CAPTURES
-    + MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES
-    + DEFAULT_EXTRACTION_OWNER_RECORDS;
-const DEFAULT_ALLOCATIONS: u64 = 100_000;
-const DEFAULT_OWNER_CHANGES: u64 = 100_000;
-const DEFAULT_TYPE_ADDITIONS: u64 = 100_000;
-const DEFAULT_DEPENDENCY_CHANGES: u64 = 10_000;
-const DEFAULT_RETIREMENT_CHANGES: u64 = 100_000;
-const DEFAULT_RELATION_CHANGES: u64 = 100_000;
-const DEFAULT_STRUCTURAL_OWNERS: u64 = 100_000;
-const DEFAULT_SEMANTIC_OWNERS: u64 = 10_000;
-const DEFAULT_SELECTED_TESTS: u64 = 10_000;
-const DEFAULT_IMPACT_REASONS: u64 = 110_000;
-const DEFAULT_HTTP_ROUTE_EVIDENCE: u64 = DEFAULT_SEMANTIC_OWNERS;
-
-/// Fixed plan-file admission covering every logical record possible under the current default
-/// change admissions. Requests may declare larger engine budgets, but their actual logical plan
-/// must still fit this independent complete-review boundary.
-pub const MAXIMUM_LOGICAL_PLAN_RECORDS: u64 = 20_001
-    + FIXED_LOGICAL_PLAN_RECORDS
-    + DEFAULT_EXTRACTION_RECORDS
-    + DEFAULT_ALLOCATIONS
-    + DEFAULT_OWNER_CHANGES
-    + DEFAULT_HTTP_ROUTE_EVIDENCE.saturating_mul(2)
-    + DEFAULT_TYPE_ADDITIONS
-    + DEFAULT_DEPENDENCY_CHANGES
-    + 2 * DEFAULT_DEPENDENCY_CHANGES
-    + DEFAULT_RETIREMENT_CHANGES
-    + DEFAULT_RELATION_CHANGES
-    + DEFAULT_STRUCTURAL_OWNERS
-    + DEFAULT_SEMANTIC_OWNERS
-    + DEFAULT_SELECTED_TESTS
-    + DEFAULT_IMPACT_REASONS;
-
-// These are the exact canonical byte maxima, including newline framing, for current default
-// admissions and current typed text forms. The fixed total includes every singleton/budget record
-// and the maximally escaped 4,096-byte intent. A unit test renders each maximum and requires exact
-// equality, so vocabulary or field-bound growth must deliberately revise this contract.
-const MAXIMUM_FIXED_RECORDS_BYTES: u64 = 28_031;
-const MAXIMUM_PACKAGE_RECORD_BYTES: u64 = 352;
-const MAXIMUM_ALLOCATION_RECORD_BYTES: u64 = 111;
-const MAXIMUM_OWNER_RECORD_BYTES: u64 = 857;
-const MAXIMUM_HTTP_ROUTE_RECORD_BYTES: u64 = 65_536;
-const MAXIMUM_TYPE_RECORD_BYTES: u64 = 111;
-const MAXIMUM_DEPENDENCY_RECORD_BYTES: u64 = 699;
-const MAXIMUM_RETIREMENT_RECORD_BYTES: u64 = 1_225;
-const MAXIMUM_RELATION_RECORD_BYTES: u64 = 331;
-const MAXIMUM_SELECTION_RECORD_BYTES: u64 = 85;
-const MAXIMUM_REASON_RECORD_BYTES: u64 = 206;
-const MAXIMUM_EXTRACTION_HEADER_RECORD_BYTES: u64 = 766;
-const MAXIMUM_EXTRACTION_REQUIREMENT_RECORD_BYTES: u64 = 141;
-const MAXIMUM_EXTRACTION_CAPTURE_RECORD_BYTES: u64 = 528;
-const MAXIMUM_EXTRACTION_USE_RECORD_BYTES: u64 = 101;
-const MAXIMUM_EXTRACTION_OWNER_RECORD_BYTES: u64 = 102;
-
-pub const MAXIMUM_LOGICAL_PLAN_BYTES: u64 = 20_001 * 1_024
-    + MAXIMUM_FIXED_RECORDS_BYTES
-    + MAXIMUM_EXTRACTION_HEADER_RECORD_BYTES
-    + MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS * MAXIMUM_EXTRACTION_REQUIREMENT_RECORD_BYTES
-    + MAXIMUM_FUNCTION_EXTRACTION_CAPTURES * MAXIMUM_EXTRACTION_CAPTURE_RECORD_BYTES
-    + MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES * MAXIMUM_EXTRACTION_USE_RECORD_BYTES
-    + DEFAULT_EXTRACTION_OWNER_RECORDS * MAXIMUM_EXTRACTION_OWNER_RECORD_BYTES
-    + DEFAULT_ALLOCATIONS * MAXIMUM_ALLOCATION_RECORD_BYTES
-    + DEFAULT_OWNER_CHANGES * MAXIMUM_OWNER_RECORD_BYTES
-    + DEFAULT_HTTP_ROUTE_EVIDENCE.saturating_mul(2) * MAXIMUM_HTTP_ROUTE_RECORD_BYTES
-    + DEFAULT_TYPE_ADDITIONS * MAXIMUM_TYPE_RECORD_BYTES
-    + DEFAULT_DEPENDENCY_CHANGES * MAXIMUM_DEPENDENCY_RECORD_BYTES
-    + 2 * DEFAULT_DEPENDENCY_CHANGES * MAXIMUM_PACKAGE_RECORD_BYTES
-    + DEFAULT_RETIREMENT_CHANGES * MAXIMUM_RETIREMENT_RECORD_BYTES
-    + DEFAULT_RELATION_CHANGES * MAXIMUM_RELATION_RECORD_BYTES
-    + (DEFAULT_STRUCTURAL_OWNERS + DEFAULT_SEMANTIC_OWNERS + DEFAULT_SELECTED_TESTS)
-        * MAXIMUM_SELECTION_RECORD_BYTES
-    + DEFAULT_IMPACT_REASONS * MAXIMUM_REASON_RECORD_BYTES;
+/// Ordinary plan emission and streaming decode have no configured total quotas.
+pub const MAXIMUM_LOGICAL_PLAN_RECORDS: Option<u64> = None;
+pub const MAXIMUM_LOGICAL_PLAN_BYTES: Option<u64> = None;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) struct PreparedPlanCommitment([u8; 32]);
@@ -722,6 +639,8 @@ pub(crate) struct LogicalPlanEncoding {
     pub token: ChangePlanToken,
     pub bytes: u64,
     pub records: u64,
+    /// Counts are lower bounds when saturation occurred.
+    pub saturated: bool,
 }
 
 /// Renders and hashes one canonical logical plan in a single traversal. `emit` may discard bytes,
@@ -751,14 +670,14 @@ pub(crate) fn encode_logical_change_plan_with_limits<F>(
 where
     F: FnMut(&[u8]) -> Result<(), Diagnostic>,
 {
-    encode_logical_change_plan_admitted(plan, emit, maximum_bytes, maximum_records)
+    encode_logical_change_plan_admitted(plan, emit, Some(maximum_bytes), Some(maximum_records))
 }
 
 fn encode_logical_change_plan_admitted<F>(
     plan: &LogicalChangePlan<'_>,
     mut emit: F,
-    maximum_bytes: u64,
-    maximum_records: u64,
+    maximum_bytes: Option<u64>,
+    maximum_records: Option<u64>,
 ) -> Result<LogicalPlanEncoding, Diagnostic>
 where
     F: FnMut(&[u8]) -> Result<(), Diagnostic>,
@@ -781,30 +700,31 @@ where
     )?;
     Ok(LogicalPlanEncoding {
         token,
-        bytes: encoder.bytes,
-        records: encoder.records,
+        bytes: encoder.bytes.consumed,
+        records: encoder.records.consumed,
+        saturated: encoder.bytes.saturated || encoder.records.saturated,
     })
 }
 
 struct PlanEncoder<'a, F> {
     emit: &'a mut F,
     hasher: blake3::Hasher,
-    bytes: u64,
-    records: u64,
-    maximum_bytes: u64,
-    maximum_records: u64,
+    bytes: BudgetCounter,
+    records: BudgetCounter,
+    maximum_bytes: Option<u64>,
+    maximum_records: Option<u64>,
 }
 
 impl<F> PlanEncoder<'_, F>
 where
     F: FnMut(&[u8]) -> Result<(), Diagnostic>,
 {
-    fn new(emit: &mut F, maximum_bytes: u64, maximum_records: u64) -> PlanEncoder<'_, F> {
+    fn new(emit: &mut F, maximum_bytes: Option<u64>, maximum_records: Option<u64>) -> PlanEncoder<'_, F> {
         PlanEncoder {
             emit,
             hasher: blake3::Hasher::new_derive_key(PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN),
-            bytes: 0,
-            records: 0,
+            bytes: BudgetCounter::default(),
+            records: BudgetCounter::default(),
             maximum_bytes,
             maximum_records,
         }
@@ -839,36 +759,10 @@ where
                 "logical plan record length exceeds the platform counter domain",
             )
         })?;
-        let bytes = self.bytes.checked_add(additional).ok_or_else(|| {
-            plan_resource_error(
-                "change_plan_output_byte_budget",
-                "logical plan byte accounting overflowed",
-            )
-        })?;
-        let records = self.records.checked_add(1).ok_or_else(|| {
-            plan_resource_error(
-                "change_plan_output_record_budget",
-                "logical plan record accounting overflowed",
-            )
-        })?;
-        if bytes > self.maximum_bytes {
-            return Err(plan_resource_error(
-                "change_plan_output_byte_budget",
-                format!(
-                    "logical plan requires more than the {}-byte complete-review budget",
-                    self.maximum_bytes
-                ),
-            ));
-        }
-        if records > self.maximum_records {
-            return Err(plan_resource_error(
-                "change_plan_output_record_budget",
-                format!(
-                    "logical plan requires more than the {}-record complete-review budget",
-                    self.maximum_records
-                ),
-            ));
-        }
+        let bytes = plan_charge(self.bytes, additional, self.maximum_bytes,
+            "change_plan_output_byte_budget", "logical plan byte")?;
+        let records = plan_charge(self.records, 1, self.maximum_records,
+            "change_plan_output_record_budget", "logical plan record")?;
         if hashed {
             self.hasher.update(record.as_bytes());
         }
@@ -905,6 +799,7 @@ where
         &[
             ("product", "lkjscript".to_owned()),
             ("version", crate::PRODUCT_VERSION.to_owned()),
+            ("profile", LOGICAL_CHANGE_PLAN_CONTRACT_VERSION.to_string()),
         ],
     )?;
     encoder.append(
@@ -1400,16 +1295,16 @@ where
     encoder.append(
         "logical-plan.budget-authored",
         &[
-            ("operations", budget.authored.maximum_operations.to_string()),
+            ("operations", render_policy(budget.authored.maximum_operations)),
             (
                 "preconditions",
-                budget.authored.maximum_preconditions.to_string(),
+                render_policy(budget.authored.maximum_preconditions),
             ),
             (
                 "allocated-identities",
-                budget.authored.maximum_allocated_identities.to_string(),
+                render_policy(budget.authored.maximum_allocated_identities),
             ),
-            ("type-nodes", budget.authored.maximum_type_nodes.to_string()),
+            ("type-nodes", render_policy(budget.authored.maximum_type_nodes)),
         ],
     )?;
     encoder.append(
@@ -1417,19 +1312,19 @@ where
         &[
             (
                 "owners",
-                budget.canonical_edits.maximum_owner_edits.to_string(),
+                render_policy(budget.canonical_edits.maximum_owner_edits),
             ),
             (
                 "types",
-                budget.canonical_edits.maximum_type_edits.to_string(),
+                render_policy(budget.canonical_edits.maximum_type_edits),
             ),
             (
                 "dependencies",
-                budget.canonical_edits.maximum_dependency_edits.to_string(),
+                render_policy(budget.canonical_edits.maximum_dependency_edits),
             ),
             (
                 "retirements",
-                budget.canonical_edits.maximum_retirement_edits.to_string(),
+                render_policy(budget.canonical_edits.maximum_retirement_edits),
             ),
         ],
     )?;
@@ -1449,17 +1344,11 @@ where
         &[
             (
                 "pages",
-                budget
-                    .canonical_map_update
-                    .maximum_pages_encoded
-                    .to_string(),
+                render_policy(budget.canonical_map_update.maximum_pages_encoded),
             ),
             (
                 "bytes",
-                budget
-                    .canonical_map_update
-                    .maximum_bytes_encoded
-                    .to_string(),
+                render_policy(budget.canonical_map_update.maximum_bytes_encoded),
             ),
         ],
     )?;
@@ -1479,31 +1368,31 @@ where
         &[
             (
                 "affected-owners",
-                budget.impact.maximum_affected_owners.to_string(),
+                render_policy(budget.impact.maximum_affected_owners),
             ),
             (
                 "summary-owners",
-                budget.impact.maximum_summary_owners.to_string(),
+                render_policy(budget.impact.maximum_summary_owners),
             ),
             (
                 "summary-edits",
-                budget.impact.maximum_summary_edits.to_string(),
+                render_policy(budget.impact.maximum_summary_edits),
             ),
             (
                 "ownership-steps",
-                budget.impact.maximum_ownership_steps.to_string(),
+                render_policy(budget.impact.maximum_ownership_steps),
             ),
             (
                 "behavior-owners",
-                budget.impact.maximum_behavior_owners.to_string(),
+                render_policy(budget.impact.maximum_behavior_owners),
             ),
             (
                 "relation-edges",
-                budget.impact.maximum_relation_edges.to_string(),
+                render_policy(budget.impact.maximum_relation_edges),
             ),
             (
                 "relation-fanout",
-                budget.impact.maximum_relation_fanout.to_string(),
+                render_policy(budget.impact.maximum_relation_fanout),
             ),
         ],
     )?;
@@ -1512,64 +1401,64 @@ where
         &[
             (
                 "owner-records",
-                budget.validation.maximum_owner_records.to_string(),
+                render_policy(budget.validation.maximum_owner_records),
             ),
             (
                 "ownership-entries",
-                budget.validation.maximum_ownership_entries.to_string(),
+                render_policy(budget.validation.maximum_ownership_entries),
             ),
             (
                 "type-objects",
-                budget.validation.maximum_type_objects.to_string(),
+                render_policy(budget.validation.maximum_type_objects),
             ),
             (
                 "expression-steps",
-                budget.validation.maximum_expression_steps.to_string(),
+                render_policy(budget.validation.maximum_expression_steps),
             ),
             (
                 "diagnostics",
-                budget.validation.maximum_diagnostics.to_string(),
+                render_policy(budget.validation.maximum_diagnostics),
             ),
         ],
     )?;
     encoder.append(
         "logical-plan.budget-tests",
         &[
-            ("selected", budget.tests.maximum_selected.to_string()),
+            ("selected", render_policy(budget.tests.maximum_selected)),
             (
                 "dependencies-per-test",
-                budget.tests.maximum_dependencies_per_test.to_string(),
+                render_policy(budget.tests.maximum_dependencies_per_test),
             ),
             (
                 "ownership-steps",
-                budget.tests.maximum_ownership_steps.to_string(),
+                render_policy(budget.tests.maximum_ownership_steps),
             ),
             (
                 "owners-visited",
-                budget.tests.maximum_owners_visited.to_string(),
+                render_policy(budget.tests.maximum_owners_visited),
             ),
         ],
     )?;
     encoder.append(
         "logical-plan.budget-witness-update",
         &[
-            ("edits", budget.witness_update.maximum_edits.to_string()),
+            ("edits", render_policy(budget.witness_update.maximum_edits)),
             (
                 "pages",
-                budget.witness_update.maximum_pages_encoded.to_string(),
+                render_policy(budget.witness_update.maximum_pages_encoded),
             ),
             (
                 "bytes",
-                budget.witness_update.maximum_bytes_encoded.to_string(),
+                render_policy(budget.witness_update.maximum_bytes_encoded),
             ),
         ],
     )?;
     encoder.append(
         "logical-plan.budget-staging",
         &[
-            ("objects", budget.staging.maximum_objects.to_string()),
-            ("bytes", budget.staging.maximum_bytes.to_string()),
-            ("pages", budget.staging.maximum_pages.to_string()),
+            ("objects", render_policy(budget.staging.maximum_objects)),
+            ("bytes", render_policy(budget.staging.maximum_bytes)),
+            ("pages", render_policy(budget.staging.maximum_pages)),
         ],
     )
 }
@@ -1580,13 +1469,13 @@ where
 )]
 fn encode_read_budget<F>(
     operation: &str,
-    point_reads: u64,
-    map_pages: u64,
-    map_entries: u64,
-    catalog_lookups: u64,
-    objects: u64,
-    bytes: u64,
-    decoded_records: u64,
+    point_reads: Option<u64>,
+    map_pages: Option<u64>,
+    map_entries: Option<u64>,
+    catalog_lookups: Option<u64>,
+    objects: Option<u64>,
+    bytes: Option<u64>,
+    decoded_records: Option<u64>,
     encoder: &mut PlanEncoder<'_, F>,
 ) -> Result<(), Diagnostic>
 where
@@ -1595,13 +1484,13 @@ where
     encoder.append(
         operation,
         &[
-            ("point-reads", point_reads.to_string()),
-            ("map-pages", map_pages.to_string()),
-            ("map-entries", map_entries.to_string()),
-            ("catalog-lookups", catalog_lookups.to_string()),
-            ("objects", objects.to_string()),
-            ("bytes", bytes.to_string()),
-            ("decoded-records", decoded_records.to_string()),
+            ("point-reads", render_policy(point_reads)),
+            ("map-pages", render_policy(map_pages)),
+            ("map-entries", render_policy(map_entries)),
+            ("catalog-lookups", render_policy(catalog_lookups)),
+            ("objects", render_policy(objects)),
+            ("bytes", render_policy(bytes)),
+            ("decoded-records", render_policy(decoded_records)),
         ],
     )
 }
@@ -2048,9 +1937,11 @@ pub struct DecodedLogicalPlan {
     pub counts: LogicalPlanCounts,
     pub bytes: u64,
     pub records: u64,
+    /// Counts are lower bounds when saturation occurred.
+    pub saturated: bool,
 }
 
-/// Strictly validates a bounded canonical plan stream without retaining its complete bytes.
+/// Strictly validates a canonical plan stream without retaining its complete bytes.
 pub fn decode_logical_change_plan<R: BufRead>(
     mut reader: R,
 ) -> Result<DecodedLogicalPlan, Diagnostic> {
@@ -2058,31 +1949,27 @@ pub fn decode_logical_change_plan<R: BufRead>(
     let mut line = Vec::new();
     loop {
         line.clear();
-        let mut bounded_record = (&mut reader).take(64 * 1_024 + 1);
-        let read = bounded_record
-            .read_until(b'\n', &mut line)
-            .map_err(|error| {
-                plan_source_error(
-                    "change_plan_file_read",
-                    format!("logical plan file could not be read: {error}"),
-                )
-            })?;
-        if read == 0 {
-            break;
+        loop {
+            let buffered = reader.fill_buf().map_err(|error| plan_source_error(
+                "change_plan_file_read", format!("logical plan file could not be read: {error}")))?;
+            if buffered.is_empty() { break; }
+            let count = buffered.iter().position(|byte| *byte == b'\n')
+                .map_or(buffered.len(), |index| index + 1);
+            let terminated = buffered[count - 1] == b'\n';
+            line.try_reserve(count).map_err(|_| plan_resource_error(
+                "change_plan_file_allocation", "logical plan record allocation failed"))?;
+            line.extend_from_slice(&buffered[..count]);
+            reader.consume(count);
+            if terminated { break; }
         }
-        if line.len() > 64 * 1_024 {
-            return Err(plan_resource_error(
-                "change_plan_file_record_bytes",
-                "logical plan record exceeds the 65536-byte compact-record bound",
-            ));
-        }
+        if line.is_empty() { break; }
         if line.last() != Some(&b'\n') {
             return Err(plan_source_error(
                 "change_plan_file_truncated",
                 "logical plan file ends inside a record",
             ));
         }
-        decoder.observe_meter(line.len())?;
+        decoder.observe_meter(line.len());
         let parsed = parse_records("<logical-plan>", &line).map_err(|diagnostics| {
             diagnostics.into_iter().next().unwrap_or_else(|| {
                 plan_source_error(
@@ -2118,8 +2005,8 @@ pub fn decode_logical_change_plan<R: BufRead>(
 struct PlanDecoder {
     references: references::Decoder,
     hasher: blake3::Hasher,
-    bytes: u64,
-    records: u64,
+    bytes: BudgetCounter,
+    records: BudgetCounter,
     next_fixed: usize,
     phase: usize,
     trailer_seen: bool,
@@ -2171,8 +2058,8 @@ impl PlanDecoder {
         Self {
             references: references::Decoder::default(),
             hasher: blake3::Hasher::new_derive_key(PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN),
-            bytes: 0,
-            records: 0,
+            bytes: BudgetCounter::default(),
+            records: BudgetCounter::default(),
             next_fixed: 0,
             phase: 16,
             trailer_seen: false,
@@ -2220,39 +2107,9 @@ impl PlanDecoder {
         }
     }
 
-    fn observe_meter(&mut self, bytes: usize) -> Result<(), Diagnostic> {
-        self.bytes = self
-            .bytes
-            .checked_add(u64::try_from(bytes).unwrap_or(u64::MAX))
-            .ok_or_else(|| {
-                plan_resource_error(
-                    "change_plan_file_byte_budget",
-                    "logical plan decoder byte accounting overflowed",
-                )
-            })?;
-        self.records = self.records.checked_add(1).ok_or_else(|| {
-            plan_resource_error(
-                "change_plan_file_record_budget",
-                "logical plan decoder record accounting overflowed",
-            )
-        })?;
-        if self.bytes > MAXIMUM_LOGICAL_PLAN_BYTES {
-            return Err(plan_resource_error(
-                "change_plan_file_byte_budget",
-                format!(
-                    "logical plan file exceeds the {MAXIMUM_LOGICAL_PLAN_BYTES}-byte decoder bound"
-                ),
-            ));
-        }
-        if self.records > MAXIMUM_LOGICAL_PLAN_RECORDS {
-            return Err(plan_resource_error(
-                "change_plan_file_record_budget",
-                format!(
-                    "logical plan file exceeds the {MAXIMUM_LOGICAL_PLAN_RECORDS}-record decoder bound"
-                ),
-            ));
-        }
-        Ok(())
+    fn observe_meter(&mut self, bytes: usize) {
+        self.bytes.observe(BudgetCounter::exact(bytes as u64));
+        self.records.observe(BudgetCounter::exact(1));
     }
 
     fn accept(&mut self, record: &CompactRecord, line: &[u8]) -> Result<(), Diagnostic> {
@@ -2424,12 +2281,6 @@ impl PlanDecoder {
         }
         let digest = decode_hex_32(digest)?;
         let guards = parse_u64(field(record, 2), "authored intent read guard count")?;
-        if guards > u64::try_from(MAXIMUM_REFRESH_GUARDS).unwrap_or(u64::MAX) {
-            return Err(plan_resource_error(
-                "change_plan_file_intent_read_guards",
-                "authored intent read guard count exceeds complete refresh footprint admission",
-            ));
-        }
         let present = parse_bool(field(record, 3), "refreshed plan origin presence")?;
         let refresh = if present {
             let original_prepared = parse_prepared_commitment(field(record, 4))?;
@@ -2484,17 +2335,19 @@ impl PlanDecoder {
         let changed = parse_u64(field(record, 14), "changed owner count")?;
         let generated = parse_u64(field(record, 15), "generated owner count")?;
         let affine = parse_bool(field(record, 16), "affine capture presence")?;
-        let expected_generated = captures.saturating_mul(2).saturating_add(2);
+        let expected_generated = captures.checked_mul(2).and_then(|value| value.checked_add(2))
+            .ok_or_else(|| plan_source_error("change_plan_file_extraction_counts",
+                "generated extraction owner count exceeds u64 framing"))?;
         if moved == 0
-            || moved > MAXIMUM_FUNCTION_EXTRACTION_MOVED_OWNERS
+
             || caller_body == 0
-            || caller_body > MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS
+
             || helper_body != moved
-            || captures > MAXIMUM_FUNCTION_EXTRACTION_CAPTURES
-            || requirements > MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS
-            || preserved > MAXIMUM_FUNCTION_EXTRACTION_PRESERVED_OWNERS
-            || changed > MAXIMUM_FUNCTION_EXTRACTION_CHANGED_OWNERS
-            || generated > MAXIMUM_FUNCTION_EXTRACTION_GENERATED_OWNERS
+
+
+
+
+
             || generated != expected_generated
         {
             return Err(plan_source_error(
@@ -2648,7 +2501,6 @@ impl PlanDecoder {
         }
         let expression = OwnerKey::Expression(field(record, 2).parse::<ExpressionId>()?);
         if !self.extraction_capture_uses.insert(expression)
-            || self.counts.extraction_uses >= MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES
         {
             return Err(plan_source_error(
                 "change_plan_file_extraction_use_identity",
@@ -2788,12 +2640,6 @@ impl PlanDecoder {
             || !self
                 .unchanged_http_route_befores
                 .is_disjoint(&self.changed_http_route_afters)
-            || self
-                .changed_http_route_befores
-                .union(&self.changed_http_route_afters)
-                .count()
-                .saturating_add(self.unchanged_http_route_befores.len())
-                > usize::try_from(DEFAULT_HTTP_ROUTE_EVIDENCE).unwrap_or(usize::MAX)
         {
             return Err(plan_source_error(
                 "change_plan_file_http_route_sets",
@@ -3213,12 +3059,6 @@ impl PlanDecoder {
             &mut self.counts.package_befores
         };
         increment(count, "package closure member")?;
-        if *count > DEFAULT_DEPENDENCY_CHANGES {
-            return Err(plan_source_error(
-                "change_plan_package_count",
-                "package closure exceeds bounded review membership",
-            ));
-        }
         Ok(())
     }
 
@@ -3264,8 +3104,9 @@ impl PlanDecoder {
             prepared_plan_commitment: prepared.to_string(),
             token: token.to_string(),
             counts: self.counts,
-            bytes: self.bytes,
-            records: self.records,
+            bytes: self.bytes.consumed,
+            records: self.records.consumed,
+            saturated: self.bytes.saturated || self.records.saturated,
         })
     }
 }
@@ -3328,7 +3169,9 @@ fn bind_internal_registry(hasher: &mut blake3::Hasher, digest: &str) {
 }
 
 fn validate_header(record: &CompactRecord) -> Result<(), Diagnostic> {
-    if field(record, 0) != "lkjscript" || field(record, 1) != crate::PRODUCT_VERSION {
+    if field(record, 0) != "lkjscript" || field(record, 1) != crate::PRODUCT_VERSION
+        || field(record, 2) != LOGICAL_CHANGE_PLAN_CONTRACT_VERSION.to_string()
+    {
         return Err(plan_source_error(
             "change_plan_file_product",
             "logical plan file names a predecessor or foreign product",
@@ -3379,11 +3222,11 @@ fn decode_budget_authored(
     record: &CompactRecord,
     budget: &mut ChangeBudget,
 ) -> Result<(), Diagnostic> {
-    budget.authored.maximum_operations = parse_u64(field(record, 0), "operations")?;
-    budget.authored.maximum_preconditions = parse_u64(field(record, 1), "preconditions")?;
+    budget.authored.maximum_operations = parse_policy(field(record, 0), "operations")?;
+    budget.authored.maximum_preconditions = parse_policy(field(record, 1), "preconditions")?;
     budget.authored.maximum_allocated_identities =
-        parse_u64(field(record, 2), "allocated identities")?;
-    budget.authored.maximum_type_nodes = parse_u64(field(record, 3), "type nodes")?;
+        parse_policy(field(record, 2), "allocated identities")?;
+    budget.authored.maximum_type_nodes = parse_policy(field(record, 3), "type nodes")?;
     Ok(())
 }
 
@@ -3391,12 +3234,12 @@ fn decode_budget_canonical_edits(
     record: &CompactRecord,
     budget: &mut ChangeBudget,
 ) -> Result<(), Diagnostic> {
-    budget.canonical_edits.maximum_owner_edits = parse_u64(field(record, 0), "owner edits")?;
-    budget.canonical_edits.maximum_type_edits = parse_u64(field(record, 1), "type edits")?;
+    budget.canonical_edits.maximum_owner_edits = parse_policy(field(record, 0), "owner edits")?;
+    budget.canonical_edits.maximum_type_edits = parse_policy(field(record, 1), "type edits")?;
     budget.canonical_edits.maximum_dependency_edits =
-        parse_u64(field(record, 2), "dependency edits")?;
+        parse_policy(field(record, 2), "dependency edits")?;
     budget.canonical_edits.maximum_retirement_edits =
-        parse_u64(field(record, 3), "retirement edits")?;
+        parse_policy(field(record, 3), "retirement edits")?;
     Ok(())
 }
 
@@ -3404,15 +3247,15 @@ fn decode_budget_canonical_reads(
     record: &CompactRecord,
     budget: &mut ChangeBudget,
 ) -> Result<(), Diagnostic> {
-    budget.canonical_reads.maximum_point_reads = parse_u64(field(record, 0), "point reads")?;
-    budget.canonical_reads.maximum_map_pages = parse_u64(field(record, 1), "map pages")?;
-    budget.canonical_reads.maximum_map_entries = parse_u64(field(record, 2), "map entries")?;
+    budget.canonical_reads.maximum_point_reads = parse_policy(field(record, 0), "point reads")?;
+    budget.canonical_reads.maximum_map_pages = parse_policy(field(record, 1), "map pages")?;
+    budget.canonical_reads.maximum_map_entries = parse_policy(field(record, 2), "map entries")?;
     budget.canonical_reads.maximum_catalog_lookups =
-        parse_u64(field(record, 3), "catalog lookups")?;
-    budget.canonical_reads.maximum_objects = parse_u64(field(record, 4), "objects")?;
-    budget.canonical_reads.maximum_bytes = parse_u64(field(record, 5), "bytes")?;
+        parse_policy(field(record, 3), "catalog lookups")?;
+    budget.canonical_reads.maximum_objects = parse_policy(field(record, 4), "objects")?;
+    budget.canonical_reads.maximum_bytes = parse_policy(field(record, 5), "bytes")?;
     budget.canonical_reads.maximum_decoded_records =
-        parse_u64(field(record, 6), "decoded records")?;
+        parse_policy(field(record, 6), "decoded records")?;
     Ok(())
 }
 
@@ -3420,8 +3263,8 @@ fn decode_budget_canonical_map(
     record: &CompactRecord,
     budget: &mut ChangeBudget,
 ) -> Result<(), Diagnostic> {
-    budget.canonical_map_update.maximum_pages_encoded = parse_u64(field(record, 0), "pages")?;
-    budget.canonical_map_update.maximum_bytes_encoded = parse_u64(field(record, 1), "bytes")?;
+    budget.canonical_map_update.maximum_pages_encoded = parse_policy(field(record, 0), "pages")?;
+    budget.canonical_map_update.maximum_bytes_encoded = parse_policy(field(record, 1), "bytes")?;
     Ok(())
 }
 
@@ -3429,13 +3272,13 @@ fn decode_budget_witness_reads(
     record: &CompactRecord,
     budget: &mut ChangeBudget,
 ) -> Result<(), Diagnostic> {
-    budget.witness_reads.maximum_point_reads = parse_u64(field(record, 0), "point reads")?;
-    budget.witness_reads.maximum_map_pages = parse_u64(field(record, 1), "map pages")?;
-    budget.witness_reads.maximum_map_entries = parse_u64(field(record, 2), "map entries")?;
-    budget.witness_reads.maximum_catalog_lookups = parse_u64(field(record, 3), "catalog lookups")?;
-    budget.witness_reads.maximum_objects = parse_u64(field(record, 4), "objects")?;
-    budget.witness_reads.maximum_bytes = parse_u64(field(record, 5), "bytes")?;
-    budget.witness_reads.maximum_decoded_records = parse_u64(field(record, 6), "decoded records")?;
+    budget.witness_reads.maximum_point_reads = parse_policy(field(record, 0), "point reads")?;
+    budget.witness_reads.maximum_map_pages = parse_policy(field(record, 1), "map pages")?;
+    budget.witness_reads.maximum_map_entries = parse_policy(field(record, 2), "map entries")?;
+    budget.witness_reads.maximum_catalog_lookups = parse_policy(field(record, 3), "catalog lookups")?;
+    budget.witness_reads.maximum_objects = parse_policy(field(record, 4), "objects")?;
+    budget.witness_reads.maximum_bytes = parse_policy(field(record, 5), "bytes")?;
+    budget.witness_reads.maximum_decoded_records = parse_policy(field(record, 6), "decoded records")?;
     Ok(())
 }
 
@@ -3443,13 +3286,13 @@ fn decode_budget_impact(
     record: &CompactRecord,
     budget: &mut ChangeBudget,
 ) -> Result<(), Diagnostic> {
-    budget.impact.maximum_affected_owners = parse_u64(field(record, 0), "affected owners")?;
-    budget.impact.maximum_summary_owners = parse_u64(field(record, 1), "summary owners")?;
-    budget.impact.maximum_summary_edits = parse_u64(field(record, 2), "summary edits")?;
-    budget.impact.maximum_ownership_steps = parse_u64(field(record, 3), "ownership steps")?;
-    budget.impact.maximum_behavior_owners = parse_u64(field(record, 4), "behavior owners")?;
-    budget.impact.maximum_relation_edges = parse_u64(field(record, 5), "relation edges")?;
-    budget.impact.maximum_relation_fanout = parse_u64(field(record, 6), "relation fanout")?;
+    budget.impact.maximum_affected_owners = parse_policy(field(record, 0), "affected owners")?;
+    budget.impact.maximum_summary_owners = parse_policy(field(record, 1), "summary owners")?;
+    budget.impact.maximum_summary_edits = parse_policy(field(record, 2), "summary edits")?;
+    budget.impact.maximum_ownership_steps = parse_policy(field(record, 3), "ownership steps")?;
+    budget.impact.maximum_behavior_owners = parse_policy(field(record, 4), "behavior owners")?;
+    budget.impact.maximum_relation_edges = parse_policy(field(record, 5), "relation edges")?;
+    budget.impact.maximum_relation_fanout = parse_policy(field(record, 6), "relation fanout")?;
     Ok(())
 }
 
@@ -3457,11 +3300,11 @@ fn decode_budget_validation(
     record: &CompactRecord,
     budget: &mut ChangeBudget,
 ) -> Result<(), Diagnostic> {
-    budget.validation.maximum_owner_records = parse_u64(field(record, 0), "owner records")?;
-    budget.validation.maximum_ownership_entries = parse_u64(field(record, 1), "ownership entries")?;
-    budget.validation.maximum_type_objects = parse_u64(field(record, 2), "type objects")?;
-    budget.validation.maximum_expression_steps = parse_u64(field(record, 3), "expression steps")?;
-    budget.validation.maximum_diagnostics = parse_u64(field(record, 4), "diagnostics")?;
+    budget.validation.maximum_owner_records = parse_policy(field(record, 0), "owner records")?;
+    budget.validation.maximum_ownership_entries = parse_policy(field(record, 1), "ownership entries")?;
+    budget.validation.maximum_type_objects = parse_policy(field(record, 2), "type objects")?;
+    budget.validation.maximum_expression_steps = parse_policy(field(record, 3), "expression steps")?;
+    budget.validation.maximum_diagnostics = parse_policy(field(record, 4), "diagnostics")?;
     Ok(())
 }
 
@@ -3469,11 +3312,11 @@ fn decode_budget_tests(
     record: &CompactRecord,
     budget: &mut ChangeBudget,
 ) -> Result<(), Diagnostic> {
-    budget.tests.maximum_selected = parse_u64(field(record, 0), "selected tests")?;
+    budget.tests.maximum_selected = parse_policy(field(record, 0), "selected tests")?;
     budget.tests.maximum_dependencies_per_test =
-        parse_u64(field(record, 1), "dependencies per test")?;
-    budget.tests.maximum_ownership_steps = parse_u64(field(record, 2), "ownership steps")?;
-    budget.tests.maximum_owners_visited = parse_u64(field(record, 3), "owners visited")?;
+        parse_policy(field(record, 1), "dependencies per test")?;
+    budget.tests.maximum_ownership_steps = parse_policy(field(record, 2), "ownership steps")?;
+    budget.tests.maximum_owners_visited = parse_policy(field(record, 3), "owners visited")?;
     Ok(())
 }
 
@@ -3481,9 +3324,9 @@ fn decode_budget_witness_update(
     record: &CompactRecord,
     budget: &mut ChangeBudget,
 ) -> Result<(), Diagnostic> {
-    budget.witness_update.maximum_edits = parse_u64(field(record, 0), "witness edits")?;
-    budget.witness_update.maximum_pages_encoded = parse_u64(field(record, 1), "pages")?;
-    budget.witness_update.maximum_bytes_encoded = parse_u64(field(record, 2), "bytes")?;
+    budget.witness_update.maximum_edits = parse_policy(field(record, 0), "witness edits")?;
+    budget.witness_update.maximum_pages_encoded = parse_policy(field(record, 1), "pages")?;
+    budget.witness_update.maximum_bytes_encoded = parse_policy(field(record, 2), "bytes")?;
     Ok(())
 }
 
@@ -3491,9 +3334,9 @@ fn decode_budget_staging(
     record: &CompactRecord,
     budget: &mut ChangeBudget,
 ) -> Result<(), Diagnostic> {
-    budget.staging.maximum_objects = parse_u64(field(record, 0), "staged objects")?;
-    budget.staging.maximum_bytes = parse_u64(field(record, 1), "staged bytes")?;
-    budget.staging.maximum_pages = parse_u64(field(record, 2), "staged pages")?;
+    budget.staging.maximum_objects = parse_policy(field(record, 0), "staged objects")?;
+    budget.staging.maximum_bytes = parse_policy(field(record, 1), "staged bytes")?;
+    budget.staging.maximum_pages = parse_policy(field(record, 2), "staged pages")?;
     Ok(())
 }
 
@@ -3748,6 +3591,28 @@ fn parse_identity_kind(value: &str) -> Result<IdentityKind, Diagnostic> {
         })
 }
 
+fn render_policy(maximum: Option<u64>) -> String {
+    maximum.map_or_else(|| "unbounded".to_owned(), |value| value.to_string())
+}
+
+fn parse_policy(value: &str, label: &str) -> Result<Option<u64>, Diagnostic> {
+    if value == "unbounded" { return Ok(None); }
+    parse_u64(value, label).map(Some)
+}
+
+fn plan_charge(mut observed: BudgetCounter, additional: u64, maximum: Option<u64>,
+    code: &'static str, label: &str) -> Result<BudgetCounter, Diagnostic>
+{
+    if let Some(maximum) = maximum
+        && (observed.saturated || observed.consumed.checked_add(additional)
+            .is_none_or(|next| next > maximum))
+    {
+        return Err(plan_resource_error(code, format!("{label} allowance {maximum} exhausted")));
+    }
+    observed.observe(BudgetCounter::exact(additional));
+    Ok(observed)
+}
+
 fn parse_u64(value: &str, label: &str) -> Result<u64, Diagnostic> {
     if value.is_empty()
         || (value.len() > 1 && value.starts_with('0'))
@@ -3881,14 +3746,6 @@ fn validate_http_route_evidence(
     evidence: &LogicalChangePlanEvidence,
     owners: &[OwnerDiffEntry],
 ) -> Result<(), Diagnostic> {
-    if evidence.http_routes.len()
-        > usize::try_from(DEFAULT_HTTP_ROUTE_EVIDENCE).unwrap_or(usize::MAX)
-    {
-        return Err(plan_corrupt(
-            "change_logical_plan_http_route_count",
-            "HTTP route review evidence exceeds the bounded semantic frontier",
-        ));
-    }
     let changed_routes = owners
         .iter()
         .filter_map(|entry| match entry.owner {
@@ -4173,12 +4030,7 @@ fn validate_extraction_evidence(
 ) -> Result<(), Diagnostic> {
     let moved_count = u64::try_from(extraction.moved_owners.len()).unwrap_or(u64::MAX);
     let capture_count = u64::try_from(extraction.captures.len()).unwrap_or(u64::MAX);
-    let preserved_count = u64::try_from(extraction.preserved_owners.len()).unwrap_or(u64::MAX);
-    let changed_count = u64::try_from(extraction.changed_owners.len()).unwrap_or(u64::MAX);
     let generated_count = u64::try_from(extraction.generated_owners.len()).unwrap_or(u64::MAX);
-    let capture_use_count = extraction.captures.iter().fold(0_u64, |total, capture| {
-        total.saturating_add(u64::try_from(capture.rewritten_uses.len()).unwrap_or(u64::MAX))
-    });
     let requirements = match &extraction.effect {
         FunctionEffect::Pure => &[][..],
         FunctionEffect::Task {
@@ -4186,22 +4038,23 @@ fn validate_extraction_evidence(
             requirements,
         } => requirements.as_slice(),
     };
-    let requirement_count = u64::try_from(requirements.len()).unwrap_or(u64::MAX);
-    let expected_generated = capture_count.saturating_mul(2).saturating_add(2);
+    let expected_generated = capture_count.checked_mul(2).and_then(|value| value.checked_add(2))
+        .ok_or_else(|| plan_corrupt("change_logical_plan_extraction_counts",
+            "generated extraction owner count exceeds u64 framing"))?;
     if extraction.base_definition.is_none()
         || extraction.function == extraction.helper
         || moved_count == 0
-        || moved_count > MAXIMUM_FUNCTION_EXTRACTION_MOVED_OWNERS
-        || capture_count > MAXIMUM_FUNCTION_EXTRACTION_CAPTURES
-        || capture_use_count > MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES
-        || requirement_count > MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS
-        || preserved_count > MAXIMUM_FUNCTION_EXTRACTION_PRESERVED_OWNERS
-        || changed_count > MAXIMUM_FUNCTION_EXTRACTION_CHANGED_OWNERS
-        || generated_count > MAXIMUM_FUNCTION_EXTRACTION_GENERATED_OWNERS
+
+
+
+
+
+
+
         || generated_count != expected_generated
         || extraction.helper_body_records != moved_count
         || extraction.caller_body_records == 0
-        || extraction.caller_body_records > MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS
+
     {
         return Err(plan_corrupt(
             "change_logical_plan_extraction_bounds",
@@ -4808,262 +4661,84 @@ mod tests {
     }
 
     #[test]
-    fn reviewed_change_plan_limits_cover_default_admission_and_maximum_records() {
-        let budget = ChangeBudget::default();
-        assert_eq!(
-            budget.authored.maximum_allocated_identities,
-            DEFAULT_ALLOCATIONS
-        );
-        assert_eq!(
-            budget.canonical_edits.maximum_owner_edits,
-            DEFAULT_OWNER_CHANGES
-        );
-        assert_eq!(
-            budget.canonical_edits.maximum_type_edits,
-            DEFAULT_TYPE_ADDITIONS
-        );
-        assert_eq!(
-            budget.canonical_edits.maximum_dependency_edits,
-            DEFAULT_DEPENDENCY_CHANGES
-        );
-        assert_eq!(
-            budget.canonical_edits.maximum_retirement_edits,
-            DEFAULT_RETIREMENT_CHANGES
-        );
-        assert_eq!(
-            budget.impact.maximum_relation_edges,
-            DEFAULT_RELATION_CHANGES
-        );
-        assert_eq!(
-            budget.validation.maximum_owner_records,
-            DEFAULT_STRUCTURAL_OWNERS
-        );
-        assert_eq!(
-            budget.impact.maximum_affected_owners,
-            DEFAULT_SEMANTIC_OWNERS
-        );
-        assert_eq!(budget.tests.maximum_selected, DEFAULT_SELECTED_TESTS);
-        assert_eq!(
-            DEFAULT_IMPACT_REASONS,
-            budget
-                .impact
-                .maximum_relation_edges
-                .saturating_add(budget.impact.maximum_affected_owners)
-        );
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_RECORDS, 832_791);
-        assert_eq!(MAXIMUM_LOGICAL_PLAN_BYTES, 1_646_863_007);
+    fn logical_plan_budget_records_preserve_all_optional_policy_states() {
+        type Decoder = fn(&CompactRecord, &mut ChangeBudget) -> Result<(), Diagnostic>;
+        let decoders: [Decoder; 10] = [decode_budget_authored, decode_budget_canonical_edits,
+            decode_budget_canonical_reads, decode_budget_canonical_map, decode_budget_witness_reads,
+            decode_budget_impact, decode_budget_validation, decode_budget_tests,
+            decode_budget_witness_update, decode_budget_staging];
+        for maximum in [None, Some(0), Some(10_000_001), Some(u64::MAX)] {
+            let mut budget = ChangeBudget::default();
+            for dimension in crate::platform::change::budget::BudgetDimension::ALL {
+                budget.set_policy_limit(dimension.policy_name(), maximum).unwrap();
+            }
+            let mut bytes = Vec::new();
+            {
+                let mut emit = |record: &[u8]| { bytes.extend_from_slice(record); Ok(()) };
+                let mut encoder = PlanEncoder::new(&mut emit, None, None);
+                encode_budget(budget, &mut encoder).unwrap();
+                assert_eq!(encoder.records, BudgetCounter::exact(10));
+            }
+            let records = parse_records("<budget-policy>", &bytes).unwrap();
+            assert_eq!(records.len(), decoders.len());
+            let mut decoded = ChangeBudget::default();
+            for (record, decode) in records.iter().zip(decoders) {
+                validate_record_schema(record).unwrap();
+                decode(record, &mut decoded).unwrap();
+            }
+            assert_eq!(decoded, budget);
+        }
+        for invalid in ["", "+1", "-1", "00", "01", "18446744073709551616", "Unlimited"] {
+            assert!(parse_policy(invalid, "test policy").is_err(), "{invalid}");
+        }
+    }
 
-        let owner = format!("annotation_{}", "f".repeat(32));
-        let owner_object = format!("owner_object_{}", "f".repeat(64));
-        assert_record_maximum(
-            "logical-plan.allocation",
-            &[
-                ("domain", "type_parameter"),
-                ("ordinal", "100000"),
-                ("owner", &owner),
-            ],
-            MAXIMUM_ALLOCATION_RECORD_BYTES,
-        );
-        let mut owner_fields = LOGICAL_PLAN_RECORD_DESCRIPTORS[22]
-            .fields
-            .iter()
-            .map(|field| (*field, "false"))
-            .collect::<Vec<_>>();
-        owner_fields[0].1 = &owner;
-        owner_fields[1].1 = "true";
-        owner_fields[2].1 = &owner_object;
-        owner_fields[3].1 = "true";
-        owner_fields[4].1 = &owner_object;
-        assert_record_maximum(
-            "logical-plan.owner",
-            &owner_fields,
-            MAXIMUM_OWNER_RECORD_BYTES,
-        );
-        assert_record_maximum(
-            "logical-plan.type-addition",
-            &[("object", &format!("type_object_{}", "f".repeat(64)))],
-            MAXIMUM_TYPE_RECORD_BYTES,
-        );
-        let package = format!("pkg_{}", "f".repeat(32));
-        let dependency_object = format!("dependency_object_{}", "f".repeat(64));
-        let revision = format!("rev_{}", "f".repeat(64));
-        let package_revision = format!("package_revision_{}", "f".repeat(64));
-        assert_record_maximum(
-            "logical-plan.package-before",
-            &[
-                ("package", &package),
-                ("semantic-revision", &revision),
-                ("package-revision", &package_revision),
-                (
-                    "interface",
-                    &format!("package_interface_{}", "f".repeat(64)),
-                ),
-            ],
-            MAXIMUM_PACKAGE_RECORD_BYTES,
-        );
-        assert_record_maximum(
-            "logical-plan.dependency",
-            &[
-                ("package", &package),
-                ("before-present", "true"),
-                ("before-object", &dependency_object),
-                ("before-semantic-revision", &revision),
-                ("before-package-revision", &package_revision),
-                ("after-present", "true"),
-                ("after-object", &dependency_object),
-                ("after-semantic-revision", &revision),
-                ("after-package-revision", &package_revision),
-            ],
-            MAXIMUM_DEPENDENCY_RECORD_BYTES,
-        );
-        let retirement_object = format!("retirement_object_{}", "f".repeat(64));
-        let change = format!("change_{}", "f".repeat(64));
-        let name = "x".repeat(crate::platform::kernel::contract::MAXIMUM_NAME_BYTES);
-        assert_record_maximum(
-            "logical-plan.retirement",
-            &[
-                ("owner", &owner),
-                ("before-present", "true"),
-                ("before-object", &retirement_object),
-                ("before-kind", "type_parameter"),
-                ("before-name-present", "true"),
-                ("before-name", &name),
-                ("before-parent-present", "true"),
-                ("before-parent", &owner),
-                ("before-live-revision", &revision),
-                ("before-deletion-change", &change),
-                ("after-present", "true"),
-                ("after-object", &retirement_object),
-                ("after-kind", "type_parameter"),
-                ("after-name-present", "true"),
-                ("after-name", &name),
-                ("after-parent-present", "true"),
-                ("after-parent", &owner),
-                ("after-live-revision", &revision),
-                ("after-deletion-change", &change),
-            ],
-            MAXIMUM_RETIREMENT_RECORD_BYTES,
-        );
-        assert_record_maximum(
-            "logical-plan.relation-removed",
-            &[
-                ("source-package", &package),
-                ("source-owner-present", "true"),
-                ("source-owner", &owner),
-                ("kind", "test_execution_dependency"),
-                ("target-package", &package),
-                ("target-owner-present", "true"),
-                ("target-owner", &owner),
-            ],
-            MAXIMUM_RELATION_RECORD_BYTES,
-        );
-        assert_record_maximum(
-            "logical-plan.validation-structural",
-            &[("owner", &owner)],
-            MAXIMUM_SELECTION_RECORD_BYTES,
-        );
-        assert_record_maximum(
-            "logical-plan.reason",
-            &[
-                ("kind", "validation_dependency"),
-                ("source", &owner),
-                ("target", &owner),
-                ("relation-present", "true"),
-                ("relation", "test_execution_dependency"),
-            ],
-            MAXIMUM_REASON_RECORD_BYTES,
-        );
-        let declaration = format!("decl_{}", "f".repeat(32));
-        let expression = format!("expr_{}", "f".repeat(32));
-        let definition = format!("definition_{}", "f".repeat(64));
-        let moved = format!("moved_{}", "f".repeat(64));
-        let parameter = format!("param_{}", "f".repeat(32));
-        let requirement = format!("req_{}", "f".repeat(32));
-        let type_object = format!("type_object_{}", "f".repeat(64));
-        assert_record_maximum(
-            "logical-plan.extraction",
-            &[
-                ("function", &declaration),
-                ("base-definition", &definition),
-                ("selected-root", &expression),
-                ("moved-digest", &moved),
-                ("moved-owners", "4096"),
-                ("helper", &declaration),
-                ("helper-name", &name),
-                ("result", &type_object),
-                ("effect", "task"),
-                ("caller-body-records", "4096"),
-                ("helper-body-records", "4096"),
-                ("captures", "4096"),
-                ("requirements", "4096"),
-                ("preserved-owners", "4096"),
-                ("changed-owners", "4097"),
-                ("generated-owners", "8194"),
-                ("affine-present", "false"),
-            ],
-            MAXIMUM_EXTRACTION_HEADER_RECORD_BYTES,
-        );
-        assert_record_maximum(
-            "logical-plan.extraction-requirement",
-            &[
-                ("index", "4095"),
-                ("package", &package),
-                ("requirement", &requirement),
-            ],
-            MAXIMUM_EXTRACTION_REQUIREMENT_RECORD_BYTES,
-        );
-        assert_record_maximum(
-            "logical-plan.extraction-capture",
-            &[
-                ("index", "4095"),
-                ("source-kind", "function-parameter"),
-                ("source", &parameter),
-                ("parameter", &parameter),
-                ("name", &name),
-                ("type", &type_object),
-                ("use", "consume"),
-                ("requirement-present", "true"),
-                ("requirement-package", &package),
-                ("requirement", &requirement),
-            ],
-            MAXIMUM_EXTRACTION_CAPTURE_RECORD_BYTES,
-        );
-        assert_record_maximum(
-            "logical-plan.extraction-use",
-            &[
-                ("capture", "4095"),
-                ("index", "4095"),
-                ("expression", &expression),
-            ],
-            MAXIMUM_EXTRACTION_USE_RECORD_BYTES,
-        );
-        assert_record_maximum(
-            "logical-plan.extraction-owner",
-            &[
-                ("class", "preserved"),
-                ("index", "8193"),
-                ("owner", &parameter),
-            ],
-            MAXIMUM_EXTRACTION_OWNER_RECORD_BYTES,
-        );
-        let worst_controls =
-            "\u{7f}".repeat(crate::platform::publication::contract::MAXIMUM_INTENT_BYTES);
-        assert_record_maximum(
-            "logical-plan.controls",
-            &[
-                ("idempotency-present", "true"),
-                (
-                    "idempotency",
-                    &"x".repeat(
-                        crate::platform::publication::contract::MAXIMUM_IDEMPOTENCY_KEY_BYTES,
-                    ),
-                ),
-                ("intent-present", "true"),
-                ("intent", &worst_controls),
-            ],
-            24_794,
-        );
-        assert_eq!(maximum_fixed_record_bytes(), MAXIMUM_FIXED_RECORDS_BYTES);
+    #[test]
+    fn logical_plan_explicit_limits_are_atomic_and_passive_counts_are_honest() {
+        let mut output = Vec::new();
+        {
+            let mut emit = |part: &[u8]| { output.extend_from_slice(part); Ok(()) };
+            let mut encoder = PlanEncoder::new(&mut emit, Some(u64::MAX), Some(1));
+            encoder.append("probe", &[]).unwrap();
+            let before = (encoder.bytes, encoder.records, encoder.hasher.clone().finalize());
+            assert_eq!(encoder.append("probe", &[]).unwrap_err().code,
+                "change_plan_output_record_budget");
+            assert_eq!((encoder.bytes, encoder.records, encoder.hasher.clone().finalize()), before);
+        }
+        assert_eq!(output, b"probe\n");
+        for maximum in [0, 1, u64::MAX] {
+            let fit = plan_charge(BudgetCounter::default(), maximum, Some(maximum),
+                "test_limit", "test bytes").unwrap();
+            assert_eq!(fit, BudgetCounter::exact(maximum));
+            assert_eq!(plan_charge(fit, 1, Some(maximum), "test_limit", "test bytes")
+                .unwrap_err().code, "test_limit");
+        }
+        let saturated = plan_charge(BudgetCounter::exact(u64::MAX), 1, None,
+            "unused_limit", "passive bytes").unwrap();
+        assert_eq!(saturated, BudgetCounter { consumed: u64::MAX, saturated: true });
+        let mut decoder = PlanDecoder::new();
+        decoder.bytes = BudgetCounter::exact(u64::MAX);
+        decoder.observe_meter(1);
+        assert_eq!(decoder.bytes, saturated);
+        assert_eq!(decoder.records, BudgetCounter::exact(1));
+    }
+
+    #[test]
+    fn current_logical_plan_profile_roundtrips_unbounded_policy_and_exact_observations() {
+        with_prepared_plan(|request, publication| {
+            let plan = LogicalChangePlan::new(request, &publication).unwrap();
+            let (encoding, text) = encode_test_plan(&plan);
+            let decoded = decode_logical_change_plan(Cursor::new(text.as_bytes())).unwrap();
+            assert_eq!(decoded.bytes, encoding.bytes);
+            assert_eq!(decoded.records, encoding.records);
+            assert_eq!(decoded.saturated, encoding.saturated);
+            assert!(!decoded.saturated);
+            assert!(text.contains("operations=unbounded"));
+            assert!(text.contains("profile=2"));
+            let obsolete = text.replacen("profile=2", "profile=1", 1);
+            assert_eq!(decode_logical_change_plan(Cursor::new(obsolete.as_bytes()))
+                .unwrap_err().code, "change_plan_file_product");
+        });
     }
 
     fn one_record_commitment(operation: &str, fields: &[(&str, String)]) -> [u8; 32] {
@@ -5077,112 +4752,4 @@ mod tests {
         *hasher.finalize().as_bytes()
     }
 
-    fn assert_record_maximum(operation: &str, fields: &[(&str, &str)], maximum: u64) {
-        let record = render_record(operation, fields).unwrap();
-        assert_eq!(u64::try_from(record.len()).unwrap(), maximum, "{operation}");
-    }
-
-    fn maximum_fixed_record_bytes() -> u64 {
-        let mut total = 0_u64;
-        let request = format!("request_{}", "f".repeat(64));
-        {
-            let mut add = |operation: &str, fields: &[(&str, &str)]| {
-                total += u64::try_from(render_record(operation, fields).unwrap().len()).unwrap();
-            };
-            add(
-                "logical-plan",
-                &[
-                    ("product", "lkjscript"),
-                    ("version", crate::PRODUCT_VERSION),
-                ],
-            );
-            add("logical-plan.capabilities", &[("digest", &"f".repeat(64))]);
-            let repository = format!("repo_{}", "f".repeat(32));
-            let package = format!("pkg_{}", "f".repeat(32));
-            let revision = format!("rev_{}", "f".repeat(64));
-            let state = format!("semantic_state_{}", "f".repeat(64));
-            add(
-                "logical-plan.authority",
-                &[
-                    ("repository", &repository),
-                    ("package", &package),
-                    ("base", &revision),
-                    ("result", &revision),
-                    ("semantic-state", &state),
-                ],
-            );
-            add(
-                "logical-plan.request",
-                &[
-                    ("commitment", &request),
-                    ("intent-reads", &"f".repeat(64)),
-                    ("intent-read-guards", &MAXIMUM_REFRESH_GUARDS.to_string()),
-                    ("refresh-present", "true"),
-                    ("original-prepared", &format!("prepared_{}", "f".repeat(64))),
-                    ("onto", &revision),
-                ],
-            );
-        }
-
-        let mut budget_bytes = 0_u64;
-        {
-            let mut emit = |bytes: &[u8]| {
-                budget_bytes += u64::try_from(bytes.len()).unwrap();
-                Ok(())
-            };
-            let mut encoder = PlanEncoder::new(
-                &mut emit,
-                MAXIMUM_LOGICAL_PLAN_BYTES,
-                MAXIMUM_LOGICAL_PLAN_RECORDS,
-            );
-            encode_budget(ChangeBudget::default(), &mut encoder).unwrap();
-        }
-        total += budget_bytes;
-
-        let worst_controls =
-            "\u{7f}".repeat(crate::platform::publication::contract::MAXIMUM_INTENT_BYTES);
-        let idempotency =
-            "x".repeat(crate::platform::publication::contract::MAXIMUM_IDEMPOTENCY_KEY_BYTES);
-        let mut add = |operation: &str, fields: &[(&str, &str)]| {
-            total += u64::try_from(render_record(operation, fields).unwrap().len()).unwrap();
-        };
-        add(
-            "logical-plan.controls",
-            &[
-                ("idempotency-present", "true"),
-                ("idempotency", &idempotency),
-                ("intent-present", "true"),
-                ("intent", &worst_controls),
-            ],
-        );
-        let transaction = format!("transaction_{}", "f".repeat(64));
-        let semantic_diff = format!("semantic_diff_{}", "f".repeat(64));
-        add(
-            "logical-plan.binding",
-            &[
-                ("transaction", &transaction),
-                ("semantic-diff", &semantic_diff),
-            ],
-        );
-        let six_digits = "999999";
-        add(
-            "logical-plan.counts",
-            &LOGICAL_PLAN_RECORD_DESCRIPTORS[39]
-                .fields
-                .iter()
-                .map(|field| (*field, six_digits))
-                .collect::<Vec<_>>(),
-        );
-        let prepared = format!("prepared_{}", "f".repeat(64));
-        let token = format!("refresh_{}", "f".repeat(256));
-        add(
-            "logical-plan.digest",
-            &[
-                ("request", &request),
-                ("prepared", &prepared),
-                ("token", &token),
-            ],
-        );
-        total
-    }
 }

@@ -1,6 +1,6 @@
 //! Locally derived witness deltas from changed canonical owner records.
 
-use super::{CanonicalBaseRead, CanonicalDelta, KernelOverlay, WitnessBaseRead, WitnessReadWork};
+use super::{BudgetCounter, BudgetDimension, CanonicalBaseRead, CanonicalDelta, KernelOverlay, WitnessBaseRead, WitnessReadWork, WorkSaturation};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ExactOwnerKey, OwnerKey, OwnerRecord, RelationEdge, RelationEndpoint, RelationKind,
@@ -34,6 +34,7 @@ pub struct DerivedDelta {
     pub ownership_steps: u64,
     pub relation_edges_examined: u64,
     pub read_work: WitnessReadWork,
+    pub saturation: WorkSaturation,
 }
 
 pub fn derive_local_delta<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
@@ -57,8 +58,8 @@ pub(crate) fn derive_local_delta_with_admission<
     overlay: &KernelOverlay<'_, B>,
     delta: &CanonicalDelta,
     base_witness: &W,
-    maximum_ownership_steps: u64,
-    maximum_relation_edges: u64,
+    maximum_ownership_steps: Option<u64>,
+    maximum_relation_edges: Option<u64>,
 ) -> Result<DerivedDelta, Diagnostic> {
     if !base_witness.canonical_facts_are_current()
         || base_witness.witness_repository_id() != overlay.repository_id()
@@ -77,7 +78,7 @@ pub(crate) fn derive_local_delta_with_admission<
     let mut after_ownership = BTreeMap::new();
     let mut before_relations = BTreeSet::new();
     let mut after_relations = BTreeSet::new();
-    let mut relation_edges_examined = 0_u64;
+    let mut relation_edges_examined = BudgetCounter::default();
     let mut witness = CachedWitness::new(base_witness);
 
     for (owner, edit) in &delta.owners {
@@ -119,7 +120,7 @@ pub(crate) fn derive_local_delta_with_admission<
                 },
                 remaining_relation_edges(maximum_relation_edges, relation_edges_examined)?,
             )?;
-            relation_edges_examined = relation_edges_examined.saturating_add(examined);
+            relation_edges_examined.charge(examined, maximum_relation_edges, "derived relation extraction", "relation_edges")?;
             before_relations.extend(relations);
         }
         if let Some((_, record)) = &edit.after {
@@ -151,7 +152,7 @@ pub(crate) fn derive_local_delta_with_admission<
                 },
                 remaining_relation_edges(maximum_relation_edges, relation_edges_examined)?,
             )?;
-            relation_edges_examined = relation_edges_examined.saturating_add(examined);
+            relation_edges_examined.charge(examined, maximum_relation_edges, "derived relation extraction", "relation_edges")?;
             after_relations.extend(relations);
         }
     }
@@ -203,14 +204,18 @@ pub(crate) fn derive_local_delta_with_admission<
         &mut witness,
         maximum_ownership_steps,
     )?;
+    let mut saturation = WorkSaturation::default();
+    if ownership_steps.saturated { saturation.mark(BudgetDimension::ImpactOwnershipSteps); }
+    if relation_edges_examined.saturated { saturation.mark(BudgetDimension::RelationEdges); }
     Ok(DerivedDelta {
         namespaces,
         ownership,
         relations: RelationDelta { removed, added },
         summary_candidates,
-        ownership_steps,
-        relation_edges_examined,
+        ownership_steps: ownership_steps.consumed,
+        relation_edges_examined: relation_edges_examined.consumed,
         read_work: witness.work,
+        saturation,
     })
 }
 
@@ -329,8 +334,8 @@ fn extract_relations<F, C>(
     record: &OwnerRecord,
     type_object: F,
     case_parent: C,
-    maximum_edges: u64,
-) -> Result<(Vec<RelationEdge>, u64), Diagnostic>
+    maximum_edges: Option<u64>,
+) -> Result<(Vec<RelationEdge>, BudgetCounter), Diagnostic>
 where
     F: FnMut(
         crate::platform::kernel::TypeObjectDigest,
@@ -346,8 +351,9 @@ where
         record,
         type_object,
         case_parent,
-        usize::try_from(maximum_edges).unwrap_or(usize::MAX),
+        maximum_edges,
     )
+    .map(|(edges, work)| (edges, BudgetCounter { consumed: work.edges_examined, saturated: work.edges_saturated }))
     .map_err(|diagnostic| {
         if diagnostic.code == "kernel_relation_edge_budget" {
             derived_error(
@@ -361,28 +367,12 @@ where
     })
 }
 
-fn remaining_relation_edges(maximum: u64, observed: u64) -> Result<u64, Diagnostic> {
-    maximum.checked_sub(observed).ok_or_else(|| {
-        derived_error(
-            DiagnosticClass::Resource,
-            "change_budget_relation_edges",
-            format!(
-                "derived relation extraction observed {observed} edges, exceeding the declared {maximum}-edge budget"
-            ),
-        )
-    })
+fn remaining_relation_edges(maximum: Option<u64>, observed: BudgetCounter) -> Result<Option<u64>, Diagnostic> {
+    observed.remaining(maximum, "derived relation extraction", "relation_edges")
 }
 
-fn admit_relation_edge(observed: &mut u64, maximum: u64) -> Result<(), Diagnostic> {
-    if *observed >= maximum {
-        return Err(derived_error(
-            DiagnosticClass::Resource,
-            "change_budget_relation_edges",
-            format!("derived relation work exceeds the declared {maximum}-edge budget"),
-        ));
-    }
-    *observed = observed.saturating_add(1);
-    Ok(())
+fn admit_relation_edge(observed: &mut BudgetCounter, maximum: Option<u64>) -> Result<(), Diagnostic> {
+    observed.charge(BudgetCounter::exact(1), maximum, "derived relation work", "relation_edges")
 }
 
 fn summary_candidates<W: WitnessBaseRead + ?Sized>(
@@ -392,8 +382,8 @@ fn summary_candidates<W: WitnessBaseRead + ?Sized>(
     removed_relations: &BTreeSet<RelationEdge>,
     added_relations: &BTreeSet<RelationEdge>,
     witness: &mut CachedWitness<'_, W>,
-    maximum_ownership_steps: u64,
-) -> Result<(BTreeSet<OwnerKey>, u64), Diagnostic> {
+    maximum_ownership_steps: Option<u64>,
+) -> Result<(BTreeSet<OwnerKey>, BudgetCounter), Diagnostic> {
     let candidate_edits = ownership
         .iter()
         .map(|edit| (edit.key, edit.after))
@@ -414,7 +404,7 @@ fn summary_candidates<W: WitnessBaseRead + ?Sized>(
         },
     ));
     let mut affected = BTreeSet::new();
-    let mut ownership_steps = 0_u64;
+    let mut ownership_steps = BudgetCounter::default();
     for seed in seeds {
         walk_summary_ancestors(
             seed,
@@ -441,8 +431,8 @@ fn walk_summary_ancestors(
     seed: OwnerKey,
     mut ownership: impl FnMut(OwnerKey) -> Result<Option<OwnershipEntry>, Diagnostic>,
     affected: &mut BTreeSet<OwnerKey>,
-    ownership_steps: &mut u64,
-    maximum_ownership_steps: u64,
+    ownership_steps: &mut BudgetCounter,
+    maximum_ownership_steps: Option<u64>,
 ) -> Result<(), Diagnostic> {
     let mut current = seed;
     let mut observed = BTreeSet::new();
@@ -454,16 +444,8 @@ fn walk_summary_ancestors(
                 "candidate summary ownership path is cyclic",
             ));
         }
-        if *ownership_steps >= maximum_ownership_steps {
-            return Err(derived_error(
-                DiagnosticClass::Resource,
-                "change_budget_impact_ownership_steps",
-                format!(
-                    "summary ownership traversal exceeds the declared {maximum_ownership_steps}-step budget"
-                ),
-            ));
-        }
-        *ownership_steps = ownership_steps.saturating_add(1);
+        ownership_steps.charge(BudgetCounter::exact(1), maximum_ownership_steps,
+            "summary ownership traversal", "impact_ownership_steps")?;
         affected.insert(current);
         let Some(entry) = ownership(current)? else {
             break;

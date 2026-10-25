@@ -226,7 +226,7 @@ fn associated_projection_commitment_retains_every_authority_coordinate_and_neste
         },
     ];
     for (index, ty) in types.iter().enumerate() {
-        let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+        let mut writer = Writer::new(None);
         writer.authored_type(ty, &BTreeMap::new(), 1).unwrap();
         let mut literal = vec![25 + index as u8];
         if index == 1 {
@@ -263,7 +263,7 @@ fn associated_projection_commitment_retains_every_authority_coordinate_and_neste
         *member = AssociatedTypeMemberId::migrate(b"associated-intent", 2);
     }
     let encode_type = |ty: &AuthoredType| {
-        let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+        let mut writer = Writer::new(None);
         writer.authored_type(ty, &BTreeMap::new(), 1).unwrap();
         writer.bytes
     };

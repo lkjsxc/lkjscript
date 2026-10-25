@@ -5,9 +5,7 @@
     reason = "the process boundary preserves the complete structured diagnostic"
 )]
 
-use lkjscript::platform::contract::{
-    MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS, exit_status_for,
-};
+use lkjscript::platform::contract::exit_status_for;
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::runtime::structured::{StructuredExecutor, StructuredExecutorObservation};
 use lkjscript::platform::{
@@ -575,15 +573,11 @@ fn write_compact_failures_with_fallback(
             lkjscript::platform::DiagnosticClass::Infrastructure,
         ));
     };
-    const MAXIMUM_INLINE_DIAGNOSTICS: usize = 64;
     let exit = exit_for(first);
     let result = (|| {
-        let mut output = CompactResponseWriter::new(CompactResponseLimits {
-            maximum_bytes: MAXIMUM_CLI_RESPONSE_BYTES,
-            maximum_records: MAXIMUM_CLI_RESPONSE_RECORDS,
-        })?;
+        let mut output = CompactResponseWriter::new(CompactResponseLimits::default())?;
         output.append_record("result", &[("status", "failure"), ("command", command)])?;
-        for error in diagnostics.iter().take(MAXIMUM_INLINE_DIAGNOSTICS) {
+        for error in diagnostics {
             let class = diagnostic_class_name(error.class);
             let mut fields = vec![
                 ("class", class.to_owned()),
@@ -607,16 +601,6 @@ fn write_compact_failures_with_fallback(
                 .map(|(name, value)| (*name, value.as_str()))
                 .collect::<Vec<_>>();
             output.append_record("diagnostic", &borrowed)?;
-        }
-        if diagnostics.len() > MAXIMUM_INLINE_DIAGNOSTICS {
-            let omitted = diagnostics.len() - MAXIMUM_INLINE_DIAGNOSTICS;
-            output.append_record(
-                "summary",
-                &[
-                    ("diagnostics", &diagnostics.len().to_string()),
-                    ("omitted", &omitted.to_string()),
-                ],
-            )?;
         }
         write_bytes(&output.finish())
     })();

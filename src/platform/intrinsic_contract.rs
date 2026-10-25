@@ -529,8 +529,8 @@ fn legacy_type(ty: &ResolvedType) -> IntrinsicType {
 pub(crate) fn validate_kernel_intrinsic<R: ExpressionRead + ?Sized>(
     read: &R,
     external: &ExternalDeclaration,
-    work: &mut usize,
-    maximum: usize,
+    work: &mut ValidationWork,
+    maximum: Option<usize>,
 ) -> Result<(), Diagnostic> {
     for id in &external.type_parameters {
         intrinsic_visit(read, work, maximum)?;
@@ -612,20 +612,17 @@ fn signature_error(message: &str) -> Diagnostic {
 }
 fn intrinsic_visit<R: ExpressionRead + ?Sized>(
     read: &R,
-    work: &mut usize,
-    maximum: usize,
+    work: &mut ValidationWork,
+    maximum: Option<usize>,
 ) -> Result<(), Diagnostic> {
     read.validation_checkpoint()?;
-    *work = work
-        .checked_add(1)
-        .filter(|next| *next <= maximum)
-        .ok_or_else(|| {
-            Diagnostic::new(
-                DiagnosticClass::Resource,
-                "kernel_full_work",
-                "intrinsic signature exhausted canonical validation visits",
-            )
-        })?;
+    if !work.charge(1, maximum) {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Resource,
+            "kernel_full_work",
+            "intrinsic signature exhausted canonical validation visits",
+        ));
+    }
     Ok(())
 }
 
@@ -633,8 +630,8 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
     read: &R,
     digest: TypeObjectDigest,
     depth: usize,
-    work: &mut usize,
-    maximum: usize,
+    work: &mut ValidationWork,
+    maximum: Option<usize>,
 ) -> Result<IntrinsicType, Diagnostic> {
     intrinsic_visit(read, work, maximum)?;
     if depth > super::kernel::contract::MAXIMUM_TYPE_DEPTH {
@@ -737,34 +734,36 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
 fn reject_kernel_view_escape<R: ExpressionRead + ?Sized>(
     read: &R,
     ty: TypeObjectDigest,
-    work: &mut usize,
-    maximum: usize,
+    work: &mut ValidationWork,
+    maximum: Option<usize>,
 ) -> Result<(), Diagnostic> {
     use crate::platform::kernel::owned_associated::{
         AssociatedAdmissionLimits, OwnedAssociatedAdmission, read_view_admission,
     };
-    let remaining = maximum.checked_sub(*work).ok_or_else(|| {
-        Diagnostic::new(
-            DiagnosticClass::Resource,
-            "kernel_full_work",
-            "intrinsic signature exhausted canonical validation visits",
-        )
-    })?;
+    let exhausted = || Diagnostic::new(
+        DiagnosticClass::Resource,
+        "kernel_full_work",
+        "intrinsic signature exhausted canonical validation visits",
+    );
+    let remaining = match maximum {
+        Some(maximum) => {
+            if work.saturated {
+                return Err(exhausted());
+            }
+            Some(maximum.checked_sub(work.consumed).ok_or_else(exhausted)?)
+        }
+        None => None,
+    };
     let admission = OwnedAssociatedAdmission::with_limits(AssociatedAdmissionLimits {
         maximum_steps: remaining,
         ..AssociatedAdmissionLimits::default()
     });
     let result = read_view_admission::contains(read, ty, &admission);
-    *work = work
-        .checked_add(admission.work().0)
-        .filter(|count| *count <= maximum)
-        .ok_or_else(|| {
-            Diagnostic::new(
-                DiagnosticClass::Resource,
-                "kernel_full_work",
-                "intrinsic signature exhausted canonical validation visits",
-            )
-        })?;
+    let observed = admission.work_observation();
+    if (observed.saturated && maximum.is_some()) || !work.charge(observed.consumed, maximum) {
+        return Err(exhausted());
+    }
+    work.saturated |= observed.saturated;
     if result? {
         return Err(signature_error("external types cannot contain read views"));
     }
@@ -928,20 +927,20 @@ mod read_view_boundary_tests {
         for root in [
             view, associated, projected, nested, hidden, inactive, phantom,
         ] {
-            let mut work = 0;
-            let error = kernel_type(&read, root, 0, &mut work, contract::MAXIMUM_VALIDATION_WORK)
+            let mut work = ValidationWork::default();
+            let error = kernel_type(&read, root, 0, &mut work, Some(contract::MAXIMUM_VALIDATION_WORK))
                 .unwrap_err();
             assert_eq!(error.class, DiagnosticClass::Semantic);
             assert_eq!(error.code, "intrinsic_signature");
             assert!(error.message.contains("read views"));
-            assert!(work > 0);
+            assert!(work.consumed > 0);
         }
-        let mut work = 0;
+        let mut work = ValidationWork::default();
         assert_eq!(
-            kernel_type(&read, unit, 0, &mut work, contract::MAXIMUM_VALIDATION_WORK).unwrap(),
+            kernel_type(&read, unit, 0, &mut work, Some(contract::MAXIMUM_VALIDATION_WORK)).unwrap(),
             IntrinsicType::Unit
         );
-        let error = kernel_type(&read, unit, 0, &mut 0, 0).unwrap_err();
+        let error = kernel_type(&read, unit, 0, &mut ValidationWork::default(), Some(0)).unwrap_err();
         assert_eq!(error.class, DiagnosticClass::Resource);
     }
 }

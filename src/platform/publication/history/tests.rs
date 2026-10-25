@@ -205,7 +205,7 @@ fn history_shares_preconsumption_admission_and_honors_cancellation() {
     for (limits, consumed, code) in [
         (
             StoreReadLimits {
-                maximum_catalog_lookups: 0,
+                maximum_catalog_lookups: Some(0),
                 ..history_read_limits()
             },
             0,
@@ -213,7 +213,7 @@ fn history_shares_preconsumption_admission_and_honors_cancellation() {
         ),
         (
             StoreReadLimits {
-                maximum_objects: 1,
+                maximum_objects: Some(1),
                 ..history_read_limits()
             },
             1,
@@ -221,7 +221,7 @@ fn history_shares_preconsumption_admission_and_honors_cancellation() {
         ),
         (
             StoreReadLimits {
-                maximum_bytes: current.revision.encode().unwrap().1.len() as u64,
+                maximum_bytes: Some(current.revision.encode().unwrap().1.len() as u64),
                 ..history_read_limits()
             },
             1,

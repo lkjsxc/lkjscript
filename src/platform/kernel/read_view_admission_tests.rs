@@ -517,7 +517,7 @@ fn wide_value_result_retains_complete_view_exclusion_without_an_unused_owned_que
     let result = ty(&mut source, TypeForm::StructuralRecord { fields });
     let occurrence = OwnedTypeOccurrence::authored(None, contract::GRAPH_CONTRACT_VERSION);
     let limits = AssociatedAdmissionLimits {
-        maximum_metadata_bytes: 192 * 1024,
+        maximum_metadata_bytes: Some(192 * 1024),
         ..AssociatedAdmissionLimits::default()
     };
     let admitted = OwnedAssociatedAdmission::with_limits(limits);
@@ -537,7 +537,7 @@ fn wide_value_result_retains_complete_view_exclusion_without_an_unused_owned_que
         &admitted,
     )
     .unwrap();
-    assert!(admitted.work().1 < limits.maximum_metadata_bytes);
+    assert!(admitted.work().1 < limits.maximum_metadata_bytes.expect("explicit test allowance"));
 
     let source_tied = OwnedAssociatedAdmission::with_limits(limits);
     let error = read_view_admission::validate_result(

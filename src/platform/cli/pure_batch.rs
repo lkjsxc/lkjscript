@@ -329,7 +329,7 @@ pub async fn execute_pure_run_batch(
     let publication = publish_create_new(
         &options.output,
         &encoded,
-        MAXIMUM_BATCH_BYTES,
+        Some(MAXIMUM_BATCH_BYTES),
         "pure batch result",
     )?;
     append_compact_record(

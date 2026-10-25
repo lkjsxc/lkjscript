@@ -145,7 +145,7 @@ fn assert_foreign_signature(implementation: &str, signature: &FunctionSignature)
     );
     let (snapshot, external) = canonical_signature(implementation, signature);
     assert_eq!(
-        validate_kernel_intrinsic(&snapshot, &external, &mut 0, 10_000)
+        validate_kernel_intrinsic(&snapshot, &external, &mut crate::platform::kernel::ValidationWork::default(), Some(10_000))
             .unwrap_err()
             .code,
         "intrinsic_signature",
@@ -159,7 +159,7 @@ fn f64_independent_intrinsic_signatures_reject_wrong_arity_types_and_legacy_effe
         let valid = legacy_signature(parameters, result);
         validate_intrinsic(implementation, &valid).unwrap();
         let (snapshot, external) = canonical_signature(implementation, &valid);
-        validate_kernel_intrinsic(&snapshot, &external, &mut 0, 10_000).unwrap();
+        validate_kernel_intrinsic(&snapshot, &external, &mut crate::platform::kernel::ValidationWork::default(), Some(10_000)).unwrap();
 
         for index in 0..valid.parameters.len() {
             for wrong in [
@@ -214,7 +214,7 @@ fn f64_independent_intrinsic_signatures_reject_wrong_arity_types_and_legacy_effe
             };
             parameter.use_mode = use_mode;
             assert_eq!(
-                validate_kernel_intrinsic(&resource, &external, &mut 0, 10_000)
+                validate_kernel_intrinsic(&resource, &external, &mut crate::platform::kernel::ValidationWork::default(), Some(10_000))
                     .unwrap_err()
                     .code,
                 "intrinsic_signature"
@@ -288,7 +288,7 @@ fn f64_fallible_intrinsics_require_exact_structural_result_fields() {
         }
         let (snapshot, external) = canonical_signature(implementation, &valid);
         assert_eq!(
-            validate_kernel_intrinsic(&snapshot, &external, &mut 0, 1)
+            validate_kernel_intrinsic(&snapshot, &external, &mut crate::platform::kernel::ValidationWork::default(), Some(1))
                 .unwrap_err()
                 .code,
             "kernel_full_work"

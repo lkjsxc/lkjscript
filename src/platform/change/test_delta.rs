@@ -1,6 +1,7 @@
 //! Declaration-local maintenance of graph-owned test dependency facts.
 
 use super::relation_view::CandidateRelations;
+use super::{BudgetCounter, BudgetDimension, WorkSaturation, minimum_limit, optional_usize};
 use super::{
     CanonicalBaseRead, CanonicalDelta, ChangeBudget, DerivedDelta, KernelOverlay, TestAdmission,
     WitnessBaseRead, WitnessReadWork,
@@ -10,7 +11,7 @@ use crate::platform::kernel::{
     ExactOwnerKey, OwnerKey, OwnerKind, OwnerRecord, PropagationClass, RelationEndpoint,
 };
 use crate::platform::witness::{
-    MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS, OwnershipEntry, OwnershipParent, TestDependency,
+    OwnershipEntry, OwnershipParent, TestDependency,
     aggregation_children_with_bindings,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -21,6 +22,7 @@ pub struct TestDeltaWork {
     pub owners_visited: u64,
     pub relation_edges_visited: u64,
     pub witness_reads: WitnessReadWork,
+    pub saturation: WorkSaturation,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -34,19 +36,19 @@ pub struct TestDependencyDelta {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct TestDependencyAdmission {
     tests: TestAdmission,
-    maximum_relation_edges: u64,
-    maximum_relation_fanout: u64,
-    maximum_witness_records: u64,
-    maximum_dependency_changes: u64,
+    maximum_relation_edges: Option<u64>,
+    maximum_relation_fanout: Option<u64>,
+    maximum_witness_records: Option<u64>,
+    maximum_dependency_changes: Option<u64>,
 }
 
 impl TestDependencyAdmission {
     pub(crate) const fn new(
         tests: TestAdmission,
-        maximum_relation_edges: u64,
-        maximum_relation_fanout: u64,
-        maximum_witness_records: u64,
-        maximum_dependency_changes: u64,
+        maximum_relation_edges: Option<u64>,
+        maximum_relation_fanout: Option<u64>,
+        maximum_witness_records: Option<u64>,
+        maximum_dependency_changes: Option<u64>,
     ) -> Self {
         Self {
             tests,
@@ -66,7 +68,7 @@ impl Default for TestDependencyAdmission {
             budget.impact.maximum_relation_edges,
             budget.impact.maximum_relation_fanout,
             budget.witness_reads.maximum_decoded_records,
-            budget.witness_update.maximum_edits / 2,
+            budget.witness_update.maximum_edits.map(|maximum| maximum / 2),
         )
     }
 }
@@ -191,17 +193,9 @@ fn candidate_test_dependencies<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
         if visited.contains(&owner) {
             continue;
         }
-        if work.owners_visited >= admission.tests.maximum_owners_visited {
-            return Err(test_resource_error(
-                "change_budget_test_owners_visited",
-                format!(
-                    "test dependency traversal exceeds the declared {}-owner budget",
-                    admission.tests.maximum_owners_visited
-                ),
-            ));
-        }
+        work.saturation.charge(&mut work.owners_visited, BudgetDimension::TestOwnersVisited,
+            BudgetCounter::exact(1), admission.tests.maximum_owners_visited, "test dependency traversal")?;
         visited.insert(owner);
-        work.owners_visited = work.owners_visited.saturating_add(1);
         let record = overlay.owner(owner)?.ok_or_else(|| {
             test_error(
                 "change_test_owner_missing",
@@ -224,23 +218,15 @@ fn candidate_test_dependencies<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
             .filter(|(role, _)| role.aggregates_into_parent())
             .map(|(_, child)| child),
         );
-        let remaining_relations = admission
-            .maximum_relation_edges
-            .checked_sub(work.relation_edges_visited)
-            .ok_or_else(|| {
-                test_resource_error(
-                    "change_budget_relation_edges",
-                    "test dependency relation traversal exceeded its edge budget",
-                )
-            })?;
+        let remaining_relations = work.saturation
+            .counter(BudgetDimension::RelationEdges, work.relation_edges_visited)
+            .remaining(admission.maximum_relation_edges, "test dependency traversal", "relation_edges")?;
         let relation_read = relations.outgoing(
             owner,
             remaining_relations,
             admission.maximum_relation_fanout,
         )?;
-        work.relation_edges_visited = work
-            .relation_edges_visited
-            .saturating_add(relation_read.edges_examined);
+        work.saturation.observe(&mut work.relation_edges_visited, BudgetDimension::RelationEdges, relation_read.edges_examined);
         for edge in relation_read.edges {
             if matches!(
                 edge.kind.propagation(),
@@ -276,11 +262,11 @@ struct CandidateTestWitness<'a, W: ?Sized> {
     kinds: BTreeMap<OwnerKey, Option<OwnerKind>>,
     dependencies: BTreeMap<OwnerKey, BTreeSet<TestDependency>>,
     work: WitnessReadWork,
-    maximum_witness_records: u64,
+    maximum_witness_records: Option<u64>,
 }
 
 impl<'a, W: WitnessBaseRead + ?Sized> CandidateTestWitness<'a, W> {
-    fn new(derived: &DerivedDelta, base: &'a W, maximum_witness_records: u64) -> Self {
+    fn new(derived: &DerivedDelta, base: &'a W, maximum_witness_records: Option<u64>) -> Self {
         Self {
             edits: derived
                 .ownership
@@ -340,51 +326,27 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateTestWitness<'a, W> {
     fn test_dependencies(
         &mut self,
         test: OwnerKey,
-        maximum_per_test: u64,
+        maximum_per_test: Option<u64>,
     ) -> Result<BTreeSet<TestDependency>, Diagnostic> {
         if let Some(cached) = self.dependencies.get(&test) {
             return Ok(cached.clone());
         }
-        let remaining_records = self
-            .maximum_witness_records
-            .checked_sub(self.work.witness_records_decoded)
-            .ok_or_else(|| {
-                test_resource_error(
-                    "change_budget_witness_decoded_records",
-                    "test dependency reads exhausted the remaining witness-record budget",
-                )
-            })?;
-        let maximum_items = maximum_per_test
-            .min(remaining_records)
-            .min(MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS as u64);
-        if maximum_items == 0 {
-            let (code, message) = if remaining_records == 0 {
-                (
-                    "change_budget_witness_decoded_records",
-                    "test dependency read has no remaining witness-record budget",
-                )
-            } else {
-                (
-                    "change_budget_test_dependencies_per_test",
-                    "test dependency read has a zero per-test dependency budget",
-                )
-            };
-            return Err(test_resource_error(code, message));
-        }
-        let read = self.base.read_test_dependencies(
-            test,
-            usize::try_from(maximum_items).unwrap_or(MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS),
-        )?;
+        let remaining_records = self.work.observation(BudgetDimension::WitnessDecodedRecords,
+            self.work.witness_records_decoded).remaining(self.maximum_witness_records,
+                "test dependency reads", "witness_decoded_records")?;
+        let maximum_items = minimum_limit(maximum_per_test, remaining_records);
+        let read = self.base.read_test_dependencies(test,
+            optional_usize(maximum_items, "test_dependencies_per_test")?)?;
         self.work.add(read.work);
         if read.value.truncated {
-            let (code, limit) = if remaining_records < maximum_per_test {
+            let (code, limit) = if remaining_records.is_some_and(|records| maximum_per_test.is_none_or(|per_test| records < per_test)) {
                 ("change_budget_witness_decoded_records", remaining_records)
             } else {
                 ("change_budget_test_dependencies_per_test", maximum_per_test)
             };
             return Err(test_resource_error(
                 code,
-                format!("test dependency prefix exceeds the declared {limit}-record budget"),
+                format!("test dependency prefix exceeds the declared {limit:?}-record budget"),
             ));
         }
         let dependencies = read.value.dependencies.into_iter().collect::<BTreeSet<_>>();
@@ -397,22 +359,14 @@ fn admit_dependency_change(
     destination: &mut BTreeSet<TestDependency>,
     other: &BTreeSet<TestDependency>,
     dependency: TestDependency,
-    maximum: u64,
+    maximum: Option<u64>,
 ) -> Result<(), Diagnostic> {
     if destination.contains(&dependency) {
         return Ok(());
     }
-    let observed = u64::try_from(destination.len())
-        .unwrap_or(u64::MAX)
-        .saturating_add(u64::try_from(other.len()).unwrap_or(u64::MAX));
-    if observed >= maximum {
-        return Err(test_resource_error(
-            "change_budget_witness_edits",
-            format!(
-                "test dependency delta exceeds the remaining {maximum}-dependency-change witness budget"
-            ),
-        ));
-    }
+    let mut observed = BudgetCounter::exact(destination.len() as u64);
+    observed.observe(BudgetCounter::exact(other.len() as u64));
+    observed.charge(BudgetCounter::exact(1), maximum, "test dependency delta", "witness_edits")?;
     destination.insert(dependency);
     Ok(())
 }
@@ -420,12 +374,12 @@ fn admit_dependency_change(
 fn admit_test_dependency(
     dependencies: &mut BTreeSet<TestDependency>,
     dependency: TestDependency,
-    maximum: u64,
+    maximum: Option<u64>,
 ) -> Result<(), Diagnostic> {
     if dependencies.contains(&dependency) {
         return Ok(());
     }
-    if u64::try_from(dependencies.len()).unwrap_or(u64::MAX) >= maximum {
+    if let Some(maximum) = maximum && dependencies.len() as u64 >= maximum {
         return Err(test_resource_error(
             "change_budget_test_dependencies_per_test",
             format!(
@@ -447,16 +401,8 @@ fn owning_declaration<W: WitnessBaseRead + ?Sized>(
     let mut current = owner;
     let mut observed = BTreeSet::new();
     loop {
-        if work.ownership_steps >= admission.maximum_ownership_steps {
-            return Err(test_resource_error(
-                "change_budget_test_ownership_steps",
-                format!(
-                    "test ownership traversal exceeds the declared {}-step budget",
-                    admission.maximum_ownership_steps
-                ),
-            ));
-        }
-        work.ownership_steps = work.ownership_steps.saturating_add(1);
+        work.saturation.charge(&mut work.ownership_steps, BudgetDimension::TestOwnershipSteps,
+            BudgetCounter::exact(1), admission.maximum_ownership_steps, "test ownership traversal")?;
         if matches!(current, OwnerKey::Declaration(_)) {
             return Ok(Some(current));
         }
@@ -479,12 +425,12 @@ fn owning_declaration<W: WitnessBaseRead + ?Sized>(
 fn admit_test(
     selected: &mut BTreeSet<OwnerKey>,
     test: OwnerKey,
-    maximum: u64,
+    maximum: Option<u64>,
 ) -> Result<(), Diagnostic> {
     if selected.contains(&test) {
         return Ok(());
     }
-    if u64::try_from(selected.len()).unwrap_or(u64::MAX) >= maximum {
+    if let Some(maximum) = maximum && selected.len() as u64 >= maximum {
         return Err(test_resource_error(
             "change_budget_tests_selected",
             format!("test selection exceeds the declared {maximum}-test budget"),
@@ -536,16 +482,16 @@ mod tests {
 
         let mut dependencies = BTreeSet::new();
         assert_eq!(
-            admit_test_dependency(&mut dependencies, dependency, 0)
+            admit_test_dependency(&mut dependencies, dependency, Some(0))
                 .expect_err("zero admission must reject before insertion")
                 .code,
             "change_budget_test_dependencies_per_test"
         );
         assert!(dependencies.is_empty());
 
-        admit_test_dependency(&mut dependencies, dependency, 1)
+        admit_test_dependency(&mut dependencies, dependency, Some(1))
             .expect("one dependency fits one exact admission");
-        admit_test_dependency(&mut dependencies, dependency, 1)
+        admit_test_dependency(&mut dependencies, dependency, Some(1))
             .expect("an equal dependency consumes no additional admission");
         let second = TestDependency {
             target: RelationEndpoint::Owner(ExactOwnerKey {
@@ -555,7 +501,7 @@ mod tests {
             ..dependency
         };
         assert_eq!(
-            admit_test_dependency(&mut dependencies, second, 1)
+            admit_test_dependency(&mut dependencies, second, Some(1))
                 .expect_err("a second dependency must reject before insertion")
                 .code,
             "change_budget_test_dependencies_per_test"

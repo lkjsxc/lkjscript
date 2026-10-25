@@ -369,20 +369,20 @@ pub struct StructuralTypeField {
 #[derive(Clone, Debug)]
 pub struct TypeObjectInterner {
     objects: BTreeMap<TypeObjectDigest, TypeObject>,
-    maximum_objects: usize,
+    maximum_objects: Option<u64>,
 }
 
 impl Default for TypeObjectInterner {
     fn default() -> Self {
         Self {
             objects: BTreeMap::new(),
-            maximum_objects: usize::MAX,
+            maximum_objects: None,
         }
     }
 }
 
 impl TypeObjectInterner {
-    pub fn with_maximum_objects(maximum_objects: usize) -> Self {
+    pub fn with_maximum_objects(maximum_objects: Option<u64>) -> Self {
         Self {
             objects: BTreeMap::new(),
             maximum_objects,
@@ -440,13 +440,12 @@ impl TypeObjectInterner {
         if self.objects.contains_key(&digest) {
             return Ok(());
         }
-        if self.objects.len() >= self.maximum_objects {
+        if let Some(maximum) = self.maximum_objects && self.objects.len() as u64 >= maximum {
             return Err(Diagnostic::new(
                 DiagnosticClass::Resource,
                 "kernel_type_interner_exhausted",
                 format!(
-                    "request-local type interning exceeds the declared {}-type-object budget",
-                    self.maximum_objects
+                    "request-local type interning exceeds the declared {maximum}-type-object budget"
                 ),
             ));
         }

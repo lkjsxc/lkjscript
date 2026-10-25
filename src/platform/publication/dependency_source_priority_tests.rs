@@ -283,7 +283,8 @@ fn dependency_source_priority_admits_two_maximal_roots_for_the_nine_supplier_ove
         &ExecutionControl::uncancelled(),
     )
     .unwrap();
-    assert!(observed <= MAXIMUM_VALIDATION_VISITS);
+    assert!(observed.0 <= MAXIMUM_VALIDATION_VISITS);
+    assert!(!observed.1);
     assert_eq!(
         collections(),
         [state.revision_digest, planner.revision_digest]

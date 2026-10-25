@@ -183,29 +183,25 @@ fn raw_read_view_readback_reserves_complete_fields_and_cancels_empty_inventory_b
         ty,
         kind: ReadViewFieldKind::Ordinary,
     };
-    for maximum in [1, 2] {
+    for available in [1, 2] {
         let mut reader = Reader::for_raw_lowered_candidate(
             &view,
             ExecutionControl::uncancelled(),
             BTreeMap::new(),
             types.clone(),
         );
-        reader.remaining_type_nodes = maximum;
-        let result = reader.view_fields(vec![field.clone()]);
-        if maximum == 1 {
-            assert_eq!(result.unwrap_err().class, DiagnosticClass::Resource);
-        } else {
-            assert_eq!(
-                result.unwrap(),
-                vec![AuthoredReadViewField {
-                    id: field.id,
-                    name: field.name.clone(),
-                    ty: AuthoredType::I64 {},
-                    kind: AuthoredReadViewFieldKind::Ordinary
-                }]
-            );
-            assert_eq!(reader.remaining_type_nodes, 0);
-        }
+        reader.type_nodes = crate::platform::change::budget::BudgetCounter::exact(u64::MAX - available);
+        assert_eq!(
+            reader.view_fields(vec![field.clone()]).unwrap(),
+            vec![AuthoredReadViewField {
+                id: field.id,
+                name: field.name.clone(),
+                ty: AuthoredType::I64 {},
+                kind: AuthoredReadViewFieldKind::Ordinary
+            }]
+        );
+        assert_eq!(reader.type_nodes.consumed, u64::MAX);
+        assert_eq!(reader.type_nodes.saturated, available < 2);
     }
     let mut cancelled = Reader::for_raw_lowered_candidate(
         &view,
@@ -287,7 +283,7 @@ fn raw_read_view_draft_reentry_preserves_scope_formal_inline_field_order_and_com
     let rendered = super::super::draft::render_raw_lowered_candidate(
         &view,
         &[owner.into()],
-        4 * 1_048_576,
+        Some(4 * 1_048_576),
         ExecutionControl::uncancelled(),
         owners.clone(),
         types.clone(),

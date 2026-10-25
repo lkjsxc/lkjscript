@@ -452,7 +452,7 @@ fn read_view_complete_edit_deletion_rechecks_parent_witness_and_admits_original_
     );
 
     let mut request = request;
-    request.semantic.budget.impact.maximum_ownership_steps = 0;
+    request.semantic.budget.impact.maximum_ownership_steps = Some(0);
     let diagnostic = lower_authored_changes(&before, &before, &request.semantic).expect_err(
         "accepted read-view membership inspection must obey the ownership work admission",
     );

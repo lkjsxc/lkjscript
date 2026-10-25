@@ -10,26 +10,16 @@ declarations.begin
         (if
           (call ci::both
             (call ci::lt (i64 0) (local function-count))
-            (call ci::lt (local function-count) (i64 1025)))
+            (call ci::lt (local function-count) (i64 115292150460684693)))
           (call ci::div
-            (call ci::sub
-              (i64 8388608)
-              (call ci::add (i64 2176) (call ci::mul (local function-count) (i64 40))))
-            (i64 32))
+            (call ci::sub (i64 9223372036854775423) (call ci::mul (local function-count) (i64 80)))
+            (i64 64))
           (i64 -1))))
-
     (function create failure
       (visibility private)
       (effect pure)
       (returns (record (code I64) (input Bytes)))
-      (body
-        (record structural
-          (field code (i64 13))
-          (field input (call ci::text-bytes (text "")))
-        )
-      )
-    )
-
+      (body (record structural (field code (i64 13)) (field input (call ci::text-bytes (text ""))))))
     (function create words
       (visibility private)
       (effect pure)
@@ -39,31 +29,16 @@ declarations.begin
       (returns ByteBuffer)
       (body
         (if
-          (call ci::eq
-            (local index)
-            (call ci::list-size (types I64) (local values)))
+          (call ci::eq (local index) (call ci::list-size (types I64) (local values)))
           (local out)
           (let
             (binding next
               (type ByteBuffer)
               (call ci::le
-                (call ci::list-get
-                  (types I64)
-                  (local values)
-                  (local index))
-                (i64 4)
+                (call ci::list-get (types I64) (local values) (local index))
+                (i64 8)
                 (local out)))
-            (in
-              (call words
-                (local values)
-                (call ci::add (local index) (i64 1))
-                (local next))
-            )
-          )
-        )
-      )
-    )
-
+            (in (call words (local values) (call ci::add (local index) (i64 1)) (local next)))))))
     (function create signed
       (visibility package)
       (effect pure)
@@ -72,80 +47,33 @@ declarations.begin
       (body
         (let
           (binding negative (call ci::lt (local value) (i64 0)))
-          (binding magnitude
-            (if
-              (local negative)
-              (call ci::sub (i64 -1) (local value))
-              (local value)))
-          (binding high
-            (call ci::div (local magnitude) (i64 4294967296)))
-          (binding low
-            (call ci::sub
-              (local magnitude)
-              (call ci::mul (local high) (i64 4294967296))))
-          (binding lower
-            (if
-              (local negative)
-              (call ci::sub (i64 4294967295) (local low))
-              (local low)))
-          (binding upper
-            (if
-              (local negative)
-              (call ci::sub (i64 4294967295) (local high))
-              (local high)))
-          (binding a
-            (type ByteBuffer)
-            (call ci::empty))
-          (binding b
-            (type ByteBuffer)
-            (call ci::le (local lower) (i64 4) (local a)))
-          (binding c
-            (type ByteBuffer)
-            (call ci::le (local upper) (i64 4) (local b)))
-          (in (call ci::freeze (local c)))
-        )
-      )
-    )
-
+          (binding magnitude (if (local negative) (call ci::sub (i64 -1) (local value)) (local value)))
+          (binding high (call ci::div (local magnitude) (i64 4294967296)))
+          (binding low (call ci::sub (local magnitude) (call ci::mul (local high) (i64 4294967296))))
+          (binding lower (if (local negative) (call ci::sub (i64 4294967295) (local low)) (local low)))
+          (binding upper (if (local negative) (call ci::sub (i64 4294967295) (local high)) (local high)))
+          (binding a (type ByteBuffer) (call ci::empty))
+          (binding b (type ByteBuffer) (call ci::le (local lower) (i64 4) (local a)))
+          (binding c (type ByteBuffer) (call ci::le (local upper) (i64 4) (local b)))
+          (in (call ci::freeze (local c))))))
     (function create prefix
       (visibility private)
       (effect pure)
       (parameter create length (type I64))
       (parameter create function-count (type I64))
-      (parameter create entry (type I64))
-      (parameter create fuel (type I64))
       (returns Bytes)
       (body
         (let
-          (binding a
-            (type ByteBuffer)
-            (call ci::empty))
+          (binding a (type ByteBuffer) (call ci::empty))
           (binding b
             (type ByteBuffer)
-            (call ci::append
-              (call ci::text-bytes (text "LKJCI001"))
-              (i64 0)
-              (local a)))
-          (binding c
-            (type ByteBuffer)
-            (call ci::le (i64 4) (i64 4) (local b)))
-          (binding d
-            (type ByteBuffer)
-            (call ci::le (local entry) (i64 4) (local c)))
-          (binding e
-            (type ByteBuffer)
-            (call ci::le (local length) (i64 8) (local d)))
-          (binding f
-            (type ByteBuffer)
-            (call ci::le (local function-count) (i64 8) (local e)))
-          (binding g
-            (type ByteBuffer)
-            (call ci::le (local fuel) (i64 8) (local f)))
-          (in (call ci::freeze (local g)))
-        )
-      )
-    )
-
+            (call ci::append (call ci::text-bytes (text "LKJCI001")) (i64 0) (local a)))
+          (binding c (type ByteBuffer) (call ci::le (i64 6) (i64 4) (local b)))
+          (binding d (type ByteBuffer) (call ci::le (i64 0) (i64 4) (local c)))
+          (binding e (type ByteBuffer) (call ci::le (local length) (i64 8) (local d)))
+          (binding f (type ByteBuffer) (call ci::le (local function-count) (i64 8) (local e)))
+          (binding g (type ByteBuffer) (call ci::le (i64 0) (i64 8) (local f)))
+          (in (call ci::freeze (local g))))))
     (function create body
       (visibility private)
       (effect pure)
@@ -156,54 +84,66 @@ declarations.begin
       (parameter create node-count (type I64))
       (parameter create node-offset (type I64))
       (parameter create blob-offset (type I64))
+      (parameter create entry (type I64))
       (returns Bytes)
       (body
         (let
-          (binding a
-            (type ByteBuffer)
-            (call ci::empty))
+          (binding a (type ByteBuffer) (call ci::empty))
           (binding b
             (type ByteBuffer)
             (call words
               (list I64
-                (i64 112) (i64 1)
-                (i64 128) (i64 7)
-                (i64 2176) (local function-count)
-                (local node-offset) (local node-count)
-                (local blob-offset) (call ci::length (local blob))
-                (i64 0) (local function-count) (i64 0) (i64 0))
+                (i64 160)
+                (i64 7)
+                (i64 384)
+                (local function-count)
+                (local node-offset)
+                (i64 0)
+                (local node-count)
+                (local blob-offset)
+                (call ci::length (local blob))
+                (local entry)
+                (i64 0))
               (i64 0)
               (local a)))
           (binding c
             (type ByteBuffer)
             (call words
               (list I64
-                (i64 1) (i64 0) (i64 0) (i64 0)
-                (i64 2) (i64 0) (i64 0) (i64 0)
-                (i64 3) (i64 0) (i64 0) (i64 0)
-                (i64 4) (i64 0) (i64 0) (i64 0)
-                (i64 5) (i64 0) (i64 0) (i64 0)
-                (i64 6) (i64 0) (i64 0) (i64 0)
-                (i64 7) (i64 1) (i64 0) (i64 0))
+                (i64 1)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 2)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 3)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 4)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 5)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 6)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 7)
+                (i64 1)
+                (i64 0)
+                (i64 0))
               (i64 0)
               (local b)))
-          (binding d
-            (type ByteBuffer)
-            (call ci::pad (i64 2104) (i64 0) (local c)))
-          (binding e
-            (type ByteBuffer)
-            (call ci::append (local functions) (i64 0) (local d)))
-          (binding f
-            (type ByteBuffer)
-            (call ci::append (local nodes) (i64 0) (local e)))
-          (binding g
-            (type ByteBuffer)
-            (call ci::append (local blob) (i64 0) (local f)))
-          (in (call ci::freeze (local g)))
-        )
-      )
-    )
-
+          (binding d (type ByteBuffer) (call ci::append (local functions) (i64 0) (local c)))
+          (binding e (type ByteBuffer) (call ci::append (local nodes) (i64 0) (local d)))
+          (binding f (type ByteBuffer) (call ci::append (local blob) (i64 0) (local e)))
+          (in (call ci::freeze (local f))))))
     (function create assemble
       (visibility private)
       (effect pure)
@@ -216,16 +156,10 @@ declarations.begin
       (parameter create node-offset (type I64))
       (parameter create blob-offset (type I64))
       (parameter create length (type I64))
-      (parameter create fuel (type I64))
       (returns (record (code I64) (input Bytes)))
       (body
         (let
-          (binding head
-            (call prefix
-              (local length)
-              (local function-count)
-              (local entry)
-              (local fuel)))
+          (binding head (call prefix (local length) (local function-count)))
           (binding content
             (call body
               (local functions)
@@ -234,32 +168,14 @@ declarations.begin
               (local function-count)
               (local node-count)
               (local node-offset)
-              (local blob-offset)))
-          (binding checksum
-            (call ci::digest
-              (call ci::concat (local head) (local content))))
-          (binding a
-            (type ByteBuffer)
-            (call ci::empty))
-          (binding b
-            (type ByteBuffer)
-            (call ci::append (local head) (i64 0) (local a)))
-          (binding c
-            (type ByteBuffer)
-            (call ci::append (local checksum) (i64 0) (local b)))
-          (binding d
-            (type ByteBuffer)
-            (call ci::append (local content) (i64 0) (local c)))
-          (in
-            (record structural
-              (field code (i64 0))
-              (field input (call ci::freeze (local d)))
-            )
-          )
-        )
-      )
-    )
-
+              (local blob-offset)
+              (local entry)))
+          (binding checksum (call ci::digest (call ci::concat (local head) (local content))))
+          (binding a (type ByteBuffer) (call ci::empty))
+          (binding b (type ByteBuffer) (call ci::append (local head) (i64 0) (local a)))
+          (binding c (type ByteBuffer) (call ci::append (local checksum) (i64 0) (local b)))
+          (binding d (type ByteBuffer) (call ci::append (local content) (i64 0) (local c)))
+          (in (record structural (field code (i64 0)) (field input (call ci::freeze (local d))))))))
     (function create checked
       (visibility private)
       (effect pure)
@@ -272,71 +188,51 @@ declarations.begin
       (returns (record (code I64) (input Bytes)))
       (body
         (let
-          (binding function-bytes
-            (call ci::mul (local function-count) (i64 40)))
-          (binding node-bytes
-            (call ci::mul (local node-count) (i64 32)))
-          (binding node-offset
-            (call ci::add (i64 2176) (local function-bytes)))
-          (binding blob-offset
-            (call ci::add (local node-offset) (local node-bytes)))
-          (binding blob-size
-            (call ci::length (local blob)))
+          (binding function-bytes (call ci::length (local functions)))
+          (binding node-bytes (call ci::length (local nodes)))
+          (binding blob-size (call ci::length (local blob)))
           (in
             (if
-              (call ci::both
-                (call ci::eq
-                  (call ci::length (local functions))
-                  (local function-bytes))
-                (call ci::eq
-                  (call ci::length (local nodes))
-                  (local node-bytes)))
+              (call ci::eq (call ci::div (local function-bytes) (i64 80)) (local function-count))
               (if
-                (call ci::lt (local blob-size) (i64 0))
-                (call failure)
+                (call ci::eq (call ci::mul (local function-count) (i64 80)) (local function-bytes))
                 (if
-                  (call ci::lt
-                    (call ci::sub (i64 8388608) (local blob-offset))
-                    (local blob-size))
-                  (call failure)
-                  (let
-                    (binding length
-                      (call ci::add (local blob-offset) (local blob-size)))
-                    (binding fuel
-                      (call ci::add
-                        (i64 4096)
-                        (call ci::add
-                          (local function-count)
-                          (call ci::add
-                            (call ci::mul (local node-count) (i64 64))
-                            (call ci::mul (local blob-size) (i64 256))))))
-                    (in
-                      (if
-                        (call ci::lt (i64 2147483647) (local fuel))
-                        (call failure)
-                        (call assemble
-                          (local functions)
-                          (local nodes)
-                          (local blob)
-                          (local function-count)
-                          (local node-count)
-                          (local entry)
-                          (local node-offset)
-                          (local blob-offset)
-                          (local length)
-                          (local fuel))
-                      )
-                    )
-                  )
-                )
-              )
-              (call failure)
-            )
-          )
-        )
-      )
-    )
-
+                  (call ci::eq (call ci::div (local node-bytes) (i64 64)) (local node-count))
+                  (if
+                    (call ci::eq (call ci::mul (local node-count) (i64 64)) (local node-bytes))
+                    (if
+                      (call ci::lt (i64 9223372036854775423) (local function-bytes))
+                      (call failure)
+                      (let
+                        (binding node-offset (call ci::add (i64 384) (local function-bytes)))
+                        (in
+                          (if
+                            (call ci::lt
+                              (call ci::sub (i64 9223372036854775807) (local node-offset))
+                              (local node-bytes))
+                            (call failure)
+                            (let
+                              (binding blob-offset (call ci::add (local node-offset) (local node-bytes)))
+                              (in
+                                (if
+                                  (call ci::lt
+                                    (call ci::sub (i64 9223372036854775807) (local blob-offset))
+                                    (local blob-size))
+                                  (call failure)
+                                  (call assemble
+                                    (local functions)
+                                    (local nodes)
+                                    (local blob)
+                                    (local function-count)
+                                    (local node-count)
+                                    (local entry)
+                                    (local node-offset)
+                                    (local blob-offset)
+                                    (call ci::add (local blob-offset) (local blob-size))))))))))
+                    (call failure))
+                  (call failure))
+                (call failure))
+              (call failure))))))
     (function create encode
       (visibility package)
       (effect pure)
@@ -350,14 +246,8 @@ declarations.begin
       (body
         (if
           (call ci::both
-            (call ci::both
-              (call ci::lt (i64 0) (local function-count))
-              (call ci::lt (local function-count) (i64 1025)))
-            (call ci::both
-              (call ci::lt (i64 0) (local node-count))
-              (call ci::lt
-                (local node-count)
-                (call ci::add (call node-capacity (local function-count)) (i64 1)))))
+            (call ci::lt (i64 0) (local function-count))
+            (call ci::lt (i64 0) (local node-count)))
           (if
             (call ci::both
               (call ci::lt (i64 -1) (local entry))
@@ -369,12 +259,16 @@ declarations.begin
               (local function-count)
               (local node-count)
               (local entry))
-            (call failure)
-          )
-          (call failure)
-        )
-      )
-    )
-  )
-)
+            (call failure))
+          (call failure))))
+    (function create value-type
+      (visibility package)
+      (effect pure)
+      (parameter create identity (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::le (local identity) (i64 8) (local out)))
+          (in (call ci::le (i64 0) (i64 8) (local a))))))))
 declarations.end

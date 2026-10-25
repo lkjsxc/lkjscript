@@ -59,7 +59,7 @@ fn encode(change: AuthoredChange) -> Vec<u8> {
 }
 
 fn encode_scope(argument: &AuthoredReadScopeArgument) -> Vec<u8> {
-    let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+    let mut writer = Writer::new(None);
     writer
         .read_scope_argument(argument, &BTreeMap::new())
         .unwrap();
@@ -264,7 +264,7 @@ fn result_relations_and_associated_read_view_coordinates_have_literal_layouts() 
                 literal_scope(&mut literal, 1);
             }
         }
-        let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+        let mut writer = Writer::new(None);
         writer
             .callable_result(
                 &AuthoredCallableResult {
@@ -285,7 +285,7 @@ fn result_relations_and_associated_read_view_coordinates_have_literal_layouts() 
         read_scope: scope(1),
     };
     let encode_type = |ty: &AuthoredType| {
-        let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+        let mut writer = Writer::new(None);
         writer.authored_type(ty, &BTreeMap::new(), 1).unwrap();
         writer.finish()
     };
@@ -320,7 +320,7 @@ fn result_relations_and_associated_read_view_coordinates_have_literal_layouts() 
 #[test]
 fn family_bounds_and_bindings_commit_the_kind_and_full_scope_formal() {
     let member = AssociatedTypeMemberId::migrate(b"view-intent", 1);
-    let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+    let mut writer = Writer::new(None);
     writer
         .associated_members(&[AuthoredAssociatedTypeMember {
             id: member,
@@ -340,7 +340,7 @@ fn family_bounds_and_bindings_commit_the_kind_and_full_scope_formal() {
     literal.extend_from_slice(b"loan");
     assert_eq!(writer.finish(), literal);
     let encode_binding = |value| {
-        let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+        let mut writer = Writer::new(None);
         writer
             .associated_bindings(
                 &[AuthoredAssociatedTypeBinding { member, value }],
@@ -387,7 +387,7 @@ fn family_bounds_and_bindings_commit_the_kind_and_full_scope_formal() {
 #[test]
 fn empty_view_construction_still_commits_source_and_field_references_are_qualified() {
     let encode_operation = |operation| {
-        let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+        let mut writer = Writer::new(None);
         writer
             .expression_operation(&operation, &BTreeMap::new(), 1)
             .unwrap();
@@ -434,7 +434,7 @@ fn unused_view_fields_commit_identity_name_type_kind_scope_and_authored_order() 
         },
     };
     let encode_fields = |fields: &[AuthoredReadViewField]| {
-        let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+        let mut writer = Writer::new(None);
         writer.read_view_fields(fields, &BTreeMap::new()).unwrap();
         writer.finish()
     };
@@ -512,7 +512,7 @@ fn all_call_and_method_mapping_scope_actuals_change_the_commitment() {
         ]
     };
     let encode_operation = |operation: &AuthoredExpressionOperation| {
-        let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+        let mut writer = Writer::new(None);
         writer
             .expression_operation(operation, &BTreeMap::new(), 1)
             .unwrap();

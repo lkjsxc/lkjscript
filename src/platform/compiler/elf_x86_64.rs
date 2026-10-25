@@ -7,7 +7,7 @@ use crate::platform::execution::normalized::prepare::{
 };
 use crate::platform::kernel::{Name, TypeForm};
 use crate::platform::package::RunnerKind;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, HashSet};
 
 mod asm;
 mod blake3;
@@ -17,6 +17,8 @@ mod filter;
 mod runtime;
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod stack_tests;
+#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+mod capacity_tests;
 use asm::{Asm, Label, R::*, *};
 use runtime::Runtime;
 
@@ -24,14 +26,33 @@ type Result<T> = std::result::Result<T, Diagnostic>;
 const TEXT_OFFSET: usize = 4096;
 const IMAGE_ADDRESS: u64 = 0x400000;
 const TEXT_ADDRESS: u64 = IMAGE_ADDRESS + TEXT_OFFSET as u64;
-const MAX_FUNCTIONS: usize = 4096;
-const MAX_INSTRUCTIONS: usize = 65_536;
 
 fn error(code: &'static str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Source, code, message)
 }
 fn unsupported(message: impl Into<String>) -> Diagnostic {
     error("native_elf_unsupported", message)
+}
+
+fn reserve<T>(storage: &mut Vec<T>, additional: usize) -> Result<()> {
+    storage.try_reserve(additional).map_err(|_| {
+        Diagnostic::new(DiagnosticClass::Resource, "native_elf_allocation",
+            "cannot allocate native compilation storage")
+    })
+}
+
+fn layout_extent(count: usize, stride: u64, header: u64) -> Result<u64> {
+    u64::try_from(count).ok()
+        .and_then(|count| count.checked_mul(stride))
+        .and_then(|size| size.checked_add(header))
+        .ok_or_else(|| error("native_elf_layout", "native allocation extent overflowed"))
+}
+
+fn layout_offset(index: usize, stride: i64, header: i64) -> Result<i64> {
+    i64::try_from(index).ok()
+        .and_then(|index| index.checked_mul(stride))
+        .and_then(|offset| offset.checked_add(header))
+        .ok_or_else(|| error("native_elf_layout", "native field offset overflowed"))
 }
 
 pub(crate) struct Image {
@@ -101,7 +122,7 @@ struct Emitter<'a> {
     program: &'a NormalizedProgram,
     a: Asm,
     runtime: Runtime,
-    functions: BTreeMap<usize, Label>,
+    functions: Vec<Option<Label>>,
     constants: BTreeMap<Constant, Label>,
     data: Vec<(Label, Vec<u8>)>,
     rewrites: usize,
@@ -111,16 +132,17 @@ pub(crate) fn compile_function(
     program: &NormalizedProgram,
     entry: usize,
 ) -> Result<(Vec<u8>, usize, usize)> {
-    let mut reachable = BTreeSet::new();
-    let mut pending = vec![entry];
-    let mut instructions = 0usize;
+    let mut reachable = Vec::new();
+    let mut scheduled = Vec::new();
+    reserve(&mut scheduled, program.functions.len())?;
+    scheduled.resize(program.functions.len(), false);
+    *scheduled.get_mut(entry).ok_or_else(|| unsupported("native entry is absent"))? = true;
+    let mut pending = Vec::new();
+    reserve(&mut pending, 1)?;
+    pending.push(entry);
     while let Some(index) = pending.pop() {
-        if !reachable.insert(index) {
-            continue;
-        }
-        if reachable.len() > MAX_FUNCTIONS {
-            return Err(unsupported("native function closure exceeds its bound"));
-        }
+        reserve(&mut reachable, 1)?;
+        reachable.push(index);
         let function = program
             .functions
             .get(index)
@@ -134,22 +156,24 @@ pub(crate) fn compile_function(
             ));
         }
         if let NormalizedFunctionBody::Code(code) = &function.body {
-            instructions = instructions.saturating_add(code.instructions.len());
-            if instructions > MAX_INSTRUCTIONS || code.local_count as usize > MAX_INSTRUCTIONS {
-                return Err(unsupported(
-                    "native code exceeds its bounded instruction or local inventory",
-                ));
-            }
             for instruction in code.instructions.iter() {
                 if let I::Call { function, .. }
                 | I::TailCall { function, .. }
                 | I::FunctionValue { function, .. } = instruction
                 {
-                    pending.push(function.0 as usize);
+                    let target = function.0 as usize;
+                    let queued = scheduled.get_mut(target)
+                        .ok_or_else(|| unsupported("native call target is absent"))?;
+                    if !*queued {
+                        reserve(&mut pending, 1)?;
+                        *queued = true;
+                        pending.push(target);
+                    }
                 }
             }
         }
     }
+    reachable.sort_unstable();
     let function = program
         .functions
         .get(entry)
@@ -176,7 +200,13 @@ pub(crate) fn compile_function(
     }
     let mut a = Asm::new();
     let runtime = Runtime::new(&mut a);
-    let functions = reachable.iter().map(|&index| (index, a.label())).collect();
+    let mut functions = Vec::new();
+    reserve(&mut functions, program.functions.len())?;
+    functions.resize(program.functions.len(), None);
+    for &index in &reachable {
+        functions[index] = Some(a.label());
+    }
+    a.check()?;
     let mut e = Emitter {
         program,
         a,
@@ -193,6 +223,7 @@ pub(crate) fn compile_function(
     }
     for &index in &reachable {
         e.function(index)?;
+        e.a.check()?;
     }
     e.runtime.emit(&mut e.a, &mut e.data);
     for (label, bytes) in &e.data {
@@ -233,7 +264,7 @@ pub(crate) fn compile_function(
             }
             Constant::Function(index) => {
                 e.a.bytes(&6_u64.to_le_bytes());
-                e.a.absolute(*e.functions.get(index).ok_or_else(|| {
+                e.a.absolute(e.functions.get(*index).copied().flatten().ok_or_else(|| {
                     unsupported("native function constant is outside its closure")
                 })?);
                 e.a.bytes(&0_u64.to_le_bytes());
@@ -249,17 +280,19 @@ fn admit_result(
     program: &NormalizedProgram,
     root: crate::platform::kernel::TypeObjectDigest,
 ) -> Result<()> {
-    let mut pending = vec![root];
-    let mut seen = BTreeSet::new();
+    let mut pending = Vec::new();
+    reserve(&mut pending, 1)?;
+    pending.push(root);
+    let mut seen = HashSet::new();
     while let Some(ty) = pending.pop() {
-        if !seen.insert(ty) {
+        if seen.contains(&ty) {
             continue;
         }
-        if seen.len() > MAX_INSTRUCTIONS || pending.len() > MAX_INSTRUCTIONS {
-            return Err(unsupported(
-                "native result type exceeds its admission bound",
-            ));
-        }
+        seen.try_reserve(1).map_err(|_| {
+            Diagnostic::new(DiagnosticClass::Resource, "native_elf_allocation",
+                "cannot allocate native result admission storage")
+        })?;
+        seen.insert(ty);
         match program.types.get(&ty).map(|ty| &ty.form) {
             Some(
                 TypeForm::Unit
@@ -268,8 +301,12 @@ fn admit_result(
                 | TypeForm::Text
                 | TypeForm::StaticText,
             ) => {}
-            Some(TypeForm::List { item }) => pending.push(*item),
+            Some(TypeForm::List { item }) => {
+                reserve(&mut pending, 1)?;
+                pending.push(*item);
+            }
             Some(TypeForm::StructuralRecord { fields }) => {
+                reserve(&mut pending, fields.len())?;
                 pending.extend(fields.iter().map(|field| field.ty))
             }
             Some(TypeForm::Named { declaration }) => {
@@ -280,6 +317,7 @@ fn admit_result(
                     .ok_or_else(|| {
                         unsupported("native result requires a concrete record layout")
                     })?;
+                reserve(&mut pending, record.fields.len())?;
                 pending.extend(record.fields.iter().map(|field| field.ty));
             }
             Some(TypeForm::Applied {
@@ -296,6 +334,7 @@ fn admit_result(
                     .ok_or_else(|| {
                         unsupported("native result requires a concrete record application")
                     })?;
+                reserve(&mut pending, record.fields.len())?;
                 pending.extend(record.fields.iter().map(|field| field.ty));
             }
             _ => {
@@ -309,11 +348,12 @@ fn admit_result(
 }
 
 fn elf(code: &[u8]) -> Result<Vec<u8>> {
-    let size = TEXT_OFFSET
-        .checked_add(code.len())
-        .filter(|size| *size <= MAX_BYTES)
-        .ok_or_else(|| unsupported("native ELF exceeds its image bound"))?;
-    let mut out = vec![0_u8; size];
+    let size = TEXT_OFFSET.checked_add(code.len())
+        .ok_or_else(|| error("native_elf_layout", "native ELF extent overflowed"))?;
+    absolute_address(code.len())?;
+    let mut out = Vec::new();
+    reserve(&mut out, size)?;
+    out.resize(size, 0_u8);
     out[..16].copy_from_slice(&[0x7f, b'E', b'L', b'F', 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     out[16..18].copy_from_slice(&2_u16.to_le_bytes());
     out[18..20].copy_from_slice(&62_u16.to_le_bytes());
@@ -342,8 +382,9 @@ fn elf(code: &[u8]) -> Result<Vec<u8>> {
 impl Emitter<'_> {
     fn label(&self, index: usize) -> Result<Label> {
         self.functions
-            .get(&index)
+            .get(index)
             .copied()
+            .flatten()
             .ok_or_else(|| unsupported("native function is outside the admitted closure"))
     }
     fn constant(&mut self, value: Constant) -> Label {
@@ -362,17 +403,17 @@ impl Emitter<'_> {
     fn start(&mut self, entry: usize, parameters: usize) -> Result<()> {
         self.a.mov(R12, Sp);
         self.a.load(Ax, R12, 0);
-        self.a.group(7, Ax, parameters as i32 + 1);
+        self.a.group_wide(7, Ax, layout_extent(parameters, 1, 1)?);
         self.a.when(NE, self.runtime.argument);
         self.a.imm(R14, 0);
         self.a.imm(R15, 0);
         for parameter in 0..parameters {
-            self.a.load(Di, R12, 16 + parameter as i32 * 8);
+            self.a.load_offset(Di, R12, layout_offset(parameter, 8, 16)?);
             self.a.call(self.runtime.parse);
             self.a.push(Ax);
         }
         self.a.call(self.label(entry)?);
-        self.a.group(0, Sp, parameters as i32 * 8);
+        self.a.group_wide(0, Sp, layout_extent(parameters, 8, 0)?);
         self.a.mov(Di, Ax);
         self.a.call(self.runtime.print);
         self.a.imm(Di, 0);
@@ -387,7 +428,7 @@ impl Emitter<'_> {
         self.a.push(Bx);
         self.a.push(R12);
         self.a.push(R13);
-        self.a.group(5, Sp, locals as i32 * 8);
+        self.a.group_wide(5, Sp, u64::from(locals) * 8);
     }
     fn epilogue(&mut self) {
         self.a.lea(Sp, Bp, -24);
@@ -399,7 +440,7 @@ impl Emitter<'_> {
     }
     fn argument(&mut self, destination: R, offset: u32) {
         self.a.load(destination, Bp, 24);
-        self.a.load(destination, destination, offset as i32 * 8);
+        self.a.load_offset(destination, destination, i64::from(offset) * 8);
     }
     fn function(&mut self, index: usize) -> Result<()> {
         self.a.bind(self.label(index)?);
@@ -414,11 +455,12 @@ impl Emitter<'_> {
         self.prologue(code.local_count);
         for parameter in 0..code.parameter_count {
             self.argument(Ax, code.parameter_count - 1 - parameter);
-            self.a.store(Bp, -32 - parameter as i32 * 8, Ax);
+            self.a.store_offset(Bp, -32 - i64::from(parameter) * 8, Ax);
         }
-        let labels: Vec<_> = (0..code.instructions.len())
-            .map(|_| self.a.label())
-            .collect();
+        let mut labels = Vec::new();
+        reserve(&mut labels, code.instructions.len())?;
+        labels.extend((0..code.instructions.len()).map(|_| self.a.label()));
+        self.a.check()?;
         let plan = super::egraph_opt::optimize(self.program, code);
         self.rewrites += plan.rewrites.len();
         let mut ip = 0;
@@ -452,12 +494,12 @@ impl Emitter<'_> {
             I::I64(v) => self.push_constant(Constant::I64(*v)),
             I::Text(v) | I::StaticText(v) => self.push_constant(Constant::Text(v.to_string())),
             I::LoadLocal { local, .. } | I::MoveLocal(local) => {
-                self.a.load(Ax, Bp, -32 - *local as i32 * 8);
+                self.a.load_offset(Ax, Bp, -32 - i64::from(*local) * 8);
                 self.a.push(Ax);
             }
             I::StoreLocal(local) => {
                 self.a.pop(Ax);
-                self.a.store(Bp, -32 - *local as i32 * 8, Ax);
+                self.a.store_offset(Bp, -32 - i64::from(*local) * 8, Ax);
             }
             I::Drop => self.a.group(0, Sp, 8),
             I::Jump(target) => self.a.jump(
@@ -490,12 +532,12 @@ impl Emitter<'_> {
                 if tail && target.0 as usize == function {
                     for parameter in (0..*arguments).rev() {
                         self.a.pop(Ax);
-                        self.a.store(Bp, -32 - parameter as i32 * 8, Ax);
+                        self.a.store_offset(Bp, -32 - i64::from(parameter) * 8, Ax);
                     }
                     self.a.jump(labels[0]);
                 } else {
                     self.a.call(self.label(target.0 as usize)?);
-                    self.a.group(0, Sp, *arguments as i32 * 8);
+                    self.a.group_wide(0, Sp, u64::from(*arguments) * 8);
                     if tail {
                         self.epilogue();
                     } else {
@@ -525,12 +567,13 @@ impl Emitter<'_> {
                 self.a.store(Ax, 8, Cx);
                 for item in (0..*items).rev() {
                     self.a.pop(Cx);
-                    self.a.store(Ax, 16 + item as i32 * 8, Cx);
+                    self.a.store_offset(Ax, 16 + i64::from(item) * 8, Cx);
                 }
                 self.a.push(Ax);
             }
             I::Record { fields, .. } => {
                 let mut names = Vec::new();
+                reserve(&mut names, fields.len())?;
                 for field in fields.iter() {
                     names.push(match field {
                         NormalizedFieldSelector::Structural(name) => name.clone(),
@@ -544,9 +587,11 @@ impl Emitter<'_> {
                             .clone(),
                     });
                 }
-                let mut order: Vec<_> = (0..names.len()).collect();
+                let mut order = Vec::new();
+                reserve(&mut order, names.len())?;
+                order.extend(0..names.len());
                 order.sort_by_key(|&i| &names[i]);
-                self.a.imm(Di, 16 + fields.len() as u64 * 16);
+                self.a.imm(Di, layout_extent(fields.len(), 16, 16)?);
                 self.a.call(self.runtime.alloc);
                 self.a.imm(Cx, 5);
                 self.a.store(Ax, 0, Cx);
@@ -555,12 +600,12 @@ impl Emitter<'_> {
                 for (offset, &position) in order.iter().enumerate() {
                     let key = self.constant(Constant::Text(names[position].to_string()));
                     self.a.address(Cx, key);
-                    self.a.store(Ax, 16 + offset as i32 * 16, Cx);
+                    self.a.store_offset(Ax, layout_offset(offset, 16, 16)?, Cx);
                     self.a
-                        .load(Cx, Sp, (fields.len() - 1 - position) as i32 * 8);
-                    self.a.store(Ax, 24 + offset as i32 * 16, Cx);
+                        .load_offset(Cx, Sp, layout_offset(fields.len() - 1 - position, 8, 0)?);
+                    self.a.store_offset(Ax, layout_offset(offset, 16, 24)?, Cx);
                 }
-                self.a.group(0, Sp, fields.len() as i32 * 8);
+                self.a.group_wide(0, Sp, layout_extent(fields.len(), 8, 0)?);
                 self.a.push(Ax);
             }
             I::Field(field) => {
@@ -610,7 +655,7 @@ impl Emitter<'_> {
     }
     fn invoke(&mut self, arguments: u32) {
         self.a.mov(Bx, Sp);
-        self.a.load(R12, Bx, arguments as i32 * 8);
+        self.a.load_offset(R12, Bx, i64::from(arguments) * 8);
         self.a.load(R13, R12, 16);
         self.a.imm(Cx, 0);
         let next = self.a.label();
@@ -627,24 +672,35 @@ impl Emitter<'_> {
         self.a.jump(next);
         self.a.bind(ready);
         for argument in 0..arguments {
-            self.a.load(Ax, Bx, (arguments - 1 - argument) as i32 * 8);
+            self.a.load_offset(Ax, Bx, i64::from(arguments - 1 - argument) * 8);
             self.a.push(Ax);
         }
         self.a.load(Ax, R12, 8);
         self.a.indirect(Ax);
         self.a.mov(Cx, R13);
-        self.a.group(0, Cx, arguments as i32);
+        self.a.group_wide(0, Cx, u64::from(arguments));
+        self.a.when(B, self.runtime.capacity);
+        self.a.mov(Dx, Cx);
+        self.a.shift(5, Dx, 61);
+        self.a.bin(0x85, Dx, Dx);
+        self.a.when(NE, self.runtime.capacity);
         self.a.shift(4, Cx, 3);
         self.a.bin(0x01, Sp, Cx);
-        self.a.group(0, Sp, (arguments + 1) as i32 * 8);
+        self.a.group_wide(0, Sp, (u64::from(arguments) + 1) * 8);
     }
     fn bind(&mut self, arguments: u32) {
-        self.a.load(R12, Sp, arguments as i32 * 8);
+        self.a.load_offset(R12, Sp, i64::from(arguments) * 8);
         self.a.load(R13, R12, 16);
         self.a.mov(Di, R13);
-        self.a.group(0, Di, arguments as i32);
+        self.a.group_wide(0, Di, u64::from(arguments));
+        self.a.when(B, self.runtime.capacity);
+        self.a.mov(Dx, Di);
+        self.a.shift(5, Dx, 61);
+        self.a.bin(0x85, Dx, Dx);
+        self.a.when(NE, self.runtime.capacity);
         self.a.shift(4, Di, 3);
         self.a.group(0, Di, 24);
+        self.a.when(B, self.runtime.capacity);
         self.a.call(self.runtime.alloc);
         self.a.mov(Bx, Ax);
         self.a.imm(Cx, 6);
@@ -652,7 +708,7 @@ impl Emitter<'_> {
         self.a.load(Cx, R12, 8);
         self.a.store(Bx, 8, Cx);
         self.a.mov(Cx, R13);
-        self.a.group(0, Cx, arguments as i32);
+        self.a.group_wide(0, Cx, u64::from(arguments));
         self.a.store(Bx, 16, Cx);
         self.a.imm(Cx, 0);
         let next = self.a.label();
@@ -674,10 +730,10 @@ impl Emitter<'_> {
         self.a.shift(4, Ax, 3);
         self.a.bin(0x01, Ax, Bx);
         for argument in 0..arguments {
-            self.a.load(Cx, Sp, (arguments - 1 - argument) as i32 * 8);
-            self.a.store(Ax, 24 + argument as i32 * 8, Cx);
+            self.a.load_offset(Cx, Sp, i64::from(arguments - 1 - argument) * 8);
+            self.a.store_offset(Ax, 24 + i64::from(argument) * 8, Cx);
         }
-        self.a.group(0, Sp, (arguments + 1) as i32 * 8);
+        self.a.group_wide(0, Sp, (u64::from(arguments) + 1) * 8);
         self.a.push(Bx);
     }
     fn external(&mut self, name: &str, parameters: u32) -> Result<()> {

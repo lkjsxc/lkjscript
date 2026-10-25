@@ -1,4 +1,4 @@
-//! Create-new publication of bounded immutable derived output.
+//! Create-new publication of immutable derived output with exact caller policies.
 
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::semantic_id::RepositoryId;
@@ -18,7 +18,7 @@ pub struct OwnedOutputReceipt {
 pub fn publish_create_new(
     path: &Path,
     bytes: &[u8],
-    maximum_bytes: usize,
+    maximum_bytes: Option<usize>,
     label: &str,
 ) -> Result<OwnedOutputReceipt, Diagnostic> {
     publish_with_access(path, bytes, maximum_bytes, label, None)
@@ -29,7 +29,7 @@ pub fn publish_create_new(
 pub(crate) fn publish_private_create_new(
     path: &Path,
     bytes: &[u8],
-    maximum_bytes: usize,
+    maximum_bytes: Option<usize>,
     label: &str,
 ) -> Result<OwnedOutputReceipt, Diagnostic> {
     publish_with_access(path, bytes, maximum_bytes, label, Some(0o600))
@@ -39,7 +39,7 @@ pub(crate) fn publish_private_create_new(
 pub(crate) fn publish_executable_create_new(
     path: &Path,
     bytes: &[u8],
-    maximum_bytes: usize,
+    maximum_bytes: Option<usize>,
     label: &str,
 ) -> Result<OwnedOutputReceipt, Diagnostic> {
     publish_with_access(path, bytes, maximum_bytes, label, Some(0o755))
@@ -48,11 +48,13 @@ pub(crate) fn publish_executable_create_new(
 fn publish_with_access(
     path: &Path,
     bytes: &[u8],
-    maximum_bytes: usize,
+    maximum_bytes: Option<usize>,
     label: &str,
     mode: Option<u32>,
 ) -> Result<OwnedOutputReceipt, Diagnostic> {
-    if bytes.len() > maximum_bytes {
+    if let Some(maximum_bytes) = maximum_bytes
+        && bytes.len() > maximum_bytes
+    {
         return Err(output_error(
             DiagnosticClass::Resource,
             "output_byte_limit",
@@ -308,6 +310,33 @@ fn output_error(
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    #[test]
+    fn executable_publication_preserves_unbounded_zero_and_exact_finite_policies() {
+        let temporary = tempfile::TempDir::new().expect("output parent");
+        for (name, payload, limit) in [
+            ("unbounded", &b"complete"[..], None),
+            ("zero", &b""[..], Some(0)),
+            ("exact", &b"complete"[..], Some(8)),
+            ("maximum", &b"complete"[..], Some(usize::MAX)),
+        ] {
+            let path = temporary.path().join(name);
+            let receipt = publish_executable_create_new(&path, payload, limit, "test ELF")
+                .expect("admitted explicit policy");
+            assert_eq!(receipt.bytes, payload.len() as u64);
+            assert_eq!(receipt.stage_cleanup, "removed");
+            assert_eq!(fs::read(path).unwrap(), payload);
+        }
+        for (name, limit) in [("zero-refusal", 0), ("one-over", 7)] {
+            let path = temporary.path().join(name);
+            let error = publish_executable_create_new(&path, b"complete", Some(limit), "test ELF")
+                .expect_err("finite policy must reject before staging");
+            assert_eq!(error.code, "output_byte_limit");
+            assert!(!path.exists());
+        }
+        assert_eq!(fs::read_dir(temporary.path()).unwrap().count(), 4);
+    }
+
     #[test]
     fn inspection_reserves_nothing_and_publication_rechecks_the_destination() {
         let temporary = tempfile::TempDir::new().expect("temporary output parent");
@@ -315,7 +344,7 @@ mod tests {
         let inspected = inspect_create_new(&path).expect("inspect absent result");
         assert_eq!(fs::read_dir(temporary.path()).expect("parent").count(), 0);
         fs::write(&path, b"competing output").expect("competing writer");
-        let error = publish_create_new(&inspected, b"new output", 16, "test result")
+        let error = publish_create_new(&inspected, b"new output", Some(16), "test result")
             .expect_err("late conflict");
         assert_eq!(error.code, "output_conflict");
         assert_eq!(
@@ -330,7 +359,7 @@ mod tests {
     fn publication_accepts_a_full_length_destination_component() {
         let temporary = tempfile::TempDir::new().expect("temporary output parent");
         let output = temporary.path().join("x".repeat(255));
-        let receipt = publish_create_new(&output, b"complete", 8, "test output")
+        let receipt = publish_create_new(&output, b"complete", Some(8), "test output")
             .expect("stage name does not extend the destination component");
         assert_eq!(receipt.stage_cleanup, "removed");
         assert_eq!(fs::read(&output).expect("read output"), b"complete");
@@ -338,14 +367,36 @@ mod tests {
     }
 
     #[test]
+    fn publication_preserves_unbounded_zero_and_exact_finite_allowances() {
+        let temporary = tempfile::TempDir::new().expect("temporary output parent");
+        for (index, limit) in [None, Some(7), Some(usize::MAX)].into_iter().enumerate() {
+            let output = temporary.path().join(format!("complete-{index}"));
+            publish_create_new(&output, b"payload", limit, "test output").expect("exact publication");
+            assert_eq!(fs::read(&output).expect("read output"), b"payload");
+        }
+        for limit in [0, 6] {
+            let output = temporary.path().join(format!("rejected-{limit}"));
+            assert_eq!(
+                publish_create_new(&output, b"payload", Some(limit), "test output")
+                    .expect_err("finite exhaustion").code,
+                "output_byte_limit",
+            );
+            assert!(!output.exists());
+        }
+        let empty = temporary.path().join("zero-fit");
+        publish_create_new(&empty, b"", Some(0), "empty output").expect("zero fit");
+        assert_eq!(fs::read_dir(temporary.path()).expect("only accepted outputs").count(), 4);
+    }
+
+    #[test]
     fn publication_is_create_new_and_preserves_existing_bytes() {
         let temporary = tempfile::TempDir::new().expect("temporary output parent");
         let output = temporary.path().join("application.lkja");
-        let receipt = publish_create_new(&output, b"complete", 8, "test output")
+        let receipt = publish_create_new(&output, b"complete", Some(8), "test output")
             .expect("publish create-new output");
         assert_eq!(receipt.visibility, "created");
         assert_eq!(fs::read(&output).expect("read output"), b"complete");
-        let error = publish_create_new(&output, b"replacement", 16, "test output")
+        let error = publish_create_new(&output, b"replacement", Some(16), "test output")
             .expect_err("existing output must be rejected");
         assert_eq!(error.code, "output_conflict");
         assert_eq!(fs::read(&output).expect("preserved output"), b"complete");
@@ -355,7 +406,7 @@ mod tests {
     fn publication_rejects_invalid_parents_and_directories_as_outputs() {
         let temporary = tempfile::TempDir::new().expect("temporary output parent");
         let missing = temporary.path().join("missing/application.lkja");
-        let error = publish_create_new(&missing, b"bytes", 8, "test output")
+        let error = publish_create_new(&missing, b"bytes", Some(8), "test output")
             .expect_err("missing parent must be rejected");
         assert_eq!(error.code, "output_parent");
         assert!(!missing.exists());
@@ -365,7 +416,7 @@ mod tests {
         let error = publish_create_new(
             &parent_file.join("application.lkja"),
             b"bytes",
-            8,
+            Some(8),
             "test output",
         )
         .expect_err("non-directory parent must be rejected");
@@ -377,7 +428,7 @@ mod tests {
 
         let directory_output = temporary.path().join("existing-directory");
         fs::create_dir(&directory_output).expect("output directory");
-        let error = publish_create_new(&directory_output, b"bytes", 8, "test output")
+        let error = publish_create_new(&directory_output, b"bytes", Some(8), "test output")
             .expect_err("directory output must be rejected");
         assert_eq!(error.code, "output_conflict");
         assert!(directory_output.is_dir());
@@ -396,7 +447,7 @@ mod tests {
         let error = publish_create_new(
             &linked_parent.join("application.lkja"),
             b"bytes",
-            8,
+            Some(8),
             "test output",
         )
         .expect_err("symlinked parent must be rejected");
@@ -407,7 +458,7 @@ mod tests {
         fs::write(&existing, b"preserve").expect("symlink target");
         let linked_output = temporary.path().join("application.lkja");
         symlink(&existing, &linked_output).expect("linked output");
-        let error = publish_create_new(&linked_output, b"bytes", 8, "test output")
+        let error = publish_create_new(&linked_output, b"bytes", Some(8), "test output")
             .expect_err("symlink output must be rejected");
         assert_eq!(error.code, "output_conflict");
         assert_eq!(fs::read(&existing).expect("preserved target"), b"preserve");

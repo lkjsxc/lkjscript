@@ -431,8 +431,8 @@ fn selfhost_byte_backend_reproduces_its_complete_native_closure() {
     );
     eprintln!(
         "selfhost tier=backend native_closure functions={} nodes={} normalized_bytes={} C2_C3_bytes={} C2_C3_sha256={}",
-        u32::from_le_bytes(payload[92..96].try_into().unwrap()),
-        u32::from_le_bytes(payload[100..104].try_into().unwrap()),
+        wide_at(&payload, 96),
+        wide_at(&payload, 120),
         payload.len(),
         c2.len(),
         crate::platform::semantic_id::encode_hex(&Sha256::digest(&c2))

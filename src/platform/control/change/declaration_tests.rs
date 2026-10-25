@@ -216,7 +216,7 @@ declarations.end"#;
     let draft = render_native_draft(
         &view,
         &[module.into()],
-        4 * 1_048_576,
+        Some(4 * 1_048_576),
         crate::platform::execution::ExecutionControl::uncancelled(),
     )
     .unwrap();
@@ -449,7 +449,7 @@ fn transfer_and_share_constraints_round_trip_native_drafts_without_concrete_call
     let draft = render_native_draft(
         &created.repository.view_current().unwrap(),
         &[prepared.allocated["$module"].into()],
-        4 * 1_048_576,
+        Some(4 * 1_048_576),
         crate::platform::execution::ExecutionControl::uncancelled(),
     )
     .unwrap();
@@ -678,7 +678,7 @@ declarations.end"#;
     let draft = render_native_draft(
         &created.repository.view_current().unwrap(),
         &[module.into()],
-        4 * 1_048_576,
+        Some(4 * 1_048_576),
         crate::platform::execution::ExecutionControl::uncancelled(),
     )
     .unwrap();
@@ -879,7 +879,7 @@ declarations.end
     let draft = render_native_draft(
         &view,
         &[module.into()],
-        4 * 1_048_576,
+        Some(4 * 1_048_576),
         crate::platform::execution::ExecutionControl::uncancelled(),
     )
     .unwrap();
@@ -966,7 +966,7 @@ declarations.end
         let draft = render_native_draft(
             &view,
             &[prepared.allocated["$t"].into()],
-            4 * 1_048_576,
+            Some(4 * 1_048_576),
             crate::platform::execution::ExecutionControl::uncancelled(),
         )
         .unwrap();
@@ -1061,14 +1061,14 @@ fn draft_cancellation_is_read_only_and_complete() {
         .collect();
     let control = crate::platform::execution::ExecutionControl::uncancelled();
     control.cancel();
-    let error = render_native_draft(&view, &selected, 4 * 1_048_576, control).unwrap_err();
+    let error = render_native_draft(&view, &selected, Some(4 * 1_048_576), control).unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Cancelled);
     assert_eq!(
         created.repository.view_current().unwrap().revision(),
         view.revision()
     );
     let control = crate::platform::execution::ExecutionControl::cancel_after_checks(3);
-    let error = render_native_draft(&view, &selected, 4 * 1_048_576, control).unwrap_err();
+    let error = render_native_draft(&view, &selected, Some(4 * 1_048_576), control).unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Cancelled);
     assert_eq!(
         created.repository.view_current().unwrap().revision(),

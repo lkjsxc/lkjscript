@@ -33,17 +33,9 @@ impl PrivateSymbols {
     }
 
     fn admit(&mut self, location: &SourceLocation) -> Result<(), Diagnostic> {
-        let maximum = crate::platform::change::ChangeBudget::default()
-            .authored
-            .maximum_allocated_identities;
-        if self.identities as u64 >= maximum {
-            return Err(capacity(
-                location,
-                "change_budget_allocated_identities",
-                format!("complete change input exceeds its {maximum}-identity authored admission"),
-            ));
-        }
-        self.identities += 1;
+        self.identities = self.identities.checked_add(1).ok_or_else(|| capacity(
+            location, "change_block_capacity", "private identity count exceeds the host address space",
+        ))?;
         Ok(())
     }
 

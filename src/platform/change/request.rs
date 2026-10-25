@@ -40,7 +40,7 @@ pub use precondition::{
 };
 
 use super::{
-    AuthoredAllocation, CanonicalBaseRead, CanonicalReadWork, ChangeBudget, ChangeBudgetWork,
+    AuthoredAllocation, BudgetCounter, BudgetDimension, CanonicalBaseRead, CanonicalReadWork, ChangeBudget, ChangeBudgetWork, WorkSaturation, optional_usize,
     PrimitiveEdit, WitnessBaseRead, WitnessReadWork,
 };
 use crate::platform::contract::registry::CHANGE_ALLOCATION_SEED_DOMAIN;
@@ -59,8 +59,6 @@ use crate::platform::semantic_id::{
 use crate::platform::witness::NamespaceKey;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const MAXIMUM_AUTHORED_CHANGES: usize = 10_000;
-pub const MAXIMUM_AUTHORED_CHANGE_BYTES: usize = 4 * 1_048_576;
 const MAXIMUM_REQUEST_SYMBOL_BYTES: usize = 128;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -594,6 +592,11 @@ pub struct AuthoredLoweringWork {
     pub effect_normalization_steps: u64,
     /// Associated inventory traversal and canonicalization, admitted before modeled growth.
     pub associated_inventory_steps: u64,
+    pub effect_normalization_saturated: bool,
+    pub associated_inventory_saturated: bool,
+    pub expression_analysis_steps: u64,
+    pub expression_analysis_saturated: bool,
+    pub saturation: WorkSaturation,
     pub ownership_steps: u64,
     pub relation_edges_read: u64,
     pub canonical: CanonicalReadWork,
@@ -601,25 +604,35 @@ pub struct AuthoredLoweringWork {
 }
 
 impl AuthoredLoweringWork {
+    pub(crate) fn validation_observation(self) -> BudgetCounter {
+        let mut steps = BudgetCounter { consumed: self.effect_normalization_steps, saturated: self.effect_normalization_saturated };
+        steps.observe(BudgetCounter { consumed: self.associated_inventory_steps, saturated: self.associated_inventory_saturated });
+        steps.observe(BudgetCounter { consumed: self.expression_analysis_steps, saturated: self.expression_analysis_saturated });
+        steps
+    }
+
     pub(crate) fn budget_work(self) -> ChangeBudgetWork {
+        let steps = self.validation_observation();
+        let mut saturation = self.saturation;
+        if steps.saturated { saturation.mark(BudgetDimension::ValidationExpressionSteps); }
         ChangeBudgetWork {
             authored_operations: self.operations_lowered,
             preconditions_checked: self.preconditions_checked,
             allocated_identities: self.allocated_identities,
             authored_type_nodes: self.type_nodes_interned,
             validation: super::budget::ValidationBudgetWork {
-                expression_steps: self
-                    .effect_normalization_steps
-                    .saturating_add(self.associated_inventory_steps),
+                expression_steps: steps.consumed,
                 ..Default::default()
             },
             canonical_reads: self.canonical,
             witness_reads: self.witness,
             impact_ownership_steps: self.ownership_steps,
             relation_edges: self.relation_edges_read,
+            saturation,
             ..ChangeBudgetWork::default()
         }
     }
+
 }
 
 #[derive(Clone, Debug)]
@@ -698,11 +711,11 @@ pub(crate) fn lower_authored_changes_with_publication_base<
             "authored change inputs do not share one exact canonical and witness base",
         ));
     }
-    if request.changes.is_empty() || request.changes.len() > MAXIMUM_AUTHORED_CHANGES {
+    if request.changes.is_empty() {
         return Err(request_error(
             DiagnosticClass::Resource,
             "change_authored_count",
-            format!("authored change requires 1 through {MAXIMUM_AUTHORED_CHANGES} operations"),
+            "authored change requires at least one operation",
         ));
     }
     let operation_count = references::admitted_operations(request)?;
@@ -1244,7 +1257,7 @@ pub(crate) fn lower_authored_changes_with_publication_base<
 
 fn collect_symbol_definitions(
     request: &AuthoredChangeSet,
-    maximum: u64,
+    maximum: Option<u64>,
 ) -> Result<(BTreeMap<String, SymbolDefinition>, usize), Diagnostic> {
     let mut definitions = SymbolDefinitions::new(maximum);
     for change in &request.changes {
@@ -1435,11 +1448,11 @@ fn collect_symbol_definitions(
             }
         }
     }
-    Ok(definitions.into_entries())
+    definitions.into_entries()
 }
 
 pub(super) struct SymbolDefinitions {
-    maximum: u64,
+    maximum: Option<u64>,
     entries: BTreeMap<String, SymbolDefinition>,
     next_ordinals: BTreeMap<u8, u64>,
     anonymous_identities: usize,
@@ -1452,7 +1465,7 @@ pub(super) struct SymbolDefinition {
 }
 
 impl SymbolDefinitions {
-    fn new(maximum: u64) -> Self {
+    fn new(maximum: Option<u64>) -> Self {
         Self {
             maximum,
             entries: BTreeMap::new(),
@@ -1461,33 +1474,30 @@ impl SymbolDefinitions {
         }
     }
 
-    fn into_entries(self) -> (BTreeMap<String, SymbolDefinition>, usize) {
-        let identity_count = self.identity_count();
-        (self.entries, identity_count)
+    fn into_entries(self) -> Result<(BTreeMap<String, SymbolDefinition>, usize), Diagnostic> {
+        let identity_count = self.identity_count()?;
+        Ok((self.entries, identity_count))
     }
 
-    fn identity_count(&self) -> usize {
-        self.entries.len().saturating_add(self.anonymous_identities)
+    fn identity_count(&self) -> Result<usize, Diagnostic> {
+        self.entries.len().checked_add(self.anonymous_identities).ok_or_else(|| {
+            request_error(DiagnosticClass::Resource, "change_authored_identity_count",
+                "identity inventory length exceeds the host collection representation")
+        })
     }
 
     pub(super) fn define_anonymous_identity(&mut self) -> Result<(), Diagnostic> {
         self.admit_one_identity()?;
-        self.anonymous_identities = self.anonymous_identities.saturating_add(1);
+        self.anonymous_identities = self.anonymous_identities.checked_add(1).ok_or_else(|| {
+            request_error(DiagnosticClass::Resource, "change_authored_identity_count",
+                "anonymous identity inventory length exceeds the host collection representation")
+        })?;
         Ok(())
     }
 
     fn admit_one_identity(&self) -> Result<(), Diagnostic> {
-        if u64::try_from(self.identity_count()).unwrap_or(u64::MAX) >= self.maximum {
-            return Err(request_error(
-                DiagnosticClass::Resource,
-                "change_budget_allocated_identities",
-                format!(
-                    "request-local identity collection exceeds the declared {}-identity budget",
-                    self.maximum
-                ),
-            ));
-        }
-        Ok(())
+        let mut observed = BudgetCounter::exact(self.identity_count()? as u64);
+        observed.charge(BudgetCounter::exact(1), self.maximum, "request-local identity collection", "allocated_identities")
     }
 }
 
@@ -1742,7 +1752,7 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             incoming_relations: BTreeMap::new(),
             base_types: BTreeMap::new(),
             types: TypeObjectInterner::with_maximum_objects(
-                usize::try_from(inputs.budget.authored.maximum_type_nodes).unwrap_or(usize::MAX),
+                inputs.budget.authored.maximum_type_nodes,
             ),
             type_additions: BTreeSet::new(),
             next_anonymous_expression_ordinal,
@@ -1753,6 +1763,22 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             work: AuthoredLoweringWork::default(),
             budget: inputs.budget,
         })
+    }
+
+    fn remaining_validation_steps(&self, phase: &str) -> Result<Option<u64>, Diagnostic> {
+        self.work.validation_observation().remaining(self.budget.validation.maximum_expression_steps,
+            phase, "validation_expression_steps")
+    }
+
+    fn observe_expression_analysis(&mut self, work: BudgetCounter, phase: &str) -> Result<(), Diagnostic> {
+        let mut total = self.work.validation_observation();
+        total.charge(work, self.budget.validation.maximum_expression_steps, phase, "validation_expression_steps")?;
+        let mut observed = BudgetCounter { consumed: self.work.expression_analysis_steps,
+            saturated: self.work.expression_analysis_saturated };
+        observed.observe(work);
+        self.work.expression_analysis_steps = observed.consumed;
+        self.work.expression_analysis_saturated = observed.saturated;
+        Ok(())
     }
 
     fn check_budget(&self, phase: &str) -> Result<(), Diagnostic> {
@@ -2419,13 +2445,15 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             u64::try_from(self.retirement_edits.len()).unwrap_or(u64::MAX),
             "authored canonical edit preflight",
         )?;
-        let estimated_edits = self
-            .owner_edits
-            .len()
-            .saturating_add(self.type_additions.len())
-            .saturating_add(self.dependency_edits.len())
-            .saturating_add(self.retirement_edits.len());
-        let mut edits = Vec::with_capacity(estimated_edits);
+        let estimated_edits = self.owner_edits.len()
+            .checked_add(self.type_additions.len())
+            .and_then(|count| count.checked_add(self.dependency_edits.len()))
+            .and_then(|count| count.checked_add(self.retirement_edits.len()))
+            .ok_or_else(|| request_error(DiagnosticClass::Resource,
+                "change_authored_allocation", "canonical edit layout exceeds the host address space"))?;
+        let mut edits = Vec::new();
+        edits.try_reserve(estimated_edits).map_err(|_| request_error(DiagnosticClass::Resource,
+            "change_authored_allocation", "canonical edit allocation failed"))?;
         let mut http_route_befores = BTreeMap::new();
         for owner in &self.owner_edits {
             let OwnerKey::HttpRoute(route) = owner else {

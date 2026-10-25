@@ -452,7 +452,7 @@ declarations.begin
               (local f)))
           (binding h
             (type ByteBuffer)
-            (call wire::unsigned (call flow::field (local data) (local at) (i64 192)) (local g)))
+            (call wire::unsigned (call ci::field32 (local data) (local at) (i64 192)) (local g)))
           (binding encoded
             (call wire::envelope
               (text "LKJPIFI1")

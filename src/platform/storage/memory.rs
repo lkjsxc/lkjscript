@@ -59,7 +59,7 @@ impl MemoryPackedStore {
         for pack in packs {
             installed.push(pack.id);
             self.install(pack)?;
-            work.packs_sealed = work.packs_sealed.saturating_add(1);
+            work.add(crate::platform::storage::object::StoreWork { packs_sealed: 1, ..crate::platform::storage::object::StoreWork::default() });
         }
         self.rebuild_catalog()?;
         Ok(installed)
@@ -129,7 +129,7 @@ impl ImmutableObjectStore for MemoryPackedStore {
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         admission.admit_catalog_lookup()?;
-        work.catalog_lookups = work.catalog_lookups.saturating_add(1);
+        work.add(crate::platform::storage::object::StoreWork { catalog_lookups: 1, ..crate::platform::storage::object::StoreWork::default() });
         if let Some(bytes) = self.staged.get(&key) {
             if bytes.len() > maximum_bytes {
                 return Err(store_error(
@@ -140,8 +140,8 @@ impl ImmutableObjectStore for MemoryPackedStore {
             }
             admission.admit_object(bytes.len())?;
             key.verify(bytes)?;
-            work.objects_read = work.objects_read.saturating_add(1);
-            work.bytes_read = work.bytes_read.saturating_add(bytes.len() as u64);
+            work.add(crate::platform::storage::object::StoreWork { objects_read: 1, ..crate::platform::storage::object::StoreWork::default() });
+            work.add(crate::platform::storage::object::StoreWork { bytes_read: bytes.len() as u64, ..crate::platform::storage::object::StoreWork::default() });
             return Ok(Some(bytes.clone()));
         }
         let Some(location) = self.catalog.get(key) else {
@@ -188,11 +188,11 @@ impl ImmutableObjectStore for MemoryPackedStore {
                 "catalog names a missing immutable pack",
             )
         })?;
-        work.packs_opened = work.packs_opened.saturating_add(1);
+        work.add(crate::platform::storage::object::StoreWork { packs_opened: 1, ..crate::platform::storage::object::StoreWork::default() });
         let value = metadata.read(bytes, key, maximum_bytes)?;
         if let Some(value) = &value {
-            work.objects_read = work.objects_read.saturating_add(1);
-            work.bytes_read = work.bytes_read.saturating_add(value.len() as u64);
+            work.add(crate::platform::storage::object::StoreWork { objects_read: 1, ..crate::platform::storage::object::StoreWork::default() });
+            work.add(crate::platform::storage::object::StoreWork { bytes_read: value.len() as u64, ..crate::platform::storage::object::StoreWork::default() });
         }
         Ok(value)
     }
@@ -209,7 +209,7 @@ impl ImmutableObjectStore for MemoryPackedStore {
         work: &mut StoreWork,
     ) -> Result<bool, StoreError> {
         admission.admit_catalog_lookup()?;
-        work.catalog_lookups = work.catalog_lookups.saturating_add(1);
+        work.add(crate::platform::storage::object::StoreWork { catalog_lookups: 1, ..crate::platform::storage::object::StoreWork::default() });
         Ok(self.staged.contains_key(&key) || self.catalog.get(key).is_some())
     }
 
@@ -235,7 +235,7 @@ impl ImmutableObjectStore for MemoryPackedStore {
             self.read_admitted(key, key.domain.maximum_bytes(), admission, work)?
         {
             if existing == bytes {
-                work.objects_reused = work.objects_reused.saturating_add(1);
+                work.add(crate::platform::storage::object::StoreWork { objects_reused: 1, ..crate::platform::storage::object::StoreWork::default() });
                 return Ok(StageOutcome::Reused);
             }
             return Err(store_error(
@@ -247,11 +247,11 @@ impl ImmutableObjectStore for MemoryPackedStore {
         let outcome = stage_into_map(&mut self.staged, key, bytes)?;
         match outcome {
             StageOutcome::Inserted => {
-                work.objects_staged = work.objects_staged.saturating_add(1);
-                work.bytes_staged = work.bytes_staged.saturating_add(bytes.len() as u64);
+                work.add(crate::platform::storage::object::StoreWork { objects_staged: 1, ..crate::platform::storage::object::StoreWork::default() });
+                work.add(crate::platform::storage::object::StoreWork { bytes_staged: bytes.len() as u64, ..crate::platform::storage::object::StoreWork::default() });
             }
             StageOutcome::Reused => {
-                work.objects_reused = work.objects_reused.saturating_add(1);
+                work.add(crate::platform::storage::object::StoreWork { objects_reused: 1, ..crate::platform::storage::object::StoreWork::default() });
             }
         }
         Ok(outcome)

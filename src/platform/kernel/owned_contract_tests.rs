@@ -75,14 +75,14 @@ declarations.end
         }
     }
     let mut diagnostics = vec![];
-    validate_affine_roots_with_limits(
+    crate::platform::kernel::test_work::validate_affine_roots_with_limits(
         &source,
         [root.unwrap()],
         &mut diagnostics,
         &mut 0,
         ExpressionValidationLimits {
-            maximum_steps: 100,
-            maximum_diagnostics: 10,
+            maximum_steps: Some(100),
+            maximum_diagnostics: Some(10),
         },
     )
     .unwrap();
@@ -242,14 +242,14 @@ fn owned_witness_inference_and_affine_metadata_stop_before_unadmitted_reads() {
     };
     let mut diagnostics = vec![];
     assert_eq!(
-        validate_affine_roots_with_limits(
+        crate::platform::kernel::test_work::validate_affine_roots_with_limits(
             &read,
             [root],
             &mut diagnostics,
             &mut 0,
             ExpressionValidationLimits {
-                maximum_steps: 0,
-                maximum_diagnostics: 1
+                maximum_steps: Some(0),
+                maximum_diagnostics: Some(1)
             }
         ),
         Err(ExpressionValidationExhaustion::Steps)
@@ -257,14 +257,14 @@ fn owned_witness_inference_and_affine_metadata_stop_before_unadmitted_reads() {
     assert_eq!(read.reads.get(), 0);
     let mut work = 99;
     assert_eq!(
-        validate_expression_roots_with_limits(
+        crate::platform::kernel::test_work::validate_expression_roots_with_limits(
             &read,
             [root],
             &mut diagnostics,
             &mut work,
             ExpressionValidationLimits {
-                maximum_steps: 100,
-                maximum_diagnostics: 1
+                maximum_steps: Some(100),
+                maximum_diagnostics: Some(1)
             }
         ),
         Err(ExpressionValidationExhaustion::Steps)
@@ -273,14 +273,14 @@ fn owned_witness_inference_and_affine_metadata_stop_before_unadmitted_reads() {
     assert_eq!(read.implementation_reads.get(), 0);
     assert!(diagnostics.is_empty());
     let mut total = 0;
-    validate_affine_roots_with_limits(
+    crate::platform::kernel::test_work::validate_affine_roots_with_limits(
         &source,
         [root],
         &mut diagnostics,
         &mut total,
         ExpressionValidationLimits {
-            maximum_steps: 10000,
-            maximum_diagnostics: 1,
+            maximum_steps: Some(10000),
+            maximum_diagnostics: Some(1),
         },
     )
     .unwrap();
@@ -290,14 +290,14 @@ fn owned_witness_inference_and_affine_metadata_stop_before_unadmitted_reads() {
         read.reads.set(0);
         let mut work = 0;
         assert_eq!(
-            validate_affine_roots_with_limits(
+            crate::platform::kernel::test_work::validate_affine_roots_with_limits(
                 &read,
                 [root],
                 &mut diagnostics,
                 &mut work,
                 ExpressionValidationLimits {
-                    maximum_steps: limit,
-                    maximum_diagnostics: 1
+                    maximum_steps: Some(limit),
+                    maximum_diagnostics: Some(1)
                 }
             ),
             Err(ExpressionValidationExhaustion::Steps),
@@ -328,14 +328,14 @@ fn owned_witness_inference_and_affine_metadata_stop_before_unadmitted_reads() {
         checkpoint: &cancellation,
     };
     let mut work = 0;
-    validate_expression_roots_with_limits(
+    crate::platform::kernel::test_work::validate_expression_roots_with_limits(
         &checked,
         [root],
         &mut diagnostics,
         &mut work,
         ExpressionValidationLimits {
-            maximum_steps: 10000,
-            maximum_diagnostics: 1,
+            maximum_steps: Some(10000),
+            maximum_diagnostics: Some(1),
         },
     )
     .unwrap();

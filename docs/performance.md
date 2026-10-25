@@ -1250,11 +1250,18 @@ observation SHA-256. These are single samples, not latency or topology distribut
 
 ## Current incremental-catalog capacity implementation
 
-Semantic-scale receipt contract 3 adds the exact catalog identity, selected segment layout,
+Semantic-scale receipt contract 4 retains the exact catalog identity, selected segment layout,
 cumulative delta/merge/reconstruction work, final healthy-session reads, packing-independent
 logical commitment, and an implementation-disjoint full-footer reconstruction. The copied product
 binary remains the only writer: the harness uses ordinary 1,000-operation `change plan` and
 `change apply` batches and has no storage or accepted-authority construction shortcut.
+
+Contract 4 also carries independent saturation flags for full semantic-validation work,
+persistent-map work, and immutable-store work through the typed inventory into oracle evidence.
+Unbounded execution may continue when a passive counter reaches its representation boundary;
+a saturated count is therefore reported as a lower bound. An exact count equal to `u64::MAX`
+keeps its flag clear. This receipt change prevents consumers from treating a saturated observation
+as an exact measurement and does not alter the historical campaign results below.
 
 Two release-mode feasibility probes on Linux x86-64 used candidate SHA-256
 `2257fe2d1472023504b1f761f5005d04f5b8b66db9dcb065d8e71682c0eace59` and capabilities digest

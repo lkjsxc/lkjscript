@@ -3,8 +3,7 @@ use super::*;
 use crate::platform::kernel::{
     DeclarationPayload, EncodedOwnerKey, ExpressionValidationLimits, KernelSnapshot,
     OwnedProductBinding, ParameterUse, decode_owner_binding, encode_owner_binding,
-    validate_affine_roots_with_limits, validate_expression_roots_with_limits,
-};
+    };
 
 // The new operations live in untaken syntax deliberately: artifact admission must
 // prove the complete meaning, independently of the selected runtime branch.
@@ -334,18 +333,18 @@ fn owned_read_artifact_rejects_coherent_untaken_view_to_owner_counterfeit() {
         body,
     };
     let limits = ExpressionValidationLimits {
-        maximum_steps: crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
-        maximum_diagnostics: 1,
+        maximum_steps: Some(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK),
+        maximum_diagnostics: Some(1),
     };
     let mut diagnostics = vec![];
-    validate_expression_roots_with_limits(&forged, [owner], &mut diagnostics, &mut 0, limits)
+    crate::platform::kernel::test_work::validate_expression_roots_with_limits(&forged, [owner], &mut diagnostics, &mut 0, limits)
         .unwrap();
     assert!(
         diagnostics.is_empty(),
         "counterfeit remains type-correct: {diagnostics:?}"
     );
     assert!(!crate::platform::kernel::memory_reference::accepts(&forged));
-    validate_affine_roots_with_limits(&forged, [owner], &mut diagnostics, &mut 0, limits).unwrap();
+    crate::platform::kernel::test_work::validate_affine_roots_with_limits(&forged, [owner], &mut diagnostics, &mut 0, limits).unwrap();
     assert_eq!(
         diagnostics.len(),
         1,

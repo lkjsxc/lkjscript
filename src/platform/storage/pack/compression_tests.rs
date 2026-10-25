@@ -89,9 +89,9 @@ fn disk_and_memory_catalogs_charge_decoded_bytes_for_compressed_and_raw_entries(
         for store in [&disk as &dyn ImmutableObjectStore, &memory] {
             let mut work = StoreWork::default();
             let mut admission = StoreReadAdmission::new(StoreReadLimits {
-                maximum_catalog_lookups: 1,
-                maximum_objects: 1,
-                maximum_bytes: value.len() as u64,
+                maximum_catalog_lookups: Some(1),
+                maximum_objects: Some(1),
+                maximum_bytes: Some(value.len() as u64),
             });
             assert_eq!(
                 store
@@ -99,13 +99,13 @@ fn disk_and_memory_catalogs_charge_decoded_bytes_for_compressed_and_raw_entries(
                     .unwrap(),
                 Some(value.clone())
             );
-            assert_eq!(admission.remaining().maximum_bytes, 0);
+            assert_eq!(admission.remaining().maximum_bytes, Some(0));
             assert_eq!(work.bytes_read, value.len() as u64);
             if !value.is_empty() {
                 let mut admission = StoreReadAdmission::new(StoreReadLimits {
-                    maximum_catalog_lookups: 1,
-                    maximum_objects: 1,
-                    maximum_bytes: value.len() as u64 - 1,
+                    maximum_catalog_lookups: Some(1),
+                    maximum_objects: Some(1),
+                    maximum_bytes: Some(value.len() as u64 - 1),
                 });
                 let mut work = StoreWork::default();
                 assert_eq!(

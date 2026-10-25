@@ -8,12 +8,6 @@ impl Machine<'_> {
         charge: super::super::map::Charge,
     ) -> Result<(), ExecutionError> {
         self.control.check()?;
-        if charge.bytes > super::super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
-            return Err(resource_error(
-                "normalized_allocation",
-                "one map allocation exceeds finite value storage",
-            ));
-        }
         let items = crate::platform::execution::cumulative_charge(
             self.observation.collection_items,
             charge.slots,
@@ -462,7 +456,7 @@ impl Machine<'_> {
                 let mut work = std::mem::take(&mut self.observation.value_work.bytes);
                 let result = left.concat(
                     right,
-                    super::super::value::MAXIMUM_VALUE_ALLOCATION_BYTES,
+                    None,
                     control,
                     &mut |charge| self.charge_allocation(charge),
                     &mut work,

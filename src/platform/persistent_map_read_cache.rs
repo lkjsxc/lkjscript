@@ -92,20 +92,27 @@ fn load_with_cache<S: PageStore + ?Sized>(
         work.admit_entries_visited(page.visited)?;
         return Ok(page);
     }
-    let before = work.entries_visited;
     let page = decode_page_with_admission(&bytes, Some(work))?;
-    add_counter(
+    observe_counter(
         &mut work.pages_decoded,
         1,
-        "persistent_map_work_pages_decoded",
-    )?;
+        &mut work.saturated,
+        &mut work.saturated_counters,
+        MapWorkCounter::PagesDecoded,
+    );
+    // A saturated cumulative observation cannot recover an exact per-page
+    // charge by subtraction. Keep the admission cost from the admitted page.
+    let visited = match &page {
+        Page::Leaf { entries, .. } => usize_to_u64(entries.len(), "persistent_map_cache_entries")?,
+        Page::Branch { terminal, .. } => u64::from(terminal.is_some()),
+    };
     let summary = PageLinkSummary::from_page(&page)?;
     let retained = retained_bytes(&page, &summary, bytes.capacity()).unwrap_or(usize::MAX);
     let page = Arc::new(ReadPage {
         page,
         summary,
         bytes,
-        visited: work.entries_visited - before,
+        visited,
         retained,
     });
     // Expensive decoding never holds a cache lock. Concurrent misses may prepare

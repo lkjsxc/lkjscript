@@ -1,7 +1,7 @@
 //! Single deterministic relation extractor for Graph 14 records.
 
 use super::TypeObjectDigest;
-use super::contract::MAXIMUM_VALIDATION_WORK;
+use super::work::ValidationWork;
 use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference};
 use super::id::{ExactOwnerKey, OwnerKey, PackageId};
 use super::owner::{
@@ -312,10 +312,10 @@ pub fn extract_relations(
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
     dependencies: &BTreeMap<PackageId, DependencyRecord>,
 ) -> Result<Vec<RelationEdge>, Diagnostic> {
-    let mut edges = RelationCollector::new(MAXIMUM_VALIDATION_WORK);
-    let mut work = 0_usize;
+    let mut edges = RelationCollector::new(None);
+    let mut work = ValidationWork::default();
     for (key, record) in owners {
-        consume_work(&mut work)?;
+        work.charge(1, None);
         let source = exact(package, *key);
         extract_owner(
             source,
@@ -336,7 +336,7 @@ pub fn extract_relations(
         )?;
     }
     for dependency in dependencies.keys() {
-        consume_work(&mut work)?;
+        work.charge(1, None);
         edges.insert(RelationEdge {
             source: RelationEndpoint::Package(package),
             kind: RelationKind::PackageDependency,
@@ -368,7 +368,7 @@ where
         record,
         type_object,
         case_parent,
-        MAXIMUM_VALIDATION_WORK,
+        None,
     )
     .map(|(edges, _)| edges)
 }
@@ -379,8 +379,8 @@ pub fn extract_owner_relations_with_limit<F, C>(
     record: &OwnerRecord,
     mut type_object: F,
     mut case_parent: C,
-    maximum_edges: usize,
-) -> Result<(Vec<RelationEdge>, u64), Diagnostic>
+    maximum_edges: Option<u64>,
+) -> Result<(Vec<RelationEdge>, RelationExtractionWork), Diagnostic>
 where
     F: FnMut(TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>,
     C: FnMut(
@@ -395,7 +395,7 @@ where
         ));
     }
     let mut edges = RelationCollector::new(maximum_edges);
-    let mut work = 0;
+    let mut work = ValidationWork::default();
     extract_owner(
         exact(package, owner),
         record,
@@ -405,8 +405,13 @@ where
         &mut edges,
         &mut work,
     )?;
-    let examined = edges.examined;
-    Ok((edges.into_edges(), examined))
+    let observation = RelationExtractionWork {
+        edges_examined: edges.examined,
+        edges_saturated: edges.saturated,
+        traversal_steps: work.consumed as u64,
+        traversal_saturated: work.saturated,
+    };
+    Ok((edges.into_edges(), observation))
 }
 
 fn extract_owner<F, C>(
@@ -416,7 +421,7 @@ fn extract_owner<F, C>(
     type_object: &mut F,
     case_parent: &mut C,
     edges: &mut RelationCollector,
-    work: &mut usize,
+    work: &mut ValidationWork,
 ) -> Result<(), Diagnostic>
 where
     F: FnMut(TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>,
@@ -1263,7 +1268,7 @@ fn extract_type_relations<F>(
     package: PackageId,
     type_object: &mut F,
     edges: &mut RelationCollector,
-    work: &mut usize,
+    work: &mut ValidationWork,
 ) -> Result<(), Diagnostic>
 where
     F: FnMut(TypeObjectDigest) -> Result<Option<TypeObject>, Diagnostic>,
@@ -1271,7 +1276,7 @@ where
     let mut pending = vec![root];
     let mut observed = BTreeSet::new();
     while let Some(digest) = pending.pop() {
-        consume_work(work)?;
+        work.charge(1, None);
         if !observed.insert(digest) {
             continue;
         }
@@ -1494,33 +1499,42 @@ fn exact_edge(
     })
 }
 
+/// Passive relation observations; a saturated value is a lower bound.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RelationExtractionWork {
+    pub edges_examined: u64,
+    pub edges_saturated: bool,
+    pub traversal_steps: u64,
+    pub traversal_saturated: bool,
+}
+
 struct RelationCollector {
     edges: BTreeSet<RelationEdge>,
     examined: u64,
-    maximum: u64,
+    saturated: bool,
+    maximum: Option<u64>,
 }
 
 impl RelationCollector {
-    fn new(maximum: usize) -> Self {
-        Self {
-            edges: BTreeSet::new(),
-            examined: 0,
-            maximum: u64::try_from(maximum).unwrap_or(u64::MAX),
-        }
+    fn new(maximum: Option<u64>) -> Self {
+        Self { edges: BTreeSet::new(), examined: 0, saturated: false, maximum }
     }
 
     fn insert(&mut self, edge: RelationEdge) -> Result<(), Diagnostic> {
-        if self.examined >= self.maximum {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "kernel_relation_edge_budget",
-                format!(
-                    "relation extraction exceeds the declared {}-edge budget",
-                    self.maximum
-                ),
-            ));
+        let next = self.examined.checked_add(1);
+        if let Some(maximum) = self.maximum {
+            if self.saturated || next.is_none_or(|next| next > maximum) {
+                return Err(Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "kernel_relation_edge_budget",
+                    format!("relation extraction exceeds the declared {maximum}-edge budget"),
+                ));
+            }
         }
-        self.examined = self.examined.saturating_add(1);
+        match next {
+            Some(next) => self.examined = next,
+            None => { self.examined = u64::MAX; self.saturated = true; }
+        }
         self.edges.insert(edge);
         Ok(())
     }
@@ -1528,17 +1542,6 @@ impl RelationCollector {
     fn into_edges(self) -> Vec<RelationEdge> {
         self.edges.into_iter().collect()
     }
-}
-
-fn consume_work(work: &mut usize) -> Result<(), Diagnostic> {
-    *work = work.saturating_add(1);
-    if *work > MAXIMUM_VALIDATION_WORK {
-        return Err(relation_error(
-            "kernel_relation_work",
-            "relation extraction exhausted its work budget",
-        ));
-    }
-    Ok(())
 }
 
 fn relation_error(code: &str, message: impl Into<String>) -> Diagnostic {

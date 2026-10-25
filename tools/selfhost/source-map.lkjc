@@ -86,12 +86,7 @@ declarations.begin
                 (local key-bytes)
                 (local value-bytes)))
             (binding digest
-              (call content
-                (local data)
-                (local at)
-                (local next)
-                (local key-bytes)
-                (local value-bytes)))
+              (call content (local data) (local at) (local next) (local key-bytes) (local value-bytes)))
             (binding a (type ByteBuffer) (call ci::push (local edge) (local out)))
             (binding b
               (type ByteBuffer)
@@ -255,13 +250,7 @@ declarations.begin
               (call ci::lt (local key-bytes) (i64 33))
               (if
                 (call ci::lt (i64 0) (local value-bytes))
-                (if
-                  (call ci::lt (local value-bytes) (i64 129))
-                  (if
-                    (call ci::lt (call ci::length (local data)) (i64 8388609))
-                    (bool true)
-                    (bool false))
-                  (bool false))
+                (if (call ci::lt (local value-bytes) (i64 129)) (bool true) (bool false))
                 (bool false))
               (bool false))
             (bool false))
@@ -271,13 +260,10 @@ declarations.begin
             (in
               (if
                 (if
-                  (call ci::lt (local count) (i64 100001))
-                  (if
-                    (call ci::eq
-                      (call ci::mul (local count) (local stride))
-                      (call ci::length (local data)))
-                    (bool true)
-                    (bool false))
+                  (call ci::eq
+                    (call ci::mul (local count) (local stride))
+                    (call ci::length (local data)))
+                  (bool true)
                   (bool false))
                 (if
                   (if
@@ -304,7 +290,5 @@ declarations.begin
                 (record structural
                   (field diagnostic (i64 12))
                   (field image (call ci::text-bytes (text "")))))))
-          (record structural
-            (field diagnostic (i64 12))
-            (field image (call ci::text-bytes (text "")))))))))
+          (record structural (field diagnostic (i64 12)) (field image (call ci::text-bytes (text "")))))))))
 declarations.end

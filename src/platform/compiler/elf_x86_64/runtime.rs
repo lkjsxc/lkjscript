@@ -108,6 +108,7 @@ impl Runtime {
         a.mov(R15, Ax);
         a.mov(R14, Ax);
         a.bin(0x01, R14, Si);
+        a.when(B, self.capacity);
         a.pop(Di);
         a.bind(available);
         a.mov(Ax, R15);

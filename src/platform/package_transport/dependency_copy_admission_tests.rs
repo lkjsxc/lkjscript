@@ -102,9 +102,9 @@ fn dependency_copy_store(
     let mut store = CollectingStore::new(objects);
     store.maximum_visits = maximum_visits;
     store.admission = RefCell::new(StoreReadAdmission::new(StoreReadLimits {
-        maximum_catalog_lookups: maximum_visits,
-        maximum_objects: maximum_visits,
-        maximum_bytes: MAXIMUM_VALIDATION_READ_BYTES,
+        maximum_catalog_lookups: Some(maximum_visits),
+        maximum_objects: Some(maximum_visits),
+        maximum_bytes: Some(MAXIMUM_VALIDATION_READ_BYTES),
     }));
     // Earlier semantic work and dependency copies consume the same aggregate remainder.
     store.charge_visits(1).unwrap();

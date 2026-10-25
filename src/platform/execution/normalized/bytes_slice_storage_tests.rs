@@ -119,7 +119,7 @@ fn byte_slice_concatenation_never_exposes_outside_bytes_or_mutates_aliases() {
     let combined = value
         .concat(
             view.clone(),
-            1024,
+            Some(1024),
             &ExecutionControl::uncancelled(),
             &mut |_| Ok(()),
             &mut work,
@@ -131,7 +131,7 @@ fn byte_slice_concatenation_never_exposes_outside_bytes_or_mutates_aliases() {
         .clone()
         .concat(
             BytePayload::from([255]),
-            1024,
+            Some(1024),
             &ExecutionControl::uncancelled(),
             &mut |_| Ok(()),
             &mut work,

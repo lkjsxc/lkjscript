@@ -88,3 +88,35 @@ fn symbolic_transaction_file_is_one_json_result_and_failed_test_keeps_head() {
         String::from_utf8_lossy(&checked.stdout)
     );
 }
+
+#[test]
+fn symbolic_transaction_policy_keeps_unbounded_zero_and_exact_finite_meanings() {
+    let temporary = tempfile::tempdir().unwrap();
+    let project = temporary.path().join("project");
+    let executable = binary();
+    let created = support::output(Command::new(&executable).args([
+        "new", project.to_str().unwrap(), "--template", "command",
+    ])).unwrap();
+    assert!(created.status.success(), "{}", String::from_utf8_lossy(&created.stdout));
+    let input = temporary.path().join("policy.lkjx");
+    let head = project.join("HEAD");
+    let execute = |text: &str| {
+        std::fs::write(&input, text).unwrap();
+        support::output(Command::new(&executable).arg("--project").arg(&project)
+            .args(["tx", "--compact", "--input-file"]).arg(&input)).unwrap()
+    };
+    for limit in ["0", "01", "18446744073709551616"] {
+        let before = std::fs::read(&head).unwrap();
+        let result = execute(&format!("(tx (base @head) (policy operations {limit}) (upsert-module denied))"));
+        assert!(!result.status.success());
+        assert_eq!(std::fs::read(&head).unwrap(), before);
+    }
+    for (index, limit) in ["1", "18446744073709551615", "unbounded"].iter().enumerate() {
+        let result = execute(&format!("(tx (base @head) (policy operations {limit}) (upsert-module allowed{index}))"));
+        assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stdout));
+    }
+    let before = std::fs::read(&head).unwrap();
+    let duplicate = execute("(tx (base @head) (policy operations unbounded) (policy operations 1) (upsert-module duplicate))");
+    assert!(!duplicate.status.success());
+    assert_eq!(std::fs::read(&head).unwrap(), before);
+}

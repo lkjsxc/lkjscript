@@ -1,6 +1,7 @@
 //! Independent exact-ID expression type and effect oracle for Graph 14.
 
-use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH, MAXIMUM_VALIDATION_WORK};
+use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH};
+use super::work::ValidationWork;
 use super::digest::TypeObjectDigest;
 use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference};
 use super::id::{OwnerKey, OwnerKind, PackageId};
@@ -208,9 +209,9 @@ impl<R: ExpressionRead + ?Sized> ExpressionRead for InferredTypeRead<'_, R> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ExpressionValidationLimits {
     /// Shared maximum for inference/substitution, affine visits and affine metadata reads.
-    pub maximum_steps: usize,
+    pub maximum_steps: Option<usize>,
     /// Maximum semantic diagnostics inserted into the caller's bounded sink.
-    pub maximum_diagnostics: usize,
+    pub maximum_diagnostics: Option<usize>,
 }
 
 /// Exact request-local admission exhausted before its next unit could be consumed.
@@ -283,8 +284,8 @@ pub(super) fn validate_expression_meaning(
     snapshot: &KernelSnapshot,
     read: &impl ExpressionRead,
     diagnostics: &mut Vec<Diagnostic>,
-    work: &mut usize,
-    maximum_steps: usize,
+    work: &mut ValidationWork,
+    maximum_steps: Option<usize>,
 ) {
     let roots = snapshot.owners.keys().copied().collect::<Vec<_>>();
     if validate_expression_roots_with_limits(
@@ -294,7 +295,7 @@ pub(super) fn validate_expression_meaning(
         work,
         ExpressionValidationLimits {
             maximum_steps,
-            maximum_diagnostics: usize::MAX,
+            maximum_diagnostics: None,
         },
     ) == Err(ExpressionValidationExhaustion::Steps)
     {
@@ -309,7 +310,7 @@ pub(crate) fn validate_expression_roots<R: ExpressionRead>(
     read: &R,
     roots: impl IntoIterator<Item = OwnerKey>,
     diagnostics: &mut Vec<Diagnostic>,
-    work: &mut usize,
+    work: &mut ValidationWork,
 ) {
     if validate_expression_roots_with_limits(
         read,
@@ -317,8 +318,8 @@ pub(crate) fn validate_expression_roots<R: ExpressionRead>(
         diagnostics,
         work,
         ExpressionValidationLimits {
-            maximum_steps: MAXIMUM_VALIDATION_WORK,
-            maximum_diagnostics: usize::MAX,
+            maximum_steps: None,
+            maximum_diagnostics: None,
         },
     ) == Err(ExpressionValidationExhaustion::Steps)
     {
@@ -333,7 +334,7 @@ pub(crate) fn validate_expression_roots_with_limits<R: ExpressionRead>(
     read: &R,
     roots: impl IntoIterator<Item = OwnerKey>,
     diagnostics: &mut Vec<Diagnostic>,
-    work: &mut usize,
+    work: &mut ValidationWork,
     limits: ExpressionValidationLimits,
 ) -> Result<(), ExpressionValidationExhaustion> {
     let mut validator = ExpressionValidator {
@@ -344,7 +345,7 @@ pub(crate) fn validate_expression_roots_with_limits<R: ExpressionRead>(
         exhaustion: None,
         ephemeral_types: BTreeMap::new(),
         admitted_nominals: BTreeSet::new(),
-        type_metadata_bytes: 0,
+        type_metadata_bytes: ValidationWork::default(),
         selected_expression: None,
         associated_admission: super::owned_associated::OwnedAssociatedAdmission::new(),
         admitted_occurrences: BTreeSet::new(),
@@ -360,8 +361,8 @@ pub(crate) fn infer_function_expression_type<R: ExpressionRead>(
     declaration: DeclarationId,
     expression: ExpressionId,
     effect: &FunctionEffect,
-    work: &mut usize,
-    maximum_steps: usize,
+    work: &mut ValidationWork,
+    maximum_steps: Option<usize>,
 ) -> Result<TypeObjectDigest, Diagnostic> {
     infer_function_expression(
         read,
@@ -381,8 +382,8 @@ pub(crate) fn infer_function_expression_type_object<R: ExpressionRead>(
     declaration: DeclarationId,
     expression: ExpressionId,
     effect: &FunctionEffect,
-    work: &mut usize,
-    maximum_steps: usize,
+    work: &mut ValidationWork,
+    maximum_steps: Option<usize>,
 ) -> Result<TypeObject, Diagnostic> {
     infer_function_expression(
         read,
@@ -400,8 +401,8 @@ fn infer_function_expression<R: ExpressionRead, T>(
     declaration: DeclarationId,
     expression: ExpressionId,
     effect: &FunctionEffect,
-    work: &mut usize,
-    maximum_steps: usize,
+    work: &mut ValidationWork,
+    maximum_steps: Option<usize>,
     result: impl FnOnce(&ExpressionValidator<'_, '_, R>, TypeObjectDigest) -> Result<T, Diagnostic>,
 ) -> Result<T, Diagnostic> {
     let (pure, requirements) = match effect {
@@ -418,12 +419,12 @@ fn infer_function_expression<R: ExpressionRead, T>(
         work,
         limits: ExpressionValidationLimits {
             maximum_steps,
-            maximum_diagnostics: 1,
+            maximum_diagnostics: Some(1),
         },
         exhaustion: None,
         ephemeral_types: BTreeMap::new(),
         admitted_nominals: BTreeSet::new(),
-        type_metadata_bytes: 0,
+        type_metadata_bytes: ValidationWork::default(),
         selected_expression: Some((expression, None)),
         associated_admission: super::owned_associated::OwnedAssociatedAdmission::new(),
         admitted_occurrences: BTreeSet::new(),
@@ -482,12 +483,12 @@ fn infer_function_expression<R: ExpressionRead, T>(
 struct ExpressionValidator<'a, 'b, R> {
     read: &'a R,
     diagnostics: &'b mut Vec<Diagnostic>,
-    work: &'b mut usize,
+    work: &'b mut ValidationWork,
     limits: ExpressionValidationLimits,
     exhaustion: Option<ExpressionValidationExhaustion>,
     ephemeral_types: BTreeMap<TypeObjectDigest, TypeObject>,
     admitted_nominals: BTreeSet<DeclarationReference>,
-    type_metadata_bytes: usize,
+    type_metadata_bytes: ValidationWork,
     selected_expression: Option<(ExpressionId, Option<TypeObjectDigest>)>,
     associated_admission: super::owned_associated::OwnedAssociatedAdmission,
     admitted_occurrences: BTreeSet<(
@@ -5062,35 +5063,23 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             let children = match &object.form {
                 TypeForm::StructuralRecord { fields }
                 | TypeForm::OwnedProduct { fields }
-                | TypeForm::OwnedChoice { cases: fields } => fields.len(),
-                TypeForm::Applied { arguments, .. } => arguments.len(),
-                TypeForm::Function { parameters, .. } => parameters.len(),
+                | TypeForm::OwnedChoice { cases: fields } => Some(fields.len()),
+                TypeForm::Applied { arguments, .. } => Some(arguments.len()),
+                TypeForm::Function { parameters, .. } => Some(parameters.len()),
                 TypeForm::TaskFunction {
                     parameters, effect, ..
                 } => parameters
                     .len()
-                    .saturating_add(effect.requirements.len())
-                    .saturating_add(effect.parameters.len()),
-                _ => 0,
+                    .checked_add(effect.requirements.len())
+                    .and_then(|count| count.checked_add(effect.parameters.len())),
+                _ => Some(0),
             };
-            self.type_metadata_bytes = children
-                .checked_mul(std::mem::size_of::<StructuralTypeField>())
-                .and_then(|size| size.checked_add(bytes.len()))
-                .and_then(|size| {
-                    size.checked_add(
-                        std::mem::size_of::<(TypeObjectDigest, TypeObject)>()
-                            + 4 * std::mem::size_of::<usize>(),
-                    )
-                })
-                .and_then(|size| self.type_metadata_bytes.checked_add(size))
-                .filter(|bytes| *bytes <= 64 * 1_048_576)
-                .ok_or_else(|| {
-                    Diagnostic::new(
-                        DiagnosticClass::Resource,
-                        "kernel_type_nominal_storage",
-                        "substituted type metadata exceeds its storage admission",
-                    )
-                })?;
+            match children {
+                Some(count) => { self.type_metadata_bytes.charge_product(count, std::mem::size_of::<StructuralTypeField>(), None); }
+                None => { self.type_metadata_bytes.charge_product(usize::MAX, 2, None); }
+            }
+            self.type_metadata_bytes.charge(bytes.len(), None);
+            self.type_metadata_bytes.charge(std::mem::size_of::<(TypeObjectDigest, TypeObject)>() + 4 * std::mem::size_of::<usize>(), None);
             self.ephemeral_types.insert(digest, object);
         }
         Ok(digest)
@@ -5341,17 +5330,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             super::owned_product::validate_owning_type_depth(read, ty)?;
             admission.validate_occurrence_at(read, &[ty], occurrence)
         })?;
-        self.type_metadata_bytes = self
-            .type_metadata_bytes
-            .checked_add(std::mem::size_of_val(&key) + 4 * std::mem::size_of::<usize>())
-            .filter(|bytes| *bytes <= 64 * 1_048_576)
-            .ok_or_else(|| {
-                Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "kernel_type_occurrence_storage",
-                    "type occurrence metadata exceeds its storage admission",
-                )
-            })?;
+        self.type_metadata_bytes.charge(std::mem::size_of_val(&key) + 4 * std::mem::size_of::<usize>(), None);
         self.admitted_occurrences.insert(key);
         Ok(())
     }
@@ -5373,14 +5352,15 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         let used = std::cell::Cell::from_mut(self.work);
         let maximum = self.limits.maximum_steps;
         let checkpoint = || {
-            if used.get() >= maximum {
+            let mut observation = used.get();
+            if !observation.charge(1, maximum) {
                 return Err(Diagnostic::new(
                     DiagnosticClass::Resource,
                     "kernel_type_work",
                     "owned contract validation exhausted inference work",
                 ));
             }
-            used.set(used.get() + 1);
+            used.set(observation);
             Ok(())
         };
         let inferred = InferredTypeRead {
@@ -5405,14 +5385,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 "expression type validation stopped after exhausting an admission",
             ));
         }
-        if *self.work >= self.limits.maximum_steps {
+        if !self.work.charge(1, self.limits.maximum_steps) {
             self.exhaustion = Some(ExpressionValidationExhaustion::Steps);
             return Err(type_error(
                 "kernel_type_work",
                 "expression type validation exhausted its explicit work budget",
             ));
         }
-        *self.work = self.work.saturating_add(1);
         Ok(())
     }
 
@@ -5428,7 +5407,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         if self.exhaustion.is_some() {
             return;
         }
-        if self.diagnostics.len() >= self.limits.maximum_diagnostics {
+        if self.limits.maximum_diagnostics.is_some_and(|maximum| self.diagnostics.len() >= maximum) {
             self.exhaustion = Some(ExpressionValidationExhaustion::Diagnostics);
             return;
         }
@@ -5482,6 +5461,23 @@ mod tests {
     use crate::platform::semantic_id::ModuleId;
 
     #[test]
+    fn default_inference_observes_work_beyond_the_old_limit_and_saturates_honestly() {
+        let snapshot = super::super::tests::witness_snapshot();
+        let root = snapshot.owners.iter().find_map(|(owner, record)| match record {
+            OwnerRecord::Declaration(declaration) if declaration.name.as_str() == "unit_constant" => Some(*owner),
+            _ => None,
+        }).expect("unit constant declaration");
+        for initial in [10_000_000, usize::MAX] {
+            let mut work = ValidationWork::exact(initial);
+            let mut diagnostics = Vec::new();
+            super::validate_expression_roots(&snapshot, [root], &mut diagnostics, &mut work);
+            assert!(diagnostics.is_empty(), "{diagnostics:?}");
+            assert_eq!(work.saturated, initial == usize::MAX);
+            assert!(work.consumed > 10_000_000);
+        }
+    }
+
+    #[test]
     fn expression_and_type_occurrence_steps_stop_before_zero_one_and_measured_limits() {
         let snapshot = super::super::tests::witness_snapshot();
         let constant = snapshot
@@ -5502,14 +5498,14 @@ mod tests {
         // one declared-type step and one expression step.
         let mut diagnostics = Vec::new();
         let mut work = 0;
-        validate_expression_roots_with_limits(
+        crate::platform::kernel::test_work::validate_expression_roots_with_limits(
             &snapshot,
             [constant],
             &mut diagnostics,
             &mut work,
             ExpressionValidationLimits {
-                maximum_steps: super::super::contract::MAXIMUM_VALIDATION_WORK,
-                maximum_diagnostics: 1,
+                maximum_steps: Some(super::super::contract::MAXIMUM_VALIDATION_WORK),
+                maximum_diagnostics: Some(1),
             },
         )
         .expect("healthy complete fresh admission");
@@ -5525,14 +5521,14 @@ mod tests {
         ] {
             let mut diagnostics = Vec::new();
             let mut work = 0;
-            let outcome = validate_expression_roots_with_limits(
+            let outcome = crate::platform::kernel::test_work::validate_expression_roots_with_limits(
                 &snapshot,
                 [constant],
                 &mut diagnostics,
                 &mut work,
                 ExpressionValidationLimits {
-                    maximum_steps,
-                    maximum_diagnostics: 1,
+                    maximum_steps: Some(maximum_steps),
+                    maximum_diagnostics: Some(1),
                 },
             );
             assert_eq!(
@@ -5554,7 +5550,7 @@ mod tests {
     ) -> Vec<Diagnostic> {
         let mut diagnostics = Vec::new();
         let mut work = 0;
-        validate_expression_roots(
+        crate::platform::kernel::test_work::validate_expression_roots(
             &fixture.source,
             [OwnerKey::Declaration(fixture.caller.declaration)],
             &mut diagnostics,
@@ -5643,14 +5639,14 @@ mod tests {
 
         let mut diagnostics = Vec::new();
         let mut work = 0;
-        let exhausted = validate_expression_roots_with_limits(
+        let exhausted = crate::platform::kernel::test_work::validate_expression_roots_with_limits(
             &snapshot,
             [missing_a],
             &mut diagnostics,
             &mut work,
             ExpressionValidationLimits {
-                maximum_steps: 1,
-                maximum_diagnostics: 0,
+                maximum_steps: Some(1),
+                maximum_diagnostics: Some(0),
             },
         );
         assert_eq!(exhausted, Err(ExpressionValidationExhaustion::Diagnostics));
@@ -5659,14 +5655,14 @@ mod tests {
 
         let mut diagnostics = Vec::new();
         let mut work = 0;
-        let exhausted = validate_expression_roots_with_limits(
+        let exhausted = crate::platform::kernel::test_work::validate_expression_roots_with_limits(
             &snapshot,
             [missing_a, missing_b],
             &mut diagnostics,
             &mut work,
             ExpressionValidationLimits {
-                maximum_steps: 1,
-                maximum_diagnostics: 1,
+                maximum_steps: Some(1),
+                maximum_diagnostics: Some(1),
             },
         );
         assert_eq!(exhausted, Err(ExpressionValidationExhaustion::Diagnostics));

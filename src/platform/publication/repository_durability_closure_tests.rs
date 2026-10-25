@@ -365,7 +365,7 @@ fn exhausted_candidate_reference_admission_preserves_head_and_sealed_owner_reuse
     let mut prepared = prepare_rename_publication(&created, "bounded_reuse", None);
     let before = std::fs::read(created.repository.root().join("HEAD")).unwrap();
     let limits = crate::platform::change::CanonicalReadAdmission {
-        maximum_decoded_records: 0,
+        maximum_decoded_records: Some(0),
         ..Default::default()
     };
     let error = created

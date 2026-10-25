@@ -43,7 +43,6 @@ struct Lowering<'a> {
     edits: &'a mut BTreeMap<String, OwnerKey>,
     existing: &'a BTreeMap<OwnerKey, crate::platform::kernel::OwnerRecord>,
     package: Option<PackageId>,
-    remaining_records: usize,
 }
 
 pub(super) fn lower(
@@ -124,7 +123,7 @@ pub(super) fn lower(
             for edge in reader.incoming(
                 owner,
                 crate::platform::kernel::RelationKind::HttpRouteTarget,
-                crate::platform::change::MAXIMUM_AUTHORED_CHANGES,
+                None,
             )? {
                 let crate::platform::kernel::RelationEndpoint::Owner(source) = edge.source else {
                     return Err(canonical::error("route ownership has no source"));
@@ -201,8 +200,6 @@ pub(super) fn lower(
             edits: &mut lowered.edits,
             existing: &existing,
             package,
-            remaining_records: crate::platform::control::compact::MAXIMUM_COMPACT_RECORDS
-                .saturating_sub(input.records.len()),
         };
         let items = block.list(block.root)?;
         if items.first().and_then(|id| block.atom(*id).ok()) != Some("units") {
@@ -289,15 +286,11 @@ pub(super) fn lower(
         let Lowering {
             records, bodies, ..
         } = lowering;
+        input.records.try_reserve(records.len()).map_err(|_| block.error(
+            block.root, "change_unit_capacity", "lowered declaration record allocation failed",
+        ))?;
         input.records.extend(records);
         input.blocks.extend(bodies);
-        if input.records.len() > crate::platform::control::compact::MAXIMUM_COMPACT_RECORDS {
-            return Err(block.error(
-                block.root,
-                "change_unit_capacity",
-                "lowered declaration request exceeds the compact-record admission",
-            ));
-        }
     }
     Ok(lowered)
 }
@@ -362,13 +355,6 @@ impl Lowering<'_> {
         operation: &str,
         fields: Vec<(&str, String)>,
     ) -> Result<(), Diagnostic> {
-        self.remaining_records = self.remaining_records.checked_sub(1).ok_or_else(|| {
-            self.block.error(
-                at,
-                "change_unit_capacity",
-                "complete lowered request exceeds record admission",
-            )
-        })?;
         self.records.try_reserve(1).map_err(|_| {
             self.block.error(
                 at,

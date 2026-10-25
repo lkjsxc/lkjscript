@@ -1,6 +1,6 @@
 //! Reference-owned value proofs. Only canonical schemas and owner reads establish eligibility.
 
-use super::super::value::ValueOrigin;
+use super::super::value::{RawValue, ValueOrigin};
 use super::*;
 use std::collections::BTreeSet;
 
@@ -138,7 +138,8 @@ impl Value {
         datum: NormalizedValue,
         control: &ExecutionControl,
     ) -> Result<Self, ExecutionError> {
-        let ownership = match &datum {
+        let datum = RawValue::new(datum);
+        let ownership = match datum.as_raw() {
             NormalizedValue::RegionCap { ty, token } => {
                 let Some(TypeForm::RegionCap { mode, .. }) =
                     schema.types.get(&expected).map(|ty| &ty.form)
@@ -160,16 +161,15 @@ impl Value {
             _ => {
                 super::super::region_value::check_plain(
                     &schema.types,
-                    &datum,
+                    datum.as_raw(),
                     expected,
                     control,
-                    0,
                 )?;
                 Ownership::Ordinary
             }
         };
         Ok(Self {
-            datum,
+            datum: datum.into_raw(),
             preparation: schema.value_origin,
             ownership,
             provenance: None,
@@ -915,12 +915,6 @@ impl ReferenceState<'_> {
         charge: super::super::map::Charge,
     ) -> Result<(), ExecutionError> {
         self.control.check()?;
-        if charge.bytes > super::super::value::MAXIMUM_VALUE_ALLOCATION_BYTES {
-            return Err(reference_resource(
-                "normalized_reference_allocation",
-                "one map allocation exceeds finite value storage",
-            ));
-        }
         let items = crate::platform::execution::cumulative_charge(
             self.observation.collection_items,
             charge.slots,
@@ -1960,7 +1954,7 @@ impl ReferenceState<'_> {
         *admission_bytes = crate::platform::execution::cumulative_charge(
             *admission_bytes,
             bytes as u64,
-            Some(super::super::value::MAXIMUM_VALUE_ALLOCATION_BYTES),
+            None,
             "normalized_reference_allocation",
             "single raw admission exceeds finite storage",
         )?;
@@ -1978,7 +1972,7 @@ impl ReferenceState<'_> {
         *total = crate::platform::execution::cumulative_charge(
             *total,
             bytes,
-            Some(super::super::value::MAXIMUM_VALUE_ALLOCATION_BYTES),
+            None,
             "normalized_reference_allocation",
             "single raw admission exceeds finite storage",
         )?;

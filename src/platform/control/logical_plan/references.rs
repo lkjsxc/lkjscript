@@ -128,12 +128,10 @@ impl Decoder {
         } else {
             self.bindings.owners.len()
         };
-        if kind < 2
-            && (count >= crate::platform::change::MAXIMUM_AUTHORED_CHANGES
-                || parse_u64(field(record, 0), "reference index")? != count as u64)
+        if kind < 2 && parse_u64(field(record, 0), "reference index")? != count as u64
         {
             return Err(invalid(
-                "reference inventory index is not consecutive or exceeds admission",
+                "reference inventory index is not consecutive",
             ));
         }
         match kind {

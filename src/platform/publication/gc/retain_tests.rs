@@ -27,7 +27,7 @@ impl ImmutableObjectStore for BlobSource {
         maximum: usize,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
-        work.catalog_lookups = work.catalog_lookups.saturating_add(1);
+        work.add(crate::platform::storage::object::StoreWork { catalog_lookups: 1, ..crate::platform::storage::object::StoreWork::default() });
         let Some(marker) = self.keys.get(&key) else {
             return Ok(None);
         };
@@ -38,8 +38,8 @@ impl ImmutableObjectStore for BlobSource {
                 "explicit object limit",
             ));
         }
-        work.objects_read = work.objects_read.saturating_add(1);
-        work.bytes_read = work.bytes_read.saturating_add(self.length as u64);
+        work.add(crate::platform::storage::object::StoreWork { objects_read: 1, ..crate::platform::storage::object::StoreWork::default() });
+        work.add(crate::platform::storage::object::StoreWork { bytes_read: self.length as u64, ..crate::platform::storage::object::StoreWork::default() });
         Ok(Some(vec![*marker; self.length]))
     }
 
@@ -109,9 +109,9 @@ fn gc_explicit_read_allowances_still_refuse_before_payload_growth() {
     let store = Retained::new(&base, &control);
     let mut work = StoreWork::default();
     let mut outer = StoreReadAdmission::new(StoreReadLimits {
-        maximum_catalog_lookups: 1,
-        maximum_objects: 1,
-        maximum_bytes: 6,
+        maximum_catalog_lookups: Some(1),
+        maximum_objects: Some(1),
+        maximum_bytes: Some(6),
     });
     assert_eq!(
         store
@@ -123,9 +123,9 @@ fn gc_explicit_read_allowances_still_refuse_before_payload_growth() {
     assert_eq!(work.objects_read, 0);
     assert!(store.objects.borrow().is_empty());
     let mut exact = StoreReadAdmission::new(StoreReadLimits {
-        maximum_catalog_lookups: 1,
-        maximum_objects: 1,
-        maximum_bytes: 7,
+        maximum_catalog_lookups: Some(1),
+        maximum_objects: Some(1),
+        maximum_bytes: Some(7),
     });
     assert_eq!(
         store.read_admitted(key, 7, &mut exact, &mut work).unwrap(),

@@ -2,9 +2,8 @@
 //! Process behavior and release candidates always retain the executable boundary.
 
 use super::copy_executable;
-use lkjscript::platform::contract::MAXIMUM_CLI_RESPONSE_BYTES;
 use lkjscript::platform::contract::{
-    MAXIMUM_CLI_RESPONSE_RECORDS, diagnostic_class_name, exit_status_for,
+    diagnostic_class_name, exit_status_for,
 };
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::{self, Diagnostic};
@@ -262,7 +261,7 @@ fn absolute_external_paths(arguments: &[&str]) -> bool {
 }
 
 pub fn failure(command: &str, diagnostics: &[Diagnostic]) -> Response {
-    // Keep the same bounded compact diagnostic projection as the executable.
+    // Keep the same complete compact diagnostic projection as the executable.
     // The parity control compares these exact bytes against the real boundary.
     let infrastructure = exit_status_for(platform::DiagnosticClass::Infrastructure);
     let (code, stdout) = match diagnostics.first() {
@@ -287,15 +286,12 @@ pub fn failure(command: &str, diagnostics: &[Diagnostic]) -> Response {
 }
 
 fn failure_bytes(command: &str, diagnostics: &[Diagnostic]) -> Result<Vec<u8>, ()> {
-    let mut output = CompactResponseWriter::new(CompactResponseLimits {
-        maximum_bytes: MAXIMUM_CLI_RESPONSE_BYTES,
-        maximum_records: MAXIMUM_CLI_RESPONSE_RECORDS,
-    })
+    let mut output = CompactResponseWriter::new(CompactResponseLimits::default())
     .map_err(|_| ())?;
     output
         .append_record("result", &[("status", "failure"), ("command", command)])
         .map_err(|_| ())?;
-    for error in diagnostics.iter().take(64) {
+    for error in diagnostics {
         let mut fields = vec![
             ("class", diagnostic_class_name(error.class).to_owned()),
             ("code", error.code.clone()),
@@ -318,17 +314,6 @@ fn failure_bytes(command: &str, diagnostics: &[Diagnostic]) -> Result<Vec<u8>, (
                     .iter()
                     .map(|(name, value)| (*name, value.as_str()))
                     .collect::<Vec<_>>(),
-            )
-            .map_err(|_| ())?;
-    }
-    if diagnostics.len() > 64 {
-        output
-            .append_record(
-                "summary",
-                &[
-                    ("diagnostics", &diagnostics.len().to_string()),
-                    ("omitted", &(diagnostics.len() - 64).to_string()),
-                ],
             )
             .map_err(|_| ())?;
     }

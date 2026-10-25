@@ -265,9 +265,9 @@ fn refresh_guard_and_staging_exhaustion_and_cancellation_publish_no_objects() {
     for staging in [false, true] {
         let mut bounded = request.clone();
         if staging {
-            bounded.budget.staging.maximum_objects = 0;
+            bounded.budget.staging.maximum_objects = Some(0);
         } else {
-            bounded.budget.canonical_reads.maximum_point_reads = 0;
+            bounded.budget.canonical_reads.maximum_point_reads = Some(0);
         }
         let errors = target
             .prepare_refreshed_authored_change(
@@ -338,7 +338,7 @@ fn refresh_rejects_truncated_negative_range_and_new_referrers_without_partial_pu
     created.repository.publish(&added.publication).unwrap();
     let origin = created.repository.view_current().unwrap();
     let read = origin
-        .read_incoming_relations_of_kind(unused, RelationKind::FunctionCall, 1)
+        .read_incoming_relations_of_kind(unused, RelationKind::FunctionCall, Some(1))
         .unwrap();
     assert!(read.value.edges.is_empty());
     assert!(!read.value.truncated);
@@ -348,14 +348,14 @@ fn refresh_rejects_truncated_negative_range_and_new_referrers_without_partial_pu
             unused,
             Some(RelationKind::FunctionCall),
             true,
-            1,
+            Some(1),
             &read.value.edges,
             false,
         )
         .unwrap();
     let mut incomplete = AuthoredReadFootprint::default();
     let error = incomplete
-        .record_relations(unused, Some(RelationKind::FunctionCall), true, 1, &[], true)
+        .record_relations(unused, Some(RelationKind::FunctionCall), true, Some(1), &[], true)
         .unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Resource);
     assert_eq!(error.code, "change_refresh_incomplete_footprint");
@@ -381,13 +381,13 @@ fn refresh_rejects_truncated_negative_range_and_new_referrers_without_partial_pu
     created.repository.publish(&incoming.publication).unwrap();
     let target = created.repository.view_current().unwrap();
     let full = target
-        .read_incoming_relations_of_kind(unused, RelationKind::FunctionCall, 10)
+        .read_incoming_relations_of_kind(unused, RelationKind::FunctionCall, Some(10))
         .unwrap();
     assert_eq!(full.value.edges.len(), 2);
     assert!(!full.value.truncated);
     assert!(
         target
-            .read_incoming_relations_of_kind(unused, RelationKind::FunctionCall, 1)
+            .read_incoming_relations_of_kind(unused, RelationKind::FunctionCall, Some(1))
             .unwrap()
             .value
             .truncated

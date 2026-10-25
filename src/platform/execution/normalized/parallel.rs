@@ -48,18 +48,7 @@ pub(super) fn include_value_work(
         local_value_moves,
         local_value_copies
     );
-    let value = &mut value.bytes;
-    let child = &child.bytes;
-    macro_rules! add_bytes { ($($field:ident),* $(,)?) => { $(value.$field = value.$field.saturating_add(child.$field);)* }; }
-    add_bytes!(
-        concatenations,
-        empty_operand_reuses,
-        in_place_appends,
-        buffer_growths,
-        fresh_buffers,
-        payload_bytes_copied,
-        requested_capacity_bytes
-    );
+    value.bytes.include(&child.bytes);
 }
 
 pub(super) fn run<L, R: Send + 'static>(

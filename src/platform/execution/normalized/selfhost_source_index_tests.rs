@@ -202,3 +202,18 @@ fn selfhost_source_index_windows_reject_invalid_ranges_without_arithmetic_traps(
         check(&bytes, -2);
     }
 }
+
+
+#[test]
+fn selfhost_source_index_retrieves_rows_above_historical_count_quota() {
+    let rows = (0_u64..100_001)
+        .map(|index| {
+            let mut row = vec![1; 17];
+            row[9..].copy_from_slice(&index.to_be_bytes());
+            row
+        })
+        .collect::<Vec<_>>();
+    for index in [0, 50_000, 100_000] {
+        check(&packet(1, &rows, 50, &rows[index], 1), index as i64);
+    }
+}

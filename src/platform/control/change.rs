@@ -37,7 +37,6 @@ mod tx;
 pub(crate) use tx::{MAXIMUM_TRANSACTION_RESULT_BYTES, decode as decode_transaction};
 #[cfg(test)]
 mod structural_tests;
-pub(crate) use input::{MAXIMUM_STRUCTURAL_SYNTAX_NODES, MAXIMUM_STRUCTURAL_TOKENS};
 use references::ReferenceLookup;
 
 use super::{CompactField, CompactRecord, parse_records};
@@ -62,6 +61,7 @@ use crate::platform::change::{
     ParameterParentSelector,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
+use crate::platform::change::BudgetCounter;
 use crate::platform::kernel::{
     AssociatedTypeBound, DeclarationVisibility, ExternalVisibility, HttpRouteSelector, Idempotency,
     ImplementationName, Name, NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest,
@@ -78,9 +78,9 @@ use std::fmt;
 use std::str::FromStr;
 
 pub const COMPACT_CHANGE_CONTRACT_IDENTITY: &str = "lkjscript-change-records";
-pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+pub const COMPACT_CHANGE_CONTRACT_VERSION: u16 = 2;
 pub const AUTHORED_CHANGE_CODEC_IDENTITY: &str = "lkjscript-authored-change";
-pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v1";
+pub const CHANGE_REQUEST_COMMITMENT_DOMAIN: &str = "lkjscript.change-request-commitment.v2";
 pub const COMPACT_DELETE_POLICIES: &[&str] = &["reject", "owned-closure"];
 pub(crate) const COMPACT_DECLARATION_VISIBILITIES: &[(&str, DeclarationVisibility)] = &[
     ("private", DeclarationVisibility::Private),
@@ -5115,10 +5115,10 @@ struct Decoder {
     blocks: BTreeMap<String, structural::Body>,
     expression_ready: BTreeMap<String, AuthoredExpression>,
     type_sizes: BTreeMap<String, usize>,
-    expanded_type_work: usize,
+    expanded_type_work: BudgetCounter,
     expression_uses: BTreeMap<String, usize>,
     implementation_stack: BTreeSet<String>,
-    expanded_implementation_work: usize,
+    expanded_implementation_work: BudgetCounter,
 }
 
 impl Decoder {
@@ -5144,18 +5144,45 @@ impl Decoder {
             blocks: BTreeMap::new(),
             expression_ready: BTreeMap::new(),
             type_sizes: BTreeMap::new(),
-            expanded_type_work: 0,
+            expanded_type_work: BudgetCounter::default(),
             expression_uses: BTreeMap::new(),
             implementation_stack: BTreeSet::new(),
-            expanded_implementation_work: 0,
+            expanded_implementation_work: BudgetCounter::default(),
         }
     }
 
     fn decode(mut self) -> Result<NormalizedChangeRequest, Diagnostic> {
         let mut request = None;
+        let mut budget = crate::platform::change::ChangeBudget::default();
+        let mut policy_names = BTreeSet::new();
         for record in std::mem::take(&mut self.records) {
             match record.operation.as_str() {
                 "reference.package" | "reference.owner" => {}
+                "change.policy" => {
+                    check_fields(&record, &["name", "limit"])?;
+                    let name = required(&record, "name")?;
+                    if !policy_names.insert(name.to_owned()) {
+                        return Err(record_error(&record, "change_policy_duplicate",
+                            format!("change policy '{name}' is supplied more than once")));
+                    }
+                    let value = required(&record, "limit")?;
+                    let maximum = if value == "unbounded" {
+                        None
+                    } else {
+                        let parsed = value.parse::<u64>().map_err(|_| record_error(
+                            &record, "change_policy_limit",
+                            "change policy requires unbounded or a canonical u64 decimal allowance"))?;
+                        if parsed.to_string() != value {
+                            return Err(record_error(&record, "change_policy_limit",
+                                "finite change policy allowances use canonical decimal notation"));
+                        }
+                        Some(parsed)
+                    };
+                    budget.set_policy_limit(name, maximum).map_err(|mut error| {
+                        error.location = Some(record.location.clone());
+                        error
+                    })?;
+                }
                 "request" => {
                     if request.is_some() {
                         return Err(record_error(
@@ -5648,7 +5675,7 @@ impl Decoder {
             base,
             preconditions,
             changes,
-            budget: Default::default(),
+            budget,
         };
         let options = PublicationOptions {
             idempotency_key,
@@ -5749,19 +5776,7 @@ impl Decoder {
             diagnostic.location = Some(record.location.clone());
             return Err(diagnostic);
         }
-        self.expanded_implementation_work = self
-            .expanded_implementation_work
-            .checked_add(1)
-            .filter(|nodes| *nodes <= input::MAXIMUM_STRUCTURAL_SYNTAX_NODES)
-            .ok_or_else(|| {
-                let mut diagnostic = Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "change_owned_operand_capacity",
-                    "expanded implementation applications exceed complete input admission",
-                );
-                diagnostic.location = Some(record.location.clone());
-                diagnostic
-            })?;
+        self.expanded_implementation_work.observe(BudgetCounter::exact(1));
         let parts = text.split('@').collect::<Vec<_>>();
         let (reference, parameter, application) = match parts.as_slice() {
             [reference] => (*reference, None, None),
@@ -6500,20 +6515,7 @@ impl Decoder {
     }
 
     fn admit_expanded_input(&mut self, size: usize) -> Result<(), Diagnostic> {
-        self.expanded_type_work = self.expanded_type_work.checked_add(size).ok_or_else(|| {
-            Diagnostic::new(
-                DiagnosticClass::Resource,
-                "change_input_type_capacity",
-                "expanded input type accounting overflowed",
-            )
-        })?;
-        if self.expanded_type_work > preflight::MAXIMUM_EXPANDED_INPUT_TYPE_NODES {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "change_input_type_capacity",
-                "complete change input exceeds its expanded type/effect adapter capacity",
-            ));
-        }
+        self.expanded_type_work.observe(BudgetCounter::exact(size as u64));
         Ok(())
     }
 
@@ -9621,7 +9623,7 @@ mod tests {
         let decoded = decode_compact_change("change.lk", input.as_bytes()).unwrap();
 
         let mut budget_changed = decoded.semantic.clone();
-        budget_changed.budget.canonical_reads.maximum_bytes -= 1;
+        budget_changed.budget.canonical_reads.maximum_bytes = Some(u64::MAX);
         assert_ne!(
             decoded.request_commitment,
             change_request_commitment(&budget_changed, &decoded.options).unwrap()

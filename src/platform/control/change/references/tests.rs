@@ -719,7 +719,7 @@ fn parameter_type_diagnostic_sources_reuse_bounded_import_resolution() {
     // Exhaustion during the same imported prelude must stop before another point read. Keeping
     // source locations cannot grant a fresh quota or return partially resolved alias authority.
     let mut exhausted = request.semantic.clone();
-    exhausted.budget.canonical_reads.maximum_point_reads = 0;
+    exhausted.budget.canonical_reads.maximum_point_reads = Some(0);
     let canonical =
         BudgetedCanonicalBase::new(&view, exhausted.budget.canonical_reads, Default::default())
             .unwrap();
@@ -782,7 +782,7 @@ fn named_reference_wrong_parents_scope_and_large_shared_prelude_leave_head_uncha
     assert_eq!(prepared.lowering_work.witness.point_reads, 2);
     assert_eq!(prepared.allocated.len(), 1);
     let mut exhausted = request.semantic;
-    exhausted.budget.witness_reads.maximum_point_reads = 0;
+    exhausted.budget.witness_reads.maximum_point_reads = Some(0);
     assert!(
         created
             .repository

@@ -9,24 +9,21 @@ use crate::platform::kernel::{
 };
 use std::collections::BTreeMap;
 
-pub(super) fn admit_work(work: &mut usize, maximum: usize) -> Result<(), Diagnostic> {
-    *work = work
-        .checked_add(1)
-        .filter(|next| *next <= maximum)
-        .ok_or_else(|| {
-            artifact_error(
-                DiagnosticClass::Resource,
-                "artifact_associated_work",
-                "artifact associated table admission exhausted its existing work budget",
-            )
-        })?;
+pub(super) fn admit_work(work: &mut crate::platform::kernel::ValidationWork, maximum: Option<usize>) -> Result<(), Diagnostic> {
+    if !work.charge(1, maximum) {
+        return Err(artifact_error(
+            DiagnosticClass::Resource,
+            "artifact_associated_work",
+            "artifact associated table admission exhausted its explicit work budget",
+        ));
+    }
     Ok(())
 }
 
 pub(super) fn contains_associated_types(
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
-    work: &mut usize,
-    maximum: usize,
+    work: &mut crate::platform::kernel::ValidationWork,
+    maximum: Option<usize>,
 ) -> Result<bool, Diagnostic> {
     // The loaded map is already the complete child closure. Charge discovery too;
     // no temporary inventory or per-unit feature scan is needed.

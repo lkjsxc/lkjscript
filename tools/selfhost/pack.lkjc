@@ -11,12 +11,12 @@ declarations.begin
       (returns Bytes)
       (body
         (let
-          (binding offset (call flow::field (local rows) (local at) (i64 8)))
-          (binding size (call flow::field (local rows) (local at) (i64 12)))
+          (binding offset (call ci::field32 (local rows) (local at) (i64 8)))
+          (binding size (call ci::field32 (local rows) (local at) (i64 12)))
           (in
             (call ci::slice
               (if
-                (call ci::eq (call flow::field (local rows) (local at) (i64 4)) (i64 0))
+                (call ci::eq (call ci::field32 (local rows) (local at) (i64 4)) (i64 0))
                 (local input)
                 (local generated))
               (local offset)
@@ -36,14 +36,14 @@ declarations.begin
           (call ci::eq (local at) (call ci::length (local rows)))
           (local out)
           (let
-            (binding size (call flow::field (local rows) (local at) (i64 12)))
+            (binding size (call ci::field32 (local rows) (local at) (i64 12)))
             (binding checksum
               (call wire::digest
                 (text "lkjscript.object-pack.entry.v1")
                 (call value (local input) (local generated) (local rows) (local at))))
             (binding a
               (type ByteBuffer)
-              (call ci::push (call flow::field (local rows) (local at) (i64 0)) (local out)))
+              (call ci::push (call ci::field32 (local rows) (local at) (i64 0)) (local out)))
             (binding b
               (type ByteBuffer)
               (call wire::range
@@ -111,13 +111,13 @@ declarations.begin
           (call ci::eq (local at) (call ci::length (local rows)))
           (local out)
           (let
-            (binding offset (call flow::field (local rows) (local at) (i64 8)))
-            (binding size (call flow::field (local rows) (local at) (i64 12)))
+            (binding offset (call ci::field32 (local rows) (local at) (i64 8)))
+            (binding size (call ci::field32 (local rows) (local at) (i64 12)))
             (binding a
               (type ByteBuffer)
               (call wire::range
                 (if
-                  (call ci::eq (call flow::field (local rows) (local at) (i64 4)) (i64 0))
+                  (call ci::eq (call ci::field32 (local rows) (local at) (i64 4)) (i64 0))
                   (local input)
                   (local generated))
                 (local offset)

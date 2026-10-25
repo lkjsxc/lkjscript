@@ -85,23 +85,24 @@ pub fn prepare_change_analysis_with_budget<
         &overlay,
         &canonical,
         &witness_base,
-        declared_budget.impact.maximum_ownership_steps,
-        declared_budget.impact.maximum_relation_edges,
+        budget.remaining_impact_ownership_steps("derived witness delta")
+            .map_err(|error| vec![error])?,
+        budget.remaining_relation_edges("derived witness delta")
+            .map_err(|error| vec![error])?,
     )
     .map_err(|error| vec![error])?;
     budget
         .observe_derived(&derived)
+        .map_err(|error| vec![error])?;
+    let validation_admission = budget.validation_admission("candidate validation")
         .map_err(|error| vec![error])?;
     let structural = validate_structural_frontier_with_admission(
         &overlay,
         &canonical,
         &derived,
         &witness_base,
-        declared_budget.validation,
+        validation_admission,
     )?;
-    budget
-        .observe_structural(&structural)
-        .map_err(|error| vec![error])?;
     let mut impact_admission = declared_budget.impact;
     impact_admission.maximum_ownership_steps = budget
         .remaining_impact_ownership_steps("impact planning")
@@ -123,10 +124,6 @@ pub fn prepare_change_analysis_with_budget<
     budget
         .observe_impact(&summaries.plan)
         .map_err(|error| vec![error])?;
-    let mut validation_admission = declared_budget.validation;
-    validation_admission.maximum_expression_steps = validation_admission
-        .maximum_expression_steps
-        .saturating_sub(initial_work.validation.expression_steps);
     let validation = validate_incremental_frontier_with_admission(
         &overlay,
         &canonical,
@@ -137,7 +134,7 @@ pub fn prepare_change_analysis_with_budget<
         validation_admission,
     )?;
     budget
-        .observe_expression_validation(validation.work.expression_work, 0)
+        .observe_completed_validation(validation.work)
         .map_err(|error| vec![error])?;
     let tests = derive_test_dependency_delta_with_admission(
         &overlay,

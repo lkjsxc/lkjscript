@@ -46,9 +46,9 @@ fn selfhost_source_maps_match_independent_logical_commitments_and_current_state(
             );
         }
     }
-    // Exact entry and byte ceilings are independent, supported positive cases.
-    check_map(3, 1, map_rows(3, 1, 100_000));
-    check_map(16, 112, map_rows(16, 112, 65_536));
+    // Cross both historical logical-map quotas with independent canonical roots.
+    check_map(3, 1, map_rows(3, 1, 100_001));
+    check_map(16, 112, map_rows(16, 112, 65_537));
     let (source, _) = compiler();
     let owners = source
         .owners
@@ -148,12 +148,12 @@ fn selfhost_source_maps_reject_invalid_widths_extents_duplicates_and_order() {
         result("read-map", &map_packet(17, 33, &reversed)),
         (12, vec![])
     );
-    let mut too_many = map_packet(1, 1, &[]);
-    too_many.resize(8 + 2 * 100_001, 0);
-    assert_eq!(result("read-map", &too_many), (12, vec![]));
-    let mut too_large = map_packet(16, 112, &[]);
-    too_large.resize(8 + 8_388_609, 0);
-    assert_eq!(result("read-map", &too_large), (12, vec![]));
+    let mut duplicate_rows = map_packet(1, 1, &[]);
+    duplicate_rows.resize(8 + 2 * 100_001, 0);
+    assert_eq!(result("read-map", &duplicate_rows), (12, vec![]));
+    let mut unaligned_bytes = map_packet(16, 112, &[]);
+    unaligned_bytes.resize(8 + 8_388_609, 0);
+    assert_eq!(result("read-map", &unaligned_bytes), (12, vec![]));
     for (key_bytes, value_bytes) in [
         (i64::MIN, 32),
         (-1, 32),

@@ -826,7 +826,7 @@ fn selfhost_source_scalar_e2_checks_complete_carriers_in_vm_reference_and_native
         };
         assert_eq!(image.as_ref(), expected, "case={}", case.name);
         assert_eq!(
-            run_filter(inspector, case, &case.carrier, "LKJSG001"),
+            run_filter(inspector, case, &case.carrier, "LKJSG002"),
             expected,
             "case={}",
             case.name
@@ -887,7 +887,7 @@ fn selfhost_source_scalar_e3_compiles_selected_requests_and_executes_independent
             eprintln!(
                 "selfhost scalar execution case={} compiler_sha256={} carrier_sha256={} \
                  request_sha256={} selected_target={} \
-                 program_sha256={} target=linux-x86_64 output=ELF64 normalized_profile=4 \
+                 program_sha256={} target=linux-x86_64 output=ELF64 normalized_profile=6 \
                  arguments=[] environment=empty \
                  program_deadline_seconds=5 exit={:?} stdout_sha256={} elapsed_ms={}",
                 case.name,
@@ -993,14 +993,21 @@ fn selfhost_source_scalar_e3_lowers_more_than_historical_node_limit_natively() {
         .unwrap()
         .repository;
     let base = repo.view_current().unwrap().revision();
-    let request = format!("request base={base}\n{proposal}");
-    let mut decoded =
+    let summary_budget = owner_budget.checked_mul(2).unwrap();
+    let relation_budget = owner_budget.checked_mul(16).unwrap();
+    let request = format!(
+        "request base={base}\n\
+         change.policy name=affected-frontier-owners limit={owner_budget}\n\
+         change.policy name=impact-summary-owners limit={summary_budget}\n\
+         change.policy name=impact-summary-edits limit={owner_budget}\n\
+         change.policy name=impact-behavior-owners limit={owner_budget}\n\
+         change.policy name=relation-edges limit={relation_budget}\n\
+         {proposal}"
+    );
+    let decoded =
         crate::platform::control::decode_compact_change("buffer", request.as_bytes()).unwrap();
-    decoded.semantic.budget.impact.maximum_affected_owners = owner_budget;
-    decoded.semantic.budget.impact.maximum_summary_owners = owner_budget.checked_mul(2).unwrap();
-    decoded.semantic.budget.impact.maximum_summary_edits = owner_budget;
-    decoded.semantic.budget.impact.maximum_behavior_owners = owner_budget;
-    decoded.semantic.budget.impact.maximum_relation_edges = owner_budget.checked_mul(16).unwrap();
+    assert_eq!(decoded.semantic.budget.impact.maximum_affected_owners, Some(owner_budget));
+    assert_eq!(decoded.semantic.budget.impact.maximum_relation_edges, Some(relation_budget));
     let plan = repo
         .prepare_authored_change(&decoded.semantic, decoded.options)
         .unwrap();
@@ -1026,16 +1033,16 @@ fn selfhost_source_scalar_e3_lowers_more_than_historical_node_limit_natively() {
     assert!(output.stderr.is_empty());
     // Sequence entry/exit emit no nodes. Across the complete tree, sum(k - 1)
     // is leaf_count - 1, so literals, Drops and the final Return total 2*leaves.
-    // Each Drop and Return has exactly one operand-state byte; there are no locals.
+    // Each Drop and Return has one 16-byte value-type cell; there are no locals.
     let expected_nodes = 2 * leaf_count;
-    let expected_state_bytes = leaf_count;
+    let expected_state_bytes = leaf_count * input::VALUE_TYPE_BYTES;
     assert_eq!(expected_nodes, 32_770);
     assert!(expected_nodes > HISTORICAL_MAX_NODES);
-    assert_eq!(
-        output.stdout.len(),
-        65536 + 512 + expected_nodes * 128 + expected_state_bytes
-    );
-    assert_eq!(output.stdout.len(), 4_276_993);
+    // User code is measured and compact. The 64 KiB runtime is a checked,
+    // fixed semantic alphabet; no per-function or per-node padding remains.
+    let file_bytes = u64::from_le_bytes(output.stdout[96..104].try_into().unwrap());
+    assert_eq!(file_bytes, output.stdout.len() as u64);
+    assert!(output.stdout.len() < 65536 + 512 + expected_nodes * 128 + expected_state_bytes);
     let program = execute(&output.stdout, &[]);
     assert_eq!(program.status.code(), Some(0), "{:?}", program.stderr);
     assert_eq!(program.stdout, b"42");
@@ -1364,4 +1371,31 @@ fn selfhost_source_scalar_e3_rejects_hash_consistent_disconnected_expression_cyc
     }
     assert_eq!(source.owners.len(), 2);
     assert_raw_scalar_e3_rejection("raw-disconnected-expression-cycle", &source, 0, 15);
+}
+
+#[test]
+fn selfhost_source_scalar_e3_derives_wide_frames_without_host_projection() {
+    let source = byte_buffer_tests::author_only(&super::super::closure::wide_parameter_source()).unwrap();
+    let carrier = graph::packet(&source);
+    let request = source_request(&carrier, target_id(&source, "wide-main"));
+    let compiler = native_compiler();
+    let compiled = native_filter_tests::execute_filter(&compiler.image, &request, &[], 4093);
+    assert_eq!(compiled.status.code(), Some(0), "{:?}", compiled.stderr);
+    assert!(compiled.stderr.is_empty());
+    crate::release_container::inspect_static_elf_bytes(&compiled.stdout).unwrap();
+    let output = execute(&compiled.stdout, &[]);
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert_eq!(output.stdout, b"255");
+    assert!(output.stderr.is_empty());
+    // Independent host preparation occurs only after native source emission and
+    // never supplies certificates, selected owners, or a lowered entry to it.
+    let program = prepare_snapshot(&source);
+    let declaration = declaration_reference(&source, "entry");
+    let control = ExecutionControl::uncancelled();
+    let policy = NormalizedRunPolicy::foreground();
+    let vm = NormalizedVm::for_test(&program, policy).invoke(declaration, vec![], None, &control).unwrap();
+    let reference = NormalizedReferenceInterpreter::new(&source, &program, policy)
+        .invoke(declaration, vec![], None, &control).unwrap();
+    assert_eq!(vm.0, NormalizedValue::I64(255));
+    assert_eq!(reference.0, vm.0);
 }

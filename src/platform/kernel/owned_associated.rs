@@ -126,16 +126,16 @@ impl OwnedTypeOccurrence {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct AssociatedAdmissionLimits {
-    pub maximum_steps: usize,
-    pub maximum_metadata_bytes: usize,
+    pub maximum_steps: Option<usize>,
+    pub maximum_metadata_bytes: Option<usize>,
     pub maximum_depth: usize,
 }
 
 impl Default for AssociatedAdmissionLimits {
     fn default() -> Self {
         Self {
-            maximum_steps: contract::MAXIMUM_VALIDATION_WORK,
-            maximum_metadata_bytes: 64 * 1_048_576,
+            maximum_steps: None,
+            maximum_metadata_bytes: None,
             maximum_depth: contract::MAXIMUM_TYPE_DEPTH,
         }
     }
@@ -172,8 +172,8 @@ pub(crate) enum AssociatedResolution {
 
 pub(crate) struct OwnedAssociatedAdmission {
     limits: AssociatedAdmissionLimits,
-    steps: Cell<usize>,
-    metadata_bytes: Cell<usize>,
+    steps: Cell<ValidationWork>,
+    metadata_bytes: Cell<ValidationWork>,
 }
 
 struct AssociatedRead<'a, R: ?Sized> {
@@ -316,30 +316,38 @@ impl OwnedAssociatedAdmission {
     pub(crate) fn with_limits(limits: AssociatedAdmissionLimits) -> Self {
         Self {
             limits,
-            steps: Cell::new(0),
-            metadata_bytes: Cell::new(0),
+            steps: Cell::new(ValidationWork::default()),
+            metadata_bytes: Cell::new(ValidationWork::default()),
         }
     }
 
     pub(crate) fn work(&self) -> (usize, usize) {
-        (self.steps.get(), self.metadata_bytes.get())
+        (self.steps.get().consumed, self.metadata_bytes.get().consumed)
+    }
+
+    pub(crate) fn work_observation(&self) -> ValidationWork {
+        self.steps.get()
+    }
+
+    pub(crate) fn metadata_observation(&self) -> ValidationWork {
+        self.metadata_bytes.get()
     }
 
     pub(crate) fn reserve<T>(&self, count: usize) -> Result<(), Diagnostic> {
-        let bytes = count
-            .checked_mul(std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>())
-            .ok_or_else(|| exhausted("associated type metadata size overflow"))?;
-        self.reserve_bytes(bytes)
+        let mut observed = self.metadata_bytes.get();
+        if !observed.charge_product(count, std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>(), self.limits.maximum_metadata_bytes) {
+            return Err(exhausted("associated type metadata exceeds its explicit storage admission"));
+        }
+        self.metadata_bytes.set(observed);
+        Ok(())
     }
 
     pub(crate) fn reserve_bytes(&self, bytes: usize) -> Result<(), Diagnostic> {
-        let bytes = self
-            .metadata_bytes
-            .get()
-            .checked_add(bytes)
-            .filter(|bytes| *bytes <= self.limits.maximum_metadata_bytes)
-            .ok_or_else(|| exhausted("associated type metadata exceeds its storage admission"))?;
-        self.metadata_bytes.set(bytes);
+        let mut observed = self.metadata_bytes.get();
+        if !observed.charge(bytes, self.limits.maximum_metadata_bytes) {
+            return Err(exhausted("associated type metadata exceeds its explicit storage admission"));
+        }
+        self.metadata_bytes.set(observed);
         Ok(())
     }
 
@@ -1590,14 +1598,11 @@ impl<R: ExpressionRead + ?Sized> ExpressionRead for AssociatedRead<'_, R> {
         self.read.validation_checkpoint()
     }
     fn validation_work(&self) -> Result<(), Diagnostic> {
+        let mut steps = self.admission.steps.get();
+        if !steps.charge(1, self.admission.limits.maximum_steps) {
+            return Err(exhausted("associated type proof exceeds its work admission"));
+        }
         self.read.validation_work()?;
-        let steps = self
-            .admission
-            .steps
-            .get()
-            .checked_add(1)
-            .filter(|steps| *steps <= self.admission.limits.maximum_steps)
-            .ok_or_else(|| exhausted("associated type proof exceeds its work admission"))?;
         self.admission.steps.set(steps);
         Ok(())
     }

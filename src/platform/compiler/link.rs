@@ -813,23 +813,7 @@ fn add_repository_work(total: &mut RepositoryReadWork, other: RepositoryReadWork
 }
 
 fn add_map_work(total: &mut MapWork, other: MapWork) {
-    total.pages_read = total.pages_read.saturating_add(other.pages_read);
-    total.pages_decoded = total.pages_decoded.saturating_add(other.pages_decoded);
-    total.pages_encoded = total.pages_encoded.saturating_add(other.pages_encoded);
-    total.pages_written = total.pages_written.saturating_add(other.pages_written);
-    total.pages_reused = total.pages_reused.saturating_add(other.pages_reused);
-    total.bytes_read = total.bytes_read.saturating_add(other.bytes_read);
-    total.bytes_encoded = total.bytes_encoded.saturating_add(other.bytes_encoded);
-    total.bytes_written = total.bytes_written.saturating_add(other.bytes_written);
-    total.key_comparisons = total.key_comparisons.saturating_add(other.key_comparisons);
-    total.entries_visited = total.entries_visited.saturating_add(other.entries_visited);
-    total.differences_emitted = total
-        .differences_emitted
-        .saturating_add(other.differences_emitted);
-    total.subtrees_skipped = total
-        .subtrees_skipped
-        .saturating_add(other.subtrees_skipped);
-    total.entries_skipped = total.entries_skipped.saturating_add(other.entries_skipped);
+    total.add_observation(other);
 }
 
 fn map_diagnostic(error: MapError) -> Diagnostic {

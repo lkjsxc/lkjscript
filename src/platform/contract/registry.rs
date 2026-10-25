@@ -23,8 +23,6 @@ use super::super::control::{
     COMPACT_READ_SCOPE_FORMS, COMPACT_TYPE_FORM_FIELDS, COMPACT_TYPE_FORMS, CompactChangeFieldForm,
     CompactChangeOperation, LOGICAL_CHANGE_PLAN_CONTRACT_IDENTITY,
     LOGICAL_CHANGE_PLAN_CONTRACT_VERSION, LOGICAL_PLAN_RECORD_DESCRIPTORS,
-    MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_LOGICAL_PLAN_BYTES, MAXIMUM_LOGICAL_PLAN_RECORDS,
-    MAXIMUM_STRUCTURAL_SYNTAX_NODES, MAXIMUM_STRUCTURAL_TOKENS,
     PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN, render_record,
 };
 use super::super::data::{
@@ -56,12 +54,9 @@ use super::super::kernel::contract::{
 };
 use super::super::kernel::{NamespaceClass, OwnerKind, RelationKind};
 use super::super::normalized_query::{
-    ContextDirection, DEFAULT_QUERY_ITEMS, DEFAULT_QUERY_OUTPUT_BYTES, MAXIMUM_CONTEXT_DEPTH,
-    MAXIMUM_CONTEXT_MAP_BYTES, MAXIMUM_CONTEXT_MAP_ENTRIES, MAXIMUM_CONTEXT_MAP_PAGES,
-    MAXIMUM_CONTEXT_OWNERS, MAXIMUM_CONTEXT_RELATION_WITNESSES, MAXIMUM_CONTEXT_RELATIONS,
-    MAXIMUM_CONTEXT_STORE_BYTES, MAXIMUM_CONTEXT_STORE_OBJECTS, MAXIMUM_QUERY_CONTINUATION_BYTES,
-    MAXIMUM_QUERY_ITEMS, MAXIMUM_QUERY_OUTPUT_BYTES, MINIMUM_CONTEXT_DEPTH,
-    MINIMUM_QUERY_OUTPUT_BYTES, QUERY_CONTINUATION_INTEGRITY_DOMAIN, QUERY_CONTINUATION_MAGIC_TEXT,
+    ContextDirection, DEFAULT_QUERY_ITEMS, DEFAULT_QUERY_OUTPUT_BYTES,
+    MAXIMUM_QUERY_CONTINUATION_BYTES, MINIMUM_CONTEXT_DEPTH,
+    QUERY_CONTINUATION_INTEGRITY_DOMAIN, QUERY_CONTINUATION_MAGIC_TEXT,
     QUERY_CONTRACT_IDENTITY, QUERY_CONTRACT_VERSION, QUERY_OPERATION_DESCRIPTORS,
     QUERY_RESPONSE_FIELDS, QUERY_SELECTOR_DIGEST_DOMAIN, QUERY_SELECTOR_FIELDS, QueryDirection,
 };
@@ -112,8 +107,6 @@ mod read_views;
 pub const REGISTRY_CONTRACT_IDENTITY: &str = "lkjscript-contract-registry";
 pub const REGISTRY_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const CLI_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
-pub const MAXIMUM_CLI_RESPONSE_BYTES: usize = 4 * 1_048_576;
-pub const MAXIMUM_CLI_RESPONSE_RECORDS: usize = 10_000;
 pub const MAXIMUM_TRANSACTION_REQUEST_BYTES: usize = 16 * 1_048_576;
 
 const STRUCTURAL_EXPRESSION_SYNTAX: &[(&str, &str)] = &[
@@ -577,6 +570,7 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("work", "fact-reads"),
     ("work", "rendered-records"),
     ("work", "rendered-output-bytes"),
+    ("work", "saturated"),
     ("schema", "capabilities"),
 ];
 
@@ -1106,7 +1100,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::PublicProtocol,
             predecessor_policy: REJECT,
-            magic_values: &["LKJACHNG", "LKJABUDG"],
+            magic_values: &["LKJACHNG", "LKJABDG2"],
             digest_domains: &[
                 CHANGE_ALLOCATION_SEED_DOMAIN,
                 CHANGE_REQUEST_COMMITMENT_DOMAIN,
@@ -1763,7 +1757,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         operation(
             PublicOperation::Package,
             "Export a complete immutable source closure, stage it offline, or inspect exact staged public interfaces without editing meaning.",
-            "package builtin inspect | package builtin inspect owner KIND ID | package builtin query owners [--kind KIND] [--name NAME] [--parent OWNER] [--limit N] [--bytes N] [--continuation TOKEN] | package builtin export --kind transport|artifact --output PATH | package current export --kind transport --output PATH | package dependency stage --transport DIGEST --input-file PATH | package dependency inspect [owner KIND ID] --package-revision REVISION | package dependency query owners --package-revision REVISION [--kind KIND] [--name NAME] [--parent OWNER] [--limit N] [--bytes N] [--continuation TOKEN]",
+            "package builtin inspect | package builtin inspect owner KIND ID | package builtin query owners [--kind KIND] [--name NAME] [--parent OWNER] [--limit N] [--bytes N] [--continuation TOKEN] | package builtin export --kind transport|artifact --output PATH | package current export --kind transport --output PATH | package current republish --kind transport --transport DIGEST --input-file PATH --expected-head SHA256 | package dependency stage --transport DIGEST --input-file PATH | package dependency inspect [owner KIND ID] --package-revision REVISION | package dependency query owners --package-revision REVISION [--kind KIND] [--name NAME] [--parent OWNER] [--limit N] [--bytes N] [--continuation TOKEN]",
             (ControlModel::PackageRequest, ControlModel::PackageResult),
             AuthorityEffect::OptionalExternalOutput,
             ProjectRequirement::None,
@@ -2063,27 +2057,6 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             override_policy: OverridePolicy::Fixed,
         },
         limit(
-            "cli_response_bytes",
-            MAXIMUM_CLI_RESPONSE_BYTES,
-            LimitClass::DeterministicOperationBudget,
-            LimitUnit::Bytes,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "cli_response_records",
-            MAXIMUM_CLI_RESPONSE_RECORDS,
-            LimitClass::DeterministicOperationBudget,
-            LimitUnit::Records,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "change_request_bytes",
-            MAXIMUM_COMPACT_INPUT_BYTES,
-            LimitClass::HostileDecoderSafety,
-            LimitUnit::Bytes,
-            OverridePolicy::Fixed,
-        ),
-        limit(
             "http_route_method_bytes",
             MAXIMUM_HTTP_ROUTE_METHOD_BYTES,
             LimitClass::HostileDecoderSafety,
@@ -2133,34 +2106,6 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             OverridePolicy::Fixed,
         ),
         limit(
-            "logical_change_plan_bytes",
-            MAXIMUM_LOGICAL_PLAN_BYTES as usize,
-            LimitClass::DeterministicOperationBudget,
-            LimitUnit::Bytes,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "logical_change_plan_records",
-            MAXIMUM_LOGICAL_PLAN_RECORDS as usize,
-            LimitClass::DeterministicOperationBudget,
-            LimitUnit::Records,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "change_refresh_guards",
-            crate::platform::change::MAXIMUM_REFRESH_GUARDS,
-            LimitClass::DeterministicOperationBudget,
-            LimitUnit::Items,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "change_refresh_guard_bytes",
-            crate::platform::change::MAXIMUM_REFRESH_GUARD_BYTES,
-            LimitClass::DeterministicOperationBudget,
-            LimitUnit::Bytes,
-            OverridePolicy::Fixed,
-        ),
-        limit(
             "change_refresh_ancestor_revisions",
             crate::platform::publication::MAXIMUM_REFRESH_ANCESTOR_REVISIONS,
             LimitClass::DeterministicOperationBudget,
@@ -2175,13 +2120,6 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             OverridePolicy::Fixed,
         ),
         limit(
-            "query_items",
-            MAXIMUM_QUERY_ITEMS as usize,
-            LimitClass::ExplicitRequestBudget,
-            LimitUnit::Items,
-            OverridePolicy::RequestUpToMaximum,
-        ),
-        limit(
             "query_default_bytes",
             DEFAULT_QUERY_OUTPUT_BYTES,
             LimitClass::DefaultPagination,
@@ -2189,52 +2127,10 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             OverridePolicy::Fixed,
         ),
         limit(
-            "query_minimum_bytes",
-            MINIMUM_QUERY_OUTPUT_BYTES,
-            LimitClass::HostileDecoderSafety,
-            LimitUnit::Bytes,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "query_bytes",
-            MAXIMUM_QUERY_OUTPUT_BYTES,
-            LimitClass::ExplicitRequestBudget,
-            LimitUnit::Bytes,
-            OverridePolicy::RequestUpToMaximum,
-        ),
-        limit(
             "query_continuation_bytes",
             MAXIMUM_QUERY_CONTINUATION_BYTES,
             LimitClass::HostileDecoderSafety,
             LimitUnit::Bytes,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "query_context_depth",
-            MAXIMUM_CONTEXT_DEPTH as usize,
-            LimitClass::ExplicitRequestBudget,
-            LimitUnit::Depth,
-            OverridePolicy::RequestUpToMaximum,
-        ),
-        limit(
-            "query_context_owners",
-            MAXIMUM_CONTEXT_OWNERS as usize,
-            LimitClass::HostileDecoderSafety,
-            LimitUnit::Items,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "query_context_relations",
-            MAXIMUM_CONTEXT_RELATIONS as usize,
-            LimitClass::HostileDecoderSafety,
-            LimitUnit::Items,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "query_context_relation_witnesses",
-            MAXIMUM_CONTEXT_RELATION_WITNESSES as usize,
-            LimitClass::HostileDecoderSafety,
-            LimitUnit::Records,
             OverridePolicy::Fixed,
         ),
         limit(
@@ -2666,14 +2562,26 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "native_elf_unsupported",
             DiagnosticClass::Source,
-            "The selected native command has an unsupported signature, instruction, capability or closure size.",
+            "The selected native command has an unsupported signature, instruction or capability.",
             "Use a closed command with I64 arguments and supported pure operations; no executable was published.",
         ),
         diagnostic(
-            "native_elf_capacity",
+            "native_elf_layout",
             DiagnosticClass::Source,
-            "Native image construction exceeded a bounded image or relocation inventory.",
-            "Reduce the reachable command closure; no executable was published.",
+            "A native address, frame or image extent is not representable.",
+            "Inspect the checked layout diagnostic; no executable was published.",
+        ),
+        diagnostic(
+            "native_elf_allocation",
+            DiagnosticClass::Resource,
+            "The host could not allocate native code, labels or relocation storage.",
+            "Inspect available host resources; no executable was published.",
+        ),
+        diagnostic(
+            "native_elf_encoding",
+            DiagnosticClass::Source,
+            "Native lowering attempted an invalid encoding or reserved-register use.",
+            "Retain the accepted source and report the emitter failure; no executable was published.",
         ),
         diagnostic(
             "native_elf_label",
@@ -5957,12 +5865,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             retry: "Use a verified executable build.",
         },
         DiagnosticDescriptor {
-            code: "capabilities_output_budget",
-            class: DiagnosticClass::Resource,
-            meaning: "The complete public capability projection exceeds its output bound.",
-            retry: "Request one advertised capability section.",
-        },
-        DiagnosticDescriptor {
             code: "capabilities_generated_drift",
             class: DiagnosticClass::Source,
             meaning: "Checked-in generated public-guide bytes differ from executable truth.",
@@ -7291,11 +7193,11 @@ pub(crate) fn transaction_records() -> Result<Vec<String>, String> {
                 ("form", "(tx (base @head|REVISION) UNIT...)".to_owned()),
                 (
                     "maximum-input-bytes",
-                    crate::platform::control::MAXIMUM_COMPACT_INPUT_BYTES.to_string(),
+                    "unbounded".to_owned(),
                 ),
                 (
                     "maximum-syntax-nodes",
-                    crate::platform::control::MAXIMUM_STRUCTURAL_SYNTAX_NODES.to_string(),
+                    "unbounded".to_owned(),
                 ),
             ],
         ),
@@ -7480,6 +7382,17 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     &[("record", "refresh".to_owned()), ("name", field.to_owned())],
                 )?);
             }
+            for (record, field) in [
+                ("plan", "saturated"),
+                ("plan-output", "saturated"),
+                ("summary", "saturated"),
+                ("validation", "saturated"),
+                ("validation", "preparation-work-saturated"),
+            ] {
+                records.push(compact_record("change.response-field", &[
+                    ("record", record.to_owned()), ("name", field.to_owned()),
+                ])?);
+            }
             structural_expression_records(&mut records)?;
             native_declaration_records(&mut records)?;
             records.push(compact_record(
@@ -7572,52 +7485,6 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("result-and-effect", "set.function-contract".to_owned()),
                 ],
             )?);
-            for (name, value, unit) in [
-                (
-                    "maximum-extraction-moved-owners",
-                    MAXIMUM_FUNCTION_EXTRACTION_MOVED_OWNERS,
-                    "owners",
-                ),
-                (
-                    "maximum-extraction-captures",
-                    MAXIMUM_FUNCTION_EXTRACTION_CAPTURES,
-                    "captures",
-                ),
-                (
-                    "maximum-extraction-capture-uses",
-                    MAXIMUM_FUNCTION_EXTRACTION_CAPTURE_USES,
-                    "uses",
-                ),
-                (
-                    "maximum-extraction-requirements",
-                    MAXIMUM_FUNCTION_EXTRACTION_REQUIREMENTS,
-                    "requirements",
-                ),
-                (
-                    "maximum-extraction-preserved-owners",
-                    MAXIMUM_FUNCTION_EXTRACTION_PRESERVED_OWNERS,
-                    "owners",
-                ),
-                (
-                    "maximum-extraction-changed-owners",
-                    MAXIMUM_FUNCTION_EXTRACTION_CHANGED_OWNERS,
-                    "owners",
-                ),
-                (
-                    "maximum-extraction-generated-owners",
-                    MAXIMUM_FUNCTION_EXTRACTION_GENERATED_OWNERS,
-                    "owners",
-                ),
-            ] {
-                records.push(compact_record(
-                    "change.extraction-limit",
-                    &[
-                        ("name", name.to_owned()),
-                        ("value", value.to_string()),
-                        ("unit", unit.to_owned()),
-                    ],
-                )?);
-            }
             for form in CompactChangeFieldForm::ALL {
                 records.push(compact_record(
                     "change.field-form",
@@ -7803,10 +7670,10 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             }
             for (name, value, unit) in [
                 ("default-items", DEFAULT_QUERY_ITEMS.to_string(), "items"),
-                ("maximum-items", MAXIMUM_QUERY_ITEMS.to_string(), "items"),
+                ("maximum-items", u64::MAX.to_string(), "items"),
                 (
                     "minimum-output-bytes",
-                    MINIMUM_QUERY_OUTPUT_BYTES.to_string(),
+                    0_usize.to_string(),
                     "bytes",
                 ),
                 (
@@ -7816,7 +7683,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ),
                 (
                     "maximum-output-bytes",
-                    MAXIMUM_QUERY_OUTPUT_BYTES.to_string(),
+                    usize::MAX.to_string(),
                     "bytes",
                 ),
                 (
@@ -7831,47 +7698,47 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ),
                 (
                     "maximum-context-depth",
-                    MAXIMUM_CONTEXT_DEPTH.to_string(),
+                    u64::MAX.to_string(),
                     "depth",
                 ),
                 (
                     "maximum-context-owners",
-                    MAXIMUM_CONTEXT_OWNERS.to_string(),
+                    "unbounded".to_owned(),
                     "items",
                 ),
                 (
                     "maximum-context-relations",
-                    MAXIMUM_CONTEXT_RELATIONS.to_string(),
+                    "unbounded".to_owned(),
                     "items",
                 ),
                 (
                     "maximum-context-relation-witnesses",
-                    MAXIMUM_CONTEXT_RELATION_WITNESSES.to_string(),
+                    "unbounded".to_owned(),
                     "records",
                 ),
                 (
                     "maximum-context-map-pages",
-                    MAXIMUM_CONTEXT_MAP_PAGES.to_string(),
+                    "unbounded".to_owned(),
                     "pages",
                 ),
                 (
                     "maximum-context-map-bytes",
-                    MAXIMUM_CONTEXT_MAP_BYTES.to_string(),
+                    "unbounded".to_owned(),
                     "bytes",
                 ),
                 (
                     "maximum-context-map-entries",
-                    MAXIMUM_CONTEXT_MAP_ENTRIES.to_string(),
+                    "unbounded".to_owned(),
                     "entries",
                 ),
                 (
                     "maximum-context-store-objects",
-                    MAXIMUM_CONTEXT_STORE_OBJECTS.to_string(),
+                    "unbounded".to_owned(),
                     "objects",
                 ),
                 (
                     "maximum-context-store-bytes",
-                    MAXIMUM_CONTEXT_STORE_BYTES.to_string(),
+                    "unbounded".to_owned(),
                     "bytes",
                 ),
             ] {
@@ -8394,8 +8261,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 &[
                     (
                         "single-allocation-bytes",
-                        super::super::execution::normalized::MAXIMUM_VALUE_ALLOCATION_BYTES
-                            .to_string(),
+                        "unbounded".to_owned(),
                     ),
                     (
                         "raw-admission-items",
@@ -9352,6 +9218,15 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
 }
 
 fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String> {
+    for (name, maximum) in crate::platform::change::ChangeBudget::default().policy_limits() {
+        records.push(compact_record("change.policy", &[
+            ("name", name.to_owned()),
+            ("default", maximum.map_or_else(|| "unbounded".to_owned(), |value| value.to_string())),
+            ("syntax", "change.policy name=NAME limit=unbounded|U64".to_owned()),
+            ("tx-syntax", "(policy NAME unbounded|U64)".to_owned()),
+            ("finite", "exact-including-zero-and-u64-max".to_owned()),
+        ])?);
+    }
     records.push(compact_record(
         "change.expression-block",
         &[
@@ -9375,17 +9250,17 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
     for (name, value, unit) in [
         (
             "maximum-input-bytes",
-            MAXIMUM_COMPACT_INPUT_BYTES as u64,
+            None,
             "bytes",
         ),
         (
             "maximum-structural-tokens",
-            MAXIMUM_STRUCTURAL_TOKENS as u64,
+            None,
             "tokens",
         ),
         (
             "maximum-structural-syntax-nodes",
-            MAXIMUM_STRUCTURAL_SYNTAX_NODES as u64,
+            None,
             "nodes",
         ),
         (
@@ -9397,17 +9272,17 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
         ),
         (
             "maximum-expanded-type-nodes",
-            crate::platform::change::MAXIMUM_CHANGE_AUTHORED_TYPE_NODES,
+            None,
             "nodes",
         ),
         (
             "maximum-combined-expression-depth",
-            crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH as u64,
+            Some(crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH as u64),
             "depth",
         ),
         (
             "maximum-type-depth",
-            crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH as u64,
+            Some(crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH as u64),
             "depth",
         ),
     ] {
@@ -9415,7 +9290,7 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
             "change.expression-limit",
             &[
                 ("name", name.to_owned()),
-                ("value", value.to_string()),
+                ("value", value.map_or_else(|| "unbounded".to_owned(), |value| value.to_string())),
                 ("unit", unit.to_owned()),
                 ("scope", "whole-request".to_owned()),
             ],
@@ -10347,24 +10222,12 @@ mod tests {
     }
 
     #[test]
-    fn cli_response_budgets_and_writer_failures_are_advertised() {
-        let bytes = limit_descriptors()
-            .iter()
-            .find(|descriptor| descriptor.name == "cli_response_bytes")
-            .expect("CLI response byte descriptor");
-        assert_eq!(bytes.value, MAXIMUM_CLI_RESPONSE_BYTES as u64);
-        assert_eq!(bytes.class, LimitClass::DeterministicOperationBudget);
-        assert_eq!(bytes.unit, LimitUnit::Bytes);
-        assert_eq!(bytes.override_policy, OverridePolicy::Fixed);
-
-        let records = limit_descriptors()
-            .iter()
-            .find(|descriptor| descriptor.name == "cli_response_records")
-            .expect("CLI response record descriptor");
-        assert_eq!(records.value, MAXIMUM_CLI_RESPONSE_RECORDS as u64);
-        assert_eq!(records.class, LimitClass::DeterministicOperationBudget);
-        assert_eq!(records.unit, LimitUnit::Records);
-        assert_eq!(records.override_policy, OverridePolicy::Fixed);
+    fn ordinary_cli_responses_are_unbounded_and_explicit_writer_failures_are_advertised() {
+        assert!(limit_descriptors().iter().all(|descriptor|
+            !matches!(descriptor.name, "cli_response_bytes" | "cli_response_records")));
+        let limits = crate::platform::control::CompactResponseLimits::default();
+        assert_eq!(limits.maximum_bytes, None);
+        assert_eq!(limits.maximum_records, None);
 
         for code in [
             "control_response_byte_budget",

@@ -449,7 +449,7 @@ fn scoped_link_reads_keep_cumulative_limits_cancellation_and_cleanup() {
                 .borrow_mut()
                 .as_mut()
                 .unwrap()
-                .remaining_work = allowance;
+                .remaining_work = Some(allowance);
             view.package_interface_owner_from_dependency(&f.dependency, f.owner)?;
             Ok(())
         });
@@ -638,4 +638,24 @@ fn scoped_link_reuse_preserves_native_immutable_bytes_and_actual_control_forward
     )
     .unwrap();
     assert_eq!(linked.artifact.bytes, expected.artifact.bytes);
+}
+
+#[test]
+fn link_reuse_default_and_finite_policy_keep_passive_overflow_separate() {
+    let mut reuse = LinkTransportReuse::default();
+    assert_eq!(reuse.remaining_work, None);
+    reuse.charge_work(usize::MAX).unwrap();
+    reuse.charge_work(1).unwrap();
+    assert_eq!(reuse.remaining_work, None);
+    if usize::BITS == 64 {
+        assert_eq!(reuse.observation.work_steps, u64::MAX);
+        assert!(reuse.observation.saturated);
+    }
+    for limit in [0, 1, usize::MAX] {
+        let mut exact = LinkTransportReuse { remaining_work: Some(limit), ..Default::default() };
+        exact.charge_work(limit).unwrap();
+        assert_eq!(exact.remaining_work, Some(0));
+        assert!(exact.charge_work(1).is_err());
+        assert_eq!(exact.remaining_work, Some(0));
+    }
 }

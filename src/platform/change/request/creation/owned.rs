@@ -87,20 +87,20 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
                 "associated inventory exceeds the canonical child limit",
             ));
         }
-        let count = u64::try_from(count).map_err(|_| associated_capacity())?;
-        let steps = count
-            .checked_mul(u64::from(count.checked_ilog2().unwrap_or(0)) + 2)
-            .ok_or_else(associated_capacity)?;
-        self.work.associated_inventory_steps = self
-            .work
-            .associated_inventory_steps
-            .checked_add(steps)
-            .ok_or_else(associated_capacity)?;
-        self.work
-            .associated_inventory_steps
-            .checked_add(self.work.effect_normalization_steps)
-            .ok_or_else(associated_capacity)?;
-        self.check_budget("associated inventory before allocation")
+        let count = count as u64;
+        let steps = crate::platform::change::BudgetCounter::product(
+            count, u64::from(count.checked_ilog2().unwrap_or(0)) + 2);
+        let mut total = self.work.validation_observation();
+        total.charge(steps, self.budget.validation.maximum_expression_steps,
+            "associated inventory before allocation", "validation_expression_steps")?;
+        let mut observed = crate::platform::change::BudgetCounter {
+            consumed: self.work.associated_inventory_steps,
+            saturated: self.work.associated_inventory_saturated,
+        };
+        observed.observe(steps);
+        self.work.associated_inventory_steps = observed.consumed;
+        self.work.associated_inventory_saturated = observed.saturated;
+        Ok(())
     }
 
     fn owned_contract_value(

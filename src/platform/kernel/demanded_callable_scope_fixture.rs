@@ -123,12 +123,12 @@ impl CallableClosureRead for Source {
     }
 }
 
-pub(super) fn analysis<'a>(read: &'a Source, work: &'a mut usize) -> Analysis<'a, Source> {
+pub(super) fn analysis<'a>(read: &'a Source, work: &'a mut ValidationWork) -> Analysis<'a, Source> {
     Analysis {
         read,
         work,
         maximum_work: Some(10_000_000),
-        maximum_metadata_bytes: MAXIMUM_ANALYSIS_BYTES,
+        maximum_metadata_bytes: Some(MAXIMUM_ANALYSIS_BYTES),
         observation: CallableFlowWork::default(),
         contexts: Vec::new(),
         indexes: BTreeMap::new(),

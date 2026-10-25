@@ -1,7 +1,7 @@
 //! Complete canonical reads for disposable declaration proposals, with the maintained aggregate
 //! definition admission. No historical authoring source or rendered inspection text is consumed.
 use super::*;
-use crate::platform::change::AuthoredReadFootprint;
+use crate::platform::change::{AuthoredReadFootprint, budget::BudgetCounter};
 use crate::platform::execution::ExecutionControl;
 use crate::platform::kernel::{self as k, OwnerRecord, TypeForm, TypeObjectDigest};
 use crate::platform::publication::{RepositoryDefinitionReader, RepositoryView};
@@ -25,7 +25,7 @@ pub(super) struct Reader<'a> {
     active_types: BTreeSet<TypeObjectDigest>,
     active_expressions: BTreeSet<ExpressionId>,
     interface_names: BTreeMap<PackageId, BTreeMap<OwnerKey, Name>>,
-    remaining_type_nodes: u64,
+    type_nodes: BudgetCounter,
     control: ExecutionControl,
     intent_reads: Option<AuthoredReadFootprint>,
     #[cfg(test)]
@@ -46,7 +46,7 @@ impl<'a> Reader<'a> {
             active_types: BTreeSet::new(),
             active_expressions: BTreeSet::new(),
             interface_names: BTreeMap::new(),
-            remaining_type_nodes: crate::platform::change::MAXIMUM_CHANGE_AUTHORED_TYPE_NODES,
+            type_nodes: BudgetCounter::default(),
             control,
             intent_reads: None,
             #[cfg(test)]
@@ -115,7 +115,7 @@ impl<'a> Reader<'a> {
         &mut self,
         owner: OwnerKey,
         kind: k::RelationKind,
-        maximum: usize,
+        maximum: Option<usize>,
     ) -> Result<Vec<k::RelationEdge>, Diagnostic> {
         self.check()?;
         // The maintained reader rejects truncated ranges before this guard is admitted.
@@ -159,13 +159,7 @@ impl<'a> Reader<'a> {
         depth: usize,
     ) -> Result<AuthoredType, Diagnostic> {
         self.check()?;
-        self.remaining_type_nodes = self.remaining_type_nodes.checked_sub(1).ok_or_else(|| {
-            Diagnostic::new(
-                DiagnosticClass::Resource,
-                "change_draft_capacity",
-                "canonical type expansion exceeds complete draft admission",
-            )
-        })?;
+        self.type_nodes.observe(BudgetCounter::exact(1));
         if depth > k::contract::MAXIMUM_TYPE_DEPTH || !self.active_types.insert(digest) {
             return Err(error(
                 "canonical type is cyclic or exceeds type-depth admission",
@@ -173,22 +167,13 @@ impl<'a> Reader<'a> {
         }
         if let Some(ty) = self.types.get(&digest) {
             let mut pending = vec![(ty, depth)];
-            let mut nodes = 0_u64;
+            let mut nodes = BudgetCounter::default();
             while let Some((ty, depth)) = pending.pop() {
                 self.check()?;
                 if depth > k::contract::MAXIMUM_TYPE_DEPTH {
                     return Err(error("expanded type exceeds type-depth admission"));
                 }
-                nodes = nodes
-                    .checked_add(1)
-                    .ok_or_else(|| error("type node accounting overflow"))?;
-                if nodes > self.remaining_type_nodes {
-                    return Err(Diagnostic::new(
-                        DiagnosticClass::Resource,
-                        "change_draft_capacity",
-                        "cached type expansion exceeds draft admission",
-                    ));
-                }
+                nodes.observe(BudgetCounter::exact(1));
                 use AuthoredType as T;
                 match ty {
                     T::Region { region } | T::RegionCap { region, .. } => {
@@ -225,7 +210,7 @@ impl<'a> Reader<'a> {
                     _ => {}
                 }
             }
-            self.remaining_type_nodes -= nodes;
+            self.type_nodes.observe(nodes);
             self.active_types.remove(&digest);
             return Ok(ty.clone());
         }
@@ -612,16 +597,7 @@ impl<'a> Reader<'a> {
         }
         let count =
             u64::try_from(count).map_err(|_| error("associated inventory count overflow"))?;
-        self.remaining_type_nodes =
-            self.remaining_type_nodes
-                .checked_sub(count)
-                .ok_or_else(|| {
-                    Diagnostic::new(
-                        DiagnosticClass::Resource,
-                        "change_draft_capacity",
-                        "associated inventory exceeds complete draft admission",
-                    )
-                })?;
+        self.type_nodes.observe(BudgetCounter::exact(count));
         Ok(())
     }
 
@@ -1409,7 +1385,7 @@ mod intent_read_tests {
         let draft = render_native_draft(
             &origin,
             &[function.into()],
-            4 * 1_048_576,
+            Some(4 * 1_048_576),
             ExecutionControl::uncancelled(),
         )
         .unwrap();
@@ -1455,7 +1431,7 @@ mod intent_read_tests {
         let draft = render_native_draft(
             &current,
             &[function.into()],
-            4 * 1_048_576,
+            Some(4 * 1_048_576),
             ExecutionControl::uncancelled(),
         )
         .unwrap();
@@ -1491,7 +1467,7 @@ mod intent_read_tests {
         let draft = render_native_draft(
             &view,
             &[target.into()],
-            4 * 1_048_576,
+            Some(4 * 1_048_576),
             ExecutionControl::uncancelled(),
         )
         .unwrap();
@@ -1505,7 +1481,7 @@ mod intent_read_tests {
                 target,
                 Some(k::RelationKind::HttpRouteTarget),
                 true,
-                crate::platform::change::MAXIMUM_AUTHORED_CHANGES,
+                None,
                 &[],
                 false,
             )

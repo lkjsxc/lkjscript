@@ -1120,14 +1120,14 @@ fn canonical_associated_growth_agrees_with_eager_and_demanded_production_decisio
         for eager in [false, true] {
             let mut work = 0;
             let result = if eager {
-                callable_flow::validate_snapshot_callable_closure_eager(
+                crate::platform::kernel::test_work::validate_snapshot_callable_closure_eager(
                     &[&fixture.source],
                     &|| Ok(()),
                     &mut work,
                     Some(contract::MAXIMUM_VALIDATION_WORK),
                 )
             } else {
-                callable_flow::validate_snapshot_callable_closure(
+                crate::platform::kernel::test_work::validate_snapshot_callable_closure(
                     &[&fixture.source],
                     &|| Ok(()),
                     &mut work,
@@ -1167,7 +1167,7 @@ fn canonical_associated_flow_capacity_cancellation_and_healthy_retry_keep_distin
             Ok(())
         };
         let mut work = 0;
-        let expected = callable_flow::validate_snapshot_callable_closure_with_limits(
+        let expected = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
             &[&fixture.source],
             &count,
             &mut work,
@@ -1183,7 +1183,7 @@ fn canonical_associated_flow_capacity_cancellation_and_healthy_retry_keep_distin
             (complete_work - 1, expected.metadata_bytes),
             (complete_work, expected.metadata_bytes - 1),
         ] {
-            let failure = callable_flow::validate_snapshot_callable_closure_with_limits(
+            let failure = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
                 &[&fixture.source],
                 &|| Ok(()),
                 &mut 0,
@@ -1208,7 +1208,7 @@ fn canonical_associated_flow_capacity_cancellation_and_healthy_retry_keep_distin
                 Ok(())
             }
         };
-        let failure = callable_flow::validate_snapshot_callable_closure_with_limits(
+        let failure = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
             &[&fixture.source],
             &cancel,
             &mut 0,
@@ -1220,7 +1220,7 @@ fn canonical_associated_flow_capacity_cancellation_and_healthy_retry_keep_distin
         assert_eq!(failure.class, DiagnosticClass::Cancelled);
         assert_eq!(failure.code, "canonical_flow_cancelled");
         let mut retry_work = 0;
-        let retry = callable_flow::validate_snapshot_callable_closure_with_limits(
+        let retry = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
             &[&fixture.source],
             &|| Ok(()),
             &mut retry_work,

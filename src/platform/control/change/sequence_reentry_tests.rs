@@ -89,7 +89,7 @@ impl Fixture {
             render_native_draft(
                 &self.view(),
                 &[self.module.into()],
-                4 * 1_048_576,
+                Some(4 * 1_048_576),
                 ExecutionControl::uncancelled(),
             )
             .unwrap(),
@@ -317,12 +317,12 @@ fn cached_owned_sequence_expansion_admits_nested_products_and_choices_completely
     let DeclarationPayload::Function(function) = record.payload else {
         panic!("pop function");
     };
-    reader.ty(function.result.ty).unwrap();
-    reader.remaining_type_nodes = 3;
-    assert_eq!(
-        reader.ty(function.result.ty).unwrap_err().code,
-        "change_draft_capacity"
-    );
+    let expected = reader.ty(function.result.ty).unwrap();
+    assert!(reader.type_nodes.consumed > 3);
+    reader.type_nodes = crate::platform::change::budget::BudgetCounter::exact(u64::MAX - 3);
+    assert_eq!(reader.ty(function.result.ty).unwrap(), expected);
+    assert_eq!(reader.type_nodes.consumed, u64::MAX);
+    assert!(reader.type_nodes.saturated);
 }
 
 #[test]

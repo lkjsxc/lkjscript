@@ -2,6 +2,7 @@
 //! the region owner checks live activation custody and every relative offset.
 use super::super::region_value::{self, Layout};
 use super::*;
+use super::super::value::RawValue;
 use crate::platform::compiler::unit::RegionInstruction as I;
 use crate::platform::kernel::RegionMode;
 
@@ -34,10 +35,11 @@ impl Machine<'_> {
                 ) {
                     return Err(region_value::error());
                 }
-                let NormalizedValue::I64(capacity) = self.pop()?.into_raw() else {
+                let capacity = RawValue::new(self.pop()?.into_raw());
+                let NormalizedValue::I64(capacity) = capacity.as_raw() else {
                     return Err(region_value::error());
                 };
-                let capacity = u32::try_from(capacity).map_err(|_| region_value::error())?;
+                let capacity = u64::try_from(*capacity).map_err(|_| region_value::error())?;
                 if self.region_scopes.len() == self.region_scopes.capacity() {
                     self.charge_allocation(
                         ((self.region_scopes.len() + 1)
@@ -82,12 +84,13 @@ impl Machine<'_> {
                 arena.close(identity)
             }
             I::Offset => {
-                let NormalizedValue::RegionPointer { pointer, .. } = self.pop()?.into_raw() else {
+                let value = RawValue::new(self.pop()?.into_raw());
+                let NormalizedValue::RegionPointer { pointer, .. } = value.as_raw() else {
                     return Err(region_value::error());
                 };
                 let value = CheckedValue::scalar(
                     self.program,
-                    NormalizedValue::I64(i64::from(pointer.offset())),
+                    NormalizedValue::I64(i64::try_from(pointer.offset()).map_err(|_| region_value::error())?),
                 )?;
                 self.push(value)
             }
@@ -161,7 +164,7 @@ impl Machine<'_> {
                         )
                     })?;
                 let value = if matches!(operation, I::Alloc { .. } | I::Write { .. }) {
-                    Some(self.pop()?.into_raw())
+                    Some(RawValue::new(self.pop()?.into_raw()))
                 } else {
                     None
                 };
@@ -169,7 +172,7 @@ impl Machine<'_> {
                     operation,
                     I::Read { .. } | I::Write { .. } | I::Resolve { .. }
                 ) {
-                    Some(self.pop()?.into_raw())
+                    Some(RawValue::new(self.pop()?.into_raw()))
                 } else {
                     None
                 };
@@ -200,7 +203,7 @@ impl Machine<'_> {
                 let (raw, result_type) = match operation {
                     I::Alloc { .. } => {
                         let bytes = layout.encode(
-                            value.as_ref().ok_or_else(region_value::error)?,
+                            value.as_ref().ok_or_else(region_value::error)?.as_raw(),
                             identity,
                             control,
                             &mut reserve,
@@ -216,20 +219,20 @@ impl Machine<'_> {
                         )
                     }
                     I::Read { .. } | I::Write { .. } => {
-                        let Some(NormalizedValue::RegionPointer { ty, pointer }) = input else {
+                        let Some(NormalizedValue::RegionPointer { ty, pointer }) = input.as_ref().map(RawValue::as_raw) else {
                             return Err(region_value::error());
                         };
-                        if ty != pointer_type {
+                        if *ty != pointer_type {
                             return Err(region_value::error());
                         }
                         if matches!(operation, I::Write { .. }) {
                             let bytes = layout.encode(
-                                value.as_ref().ok_or_else(region_value::error)?,
+                                value.as_ref().ok_or_else(region_value::error)?.as_raw(),
                                 identity,
                                 control,
                                 &mut reserve,
                             )?;
-                            arena.write(token, domain, layout.storage, pointer, &bytes, control)?;
+                            arena.write(token, domain, layout.storage, *pointer, &bytes, control)?;
                             let value = CheckedValue::scalar(self.program, NormalizedValue::Unit)?;
                             return self.push(value);
                         }
@@ -238,7 +241,7 @@ impl Machine<'_> {
                                 token,
                                 domain,
                                 layout.storage,
-                                pointer,
+                                *pointer,
                                 control,
                                 |bytes| layout.decode(bytes, identity, control, &mut reserve),
                             )?,
@@ -246,10 +249,10 @@ impl Machine<'_> {
                         )
                     }
                     I::Resolve { .. } => {
-                        let Some(NormalizedValue::I64(offset)) = input else {
+                        let Some(NormalizedValue::I64(offset)) = input.as_ref().map(RawValue::as_raw) else {
                             return Err(region_value::error());
                         };
-                        let offset = u32::try_from(offset).map_err(|_| region_value::error())?;
+                        let offset = u64::try_from(*offset).map_err(|_| region_value::error())?;
                         let pointer =
                             arena.resolve(token, domain, layout.storage, offset, control)?;
                         (

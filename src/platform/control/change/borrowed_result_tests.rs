@@ -112,7 +112,7 @@ fn borrowed_result_drafts_reenter_and_literal_edits_keep_provenance() {
         render_native_draft(
             &before,
             &[module.into()],
-            4 * 1_048_576,
+            Some(4 * 1_048_576),
             ExecutionControl::uncancelled(),
         )
         .unwrap(),

@@ -9,8 +9,7 @@ use crate::platform::kernel::{
     DeclarationPayload, EncodedOwnerKey, ExpressionOperation, ExpressionValidationLimits,
     ImplementationName, KernelSnapshot, LocalValueReference, OwnerKey, OwnerRecord, ParameterUse,
     TypeForm, TypeObject, decode_owner_binding, encode_owner, encode_owner_binding,
-    encode_type_object, validate_affine_roots_with_limits, validate_expression_roots_with_limits,
-};
+    encode_type_object, };
 use crate::platform::persistent_map::{MapRoot, MapWork, MemoryPageStore, PersistentMap};
 use crate::platform::publication::GraphRepository;
 use crate::platform::semantic_id::DeclarationId;
@@ -210,14 +209,14 @@ fn rehashed_conflicting_runtime_body_cannot_hide_untaken_double_consumption() {
 
     // The malformed untaken branch remains type-correct, but independently fails ownership.
     let limits = ExpressionValidationLimits {
-        maximum_steps: crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
-        maximum_diagnostics: 1,
+        maximum_steps: Some(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK),
+        maximum_diagnostics: Some(1),
     };
     let mut diagnostics = Vec::new();
-    validate_expression_roots_with_limits(&invalid, [owner], &mut diagnostics, &mut 0, limits)
+    crate::platform::kernel::test_work::validate_expression_roots_with_limits(&invalid, [owner], &mut diagnostics, &mut 0, limits)
         .unwrap();
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
-    validate_affine_roots_with_limits(&invalid, [owner], &mut diagnostics, &mut 0, limits).unwrap();
+    crate::platform::kernel::test_work::validate_affine_roots_with_limits(&invalid, [owner], &mut diagnostics, &mut 0, limits).unwrap();
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     assert_eq!(diagnostics[0].code, "kernel_buffer_ownership");
 

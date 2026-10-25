@@ -60,24 +60,23 @@ fn relative_paths_and_process_lifecycles_retain_the_process_boundary() {
 }
 
 #[test]
-fn an_undeliverable_refusal_cannot_be_reported_as_success() {
+fn refusal_projection_preserves_large_diagnostics_and_empty_refusal_is_infrastructure() {
     use lkjscript::platform::contract::exit_status_for;
     use lkjscript::platform::{Diagnostic, DiagnosticClass};
-    let diagnostic = Diagnostic::new(
-        DiagnosticClass::Semantic,
-        "oversized_test_diagnostic",
-        "x".repeat(MAXIMUM_CLI_RESPONSE_BYTES + 1),
-    );
-    for diagnostics in [vec![diagnostic], Vec::new()] {
-        let output = semantic_cli::failure("change", &diagnostics);
-        assert!(!output.success);
-        assert_eq!(
-            output.code,
-            Some(i32::from(exit_status_for(DiagnosticClass::Infrastructure)))
-        );
-        assert!(output.stdout.is_empty());
-        assert!(output.stderr.is_empty());
-    }
+    let message = "x".repeat(4 * 1024 * 1024 + 1);
+    let diagnostic = Diagnostic::new(DiagnosticClass::Semantic, "large_test_diagnostic", &message);
+    let output = semantic_cli::failure("change", &[diagnostic]);
+    assert!(!output.success);
+    assert_eq!(output.code, Some(i32::from(exit_status_for(DiagnosticClass::Semantic))));
+    assert!(output.stderr.is_empty());
+    let records = parse_records("large refusal", &output.stdout).unwrap();
+    assert_eq!(compact_field(compact_record(&records, "diagnostic"), "message"), Some(message.as_str()));
+
+    let empty = semantic_cli::failure("change", &[]);
+    assert!(!empty.success);
+    assert_eq!(empty.code, Some(i32::from(exit_status_for(DiagnosticClass::Infrastructure))));
+    assert!(empty.stdout.is_empty());
+    assert!(empty.stderr.is_empty());
 }
 
 #[test]

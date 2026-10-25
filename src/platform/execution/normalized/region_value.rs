@@ -1,27 +1,42 @@
-//! Fixed cell representation. Both evaluators supply their independently admitted
-//! type inventory. This module grants neither type nor capability authority.
-use super::value::{NormalizedRecord, NormalizedValue, ValueOrigin};
+//! Fixed cell representation. Both evaluators supply independently admitted type
+//! inventories. Flat layout nodes and explicit worklists keep the whole codec
+//! lifecycle independent of the host call stack.
+use super::value::{NormalizedRecord, NormalizedValue, RawValue, ValueOrigin};
 use crate::platform::execution::{
     ExecutionControl, ExecutionError,
     region::{RegionLayout, runtime},
 };
 use crate::platform::kernel::{Name, TypeForm, TypeObject, TypeObjectDigest};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 pub(super) type Arena = runtime::Arena<ValueOrigin>;
 
 pub(super) struct Layout {
     pub(super) storage: RegionLayout,
-    size: usize,
-    form: Form,
+    nodes: Vec<Node>,
+    root: usize,
 }
+
+struct Node {
+    form: Form,
+    size: usize,
+    alignment: usize,
+    key: [u8; 32],
+}
+
+struct Field {
+    name: Name,
+    offset: usize,
+    node: usize,
+}
+
 enum Form {
     Unit,
     Bool,
     I64,
     Pointer(TypeObjectDigest),
-    Record(Vec<(Name, usize, Layout)>),
+    Record(Vec<Field>),
 }
 
 pub(super) fn error() -> ExecutionError {
@@ -32,40 +47,80 @@ pub(super) fn error() -> ExecutionError {
     )
 }
 
+fn storage_error() -> ExecutionError {
+    ExecutionError::resource(
+        "normalized_region_storage",
+        "region codec cannot represent or reserve its work storage",
+    )
+}
+
+fn reserve_slots<T>(
+    values: &mut Vec<T>,
+    additional: usize,
+    control: &ExecutionControl,
+    reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+) -> Result<(), ExecutionError> {
+    control.check()?;
+    let required = values.len().checked_add(additional).ok_or_else(storage_error)?;
+    if required <= values.capacity() {
+        return Ok(());
+    }
+    std::alloc::Layout::array::<T>(required).map_err(|_| storage_error())?;
+    let capacity = required.checked_next_power_of_two()
+        .filter(|capacity| std::alloc::Layout::array::<T>(*capacity).is_ok())
+        .unwrap_or(required);
+    let bytes = capacity.checked_mul(std::mem::size_of::<T>())
+        .and_then(|bytes| u64::try_from(bytes).ok()).ok_or_else(storage_error)?;
+    reserve(bytes)?;
+    control.check()?;
+    values.try_reserve_exact(capacity - values.len()).map_err(|_| storage_error())
+}
+
+fn push<T>(
+    values: &mut Vec<T>,
+    value: T,
+    control: &ExecutionControl,
+    reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+) -> Result<(), ExecutionError> {
+    reserve_slots(values, 1, control, reserve)?;
+    values.push(value);
+    Ok(())
+}
+
 pub(super) fn check_plain(
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
     value: &NormalizedValue,
     ty: TypeObjectDigest,
     control: &ExecutionControl,
-    depth: usize,
 ) -> Result<(), ExecutionError> {
     control.check()?;
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(error());
-    }
-    match (&types.get(&ty).ok_or_else(error)?.form, value) {
-        (TypeForm::Unit, NormalizedValue::Unit)
-        | (TypeForm::Bool, NormalizedValue::Bool(_))
-        | (TypeForm::I64, NormalizedValue::I64(_)) => Ok(()),
-        (TypeForm::RelPtr { .. }, NormalizedValue::RegionPointer { ty: actual, .. })
-            if *actual == ty =>
-        {
-            Ok(())
-        }
-        (
-            TypeForm::StructuralRecord { fields },
-            NormalizedValue::Record(NormalizedRecord::Structural { fields: values }),
-        ) if fields.len() == values.len() => {
-            for (field, (name, value)) in fields.iter().zip(values.iter()) {
-                if field.name != *name {
-                    return Err(error());
+    let mut pending = Vec::new();
+    pending.try_reserve(1).map_err(|_| storage_error())?;
+    pending.push((ty, value));
+    while let Some((ty, value)) = pending.pop() {
+        control.check()?;
+        match (&types.get(&ty).ok_or_else(error)?.form, value) {
+            (TypeForm::Unit, NormalizedValue::Unit)
+            | (TypeForm::Bool, NormalizedValue::Bool(_))
+            | (TypeForm::I64, NormalizedValue::I64(_)) => {}
+            (TypeForm::RelPtr { .. }, NormalizedValue::RegionPointer { ty: actual, .. })
+                if *actual == ty => {}
+            (
+                TypeForm::StructuralRecord { fields },
+                NormalizedValue::Record(NormalizedRecord::Structural { fields: values }),
+            ) if fields.len() == values.len() => {
+                pending.try_reserve(fields.len()).map_err(|_| storage_error())?;
+                for (field, (name, value)) in fields.iter().zip(values.iter()).rev() {
+                    if field.name != *name {
+                        return Err(error());
+                    }
+                    pending.push((field.ty, value));
                 }
-                check_plain(types, value, field.ty, control, depth + 1)?;
             }
-            Ok(())
+            _ => return Err(error()),
         }
-        _ => Err(error()),
     }
+    Ok(())
 }
 
 impl Layout {
@@ -76,106 +131,108 @@ impl Layout {
         control: &ExecutionControl,
         reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
-        Self::at(types, ty, region, control, reserve, 0)
-    }
-
-    fn at(
-        types: &BTreeMap<TypeObjectDigest, TypeObject>,
-        ty: TypeObjectDigest,
-        region: TypeObjectDigest,
-        control: &ExecutionControl,
-        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
-        depth: usize,
-    ) -> Result<Self, ExecutionError> {
         control.check()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+        enum Task { Enter(TypeObjectDigest), Record(TypeObjectDigest, usize) }
+        let mut pending = Vec::new();
+        let mut completed = Vec::new();
+        let mut active = HashSet::new();
+        let mut known = HashMap::new();
+        let mut nodes = Vec::new();
+        push(&mut pending, Task::Enter(ty), control, reserve)?;
+        while let Some(task) = pending.pop() {
+            control.check()?;
+            let (ty, node) = match task {
+                Task::Enter(ty) => {
+                    if let Some(&node) = known.get(&ty) {
+                        push(&mut completed, node, control, reserve)?;
+                        continue;
+                    }
+                    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.region.cell.v2");
+                    let (form, size, alignment) = match &types.get(&ty).ok_or_else(error)?.form {
+                        TypeForm::Unit => {
+                            hasher.update(&[0]);
+                            (Form::Unit, 0, 1)
+                        }
+                        TypeForm::Bool => {
+                            hasher.update(&[1]);
+                            (Form::Bool, 1, 1)
+                        }
+                        TypeForm::I64 => {
+                            hasher.update(&[2]);
+                            (Form::I64, 8, 8)
+                        }
+                        TypeForm::RelPtr { region: actual, item } if *actual == region => {
+                            hasher.update(&[3]);
+                            fingerprint(types, *item, region, &mut hasher, control, reserve)?;
+                            (Form::Pointer(ty), 8, 8)
+                        }
+                        TypeForm::StructuralRecord { fields } => {
+                            active.try_reserve(1).map_err(|_| storage_error())?;
+                            if !active.insert(ty) {
+                                return Err(error());
+                            }
+                            let first = completed.len();
+                            push(&mut pending, Task::Record(ty, first), control, reserve)?;
+                            reserve_slots(&mut pending, fields.len(), control, reserve)?;
+                            for field in fields.iter().rev() {
+                                pending.push(Task::Enter(field.ty));
+                            }
+                            continue;
+                        }
+                        _ => return Err(error()),
+                    };
+                    (ty, Node { form, size, alignment, key: *hasher.finalize().as_bytes() })
+                }
+                Task::Record(ty, first) => {
+                    let TypeForm::StructuralRecord { fields } =
+                        &types.get(&ty).ok_or_else(error)?.form else { return Err(error()); };
+                    if completed.len().checked_sub(first) != Some(fields.len()) {
+                        return Err(error());
+                    }
+                    let mut hasher = blake3::Hasher::new_derive_key("lkjscript.region.cell.v2");
+                    hasher.update(&[4]);
+                    hasher.update(&(fields.len() as u64).to_le_bytes());
+                    let mut entries = Vec::new();
+                    reserve_slots(&mut entries, fields.len(), control, reserve)?;
+                    let mut size = 0usize;
+                    let mut alignment = 1usize;
+                    for (field, &node) in fields.iter().zip(&completed[first..]) {
+                        let child: &Node = nodes.get(node).ok_or_else(error)?;
+                        alignment = alignment.max(child.alignment);
+                        size = align_up(size, child.alignment)?;
+                        hasher.update(&(field.name.as_str().len() as u64).to_le_bytes());
+                        hasher.update(field.name.as_str().as_bytes());
+                        hasher.update(&child.key);
+                        reserve(field.name.as_str().len() as u64)?;
+                        control.check()?;
+                        entries.push(Field { name: field.name.clone(), offset: size, node });
+                        size = size.checked_add(child.size).ok_or_else(storage_error)?;
+                    }
+                    completed.truncate(first);
+                    active.remove(&ty);
+                    (ty, Node {
+                        form: Form::Record(entries),
+                        size: align_up(size, alignment)?,
+                        alignment,
+                        key: *hasher.finalize().as_bytes(),
+                    })
+                }
+            };
+            let index = nodes.len();
+            push(&mut nodes, node, control, reserve)?;
+            known.try_reserve(1).map_err(|_| storage_error())?;
+            known.insert(ty, index);
+            push(&mut completed, index, control, reserve)?;
+        }
+        if completed.len() != 1 {
             return Err(error());
         }
-        let mut hasher = blake3::Hasher::new_derive_key("lkjscript.region.cell.v1");
-        let (form, size, alignment) = match &types.get(&ty).ok_or_else(error)?.form {
-            TypeForm::Unit => {
-                hasher.update(&[0]);
-                (Form::Unit, 0, 1)
-            }
-            TypeForm::Bool => {
-                hasher.update(&[1]);
-                (Form::Bool, 1, 1)
-            }
-            TypeForm::I64 => {
-                hasher.update(&[2]);
-                (Form::I64, 8, 8)
-            }
-            TypeForm::RelPtr {
-                region: actual,
-                item,
-            } if *actual == region => {
-                hasher.update(&[3]);
-                let mut remaining = super::value::MAXIMUM_ADMISSION_ITEMS;
-                fingerprint(
-                    types,
-                    *item,
-                    region,
-                    &mut hasher,
-                    &mut remaining,
-                    control,
-                    0,
-                )?;
-                (Form::Pointer(ty), 4, 4)
-            }
-            TypeForm::StructuralRecord { fields } => {
-                hasher.update(&[4]);
-                hasher.update(&(fields.len() as u64).to_le_bytes());
-                reserve((fields.len() * std::mem::size_of::<(Name, usize, Layout)>()) as u64)?;
-                control.check()?;
-                let mut entries = Vec::new();
-                entries
-                    .try_reserve_exact(fields.len())
-                    .map_err(|_| error())?;
-                let mut size = 0usize;
-                let mut alignment = 1;
-                for field in fields {
-                    let layout = Self::at(types, field.ty, region, control, reserve, depth + 1)?;
-                    let align = layout.storage_alignment();
-                    alignment = alignment.max(align);
-                    size = align_up(size, align)?;
-                    hasher.update(&(field.name.as_str().len() as u64).to_le_bytes());
-                    hasher.update(field.name.as_str().as_bytes());
-                    hasher.update(&layout.storage_key());
-                    reserve(field.name.as_str().len() as u64)?;
-                    let end = size.checked_add(layout.size).ok_or_else(error)?;
-                    entries.push((field.name.clone(), size, layout));
-                    size = end;
-                }
-                (Form::Record(entries), align_up(size, alignment)?, alignment)
-            }
-            _ => return Err(error()),
-        };
-        let storage = RegionLayout::new(
-            *hasher.finalize().as_bytes(),
-            u32::try_from(size).map_err(|_| error())?,
-            alignment as u32,
-        )?;
-        Ok(Self {
-            storage,
-            size,
-            form,
-        })
-    }
-
-    fn storage_alignment(&self) -> usize {
-        match &self.form {
-            Form::Unit | Form::Bool => 1,
-            Form::I64 => 8,
-            Form::Pointer(_) => 4,
-            Form::Record(fields) => fields
-                .iter()
-                .map(|(_, _, layout)| layout.storage_alignment())
-                .max()
-                .unwrap_or(1),
-        }
-    }
-    fn storage_key(&self) -> [u8; 32] {
-        self.storage.key()
+        let root = completed[0];
+        let node = &nodes[root];
+        let storage = RegionLayout::new(node.key,
+            u64::try_from(node.size).map_err(|_| storage_error())?,
+            u64::try_from(node.alignment).map_err(|_| storage_error())?)?;
+        Ok(Self { storage, nodes, root })
     }
 
     pub(super) fn encode(
@@ -185,55 +242,41 @@ impl Layout {
         control: &ExecutionControl,
         reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<Vec<u8>, ExecutionError> {
-        reserve(self.size as u64)?;
+        control.check()?;
+        let size = self.nodes[self.root].size;
+        reserve(size as u64)?;
         control.check()?;
         let mut bytes = Vec::new();
-        bytes.try_reserve_exact(self.size).map_err(|_| error())?;
-        bytes.resize(self.size, 0);
-        self.write(value, identity, &mut bytes, control)?;
-        Ok(bytes)
-    }
-
-    fn write(
-        &self,
-        value: &NormalizedValue,
-        identity: runtime::Identity,
-        bytes: &mut [u8],
-        control: &ExecutionControl,
-    ) -> Result<(), ExecutionError> {
-        control.check()?;
-        match (&self.form, value) {
-            (Form::Unit, NormalizedValue::Unit) => {}
-            (Form::Bool, NormalizedValue::Bool(value)) => bytes[0] = u8::from(*value),
-            (Form::I64, NormalizedValue::I64(value)) => bytes.copy_from_slice(&value.to_le_bytes()),
-            (
-                Form::Pointer(ty),
-                NormalizedValue::RegionPointer {
-                    ty: actual,
-                    pointer,
-                },
-            ) if ty == actual && pointer.belongs_to(identity) => {
-                bytes.copy_from_slice(&pointer.offset().to_le_bytes())
-            }
-            (
-                Form::Record(fields),
-                NormalizedValue::Record(NormalizedRecord::Structural { fields: values }),
-            ) if fields.len() == values.len() => {
-                for ((name, offset, layout), (actual, value)) in fields.iter().zip(values.iter()) {
-                    if name != actual {
-                        return Err(error());
+        bytes.try_reserve_exact(size).map_err(|_| storage_error())?;
+        bytes.resize(size, 0);
+        let mut pending = Vec::new();
+        push(&mut pending, (self.root, value, 0usize), control, reserve)?;
+        while let Some((node, value, offset)) = pending.pop() {
+            control.check()?;
+            let node = self.nodes.get(node).ok_or_else(error)?;
+            let end = offset.checked_add(node.size).ok_or_else(error)?;
+            let output = bytes.get_mut(offset..end).ok_or_else(error)?;
+            match (&node.form, value) {
+                (Form::Unit, NormalizedValue::Unit) => {}
+                (Form::Bool, NormalizedValue::Bool(value)) => output[0] = u8::from(*value),
+                (Form::I64, NormalizedValue::I64(value)) => output.copy_from_slice(&value.to_le_bytes()),
+                (Form::Pointer(ty), NormalizedValue::RegionPointer { ty: actual, pointer })
+                    if ty == actual && pointer.belongs_to(identity) => {
+                        output.copy_from_slice(&pointer.offset().to_le_bytes());
                     }
-                    layout.write(
-                        value,
-                        identity,
-                        &mut bytes[*offset..*offset + layout.size],
-                        control,
-                    )?;
-                }
+                (Form::Record(fields), NormalizedValue::Record(NormalizedRecord::Structural { fields: values }))
+                    if fields.len() == values.len() => {
+                        reserve_slots(&mut pending, fields.len(), control, reserve)?;
+                        for (field, (name, value)) in fields.iter().zip(values.iter()).rev() {
+                            if field.name != *name { return Err(error()); }
+                            let child_offset = offset.checked_add(field.offset).ok_or_else(error)?;
+                            pending.push((field.node, value, child_offset));
+                        }
+                    }
+                _ => return Err(error()),
             }
-            _ => return Err(error()),
         }
-        Ok(())
+        Ok(bytes)
     }
 
     pub(super) fn decode(
@@ -243,60 +286,75 @@ impl Layout {
         control: &ExecutionControl,
         reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<NormalizedValue, ExecutionError> {
+        enum Task { Read(usize, usize), Record(usize, usize) }
         control.check()?;
-        if bytes.len() != self.size {
-            return Err(error());
-        }
-        Ok(match &self.form {
-            Form::Unit => NormalizedValue::Unit,
-            Form::Bool => NormalizedValue::Bool(match bytes[0] {
-                0 => false,
-                1 => true,
-                _ => return Err(error()),
-            }),
-            Form::I64 => {
-                NormalizedValue::I64(i64::from_le_bytes(bytes.try_into().map_err(|_| error())?))
-            }
-            Form::Pointer(ty) => NormalizedValue::RegionPointer {
-                ty: *ty,
-                pointer: runtime::Pointer::in_region(
-                    identity,
-                    u32::from_le_bytes(bytes.try_into().map_err(|_| error())?),
-                ),
-            },
-            Form::Record(fields) => {
-                reserve(
-                    (fields.len() * std::mem::size_of::<(Name, NormalizedValue)>()
-                        + std::mem::size_of::<Vec<(Name, NormalizedValue)>>()
-                        + 2 * std::mem::size_of::<usize>()) as u64,
-                )?;
-                control.check()?;
-                let mut values = Vec::new();
-                values
-                    .try_reserve_exact(fields.len())
-                    .map_err(|_| error())?;
-                for (name, offset, layout) in fields {
-                    reserve(name.as_str().len() as u64)?;
-                    let value = layout.decode(
-                        &bytes[*offset..*offset + layout.size],
-                        identity,
-                        control,
-                        reserve,
-                    )?;
-                    values.push((name.clone(), value));
+        if bytes.len() != self.nodes[self.root].size { return Err(error()); }
+        let mut pending = Vec::new();
+        // Guards release even partially decoded deep values iteratively on error.
+        let mut values: Vec<RawValue> = Vec::new();
+        push(&mut pending, Task::Read(self.root, 0), control, reserve)?;
+        while let Some(task) = pending.pop() {
+            control.check()?;
+            let value = match task {
+                Task::Read(index, offset) => {
+                    let node = self.nodes.get(index).ok_or_else(error)?;
+                    let end = offset.checked_add(node.size).ok_or_else(error)?;
+                    let input = bytes.get(offset..end).ok_or_else(error)?;
+                    match &node.form {
+                        Form::Unit => NormalizedValue::Unit,
+                        Form::Bool => NormalizedValue::Bool(match input.first() {
+                            Some(0) => false,
+                            Some(1) => true,
+                            _ => return Err(error()),
+                        }),
+                        Form::I64 => NormalizedValue::I64(i64::from_le_bytes(input.try_into().map_err(|_| error())?)),
+                        Form::Pointer(ty) => NormalizedValue::RegionPointer {
+                            ty: *ty,
+                            pointer: runtime::Pointer::in_region(identity,
+                                u64::from_le_bytes(input.try_into().map_err(|_| error())?)),
+                        },
+                        Form::Record(fields) => {
+                            let first = values.len();
+                            push(&mut pending, Task::Record(index, first), control, reserve)?;
+                            reserve_slots(&mut pending, fields.len(), control, reserve)?;
+                            for field in fields.iter().rev() {
+                                pending.push(Task::Read(field.node,
+                                    offset.checked_add(field.offset).ok_or_else(error)?));
+                            }
+                            continue;
+                        }
+                    }
                 }
-                NormalizedValue::Record(NormalizedRecord::Structural {
-                    fields: Arc::new(values),
-                })
-            }
-        })
+                Task::Record(index, first) => {
+                    let Form::Record(fields) = &self.nodes.get(index).ok_or_else(error)?.form
+                        else { return Err(error()); };
+                    if values.len().checked_sub(first) != Some(fields.len()) { return Err(error()); }
+                    let metadata = std::mem::size_of::<Vec<(Name, NormalizedValue)>>()
+                        .checked_add(2 * std::mem::size_of::<usize>()).ok_or_else(storage_error)?;
+                    reserve(metadata as u64)?;
+                    let mut record = Vec::new();
+                    reserve_slots(&mut record, fields.len(), control, reserve)?;
+                    for field in fields {
+                        reserve(field.name.as_str().len() as u64)?;
+                    }
+                    control.check()?;
+                    // All fallible work finishes before moving children out of guards.
+                    for (field, value) in fields.iter().zip(values.drain(first..)) {
+                        record.push((field.name.clone(), value.into_raw()));
+                    }
+                    NormalizedValue::Record(NormalizedRecord::Structural { fields: Arc::new(record) })
+                }
+            };
+            push(&mut values, RawValue::new(value), control, reserve)?;
+        }
+        if values.len() != 1 { return Err(error()); }
+        values.pop().map(RawValue::into_raw).ok_or_else(error)
     }
 }
 
 fn align_up(size: usize, alignment: usize) -> Result<usize, ExecutionError> {
     size.checked_add(alignment - 1)
-        .map(|size| size & !(alignment - 1))
-        .ok_or_else(error)
+        .map(|size| size & !(alignment - 1)).ok_or_else(storage_error)
 }
 
 fn fingerprint(
@@ -304,107 +362,93 @@ fn fingerprint(
     ty: TypeObjectDigest,
     region: TypeObjectDigest,
     hasher: &mut blake3::Hasher,
-    remaining: &mut u64,
     control: &ExecutionControl,
-    depth: usize,
+    reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
 ) -> Result<(), ExecutionError> {
     control.check()?;
-    *remaining = remaining.checked_sub(1).ok_or_else(error)?;
-    if ty == region {
-        hasher.update(&[0]);
-        return Ok(());
+    enum Task {
+        Type(TypeObjectDigest, TypeObjectDigest),
+        Finish(TypeObjectDigest, TypeObjectDigest, usize),
     }
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(error());
-    }
-    let object = types.get(&ty).ok_or_else(error)?;
-    match &object.form {
-        TypeForm::RelPtr { region, item } | TypeForm::RegionSlice { region, item } => {
-            hasher.update(&[if matches!(object.form, TypeForm::RelPtr { .. }) {
-                1
-            } else {
-                2
-            }]);
-            fingerprint(types, *item, *region, hasher, remaining, control, depth + 1)?;
-        }
-        TypeForm::StructuralRecord { fields } => {
-            hasher.update(&[3]);
-            hasher.update(&(fields.len() as u64).to_le_bytes());
-            for field in fields {
-                hasher.update(&(field.name.as_str().len() as u64).to_le_bytes());
-                hasher.update(field.name.as_str().as_bytes());
-                fingerprint(
-                    types,
-                    field.ty,
-                    region,
-                    hasher,
-                    remaining,
-                    control,
-                    depth + 1,
-                )?;
+    let mut pending = Vec::new();
+    let mut active = HashSet::new();
+    let mut completed: Vec<[u8; 32]> = Vec::new();
+    let mut known: HashMap<(TypeObjectDigest, TypeObjectDigest), [u8; 32]> = HashMap::new();
+    push(&mut pending, Task::Type(ty, region), control, reserve)?;
+    while let Some(task) = pending.pop() {
+        control.check()?;
+        let (ty, region, key) = match task {
+            Task::Type(ty, region) => {
+                if let Some(&key) = known.get(&(ty, region)) {
+                    push(&mut completed, key, control, reserve)?;
+                    continue;
+                }
+                let mut node = blake3::Hasher::new_derive_key("lkjscript.region.type.v2");
+                if ty == region {
+                    node.update(&[0]);
+                } else {
+                    let object = types.get(&ty).ok_or_else(error)?;
+                    match &object.form {
+                        TypeForm::RelPtr { region: next_region, item }
+                        | TypeForm::RegionSlice { region: next_region, item } => {
+                            active.try_reserve(1).map_err(|_| storage_error())?;
+                            if !active.insert((ty, region)) { return Err(error()); }
+                            push(&mut pending, Task::Finish(ty, region, completed.len()), control, reserve)?;
+                            push(&mut pending, Task::Type(*item, *next_region), control, reserve)?;
+                            continue;
+                        }
+                        TypeForm::StructuralRecord { fields } => {
+                            active.try_reserve(1).map_err(|_| storage_error())?;
+                            if !active.insert((ty, region)) { return Err(error()); }
+                            push(&mut pending, Task::Finish(ty, region, completed.len()), control, reserve)?;
+                            reserve_slots(&mut pending, fields.len(), control, reserve)?;
+                            for field in fields.iter().rev() {
+                                pending.push(Task::Type(field.ty, region));
+                            }
+                            continue;
+                        }
+                        TypeForm::Unit => { node.update(&[4]); }
+                        TypeForm::Bool => { node.update(&[5]); }
+                        TypeForm::I64 => { node.update(&[6]); }
+                        _ => return Err(error()),
+                    }
+                }
+                (ty, region, *node.finalize().as_bytes())
             }
-        }
-        TypeForm::Unit => {
-            hasher.update(&[4]);
-        }
-        TypeForm::Bool => {
-            hasher.update(&[5]);
-        }
-        TypeForm::I64 => {
-            hasher.update(&[6]);
-        }
-        _ => return Err(error()),
+            Task::Finish(ty, region, first) => {
+                let object = types.get(&ty).ok_or_else(error)?;
+                let mut node = blake3::Hasher::new_derive_key("lkjscript.region.type.v2");
+                match &object.form {
+                    TypeForm::RelPtr { .. } | TypeForm::RegionSlice { .. } => {
+                        if completed.len().checked_sub(first) != Some(1) { return Err(error()); }
+                        node.update(&[if matches!(object.form, TypeForm::RelPtr { .. }) { 1 } else { 2 }]);
+                        node.update(&completed[first]);
+                    }
+                    TypeForm::StructuralRecord { fields } => {
+                        if completed.len().checked_sub(first) != Some(fields.len()) { return Err(error()); }
+                        node.update(&[3]);
+                        node.update(&(fields.len() as u64).to_le_bytes());
+                        for (field, key) in fields.iter().zip(&completed[first..]) {
+                            node.update(&(field.name.as_str().len() as u64).to_le_bytes());
+                            node.update(field.name.as_str().as_bytes());
+                            node.update(key);
+                        }
+                    }
+                    _ => return Err(error()),
+                }
+                completed.truncate(first);
+                active.remove(&(ty, region));
+                (ty, region, *node.finalize().as_bytes())
+            }
+        };
+        known.try_reserve(1).map_err(|_| storage_error())?;
+        known.insert((ty, region), key);
+        push(&mut completed, key, control, reserve)?;
     }
+    if completed.len() != 1 { return Err(error()); }
+    hasher.update(&completed[0]);
     Ok(())
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::platform::kernel::{StructuralTypeField, encode_type_object};
-
-    #[test]
-    fn region_pointer_layout_fingerprint_delimits_nested_record_fields() {
-        let mut types = BTreeMap::new();
-        let mut insert = |form| {
-            let object = TypeObject::new(form).unwrap();
-            let (id, _) = encode_type_object(&object).unwrap();
-            types.insert(id, object);
-            id
-        };
-        let region = insert(TypeForm::Unit);
-        let i64_type = insert(TypeForm::I64);
-        let field = |name, ty| StructuralTypeField {
-            name: Name::new(name).unwrap(),
-            ty,
-        };
-        let inner_one = insert(TypeForm::StructuralRecord {
-            fields: vec![field("b", i64_type)],
-        });
-        let inner_two = insert(TypeForm::StructuralRecord {
-            fields: vec![field("b", i64_type), field("c", i64_type)],
-        });
-        let left = insert(TypeForm::StructuralRecord {
-            fields: vec![field("a", inner_one), field("c", i64_type)],
-        });
-        let right = insert(TypeForm::StructuralRecord {
-            fields: vec![field("a", inner_two)],
-        });
-        let fingerprint_of = |ty| {
-            let mut hasher = blake3::Hasher::new();
-            let mut remaining = 100;
-            fingerprint(
-                &types,
-                ty,
-                region,
-                &mut hasher,
-                &mut remaining,
-                &ExecutionControl::uncancelled(),
-                0,
-            )
-            .unwrap();
-            hasher.finalize()
-        };
-        assert_ne!(fingerprint_of(left), fingerprint_of(right));
-    }
-}
+mod tests;

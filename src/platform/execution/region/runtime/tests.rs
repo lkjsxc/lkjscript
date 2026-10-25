@@ -177,3 +177,28 @@ fn refused_open_and_cancelled_mutations_leave_existing_custody_usable() {
         11
     );
 }
+
+
+#[test]
+fn region_arena_has_no_former_live_slot_ceiling() {
+    let arena = Arena::new().unwrap();
+    let control = ExecutionControl::uncancelled();
+    let mut scopes = Vec::new();
+    for _ in 0..65_537 {
+        let cap = arena.open(1, 0, &control, |_| Ok(())).unwrap();
+        scopes.push(cap.identity());
+    }
+    assert_eq!(arena.read_state().live, scopes.len());
+    for identity in scopes { arena.close(identity).unwrap(); }
+    assert!(arena.is_empty());
+}
+
+#[test]
+fn region_slot_growth_checks_host_layout_without_wrapping_or_clamping() {
+    assert_eq!(slot_capacity::<u8>(0).unwrap(), 1);
+    assert_eq!(slot_capacity::<u8>(65_536).unwrap(), 131_072);
+    let maximum = isize::MAX as usize / std::mem::size_of::<Slot<u8>>();
+    assert_eq!(slot_capacity::<u8>(maximum - 1).unwrap(), maximum);
+    assert!(slot_capacity::<u8>(maximum).is_err());
+    assert!(slot_capacity::<u8>(usize::MAX).is_err());
+}

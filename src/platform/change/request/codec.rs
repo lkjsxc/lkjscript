@@ -14,8 +14,10 @@ use crate::platform::kernel::{
 use crate::platform::package::RunnerKind;
 
 const INTENT_MAGIC: [u8; 8] = *b"LKJACHNG";
-const BUDGET_MAGIC: [u8; 8] = *b"LKJABUDG";
-const MAXIMUM_BUDGET_BYTES: usize = 1_024;
+const BUDGET_MAGIC: [u8; 8] = *b"LKJABDG2";
+const BUDGET_PROFILE: u16 = 2;
+// Ten header bytes and exactly 46 independently tagged u64 policy fields.
+const MAXIMUM_BUDGET_BYTES: usize = 10 + 46 * 9;
 
 #[cfg(test)]
 #[path = "associated_codec_tests.rs"]
@@ -29,7 +31,7 @@ pub(super) fn encode_authored_intent(
     request: &AuthoredChangeSet,
     definitions: &BTreeMap<String, SymbolDefinition>,
 ) -> Result<Vec<u8>, Diagnostic> {
-    let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+    let mut writer = Writer::new(None);
     writer.raw(&INTENT_MAGIC)?;
     writer.raw(&SCHEMA_EPOCH.to_le_bytes())?;
     writer.raw(&request.base.bytes())?;
@@ -57,7 +59,7 @@ pub(super) fn authored_http_route_sort_key(
             "HTTP route sort-key encoding requires an add.http-route operation",
         ));
     };
-    let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+    let mut writer = Writer::new(None);
     writer.owner_selector(target, definitions)?;
     writer.string(method)?;
     writer.http_route_selector(selector)?;
@@ -66,69 +68,25 @@ pub(super) fn authored_http_route_sort_key(
 }
 
 pub(super) fn encode_budget(budget: ChangeBudget) -> Result<Vec<u8>, Diagnostic> {
-    let mut writer = Writer::new(MAXIMUM_BUDGET_BYTES);
+    let mut writer = Writer::new(Some(MAXIMUM_BUDGET_BYTES));
     writer.raw(&BUDGET_MAGIC)?;
-    writer.raw(&SCHEMA_EPOCH.to_le_bytes())?;
-    for maximum in [
-        budget.authored.maximum_operations,
-        budget.authored.maximum_preconditions,
-        budget.authored.maximum_allocated_identities,
-        budget.authored.maximum_type_nodes,
-        budget.canonical_edits.maximum_owner_edits,
-        budget.canonical_edits.maximum_type_edits,
-        budget.canonical_edits.maximum_dependency_edits,
-        budget.canonical_edits.maximum_retirement_edits,
-        budget.canonical_reads.maximum_point_reads,
-        budget.canonical_reads.maximum_map_pages,
-        budget.canonical_reads.maximum_map_entries,
-        budget.canonical_reads.maximum_catalog_lookups,
-        budget.canonical_reads.maximum_objects,
-        budget.canonical_reads.maximum_bytes,
-        budget.canonical_reads.maximum_decoded_records,
-        budget.canonical_map_update.maximum_pages_encoded,
-        budget.canonical_map_update.maximum_bytes_encoded,
-        budget.witness_reads.maximum_point_reads,
-        budget.witness_reads.maximum_map_pages,
-        budget.witness_reads.maximum_map_entries,
-        budget.witness_reads.maximum_catalog_lookups,
-        budget.witness_reads.maximum_objects,
-        budget.witness_reads.maximum_bytes,
-        budget.witness_reads.maximum_decoded_records,
-        budget.impact.maximum_affected_owners,
-        budget.impact.maximum_summary_owners,
-        budget.impact.maximum_summary_edits,
-        budget.impact.maximum_ownership_steps,
-        budget.impact.maximum_behavior_owners,
-        budget.impact.maximum_relation_edges,
-        budget.impact.maximum_relation_fanout,
-        budget.validation.maximum_owner_records,
-        budget.validation.maximum_ownership_entries,
-        budget.validation.maximum_type_objects,
-        budget.validation.maximum_expression_steps,
-        budget.validation.maximum_diagnostics,
-        budget.tests.maximum_selected,
-        budget.tests.maximum_dependencies_per_test,
-        budget.tests.maximum_ownership_steps,
-        budget.tests.maximum_owners_visited,
-        budget.witness_update.maximum_edits,
-        budget.witness_update.maximum_pages_encoded,
-        budget.witness_update.maximum_bytes_encoded,
-        budget.staging.maximum_objects,
-        budget.staging.maximum_bytes,
-        budget.staging.maximum_pages,
-    ] {
-        writer.u64(maximum)?;
+    writer.raw(&BUDGET_PROFILE.to_le_bytes())?;
+    for (_, maximum) in budget.policy_limits() {
+        match maximum {
+            None => writer.tag(0)?,
+            Some(maximum) => { writer.tag(1)?; writer.u64(maximum)?; }
+        }
     }
     Ok(writer.finish())
 }
 
 struct Writer {
     bytes: Vec<u8>,
-    maximum: usize,
+    maximum: Option<usize>,
 }
 
 impl Writer {
-    fn new(maximum: usize) -> Self {
+    fn new(maximum: Option<usize>) -> Self {
         Self {
             bytes: Vec::new(),
             maximum,
@@ -146,15 +104,16 @@ impl Writer {
                 "authored request byte length overflowed",
             )
         })?;
-        if required > self.maximum {
+        if let Some(maximum) = self.maximum && required > maximum {
             return Err(codec_error(
                 "change_authored_bytes",
                 format!(
-                    "authored request requires more than the {}-byte encoding budget",
-                    self.maximum
+                    "authored request requires more than the {maximum}-byte encoding budget"
                 ),
             ));
         }
+        self.bytes.try_reserve(bytes.len()).map_err(|_| codec_error(
+            "change_authored_allocation", "authored request encoding allocation failed"))?;
         self.bytes.extend_from_slice(bytes);
         Ok(())
     }
@@ -3066,8 +3025,45 @@ mod tests {
     }
 
     #[test]
+    fn current_budget_wire_encodes_all_optional_states_without_sentinels() {
+        let unbounded = encode_budget(ChangeBudget::default()).unwrap();
+        assert_eq!(&unbounded[..10], b"LKJABDG2\x02\x00");
+        assert_eq!(unbounded.len(), 10 + 46);
+        assert!(unbounded[10..].iter().all(|tag| *tag == 0));
+        let mut forms = vec![unbounded];
+        for maximum in [0, 10_000_001, u64::MAX] {
+            let mut budget = ChangeBudget::default();
+            for dimension in crate::platform::change::budget::BudgetDimension::ALL {
+                budget.set_policy_limit(dimension.policy_name(), Some(maximum)).unwrap();
+            }
+            let encoded = encode_budget(budget).unwrap();
+            assert_eq!(&encoded[..10], b"LKJABDG2\x02\x00");
+            assert_eq!(encoded.len(), MAXIMUM_BUDGET_BYTES);
+            for field in encoded[10..].chunks_exact(9) {
+                assert_eq!(field[0], 1);
+                assert_eq!(&field[1..], &maximum.to_be_bytes());
+            }
+            assert!(forms.iter().all(|earlier| *earlier != encoded));
+            forms.push(encoded);
+        }
+    }
+
+    #[test]
+    fn authored_byte_writer_distinguishes_unbounded_zero_and_exact_finite_policy() {
+        let mut zero = Writer::new(Some(0));
+        zero.raw(&[]).unwrap();
+        assert_eq!(zero.raw(&[1]).unwrap_err().code, "change_authored_bytes");
+        assert!(zero.finish().is_empty());
+        for maximum in [None, Some(1), Some(usize::MAX)] {
+            let mut writer = Writer::new(maximum);
+            writer.raw(&[1]).unwrap();
+            assert_eq!(writer.finish(), [1]);
+        }
+    }
+
+    #[test]
     fn schema_header_counts_toward_exact_authored_byte_admission() {
-        let mut writer = Writer::new(INTENT_MAGIC.len() + SCHEMA_EPOCH.to_le_bytes().len());
+        let mut writer = Writer::new(Some(INTENT_MAGIC.len() + SCHEMA_EPOCH.to_le_bytes().len()));
         writer.raw(&INTENT_MAGIC).unwrap();
         writer.raw(&SCHEMA_EPOCH.to_le_bytes()).unwrap();
         assert_eq!(writer.raw(&[0]).unwrap_err().code, "change_authored_bytes");
@@ -3314,7 +3310,7 @@ mod tests {
     fn operational_budget_is_disjoint_from_semantic_request_bytes() {
         let first = connected_request("$module", "$function", "$parameter", "$body");
         let mut changed = first.clone();
-        changed.budget.canonical_reads.maximum_bytes -= 1;
+        changed.budget.canonical_reads.maximum_bytes = Some(u64::MAX);
         assert_eq!(
             canonical_authored_intent_bytes(&first).unwrap(),
             canonical_authored_intent_bytes(&changed).unwrap()
@@ -3460,7 +3456,7 @@ mod tests {
         expected.extend_from_slice(&[11, 3, 13, 5, 14, 1, 4]);
         expected.extend_from_slice(&1_u64.to_be_bytes());
         expected.extend_from_slice(&[b'b', 12, 2, 15, 7]);
-        let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+        let mut writer = Writer::new(None);
         writer.authored_type(&ty, &BTreeMap::new(), 1).unwrap();
         assert_eq!(writer.finish(), expected);
 
@@ -3468,7 +3464,7 @@ mod tests {
         for _ in 1..crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
             ty = AuthoredType::List { item: Box::new(ty) };
         }
-        let mut writer = Writer::new(MAXIMUM_AUTHORED_CHANGE_BYTES);
+        let mut writer = Writer::new(None);
         writer.authored_type(&ty, &BTreeMap::new(), 1).unwrap();
         let mut expected = vec![11; crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH - 1];
         expected.push(1);

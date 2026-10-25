@@ -710,8 +710,8 @@ fn owned_associated_binding_work_and_storage_exact_fit_and_one_less() {
     let (steps, bytes) = measured.work();
     assert!(steps > 1 && bytes > 1);
     let limits = AssociatedAdmissionLimits {
-        maximum_steps: steps,
-        maximum_metadata_bytes: bytes,
+        maximum_steps: Some(steps),
+        maximum_metadata_bytes: Some(bytes),
         maximum_depth: 256,
     };
     OwnedAssociatedAdmission::with_limits(limits)
@@ -719,11 +719,11 @@ fn owned_associated_binding_work_and_storage_exact_fit_and_one_less() {
         .expect("exact admission fit");
     for limits in [
         AssociatedAdmissionLimits {
-            maximum_steps: steps - 1,
+            maximum_steps: Some(steps - 1),
             ..limits
         },
         AssociatedAdmissionLimits {
-            maximum_metadata_bytes: bytes - 1,
+            maximum_metadata_bytes: Some(bytes - 1),
             ..limits
         },
     ] {
@@ -1566,8 +1566,8 @@ fn owned_associated_full_application_budget_is_cumulative_across_calls() {
     .expect("measure complete application");
     let (steps, bytes) = measured.work();
     let limits = AssociatedAdmissionLimits {
-        maximum_steps: steps,
-        maximum_metadata_bytes: bytes,
+        maximum_steps: Some(steps),
+        maximum_metadata_bytes: Some(bytes),
         maximum_depth: 256,
     };
     let associated = OwnedAssociatedAdmission::with_limits(limits);
@@ -1815,7 +1815,8 @@ fn owned_associated_many_scalar_occurrences_fit_without_reusing_authority() {
     }
     let (steps, bytes) = admission.work();
     assert!(steps >= 100_000 && bytes > 0);
-    assert!(bytes < AssociatedAdmissionLimits::default().maximum_metadata_bytes);
+    assert!(bytes < 64 * 1_048_576, "fixture metadata regression bound");
+    assert!(!admission.metadata_observation().saturated);
 
     // The same digest must still reread canonical content on the next call.
     f.source.types.get_mut(&scalar).unwrap().contract_version = 0;
@@ -1863,7 +1864,8 @@ fn owned_associated_repeated_deep_walks_reuse_queue_storage_with_exact_contexts(
             .expect("valid repeated near-boundary traversal fits the existing budget");
     }
     let (steps, bytes) = associated.work();
-    assert!(steps > 1_000 && bytes < AssociatedAdmissionLimits::default().maximum_metadata_bytes);
+    assert!(steps > 1_000 && bytes < 64 * 1_048_576, "fixture metadata regression bound");
+    assert!(!associated.metadata_observation().saturated);
     // A different read is not a cache hit even when semantic coordinates match.
     let form = projection(&f, f.lexical);
     let projected = ty(&mut f.source, form);
@@ -1926,7 +1928,7 @@ fn owned_associated_nominal_absence_keeps_scope_independent_work_within_shared_s
     }
     let root = ty(&mut f.source, TypeForm::StructuralRecord { fields });
     let limits = AssociatedAdmissionLimits {
-        maximum_metadata_bytes: 128 * 1024,
+        maximum_metadata_bytes: Some(128 * 1024),
         ..AssociatedAdmissionLimits::default()
     };
     let admission = OwnedAssociatedAdmission::with_limits(limits);
@@ -1938,7 +1940,7 @@ fn owned_associated_nominal_absence_keeps_scope_independent_work_within_shared_s
             GENERATION,
         )
         .expect("all256 exact nominal fields fit without unused per-declaration absence scopes");
-    assert!(admission.work().1 < limits.maximum_metadata_bytes);
+    assert!(admission.work().1 < limits.maximum_metadata_bytes.expect("explicit test allowance"));
 
     // A shallower visit to Unit never suppresses a later depth refusal. Depth is
     // checked before the shared absence key may skip a completed ordinary node.
@@ -2160,4 +2162,31 @@ fn owned_associated_raw_nominal_field_and_case_generations_remain_exact() {
             );
         }
     }
+}
+
+
+#[test]
+fn associated_default_metadata_is_unbounded_and_explicit_maximum_remains_finite() {
+    let defaults = AssociatedAdmissionLimits::default();
+    assert_eq!(defaults.maximum_steps, None);
+    assert_eq!(defaults.maximum_metadata_bytes, None);
+    let unbounded = OwnedAssociatedAdmission::new();
+    unbounded.reserve_bytes(64 * 1_048_576 + 1).unwrap();
+    assert!(!unbounded.metadata_observation().saturated);
+    unbounded.reserve::<usize>(usize::MAX).unwrap();
+    assert!(unbounded.metadata_observation().saturated);
+    assert_eq!(unbounded.metadata_observation().consumed, usize::MAX);
+    let finite = OwnedAssociatedAdmission::with_limits(AssociatedAdmissionLimits {
+        maximum_metadata_bytes: Some(usize::MAX),
+        ..defaults
+    });
+    finite.reserve_bytes(usize::MAX).unwrap();
+    assert!(finite.reserve_bytes(1).is_err());
+    assert_eq!(finite.metadata_observation(), ValidationWork::exact(usize::MAX));
+    let zero = OwnedAssociatedAdmission::with_limits(AssociatedAdmissionLimits {
+        maximum_metadata_bytes: Some(0),
+        ..defaults
+    });
+    zero.reserve_bytes(0).unwrap();
+    assert!(zero.reserve_bytes(1).is_err());
 }

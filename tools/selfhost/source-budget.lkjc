@@ -1,0 +1,260 @@
+declarations.begin
+(units
+  (module create source-budget
+    (function create unbounded
+      (visibility public)
+      (effect pure)
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
+      (body
+        (record structural
+          (field code (i64 0))
+          (field finite (bool false))
+          (field high (i64 0))
+          (field low (i64 0))
+          (field observed-high (i64 0))
+          (field observed-low (i64 0))
+          (field saturated (bool false)))))
+    (function create finite-words
+      (visibility public)
+      (effect pure)
+      (parameter create high (type I64))
+      (parameter create low (type I64))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
+      (body
+        (if
+          (call ci::both
+            (call ci::both
+              (call ci::lt (i64 -1) (local high))
+              (call ci::lt (local high) (i64 4294967296)))
+            (call ci::both (call ci::lt (i64 -1) (local low)) (call ci::lt (local low) (i64 4294967296))))
+          (record structural
+            (field code (i64 0))
+            (field finite (bool true))
+            (field high (local high))
+            (field low (local low))
+            (field observed-high (i64 0))
+            (field observed-low (i64 0))
+            (field saturated (bool false)))
+          (call fail (call unbounded) (i64 6)))))
+    (function create finite
+      (visibility public)
+      (effect pure)
+      (parameter create amount (type I64))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
+      (body
+        (if
+          (call ci::lt (local amount) (i64 0))
+          (call fail (call unbounded) (i64 6))
+          (let
+            (binding high (call ci::div (local amount) (i64 4294967296)))
+            (in
+              (call finite-words
+                (local high)
+                (call ci::sub (local amount) (call ci::mul (local high) (i64 4294967296)))))))))
+    (function create failed
+      (visibility public)
+      (effect pure)
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns Bool)
+      (body (call ci::lt (i64 0) (field (local work) (name code)))))
+    (function create fail
+      (visibility public)
+      (effect pure)
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (parameter create code (type I64))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
+      (body
+        (if
+          (call failed (local work))
+          (local work)
+          (record structural
+            (field code (local code))
+            (field finite (field (local work) (name finite)))
+            (field high (field (local work) (name high)))
+            (field low (field (local work) (name low)))
+            (field observed-high (field (local work) (name observed-high)))
+            (field observed-low (field (local work) (name observed-low)))
+            (field saturated (field (local work) (name saturated)))))))
+    (function create insufficient
+      (visibility public)
+      (effect pure)
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (parameter create amount (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::either (call failed (local work)) (call ci::lt (local amount) (i64 0)))
+          (bool true)
+          (if
+            (field (local work) (name finite))
+            (let
+              (binding high (call ci::div (local amount) (i64 4294967296)))
+              (binding low (call ci::sub (local amount) (call ci::mul (local high) (i64 4294967296))))
+              (in
+                (if
+                  (call ci::lt (field (local work) (name high)) (local high))
+                  (bool true)
+                  (if
+                    (call ci::eq (field (local work) (name high)) (local high))
+                    (call ci::lt (field (local work) (name low)) (local low))
+                    (bool false)))))
+            (bool false)))))
+    (function create charge
+      (visibility public)
+      (effect pure)
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (parameter create amount (type I64))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
+      (body
+        (if
+          (call insufficient (local work) (local amount))
+          (call fail (local work) (i64 6))
+          (let
+            (binding high (call ci::div (local amount) (i64 4294967296)))
+            (binding low (call ci::sub (local amount) (call ci::mul (local high) (i64 4294967296))))
+            (binding borrow
+              (if (call ci::lt (field (local work) (name low)) (local low)) (i64 1) (i64 0)))
+            (binding observed-low (call ci::add (field (local work) (name observed-low)) (local low)))
+            (binding carry (call ci::div (local observed-low) (i64 4294967296)))
+            (binding observed-high
+              (call ci::add
+                (field (local work) (name observed-high))
+                (call ci::add (local high) (local carry))))
+            (binding saturated
+              (call ci::either
+                (field (local work) (name saturated))
+                (call ci::lt (i64 4294967295) (local observed-high))))
+            (in
+              (record structural
+                (field code (i64 0))
+                (field finite (field (local work) (name finite)))
+                (field high
+                  (if
+                    (field (local work) (name finite))
+                    (call ci::sub
+                      (call ci::sub (field (local work) (name high)) (local high))
+                      (local borrow))
+                    (i64 0)))
+                (field low
+                  (if
+                    (field (local work) (name finite))
+                    (call ci::add
+                      (call ci::sub (field (local work) (name low)) (local low))
+                      (call ci::mul (local borrow) (i64 4294967296)))
+                    (i64 0)))
+                (field observed-high (if (local saturated) (i64 4294967295) (local observed-high)))
+                (field observed-low
+                  (if
+                    (local saturated)
+                    (i64 4294967295)
+                    (call ci::sub (local observed-low) (call ci::mul (local carry) (i64 4294967296)))))
+                (field saturated (local saturated))))))))
+    (function create from-carrier
+      (visibility public)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
+      (body
+        (if
+          (call ci::lt (call ci::length (local graph)) (i64 128))
+          (call fail (call unbounded) (i64 12))
+          (let
+            (binding tag (call ci::u32 (local graph) (i64 100)))
+            (binding low (call ci::u32 (local graph) (i64 104)))
+            (binding high (call ci::u32 (local graph) (i64 108)))
+            (in
+              (if
+                (call ci::eq (local tag) (i64 0))
+                (if
+                  (call ci::both (call ci::eq (local low) (i64 0)) (call ci::eq (local high) (i64 0)))
+                  (call unbounded)
+                  (call fail (call unbounded) (i64 12)))
+                (if
+                  (call ci::eq (local tag) (i64 1))
+                  (call finite-words (local high) (local low))
+                  (call fail (call unbounded) (i64 12)))))))))))
+declarations.end

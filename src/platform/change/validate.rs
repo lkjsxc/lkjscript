@@ -1,6 +1,7 @@
 //! Owner-frontier structural and semantic validation over an isolated candidate overlay.
 
 use super::{
+    BudgetCounter, BudgetDimension, WorkSaturation, optional_usize,
     CanonicalBaseRead, CanonicalDelta, DerivedDelta, HttpRouteValidationEvidence, ImpactPlan,
     KernelOverlay, SummaryDelta, ValidationAdmission, WitnessBaseRead, WitnessReadWork,
 };
@@ -28,6 +29,7 @@ pub struct IncrementalValidationWork {
     pub type_objects_checked: u64,
     pub expression_work: u64,
     pub witness_reads: WitnessReadWork,
+    pub saturation: WorkSaturation,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -154,7 +156,7 @@ pub(crate) fn validate_incremental_frontier_with_admission<
         )]);
     }
     let mut diagnostics = Vec::new();
-    let mut work = 0_usize;
+    let mut work = crate::platform::kernel::ValidationWork::default();
     let http_routes = match validate_http_topology_frontier(
         overlay,
         impact,
@@ -183,26 +185,25 @@ pub(crate) fn validate_incremental_frontier_with_admission<
         &mut diagnostics,
         &mut work,
         ExpressionValidationLimits {
-            maximum_steps: usize::try_from(admission.maximum_expression_steps)
-                .unwrap_or(usize::MAX),
-            maximum_diagnostics: usize::try_from(admission.maximum_diagnostics)
-                .unwrap_or(usize::MAX),
+            maximum_steps: optional_usize(admission.maximum_expression_steps, "validation_expression_steps").map_err(|error| vec![error])?,
+            maximum_diagnostics: optional_usize(admission.maximum_diagnostics, "validation_diagnostics").map_err(|error| vec![error])?,
         },
     );
-    structural.work.expression_work = u64::try_from(work).unwrap_or(u64::MAX);
+    structural.work.expression_work = work.consumed as u64;
+    if work.saturated { structural.work.saturation.mark(BudgetDimension::ValidationExpressionSteps); }
     if let Err(exhaustion) = exhaustion {
         let (code, message) = match exhaustion {
             ExpressionValidationExhaustion::Steps => (
                 "change_budget_validation_expression_steps",
                 format!(
-                    "semantic validation exceeds the declared {}-expression-step budget",
+                    "semantic validation exceeds the declared {:?}-expression-step budget",
                     admission.maximum_expression_steps
                 ),
             ),
             ExpressionValidationExhaustion::Diagnostics => (
                 "change_budget_validation_diagnostics",
                 format!(
-                    "semantic validation exceeds the declared {}-diagnostic budget",
+                    "semantic validation exceeds the declared {:?}-diagnostic budget",
                     admission.maximum_diagnostics
                 ),
             ),
@@ -215,26 +216,25 @@ pub(crate) fn validate_incremental_frontier_with_admission<
         &mut diagnostics,
         &mut work,
         ExpressionValidationLimits {
-            maximum_steps: usize::try_from(admission.maximum_expression_steps)
-                .unwrap_or(usize::MAX),
-            maximum_diagnostics: usize::try_from(admission.maximum_diagnostics)
-                .unwrap_or(usize::MAX),
+            maximum_steps: optional_usize(admission.maximum_expression_steps, "validation_expression_steps").map_err(|error| vec![error])?,
+            maximum_diagnostics: optional_usize(admission.maximum_diagnostics, "validation_diagnostics").map_err(|error| vec![error])?,
         },
     );
-    structural.work.expression_work = u64::try_from(work).unwrap_or(u64::MAX);
+    structural.work.expression_work = work.consumed as u64;
+    if work.saturated { structural.work.saturation.mark(BudgetDimension::ValidationExpressionSteps); }
     if let Err(exhaustion) = exhaustion {
         let (code, message) = match exhaustion {
             ExpressionValidationExhaustion::Steps => (
                 "change_budget_validation_affine_steps",
                 format!(
-                    "affine validation exceeds the declared {}-expression-step budget",
+                    "affine validation exceeds the declared {:?}-expression-step budget",
                     admission.maximum_expression_steps
                 ),
             ),
             ExpressionValidationExhaustion::Diagnostics => (
                 "change_budget_validation_diagnostics",
                 format!(
-                    "semantic validation exceeds the declared {}-diagnostic budget",
+                    "semantic validation exceeds the declared {:?}-diagnostic budget",
                     admission.maximum_diagnostics
                 ),
             ),
@@ -246,7 +246,7 @@ pub(crate) fn validate_incremental_frontier_with_admission<
             overlay,
             live_semantic_roots,
             &mut work,
-            usize::try_from(admission.maximum_expression_steps).unwrap_or(usize::MAX),
+            optional_usize(admission.maximum_expression_steps, "validation_expression_steps").map_err(|error| vec![error])?,
         )
         .map_err(|mut diagnostic| {
             if diagnostic.code == "kernel_callable_flow_work" {
@@ -254,7 +254,8 @@ pub(crate) fn validate_incremental_frontier_with_admission<
             }
             vec![diagnostic]
         })?;
-        structural.work.expression_work = u64::try_from(work).unwrap_or(u64::MAX);
+        structural.work.expression_work = work.consumed as u64;
+    if work.saturated { structural.work.saturation.mark(BudgetDimension::ValidationExpressionSteps); }
     }
     if summaries.selected != impact.summary_owners {
         push_bounded_diagnostic(
@@ -357,7 +358,7 @@ pub(super) fn validate_http_topology_frontier<
         let base_read = base_witness.read_incoming_relations_of_kind(
             target_owner,
             RelationKind::HttpRouteTarget,
-            MAXIMUM_HTTP_ROUTES_PER_TARGET.saturating_add(1),
+            Some(MAXIMUM_HTTP_ROUTES_PER_TARGET.saturating_add(1)),
         )?;
         work.witness_reads.add(base_read.work);
         if base_read.value.truncated {
@@ -734,17 +735,8 @@ fn charge_http_owner(
     admission: ValidationAdmission,
     label: &str,
 ) -> Result<(), Diagnostic> {
-    if work.owner_records_checked >= admission.maximum_owner_records {
-        return Err(validation_budget_error(
-            "change_budget_validation_owner_records",
-            format!(
-                "{label} exceeds the declared {}-owner-record validation budget",
-                admission.maximum_owner_records
-            ),
-        ));
-    }
-    work.owner_records_checked = work.owner_records_checked.saturating_add(1);
-    Ok(())
+    work.saturation.charge(&mut work.owner_records_checked, BudgetDimension::ValidationOwnerRecords,
+        BudgetCounter::exact(1), admission.maximum_owner_records, label)
 }
 
 fn candidate_http_route_relation_removals<B: CanonicalBaseRead + ?Sized>(
@@ -1221,58 +1213,36 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
     }
 
     fn charge_owner_record(&mut self) -> bool {
-        if self.work.owner_records_checked >= self.admission.maximum_owner_records {
-            self.budget_error = Some(validation_budget_error(
-                "change_budget_validation_owner_records",
-                format!(
-                    "structural validation exceeds the declared {}-owner-record budget",
-                    self.admission.maximum_owner_records
-                ),
-            ));
-            return false;
+        match self.work.saturation.charge(&mut self.work.owner_records_checked, BudgetDimension::ValidationOwnerRecords,
+            BudgetCounter::exact(1), self.admission.maximum_owner_records, "structural validation") {
+            Ok(()) => true,
+            Err(error) => { self.budget_error = Some(error); false }
         }
-        self.work.owner_records_checked = self.work.owner_records_checked.saturating_add(1);
-        true
     }
 
     fn charge_ownership_entry(&mut self) -> bool {
-        if self.work.ownership_entries_checked >= self.admission.maximum_ownership_entries {
-            self.budget_error = Some(validation_budget_error(
-                "change_budget_validation_ownership_entries",
-                format!(
-                    "structural validation exceeds the declared {}-ownership-entry budget",
-                    self.admission.maximum_ownership_entries
-                ),
-            ));
-            return false;
+        match self.work.saturation.charge(&mut self.work.ownership_entries_checked, BudgetDimension::ValidationOwnershipEntries,
+            BudgetCounter::exact(1), self.admission.maximum_ownership_entries, "structural validation") {
+            Ok(()) => true,
+            Err(error) => { self.budget_error = Some(error); false }
         }
-        self.work.ownership_entries_checked = self.work.ownership_entries_checked.saturating_add(1);
-        true
     }
 
     fn charge_type_object(&mut self) -> bool {
-        if self.work.type_objects_checked >= self.admission.maximum_type_objects {
-            self.budget_error = Some(validation_budget_error(
-                "change_budget_validation_type_objects",
-                format!(
-                    "structural validation exceeds the declared {}-type-object budget",
-                    self.admission.maximum_type_objects
-                ),
-            ));
-            return false;
+        match self.work.saturation.charge(&mut self.work.type_objects_checked, BudgetDimension::ValidationTypeObjects,
+            BudgetCounter::exact(1), self.admission.maximum_type_objects, "structural validation") {
+            Ok(()) => true,
+            Err(error) => { self.budget_error = Some(error); false }
         }
-        self.work.type_objects_checked = self.work.type_objects_checked.saturating_add(1);
-        true
     }
 
     fn push_diagnostic(&mut self, diagnostic: Diagnostic) {
-        if u64::try_from(self.diagnostics.len()).unwrap_or(u64::MAX)
-            >= self.admission.maximum_diagnostics
+        if self.admission.maximum_diagnostics.is_some_and(|maximum| self.diagnostics.len() as u64 >= maximum)
         {
             self.budget_error = Some(validation_budget_error(
                 "change_budget_validation_diagnostics",
                 format!(
-                    "structural validation exceeds the declared {}-diagnostic budget",
+                    "structural validation exceeds the declared {:?}-diagnostic budget",
                     self.admission.maximum_diagnostics
                 ),
             ));
@@ -1295,11 +1265,11 @@ fn push_bounded_diagnostic(
     diagnostic: Diagnostic,
     admission: ValidationAdmission,
 ) -> Result<(), Vec<Diagnostic>> {
-    if u64::try_from(diagnostics.len()).unwrap_or(u64::MAX) >= admission.maximum_diagnostics {
+    if admission.maximum_diagnostics.is_some_and(|maximum| diagnostics.len() as u64 >= maximum) {
         return Err(vec![validation_budget_error(
             "change_budget_validation_diagnostics",
             format!(
-                "semantic validation exceeds the declared {}-diagnostic budget",
+                "semantic validation exceeds the declared {:?}-diagnostic budget",
                 admission.maximum_diagnostics
             ),
         )]);
@@ -1428,7 +1398,7 @@ mod supplied_type_tests {
             validate_structural_frontier(&overlay, &canonical, &derived, &witness).unwrap();
         assert_eq!(report.work.type_objects_checked, 2);
         let admission = ValidationAdmission {
-            maximum_type_objects: 1,
+            maximum_type_objects: Some(1),
             ..ValidationAdmission::default()
         };
         assert_eq!(

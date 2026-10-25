@@ -252,7 +252,7 @@ per-value bound. The canonical compilation manifest independently retains its
 10,000,000-unit admission guard. Input and generated-pool offsets remain u32;
 allocation may fail before those representation boundaries. Mode 0 retains its
 existing profile, byte bound, type representation and fuel. This change does not
-alter `LKJSG001`, canonical unit, map, pack or `.lkja` wire encodings or schema
+alter `LKJSG002`, canonical unit, map, pack or `.lkja` wire encodings or schema
 epoch 1. The changed canonical compiler graph binds new compiler identities;
 maintained application/package encodings require no schema migration.
 

@@ -50,8 +50,14 @@ declarations.begin
                   (local graph)
                   (local data)
                   (call ci::add (local at) (if (call ci::eq (local kind) (i64 0)) (i64 1) (i64 0)))
-                  (if (call ci::eq (local kind) (i64 0)) (if (local concrete) (i64 10) (i64 17)) (i64 16))
-                  (if (call ci::eq (local kind) (i64 0)) (if (local concrete) (i64 18) (i64 25)) (i64 24))))
+                  (if
+                    (call ci::eq (local kind) (i64 0))
+                    (if (local concrete) (i64 10) (i64 17))
+                    (i64 16))
+                  (if
+                    (call ci::eq (local kind) (i64 0))
+                    (if (local concrete) (i64 18) (i64 25))
+                    (i64 24))))
               (in
                 (call items
                   (local graph)
@@ -102,15 +108,32 @@ declarations.begin
       (parameter create count (type I64))
       (parameter create kind (type I64))
       (parameter create declaration (type I64))
-      (parameter create work (type I64))
-      (returns I64)
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
       (body
         (if
           (call ci::eq (local count) (i64 0))
           (local work)
           (if
-            (call ci::lt (local work) (i64 1))
-            (i64 -6)
+            (call source-budget::insufficient (local work) (i64 1))
+            (call source-budget::fail (local work) (i64 6))
             (let
               (binding concrete
                 (if
@@ -127,7 +150,9 @@ declarations.begin
                       (call source-table::owner
                         (local graph)
                         (local data)
-                        (call ci::add (local at) (if (call ci::eq (local kind) (i64 0)) (i64 18) (i64 17)))
+                        (call ci::add
+                          (local at)
+                          (if (call ci::eq (local kind) (i64 0)) (i64 18) (i64 17)))
                         (if (call ci::eq (local kind) (i64 0)) (i64 17) (i64 16))))
                     (local declaration))))
               (in
@@ -141,8 +166,8 @@ declarations.begin
                     (call ci::sub (local count) (i64 1))
                     (local kind)
                     (local declaration)
-                    (call ci::sub (local work) (i64 1)))
-                  (i64 -17))))))))
+                    (call source-budget::charge (local work) (i64 1)))
+                  (call source-budget::fail (local work) (i64 17)))))))))
     (function create scope
       (visibility package)
       (effect pure)
@@ -151,8 +176,25 @@ declarations.begin
       (parameter create data (type Bytes))
       (parameter create at (type I64))
       (parameter create declaration (type I64))
-      (parameter create work (type I64))
-      (returns I64)
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
       (body
         (let
           (binding requirements (call source-table::array (local data) (local at)))
@@ -168,7 +210,7 @@ declarations.begin
               (local work)))
           (in
             (if
-              (call ci::lt (local left) (i64 0))
+              (call source-budget::failed (local left))
               (local left)
               (let
                 (binding effects

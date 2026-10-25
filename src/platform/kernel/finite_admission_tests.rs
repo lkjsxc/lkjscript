@@ -163,14 +163,14 @@ fn incremental(
 ) -> (Vec<Diagnostic>, usize) {
     let mut diagnostics = Vec::new();
     let mut work = 0;
-    let result = validate_expression_roots_with_limits(
+    let result = crate::platform::kernel::test_work::validate_expression_roots_with_limits(
         snapshot,
         roots,
         &mut diagnostics,
         &mut work,
         ExpressionValidationLimits {
-            maximum_steps,
-            maximum_diagnostics: 32,
+            maximum_steps: Some(maximum_steps),
+            maximum_diagnostics: Some(32),
         },
     );
     assert_eq!(result, Ok(()), "unexpected exhaustion: {diagnostics:?}");
@@ -201,7 +201,7 @@ fn descendant_cycle_returns_its_semantic_rejection_with_finite_work() {
         },
     );
     function(&mut snapshot, 0, "unused", root, unit);
-    let errors = validate_full_with_limit(&snapshot, 512).unwrap_err();
+    let errors = crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 512).unwrap_err();
     assert!(has(&errors, "kernel_full_expression_cycle"));
     assert!(!has(&errors, "kernel_full_work"));
 }
@@ -232,7 +232,7 @@ fn unused_interface_cannot_list_another_interfaces_operation() {
             external_visibility: ExternalVisibility::None,
         }),
     );
-    validate_full_with_limit(&snapshot, 1024).unwrap();
+    crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 1024).unwrap();
     declaration(
         &mut snapshot,
         1,
@@ -243,7 +243,7 @@ fn unused_interface_cannot_list_another_interfaces_operation() {
         },
     );
     assert!(has(
-        &validate_full_with_limit(&snapshot, 1024).unwrap_err(),
+        &crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 1024).unwrap_err(),
         "kernel_full_parent_mismatch"
     ));
 }
@@ -311,7 +311,7 @@ fn incremental_rejects_cross_function_self_and_forward_binding_references() {
             "{mode}: {errors:?}"
         );
         assert!(has(
-            &validate_full_with_limit(&snapshot, 2048).unwrap_err(),
+            &crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 2048).unwrap_err(),
             "kernel_full_lexical_scope"
         ));
     }
@@ -368,7 +368,7 @@ fn operation_parameters_have_no_function_execution_environment() {
         "kernel_type_parameter_scope"
     ));
     assert!(has(
-        &validate_full_with_limit(&snapshot, 2048).unwrap_err(),
+        &crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 2048).unwrap_err(),
         "kernel_type_parameter_scope"
     ));
 }
@@ -417,7 +417,7 @@ fn branch_local_bindings_do_not_escape_into_a_sibling_branch() {
         "kernel_full_lexical_scope"
     ));
     assert!(has(
-        &validate_full_with_limit(&snapshot, 2048).unwrap_err(),
+        &crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 2048).unwrap_err(),
         "kernel_full_lexical_scope"
     ));
 }
@@ -496,7 +496,7 @@ fn completed_let_types_are_reused_and_subexpression_inference_retains_scope() {
         observations.push(work);
         let mut work = 0;
         assert_eq!(
-            infer_function_expression_type(
+            crate::platform::kernel::test_work::infer_function_expression_type(
                 &snapshot,
                 f,
                 selected,
@@ -507,7 +507,7 @@ fn completed_let_types_are_reused_and_subexpression_inference_retains_scope() {
             .unwrap(),
             unit
         );
-        validate_full_with_limit(&snapshot, 4096).unwrap();
+        crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 4096).unwrap();
     }
     assert_eq!(observations[0], observations[1]);
 }
@@ -549,11 +549,11 @@ fn resource_shape_dag_work_is_admitted_and_interruptible() {
         }
     };
     let mut work = 0;
-    let errors = validate_full_checked(&snapshot, 4096, &mut work, &checkpoint).unwrap_err();
+    let errors = crate::platform::kernel::test_work::validate_full_checked(&snapshot, 4096, &mut work, &checkpoint).unwrap_err();
     assert!(has(&errors, "finite_fixture_cancelled"));
     assert!(work < 100);
     let mut work = 0;
-    let errors = super::validate::validate_full_observed(&snapshot, 4096, &mut work).unwrap_err();
+    let errors = crate::platform::kernel::test_work::validate_full_observed(&snapshot, 4096, &mut work).unwrap_err();
     assert!(has(&errors, "kernel_full_type_unreachable"));
     assert!(!has(&errors, "kernel_full_work"));
     assert!(work < 4096);
@@ -650,7 +650,7 @@ fn imported_target_checks_both_port_parent_and_component_inventory() {
             "kernel_full_target_port_owner"
         ));
         assert!(has(
-            &validate_full_with_limit(&snapshot, 2048).unwrap_err(),
+            &crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 2048).unwrap_err(),
             "kernel_full_target_port_owner"
         ));
         let owners =
@@ -683,7 +683,7 @@ fn imported_target_checks_both_port_parent_and_component_inventory() {
                 .0
                 .is_empty()
         );
-        validate_full_with_limit(&snapshot, 2048).unwrap();
+        crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 2048).unwrap();
     }
 }
 
@@ -753,7 +753,7 @@ declarations.end
             .reconstruct_full_oracle()
             .unwrap()
             .value;
-        validate_full_with_limit(&snapshot, 100_000).unwrap();
+        crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 100_000).unwrap();
         let (function, body) = snapshot
             .owners
             .values()
@@ -796,7 +796,7 @@ declarations.end
             "kernel_type_nominal_resource"
         ));
         assert!(has(
-            &validate_full_with_limit(&snapshot, 100_000).unwrap_err(),
+            &crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 100_000).unwrap_err(),
             "kernel_type_nominal_resource"
         ));
     }

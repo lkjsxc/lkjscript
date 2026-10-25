@@ -660,7 +660,7 @@ declarations.end
                 render_native_draft(
                     &repository.view_current().unwrap(),
                     &[test.into()],
-                    1_048_576,
+                    Some(1_048_576),
                     ExecutionControl::uncancelled(),
                 )
                 .unwrap(),

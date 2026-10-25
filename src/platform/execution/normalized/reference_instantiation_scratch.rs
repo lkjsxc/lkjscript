@@ -21,7 +21,6 @@ impl Scratch<'_> {
         self.bytes = self
             .bytes
             .checked_add(bytes)
-            .filter(|total| *total <= super::super::value::MAXIMUM_VALUE_ALLOCATION_BYTES)
             .ok_or_else(capacity)?;
         Ok(())
     }

@@ -3916,14 +3916,14 @@ mod tests {
         let roots = source.owners.keys().copied().collect::<Vec<_>>();
         let mut steps = 0;
         let mut diagnostics = vec![];
-        validate_affine_roots_with_limits(
+        crate::platform::kernel::test_work::validate_affine_roots_with_limits(
             &source,
             roots.clone(),
             &mut diagnostics,
             &mut steps,
             ExpressionValidationLimits {
-                maximum_steps: contract::MAXIMUM_VALIDATION_WORK,
-                maximum_diagnostics: 1000,
+                maximum_steps: Some(contract::MAXIMUM_VALIDATION_WORK),
+                maximum_diagnostics: Some(1000),
             },
         )
         .unwrap();
@@ -3932,14 +3932,14 @@ mod tests {
         for maximum in [0, 1, steps - 1, steps] {
             let mut work = 0;
             let mut diagnostics = vec![];
-            let result = validate_affine_roots_with_limits(
+            let result = crate::platform::kernel::test_work::validate_affine_roots_with_limits(
                 &source,
                 roots.clone(),
                 &mut diagnostics,
                 &mut work,
                 ExpressionValidationLimits {
-                    maximum_steps: maximum,
-                    maximum_diagnostics: 1000,
+                    maximum_steps: Some(maximum),
+                    maximum_diagnostics: Some(1000),
                 },
             );
             assert_eq!(work, maximum);

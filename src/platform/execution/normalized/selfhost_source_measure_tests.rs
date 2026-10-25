@@ -20,7 +20,7 @@ fn selfhost_source_measure_nominal_on_pinned_carrier() {
         output.sync_all().unwrap();
     }
     assert!(bytes.len() >= 128);
-    assert_eq!(&bytes[..8], b"LKJSG001");
+    assert_eq!(&bytes[..8], b"LKJSG002");
     eprintln!(
         "selfhost pinned carrier bytes={} sha256={} state={}",
         bytes.len(),
@@ -34,12 +34,12 @@ fn selfhost_source_measure_nominal_on_pinned_carrier() {
         .unwrap()
         .0 as usize;
     let payload = input::export(program, entry).unwrap();
-    let word = |at| u32::from_le_bytes(payload[at..at + 4].try_into().unwrap());
+    let word = |at| u64::from_le_bytes(payload[at..at + 8].try_into().unwrap());
     eprintln!(
         "selfhost validator normalized capacity functions={} nodes={} type_rows={} input_bytes={}",
-        word(92),
-        word(100),
-        word(84),
+        word(96),
+        word(120),
+        word(80),
         payload.len()
     );
     assert_eq!(result("read-nominal", &bytes), (0, bytes[48..80].to_vec()));
@@ -107,7 +107,7 @@ fn selfhost_source_measure_maintained_native_closure() {
         .count();
     let word = |bytes: &[u8], at| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
     let allowance = u64::from_le_bytes(mode1[32..40].try_into().unwrap());
-    assert_eq!(word(&mode0, 8), 4);
+    assert_eq!(word(&mode0, 8), 6);
     assert_eq!(word(&mode1, 8), 5);
     assert_eq!(allowance, 0);
     assert_eq!(units, word(&mode1, 76) as usize);
@@ -129,10 +129,10 @@ fn selfhost_source_measure_maintained_native_closure() {
         "status": "ok",
         "input": identity(&source_input),
         "profile": word(&source_input, 8),
-        "functions": word(&source_input, 92),
-        "nodes": word(&source_input, 100),
-        "types": word(&source_input, 84),
-        "exceeds_historical_node_limit": word(&source_input, 100) > 32_768,
+        "functions": wide_at(&source_input, 96),
+        "nodes": wide_at(&source_input, 120),
+        "types": wide_at(&source_input, 80),
+        "exceeds_historical_node_limit": wide_at(&source_input, 120) > 32_768,
     });
     let started = Instant::now();
     let (source_bootstrap_image, source_functions, source_rewrites) =
@@ -263,9 +263,9 @@ fn selfhost_source_measure_maintained_native_closure() {
         "mode0": {
             "input": identity(&mode0),
             "profile": word(&mode0, 8),
-            "functions": word(&mode0, 92),
-            "nodes": word(&mode0, 100),
-            "types": word(&mode0, 84),
+            "functions": wide_at(&mode0, 96),
+            "nodes": wide_at(&mode0, 120),
+            "types": wide_at(&mode0, 80),
         },
         "mode1": {
             "input": identity(&mode1),

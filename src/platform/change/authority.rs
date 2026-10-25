@@ -34,6 +34,7 @@ pub struct CanonicalMapEditCounts {
     pub replaced: u64,
     pub removed: u64,
     pub unchanged: u64,
+    pub saturated: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -396,12 +397,14 @@ fn stage_full_semantic<S: ImmutableObjectStore + ?Sized>(
         state,
         bytes,
         map_work,
-        map_edits: CanonicalMapEditCounts {
-            inserted: owners
-                .entries()
-                .saturating_add(dependencies.entries())
-                .saturating_add(retirements.entries()),
-            ..CanonicalMapEditCounts::default()
+        map_edits: {
+            let inserted = owners.entries().checked_add(dependencies.entries())
+                .and_then(|value| value.checked_add(retirements.entries()));
+            CanonicalMapEditCounts {
+                inserted: inserted.unwrap_or(u64::MAX),
+                saturated: inserted.is_none(),
+                ..CanonicalMapEditCounts::default()
+            }
         },
         canonical_read_work: CanonicalReadWork::default(),
     })
@@ -563,10 +566,16 @@ fn apply_map<S: PageStore + ?Sized>(
 }
 
 fn add_map_counts(counts: &mut CanonicalMapEditCounts, outcome: BatchOutcome) {
-    counts.inserted = counts.inserted.saturating_add(outcome.inserted);
-    counts.replaced = counts.replaced.saturating_add(outcome.replaced);
-    counts.removed = counts.removed.saturating_add(outcome.removed);
-    counts.unchanged = counts.unchanged.saturating_add(outcome.unchanged);
+    for (value, additional) in [
+        (&mut counts.inserted, outcome.inserted),
+        (&mut counts.replaced, outcome.replaced),
+        (&mut counts.removed, outcome.removed),
+        (&mut counts.unchanged, outcome.unchanged),
+    ] {
+        let next = value.checked_add(additional);
+        counts.saturated |= next.is_none();
+        *value = next.unwrap_or(u64::MAX);
+    }
 }
 
 fn stage_incremental_witness_objects<S: ImmutableObjectStore + ?Sized>(
@@ -640,15 +649,7 @@ fn require_digest(label: &str, actual: [u8; 32], expected: [u8; 32]) -> Result<(
 }
 
 fn merge_store_work(total: &mut StoreWork, update: StoreWork) {
-    total.catalog_lookups = total.catalog_lookups.saturating_add(update.catalog_lookups);
-    total.packs_opened = total.packs_opened.saturating_add(update.packs_opened);
-    total.objects_read = total.objects_read.saturating_add(update.objects_read);
-    total.objects_staged = total.objects_staged.saturating_add(update.objects_staged);
-    total.objects_reused = total.objects_reused.saturating_add(update.objects_reused);
-    total.bytes_read = total.bytes_read.saturating_add(update.bytes_read);
-    total.bytes_staged = total.bytes_staged.saturating_add(update.bytes_staged);
-    total.pages_staged = total.pages_staged.saturating_add(update.pages_staged);
-    total.packs_sealed = total.packs_sealed.saturating_add(update.packs_sealed);
+    total.add(update);
 }
 
 fn map_diagnostic(error: MapError) -> Diagnostic {

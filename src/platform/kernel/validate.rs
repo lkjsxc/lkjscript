@@ -1,9 +1,9 @@
 //! Implementation-disjoint full validator for normalized Graph 10 authority.
 
 use super::affine::validate_affine_meaning;
+use super::work::ValidationWork;
 use super::contract::{
     MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_HTTP_ROUTES_PER_TARGET, MAXIMUM_TYPE_DEPTH,
-    MAXIMUM_VALIDATION_WORK,
 };
 use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference, TextValue};
 use super::id::{OwnerKey, OwnerKind, PackageId};
@@ -59,6 +59,7 @@ pub struct FullValidationReport {
     pub dependencies_checked: u64,
     pub retirements_checked: u64,
     pub work_consumed: u64,
+    pub work_saturated: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -89,28 +90,28 @@ enum ExpressionParent {
 }
 
 pub fn validate_full(snapshot: &KernelSnapshot) -> Result<FullValidationReport, Vec<Diagnostic>> {
-    validate_full_with_limit(snapshot, MAXIMUM_VALIDATION_WORK)
+    validate_full_with_limit(snapshot, None)
 }
 
 pub(crate) fn validate_full_with_limit(
     snapshot: &KernelSnapshot,
-    maximum_work: usize,
+    maximum_work: Option<usize>,
 ) -> Result<FullValidationReport, Vec<Diagnostic>> {
-    validate_full_observed(snapshot, maximum_work, &mut 0)
+    validate_full_observed(snapshot, maximum_work, &mut ValidationWork::default())
 }
 
 pub(crate) fn validate_full_observed(
     snapshot: &KernelSnapshot,
-    maximum_work: usize,
-    consumed: &mut u64,
+    maximum_work: Option<usize>,
+    consumed: &mut ValidationWork,
 ) -> Result<FullValidationReport, Vec<Diagnostic>> {
     validate_full_checked(snapshot, maximum_work, consumed, &|| Ok(()))
 }
 
 pub(crate) fn validate_full_checked(
     snapshot: &KernelSnapshot,
-    maximum_work: usize,
-    consumed: &mut u64,
+    maximum_work: Option<usize>,
+    consumed: &mut ValidationWork,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
 ) -> Result<FullValidationReport, Vec<Diagnostic>> {
     checkpoint().map_err(|error| vec![error])?;
@@ -122,8 +123,9 @@ pub(crate) fn validate_full_checked(
         },
         interrupted: false,
         diagnostics: Vec::new(),
-        work: 0,
-        maximum_work: maximum_work.min(MAXIMUM_VALIDATION_WORK),
+        work: ValidationWork::default(),
+        work_exhausted: false,
+        maximum_work,
         associated_admission: super::owned_associated::OwnedAssociatedAdmission::new(),
         relations: Vec::new(),
         expression_parents: BTreeMap::new(),
@@ -131,7 +133,7 @@ pub(crate) fn validate_full_checked(
         binding_containers: BTreeMap::new(),
     };
     validator.validate();
-    *consumed = validator.work as u64;
+    *consumed = validator.work;
     validator
         .diagnostics
         .sort_by(|left, right| (&left.code, &left.message).cmp(&(&right.code, &right.message)));
@@ -148,7 +150,8 @@ pub(crate) fn validate_full_checked(
             relation_edges: validator.relations.len() as u64,
             dependencies_checked: snapshot.dependencies.len() as u64,
             retirements_checked: snapshot.retirements.len() as u64,
-            work_consumed: validator.work as u64,
+            work_consumed: validator.work.consumed as u64,
+            work_saturated: validator.work.saturated,
         })
     } else {
         Err(validator.diagnostics)
@@ -160,8 +163,9 @@ struct FullValidator<'a> {
     read: super::infer::CheckedExpressionRead<'a, KernelSnapshot>,
     interrupted: bool,
     diagnostics: Vec<Diagnostic>,
-    work: usize,
-    maximum_work: usize,
+    work: ValidationWork,
+    work_exhausted: bool,
+    maximum_work: Option<usize>,
     associated_admission: super::owned_associated::OwnedAssociatedAdmission,
     relations: Vec<RelationEdge>,
     expression_parents: BTreeMap<ExpressionId, Vec<ExpressionParent>>,
@@ -1802,17 +1806,19 @@ impl FullValidator<'_> {
     ) -> Result<T, Diagnostic> {
         let work = std::cell::Cell::new(self.work);
         let interrupted = std::cell::Cell::new(false);
+        let work_exhausted = std::cell::Cell::new(false);
         let result = {
             let checkpoint = || {
                 if let Err(error) = (self.read.checkpoint)() {
                     interrupted.set(true);
                     return Err(error);
                 }
-                let next = work.get().checked_add(1).ok_or_else(full_work_exhausted)?;
-                work.set(next);
-                if next > self.maximum_work {
+                let mut observed = work.get();
+                if !observed.charge(1, self.maximum_work) {
+                    work_exhausted.set(true);
                     return Err(full_work_exhausted());
                 }
+                work.set(observed);
                 Ok(())
             };
             let read = super::infer::CheckedExpressionRead {
@@ -1823,6 +1829,7 @@ impl FullValidator<'_> {
         };
         self.work = work.get();
         self.interrupted |= interrupted.get();
+        self.work_exhausted |= work_exhausted.get();
         result
     }
 
@@ -4089,8 +4096,8 @@ impl FullValidator<'_> {
             self.interrupted = true;
             return false;
         }
-        self.work = self.work.saturating_add(1);
-        if self.work > self.maximum_work {
+        if !self.work.charge(1, self.maximum_work) {
+            self.work_exhausted = true;
             if !self
                 .diagnostics
                 .iter()
@@ -4131,17 +4138,19 @@ impl FullValidator<'_> {
         }
         let work = std::cell::Cell::new(self.work);
         let interrupted = std::cell::Cell::new(false);
+        let work_exhausted = std::cell::Cell::new(false);
         let result = (|| {
             let checkpoint = || {
                 if let Err(error) = (self.read.checkpoint)() {
                     interrupted.set(true);
                     return Err(error);
                 }
-                let next = work.get().checked_add(1).ok_or_else(full_work_exhausted)?;
-                work.set(next);
-                if next > self.maximum_work {
+                let mut observed = work.get();
+                if !observed.charge(1, self.maximum_work) {
+                    work_exhausted.set(true);
                     return Err(full_work_exhausted());
                 }
+                work.set(observed);
                 Ok(())
             };
             let read = super::infer::CheckedExpressionRead {
@@ -4170,11 +4179,12 @@ impl FullValidator<'_> {
         })();
         self.work = work.get();
         self.interrupted |= interrupted.get();
+        self.work_exhausted |= work_exhausted.get();
         result
     }
 
     fn exhausted(&self) -> bool {
-        self.work > self.maximum_work || self.interrupted
+        self.work_exhausted || self.interrupted
     }
 
     fn error(&mut self, code: &str, message: impl Into<String>) {
@@ -4355,8 +4365,9 @@ mod read_view_glue_tests {
             },
             interrupted: false,
             diagnostics: vec![],
-            work: 0,
-            maximum_work: MAXIMUM_VALIDATION_WORK,
+            work: ValidationWork::default(),
+            work_exhausted: false,
+            maximum_work: None,
             associated_admission: super::super::owned_associated::OwnedAssociatedAdmission::new(),
             relations: vec![],
             expression_parents: BTreeMap::new(),

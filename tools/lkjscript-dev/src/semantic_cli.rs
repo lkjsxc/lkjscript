@@ -1,8 +1,7 @@
 //! Linked public operations produce return-value evidence; only real children produce process evidence.
 use crate::{error::DevError, evidence, process};
 use lkjscript::platform::contract::{
-    MAXIMUM_CLI_RESPONSE_BYTES, MAXIMUM_CLI_RESPONSE_RECORDS, diagnostic_class_name,
-    exit_status_for,
+    diagnostic_class_name, exit_status_for,
 };
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::{self, Diagnostic};
@@ -428,14 +427,6 @@ fn publish_call(
     evidence_root: &Path,
 ) -> Result<CallObservation, DevError> {
     require(
-        response.len() <= MAXIMUM_CLI_RESPONSE_BYTES,
-        &format!(
-            "linked {operation} response has {} bytes, exceeding its {} byte format bound",
-            response.len(),
-            MAXIMUM_CLI_RESPONSE_BYTES,
-        ),
-    )?;
-    require(
         response_path.parent() == Some(evidence_root)
             && diagnostic_path.parent() == Some(evidence_root),
         "linked evidence files must belong to the owned evidence root",
@@ -465,15 +456,12 @@ fn publish_call(
 }
 
 fn failure_bytes(command: &str, diagnostics: &[Diagnostic]) -> Result<Vec<u8>, DevError> {
-    let mut output = CompactResponseWriter::new(CompactResponseLimits {
-        maximum_bytes: MAXIMUM_CLI_RESPONSE_BYTES,
-        maximum_records: MAXIMUM_CLI_RESPONSE_RECORDS,
-    })
+    let mut output = CompactResponseWriter::new(CompactResponseLimits::default())
     .map_err(|error| DevError::corrupt(error.to_string()))?;
     output
         .append_record("result", &[("status", "failure"), ("command", command)])
         .map_err(|error| DevError::corrupt(error.to_string()))?;
-    for error in diagnostics.iter().take(64) {
+    for error in diagnostics {
         let mut fields = vec![
             ("class", diagnostic_class_name(error.class).to_owned()),
             ("code", error.code.clone()),
@@ -499,17 +487,6 @@ fn failure_bytes(command: &str, diagnostics: &[Diagnostic]) -> Result<Vec<u8>, D
             )
             .map_err(|error| DevError::corrupt(error.to_string()))?;
     }
-    if diagnostics.len() > 64 {
-        output
-            .append_record(
-                "summary",
-                &[
-                    ("diagnostics", &diagnostics.len().to_string()),
-                    ("omitted", &(diagnostics.len() - 64).to_string()),
-                ],
-            )
-            .map_err(|error| DevError::corrupt(error.to_string()))?;
-    }
     Ok(output.finish())
 }
 
@@ -531,45 +508,36 @@ mod tests {
         clippy::result_large_err,
         reason = "probe callbacks preserve the public typed diagnostic boundary"
     )]
-    fn json_probe_keeps_complete_compact_values_within_the_unchanged_response_bound() {
+    fn json_probe_keeps_complete_values_beyond_the_former_response_bound() {
         let root = tempfile::tempdir().unwrap();
-        let value = serde_json::Value::Array(vec![
-            serde_json::Value::Null;
-            MAXIMUM_CLI_RESPONSE_BYTES / 8 + 1
-        ]);
-        assert!(evidence::encode_json(&value).unwrap().len() > MAXIMUM_CLI_RESPONSE_BYTES);
+        let former_default_bytes = 4 * 1024 * 1024;
+        let value = serde_json::Value::String("x".repeat(former_default_bytes + 1));
         let mut expected = serde_json::to_vec(&value).unwrap();
         expected.push(b'\n');
+        assert!(expected.len() > former_default_bytes);
         let response = root.path().join("probe.stdout");
         let diagnostic = root.path().join("probe.stderr");
         let observed = observe_json(
-            "contributor.probe",
-            &[],
-            &response,
-            &diagnostic,
-            root.path(),
-            || Ok(value),
-        )
-        .unwrap();
+            "contributor.probe", &[], &response, &diagnostic, root.path(), || Ok(value),
+        ).unwrap();
         observed.require_outcome(true).unwrap();
         assert_eq!(std::fs::read(&response).unwrap(), expected);
-        assert!(expected.len() <= MAXIMUM_CLI_RESPONSE_BYTES);
+        assert!(std::fs::read(&diagnostic).unwrap().is_empty());
+    }
 
-        let rejected = root.path().join("oversized.stdout");
-        assert!(
-            observe_json(
-                "contributor.probe",
-                &[],
-                &rejected,
-                &root.path().join("oversized.stderr"),
-                root.path(),
-                || Ok(serde_json::Value::String(
-                    "x".repeat(MAXIMUM_CLI_RESPONSE_BYTES)
-                )),
-            )
-            .is_err()
-        );
-        assert!(!rejected.exists());
+    #[test]
+    fn failure_projection_keeps_every_diagnostic_beyond_former_record_defaults() {
+        let diagnostics = (0..10_001).map(|index| Diagnostic::new(
+            platform::DiagnosticClass::Semantic, "complete_diagnostic", index.to_string(),
+        )).collect::<Vec<_>>();
+        let bytes = failure_bytes("change", &diagnostics).unwrap();
+        let records = parse_records("response", &bytes).unwrap();
+        assert_eq!(records.len(), diagnostics.len() + 1);
+        for (record, diagnostic) in records[1..].iter().zip(&diagnostics) {
+            assert_eq!(record.operation, "diagnostic");
+            assert_eq!(record.fields.iter().find(|field| field.name == "message").unwrap().value,
+                diagnostic.message);
+        }
     }
 
     fn field(records: &[CompactRecord], name: &str) -> String {

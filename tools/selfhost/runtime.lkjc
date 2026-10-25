@@ -1,39 +1,111 @@
 declarations.begin
-(units (module create runtime
-  (function create message (visibility private) (effect pure)
-    (parameter create i (type I64)) (returns Text)
-    (body (if (call ci::eq (local i) (i64 0)) (text "native_allocation\n")
-      (if (call ci::eq (local i) (i64 1)) (text "normalized_bytes_index\n")
-        (if (call ci::eq (local i) (i64 2)) (text "normalized_bytes_octet\n")
-          (if (call ci::eq (local i) (i64 3)) (text "normalized_bytes_range\n")
-            (if (call ci::eq (local i) (i64 4)) (text "normalized_allocation\n")
-              (if (call ci::eq (local i) (i64 5)) (text "normalized_buffer_index\n")
-                (if (call ci::eq (local i) (i64 6)) (text "normalized_buffer_octet\n")
-                  (if (call ci::eq (local i) (i64 7)) (text "normalized_buffer_storage\n")
-                    (if (call ci::eq (local i) (i64 8)) (text "normalized_list_index\n") (text "native_input\n"))))))))))))
-  (function create traps (visibility private) (effect pure)
-    (parameter create i (type I64)) (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (if (call ci::eq (local i) (i64 10)) (local out)
-      (let (binding start (call ci::add (i64 24576) (call ci::mul (local i) (i64 256))))
-        (binding bytes (call ci::text-bytes (call message (local i))))
-        (binding a (type ByteBuffer) (call elf::trap (call ci::add (local start) (i64 128))
-          (call ci::length (local bytes)) (if (call ci::eq (local i) (i64 9)) (i64 65) (i64 70)) (local out)))
-        (binding b (type ByteBuffer) (call ci::pad (call ci::add (local start) (i64 128)) (i64 0) (local a)))
-        (binding c (type ByteBuffer) (call ci::append (local bytes) (i64 0) (local b)))
-        (binding d (type ByteBuffer) (call ci::pad (call ci::add (local start) (i64 256)) (i64 0) (local c)))
-        (in (call traps (call ci::add (local i) (i64 1)) (local d)))))))
-  (function create emit (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let
-      (binding a (type ByteBuffer) (call heap::allocate (local out)))
-      (binding b (type ByteBuffer) (call heap::copy (local a)))
-      (binding c (type ByteBuffer) (call heap::write (local b)))
-      (binding d (type ByteBuffer) (call heap::decimal (local c)))
-      (binding e (type ByteBuffer) (if (call ci::eq (call flow::field (local data)
-          (call flow::declaration (call ci::u32 (local data) (i64 12))) (i64 8)) (i64 1))
-        (call stream::emit (local data) (local d)) (call ci::pad (i64 8192) (i64 0) (local d))))
-      (binding f (type ByteBuffer) (call hash::emit (local e)))
-      (binding g (type ByteBuffer) (call traps (i64 0) (local f)))
-      (in (call ci::pad (i64 65536) (i64 0) (local g))))))
-))
+(units
+  (module create runtime
+    (function create message
+      (visibility private)
+      (effect pure)
+      (parameter create i (type I64))
+      (returns Text)
+      (body
+        (if
+          (call ci::eq (local i) (i64 0))
+          (text "native_allocation\n")
+          (if
+            (call ci::eq (local i) (i64 1))
+            (text "normalized_bytes_index\n")
+            (if
+              (call ci::eq (local i) (i64 2))
+              (text "normalized_bytes_octet\n")
+              (if
+                (call ci::eq (local i) (i64 3))
+                (text "normalized_bytes_range\n")
+                (if
+                  (call ci::eq (local i) (i64 4))
+                  (text "normalized_allocation\n")
+                  (if
+                    (call ci::eq (local i) (i64 5))
+                    (text "normalized_buffer_index\n")
+                    (if
+                      (call ci::eq (local i) (i64 6))
+                      (text "normalized_buffer_octet\n")
+                      (if
+                        (call ci::eq (local i) (i64 7))
+                        (text "normalized_buffer_storage\n")
+                        (if
+                          (call ci::eq (local i) (i64 8))
+                          (text "normalized_list_index\n")
+                          (text "native_input\n"))))))))))))
+    (function create traps
+      (visibility private)
+      (effect pure)
+      (parameter create i (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local i) (i64 10))
+          (local out)
+          (let
+            (binding start (call ci::add (i64 24576) (call ci::mul (local i) (i64 256))))
+            (binding bytes (call ci::text-bytes (call message (local i))))
+            (binding a
+              (type ByteBuffer)
+              (call elf::trap
+                (call ci::add (local start) (i64 128))
+                (call ci::length (local bytes))
+                (if (call ci::eq (local i) (i64 9)) (i64 65) (i64 70))
+                (local out)))
+            (binding b
+              (type ByteBuffer)
+              (call ci::pad (call ci::add (local start) (i64 128)) (i64 0) (local a)))
+            (binding c (type ByteBuffer) (call ci::append (local bytes) (i64 0) (local b)))
+            (binding d
+              (type ByteBuffer)
+              (call ci::pad (call ci::add (local start) (i64 256)) (i64 0) (local c)))
+            (in (call traps (call ci::add (local i) (i64 1)) (local d)))))))
+    (function create emit
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create layout (type Bytes))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (let
+          (binding initial (call ci::eq (call ci::size (local out)) (i64 5120)))
+          (binding a (type ByteBuffer) (call heap::allocate (local out)))
+          (binding aa (call ci::eq (call ci::size (local a)) (i64 5376)))
+          (binding b (type ByteBuffer) (call heap::copy (local a)))
+          (binding bb (call ci::eq (call ci::size (local b)) (i64 5632)))
+          (binding c (type ByteBuffer) (call heap::write (local b)))
+          (binding cc (call ci::eq (call ci::size (local c)) (i64 5888)))
+          (binding d (type ByteBuffer) (call heap::decimal (local c)))
+          (binding dd (call ci::eq (call ci::size (local d)) (i64 6144)))
+          (binding e
+            (type ByteBuffer)
+            (if
+              (call ci::eq
+                (call flow::field
+                  (local data)
+                  (call flow::declaration (local data) (call ci::u64 (local data) (i64 144)))
+                  (i64 16))
+                (i64 1))
+              (call stream::emit (local data) (local layout) (local d))
+              (call ci::pad (i64 8192) (i64 0) (local d))))
+          (binding ee (call ci::eq (call ci::size (local e)) (i64 8192)))
+          (binding f (type ByteBuffer) (call hash::emit (local e)))
+          (binding ff (call ci::eq (call ci::size (local f)) (i64 24576)))
+          (binding g (type ByteBuffer) (call traps (i64 0) (local f)))
+          (binding gg (call ci::eq (call ci::size (local g)) (i64 27136)))
+          (in
+            (if
+              (call ci::both
+                (call ci::both (local initial) (local aa))
+                (call ci::both
+                  (call ci::both (local bb) (local cc))
+                  (call ci::both
+                    (call ci::both (local dd) (local ee))
+                    (call ci::both (local ff) (local gg)))))
+              (call machine::builtins (i64 1) (local g))
+              (call machine::layout-failure (local g)))))))))
 declarations.end

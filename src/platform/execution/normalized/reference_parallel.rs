@@ -818,7 +818,6 @@ impl ReferenceState<'_> {
                 raw,
                 ty,
                 self.control,
-                0,
             );
         }
         if !self.schema.comparable_types.contains(&ty)

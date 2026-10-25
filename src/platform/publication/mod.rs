@@ -54,7 +54,7 @@ pub use receipt::{
 };
 pub(crate) use repository::GarbageCollectionReceipt;
 pub use repository::{
-    CreatedRepository, CurrentPublication, GraphRepository, InitialPackageTransport,
+    CreatedRepository, CurrentPublication, GraphRepository, InitialPackageTransport, RepublicationReceipt,
     MAXIMUM_REFRESH_ANCESTOR_REVISIONS, PackageTransportStageReceipt, PublicationOutcome,
     PublicationPoint, ReconciliationResult, ReconciliationStatus, ReconciliationWork,
 };

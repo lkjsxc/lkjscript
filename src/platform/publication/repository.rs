@@ -3,6 +3,10 @@
 #[path = "memory_repository.rs"]
 mod memory_repository;
 
+#[path = "republish.rs"]
+mod republish;
+pub use republish::RepublicationReceipt;
+
 #[path = "gc.rs"]
 mod gc;
 pub(crate) use gc::GarbageCollectionReceipt;
@@ -127,33 +131,14 @@ impl ImmutableObjectStore for AncestorStore<'_> {
             code: "change_refresh_history_cancelled",
             message: error.message,
         })?;
-        let own = self.admission.borrow().remaining();
-        let other = external.remaining();
-        let permitted = StoreReadLimits {
-            maximum_catalog_lookups: own
-                .maximum_catalog_lookups
-                .min(other.maximum_catalog_lookups),
-            maximum_objects: own.maximum_objects.min(other.maximum_objects),
-            maximum_bytes: own.maximum_bytes.min(other.maximum_bytes),
-        };
-        let mut merged = StoreReadAdmission::new(permitted);
-        let result = self
-            .base
-            .read_admitted(key, maximum_bytes, &mut merged, work);
-        let after = merged.remaining();
-        let used = StoreReadLimits {
-            maximum_catalog_lookups: permitted.maximum_catalog_lookups
-                - after.maximum_catalog_lookups,
-            maximum_objects: permitted.maximum_objects - after.maximum_objects,
-            maximum_bytes: permitted.maximum_bytes - after.maximum_bytes,
-        };
-        let remaining = |before: StoreReadLimits| StoreReadLimits {
-            maximum_catalog_lookups: before.maximum_catalog_lookups - used.maximum_catalog_lookups,
-            maximum_objects: before.maximum_objects - used.maximum_objects,
-            maximum_bytes: before.maximum_bytes - used.maximum_bytes,
-        };
-        *self.admission.borrow_mut() = StoreReadAdmission::new(remaining(own));
-        *external = StoreReadAdmission::new(remaining(other));
+        let own = *self.admission.borrow();
+        let other = *external;
+        let mut merged = StoreReadAdmission::new(own.remaining().intersect(other.remaining()));
+        let result = self.base.read_admitted(key, maximum_bytes, &mut merged, work);
+        let next_own = own.charged_from(&merged)?;
+        let next_other = other.charged_from(&merged)?;
+        *self.admission.borrow_mut() = next_own;
+        *external = next_other;
         result
     }
 }
@@ -1917,7 +1902,7 @@ fn read_required<S: ImmutableObjectStore + ?Sized>(
 // they are preparation capacity, not semantic validity or an execution quota.
 struct CandidateReferenceAdmission {
     reads: RefCell<StoreReadAdmission>,
-    remaining_visits: Cell<u64>,
+    remaining_visits: Cell<Option<u64>>,
 }
 
 impl CandidateReferenceAdmission {
@@ -1933,19 +1918,15 @@ impl CandidateReferenceAdmission {
     }
 
     fn admit_visits(&self, count: usize) -> Result<(), Diagnostic> {
-        let count = u64::try_from(count).unwrap_or(u64::MAX);
-        let remaining = self
-            .remaining_visits
-            .get()
-            .checked_sub(count)
-            .ok_or_else(|| {
-                repository_error(
-                    DiagnosticClass::Resource,
-                    "publication_repository_reference_visits_exhausted",
-                    "candidate reference traversal exceeds its aggregate preparation allowance",
-                )
-            })?;
-        self.remaining_visits.set(remaining);
+        if let Some(remaining) = self.remaining_visits.get() {
+            let count = u64::try_from(count).map_err(|_| repository_error(
+                DiagnosticClass::Resource, "publication_repository_reference_visits_exhausted",
+                "candidate reference count cannot fit a finite caller allowance"))?;
+            let remaining = remaining.checked_sub(count).ok_or_else(|| repository_error(
+                DiagnosticClass::Resource, "publication_repository_reference_visits_exhausted",
+                "candidate reference traversal exceeds its aggregate preparation allowance"))?;
+            self.remaining_visits.set(Some(remaining));
+        }
         Ok(())
     }
 }
@@ -2152,8 +2133,8 @@ fn verify_candidate_references(
         maximum_pages_read: limits.maximum_map_pages,
         maximum_bytes_read: limits.maximum_bytes,
         maximum_entries_visited: limits.maximum_map_entries,
-        maximum_pages_encoded: 0,
-        maximum_bytes_encoded: 0,
+        maximum_pages_encoded: Some(0),
+        maximum_bytes_encoded: Some(0),
     });
 
     // The mutable staging inventory is not an authority for which objects are required.
@@ -2556,7 +2537,7 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
     root: &crate::platform::kernel::SemanticRoot,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
     control: &ExecutionControl,
-) -> Result<u64, Diagnostic> {
+) -> Result<(u64, bool), Diagnostic> {
     use crate::platform::kernel::{PackageId, decode_dependency, decode_dependency_binding};
     use crate::platform::package_transport::source::{
         MAXIMUM_VALIDATION_READ_BYTES, MAXIMUM_VALIDATION_VISITS, SourceAdmissionSession, entries,
@@ -2929,12 +2910,12 @@ fn install_package_container(
     let stage_input_visits = container.objects.len() as u64;
     let mut install_admission = crate::platform::storage::object::StoreReadAdmission::new(
         crate::platform::storage::object::StoreReadLimits {
-            maximum_catalog_lookups: reserved_visits,
-            maximum_objects: crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS
+            maximum_catalog_lookups: Some(reserved_visits),
+            maximum_objects: Some(crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS
                 - admitted.validation_visits
-                - stage_input_visits,
-            maximum_bytes: crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES
-                - admitted.validation_read_bytes,
+                - stage_input_visits),
+            maximum_bytes: Some(crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES
+                - admitted.validation_read_bytes),
         },
     );
     package_stage_checkpoint(fault, PackageStagePoint::BeforeObjects)?;
@@ -3621,11 +3602,11 @@ mod candidate_reference_admission_tests {
             .map(|(_, bytes)| bytes.len() as u64)
             .sum::<u64>();
         let mut work = MapWork::with_admission(MapAdmission {
-            maximum_pages_read: 2,
-            maximum_bytes_read: 2 * page_bytes,
-            maximum_entries_visited: 2,
-            maximum_pages_encoded: 0,
-            maximum_bytes_encoded: 0,
+            maximum_pages_read: Some(2),
+            maximum_bytes_read: Some(2 * page_bytes),
+            maximum_entries_visited: Some(2),
+            maximum_pages_encoded: Some(0),
+            maximum_bytes_encoded: Some(0),
         });
         let mut visits = 0;
         let mut visit = |key: &[u8], value: &[u8]| {
@@ -3665,10 +3646,10 @@ mod candidate_reference_admission_tests {
             }
             for short_bytes in [false, true] {
                 let admission = CandidateReferenceAdmission::new(CanonicalReadAdmission {
-                    maximum_catalog_lookups: 2,
-                    maximum_objects: 2,
-                    maximum_bytes: 2 * bytes.len() as u64 - u64::from(short_bytes),
-                    maximum_decoded_records: 2,
+                    maximum_catalog_lookups: Some(2),
+                    maximum_objects: Some(2),
+                    maximum_bytes: Some(2 * bytes.len() as u64 - u64::from(short_bytes)),
+                    maximum_decoded_records: Some(2),
                     ..Default::default()
                 });
                 let mut work = StoreWork::default();

@@ -65,7 +65,7 @@ declarations.begin
               (call extent
                 (local data)
                 (local next)
-                (call flow::field (local data) (local at) (i64 4))
+                (call ci::field32 (local data) (local at) (i64 4))
                 (i64 1)))
             (in
               (if
@@ -110,7 +110,7 @@ declarations.begin
           (let
             (binding at (call ci::add (i64 256) (call ci::mul (local i) (i64 8))))
             (binding offset (call ci::u32 (local data) (local at)))
-            (binding count (call flow::field (local data) (local at) (i64 4)))
+            (binding count (call ci::field32 (local data) (local at) (i64 4)))
             (in
               (if
                 (call ci::eq (local i) (i64 8))
@@ -163,7 +163,7 @@ declarations.begin
           (call ci::eq (local at) (local end))
           (bool true)
           (if
-            (call ci::lt (call flow::field (local data) (local at) (i64 0)) (local limit))
+            (call ci::lt (call ci::field32 (local data) (local at) (i64 0)) (local limit))
             (call indices (local data) (call ci::add (local at) (i64 4)) (local end) (local limit))
             (bool false)))))
     (function create parameters
@@ -186,11 +186,11 @@ declarations.begin
                 (bool false)
                 (bool true))
               (if
-                (call ci::lt (i64 0) (call flow::field (local data) (local at) (i64 20)))
+                (call ci::lt (i64 0) (call ci::field32 (local data) (local at) (i64 20)))
                 (if
-                  (call ci::lt (call flow::field (local data) (local at) (i64 24)) (local types))
+                  (call ci::lt (call ci::field32 (local data) (local at) (i64 24)) (local types))
                   (if
-                    (call ci::lt (call flow::field (local data) (local at) (i64 28)) (i64 3))
+                    (call ci::lt (call ci::field32 (local data) (local at) (i64 28)) (i64 3))
                     (bool true)
                     (bool false))
                   (bool false))
@@ -221,10 +221,10 @@ declarations.begin
         (if
           (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 20)))
           (let
-            (binding tp (call flow::field (local data) (local at) (i64 0)))
-            (binding tc (call flow::field (local data) (local at) (i64 4)))
-            (binding pp (call flow::field (local data) (local at) (i64 8)))
-            (binding pc (call flow::field (local data) (local at) (i64 12)))
+            (binding tp (call ci::field32 (local data) (local at) (i64 0)))
+            (binding tc (call ci::field32 (local data) (local at) (i64 4)))
+            (binding pp (call ci::field32 (local data) (local at) (i64 8)))
+            (binding pc (call ci::field32 (local data) (local at) (i64 12)))
             (in
               (if
                 (if
@@ -235,7 +235,7 @@ declarations.begin
                       (call ci::lt (local pc) (i64 129))
                       (if
                         (call ci::lt
-                          (call flow::field (local data) (local at) (i64 16))
+                          (call ci::field32 (local data) (local at) (i64 16))
                           (local types))
                         (bool true)
                         (bool false))
@@ -281,15 +281,15 @@ declarations.begin
       (returns I64)
       (body
         (let
-          (binding tag (call flow::field (local data) (local at) (i64 0)))
-          (binding a (call flow::field (local data) (local at) (i64 4)))
-          (binding b (call flow::field (local data) (local at) (i64 8)))
-          (binding extra (call flow::field (local data) (local at) (i64 24)))
-          (binding count (call flow::field (local data) (local at) (i64 28)))
+          (binding tag (call ci::field32 (local data) (local at) (i64 0)))
+          (binding a (call ci::field32 (local data) (local at) (i64 4)))
+          (binding b (call ci::field32 (local data) (local at) (i64 8)))
+          (binding extra (call ci::field32 (local data) (local at) (i64 24)))
+          (binding count (call ci::field32 (local data) (local at) (i64 28)))
           (in
             (if
               (if
-                (call ci::eq (call flow::field (local data) (local at) (i64 12)) (i64 0))
+                (call ci::eq (call ci::field32 (local data) (local at) (i64 12)) (i64 0))
                 (if
                   (if
                     (call ci::eq (local tag) (i64 4))
@@ -563,14 +563,14 @@ declarations.begin
         (if
           (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 16)))
           (let
-            (binding locals (call flow::field (local data) (local at) (i64 4)))
-            (binding nodes (call flow::field (local data) (local at) (i64 8)))
-            (binding count (call flow::field (local data) (local at) (i64 12)))
+            (binding locals (call ci::field32 (local data) (local at) (i64 4)))
+            (binding nodes (call ci::field32 (local data) (local at) (i64 8)))
+            (binding count (call ci::field32 (local data) (local at) (i64 12)))
             (in
               (if
                 (if
                   (call ci::eq
-                    (call flow::field (local data) (local at) (i64 0))
+                    (call ci::field32 (local data) (local at) (i64 0))
                     (local parameters))
                   (if
                     (call ci::lt (local locals) (i64 129))
@@ -622,14 +622,14 @@ declarations.begin
           (bool true)
           (if
             (if
-              (call ci::lt (call flow::field (local data) (local at) (i64 0)) (local ports))
+              (call ci::lt (call ci::field32 (local data) (local at) (i64 0)) (local ports))
               (if
-                (call ci::lt (call flow::field (local data) (local at) (i64 4)) (local types))
+                (call ci::lt (call ci::field32 (local data) (local at) (i64 4)) (local types))
                 (if
-                  (call ci::eq (call flow::field (local data) (local at) (i64 8)) (i64 0))
+                  (call ci::eq (call ci::field32 (local data) (local at) (i64 8)) (i64 0))
                   (if
                     (call ci::lt
-                      (call flow::field (local data) (local at) (i64 12))
+                      (call ci::field32 (local data) (local at) (i64 12))
                       (local declarations))
                     (bool true)
                     (bool false))
@@ -657,8 +657,8 @@ declarations.begin
         (if
           (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 8)))
           (let
-            (binding offset (call flow::field (local data) (local at) (i64 0)))
-            (binding count (call flow::field (local data) (local at) (i64 4)))
+            (binding offset (call ci::field32 (local data) (local at) (i64 0)))
+            (binding count (call ci::field32 (local data) (local at) (i64 4)))
             (in
               (if
                 (if
@@ -696,16 +696,16 @@ declarations.begin
           (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 16)))
           (if
             (if
-              (call ci::lt (call flow::field (local data) (local at) (i64 0)) (local declarations))
+              (call ci::lt (call ci::field32 (local data) (local at) (i64 0)) (local declarations))
               (if
-                (call ci::lt (call flow::field (local data) (local at) (i64 4)) (i64 2))
+                (call ci::lt (call ci::field32 (local data) (local at) (i64 4)) (i64 2))
                 (if
-                  (call ci::eq (call flow::field (local data) (local at) (i64 12)) (i64 0))
+                  (call ci::eq (call ci::field32 (local data) (local at) (i64 12)) (i64 0))
                   (if
                     (if
-                      (call ci::eq (call flow::field (local data) (local at) (i64 4)) (i64 0))
-                      (call ci::eq (call flow::field (local data) (local at) (i64 8)) (i64 0))
-                      (call ci::lt (call flow::field (local data) (local at) (i64 8)) (local ports)))
+                      (call ci::eq (call ci::field32 (local data) (local at) (i64 4)) (i64 0))
+                      (call ci::eq (call ci::field32 (local data) (local at) (i64 8)) (i64 0))
+                      (call ci::lt (call ci::field32 (local data) (local at) (i64 8)) (local ports)))
                     (bool true)
                     (bool false))
                   (bool false))
@@ -882,14 +882,14 @@ declarations.begin
       (returns I64)
       (body
         (let
-          (binding tag (call flow::field (local data) (i64 0) (i64 248)))
-          (binding at (call flow::field (local data) (i64 0) (i64 252)))
-          (binding signature (call flow::field (local data) (i64 0) (i64 244)))
-          (binding types (call flow::field (local data) (i64 0) (i64 308)))
-          (binding declarations (call flow::field (local data) (i64 0) (i64 260)))
-          (binding names (call flow::field (local data) (i64 0) (i64 316)))
-          (binding texts (call flow::field (local data) (i64 0) (i64 332)))
-          (binding ports (call flow::field (local data) (i64 0) (i64 300)))
+          (binding tag (call ci::field32 (local data) (i64 0) (i64 248)))
+          (binding at (call ci::field32 (local data) (i64 0) (i64 252)))
+          (binding signature (call ci::field32 (local data) (i64 0) (i64 244)))
+          (binding types (call ci::field32 (local data) (i64 0) (i64 308)))
+          (binding declarations (call ci::field32 (local data) (i64 0) (i64 260)))
+          (binding names (call ci::field32 (local data) (i64 0) (i64 316)))
+          (binding texts (call ci::field32 (local data) (i64 0) (i64 332)))
+          (binding ports (call ci::field32 (local data) (i64 0) (i64 300)))
           (in
             (if
               (if
@@ -912,7 +912,7 @@ declarations.begin
                         (call code
                           (local data)
                           (local at)
-                          (call flow::field (local data) (local signature) (i64 12))
+                          (call ci::field32 (local data) (local signature) (i64 12))
                           (local types)
                           (local declarations)
                           (local names)
@@ -946,19 +946,19 @@ declarations.begin
             (if (call ci::lt (call ci::length (local data)) (i64 8388609)) (bool true) (bool false))
             (bool false))
           (let
-            (binding owner (call flow::field (local data) (i64 0) (i64 0)))
-            (binding kind (call flow::field (local data) (i64 0) (i64 4)))
-            (binding tag (call flow::field (local data) (i64 0) (i64 248)))
+            (binding owner (call ci::field32 (local data) (i64 0) (i64 0)))
+            (binding kind (call ci::field32 (local data) (i64 0) (i64 4)))
+            (binding tag (call ci::field32 (local data) (i64 0) (i64 248)))
             (in
               (if
                 (if
                   (call ci::eq
-                    (call flow::field (local data) (i64 0) (i64 8))
+                    (call ci::field32 (local data) (i64 0) (i64 8))
                     (call ci::add (local kind) (i64 1)))
                   (if
-                    (call ci::eq (call flow::field (local data) (i64 0) (i64 12)) (i64 0))
+                    (call ci::eq (call ci::field32 (local data) (i64 0) (i64 12)) (i64 0))
                     (if
-                      (call ci::eq (call flow::field (local data) (i64 0) (i64 240)) (i64 256))
+                      (call ci::eq (call ci::field32 (local data) (i64 0) (i64 240)) (i64 256))
                       (if
                         (if (call zeros (local data) (i64 16) (i64 32)) (bool false) (bool true))
                         (if

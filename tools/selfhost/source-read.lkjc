@@ -83,8 +83,7 @@ declarations.begin
                     (if
                       (call range (local data) (local at) (i64 5) (local end))
                       (let
-                        (binding value
-                          (call ci::u32 (local data) (call ci::add (local at) (i64 1))))
+                        (binding value (call ci::u32 (local data) (call ci::add (local at) (i64 1))))
                         (in
                           (if
                             (call ci::lt (local value) (i64 65536))
@@ -108,10 +107,8 @@ declarations.begin
                       (if
                         (call range (local data) (local at) (i64 9) (local end))
                         (let
-                          (binding low
-                            (call ci::u32 (local data) (call ci::add (local at) (i64 1))))
-                          (binding high
-                            (call ci::u32 (local data) (call ci::add (local at) (i64 5))))
+                          (binding low (call ci::u32 (local data) (call ci::add (local at) (i64 1))))
+                          (binding high (call ci::u32 (local data) (call ci::add (local at) (i64 5))))
                           (in
                             (if
                               (call ci::eq (local high) (i64 0))
@@ -166,10 +163,7 @@ declarations.begin
                   (call ci::add
                     (call ci::mul (field (local decoded) (name high)) (i64 4294967296))
                     (field (local decoded) (name low)))))
-              (record structural
-                (field code (i64 12))
-                (field next (local at))
-                (field value (i64 0))))))))
+              (record structural (field code (i64 12)) (field next (local at)) (field value (i64 0))))))))
     (function create signed
       (visibility public)
       (effect pure)
@@ -199,10 +193,7 @@ declarations.begin
                         (call ci::eq (local low) (call ci::mul (local half) (i64 2)))
                         (local magnitude)
                         (call ci::sub (i64 -1) (local magnitude)))))))
-              (record structural
-                (field code (i64 12))
-                (field next (local at))
-                (field value (i64 0))))))))
+              (record structural (field code (i64 12)) (field next (local at)) (field value (i64 0))))))))
     (function create envelope
       (visibility public)
       (effect pure)
@@ -242,9 +233,7 @@ declarations.begin
                                 (call ci::lt (i64 -1) (local maximum))
                                 (if
                                   (if
-                                    (call ci::lt
-                                      (local maximum)
-                                      (call ci::sub (local length) (i64 50)))
+                                    (call ci::lt (local maximum) (call ci::sub (local length) (i64 50)))
                                     (bool false)
                                     (bool true))
                                   (if
@@ -281,10 +270,7 @@ declarations.begin
               (call ci::eq (local width) (i64 17))
               (bool true)
               (if (call ci::eq (local width) (i64 33)) (bool true) (bool false)))
-            (if
-              (call range (local data) (local at) (local width) (local end))
-              (bool true)
-              (bool false))
+            (if (call range (local data) (local at) (local width) (local end)) (bool true) (bool false))
             (bool false))
           (if
             (if
@@ -329,8 +315,7 @@ declarations.begin
             (call ci::eq (local count) (i64 0))
             (local at)
             (let
-              (binding next
-                (call typed (local data) (local at) (local end) (local tag) (local width)))
+              (binding next (call typed (local data) (local at) (local end) (local tag) (local width)))
               (in
                 (if
                   (call ci::lt (i64 -1) (local next))
@@ -449,9 +434,7 @@ declarations.begin
                 (bool false))
               (let
                 (binding next
-                  (call ci::add
-                    (field (local count) (name next))
-                    (field (local count) (name value))))
+                  (call ci::add (field (local count) (name next)) (field (local count) (name value))))
                 (in
                   (if
                     (call types::utf8 (local data) (field (local count) (name next)) (local next))
@@ -521,11 +504,7 @@ declarations.begin
             (bool true)
             (if
               (call name-char (call ci::get (local data) (local at)) (local first))
-              (call name-scan
-                (local data)
-                (call ci::add (local at) (i64 1))
-                (local end)
-                (bool false))
+              (call name-scan (local data) (call ci::add (local at) (i64 1)) (local end) (bool false))
               (bool false)))
           (bool false))))
     (function create name
@@ -616,5 +595,30 @@ declarations.begin
                     (local tag)
                     (local width))
                   (i64 -1)))))
-          (i64 -1))))))
+          (i64 -1))))
+    (function create items-fit
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create count (type I64))
+      (parameter create width (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::lt (local count) (i64 0))
+          (bool false)
+          (if
+            (call ci::lt (i64 0) (local width))
+            (if
+              (call range (local data) (local at) (i64 0) (local end))
+              (if
+                (call ci::lt
+                  (call ci::div (call ci::sub (local end) (local at)) (local width))
+                  (local count))
+                (bool false)
+                (bool true))
+              (bool false))
+            (bool false)))))))
 declarations.end

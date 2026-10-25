@@ -2,46 +2,55 @@
 
 /// Shape ceilings describe one semantic candidate; processing and retained-storage allowances
 /// cover original proof, guards and renewed proof cumulatively.
+const REFRESH_WORK_DIMENSIONS: &[BudgetDimension] = &[
+        BudgetDimension::CanonicalPointReads,
+        BudgetDimension::CanonicalMapPages,
+        BudgetDimension::CanonicalMapEntries,
+        BudgetDimension::CanonicalCatalogLookups,
+        BudgetDimension::CanonicalObjects,
+        BudgetDimension::CanonicalBytes,
+        BudgetDimension::CanonicalDecodedRecords,
+        BudgetDimension::CanonicalMapPagesEncoded,
+        BudgetDimension::CanonicalMapBytesEncoded,
+        BudgetDimension::WitnessPointReads,
+        BudgetDimension::WitnessMapPages,
+        BudgetDimension::WitnessMapEntries,
+        BudgetDimension::WitnessCatalogLookups,
+        BudgetDimension::WitnessObjects,
+        BudgetDimension::WitnessBytes,
+        BudgetDimension::WitnessDecodedRecords,
+        BudgetDimension::ImpactSummaryOwners,
+        BudgetDimension::ImpactSummaryEdits,
+        BudgetDimension::ImpactOwnershipSteps,
+        BudgetDimension::ImpactBehaviorOwners,
+        BudgetDimension::RelationEdges,
+        BudgetDimension::ValidationOwnerRecords,
+        BudgetDimension::ValidationOwnershipEntries,
+        BudgetDimension::ValidationTypeObjects,
+        BudgetDimension::ValidationExpressionSteps,
+        BudgetDimension::ValidationDiagnostics,
+        BudgetDimension::TestOwnershipSteps,
+        BudgetDimension::TestOwnersVisited,
+        BudgetDimension::WitnessEdits,
+        BudgetDimension::WitnessMapPagesEncoded,
+        BudgetDimension::WitnessMapBytesEncoded,
+        BudgetDimension::StagedObjects,
+        BudgetDimension::StagedBytes,
+        BudgetDimension::StagedPages,
+];
+
 pub(crate) fn remaining_refresh_budget(
     mut budget: ChangeBudget,
     prior: ChangeBudgetWork,
 ) -> Result<ChangeBudget, Diagnostic> {
     budget.check_observed(prior, "reviewed refresh prior preparation")?;
-    budget.canonical_reads.maximum_point_reads -= prior.canonical_reads.point_reads;
-    budget.canonical_reads.maximum_map_pages -= prior.canonical_reads.map_pages_read;
-    budget.canonical_reads.maximum_map_entries -= prior.canonical_reads.map_entries_visited;
-    budget.canonical_reads.maximum_catalog_lookups -= prior.canonical_reads.catalog_lookups;
-    budget.canonical_reads.maximum_objects -= prior.canonical_reads.objects_read;
-    budget.canonical_reads.maximum_bytes -= prior.canonical_reads.bytes_read;
-    budget.canonical_reads.maximum_decoded_records -=
-        prior.canonical_reads.canonical_records_decoded;
-    budget.canonical_map_update.maximum_pages_encoded -= prior.canonical_map_update.pages_encoded;
-    budget.canonical_map_update.maximum_bytes_encoded -= prior.canonical_map_update.bytes_encoded;
-    budget.witness_reads.maximum_point_reads -= prior.witness_reads.point_reads;
-    budget.witness_reads.maximum_map_pages -= prior.witness_reads.map_pages_read;
-    budget.witness_reads.maximum_map_entries -= prior.witness_reads.map_entries_visited;
-    budget.witness_reads.maximum_catalog_lookups -= prior.witness_reads.catalog_lookups;
-    budget.witness_reads.maximum_objects -= prior.witness_reads.objects_read;
-    budget.witness_reads.maximum_bytes -= prior.witness_reads.bytes_read;
-    budget.witness_reads.maximum_decoded_records -= prior.witness_reads.witness_records_decoded;
-    budget.impact.maximum_summary_owners -= prior.impact_summary_owners;
-    budget.impact.maximum_summary_edits -= prior.impact_summary_edits;
-    budget.impact.maximum_ownership_steps -= prior.impact_ownership_steps;
-    budget.impact.maximum_behavior_owners -= prior.impact_behavior_owners;
-    budget.impact.maximum_relation_edges -= prior.relation_edges;
-    budget.validation.maximum_owner_records -= prior.validation.owner_records;
-    budget.validation.maximum_ownership_entries -= prior.validation.ownership_entries;
-    budget.validation.maximum_type_objects -= prior.validation.type_objects;
-    budget.validation.maximum_expression_steps -= prior.validation.expression_steps;
-    budget.validation.maximum_diagnostics -= prior.validation.diagnostics;
-    budget.tests.maximum_ownership_steps -= prior.tests.ownership_steps;
-    budget.tests.maximum_owners_visited -= prior.tests.owners_visited;
-    budget.witness_update.maximum_edits -= prior.witness_update.edits;
-    budget.witness_update.maximum_pages_encoded -= prior.witness_update.pages_encoded;
-    budget.witness_update.maximum_bytes_encoded -= prior.witness_update.bytes_encoded;
-    budget.staging.maximum_objects -= prior.staging.objects;
-    budget.staging.maximum_bytes -= prior.staging.bytes;
-    budget.staging.maximum_pages -= prior.staging.pages;
+    for dimension in REFRESH_WORK_DIMENSIONS {
+        if let Some(observed) = prior.observation(*dimension) {
+            let remaining = observed.remaining(budget.maximum(*dimension),
+                "reviewed refresh prior preparation", dimension.name())?;
+            budget.set_policy_limit(dimension.policy_name(), remaining)?;
+        }
+    }
     Ok(budget)
 }
 
@@ -49,129 +58,17 @@ pub(crate) fn include_prior_refresh_work(
     mut current: ChangeBudgetWork,
     prior: ChangeBudgetWork,
 ) -> Result<ChangeBudgetWork, Diagnostic> {
-    current.canonical_reads.point_reads = add_observed(
-        current.canonical_reads.point_reads,
-        prior.canonical_reads.point_reads,
-    )?;
-    current.canonical_reads.map_pages_read = add_observed(
-        current.canonical_reads.map_pages_read,
-        prior.canonical_reads.map_pages_read,
-    )?;
-    current.canonical_reads.map_entries_visited = add_observed(
-        current.canonical_reads.map_entries_visited,
-        prior.canonical_reads.map_entries_visited,
-    )?;
-    current.canonical_reads.catalog_lookups = add_observed(
-        current.canonical_reads.catalog_lookups,
-        prior.canonical_reads.catalog_lookups,
-    )?;
-    current.canonical_reads.objects_read = add_observed(
-        current.canonical_reads.objects_read,
-        prior.canonical_reads.objects_read,
-    )?;
-    current.canonical_reads.bytes_read = add_observed(
-        current.canonical_reads.bytes_read,
-        prior.canonical_reads.bytes_read,
-    )?;
-    current.canonical_reads.canonical_records_decoded = add_observed(
-        current.canonical_reads.canonical_records_decoded,
-        prior.canonical_reads.canonical_records_decoded,
-    )?;
-    current.canonical_map_update.pages_encoded = add_observed(
-        current.canonical_map_update.pages_encoded,
-        prior.canonical_map_update.pages_encoded,
-    )?;
-    current.canonical_map_update.bytes_encoded = add_observed(
-        current.canonical_map_update.bytes_encoded,
-        prior.canonical_map_update.bytes_encoded,
-    )?;
-    current.witness_reads.point_reads = add_observed(
-        current.witness_reads.point_reads,
-        prior.witness_reads.point_reads,
-    )?;
-    current.witness_reads.map_pages_read = add_observed(
-        current.witness_reads.map_pages_read,
-        prior.witness_reads.map_pages_read,
-    )?;
-    current.witness_reads.map_entries_visited = add_observed(
-        current.witness_reads.map_entries_visited,
-        prior.witness_reads.map_entries_visited,
-    )?;
-    current.witness_reads.catalog_lookups = add_observed(
-        current.witness_reads.catalog_lookups,
-        prior.witness_reads.catalog_lookups,
-    )?;
-    current.witness_reads.objects_read = add_observed(
-        current.witness_reads.objects_read,
-        prior.witness_reads.objects_read,
-    )?;
-    current.witness_reads.bytes_read = add_observed(
-        current.witness_reads.bytes_read,
-        prior.witness_reads.bytes_read,
-    )?;
-    current.witness_reads.witness_records_decoded = add_observed(
-        current.witness_reads.witness_records_decoded,
-        prior.witness_reads.witness_records_decoded,
-    )?;
-    current.impact_summary_owners =
-        add_observed(current.impact_summary_owners, prior.impact_summary_owners)?;
-    current.impact_summary_edits =
-        add_observed(current.impact_summary_edits, prior.impact_summary_edits)?;
-    current.impact_ownership_steps =
-        add_observed(current.impact_ownership_steps, prior.impact_ownership_steps)?;
-    current.impact_behavior_owners =
-        add_observed(current.impact_behavior_owners, prior.impact_behavior_owners)?;
-    current.relation_edges = add_observed(current.relation_edges, prior.relation_edges)?;
-    current.validation.owner_records = add_observed(
-        current.validation.owner_records,
-        prior.validation.owner_records,
-    )?;
-    current.validation.ownership_entries = add_observed(
-        current.validation.ownership_entries,
-        prior.validation.ownership_entries,
-    )?;
-    current.validation.type_objects = add_observed(
-        current.validation.type_objects,
-        prior.validation.type_objects,
-    )?;
-    current.validation.expression_steps = add_observed(
-        current.validation.expression_steps,
-        prior.validation.expression_steps,
-    )?;
-    current.validation.diagnostics =
-        add_observed(current.validation.diagnostics, prior.validation.diagnostics)?;
-    current.tests.ownership_steps =
-        add_observed(current.tests.ownership_steps, prior.tests.ownership_steps)?;
-    current.tests.owners_visited =
-        add_observed(current.tests.owners_visited, prior.tests.owners_visited)?;
-    current.witness_update.edits =
-        add_observed(current.witness_update.edits, prior.witness_update.edits)?;
-    current.witness_update.pages_encoded = add_observed(
-        current.witness_update.pages_encoded,
-        prior.witness_update.pages_encoded,
-    )?;
-    current.witness_update.bytes_encoded = add_observed(
-        current.witness_update.bytes_encoded,
-        prior.witness_update.bytes_encoded,
-    )?;
-    current.staging.objects = add_observed(current.staging.objects, prior.staging.objects)?;
-    current.staging.bytes = add_observed(current.staging.bytes, prior.staging.bytes)?;
-    current.staging.pages = add_observed(current.staging.pages, prior.staging.pages)?;
+    for dimension in REFRESH_WORK_DIMENSIONS {
+        if let Some(observed) = prior.observation(*dimension) {
+            current.charge(*dimension, observed, None, "reviewed refresh observation")?;
+        }
+    }
     Ok(current)
 }
 
 use super::*;
-use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::diagnostic::Diagnostic;
 
-fn add_observed(current: u64, prior: u64) -> Result<u64, Diagnostic> {
-    current.checked_add(prior).ok_or_else(|| {
-        Diagnostic::new(
-            DiagnosticClass::Resource,
-            "change_refresh_preparation_capacity",
-            "aggregate refresh preparation observation overflowed",
-        )
-    })
-}
 use crate::platform::kernel::{
     DependencyRecord, OwnerKey, OwnerRecord, PackageId, PackageInterfaceRecord, RelationEdge,
     RelationKind, RetirementRecord, SemanticRoot, TypeObject, TypeObjectDigest,
@@ -350,7 +247,7 @@ impl<W: WitnessBaseRead + ?Sized> WitnessBaseRead for RecordedWitnessBase<'_, W>
     fn read_outgoing_relations(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         let read = self.base.read_outgoing_relations(owner, maximum_items)?;
         if !read.value.truncated {
@@ -368,7 +265,7 @@ impl<W: WitnessBaseRead + ?Sized> WitnessBaseRead for RecordedWitnessBase<'_, W>
     fn read_incoming_relations(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         let read = self.base.read_incoming_relations(owner, maximum_items)?;
         if !read.value.truncated {
@@ -387,7 +284,7 @@ impl<W: WitnessBaseRead + ?Sized> WitnessBaseRead for RecordedWitnessBase<'_, W>
         &self,
         owner: OwnerKey,
         kind: RelationKind,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         let read = self
             .base
@@ -407,7 +304,7 @@ impl<W: WitnessBaseRead + ?Sized> WitnessBaseRead for RecordedWitnessBase<'_, W>
     fn read_incoming_package_relations(
         &self,
         package: PackageId,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         let read = self
             .base
@@ -425,7 +322,7 @@ impl<W: WitnessBaseRead + ?Sized> WitnessBaseRead for RecordedWitnessBase<'_, W>
     fn read_test_dependencies(
         &self,
         test: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic> {
         let read = self.base.read_test_dependencies(test, maximum_items)?;
         if !read.value.truncated {

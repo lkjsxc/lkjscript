@@ -8,7 +8,7 @@ use super::{
 use crate::platform::data::{DataExpectation, DataKey, DataTransaction};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 
-const HASH_DOMAIN: &str = "lkjscript.region.image.v1";
+const HASH_DOMAIN: &str = "lkjscript.region.image.v2";
 const CHUNK_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,7 +43,7 @@ impl RegionImage {
         mut reserve: impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         control.check()?;
-        if image.len() > maximum_bytes || image.len() > u32::MAX as usize {
+        if image.len() > maximum_bytes {
             return Err(capacity_error());
         }
         if image.len() < HEADER_BYTES as usize {
@@ -139,7 +139,9 @@ pub fn save(
         return Err(capacity_error());
     }
     let digest = digest(read.image, control)?;
-    reserve(read.image.len() as u64 + std::mem::size_of::<Vec<u8>>() as u64)?;
+    reserve(u64::try_from(read.image.len()).ok()
+        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<Vec<u8>>() as u64))
+        .ok_or_else(capacity_error)?)?;
     control.check()?;
     let mut bytes = Vec::new();
     bytes

@@ -40,9 +40,9 @@ fn execute(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>> {
     let (source, bytes) = match (inline, file) {
         (Some(value), None) => ("<transaction-input>".into(), value.into_bytes()),
         (None, Some(path)) => {
-            let bytes = read_bounded(
+            let bytes = read_with_limit(
                 Path::new(&path),
-                MAXIMUM_COMPACT_INPUT_BYTES,
+                None,
                 "transaction input",
             )
             .map_err(single_diagnostic)?;

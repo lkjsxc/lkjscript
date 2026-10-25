@@ -1,91 +1,281 @@
 declarations.begin
-(units (module create asm
-  (function create low (visibility public) (effect pure)
-    (parameter create value (type I64)) (returns I64)
-    (body (call ci::sub (local value) (call ci::mul (call ci::div (local value) (i64 8)) (i64 8)))))
-  (function create rex (visibility public) (effect pure)
-    (parameter create wide (type Bool)) (parameter create reg (type I64)) (parameter create base (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (call ci::push (call ci::add (if (local wide) (i64 72) (i64 64))
-      (call ci::add (call ci::mul (call ci::div (local reg) (i64 8)) (i64 4))
-        (call ci::div (local base) (i64 8)))) (local out))))
-  (function create word (visibility public) (effect pure)
-    (parameter create value (type I64)) (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (call ci::le (if (call ci::lt (local value) (i64 0))
-      (call ci::add (local value) (i64 4294967296)) (local value)) (i64 4) (local out))))
-  (function create opcode (visibility public) (effect pure)
-    (parameter create value (type I64)) (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (if (call ci::lt (local value) (i64 256)) (call ci::push (local value) (local out))
-      (let (binding high (call ci::div (local value) (i64 256)))
-        (binding a (type ByteBuffer) (call ci::push (local high) (local out)))
-        (in (call ci::push (call ci::sub (local value) (call ci::mul (local high) (i64 256))) (local a)))))))
-  (function create imm (visibility public) (effect pure)
-    (parameter create dst (type I64)) (parameter create value (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let
-      (binding high (call ci::div (local value) (i64 4294967296)))
-      (binding low (call ci::sub (local value) (call ci::mul (local high) (i64 4294967296))))
-      (binding a (type ByteBuffer) (call rex (bool true) (i64 0) (local dst) (local out)))
-      (binding b (type ByteBuffer) (call ci::push (call ci::add (i64 184) (call low (local dst))) (local a)))
-      (binding c (type ByteBuffer) (call word (local low) (local b)))
-      (in (call word (if (call ci::lt (local low) (i64 0)) (call ci::sub (local high) (i64 1)) (local high)) (local c))))))
-  (function create binary (visibility public) (effect pure)
-    (parameter create wide (type Bool)) (parameter create op (type I64))
-    (parameter create dst (type I64)) (parameter create src (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let (binding a (type ByteBuffer) (call rex (local wide) (local src) (local dst) (local out)))
-      (binding b (type ByteBuffer) (call opcode (local op) (local a)))
-      (in (call ci::push (call ci::add (i64 192) (call ci::add
-        (call ci::mul (call low (local src)) (i64 8)) (call low (local dst)))) (local b))))))
-  (function create mov (visibility public) (effect pure)
-    (parameter create dst (type I64)) (parameter create src (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (call binary (bool true) (i64 137) (local dst) (local src) (local out))))
-  (function create group (visibility public) (effect pure)
-    (parameter create group (type I64)) (parameter create dst (type I64)) (parameter create value (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let (binding a (type ByteBuffer) (call rex (bool true) (i64 0) (local dst) (local out)))
-      (binding b (type ByteBuffer) (call ci::push (i64 129) (local a)))
-      (binding c (type ByteBuffer) (call ci::push (call ci::add (i64 192)
-        (call ci::add (call ci::mul (local group) (i64 8)) (call low (local dst)))) (local b)))
-      (in (call word (local value) (local c))))))
-  (function create shift (visibility public) (effect pure)
-    (parameter create wide (type Bool)) (parameter create group (type I64))
-    (parameter create dst (type I64)) (parameter create amount (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let (binding a (type ByteBuffer) (call rex (local wide) (i64 0) (local dst) (local out)))
-      (binding b (type ByteBuffer) (call ci::push (i64 193) (local a)))
-      (binding c (type ByteBuffer) (call ci::push (call ci::add (i64 192)
-        (call ci::add (call ci::mul (local group) (i64 8)) (call low (local dst)))) (local b)))
-      (in (call ci::push (local amount) (local c))))))
-  (function create memory (visibility public) (effect pure)
-    (parameter create wide (type Bool)) (parameter create op (type I64)) (parameter create reg (type I64))
-    (parameter create base (type I64)) (parameter create offset (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let (binding a (type ByteBuffer) (call rex (local wide) (local reg) (local base) (local out)))
-      (binding b (type ByteBuffer) (call opcode (local op) (local a)))
-      (binding c (type ByteBuffer) (call ci::push (call ci::add (i64 128) (call ci::add
-        (call ci::mul (call low (local reg)) (i64 8)) (call low (local base)))) (local b)))
-      (binding d (type ByteBuffer) (if (call ci::eq (call low (local base)) (i64 4))
-        (call ci::push (i64 36) (local c)) (local c)))
-      (in (call word (local offset) (local d))))))
-  (function create load (visibility public) (effect pure)
-    (parameter create dst (type I64)) (parameter create base (type I64)) (parameter create offset (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (call memory (bool true) (i64 139) (local dst) (local base) (local offset) (local out))))
-  (function create store (visibility public) (effect pure)
-    (parameter create base (type I64)) (parameter create offset (type I64)) (parameter create src (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (call memory (bool true) (i64 137) (local src) (local base) (local offset) (local out))))
-  (function create lea (visibility public) (effect pure)
-    (parameter create dst (type I64)) (parameter create base (type I64)) (parameter create offset (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (call memory (bool true) (i64 141) (local dst) (local base) (local offset) (local out))))
-  (function create stack (visibility public) (effect pure)
-    (parameter create pop (type Bool)) (parameter create reg (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let (binding a (type ByteBuffer) (if (call ci::lt (local reg) (i64 8)) (local out)
-      (call ci::push (i64 65) (local out))))
-      (in (call ci::push (call ci::add (if (local pop) (i64 88) (i64 80)) (call low (local reg))) (local a))))))
-))
+(units
+  (module create asm
+    (function create low
+      (visibility public)
+      (effect pure)
+      (parameter create value (type I64))
+      (returns I64)
+      (body (call ci::sub (local value) (call ci::mul (call ci::div (local value) (i64 8)) (i64 8)))))
+    (function create rex
+      (visibility public)
+      (effect pure)
+      (parameter create wide (type Bool))
+      (parameter create reg (type I64))
+      (parameter create base (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (call ci::push
+          (call ci::add
+            (if (local wide) (i64 72) (i64 64))
+            (call ci::add
+              (call ci::mul (call ci::div (local reg) (i64 8)) (i64 4))
+              (call ci::div (local base) (i64 8))))
+          (local out))))
+    (function create word
+      (visibility public)
+      (effect pure)
+      (parameter create value (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (call ci::le
+          (if
+            (call ci::lt (local value) (i64 0))
+            (call ci::add (local value) (i64 4294967296))
+            (local value))
+          (i64 4)
+          (local out))))
+    (function create opcode
+      (visibility public)
+      (effect pure)
+      (parameter create value (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::lt (local value) (i64 256))
+          (call ci::push (local value) (local out))
+          (let
+            (binding high (call ci::div (local value) (i64 256)))
+            (binding a (type ByteBuffer) (call ci::push (local high) (local out)))
+            (in
+              (call ci::push
+                (call ci::sub (local value) (call ci::mul (local high) (i64 256)))
+                (local a)))))))
+    (function create imm
+      (visibility public)
+      (effect pure)
+      (parameter create dst (type I64))
+      (parameter create value (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding high (call ci::div (local value) (i64 4294967296)))
+          (binding low (call ci::sub (local value) (call ci::mul (local high) (i64 4294967296))))
+          (binding a (type ByteBuffer) (call rex (bool true) (i64 0) (local dst) (local out)))
+          (binding b
+            (type ByteBuffer)
+            (call ci::push (call ci::add (i64 184) (call low (local dst))) (local a)))
+          (binding c (type ByteBuffer) (call word (local low) (local b)))
+          (in
+            (call word
+              (if (call ci::lt (local low) (i64 0)) (call ci::sub (local high) (i64 1)) (local high))
+              (local c))))))
+    (function create binary
+      (visibility public)
+      (effect pure)
+      (parameter create wide (type Bool))
+      (parameter create op (type I64))
+      (parameter create dst (type I64))
+      (parameter create src (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call rex (local wide) (local src) (local dst) (local out)))
+          (binding b (type ByteBuffer) (call opcode (local op) (local a)))
+          (in
+            (call ci::push
+              (call ci::add
+                (i64 192)
+                (call ci::add (call ci::mul (call low (local src)) (i64 8)) (call low (local dst))))
+              (local b))))))
+    (function create mov
+      (visibility public)
+      (effect pure)
+      (parameter create dst (type I64))
+      (parameter create src (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body (call binary (bool true) (i64 137) (local dst) (local src) (local out))))
+    (function create group32
+      (visibility public)
+      (effect pure)
+      (parameter create group (type I64))
+      (parameter create dst (type I64))
+      (parameter create value (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call rex (bool true) (i64 0) (local dst) (local out)))
+          (binding b (type ByteBuffer) (call ci::push (i64 129) (local a)))
+          (binding c
+            (type ByteBuffer)
+            (call ci::push
+              (call ci::add
+                (i64 192)
+                (call ci::add (call ci::mul (local group) (i64 8)) (call low (local dst))))
+              (local b)))
+          (in (call word (local value) (local c))))))
+    (function create shift
+      (visibility public)
+      (effect pure)
+      (parameter create wide (type Bool))
+      (parameter create group (type I64))
+      (parameter create dst (type I64))
+      (parameter create amount (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call rex (local wide) (i64 0) (local dst) (local out)))
+          (binding b (type ByteBuffer) (call ci::push (i64 193) (local a)))
+          (binding c
+            (type ByteBuffer)
+            (call ci::push
+              (call ci::add
+                (i64 192)
+                (call ci::add (call ci::mul (local group) (i64 8)) (call low (local dst))))
+              (local b)))
+          (in (call ci::push (local amount) (local c))))))
+    (function create memory32
+      (visibility public)
+      (effect pure)
+      (parameter create wide (type Bool))
+      (parameter create op (type I64))
+      (parameter create reg (type I64))
+      (parameter create base (type I64))
+      (parameter create offset (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call rex (local wide) (local reg) (local base) (local out)))
+          (binding b (type ByteBuffer) (call opcode (local op) (local a)))
+          (binding c
+            (type ByteBuffer)
+            (call ci::push
+              (call ci::add
+                (i64 128)
+                (call ci::add (call ci::mul (call low (local reg)) (i64 8)) (call low (local base))))
+              (local b)))
+          (binding d
+            (type ByteBuffer)
+            (if
+              (call ci::eq (call low (local base)) (i64 4))
+              (call ci::push (i64 36) (local c))
+              (local c)))
+          (in (call word (local offset) (local d))))))
+    (function create load
+      (visibility public)
+      (effect pure)
+      (parameter create dst (type I64))
+      (parameter create base (type I64))
+      (parameter create offset (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body (call memory (bool true) (i64 139) (local dst) (local base) (local offset) (local out))))
+    (function create store
+      (visibility public)
+      (effect pure)
+      (parameter create base (type I64))
+      (parameter create offset (type I64))
+      (parameter create src (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body (call memory (bool true) (i64 137) (local src) (local base) (local offset) (local out))))
+    (function create lea
+      (visibility public)
+      (effect pure)
+      (parameter create dst (type I64))
+      (parameter create base (type I64))
+      (parameter create offset (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body (call memory (bool true) (i64 141) (local dst) (local base) (local offset) (local out))))
+    (function create stack
+      (visibility public)
+      (effect pure)
+      (parameter create pop (type Bool))
+      (parameter create reg (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a
+            (type ByteBuffer)
+            (if (call ci::lt (local reg) (i64 8)) (local out) (call ci::push (i64 65) (local out))))
+          (in
+            (call ci::push
+              (call ci::add (if (local pop) (i64 88) (i64 80)) (call low (local reg)))
+              (local a))))))
+    (function create signed32
+      (visibility public)
+      (effect pure)
+      (parameter create value (type I64))
+      (returns Bool)
+      (body
+        (call ci::both
+          (call ci::lt (i64 -2147483649) (local value))
+          (call ci::lt (local value) (i64 2147483648)))))
+    (function create group
+      (visibility public)
+      (effect pure)
+      (parameter create group (type I64))
+      (parameter create dst (type I64))
+      (parameter create value (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call signed32 (local value))
+          (call group32 (local group) (local dst) (local value) (local out))
+          (let
+            (binding a (type ByteBuffer) (call imm (i64 11) (local value) (local out)))
+            (in
+              (call binary
+                (bool true)
+                (call ci::add (i64 1) (call ci::mul (local group) (i64 8)))
+                (local dst)
+                (i64 11)
+                (local a)))))))
+    (function create indexed-address
+      (visibility private)
+      (effect pure)
+      (parameter create base (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a
+            (type ByteBuffer)
+            (call ci::push (call ci::add (i64 78) (call ci::div (local base) (i64 8))) (local out)))
+          (binding b (type ByteBuffer) (call ci::push (i64 141) (local a)))
+          (binding c (type ByteBuffer) (call ci::push (i64 156) (local b)))
+          (binding d
+            (type ByteBuffer)
+            (call ci::push (call ci::add (i64 24) (call low (local base))) (local c)))
+          (in (call word (i64 0) (local d))))))
+    (function create memory
+      (visibility public)
+      (effect pure)
+      (parameter create wide (type Bool))
+      (parameter create op (type I64))
+      (parameter create reg (type I64))
+      (parameter create base (type I64))
+      (parameter create offset (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call signed32 (local offset))
+          (call memory32 (local wide) (local op) (local reg) (local base) (local offset) (local out))
+          (let
+            (binding a (type ByteBuffer) (call imm (i64 11) (local offset) (local out)))
+            (binding b (type ByteBuffer) (call indexed-address (local base) (local a)))
+            (in (call memory32 (local wide) (local op) (local reg) (i64 11) (i64 0) (local b)))))))))
 declarations.end

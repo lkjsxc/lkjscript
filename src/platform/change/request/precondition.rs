@@ -157,7 +157,10 @@ pub(super) fn evaluate<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Size
             }
             _ => precondition,
         };
-        lowerer.work.preconditions_checked = lowerer.work.preconditions_checked.saturating_add(1);
+        lowerer.work.saturation.charge(&mut lowerer.work.preconditions_checked,
+            crate::platform::change::BudgetDimension::Preconditions,
+            crate::platform::change::BudgetCounter::exact(1), lowerer.budget.authored.maximum_preconditions,
+            "authored preconditions")?;
         match precondition {
             AuthoredPrecondition::Selected { .. } => return Err(super::references::wrong_domain()),
             AuthoredPrecondition::OwnerExists { owner } => {

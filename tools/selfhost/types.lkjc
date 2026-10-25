@@ -1,125 +1,396 @@
 declarations.begin
-(units (module create types
-  (function create row (visibility public) (effect pure)
-    (parameter create ty (type I64)) (returns I64)
-    (body (call ci::add (i64 128) (call ci::mul (call ci::sub (local ty) (i64 1)) (i64 16)))))
-  (function create field (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create ty (type I64)) (parameter create i (type I64)) (returns I64)
-    (body (call ci::add (call ci::u32 (local data) (call ci::add (call row (local ty)) (i64 8))) (call ci::mul (local i) (i64 16)))))
-  (function create valid (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create ty (type I64)) (parameter create borrow (type Bool)) (returns Bool)
-    (body (if (call ci::eq (local ty) (i64 134)) (local borrow)
-      (call ci::both (call ci::lt (i64 0) (local ty)) (call ci::lt (local ty) (call ci::add (call ci::u32 (local data) (i64 84)) (i64 1)))))))
-  (function create values (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create at (type I64)) (parameter create count (type I64))
-    (parameter create borrow (type Bool)) (returns Bool)
-    (body (if (call ci::eq (local count) (i64 0)) (bool true)
-      (if (call valid (local data) (call ci::get (local data) (local at)) (local borrow))
-        (call values (local data) (call ci::add (local at) (i64 1)) (call ci::sub (local count) (i64 1)) (local borrow)) (bool false)))))
-  (function create zeros (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create at (type I64)) (returns Bool)
-    (body (if (call ci::eq (local at) (i64 2176)) (bool true)
-      (if (call ci::eq (call ci::u32 (local data) (local at)) (i64 0))
-        (call zeros (local data) (call ci::add (local at) (i64 4))) (bool false)))))
-  (function create continuation (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create at (type I64)) (returns Bool)
-    (body (let (binding value (call ci::get (local data) (local at)))
-      (in (call ci::both (call ci::lt (i64 127) (local value)) (call ci::lt (local value) (i64 192)))))))
-  (function create utf8 (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create at (type I64)) (parameter create end (type I64)) (returns Bool)
-    (body (if (call ci::eq (local at) (local end)) (bool true)
-      (let (binding a (call ci::get (local data) (local at)))
-        (in (if (call ci::lt (local a) (i64 128)) (call utf8 (local data) (call ci::add (local at) (i64 1)) (local end))
-          (if (call ci::both (call ci::lt (i64 193) (local a)) (call ci::lt (local a) (i64 224)))
-            (if (call ci::lt (call ci::add (local at) (i64 1)) (local end))
-              (if (call continuation (local data) (call ci::add (local at) (i64 1)))
-                (call utf8 (local data) (call ci::add (local at) (i64 2)) (local end)) (bool false)) (bool false))
-            (if (call ci::both (call ci::lt (i64 223) (local a)) (call ci::lt (local a) (i64 240)))
-              (if (call ci::lt (call ci::add (local at) (i64 2)) (local end))
-                (let (binding b (call ci::get (local data) (call ci::add (local at) (i64 1))))
-                  (in (if (call ci::both (call continuation (local data) (call ci::add (local at) (i64 1)))
-                        (call continuation (local data) (call ci::add (local at) (i64 2))))
-                    (if (if (call ci::eq (local a) (i64 224)) (call ci::lt (i64 159) (local b))
-                          (if (call ci::eq (local a) (i64 237)) (call ci::lt (local b) (i64 160)) (bool true)))
-                      (call utf8 (local data) (call ci::add (local at) (i64 3)) (local end)) (bool false)) (bool false)))) (bool false))
-              (if (call ci::both (call ci::lt (i64 239) (local a)) (call ci::lt (local a) (i64 245)))
-                (if (call ci::lt (call ci::add (local at) (i64 3)) (local end))
-                  (let (binding b (call ci::get (local data) (call ci::add (local at) (i64 1))))
-                    (in (if (call ci::both (call continuation (local data) (call ci::add (local at) (i64 1)))
-                          (call ci::both (call continuation (local data) (call ci::add (local at) (i64 2)))
-                            (call continuation (local data) (call ci::add (local at) (i64 3)))))
-                      (if (if (call ci::eq (local a) (i64 240)) (call ci::lt (i64 143) (local b))
-                            (if (call ci::eq (local a) (i64 244)) (call ci::lt (local b) (i64 144)) (bool true)))
-                        (call utf8 (local data) (call ci::add (local at) (i64 4)) (local end)) (bool false)) (bool false)))) (bool false))
-                (bool false))))))))))
-  (function create less (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create a (type I64)) (parameter create an (type I64))
-    (parameter create b (type I64)) (parameter create bn (type I64)) (parameter create i (type I64)) (returns Bool)
-    (body (if (call ci::either (call ci::eq (local i) (local an)) (call ci::eq (local i) (local bn)))
-      (call ci::lt (local an) (local bn))
-      (let (binding av (call ci::get (local data) (call ci::add (local a) (local i))))
-        (binding bv (call ci::get (local data) (call ci::add (local b) (local i))))
-        (in (if (call ci::eq (local av) (local bv))
-          (call less (local data) (local a) (local an) (local b) (local bn) (call ci::add (local i) (i64 1)))
-          (call ci::lt (local av) (local bv))))))))
-  (function create fields (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create ty (type I64)) (parameter create count (type I64))
-    (parameter create i (type I64)) (parameter create blob (type I64))
-    (parameter create previous (type I64)) (parameter create length (type I64)) (returns I64)
-    (body (if (call ci::eq (local i) (local count)) (local blob)
-      (let (binding at (call field (local data) (local ty) (local i)))
-        (binding child (call ci::u32 (local data) (local at)))
-        (binding n (call ci::u32 (local data) (call ci::add (local at) (i64 8))))
-        (binding end (call ci::add (local blob) (local n)))
-        (in (if (call ci::both (call ci::lt (i64 0) (local child))
-              (call ci::both (call ci::lt (local child) (local ty))
-                (if (call ci::eq (local child) (i64 6)) (bool false) (bool true))))
-          (if (call ci::both (call ci::eq (call ci::u32 (local data) (call ci::add (local at) (i64 4))) (local blob))
-                (call ci::both (call ci::eq (call ci::u32 (local data) (call ci::add (local at) (i64 12))) (i64 0))
-                  (call ci::both (call ci::lt (i64 0) (local n)) (call ci::lt (local end) (call ci::add (call ci::length (local data)) (i64 1))))))
-            (if (call utf8 (local data) (local blob) (local end))
-              (if (if (call ci::eq (local i) (i64 0)) (bool true)
-                    (call less (local data) (local previous) (local length) (local blob) (local n) (i64 0)))
-                (call fields (local data) (local ty) (local count) (call ci::add (local i) (i64 1)) (local end) (local blob) (local n))
-                (i64 -1)) (i64 -1)) (i64 -1)) (i64 -1)))))))
-  (function create records (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create ty (type I64)) (parameter create blob (type I64)) (returns I64)
-    (body (if (call ci::eq (local ty) (call ci::add (call ci::u32 (local data) (i64 84)) (i64 1))) (local blob)
-      (let (binding at (call row (local ty)))
-        (binding count (call ci::u32 (local data) (call ci::add (local at) (i64 4))))
-        (binding end (call ci::add (local blob) (call ci::mul (local count) (i64 16))))
-        (in (if (call ci::both (call ci::eq (call ci::u32 (local data) (local at)) (i64 8))
-              (call ci::both (call ci::eq (call ci::u32 (local data) (call ci::add (local at) (i64 8))) (local blob))
-                (call ci::eq (call ci::u32 (local data) (call ci::add (local at) (i64 12))) (i64 0))))
-          (if (call ci::both (call ci::lt (local count) (i64 129))
-                (call ci::lt (local end) (call ci::add (call ci::length (local data)) (i64 1))))
-            (let (binding next (call fields (local data) (local ty) (local count) (i64 0) (local end) (i64 0) (i64 0)))
-              (in (if (call ci::lt (local next) (i64 0)) (i64 -1)
-                (call records (local data) (call ci::add (local ty) (i64 1)) (local next))))) (i64 -1)) (i64 -1)))))))
-  (function create validate (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create blob (type I64)) (returns I64)
-    (body (let (binding count (call ci::u32 (local data) (i64 84)))
-      (in (if (call ci::both (call ci::lt (i64 6) (local count)) (call ci::lt (local count) (i64 128)))
-        (if (call ci::table-is (local data) (i64 128)
-              (list I64 (i64 1) (i64 0) (i64 0) (i64 0) (i64 2) (i64 0) (i64 0) (i64 0)
-                (i64 3) (i64 0) (i64 0) (i64 0) (i64 4) (i64 0) (i64 0) (i64 0)
-                (i64 5) (i64 0) (i64 0) (i64 0) (i64 6) (i64 0) (i64 0) (i64 0)
-                (i64 7) (i64 1) (i64 0) (i64 0)) (i64 0))
-          (if (call zeros (local data) (call ci::add (i64 128) (call ci::mul (local count) (i64 16))))
-            (call records (local data) (i64 8) (local blob)) (i64 -1)) (i64 -1)) (i64 -1))))))
-  (function create compiler-result (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create ty (type I64)) (returns Bool)
-    (body (if (call ci::both (call ci::lt (i64 7) (local ty)) (call valid (local data) (local ty) (bool false)))
-      (if (call ci::eq (call ci::u32 (local data) (call ci::add (call row (local ty)) (i64 4))) (i64 2))
-        (let (binding a (call field (local data) (local ty) (i64 0)))
-          (binding b (call field (local data) (local ty) (i64 1)))
-          (binding an (call ci::u32 (local data) (call ci::add (local a) (i64 4))))
-          (binding bn (call ci::u32 (local data) (call ci::add (local b) (i64 4))))
-          (in (call ci::both (call ci::both (call ci::eq (call ci::u32 (local data) (local a)) (i64 1))
-                (call ci::eq (call ci::u32 (local data) (local b)) (i64 5)))
-            (call ci::both (call ci::same (call ci::slice (local data) (local an)
-                (call ci::add (local an) (call ci::u32 (local data) (call ci::add (local a) (i64 8))))) (call ci::text-bytes (text "diagnostic")))
-              (call ci::same (call ci::slice (local data) (local bn)
-                (call ci::add (local bn) (call ci::u32 (local data) (call ci::add (local b) (i64 8))))) (call ci::text-bytes (text "image"))))))) (bool false)) (bool false))))
-))
+(units
+  (module create types
+    (function create row
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (returns I64)
+      (body
+        (call ci::add
+          (call ci::u64 (local data) (i64 72))
+          (call ci::mul (call ci::sub (local ty) (i64 1)) (i64 32)))))
+    (function create field
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (parameter create i (type I64))
+      (returns I64)
+      (body
+        (call ci::add
+          (call ci::u64 (local data) (call ci::add (call row (local data) (local ty)) (i64 16)))
+          (call ci::mul (local i) (i64 32)))))
+    (function create valid
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (parameter create borrow (type Bool))
+      (returns Bool)
+      (body
+        (call ci::both
+          (call ci::both
+            (call ci::lt (i64 0) (local ty))
+            (call ci::lt (local ty) (call ci::add (call ci::u64 (local data) (i64 80)) (i64 1))))
+          (if (local borrow) (call ci::eq (local ty) (i64 6)) (bool true)))))
+    (function create values
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create count (type I64))
+      (parameter create borrow (type Bool))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local count) (i64 0))
+          (bool true)
+          (let
+            (binding qualifier (call ci::u64 (local data) (call ci::add (local at) (i64 8))))
+            (in
+              (if
+                (call ci::either
+                  (call ci::eq (local qualifier) (i64 0))
+                  (call ci::both (local borrow) (call ci::eq (local qualifier) (i64 1))))
+                (if
+                  (call valid
+                    (local data)
+                    (call identity (local data) (local at))
+                    (call borrowed (local data) (local at)))
+                  (call values
+                    (local data)
+                    (call ci::add (local at) (i64 16))
+                    (call ci::sub (local count) (i64 1))
+                    (local borrow))
+                  (bool false))
+                (bool false)))))))
+    (function create continuation
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns Bool)
+      (body
+        (let
+          (binding value (call ci::get (local data) (local at)))
+          (in
+            (call ci::both (call ci::lt (i64 127) (local value)) (call ci::lt (local value) (i64 192)))))))
+    (function create utf8
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (bool true)
+          (let
+            (binding a (call ci::get (local data) (local at)))
+            (in
+              (if
+                (call ci::lt (local a) (i64 128))
+                (call utf8 (local data) (call ci::add (local at) (i64 1)) (local end))
+                (if
+                  (call ci::both (call ci::lt (i64 193) (local a)) (call ci::lt (local a) (i64 224)))
+                  (if
+                    (call ci::lt (i64 1) (call ci::sub (local end) (local at)))
+                    (if
+                      (call continuation (local data) (call ci::add (local at) (i64 1)))
+                      (call utf8 (local data) (call ci::add (local at) (i64 2)) (local end))
+                      (bool false))
+                    (bool false))
+                  (if
+                    (call ci::both (call ci::lt (i64 223) (local a)) (call ci::lt (local a) (i64 240)))
+                    (if
+                      (call ci::lt (i64 2) (call ci::sub (local end) (local at)))
+                      (let
+                        (binding b (call ci::get (local data) (call ci::add (local at) (i64 1))))
+                        (in
+                          (if
+                            (call ci::both
+                              (call continuation (local data) (call ci::add (local at) (i64 1)))
+                              (call continuation (local data) (call ci::add (local at) (i64 2))))
+                            (if
+                              (if
+                                (call ci::eq (local a) (i64 224))
+                                (call ci::lt (i64 159) (local b))
+                                (if
+                                  (call ci::eq (local a) (i64 237))
+                                  (call ci::lt (local b) (i64 160))
+                                  (bool true)))
+                              (call utf8 (local data) (call ci::add (local at) (i64 3)) (local end))
+                              (bool false))
+                            (bool false))))
+                      (bool false))
+                    (if
+                      (call ci::both (call ci::lt (i64 239) (local a)) (call ci::lt (local a) (i64 245)))
+                      (if
+                        (call ci::lt (i64 3) (call ci::sub (local end) (local at)))
+                        (let
+                          (binding b (call ci::get (local data) (call ci::add (local at) (i64 1))))
+                          (in
+                            (if
+                              (call ci::both
+                                (call continuation (local data) (call ci::add (local at) (i64 1)))
+                                (call ci::both
+                                  (call continuation (local data) (call ci::add (local at) (i64 2)))
+                                  (call continuation (local data) (call ci::add (local at) (i64 3)))))
+                              (if
+                                (if
+                                  (call ci::eq (local a) (i64 240))
+                                  (call ci::lt (i64 143) (local b))
+                                  (if
+                                    (call ci::eq (local a) (i64 244))
+                                    (call ci::lt (local b) (i64 144))
+                                    (bool true)))
+                                (call utf8 (local data) (call ci::add (local at) (i64 4)) (local end))
+                                (bool false))
+                              (bool false))))
+                        (bool false))
+                      (bool false))))))))))
+    (function create less
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create a (type I64))
+      (parameter create an (type I64))
+      (parameter create b (type I64))
+      (parameter create bn (type I64))
+      (parameter create i (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::either (call ci::eq (local i) (local an)) (call ci::eq (local i) (local bn)))
+          (call ci::lt (local an) (local bn))
+          (let
+            (binding av (call ci::get (local data) (call ci::add (local a) (local i))))
+            (binding bv (call ci::get (local data) (call ci::add (local b) (local i))))
+            (in
+              (if
+                (call ci::eq (local av) (local bv))
+                (call less
+                  (local data)
+                  (local a)
+                  (local an)
+                  (local b)
+                  (local bn)
+                  (call ci::add (local i) (i64 1)))
+                (call ci::lt (local av) (local bv))))))))
+    (function create fields
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (parameter create count (type I64))
+      (parameter create i (type I64))
+      (parameter create blob (type I64))
+      (parameter create previous (type I64))
+      (parameter create length (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local i) (local count))
+          (local blob)
+          (let
+            (binding at (call field (local data) (local ty) (local i)))
+            (binding child (call ci::u64 (local data) (local at)))
+            (binding n (call ci::u64 (local data) (call ci::add (local at) (i64 16))))
+            (in
+              (if
+                (call ci::both
+                  (call ci::lt (i64 0) (local child))
+                  (call ci::both
+                    (call ci::lt (local child) (local ty))
+                    (if (call ci::eq (local child) (i64 6)) (bool false) (bool true))))
+                (if
+                  (call ci::both
+                    (call ci::eq
+                      (call ci::u64 (local data) (call ci::add (local at) (i64 8)))
+                      (local blob))
+                    (call ci::both
+                      (call ci::eq
+                        (call ci::u64 (local data) (call ci::add (local at) (i64 24)))
+                        (i64 0))
+                      (call ci::both
+                        (call ci::lt (i64 0) (local n))
+                        (call ci::extent (local data) (local blob) (local n) (i64 1)))))
+                  (let
+                    (binding end (call ci::add (local blob) (local n)))
+                    (in
+                      (if
+                        (call utf8 (local data) (local blob) (local end))
+                        (if
+                          (if
+                            (call ci::eq (local i) (i64 0))
+                            (bool true)
+                            (call less
+                              (local data)
+                              (local previous)
+                              (local length)
+                              (local blob)
+                              (local n)
+                              (i64 0)))
+                          (call fields
+                            (local data)
+                            (local ty)
+                            (local count)
+                            (call ci::add (local i) (i64 1))
+                            (local end)
+                            (local blob)
+                            (local n))
+                          (i64 -1))
+                        (i64 -1))))
+                  (i64 -1))
+                (i64 -1)))))))
+    (function create records
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (parameter create blob (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local ty) (call ci::add (call ci::u64 (local data) (i64 80)) (i64 1)))
+          (local blob)
+          (let
+            (binding at (call row (local data) (local ty)))
+            (binding count (call ci::u64 (local data) (call ci::add (local at) (i64 8))))
+            (in
+              (if
+                (call ci::both
+                  (call ci::eq (call ci::u64 (local data) (local at)) (i64 8))
+                  (call ci::both
+                    (call ci::eq
+                      (call ci::u64 (local data) (call ci::add (local at) (i64 16)))
+                      (local blob))
+                    (call ci::eq (call ci::u64 (local data) (call ci::add (local at) (i64 24))) (i64 0))))
+                (if
+                  (call ci::extent (local data) (local blob) (local count) (i64 32))
+                  (let
+                    (binding end (call ci::add (local blob) (call ci::mul (local count) (i64 32))))
+                    (binding next
+                      (call fields
+                        (local data)
+                        (local ty)
+                        (local count)
+                        (i64 0)
+                        (local end)
+                        (i64 0)
+                        (i64 0)))
+                    (in
+                      (if
+                        (call ci::lt (local next) (i64 0))
+                        (i64 -1)
+                        (call records (local data) (call ci::add (local ty) (i64 1)) (local next)))))
+                  (i64 -1))
+                (i64 -1)))))))
+    (function create validate
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create blob (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (call ci::u64 (local data) (i64 80)) (i64 7))
+          (i64 -1)
+          (if
+            (call ci::table64-is
+              (local data)
+              (i64 160)
+              (list I64
+                (i64 1)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 2)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 3)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 4)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 5)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 6)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 7)
+                (i64 1)
+                (i64 0)
+                (i64 0))
+              (i64 0))
+            (call records (local data) (i64 8) (local blob))
+            (i64 -1)))))
+    (function create compiler-result
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::both
+            (call ci::lt (i64 7) (local ty))
+            (call valid (local data) (local ty) (bool false)))
+          (if
+            (call ci::eq
+              (call ci::u64 (local data) (call ci::add (call row (local data) (local ty)) (i64 8)))
+              (i64 2))
+            (let
+              (binding a (call field (local data) (local ty) (i64 0)))
+              (binding b (call field (local data) (local ty) (i64 1)))
+              (binding an (call ci::u64 (local data) (call ci::add (local a) (i64 8))))
+              (binding bn (call ci::u64 (local data) (call ci::add (local b) (i64 8))))
+              (in
+                (call ci::both
+                  (call ci::both
+                    (call ci::eq (call ci::u64 (local data) (local a)) (i64 1))
+                    (call ci::eq (call ci::u64 (local data) (local b)) (i64 5)))
+                  (call ci::both
+                    (call ci::same
+                      (call ci::slice
+                        (local data)
+                        (local an)
+                        (call ci::add
+                          (local an)
+                          (call ci::u64 (local data) (call ci::add (local a) (i64 16)))))
+                      (call ci::text-bytes (text "diagnostic")))
+                    (call ci::same
+                      (call ci::slice
+                        (local data)
+                        (local bn)
+                        (call ci::add
+                          (local bn)
+                          (call ci::u64 (local data) (call ci::add (local b) (i64 16)))))
+                      (call ci::text-bytes (text "image")))))))
+            (bool false))
+          (bool false))))
+    (function create identity
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body (call ci::u64 (local data) (local at))))
+    (function create borrowed
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns Bool)
+      (body (call ci::eq (call ci::u64 (local data) (call ci::add (local at) (i64 8))) (i64 1))))))
 declarations.end

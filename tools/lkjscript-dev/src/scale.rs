@@ -10,7 +10,7 @@ use lkjscript::platform::contributor::{
     semantic_inventory,
 };
 use lkjscript::platform::control::{
-    MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_COMPACT_RECORDS, parse_records, render_record,
+    MAXIMUM_COMPACT_INPUT_BYTES, parse_records, render_record,
 };
 use model::{
     AdmissionClassification, ArtifactEvidence, BatchEvidence, BuildEvidence, CandidateIdentity,
@@ -47,7 +47,7 @@ const READ_BYTES: &str = "131072";
 const REQUIRED_OPERATIONS: [&str; 7] = [
     "new", "status", "inspect", "query", "change", "check", "build",
 ];
-const HELP: &str = "usage: lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> [--items N] [--batch N] [--modules N] [--lifecycle full|capacity] [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--retain ABSENT_ABSOLUTE_PATH] [--maximum-wall-seconds N] [--maximum-run-bytes N] [--minimum-available-memory-bytes N] [--minimum-available-disk-bytes N] [--machine]\n\nfull performs reviewed construction, one reviewed rename, current bounded reads, check, a forced clean build, an exact-current build, typed semantic and catalog-oracle comparison, and cleanup. capacity performs reviewed construction, current bounded reads, typed semantic and catalog-oracle comparison, and cleanup without rename/check/build. --batch counts topology items; the current compact public change budget admits at most 1000 items per batch. Receipt schema lkjscript-semantic-scale-receipt contract 3.";
+const HELP: &str = "usage: lkjscript-dev scale <independent-modules|small-functions|wide-module|deep-chain|wide-fanout> [--items N] [--batch N] [--modules N] [--lifecycle full|capacity] [--binary PATH] [--evidence-root ABSENT_ABSOLUTE_PATH] [--retain ABSENT_ABSOLUTE_PATH] [--maximum-wall-seconds N] [--maximum-run-bytes N] [--minimum-available-memory-bytes N] [--minimum-available-disk-bytes N] [--machine]\n\nfull performs reviewed construction, one reviewed rename, current bounded reads, check, a forced clean build, an exact-current build, typed semantic and catalog-oracle comparison, and cleanup. capacity performs reviewed construction, current bounded reads, typed semantic and catalog-oracle comparison, and cleanup without rename/check/build. --batch counts topology items; the current compact public change budget admits at most 1000 items per batch. Receipt schema lkjscript-semantic-scale-receipt contract 4.";
 static RUN_ORDINAL: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -91,15 +91,8 @@ impl Topology {
         }
     }
 
-    fn maximum_batch(self) -> u64 {
-        let public_operations = compact_change_default_maximum_operations();
-        let record_bound = match self {
-            Self::IndependentModules => (MAXIMUM_COMPACT_RECORDS - 1) as u64,
-            Self::SmallFunctions | Self::WideModule | Self::DeepChain | Self::WideFanout => {
-                ((MAXIMUM_COMPACT_RECORDS - 1) / 2) as u64
-            }
-        };
-        public_operations.min(record_bound)
+    fn maximum_batch(self) -> Option<u64> {
+        compact_change_default_maximum_operations()
     }
 }
 
@@ -153,11 +146,14 @@ impl RequestBuilder {
             .len()
             .checked_add(rendered.len())
             .ok_or_else(|| DevError::infrastructure("scale request byte count overflow"))?;
-        if required > MAXIMUM_COMPACT_INPUT_BYTES {
+        if let Some(maximum) = MAXIMUM_COMPACT_INPUT_BYTES && required > maximum {
             return Err(DevError::usage(format!(
-                "scale batch requires {required} compact bytes, exceeding the current {MAXIMUM_COMPACT_INPUT_BYTES}-byte input bound"
+                "scale batch requires {required} compact bytes, exceeding the selected {maximum}-byte input allowance"
             )));
         }
+        self.bytes.try_reserve(rendered.len()).map_err(|_| {
+            DevError::infrastructure("scale request allocation failed")
+        })?;
         self.bytes.extend_from_slice(rendered.as_bytes());
         self.records = self
             .records
@@ -883,7 +879,7 @@ fn construct_small_functions(
         modules,
         Topology::IndependentModules
             .maximum_batch()
-            .min(options.batch),
+            .map_or(options.batch, |maximum| maximum.min(options.batch)),
     ) {
         let document = module_request(&changes.revision, start, end, "small-functions-modules")?;
         let outcome = changes.apply(
@@ -1440,10 +1436,13 @@ fn oracle_evidence(inventory: SemanticInventory) -> OracleEvidence {
         validation_expression_records: inventory.validation_expression_records,
         validation_relation_edges: inventory.validation_relation_edges,
         validation_work: inventory.validation_work,
+        validation_work_saturated: inventory.validation_work_saturated,
         map_pages_read: inventory.map_pages_read,
         map_bytes_read: inventory.map_bytes_read,
+        map_work_saturated: inventory.map_work_saturated,
         store_objects_read: inventory.store_objects_read,
         store_bytes_read: inventory.store_bytes_read,
+        store_work_saturated: inventory.store_work_saturated,
     }
 }
 
@@ -1776,10 +1775,10 @@ fn parse_options(arguments: impl Iterator<Item = OsString>) -> Result<Options, D
         )));
     }
     let maximum_batch = topology.maximum_batch();
-    let batch = batch.unwrap_or(DEFAULT_BATCH.min(maximum_batch));
-    if batch == 0 || batch > maximum_batch {
+    let batch = batch.unwrap_or_else(|| maximum_batch.map_or(DEFAULT_BATCH, |maximum| DEFAULT_BATCH.min(maximum)));
+    if batch == 0 || maximum_batch.is_some_and(|maximum| batch > maximum) {
         return Err(DevError::usage(format!(
-            "--batch for {} must be 1 through {maximum_batch}",
+            "--batch for {} must be positive and within its explicit operation allowance {maximum_batch:?}",
             topology.name()
         )));
     }
@@ -2631,38 +2630,77 @@ mod tests {
     }
 
     #[test]
-    fn topology_grammar_and_current_batch_bounds_are_closed() {
-        for topology in [
-            "independent-modules",
-            "small-functions",
-            "wide-module",
-            "deep-chain",
-            "wide-fanout",
-        ] {
-            assert_eq!(options(&[topology, "--items", "1"]).items, 1);
+    fn oracle_receipt_preserves_independent_saturation_flags_at_the_numeric_boundary() {
+        for flags in 0_u8..8 {
+            let validation_saturated = flags & 1 != 0;
+            let map_saturated = flags & 2 != 0;
+            let store_saturated = flags & 4 != 0;
+            let evidence = oracle_evidence(SemanticInventory {
+                revision: String::new(),
+                owners: 0,
+                modules: 0,
+                functions: 0,
+                relations: 0,
+                types: 0,
+                dependencies: 0,
+                retirements: 0,
+                owner_kinds: BTreeMap::new(),
+                owner_identity_digest: String::new(),
+                relation_digest: String::new(),
+                validation_owner_records: 0,
+                validation_type_objects: 0,
+                validation_expression_records: 0,
+                validation_relation_edges: 0,
+                validation_work: u64::MAX,
+                validation_work_saturated: validation_saturated,
+                map_pages_read: u64::MAX,
+                map_bytes_read: u64::MAX,
+                map_work_saturated: map_saturated,
+                store_objects_read: u64::MAX,
+                store_bytes_read: u64::MAX,
+                store_work_saturated: store_saturated,
+            });
+            let encoded = serde_json::to_value(&evidence).expect("encode observed work");
+            for (field, expected) in [
+                ("validation_work_saturated", validation_saturated),
+                ("map_work_saturated", map_saturated),
+                ("store_work_saturated", store_saturated),
+            ] {
+                assert_eq!(encoded[field], serde_json::Value::Bool(expected));
+            }
+            for field in [
+                "validation_work", "map_pages_read", "map_bytes_read",
+                "store_objects_read", "store_bytes_read",
+            ] {
+                assert_eq!(encoded[field], serde_json::Value::from(u64::MAX));
+            }
+            let decoded: OracleEvidence = serde_json::from_value(encoded)
+                .expect("decode current observed work");
+            assert_eq!(decoded, evidence);
         }
-        assert!(parse_options(["full"].into_iter().map(OsString::from)).is_err());
-        assert!(
-            parse_options(
-                ["independent-modules", "--batch", "1001"]
-                    .into_iter()
-                    .map(OsString::from)
-            )
-            .is_err()
-        );
-        assert!(
-            parse_options(
-                ["small-functions", "--batch", "1001"]
-                    .into_iter()
-                    .map(OsString::from)
-            )
-            .is_err()
-        );
-        assert!(HELP.contains("contract 3"));
     }
 
     #[test]
-    fn invalid_options_publish_one_failed_contract_three_receipt() {
+    fn topology_grammar_preserves_arbitrary_positive_batch_sizes() {
+        for topology in [
+            "independent-modules", "small-functions", "wide-module", "deep-chain", "wide-fanout",
+        ] {
+            assert_eq!(options(&[topology, "--items", "1"]).items, 1);
+            for batch in [1, 1_001, 100_001, u64::MAX] {
+                let value = batch.to_string();
+                let parsed = options(&[topology, "--items", "1", "--batch", &value]);
+                assert_eq!(parsed.batch, batch);
+                assert_eq!(parsed.topology.maximum_batch(), None);
+            }
+            // The chunk stride must advance; zero is not a physical batch size.
+            assert!(parse_options([topology, "--batch", "0"].into_iter().map(OsString::from)).is_err());
+        }
+        assert!(parse_options(["full"].into_iter().map(OsString::from)).is_err());
+        assert!(HELP.contains("contract 4"));
+    }
+
+    #[test]
+    fn invalid_options_publish_one_failed_contract_four_receipt() {
         let repository = repository_root().expect("repository root");
         let parent = repository.join(".artifacts/lkjscript-dev/scale-option-tests");
         fs::create_dir_all(&parent).expect("option-test parent");
@@ -2685,7 +2723,7 @@ mod tests {
         .expect("invalid options publish a receipt");
         assert_eq!(code, 1);
         let bytes = fs::read(evidence_root.join("receipt.json")).expect("failed receipt");
-        let receipt: ScaleReceipt = serde_json::from_slice(&bytes).expect("contract-3 receipt");
+        let receipt: ScaleReceipt = serde_json::from_slice(&bytes).expect("contract-4 receipt");
         assert_eq!(receipt.status, ReceiptStatus::Failed);
         assert_eq!(receipt.admission, AdmissionClassification::Failed);
         assert_eq!(receipt.commands.len(), 0);
@@ -2790,11 +2828,11 @@ mod tests {
 
     #[test]
     fn receipt_contract_is_three_and_rejects_unknown_fields() {
-        assert_eq!(SCALE_CONTRACT_VERSION, 3);
+        assert_eq!(SCALE_CONTRACT_VERSION, 4);
         assert_eq!(SCALE_SCHEMA, "lkjscript-semantic-scale-receipt");
         assert!(
             serde_json::from_str::<ScaleReceipt>(r#"{"unexpected":true}"#).is_err(),
-            "strict contract-3 decoding must reject foreign receipt fields"
+            "strict contract-4 decoding must reject foreign receipt fields"
         );
     }
 

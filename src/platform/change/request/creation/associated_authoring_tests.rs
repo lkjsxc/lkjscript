@@ -374,7 +374,7 @@ fn associated_lowering_rejects_duplicate_erasure_and_admits_cumulative_work_befo
     ];
     for maximum in [11, 12] {
         let mut budget = ChangeBudget::default();
-        budget.validation.maximum_expression_steps = maximum;
+        budget.validation.maximum_expression_steps = Some(maximum);
         let mut lowerer = lowerer(&base, &witness, budget);
         lowerer
             .owned_contract_value(&self_type(&base), &[], &[], &members)

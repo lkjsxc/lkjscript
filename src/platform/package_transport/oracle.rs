@@ -754,7 +754,7 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
         FULL_PACKAGE_VALIDATIONS.with(|count| count.set(count.get().saturating_add(1)));
         let validation = crate::platform::kernel::validate_full_with_limit(
             snapshot,
-            (16_000_000 - reader.visits.get()) as usize,
+            Some((16_000_000 - reader.visits.get()) as usize),
         )
         .map_err(|errors| {
             failure(format!(
@@ -765,7 +765,7 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
             ))
         })?;
         reader.charge(validation.work_consumed as usize)?;
-        let mut intrinsic_work = 0;
+        let mut intrinsic_work = crate::platform::kernel::ValidationWork::default();
         for record in snapshot.owners.values() {
             if let OwnerRecord::Declaration(DeclarationRecord {
                 payload: DeclarationPayload::External(external),
@@ -776,11 +776,11 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                     snapshot,
                     external,
                     &mut intrinsic_work,
-                    (16_000_000 - reader.visits.get()) as usize,
+                    Some((16_000_000 - reader.visits.get()) as usize),
                 )?;
             }
         }
-        reader.charge(intrinsic_work)?;
+        reader.charge(intrinsic_work.consumed)?;
     }
     // A package dependency DAG cannot establish finite generic instantiation:
     // a supplied witness may dispatch from an upstream body back downstream.
@@ -788,14 +788,14 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
     read_views::admit(&snapshots, &interfaces, &revisions, &reader)?;
     reader.charge(snapshots.len())?;
     let complete_sources: Vec<_> = snapshots.values().collect();
-    let mut composition_work = 0;
+    let mut composition_work = crate::platform::kernel::ValidationWork::default();
     crate::platform::kernel::callable_flow::validate_snapshot_callable_closure(
         &complete_sources,
         &|| Ok(()),
         &mut composition_work,
         Some((16_000_000 - reader.visits.get()) as usize),
     )?;
-    reader.charge(composition_work)?;
+    reader.charge(composition_work.consumed)?;
     if *reader.seen.borrow() != container.objects.keys().copied().collect() {
         return Err(failure("missing or extra complete source object"));
     }

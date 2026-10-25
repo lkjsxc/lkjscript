@@ -31,9 +31,9 @@ pub struct RepositoryHistory {
 
 pub(super) const fn history_read_limits() -> StoreReadLimits {
     StoreReadLimits {
-        maximum_catalog_lookups: MAXIMUM_HISTORY_STORE_OBJECTS,
-        maximum_objects: MAXIMUM_HISTORY_STORE_OBJECTS,
-        maximum_bytes: MAXIMUM_HISTORY_STORE_BYTES,
+        maximum_catalog_lookups: Some(MAXIMUM_HISTORY_STORE_OBJECTS),
+        maximum_objects: Some(MAXIMUM_HISTORY_STORE_OBJECTS),
+        maximum_bytes: Some(MAXIMUM_HISTORY_STORE_BYTES),
     }
 }
 

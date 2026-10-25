@@ -76,7 +76,7 @@ impl Fixture {
             render_native_draft(
                 &self.view(),
                 &[OwnerKey::Declaration(self.function).into()],
-                4 * 1_048_576,
+                Some(4 * 1_048_576),
                 crate::platform::execution::ExecutionControl::uncancelled(),
             )
             .unwrap(),
@@ -373,9 +373,9 @@ fn literal_edit_budgets_and_codec_bind_exact_values_owners_and_base() {
     for case in ["edits", "ownership", "reads"] {
         let mut request = original.semantic.clone();
         match case {
-            "edits" => request.budget.canonical_edits.maximum_owner_edits = 0,
-            "ownership" => request.budget.impact.maximum_ownership_steps = 0,
-            "reads" => request.budget.canonical_reads.maximum_point_reads = 0,
+            "edits" => request.budget.canonical_edits.maximum_owner_edits = Some(0),
+            "ownership" => request.budget.impact.maximum_ownership_steps = Some(0),
+            "reads" => request.budget.canonical_reads.maximum_point_reads = Some(0),
             _ => unreachable!(),
         }
         let errors = fixture

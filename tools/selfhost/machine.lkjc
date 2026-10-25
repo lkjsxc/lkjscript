@@ -1,175 +1,732 @@
 declarations.begin
-(units (module create machine
-  (function create address (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create f (type I64)) (returns I64)
-    (body (call ci::add (i64 65536) (call ci::add (call ci::mul (local f) (i64 512))
-      (call ci::mul (i64 128) (call flow::field (local data) (call flow::declaration (local f)) (i64 16)))))))
-  (function create data-address (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create offset (type I64)) (returns I64)
-    (body (call ci::add (i64 4194304) (call ci::add (call data-start (local data))
-      (call ci::sub (local offset) (call ci::u32 (local data) (i64 104)))))))
-  (function create data-start (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (returns I64)
-    (body (call ci::add (i64 65536) (call ci::add (call ci::mul (call ci::u32 (local data) (i64 92)) (i64 512))
-      (call ci::mul (call ci::u32 (local data) (i64 100)) (i64 128))))))
-  (function create instruction-address (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create f (type I64)) (parameter create i (type I64)) (returns I64)
-    (body (call ci::add (call address (local data) (local f)) (call ci::add (i64 512) (call ci::mul (i64 128) (local i))))))
-  (function create displacement (visibility private) (effect pure)
-    (parameter create index (type I64)) (returns I64)
-    (body (call ci::sub (i64 4294967296) (call ci::mul (call ci::add (local index) (i64 1)) (i64 8)))))
-  (function create call (visibility public) (effect pure)
-    (parameter create target (type I64)) (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let
-      (binding a (type ByteBuffer) (call elf::raw (list I64
-        (i64 73) (i64 137) (i64 227) (i64 72) (i64 131) (i64 228) (i64 240)
-        (i64 72) (i64 131) (i64 236) (i64 16) (i64 76) (i64 137) (i64 92) (i64 36) (i64 8) (i64 232)) (local out)))
-      (binding b (type ByteBuffer) (call ci::rel (local target) (local a)))
-      (in (call elf::raw (list I64 (i64 72) (i64 139) (i64 100) (i64 36) (i64 8)) (local b))))))
-  (function create end (visibility private) (effect pure)
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (call elf::raw (list I64 (i64 72) (i64 137) (i64 236) (i64 93) (i64 195)) (local out))))
-  (function create prologue (visibility private) (effect pure)
-    (parameter create start (type I64)) (parameter create parameters (type I64)) (parameter create locals (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let
-      (binding a (type ByteBuffer) (call elf::raw (list I64 (i64 85) (i64 72) (i64 137) (i64 229) (i64 72) (i64 129) (i64 236)) (local out)))
-      (binding b (type ByteBuffer) (call ci::le (call ci::mul (local locals) (i64 8)) (i64 4) (local a)))
-      (binding c (type ByteBuffer) (call ci::push (i64 185) (local b)))
-      (binding d (type ByteBuffer) (call ci::le (local parameters) (i64 4) (local c)))
-      (binding e (type ByteBuffer) (call elf::raw (list I64 (i64 72) (i64 133) (i64 201)) (local d)))
-      (binding f (type ByteBuffer) (call elf::condition (i64 132) (call ci::add (local start) (i64 64)) (local e)))
-      (binding g (type ByteBuffer) (call elf::raw (list I64
-        (i64 72) (i64 139) (i64 117) (i64 24)
-        (i64 72) (i64 141) (i64 116) (i64 206) (i64 248)
-        (i64 72) (i64 141) (i64 125) (i64 248)
-        (i64 72) (i64 139) (i64 6) (i64 72) (i64 137) (i64 7)
-        (i64 72) (i64 131) (i64 238) (i64 8) (i64 72) (i64 131) (i64 239) (i64 8)
-        (i64 72) (i64 255) (i64 201)) (local f)))
-      (binding h (type ByteBuffer) (call elf::condition (i64 133) (call ci::add (local start) (i64 38)) (local g)))
-      (in (call ci::pad (call ci::add (local start) (i64 64)) (i64 144) (local h))))))
-  (function create divide (visibility private) (effect pure)
-    (parameter create start (type I64)) (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let
-      (binding a (type ByteBuffer) (call elf::raw (list I64 (i64 72) (i64 133) (i64 201)) (local out)))
-      (binding b (type ByteBuffer) (call elf::condition (i64 132) (i64 4224) (local a)))
-      (binding c (type ByteBuffer) (call elf::raw (list I64 (i64 72) (i64 186)
-        (i64 0) (i64 0) (i64 0) (i64 0) (i64 0) (i64 0) (i64 0) (i64 128)
-        (i64 72) (i64 57) (i64 208)) (local b)))
-      (binding d (type ByteBuffer) (call elf::condition (i64 133) (call ci::add (local start) (i64 38)) (local c)))
-      (binding e (type ByteBuffer) (call elf::raw (list I64 (i64 72) (i64 131) (i64 249) (i64 255)) (local d)))
-      (binding f (type ByteBuffer) (call elf::condition (i64 132) (i64 4224) (local e)))
-      (in (call elf::raw (list I64 (i64 72) (i64 153) (i64 72) (i64 247) (i64 249)) (local f))))))
-  (function create primitive (visibility private) (effect pure)
-    (parameter create code (type I64)) (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let
-      (binding a (type ByteBuffer) (call elf::raw (list I64 (i64 72) (i64 139) (i64 69) (i64 248)) (local out)))
-      (binding b (type ByteBuffer) (if (call ci::eq (local code) (i64 8)) (local a)
-        (call elf::raw (list I64 (i64 72) (i64 139) (i64 77) (i64 240)) (local a))))
-      (binding c (type ByteBuffer) (if (call ci::lt (local code) (i64 4))
-        (let (binding x (type ByteBuffer) (call elf::raw
-          (if (call ci::eq (local code) (i64 1)) (list I64 (i64 72) (i64 1) (i64 200))
-            (if (call ci::eq (local code) (i64 2)) (list I64 (i64 72) (i64 41) (i64 200))
-              (list I64 (i64 72) (i64 15) (i64 175) (i64 193)))) (local b)))
-          (in (call elf::condition (i64 128) (i64 4160) (local x))))
-        (if (call ci::eq (local code) (i64 4)) (call divide (call ci::size (local b)) (local b))
-          (if (call ci::lt (local code) (i64 8))
-            (let (binding x (type ByteBuffer) (call elf::raw (list I64 (i64 72) (i64 57) (i64 200) (i64 15)
-              (if (call ci::eq (local code) (i64 6)) (i64 156)
-                (if (call ci::eq (local code) (i64 7)) (i64 158) (i64 148)))
-              (i64 192) (i64 72) (i64 15) (i64 182) (i64 192)) (local b))) (in (local x)))
-            (if (call ci::eq (local code) (i64 8))
-              (call elf::raw (list I64 (i64 72) (i64 131) (i64 240) (i64 1)) (local b))
-              (call elf::raw (list I64 (i64 72) (if (call ci::eq (local code) (i64 9)) (i64 33) (i64 9)) (i64 200)) (local b)))))))
-      (in (call end (local c))))))
-  (function create tail (visibility private) (effect pure)
-    (parameter create target (type I64)) (parameter create count (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let (binding start (call ci::size (local out)))
-      (binding a (type ByteBuffer) (if (call ci::eq (local count) (i64 0)) (local out)
+(units
+  (module create machine
+    (function create address
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create layout (type Bytes))
+      (parameter create f (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (call ci::length (local layout)) (i64 0))
+          (i64 0)
+          (call ci::u64
+            (local layout)
+            (call ci::mul
+              (call ci::add
+                (local f)
+                (call flow::field (local data) (call flow::declaration (local data) (local f)) (i64 32)))
+              (i64 8))))))
+    (function create data-address
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create layout (type Bytes))
+      (parameter create offset (type I64))
+      (returns I64)
+      (body
+        (call ci::add
+          (i64 4194304)
+          (call ci::add
+            (call data-start (local data) (local layout))
+            (call ci::sub (local offset) (call ci::u64 (local data) (i64 128)))))))
+    (function create data-start
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create layout (type Bytes))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (call ci::length (local layout)) (i64 0))
+          (i64 0)
+          (call ci::u64 (local layout) (call ci::sub (call ci::length (local layout)) (i64 8))))))
+    (function create instruction-address
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create layout (type Bytes))
+      (parameter create f (type I64))
+      (parameter create i (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (call ci::length (local layout)) (i64 0))
+          (i64 0)
+          (call ci::u64
+            (local layout)
+            (call ci::mul
+              (call ci::add
+                (local f)
+                (call ci::add
+                  (call flow::field
+                    (local data)
+                    (call flow::declaration (local data) (local f))
+                    (i64 32))
+                  (call ci::add (i64 1) (local i))))
+              (i64 8))))))
+    (function create displacement
+      (visibility private)
+      (effect pure)
+      (parameter create index (type I64))
+      (returns I64)
+      (body (call ci::mul (call ci::add (local index) (i64 1)) (i64 -8))))
+    (function create call
+      (visibility public)
+      (effect pure)
+      (parameter create target (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
         (let
-          (binding b (type ByteBuffer) (call ci::push (i64 185) (local out)))
-          (binding c (type ByteBuffer) (call ci::le (local count) (i64 4) (local b)))
-          (binding d (type ByteBuffer) (call elf::raw (list I64 (i64 72) (i64 141) (i64 189)) (local c)))
-          (binding e (type ByteBuffer) (call ci::le (call ci::sub (i64 4294967296) (call ci::mul (local count) (i64 8))) (i64 4) (local d)))
-          (binding f (type ByteBuffer) (call elf::raw (list I64 (i64 88) (i64 72) (i64 137) (i64 7)
-            (i64 72) (i64 131) (i64 199) (i64 8) (i64 255) (i64 201)) (local e)))
-          (in (call elf::condition (i64 133) (call ci::add (local start) (i64 12)) (local f))))))
-      (in (call elf::jump (local target) (local a))))))
-  (function create invoke (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create f (type I64)) (parameter create at (type I64))
-    (parameter create tail (type Bool)) (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let (binding target (call flow::field (local data) (local at) (i64 4)))
-      (binding count (call flow::field (local data) (local at) (i64 8)))
-      (in (if (call ci::both (local tail) (call ci::eq (local f) (local target)))
-        (call tail (call instruction-address (local data) (local f) (i64 0)) (local count) (local out))
-        (let (binding a (type ByteBuffer) (call call (call address (local data) (local target)) (local out)))
-          (binding b (type ByteBuffer) (call elf::raw (list I64 (i64 72) (i64 129) (i64 196)) (local a)))
-          (binding c (type ByteBuffer) (call ci::le (call ci::mul (local count) (i64 8)) (i64 4) (local b)))
-          (in (if (local tail) (call end (local c)) (call ci::push (i64 80) (local c))))))))))
-  (function create scalar-instruction (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create f (type I64)) (parameter create i (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let (binding at (call flow::node (local data) (call ci::add
-      (call flow::field (local data) (call flow::declaration (local f)) (i64 16)) (local i))))
-      (binding tag (call flow::field (local data) (local at) (i64 0)))
-      (binding operand (call flow::field (local data) (local at) (i64 4)))
-      (in (if (call ci::lt (local tag) (i64 3))
-        (let (binding a (type ByteBuffer) (call elf::raw (list I64 (i64 72) (i64 184)) (local out)))
-          (binding b (type ByteBuffer) (call ci::append (call ci::slice (local data) (call ci::add (local at) (i64 16)) (call ci::add (local at) (i64 24))) (i64 0) (local a)))
-          (in (call ci::push (i64 80) (local b))))
-        (if (call ci::eq (local tag) (i64 3)) (call elf::raw (list I64 (i64 49) (i64 192) (i64 80)) (local out))
-          (if (call ci::lt (local tag) (i64 6))
-            (let (binding a (type ByteBuffer) (if (call ci::eq (local tag) (i64 4))
-              (call elf::raw (list I64 (i64 72) (i64 139) (i64 133)) (local out))
-              (call elf::raw (list I64 (i64 88) (i64 72) (i64 137) (i64 133)) (local out))))
-              (binding b (type ByteBuffer) (call ci::le (call displacement (local operand)) (i64 4) (local a)))
-              (in (if (call ci::eq (local tag) (i64 4)) (call ci::push (i64 80) (local b)) (local b))))
-            (if (call ci::eq (local tag) (i64 6)) (call elf::raw (list I64 (i64 72) (i64 131) (i64 196) (i64 8)) (local out))
-              (if (call ci::eq (local tag) (i64 7)) (call elf::jump (call instruction-address (local data) (local f) (local operand)) (local out))
-                (if (call ci::eq (local tag) (i64 8))
-                  (let (binding a (type ByteBuffer) (call elf::raw (list I64 (i64 88) (i64 72) (i64 133) (i64 192)) (local out)))
-                    (in (call elf::condition (i64 132) (call instruction-address (local data) (local f) (local operand)) (local a))))
-                  (if (call ci::lt (local tag) (i64 11))
-                    (call invoke (local data) (local f) (local at) (call ci::eq (local tag) (i64 10)) (local out))
-                    (let (binding a (type ByteBuffer) (call ci::push (i64 88) (local out)))
-                      (in (call end (local a)))))))))))))))
-  (function create instruction (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create f (type I64)) (parameter create i (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (let (binding at (call flow::node (local data) (call ci::add
-        (call flow::field (local data) (call flow::declaration (local f)) (i64 16)) (local i))))
-      (binding tag (call flow::field (local data) (local at) (i64 0)))
-      (in (if (call ci::lt (local tag) (i64 12)) (call scalar-instruction (local data) (local f) (local i) (local out))
-        (if (call ci::eq (local tag) (i64 16))
-          (let (binding offset (call ci::mul (call ci::add (call flow::field (local data) (local at) (i64 4)) (i64 1)) (i64 -8)))
-            (binding a (type ByteBuffer) (call asm::load (i64 0) (i64 5) (local offset) (local out)))
-            (binding b (type ByteBuffer) (call asm::imm (i64 1) (i64 0) (local a)))
-            (binding c (type ByteBuffer) (call asm::store (i64 5) (local offset) (i64 1) (local b)))
-            (in (call ci::push (i64 80) (local c))))
-          (call aggregate::instruction (local data) (local at) (local out))))))))
-  (function create nodes (visibility private) (effect pure)
-    (parameter create data (type Bytes)) (parameter create f (type I64)) (parameter create i (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
-    (body (if (call ci::eq (local i) (call flow::field (local data) (call flow::declaration (local f)) (i64 20))) (local out)
-      (let (binding a (type ByteBuffer) (call instruction (local data) (local f) (local i) (local out)))
-        (binding b (type ByteBuffer) (call ci::pad (call instruction-address (local data) (local f) (call ci::add (local i) (i64 1))) (i64 144) (local a)))
-        (in (call nodes (local data) (local f) (call ci::add (local i) (i64 1)) (local b)))))))
-  (function create emit (visibility public) (effect pure)
-    (parameter create data (type Bytes)) (parameter create f (type I64))
-    (parameter create out (type ByteBuffer) (use consume)) (returns Bytes)
-    (body (if (call ci::eq (local f) (call ci::u32 (local data) (i64 92)))
-      (let (binding a (type ByteBuffer) (call ci::append (local data) (call ci::u32 (local data) (i64 104)) (local out)))
-        (in (call ci::freeze (local a))))
-      (let (binding decl (call flow::declaration (local f)))
-        (binding start (call address (local data) (local f)))
-        (binding code (call flow::field (local data) (local decl) (i64 24)))
-        (binding a (type ByteBuffer) (call prologue (local start)
-          (call flow::field (local data) (local decl) (i64 8)) (call flow::field (local data) (local decl) (i64 12)) (local out)))
-        (binding b (type ByteBuffer) (if (call ci::eq (local code) (i64 0)) (local a)
-          (if (call ci::lt (local code) (i64 11)) (call primitive (local code) (local a)) (call objects::primitive (local code) (local a)))))
-        (binding c (type ByteBuffer) (call ci::pad (call ci::add (local start) (i64 512)) (i64 144) (local b)))
-        (binding d (type ByteBuffer) (call nodes (local data) (local f) (i64 0) (local c)))
-        (in (call emit (local data) (call ci::add (local f) (i64 1)) (local d)))))))
-))
+          (binding a
+            (type ByteBuffer)
+            (call elf::raw
+              (list I64
+                (i64 73)
+                (i64 137)
+                (i64 227)
+                (i64 72)
+                (i64 131)
+                (i64 228)
+                (i64 240)
+                (i64 72)
+                (i64 131)
+                (i64 236)
+                (i64 16)
+                (i64 76)
+                (i64 137)
+                (i64 92)
+                (i64 36)
+                (i64 8)
+                (i64 232))
+              (local out)))
+          (binding b (type ByteBuffer) (call ci::rel (local target) (local a)))
+          (in (call elf::raw (list I64 (i64 72) (i64 139) (i64 100) (i64 36) (i64 8)) (local b))))))
+    (function create end
+      (visibility private)
+      (effect pure)
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body (call elf::raw (list I64 (i64 72) (i64 137) (i64 236) (i64 93) (i64 195)) (local out))))
+    (function create prologue
+      (visibility private)
+      (effect pure)
+      (parameter create start (type I64))
+      (parameter create parameters (type I64))
+      (parameter create locals (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a
+            (type ByteBuffer)
+            (call elf::raw (list I64 (i64 85) (i64 72) (i64 137) (i64 229)) (local out)))
+          (binding b
+            (type ByteBuffer)
+            (call asm::group (i64 5) (i64 4) (call ci::mul (local locals) (i64 8)) (local a)))
+          (binding c (type ByteBuffer) (call asm::imm (i64 1) (local parameters) (local b)))
+          (binding d (type ByteBuffer) (call elf::raw (list I64 (i64 72) (i64 133) (i64 201)) (local c)))
+          (binding branch (call ci::size (local d)))
+          (binding e
+            (type ByteBuffer)
+            (call elf::condition (i64 132) (call ci::add (local branch) (i64 42)) (local d)))
+          (binding f
+            (type ByteBuffer)
+            (call elf::raw
+              (list I64
+                (i64 72)
+                (i64 139)
+                (i64 117)
+                (i64 24)
+                (i64 72)
+                (i64 141)
+                (i64 116)
+                (i64 206)
+                (i64 248)
+                (i64 72)
+                (i64 141)
+                (i64 125)
+                (i64 248))
+              (local e)))
+          (binding loop (call ci::size (local f)))
+          (binding g
+            (type ByteBuffer)
+            (call elf::raw
+              (list I64
+                (i64 72)
+                (i64 139)
+                (i64 6)
+                (i64 72)
+                (i64 137)
+                (i64 7)
+                (i64 72)
+                (i64 131)
+                (i64 238)
+                (i64 8)
+                (i64 72)
+                (i64 131)
+                (i64 239)
+                (i64 8)
+                (i64 72)
+                (i64 255)
+                (i64 201))
+              (local f)))
+          (in (call elf::condition (i64 133) (local loop) (local g))))))
+    (function create divide
+      (visibility private)
+      (effect pure)
+      (parameter create start (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a
+            (type ByteBuffer)
+            (call elf::raw (list I64 (i64 72) (i64 133) (i64 201)) (local out)))
+          (binding b (type ByteBuffer) (call elf::condition (i64 132) (i64 4224) (local a)))
+          (binding c
+            (type ByteBuffer)
+            (call elf::raw
+              (list I64
+                (i64 72)
+                (i64 186)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (i64 128)
+                (i64 72)
+                (i64 57)
+                (i64 208))
+              (local b)))
+          (binding d
+            (type ByteBuffer)
+            (call elf::condition (i64 133) (call ci::add (local start) (i64 38)) (local c)))
+          (binding e
+            (type ByteBuffer)
+            (call elf::raw (list I64 (i64 72) (i64 131) (i64 249) (i64 255)) (local d)))
+          (binding f (type ByteBuffer) (call elf::condition (i64 132) (i64 4224) (local e)))
+          (in (call elf::raw (list I64 (i64 72) (i64 153) (i64 72) (i64 247) (i64 249)) (local f))))))
+    (function create primitive
+      (visibility private)
+      (effect pure)
+      (parameter create code (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a
+            (type ByteBuffer)
+            (call elf::raw (list I64 (i64 72) (i64 139) (i64 69) (i64 248)) (local out)))
+          (binding b
+            (type ByteBuffer)
+            (if
+              (call ci::eq (local code) (i64 8))
+              (local a)
+              (call elf::raw (list I64 (i64 72) (i64 139) (i64 77) (i64 240)) (local a))))
+          (binding c
+            (type ByteBuffer)
+            (if
+              (call ci::lt (local code) (i64 4))
+              (let
+                (binding x
+                  (type ByteBuffer)
+                  (call elf::raw
+                    (if
+                      (call ci::eq (local code) (i64 1))
+                      (list I64 (i64 72) (i64 1) (i64 200))
+                      (if
+                        (call ci::eq (local code) (i64 2))
+                        (list I64 (i64 72) (i64 41) (i64 200))
+                        (list I64 (i64 72) (i64 15) (i64 175) (i64 193))))
+                    (local b)))
+                (in (call elf::condition (i64 128) (i64 4160) (local x))))
+              (if
+                (call ci::eq (local code) (i64 4))
+                (call divide (call ci::size (local b)) (local b))
+                (if
+                  (call ci::lt (local code) (i64 8))
+                  (let
+                    (binding x
+                      (type ByteBuffer)
+                      (call elf::raw
+                        (list I64
+                          (i64 72)
+                          (i64 57)
+                          (i64 200)
+                          (i64 15)
+                          (if
+                            (call ci::eq (local code) (i64 6))
+                            (i64 156)
+                            (if (call ci::eq (local code) (i64 7)) (i64 158) (i64 148)))
+                          (i64 192)
+                          (i64 72)
+                          (i64 15)
+                          (i64 182)
+                          (i64 192))
+                        (local b)))
+                    (in (local x)))
+                  (if
+                    (call ci::eq (local code) (i64 8))
+                    (call elf::raw (list I64 (i64 72) (i64 131) (i64 240) (i64 1)) (local b))
+                    (call elf::raw
+                      (list I64
+                        (i64 72)
+                        (if (call ci::eq (local code) (i64 9)) (i64 33) (i64 9))
+                        (i64 200))
+                      (local b)))))))
+          (in (call end (local c))))))
+    (function create tail
+      (visibility private)
+      (effect pure)
+      (parameter create target (type I64))
+      (parameter create count (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a
+            (type ByteBuffer)
+            (if
+              (call ci::eq (local count) (i64 0))
+              (local out)
+              (let
+                (binding b (type ByteBuffer) (call asm::imm (i64 1) (local count) (local out)))
+                (binding c
+                  (type ByteBuffer)
+                  (call asm::lea (i64 7) (i64 5) (call ci::mul (local count) (i64 -8)) (local b)))
+                (binding loop (call ci::size (local c)))
+                (binding d
+                  (type ByteBuffer)
+                  (call elf::raw
+                    (list I64
+                      (i64 88)
+                      (i64 72)
+                      (i64 137)
+                      (i64 7)
+                      (i64 72)
+                      (i64 131)
+                      (i64 199)
+                      (i64 8)
+                      (i64 72)
+                      (i64 255)
+                      (i64 201))
+                    (local c)))
+                (in (call elf::condition (i64 133) (local loop) (local d))))))
+          (in (call elf::wide-jump (local target) (local a))))))
+    (function create invoke
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create layout (type Bytes))
+      (parameter create f (type I64))
+      (parameter create at (type I64))
+      (parameter create tail (type Bool))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding target (call flow::field (local data) (local at) (i64 8)))
+          (binding count (call flow::field (local data) (local at) (i64 16)))
+          (in
+            (if
+              (call ci::both (local tail) (call ci::eq (local f) (local target)))
+              (call tail
+                (call instruction-address (local data) (local layout) (local f) (i64 0))
+                (local count)
+                (local out))
+              (let
+                (binding a
+                  (type ByteBuffer)
+                  (call wide-call (call address (local data) (local layout) (local target)) (local out)))
+                (binding b
+                  (type ByteBuffer)
+                  (call asm::group (i64 0) (i64 4) (call ci::mul (local count) (i64 8)) (local a)))
+                (in (if (local tail) (call end (local b)) (call ci::push (i64 80) (local b))))))))))
+    (function create scalar-instruction
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create layout (type Bytes))
+      (parameter create f (type I64))
+      (parameter create i (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding at
+            (call flow::node
+              (local data)
+              (call ci::add
+                (call flow::field (local data) (call flow::declaration (local data) (local f)) (i64 32))
+                (local i))))
+          (binding tag (call flow::field (local data) (local at) (i64 0)))
+          (binding operand (call flow::field (local data) (local at) (i64 8)))
+          (in
+            (if
+              (call ci::lt (local tag) (i64 3))
+              (let
+                (binding a (type ByteBuffer) (call elf::raw (list I64 (i64 72) (i64 184)) (local out)))
+                (binding b
+                  (type ByteBuffer)
+                  (call ci::append
+                    (call ci::slice
+                      (local data)
+                      (call ci::add (local at) (i64 32))
+                      (call ci::add (local at) (i64 40)))
+                    (i64 0)
+                    (local a)))
+                (in (call ci::push (i64 80) (local b))))
+              (if
+                (call ci::eq (local tag) (i64 3))
+                (call elf::raw (list I64 (i64 49) (i64 192) (i64 80)) (local out))
+                (if
+                  (call ci::lt (local tag) (i64 6))
+                  (if
+                    (call ci::eq (local tag) (i64 4))
+                    (let
+                      (binding a
+                        (type ByteBuffer)
+                        (call asm::load (i64 0) (i64 5) (call displacement (local operand)) (local out)))
+                      (in (call ci::push (i64 80) (local a))))
+                    (let
+                      (binding a (type ByteBuffer) (call ci::push (i64 88) (local out)))
+                      (in
+                        (call asm::store (i64 5) (call displacement (local operand)) (i64 0) (local a)))))
+                  (if
+                    (call ci::eq (local tag) (i64 6))
+                    (call elf::raw (list I64 (i64 72) (i64 131) (i64 196) (i64 8)) (local out))
+                    (if
+                      (call ci::eq (local tag) (i64 7))
+                      (call elf::wide-jump
+                        (call instruction-address (local data) (local layout) (local f) (local operand))
+                        (local out))
+                      (if
+                        (call ci::eq (local tag) (i64 8))
+                        (let
+                          (binding a
+                            (type ByteBuffer)
+                            (call elf::raw (list I64 (i64 88) (i64 72) (i64 133) (i64 192)) (local out)))
+                          (in
+                            (call elf::wide-condition
+                              (i64 132)
+                              (call instruction-address
+                                (local data)
+                                (local layout)
+                                (local f)
+                                (local operand))
+                              (local a))))
+                        (if
+                          (call ci::lt (local tag) (i64 11))
+                          (call invoke
+                            (local data)
+                            (local layout)
+                            (local f)
+                            (local at)
+                            (call ci::eq (local tag) (i64 10))
+                            (local out))
+                          (let
+                            (binding a (type ByteBuffer) (call ci::push (i64 88) (local out)))
+                            (in (call end (local a)))))))))))))))
+    (function create instruction
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create layout (type Bytes))
+      (parameter create f (type I64))
+      (parameter create i (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding at
+            (call flow::node
+              (local data)
+              (call ci::add
+                (call flow::field (local data) (call flow::declaration (local data) (local f)) (i64 32))
+                (local i))))
+          (binding tag (call flow::field (local data) (local at) (i64 0)))
+          (in
+            (if
+              (call ci::lt (local tag) (i64 12))
+              (call scalar-instruction (local data) (local layout) (local f) (local i) (local out))
+              (if
+                (call ci::eq (local tag) (i64 16))
+                (let
+                  (binding offset
+                    (call ci::mul
+                      (call ci::add (call flow::field (local data) (local at) (i64 8)) (i64 1))
+                      (i64 -8)))
+                  (binding a
+                    (type ByteBuffer)
+                    (call asm::load (i64 0) (i64 5) (local offset) (local out)))
+                  (binding b (type ByteBuffer) (call asm::imm (i64 1) (i64 0) (local a)))
+                  (binding c
+                    (type ByteBuffer)
+                    (call asm::store (i64 5) (local offset) (i64 1) (local b)))
+                  (in (call ci::push (i64 80) (local c))))
+                (call aggregate::instruction (local data) (local layout) (local at) (local out))))))))
+    (function create nodes
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create layout (type Bytes))
+      (parameter create f (type I64))
+      (parameter create i (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq
+            (local i)
+            (call flow::field (local data) (call flow::declaration (local data) (local f)) (i64 40)))
+          (local out)
+          (let
+            (binding a
+              (type ByteBuffer)
+              (call instruction (local data) (local layout) (local f) (local i) (local out)))
+            (in
+              (call nodes
+                (local data)
+                (local layout)
+                (local f)
+                (call ci::add (local i) (i64 1))
+                (local a)))))))
+    (function create emit
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create layout (type Bytes))
+      (parameter create f (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns Bytes)
+      (body
+        (if
+          (call ci::eq (local f) (call ci::u64 (local data) (i64 96)))
+          (let
+            (binding a
+              (type ByteBuffer)
+              (call ci::append (local data) (call ci::u64 (local data) (i64 128)) (local out)))
+            (in (call ci::freeze (local a))))
+          (let
+            (binding a (type ByteBuffer) (call function-header (local data) (local f) (local out)))
+            (binding b
+              (type ByteBuffer)
+              (call nodes (local data) (local layout) (local f) (i64 0) (local a)))
+            (in (call emit (local data) (local layout) (call ci::add (local f) (i64 1)) (local b)))))))
+    (function create wide-call
+      (visibility public)
+      (effect pure)
+      (parameter create target (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a
+            (type ByteBuffer)
+            (call elf::raw
+              (list I64
+                (i64 73)
+                (i64 137)
+                (i64 227)
+                (i64 72)
+                (i64 131)
+                (i64 228)
+                (i64 240)
+                (i64 72)
+                (i64 131)
+                (i64 236)
+                (i64 16)
+                (i64 76)
+                (i64 137)
+                (i64 92)
+                (i64 36)
+                (i64 8))
+              (local out)))
+          (binding b
+            (type ByteBuffer)
+            (call asm::imm (i64 11) (call ci::add (i64 4194304) (local target)) (local a)))
+          (in
+            (call elf::raw
+              (list I64 (i64 65) (i64 255) (i64 211) (i64 72) (i64 139) (i64 100) (i64 36) (i64 8))
+              (local b))))))
+    (function create function-header
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create f (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding decl (call flow::declaration (local data) (local f)))
+          (binding code (call flow::field (local data) (local decl) (i64 48)))
+          (binding start (call ci::size (local out)))
+          (binding a
+            (type ByteBuffer)
+            (call prologue
+              (local start)
+              (call flow::field (local data) (local decl) (i64 16))
+              (call flow::field (local data) (local decl) (i64 24))
+              (local out)))
+          (in
+            (if
+              (call ci::eq (local code) (i64 0))
+              (local a)
+              (call elf::wide-jump
+                (call ci::add (i64 32768) (call ci::mul (call ci::sub (local code) (i64 1)) (i64 512)))
+                (local a)))))))
+    (function create measured
+      (visibility private)
+      (effect pure)
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns I64)
+      (body
+        (let
+          (binding size (call ci::size (local out)))
+          (binding discarded (call ci::discard (local out)))
+          (in (local size)))))
+    (function create layout-failure
+      (visibility public)
+      (effect pure)
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (let
+          (binding discarded (call ci::discard (local out)))
+          (in (record structural (field code (i64 3)) (field bytes (call ci::text-bytes (text ""))))))))
+    (function create layout-nodes
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create f (type I64))
+      (parameter create i (type I64))
+      (parameter create position (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (if
+          (call ci::eq
+            (local i)
+            (call flow::field (local data) (call flow::declaration (local data) (local f)) (i64 40)))
+          (call layout-functions
+            (local data)
+            (call ci::add (local f) (i64 1))
+            (local position)
+            (local out))
+          (let
+            (binding scratch (type ByteBuffer) (call ci::empty))
+            (binding emitted
+              (type ByteBuffer)
+              (call instruction
+                (local data)
+                (call ci::text-bytes (text ""))
+                (local f)
+                (local i)
+                (local scratch)))
+            (binding size (call measured (local emitted)))
+            (in
+              (if
+                (call ci::lt (call ci::sub (i64 9223372036850581503) (local position)) (local size))
+                (call layout-failure (local out))
+                (let
+                  (binding next (type ByteBuffer) (call ci::le (local position) (i64 8) (local out)))
+                  (in
+                    (call layout-nodes
+                      (local data)
+                      (local f)
+                      (call ci::add (local i) (i64 1))
+                      (call ci::add (local position) (local size))
+                      (local next))))))))))
+    (function create layout-functions
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create f (type I64))
+      (parameter create position (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (if
+          (call ci::eq (local f) (call ci::u64 (local data) (i64 96)))
+          (if
+            (call ci::lt
+              (call ci::sub (i64 9223372036850581503) (local position))
+              (call ci::u64 (local data) (i64 136)))
+            (call layout-failure (local out))
+            (let
+              (binding next (type ByteBuffer) (call ci::le (local position) (i64 8) (local out)))
+              (in (record structural (field code (i64 0)) (field bytes (call ci::freeze (local next)))))))
+          (let
+            (binding scratch (type ByteBuffer) (call ci::empty))
+            (binding emitted
+              (type ByteBuffer)
+              (call function-header (local data) (local f) (local scratch)))
+            (binding size (call measured (local emitted)))
+            (in
+              (if
+                (call ci::lt (call ci::sub (i64 9223372036850581503) (local position)) (local size))
+                (call layout-failure (local out))
+                (let
+                  (binding next (type ByteBuffer) (call ci::le (local position) (i64 8) (local out)))
+                  (in
+                    (call layout-nodes
+                      (local data)
+                      (local f)
+                      (i64 0)
+                      (call ci::add (local position) (local size))
+                      (local next))))))))))
+    (function create layout
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (let
+          (binding out (type ByteBuffer) (call ci::empty))
+          (in (call layout-functions (local data) (i64 0) (i64 65536) (local out))))))
+    (function create builtins
+      (visibility public)
+      (effect pure)
+      (parameter create code (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (if
+          (call ci::eq (local code) (i64 29))
+          (let
+            (binding final (type ByteBuffer) (call ci::pad (i64 65536) (i64 0) (local out)))
+            (in
+              (if
+                (call ci::eq (call ci::size (local final)) (i64 65536))
+                (record structural (field code (i64 0)) (field bytes (call ci::freeze (local final))))
+                (call layout-failure (local final)))))
+          (let
+            (binding start
+              (call ci::add (i64 32768) (call ci::mul (call ci::sub (local code) (i64 1)) (i64 512))))
+            (in
+              (if
+                (call ci::lt (local start) (call ci::size (local out)))
+                (call layout-failure (local out))
+                (let
+                  (binding aligned (type ByteBuffer) (call ci::pad (local start) (i64 0) (local out)))
+                  (binding emitted
+                    (type ByteBuffer)
+                    (if
+                      (call ci::lt (local code) (i64 11))
+                      (call primitive (local code) (local aligned))
+                      (call objects::primitive (local code) (local aligned))))
+                  (in
+                    (if
+                      (call ci::lt
+                        (call ci::add (local start) (i64 512))
+                        (call ci::size (local emitted)))
+                      (call layout-failure (local emitted))
+                      (call builtins (call ci::add (local code) (i64 1)) (local emitted)))))))))))))
 declarations.end

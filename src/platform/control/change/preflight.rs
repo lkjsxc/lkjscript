@@ -4,9 +4,6 @@
 use super::*;
 use crate::platform::kernel::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH};
 
-pub(crate) const MAXIMUM_EXPANDED_INPUT_TYPE_NODES: usize =
-    crate::platform::change::MAXIMUM_CHANGE_AUTHORED_TYPE_NODES as usize;
-
 impl Decoder {
     pub(super) fn preflight(&mut self) -> Result<Vec<String>, Diagnostic> {
         for parent in self.blocks.keys() {
@@ -241,13 +238,6 @@ fn admit(
                             ),
                         ));
                     }
-                    if types && size > MAXIMUM_EXPANDED_INPUT_TYPE_NODES {
-                        return Err(structural::capacity(
-                            location,
-                            "change_input_type_capacity",
-                            "expanded type definition exceeds the input adapter capacity",
-                        ));
-                    }
                 }
                 total_size = total_size.checked_add(size).ok_or_else(|| {
                     structural::capacity(
@@ -256,13 +246,6 @@ fn admit(
                         "expanded input accounting overflowed",
                     )
                 })?;
-                if types && total_size > MAXIMUM_EXPANDED_INPUT_TYPE_NODES {
-                    return Err(structural::capacity(
-                        &record.location,
-                        "change_input_type_capacity",
-                        "complete type cache exceeds the expanded input adapter capacity",
-                    ));
-                }
                 depths.insert(name.to_owned(), depth);
                 sizes.insert(name.to_owned(), size);
                 states.insert(name, 2);

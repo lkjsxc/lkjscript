@@ -54,7 +54,6 @@ mod repository_recovery;
 mod semantic_command;
 use semantic_command::ObservedOutput;
 
-use lkjscript::platform::contract::MAXIMUM_CLI_RESPONSE_BYTES;
 use lkjscript::platform::control::{CompactRecord, decode_logical_change_plan, parse_records};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -543,10 +542,6 @@ fn compact_success_output(output: impl Into<ObservedOutput>) -> Vec<CompactRecor
         String::from_utf8_lossy(&output.stdout)
     );
     assert!(output.stderr.is_empty());
-    assert!(
-        output.stdout.len() <= MAXIMUM_CLI_RESPONSE_BYTES,
-        "compact success output is excessive"
-    );
     let records = parse_records("stdout", &output.stdout).expect("compact records");
     let result = compact_record(&records, "result");
     assert!(matches!(
@@ -782,12 +777,13 @@ fn public_context_oracle(
     package: &str,
     root: &str,
     direction: &str,
-    maximum_depth: u8,
-) -> (BTreeMap<String, u8>, BTreeSet<PublicRelation>) {
-    let mut distances = BTreeMap::from([(root.to_owned(), 0_u8)]);
+    maximum_depth: u64,
+) -> (BTreeMap<String, u64>, BTreeSet<PublicRelation>) {
+    let mut distances = BTreeMap::from([(root.to_owned(), 0_u64)]);
     let mut relations = BTreeSet::new();
     let mut frontier = BTreeSet::from([root.to_owned()]);
     for depth in 0..maximum_depth {
+        if frontier.is_empty() { break; }
         let mut next = BTreeSet::new();
         for owner in &frontier {
             assert!(matches!(direction, "incoming" | "outgoing" | "both"));
@@ -833,7 +829,7 @@ fn public_context_oracle(
 }
 
 struct PublicContextResult {
-    owners: BTreeMap<String, u8>,
+    owners: BTreeMap<String, u64>,
     relations: BTreeSet<PublicRelation>,
     pages: u64,
 }
@@ -844,7 +840,7 @@ fn all_public_context(
     project: &Path,
     root: &str,
     direction: &str,
-    depth: u8,
+    depth: u64,
 ) -> PublicContextResult {
     let mut owners = BTreeMap::new();
     let mut relations = BTreeSet::new();
@@ -907,7 +903,7 @@ fn all_public_context(
                         .to_owned();
                     let owner_depth = compact_field(record, "depth")
                         .expect("context owner depth")
-                        .parse::<u8>()
+                        .parse::<u64>()
                         .expect("numeric context owner depth");
                     assert!(
                         owners.insert(id, owner_depth).is_none(),
@@ -1897,7 +1893,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             .iter()
             .filter(|record| record.operation == "query.response-field")
             .count(),
-        44
+        45
     );
     assert_eq!(
         query
@@ -1907,27 +1903,27 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         11
     );
     for (name, value) in [
-        ("default-items", "50"),
-        ("maximum-items", "10000"),
-        ("minimum-output-bytes", "1536"),
-        ("default-output-bytes", "65536"),
-        ("maximum-output-bytes", "4194304"),
-        ("maximum-continuation-bytes", "320"),
-        ("minimum-context-depth", "1"),
-        ("maximum-context-depth", "8"),
-        ("maximum-context-owners", "4096"),
-        ("maximum-context-relations", "16384"),
-        ("maximum-context-relation-witnesses", "32768"),
-        ("maximum-context-map-pages", "2940928"),
-        ("maximum-context-map-bytes", "192736657408"),
-        ("maximum-context-map-entries", "32120815616"),
-        ("maximum-context-store-objects", "2945024"),
-        ("maximum-context-store-bytes", "209916526592"),
+        ("default-items", "50".to_owned()),
+        ("maximum-items", u64::MAX.to_string()),
+        ("minimum-output-bytes", "0".to_owned()),
+        ("default-output-bytes", "65536".to_owned()),
+        ("maximum-output-bytes", usize::MAX.to_string()),
+        ("maximum-continuation-bytes", "320".to_owned()),
+        ("minimum-context-depth", "0".to_owned()),
+        ("maximum-context-depth", u64::MAX.to_string()),
+        ("maximum-context-owners", "unbounded".to_owned()),
+        ("maximum-context-relations", "unbounded".to_owned()),
+        ("maximum-context-relation-witnesses", "unbounded".to_owned()),
+        ("maximum-context-map-pages", "unbounded".to_owned()),
+        ("maximum-context-map-bytes", "unbounded".to_owned()),
+        ("maximum-context-map-entries", "unbounded".to_owned()),
+        ("maximum-context-store-objects", "unbounded".to_owned()),
+        ("maximum-context-store-bytes", "unbounded".to_owned()),
     ] {
         assert!(query.iter().any(|record| {
             record.operation == "query.limit"
                 && compact_field(record, "name") == Some(name)
-                && compact_field(record, "value") == Some(value)
+                && compact_field(record, "value") == Some(value.as_str())
         }));
     }
     assert!(!query.iter().any(|record| {
@@ -3091,7 +3087,7 @@ fn copied_binary_rediscovers_normalized_names_and_relations_without_query_writes
                 "--bytes",
                 "1",
             ],
-            "query_invalid_byte_limit",
+            "query_output_envelope_too_large",
         ),
         (
             vec![
@@ -3902,7 +3898,7 @@ fn public_context_pages_match_independent_relation_traversal_and_preserve_author
     let service_owner = compact_field(compact_record(&service, "owner"), "id")
         .expect("maintained service module")
         .to_owned();
-    for (direction, depth) in [("incoming", 1_u8), ("outgoing", 2_u8), ("both", 2_u8)] {
+    for (direction, depth) in [("incoming", 1_u64), ("outgoing", 2_u64), ("both", 2_u64)] {
         let oracle = public_context_oracle(
             &executable,
             temporary.path(),
@@ -3958,7 +3954,7 @@ fn public_context_pages_match_independent_relation_traversal_and_preserve_author
                 "--direction",
                 "both",
                 "--depth",
-                "9",
+                "18446744073709551616",
             ],
             "query_invalid_context_depth",
         ),

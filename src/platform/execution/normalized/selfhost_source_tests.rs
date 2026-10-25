@@ -232,6 +232,16 @@ fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
 }
 
 fn emitted_result(name: &str, bytes: &[u8], code: i64) {
+    let expected = if code == 0 {
+        let prefix = usize::from(name.ends_with("-budget")) * 4;
+        bytes[prefix + 48..prefix + 80].to_vec()
+    } else {
+        vec![]
+    };
+    emitted_result_bytes(name, bytes, code, &expected);
+}
+
+fn emitted_result_bytes(name: &str, bytes: &[u8], code: i64, expected: &[u8]) {
     static IMAGES: OnceLock<std::sync::Mutex<BTreeMap<String, Vec<u8>>>> = OnceLock::new();
     let module = probe_module(name);
     let image = IMAGES
@@ -243,18 +253,18 @@ fn emitted_result(name: &str, bytes: &[u8], code: i64) {
             let (_, program) = probes(module);
             let target = program.function(function(module, name)).unwrap().0 as usize;
             let input = input::export(program, target).unwrap();
-            let word = |at| u32::from_le_bytes(input[at..at + 4].try_into().unwrap());
-            let maximum_locals = (0..word(92) as usize)
-                .map(|row| word(word(88) as usize + row * 40 + 12))
+            let word = |at| u64::from_le_bytes(input[at..at + 8].try_into().unwrap());
+            let maximum_locals = (0..word(96) as usize)
+                .map(|row| word(word(88) as usize + row * input::FUNCTION_BYTES + 24))
                 .max()
                 .unwrap_or(0);
-            let maximum_stack = (0..word(100) as usize)
-                .map(|row| word(word(96) as usize + row * 32 + 28))
+            let maximum_stack = (0..word(120) as usize)
+                .map(|row| word(word(104) as usize + row * input::NODE_BYTES + 56))
                 .max()
                 .unwrap_or(0);
             eprintln!(
                 "selfhost source normalized entry={name} functions={} nodes={} type_rows={} input_bytes={} maximum_locals={} maximum_stack={} sha256={}",
-                word(92), word(100), word(84), input.len(), maximum_locals, maximum_stack,
+                word(96), word(120), word(80), input.len(), maximum_locals, maximum_stack,
                 crate::platform::semantic_id::encode_hex(&Sha256::digest(&input))
             );
             let (source, compiler) = compiler();
@@ -278,12 +288,7 @@ fn emitted_result(name: &str, bytes: &[u8], code: i64) {
     );
     assert_eq!(
         output.stdout,
-        if code == 0 {
-            let prefix = usize::from(name.ends_with("-budget")) * 4;
-            bytes[prefix + 48..prefix + 80].to_vec()
-        } else {
-            vec![]
-        },
+        expected,
         "self-produced validator {name}"
     );
     assert_eq!(
@@ -311,9 +316,11 @@ fn exact_budget_boundary(name: &str, source: &KernelSnapshot) {
         code
     };
     let mut low = 0;
-    let mut high = u32::from_le_bytes(graph[100..104].try_into().unwrap());
+    let mut high = 1_u32;
     assert_eq!(check(low), 6);
-    assert_eq!(check(high), 0);
+    while check(high) == 6 {
+        high = high.checked_mul(2).unwrap();
+    }
     while high - low > 1 {
         let middle = low + (high - low) / 2;
         if check(middle) == 0 {
@@ -874,3 +881,33 @@ mod parents;
 
 #[path = "selfhost_source_scalar_tests.rs"]
 mod scalar;
+
+
+#[test]
+fn selfhost_source_proof_policy_preserves_zero_maximum_and_saturated_observation() {
+    let maximum = i64::MAX as u64;
+    for (allowance, charges, code, remaining, observed, saturated) in [
+        (None, vec![], 0_u32, 0_u64, 0_u64, false),
+        (Some(0), vec![], 0, 0, 0, false),
+        (Some(0), vec![1], 6, 0, 0, false),
+        (Some(17), vec![8, 9], 0, 0, 17, false),
+        (Some(17), vec![8, 10], 6, 9, 8, false),
+        (Some(1_u64 << 32), vec![1], 0, u64::from(u32::MAX), 1, false),
+        (Some(u64::MAX), vec![maximum, maximum, 1], 0, 0, u64::MAX, false),
+        (Some(u64::MAX), vec![maximum, maximum, 1, 1], 6, 0, u64::MAX, false),
+        (None, vec![maximum, maximum, 1, 1], 0, 0, u64::MAX, true),
+    ] {
+        let mut bytes = u32::from(allowance.is_some()).to_le_bytes().to_vec();
+        bytes.extend_from_slice(&allowance.unwrap_or(0).to_le_bytes());
+        for charge in charges {
+            bytes.extend_from_slice(&charge.to_le_bytes());
+        }
+        let mut expected = code.to_le_bytes().to_vec();
+        expected.push(u8::from(allowance.is_some()));
+        expected.extend_from_slice(&remaining.to_le_bytes());
+        expected.extend_from_slice(&observed.to_le_bytes());
+        expected.push(u8::from(saturated));
+        assert_eq!(result("read-work", &bytes), (0, expected.clone()));
+        emitted_result_bytes("read-work", &bytes, 0, &expected);
+    }
+}

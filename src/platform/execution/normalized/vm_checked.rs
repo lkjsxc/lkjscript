@@ -9,6 +9,7 @@ mod owned_metadata;
 
 use super::super::prepare::{NormalizedFieldSelector, NormalizedProgram};
 use super::super::resource::NormalizedResourceScope;
+use super::super::value::RawValue;
 use super::super::value::{
     FunctionIndex, NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex,
     ValueOrigin, ValueWork, VariantLayoutIndex,
@@ -183,7 +184,8 @@ impl Value {
         raw: NormalizedValue,
         control: &ExecutionControl,
     ) -> Result<Self, ExecutionError> {
-        let class = if let NormalizedValue::RegionCap { ty: actual, token } = &raw {
+        let raw = RawValue::new(raw);
+        let class = if let NormalizedValue::RegionCap { ty: actual, token } = raw.as_raw() {
             if *actual != ty {
                 return Err(admission_error("region capability type changed"));
             }
@@ -202,11 +204,11 @@ impl Value {
             arena.validate(token, domain, false)?;
             Class::Region
         } else {
-            super::super::region_value::check_plain(&program.types, &raw, ty, control, 0)?;
+            super::super::region_value::check_plain(&program.types, raw.as_raw(), ty, control)?;
             Class::Free
         };
         Ok(Self {
-            raw,
+            raw: raw.into_raw(),
             origin: program.value_origin,
             class,
             ordinary_type: (class == Class::Free).then_some(ty),
@@ -2175,7 +2177,7 @@ impl Admission<'_> {
         self.admission_bytes = crate::platform::execution::cumulative_charge(
             self.admission_bytes,
             bytes,
-            Some(super::super::value::MAXIMUM_VALUE_ALLOCATION_BYTES),
+            None,
             "normalized_allocation",
             "single raw admission exceeds finite storage",
         )?;

@@ -163,7 +163,7 @@ fn nominal_owned_native_scopes_drafts_and_renames_preserve_exact_fields() {
     let draft = render_native_draft(
         &view,
         &[allocated["$module"].into()],
-        4 * 1_048_576,
+        Some(4 * 1_048_576),
         crate::platform::execution::ExecutionControl::uncancelled(),
     )
     .unwrap();
@@ -200,7 +200,7 @@ fn nominal_owned_native_scopes_drafts_and_renames_preserve_exact_fields() {
     let renamed_draft = render_native_draft(
         &renamed_view,
         &[allocated["$module"].into()],
-        4 * 1_048_576,
+        Some(4 * 1_048_576),
         crate::platform::execution::ExecutionControl::uncancelled(),
     )
     .unwrap();
@@ -457,7 +457,7 @@ declarations.end
     let draft = render_native_draft(
         &view,
         &selected,
-        4 * 1_048_576,
+        Some(4 * 1_048_576),
         crate::platform::execution::ExecutionControl::uncancelled(),
     )
     .unwrap();

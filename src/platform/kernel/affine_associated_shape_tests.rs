@@ -202,9 +202,9 @@ fn shape(
     maximum: usize,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
 ) -> (Result<(), Diagnostic>, usize) {
-    let mut used = 0;
+    let mut used = ValidationWork::default();
     let result = {
-        let meter = work::Meter::new(&mut used, maximum);
+        let meter = work::Meter::new(&mut used, Some(maximum));
         let checked = super::super::infer::CheckedExpressionRead {
             read: &fixture.source,
             checkpoint,
@@ -233,7 +233,7 @@ fn shape(
                 .map(|parameters| assert!(parameters.is_empty())),
         }
     };
-    (result, used)
+    (result, used.consumed)
 }
 
 fn healthy() -> Result<(), Diagnostic> {
@@ -260,14 +260,14 @@ fn affine_associated_shapes_accept_consume_and_borrow_at_parameter_and_signature
         ] {
             let mut diagnostics = Vec::new();
             let mut used = 0;
-            validate_affine_roots_with_limits(
+            crate::platform::kernel::test_work::validate_affine_roots_with_limits(
                 &fixture.source,
                 [root],
                 &mut diagnostics,
                 &mut used,
                 ExpressionValidationLimits {
-                    maximum_steps: super::super::contract::MAXIMUM_VALIDATION_WORK,
-                    maximum_diagnostics: 16,
+                    maximum_steps: Some(super::super::contract::MAXIMUM_VALIDATION_WORK),
+                    maximum_diagnostics: Some(16),
                 },
             )
             .expect("actual affine root remains bounded");
@@ -362,14 +362,14 @@ fn affine_associated_shapes_keep_exact_work_late_cancellation_and_fresh_retry() 
     ];
     let mut combined_diagnostics = Vec::new();
     let mut combined_used = 0;
-    validate_affine_roots_with_limits(
+    crate::platform::kernel::test_work::validate_affine_roots_with_limits(
         &combined_fixture.source,
         roots,
         &mut combined_diagnostics,
         &mut combined_used,
         ExpressionValidationLimits {
-            maximum_steps: super::super::contract::MAXIMUM_VALIDATION_WORK,
-            maximum_diagnostics: 16,
+            maximum_steps: Some(super::super::contract::MAXIMUM_VALIDATION_WORK),
+            maximum_diagnostics: Some(16),
         },
     )
     .expect("healthy cumulative two-root admission");
@@ -377,14 +377,14 @@ fn affine_associated_shapes_keep_exact_work_late_cancellation_and_fresh_retry() 
     for maximum in [combined_used, combined_used - 1] {
         let mut diagnostics = Vec::new();
         let mut used = 0;
-        let result = validate_affine_roots_with_limits(
+        let result = crate::platform::kernel::test_work::validate_affine_roots_with_limits(
             &combined_fixture.source,
             roots,
             &mut diagnostics,
             &mut used,
             ExpressionValidationLimits {
-                maximum_steps: maximum,
-                maximum_diagnostics: 16,
+                maximum_steps: Some(maximum),
+                maximum_diagnostics: Some(16),
             },
         );
         if maximum == combined_used {
@@ -497,14 +497,14 @@ declarations.end
 fn owning_view_affine_root_errors(source: &KernelSnapshot, root: OwnerKey) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     let mut used = 0;
-    validate_affine_roots_with_limits(
+    crate::platform::kernel::test_work::validate_affine_roots_with_limits(
         source,
         [root],
         &mut diagnostics,
         &mut used,
         ExpressionValidationLimits {
-            maximum_steps: super::super::contract::MAXIMUM_VALIDATION_WORK,
-            maximum_diagnostics: 16,
+            maximum_steps: Some(super::super::contract::MAXIMUM_VALIDATION_WORK),
+            maximum_diagnostics: Some(16),
         },
     )
     .expect("genuine owning-view root stays within existing work limits");

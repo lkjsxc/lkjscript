@@ -1,5 +1,7 @@
 //! Explicit semantic-owner deletion and internal expression-retirement lowering.
 
+use crate::platform::change::{BudgetCounter, BudgetDimension, minimum_limit, optional_usize};
+
 use super::{AuthoredDeletePolicy, AuthoredLowerer, OwnerSelector, request_error};
 use crate::platform::change::{CanonicalBaseRead, WitnessBaseRead};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -10,7 +12,7 @@ use crate::platform::kernel::{
     extract_owner_relations,
 };
 use crate::platform::witness::{
-    MAXIMUM_RELATION_PREFIX_ITEMS, OwnershipParent, aggregation_children_with_bindings,
+    OwnershipParent, aggregation_children_with_bindings,
     ownership_contributions_with_bindings,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -230,10 +232,8 @@ fn current_owned_children<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?S
         children.extend(candidate_children);
     }
     children.remove(&owner);
-    lowerer.work.ownership_steps = lowerer
-        .work
-        .ownership_steps
-        .saturating_add(u64::try_from(children.len()).unwrap_or(u64::MAX));
+    lowerer.work.saturation.charge(&mut lowerer.work.ownership_steps, BudgetDimension::ImpactOwnershipSteps,
+        BudgetCounter::exact(children.len() as u64), lowerer.budget.impact.maximum_ownership_steps, "authored ownership traversal")?;
     lowerer.check_budget("authored ownership child traversal")?;
     Ok(children.into_iter().collect())
 }
@@ -291,27 +291,11 @@ fn incoming_relations<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized
         return Ok(lowerer.incoming_relations[&owner].clone());
     }
     let remaining = lowerer.budget.remaining_relation_edges(
-        lowerer.work.relation_edges_read,
+        lowerer.work.saturation.counter(BudgetDimension::RelationEdges, lowerer.work.relation_edges_read),
         "authored deletion relation read",
     )?;
-    let maximum_items = usize::try_from(remaining)
-        .unwrap_or(usize::MAX)
-        .min(usize::try_from(lowerer.budget.impact.maximum_relation_fanout).unwrap_or(usize::MAX))
-        .min(MAXIMUM_RELATION_PREFIX_ITEMS);
-    if maximum_items == 0 {
-        let (code, message) = if lowerer.budget.impact.maximum_relation_fanout == 0 {
-            (
-                "change_budget_relation_fanout",
-                "authored deletion has a zero per-owner relation fanout budget",
-            )
-        } else {
-            (
-                "change_budget_relation_edges",
-                "authored deletion has no remaining relation-edge budget",
-            )
-        };
-        return Err(delete_resource(code, message));
-    }
+    let maximum_items = optional_usize(
+        minimum_limit(remaining, lowerer.budget.impact.maximum_relation_fanout), "relation_edges")?;
     let read = lowerer
         .witness
         .read_incoming_relations(owner, maximum_items)?;
@@ -322,7 +306,7 @@ fn incoming_relations<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized
         "authored deletion accepted relation traversal",
     )?;
     if read.value.truncated {
-        let code = if lowerer.budget.impact.maximum_relation_fanout <= remaining {
+        let code = if lowerer.budget.impact.maximum_relation_fanout.is_some_and(|fanout| remaining.is_none_or(|remaining| fanout <= remaining)) {
             "change_budget_relation_fanout"
         } else {
             "change_budget_relation_edges"
@@ -330,7 +314,7 @@ fn incoming_relations<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized
         return Err(delete_resource(
             code,
             format!(
-                "owner {owner:?} has more than the admitted {maximum_items}-edge relation prefix"
+                "owner {owner:?} has more than the admitted {maximum_items:?}-edge relation prefix"
             ),
         ));
     }
@@ -346,17 +330,8 @@ fn charge_relation_traversal<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
     edges: u64,
     phase: &str,
 ) -> Result<(), Diagnostic> {
-    let remaining = lowerer
-        .budget
-        .remaining_relation_edges(lowerer.work.relation_edges_read, phase)?;
-    if edges > remaining {
-        return Err(delete_resource(
-            "change_budget_relation_edges",
-            format!("{phase} requires {edges} edge inspections with only {remaining} remaining"),
-        ));
-    }
-    lowerer.work.relation_edges_read = lowerer.work.relation_edges_read.saturating_add(edges);
-    Ok(())
+    lowerer.work.saturation.charge(&mut lowerer.work.relation_edges_read, BudgetDimension::RelationEdges,
+        BudgetCounter::exact(edges), lowerer.budget.impact.maximum_relation_edges, phase)
 }
 
 fn local_relation_owner<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
@@ -419,10 +394,8 @@ fn detach_root_from_live_parent<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRea
     let original_read_view_membership = match (&record, lowerer.owners[&parent].original.as_ref()) {
         (OwnerRecord::TypeParameter(_), Some(OwnerRecord::Declaration(original))) => {
             if let DeclarationPayload::ReadView(view) = &original.payload {
-                lowerer.work.ownership_steps = lowerer
-                    .work
-                    .ownership_steps
-                    .saturating_add(u64::try_from(view.type_parameters.len()).unwrap_or(u64::MAX));
+                lowerer.work.saturation.charge(&mut lowerer.work.ownership_steps, BudgetDimension::ImpactOwnershipSteps,
+        BudgetCounter::exact(view.type_parameters.len() as u64), lowerer.budget.impact.maximum_ownership_steps, "authored ownership traversal")?;
                 lowerer.check_budget("authored read view accepted-parent membership")?;
                 Some(
                     view.type_parameters
@@ -797,12 +770,11 @@ fn extract_relations_for_record<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRea
         },
     )?;
     let relation_count = u64::try_from(relations.len()).unwrap_or(u64::MAX);
-    if relation_count > lowerer.budget.impact.maximum_relation_fanout {
+    if let Some(maximum) = lowerer.budget.impact.maximum_relation_fanout && relation_count > maximum {
         return Err(delete_resource(
             "change_budget_relation_fanout",
             format!(
-                "candidate owner {owner:?} has {relation_count} outgoing relations, exceeding the declared {}-edge fanout budget",
-                lowerer.budget.impact.maximum_relation_fanout
+                "candidate owner {owner:?} has {relation_count} outgoing relations, exceeding the declared {maximum}-edge fanout budget"
             ),
         ));
     }

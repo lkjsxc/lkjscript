@@ -49,6 +49,8 @@ pub const SOURCE: &str = concat!(
     "\n",
     include_str!("../../tools/selfhost/artifact-check.lkjc"),
     "\n",
+    include_str!("../../tools/selfhost/source-budget.lkjc"),
+    "\n",
     include_str!("../../tools/selfhost/source-read.lkjc"),
     "\n",
     include_str!("../../tools/selfhost/source-shape.lkjc"),

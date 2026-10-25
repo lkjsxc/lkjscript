@@ -9,7 +9,7 @@ use crate::platform::publication::RepositoryView;
 pub(crate) fn render(
     view: &RepositoryView,
     selected: &[NativeDraftSelection],
-    maximum: usize,
+    maximum: Option<usize>,
     control: ExecutionControl,
 ) -> Result<Vec<u8>, Diagnostic> {
     render_with_reader(view, selected, maximum, Reader::new(view, control))
@@ -21,7 +21,7 @@ pub(crate) fn render(
 pub(super) fn render_raw_lowered_candidate(
     view: &RepositoryView,
     selected: &[NativeDraftSelection],
-    maximum: usize,
+    maximum: Option<usize>,
     control: ExecutionControl,
     owners: BTreeMap<OwnerKey, O>,
     types: BTreeMap<k::TypeObjectDigest, k::TypeObject>,
@@ -37,7 +37,7 @@ pub(super) fn render_raw_lowered_candidate(
 fn render_with_reader(
     view: &RepositoryView,
     selected: &[NativeDraftSelection],
-    maximum: usize,
+    maximum: Option<usize>,
     reader: Reader<'_>,
 ) -> Result<Vec<u8>, Diagnostic> {
     let mut writer = Renderer {
@@ -56,13 +56,6 @@ fn render_with_reader(
             "draft requires at least one explicit owner selection",
         ));
     }
-    if selected.len() > crate::platform::change::MAXIMUM_AUTHORED_CHANGES {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "change_draft_capacity",
-            "draft selection count exceeds complete change admission",
-        ));
-    }
     let selected = selected
         .iter()
         .map(|selection| selection.resolve(&mut writer.reader))
@@ -77,7 +70,7 @@ fn render_with_reader(
                 for edge in writer.reader.reader.incoming(
                     *owner,
                     k::RelationKind::DeclarationModule,
-                    crate::platform::change::MAXIMUM_AUTHORED_CHANGES,
+                    None,
                 )? {
                     let k::RelationEndpoint::Owner(source) = edge.source else {
                         return Err(error("module ownership edge has no owner source"));
@@ -187,7 +180,7 @@ fn render_with_reader(
     Ok(output.into_bytes())
 }
 
-fn wrap_lines(source: &str, maximum: usize) -> Result<String, Diagnostic> {
+fn wrap_lines(source: &str, maximum: Option<usize>) -> Result<String, Diagnostic> {
     let mut output = String::new();
     let mut quoted = false;
     let mut escaped = false;
@@ -237,11 +230,11 @@ fn wrap_lines(source: &str, maximum: usize) -> Result<String, Diagnostic> {
     Ok(output)
 }
 
-fn append(output: &mut String, text: &str, maximum: usize) -> Result<(), Diagnostic> {
+fn append(output: &mut String, text: &str, maximum: Option<usize>) -> Result<(), Diagnostic> {
     if output
         .len()
         .checked_add(text.len())
-        .is_none_or(|size| size > maximum)
+        .is_none_or(|size| maximum.is_some_and(|maximum| size > maximum))
     {
         return Err(Diagnostic::new(
             DiagnosticClass::Resource,
@@ -262,7 +255,7 @@ struct Renderer<'a> {
     types: Vec<(String, String)>,
     references: BTreeMap<(String, String), String>,
     reserved_names: BTreeSet<String>,
-    maximum: usize,
+    maximum: Option<usize>,
     pool_bytes: usize,
 }
 
@@ -320,12 +313,11 @@ impl Renderer<'_> {
         self.pool_bytes = self
             .pool_bytes
             .checked_add(bytes)
-            .filter(|n| *n <= self.maximum)
             .ok_or_else(|| {
                 Diagnostic::new(
                     DiagnosticClass::Resource,
                     "change_draft_capacity",
-                    "draft aliases exceed complete output admission",
+                    "draft alias length exceeds the host address space",
                 )
             })?;
         Ok(())
@@ -1165,7 +1157,7 @@ impl Renderer<'_> {
                 for edge in self.reader.reader.incoming(
                     owner,
                     k::RelationKind::HttpRouteTarget,
-                    crate::platform::change::MAXIMUM_AUTHORED_CHANGES,
+                    None,
                 )? {
                     let k::RelationEndpoint::Owner(source) = edge.source else {
                         return Err(error("route ownership has no source"));
@@ -2188,7 +2180,7 @@ impl Renderer<'_> {
                 text
             }
         };
-        if value.len() > self.maximum {
+        if self.maximum.is_some_and(|maximum| value.len() > maximum) {
             return Err(Diagnostic::new(
                 DiagnosticClass::Resource,
                 "change_draft_capacity",
@@ -2233,6 +2225,6 @@ fn unit_name(v: ResourceUnit) -> &'static str {
         ResourceUnit::Tasks => "tasks",
     }
 }
-fn quote(value: &str, maximum: usize) -> Result<String, Diagnostic> {
+fn quote(value: &str, maximum: Option<usize>) -> Result<String, Diagnostic> {
     crate::platform::control::compact::render_structural_string(value, maximum)
 }

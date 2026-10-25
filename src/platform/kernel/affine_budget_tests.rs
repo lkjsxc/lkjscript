@@ -159,14 +159,14 @@ fn run(
     maximum_diagnostics: usize,
 ) -> (Result<(), ExpressionValidationExhaustion>, Vec<Diagnostic>) {
     let mut diagnostics = Vec::new();
-    let outcome = validate_affine_roots_with_limits(
+    let outcome = crate::platform::kernel::test_work::validate_affine_roots_with_limits(
         read,
         [root],
         &mut diagnostics,
         work,
         ExpressionValidationLimits {
-            maximum_steps,
-            maximum_diagnostics,
+            maximum_steps: Some(maximum_steps),
+            maximum_diagnostics: Some(maximum_diagnostics),
         },
     );
     (outcome, diagnostics)
@@ -390,7 +390,7 @@ fn affine_budget_whole_snapshot_wrapper_never_silences_exhaustion() {
     let (snapshot, _) = task_fixture();
     let mut work = 0;
     let mut diagnostics = Vec::new();
-    validate_affine_meaning(&snapshot, &snapshot, &mut diagnostics, &mut work, 0);
+    crate::platform::kernel::test_work::validate_affine_meaning(&snapshot, &snapshot, &mut diagnostics, &mut work, 0);
     assert_eq!(work, 0);
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(diagnostics[0].class, DiagnosticClass::Resource);
@@ -402,9 +402,9 @@ fn affine_budget_reader_covers_all_metadata_methods_before_delegation() {
     let (snapshot, root, unit) = constant_fixture();
     let inner = CountingRead::new(snapshot);
     let foreign = PackageId::migrate(b"affine-budget-foreign", 0);
-    let mut used = 0;
+    let mut used = ValidationWork::default();
     {
-        let meter = work::Meter::new(&mut used, 7);
+        let meter = work::Meter::new(&mut used, Some(7));
         let read = work::Read {
             inner: &inner,
             meter: &meter,
@@ -442,7 +442,7 @@ fn affine_budget_reader_covers_all_metadata_methods_before_delegation() {
         assert_eq!(inner.reads.get(), 6);
         assert_eq!(inner.trace().len(), 7);
     }
-    assert_eq!(used, 7);
+    assert_eq!(used.consumed, 7);
 }
 
 #[test]
@@ -516,9 +516,9 @@ fn affine_budget_preserves_cancellation_at_each_read_phase() {
         read: &snapshot,
         checkpoint: &cancellation,
     };
-    let mut used = 0;
+    let mut used = ValidationWork::default();
     {
-        let meter = work::Meter::new(&mut used, 0);
+        let meter = work::Meter::new(&mut used, Some(0));
         let read = work::Read {
             inner: &inner,
             meter: &meter,
@@ -529,7 +529,7 @@ fn affine_budget_preserves_cancellation_at_each_read_phase() {
         );
     }
     assert_eq!(
-        used, 0,
+        used.consumed, 0,
         "an explicit checkpoint is not an extra read-work unit"
     );
 }
@@ -546,14 +546,14 @@ fn affine_budget_does_not_visit_another_root_after_exhaustion() {
         let mut work = 0;
         let mut diagnostics = Vec::new();
         assert_eq!(
-            validate_affine_roots_with_limits(
+            crate::platform::kernel::test_work::validate_affine_roots_with_limits(
                 &read,
                 roots,
                 &mut diagnostics,
                 &mut work,
                 ExpressionValidationLimits {
-                    maximum_steps: limit,
-                    maximum_diagnostics: 0
+                    maximum_steps: Some(limit),
+                    maximum_diagnostics: Some(0)
                 },
             ),
             Err(ExpressionValidationExhaustion::Steps)
@@ -563,4 +563,27 @@ fn affine_budget_does_not_visit_another_root_after_exhaustion() {
         assert_eq!(read.trace(), prefix(&phases, limit));
         assert!(diagnostics.is_empty());
     }
+}
+
+
+#[test]
+fn affine_unbounded_observation_keeps_validation_after_counter_saturation() {
+    let (snapshot, root, _) = constant_fixture();
+    let read = CountingRead::new(snapshot);
+    let mut work = ValidationWork::exact(usize::MAX);
+    let mut diagnostics = Vec::new();
+    super::validate_affine_roots_with_limits(
+        &read,
+        [root],
+        &mut diagnostics,
+        &mut work,
+        ExpressionValidationLimits {
+            maximum_steps: None,
+            maximum_diagnostics: Some(1),
+        },
+    ).expect("unbounded metadata admission");
+    assert!(diagnostics.is_empty());
+    assert!(work.saturated);
+    assert_eq!(work.consumed, usize::MAX);
+    assert!(read.reads.get() > 0);
 }

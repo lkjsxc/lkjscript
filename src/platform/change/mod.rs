@@ -7,7 +7,7 @@
 
 mod authority;
 mod base_read;
-mod budget;
+pub(crate) mod budget;
 mod delta;
 mod derived;
 mod footprint;
@@ -38,14 +38,14 @@ pub(crate) use base_read::{BudgetedCanonicalBase, BudgetedWitnessBase};
 pub use budget::{
     AuthoredChangeAdmission, CanonicalEditAdmission, CanonicalEditWork,
     CanonicalMapUpdateAdmission, CanonicalMapUpdateWork, CanonicalReadAdmission, ChangeBudget,
-    ChangeBudgetWork, ImpactAdmission, MAXIMUM_CHANGE_OPERATIONS, StagingAdmission,
+    ChangeBudgetWork, ImpactAdmission, StagingAdmission,
     StagingBudgetWork, TestAdmission, TestBudgetWork, ValidationAdmission, ValidationBudgetWork,
-    WitnessReadAdmission, WitnessUpdateAdmission, WitnessUpdateWork,
+    WitnessReadAdmission, WitnessUpdateAdmission, WitnessUpdateWork, WorkSaturation,
 };
-pub(crate) use budget::{MAXIMUM_CHANGE_ALLOCATED_IDENTITIES, MAXIMUM_CHANGE_AUTHORED_TYPE_NODES};
+pub(crate) use budget::{BudgetCounter, BudgetDimension, minimum_limit, optional_usize};
 pub use delta::{CanonicalDelta, CanonicalNormalization, ExactEdit, PrimitiveEdit};
 pub use derived::{DerivedDelta, DerivedValueEdit, RelationDelta, derive_local_delta};
-pub use footprint::{AuthoredReadFootprint, MAXIMUM_REFRESH_GUARD_BYTES, MAXIMUM_REFRESH_GUARDS};
+pub use footprint::AuthoredReadFootprint;
 pub use impact::{
     ImpactPlan, ImpactReason, ImpactReasonKind, ImpactWork, PlannedSummaries,
     SummaryDimensionChange, plan_impact_and_summaries, summary_dimension_change,
@@ -85,8 +85,8 @@ pub use request::{
     AuthoredRequirementParameter, AuthoredRequirementReference, AuthoredResourceLimit,
     AuthoredResultRelation, AuthoredSelectedPrecondition, AuthoredStructuralTypeField,
     AuthoredTransactionOutcomeContract, AuthoredType, AuthoredTypeParameter,
-    AuthoredTypeParameterReference, DeclarationSelector, MAXIMUM_AUTHORED_CHANGE_BYTES,
-    MAXIMUM_AUTHORED_CHANGES, ModuleSelector, OwnerSelector, ParameterParentSelector,
+    AuthoredTypeParameterReference, DeclarationSelector,
+    ModuleSelector, OwnerSelector, ParameterParentSelector,
     ResolvedOwnerReference, ResolvedReferenceBindings, ResolvedReferencePackage,
     lower_authored_changes,
 };

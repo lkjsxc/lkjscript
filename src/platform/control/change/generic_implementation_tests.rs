@@ -379,7 +379,7 @@ declarations.end"#;
     let draft = render_native_draft(
         &view,
         &[module.into()],
-        4 * 1_048_576,
+        Some(4 * 1_048_576),
         ExecutionControl::uncancelled(),
     )
     .unwrap();

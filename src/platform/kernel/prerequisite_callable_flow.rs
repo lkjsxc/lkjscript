@@ -570,12 +570,12 @@ mod initializer_tests {
             expression
         }
         fn preflight(&self) -> Result<(), Diagnostic> {
-            let mut work = 0;
+            let mut work = ValidationWork::default();
             let mut analysis = Analysis {
                 read: self,
                 work: &mut work,
                 maximum_work: Some(contract::MAXIMUM_VALIDATION_WORK),
-                maximum_metadata_bytes: MAXIMUM_ANALYSIS_BYTES,
+                maximum_metadata_bytes: Some(MAXIMUM_ANALYSIS_BYTES),
                 observation: CallableFlowWork::default(),
                 contexts: vec![],
                 indexes: BTreeMap::new(),

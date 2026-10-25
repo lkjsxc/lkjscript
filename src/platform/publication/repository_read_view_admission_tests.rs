@@ -63,7 +63,7 @@ fn expression(ordinal: u64, operation: ExpressionOperation) -> OwnerRecord {
 
 fn admission(visits: u64) -> CandidateReferenceAdmission {
     CandidateReferenceAdmission::new(CanonicalReadAdmission {
-        maximum_decoded_records: visits,
+        maximum_decoded_records: Some(visits),
         ..Default::default()
     })
 }

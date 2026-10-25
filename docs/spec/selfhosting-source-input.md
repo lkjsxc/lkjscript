@@ -1,6 +1,6 @@
 # Canonical source carrier and reference closure
 
-This is a bounded source-admission slice toward the
+This is a restricted source-admission slice toward the
 [semantic self-hosting contract](selfhosting.md). It carries current canonical
 source objects, logical directories and a claimed semantic-state identity.
 It contains no normalized instructions, inferred types, reference summaries,
@@ -11,7 +11,7 @@ state. `source-links::validate` additionally resolves every supported owner and
 type reference, including unused owners and untaken expression operands. Success
 does not establish lexical scope, unique syntax ownership, acyclicity, expression
 typing, affine custody, effects or witness validity. The additional
-`source-scope::validate` pass establishes the bounded ownership and value-local
+`source-scope::validate` pass establishes the ownership and value-local
 scope contract below. `source-namespace::validate`, `source-type-scope::validate`
 and `source-nominal::validate` successively add namespace uniqueness, contextual
 type/R/E binder scope, structural type DAG proof and nominal member parameter flow
@@ -23,22 +23,23 @@ fixed point remain separate work.
 The current carrier has one package and no dependencies or external blobs.
 Recognized unsupported boundaries reject explicitly; importing a package's
 interface or prior validation witness cannot supply its missing source bodies.
-This carrier is separate from normalized LKJCI1: mode 0 uses profile 4 for ELF
+This carrier is separate from normalized LKJCI1: mode 0 uses profile 6 for ELF
 and mode 1 uses profile 5 for canonical artifacts. The existing Tier 1 paths use
 Rust admission and normalization. The scalar source route instead derives its
 mode-0 input inside lkjscript from the raw carrier.
 
 ## Exact bytes
 
-All scalar header fields and span fields are u32 little-endian. Complete input
-is at least 128 bytes, and its actual length must equal the encoded u32 length.
-There is no separate aggregate input-byte quota. The sum of owner, type and
-retirement counts is at most 100,000. Empty directories are allowed. Package
-identity is nonzero and the package name has 1 through 128 canonical name bytes.
+Header counts, offsets, the policy tag and span fields are u32 little-endian;
+the explicit proof allowance is u64 little-endian. Complete input is at least
+128 bytes, and its actual length must equal the encoded u32 length. There is no
+separate aggregate byte or entity-count quota. Empty directories are allowed.
+Package identity is nonzero and the package name has 1 through 128 canonical
+name bytes. The current format is a clean cut: old LKJSG001 carriers reject.
 
 | Header offset | Width | Meaning |
 | --- | --- | --- |
-| 0 | 8 | Magic `LKJSG001` |
+| 0 | 8 | Magic `LKJSG002` |
 | 8 | 4 | Complete actual byte length L |
 | 12 | 4 | Owner count O |
 | 16 | 4 | Type count T |
@@ -52,8 +53,9 @@ identity is nonzero and the package name has 1 through 128 canonical name bytes.
 | 88 | 4 | Retirement-directory offset |
 | 92 | 4 | Object-span directory offset |
 | 96 | 4 | First canonical-object byte offset |
-| 100 | 4 | Traversal allowance |
-| 104 | 24 | Zero |
+| 100 | 4 | Proof policy: 0 = unbounded, 1 = finite; other tags reject |
+| 104 | 8 | Exact finite proof allowance; zero for the unbounded tag |
+| 112 | 16 | Zero |
 
 The name starts at offset 128. The three directories follow immediately, in
 owner/type/retirement order. Their row formats are:
@@ -71,34 +73,50 @@ and retirements in that order. Objects follow immediately in span order. Every
 span must begin at the preceding span's end and the final span must end at L.
 There is no padding, overlap, gap, aliasing or trailing data.
 
-Traversal allowance must be at least
-`4096 + 128*L + 1024*(O+T+R)` and at most 2,147,483,647. It is an input admission
-condition distinct from VM instruction/allocation quotas and native process
-limits. The minimum admits the carrier; it does not guarantee that every later
-proof finishes within that allowance. A caller may select a larger allowance
-within the same maximum. Later proof exhaustion returns 6 without a semantic
-validity claim. Bounds precede products, object access and hashing. Lookup uses binary
-search over admitted immutable directories; it does not copy the complete source
-or linearly rescan the directory for each reference.
+Ordinary carriers select unbounded proof work with tag 0 and zero allowance
+bytes. They neither compute nor enforce a synthetic minimum estimate. Tag 1
+preserves every u64 value as an exact finite policy, including zero and
+18,446,744,073,709,551,615. A finite allowance is never silently clamped and zero
+is never interpreted as unlimited. Noncanonical unbounded allowance bytes and
+unknown tags reject with diagnostic 12.
 
-The retained allowance representation also bounds the admitted byte domain.
-With N = O+T+R, admission requires
-`L <= floor((2,147,483,647 - 4096 - 1024*N) / 128) = 16,777,183 - 8*N`.
-Retained layout and object constraints can tighten this allowance-derived upper
-bound. It is below the u32 wire domain. Removing the former aggregate 8 MiB check
-does not remove the count, per-object, per-field or allowance restrictions.
-Individual object readers still require their current envelopes and payload
-bounds. Logical owner and retirement maps receive only their directory slices;
-the retained 100,000-entry bound limits those slices to 5,000,000 and 4,900,000
-bytes respectively, below the map reader's independent byte limit.
+Proof work remains distinct from VM instructions, allocations, native process
+limits, effects and cancellation. Carrier shape, object bindings, complete
+reference closure and membership are admitted before the metered scope proof.
+Those preliminary checks do not consume this particular proof allowance. The
+scope, namespace, type-structure/context and nominal passes compose one state
+with an explicit finite flag, two u32 remaining limbs, two u32 observed-work
+limbs and a saturation flag. Finite enforcement subtracts only after a checked
+comparison. Observation saturates independently at u64::MAX and sets the flag
+only when an additional charge cannot be represented exactly; saturation never
+grants extra finite capacity. A refused charge changes no remaining allowance or
+successful-work observation. Proof exhaustion returns 6 without a semantic
+validity claim. Public with-work(graph, work) convenience entrypoints accept
+every nonnegative I64 allowance; with-policy takes the explicit state produced
+by source-budget constructors, including the full u64 wire domain.
 
-The complete-length comparison precedes allowance multiplication, so even a
-malformed u32 length times 128 fits I64. Index windows check bounded counts and
-strides, then compare against the actual backing length using subtraction after
-nonnegative and ordered-range checks. Wider backing storage does not grant an
-invalid window access. Carrier/object scans advance through finite byte or
-record ranges; directory searches strictly shrink their intervals. Existing
-visited-state, scope and work checks remain unchanged.
+Termination does not depend on a finite allowance. Carrier/object scans advance
+over finite byte or record ranges. Binary directory searches shrink their
+intervals. Ownership forests use bounded pointer doubling followed by a root
+check; cycles still reject. Later parent walks run only after that forest proof.
+Structural type admission settles distinct nodes or rejects a no-progress pass.
+Type/nominal queues retain visited-state deduplication. Namespace merge-sort
+splits finite row ranges. These structural arguments also apply in unbounded
+mode.
+
+Index windows establish nonnegative ordered extents and compare the requested
+count with (end - at) / stride before multiplying. Header layout arithmetic
+starts with u32 fields and fixed row widths, so intermediate products fit I64;
+the computed extent must fit the actual carrier before any directory is read.
+Logical owner/retirement map roots retain canonical key/row encodings and
+ordering, while allowing arbitrary row and byte counts within their checked
+backing extent. Their former 100,000-entry and 8 MiB quotas no longer apply.
+
+This cut does not widen the carrier's u32 length/count/offset/span fields or
+canonical per-object formats. Canonical child-array limits, payload bounds,
+structural depth admission and later normalized/native backend limits remain
+separate coupled work. No full-capacity or Tier 2 completion claim follows from
+the optional proof policy.
 
 ## Binding and references
 
@@ -135,7 +153,7 @@ binding and separation from live owners are still checked.
 | Diagnostic | Meaning |
 | --- | --- |
 | 0 | The selected carrier/reference checks succeeded |
-| 6 | Traversal allowance outside the admitted bounds |
+| 6 | Explicit finite proof allowance exhausted; no semantic-invalid claim |
 | 12 | Malformed carrier, object encoding, ordering, binding or state commitment |
 | 13 | Recognized unsupported source form or package/blob boundary |
 | 14 | Missing or incompatible reference endpoint, or live/retired identity collision |
@@ -245,9 +263,10 @@ refer only to bindings with smaller positions; the body follows all bindings.
 Nested or sequential equal names are legal and never replace a committed binder
 identity with a nearest-name lookup. Custody validation remains a later obligation.
 
-`source-scope::with-work(graph, work)` selects an additional ancestry-proof allowance
-in 0 through 2,147,483,647. Complete carrier/endpoint/membership admission precedes
-that allowance check. The default entrypoint uses the carrier's admitted allowance.
+`source-scope::with-work(graph, work)` selects an exact nonnegative I64
+ancestry-proof allowance. `with-policy` also supports explicit unbounded work and
+the full u64 finite domain. Complete carrier/endpoint/membership admission
+precedes this proof. The default entrypoint uses the carrier's tagged policy.
 Each doubling or final-root pass reserves O units before visiting rows; the value-
 local scan reserves one unit per owner and one per visited ancestor. Exact fit
 passes. Refusal returns diagnostic 6 without a semantic-invalid claim or output.
@@ -372,8 +391,9 @@ finite-flow is a separate later semantic check.
 
 The composed entrypoints prepare syntax membership once and pass a shared remaining
 allowance through scope, namespace, type structure/context and nominal checks.
-Internal `check` functions return a nonnegative remainder or a negative diagnostic;
-public wrappers return zero or the positive diagnostic. Later passes do not reset
+Internal `check` functions return the shared tagged allowance, charged-work
+observation and an independent nonnegative diagnostic code; public wrappers
+return zero or that diagnostic. Later passes do not reset
 the allowance. Work is reserved before its covered traversal or table growth.
 Namespace work includes owner collection, sort nodes, merge rows, comparisons and
 bounded name-prefix inspection. Type and nominal work includes roots, child edges,
@@ -410,7 +430,7 @@ native phase reclamation remain unchanged.
 `source-scalar::prepare` composes carrier/reference, containment, lexical scope,
 namespace, structural/contextual type and nominal checks before scalar profile
 admission and expression typing. `source-scalar::validate` returns the resulting
-diagnostic. These E2 entry points inspect raw complete `LKJSG001` carriers.
+diagnostic. These E2 entry points inspect raw complete `LKJSG002` carriers.
 `source-elf::compile` consumes an explicit source request, additionally lowers
 the selected admitted target and returns `{diagnostic: I64, image: Bytes}`; the
 `compile-source-elf` command target exposes it as a native binary filter.
@@ -419,7 +439,7 @@ Success returns ELF bytes. Failure returns the diagnostic with an empty image.
 ### Explicit source request
 
 The current source compilation request is `LKJSRQ01`, profile 1. Its 32-byte
-header precedes the exact complete `LKJSG001` carrier:
+header precedes the exact complete `LKJSG002` carrier:
 
 | Offset | Width | Meaning |
 | --- | --- | --- |
@@ -427,12 +447,12 @@ header precedes the exact complete `LKJSG001` carrier:
 | 8 | 4 | Little-endian u32 profile, exactly 1 |
 | 12 | 17 | Canonical encoded Target owner key: domain tag 12 and 16 identity bytes |
 | 29 | 3 | Zero reserved bytes |
-| 32 | Remaining bytes | Unchanged complete `LKJSG001` carrier |
+| 32 | Remaining bytes | Unchanged complete `LKJSG002` carrier |
 
 The all-zero Target identity is invalid. Owner-key domain tag 12 is distinct
 from Target owner-kind tag 20. Unknown magic/profile, wrong domain, zero identity,
 nonzero reserved bytes and incomplete framing reject with 12. Raw-only
-`LKJSG001` input is no longer accepted by `source-elf::compile`.
+`LKJSG002` input is no longer accepted by `source-elf::compile`.
 
 After checking the request header, the compiler admits the entire embedded
 carrier through E1 and E2. Every supplied target is checked, including unselected
@@ -443,7 +463,7 @@ derived inside lkjscript. The host supplies only the caller's TargetId.
 
 The request has no second length field. Existing carrier length, partition and
 commitment checks reject truncated or trailing payload bytes. The carrier length,
-proof allowance and object constraints define the supported payload domain;
+tagged proof policy and object constraints define the supported payload domain;
 request transport adds exactly 32 bytes.
 
 ### Admitted scalar profile
@@ -516,26 +536,31 @@ Return. Even a call in tail position uses ordinary Call/Return. This profile has
 no owned values and makes no claim about asymmetric consumption, borrow lifetime
 or disposal lowering.
 
-`source-scalar-pack` writes the existing mode-0/profile-4 LKJCI1 format, including
-its section offsets, fixed built-in type table, flow certificates and checksum.
+`source-scalar-pack` writes current mode-0/profile-6 LKJCI1, including dynamic
+section offsets, seven primitive descriptors, separate type/qualifier cells, wide
+function/instruction rows, flow certificates and the complete input checksum.
 `source-elf` passes those internally produced bytes through the existing
 `elf::compile-elf` validation and emission path. No Rust target normalization,
 inferred tables or custody certificates are inputs to this process.
 
-The source carrier retains 100,000 combined directory entries, its existing
-proof allowance and individual object/field bounds. The complete carrier-byte
-domain follows from the header and allowance constraints above. Generated mode-0
-input remains at most 8,388,608 bytes, with 1 through 1,024 callable rows
-(Functions and admitted Externals), at most 128 parameters and locals per row,
-operand depth at most 128 and
-a positive total instruction count. There is no separate instruction-count quota:
-`2176 + 40*F + 32*N + B <= 8,388,608` bounds the complete mode-0 encoding,
-where F counts function rows, N counts instructions and B counts blob bytes.
-Function parameters are included in the local count. Lowering checks section
-lengths and output bounds before assembling the final input; its generated
-backend allowance must fit 2,147,483,647.
-These are retained implementation/profile restrictions, not expanded capacity
-or evidence of unmetered source compilation.
+The source carrier retains u32 directory/extent framing and individual
+object/field bounds. Its default proof policy is unbounded, and neither the
+former combined-directory quota nor a synthetic proof estimate bounds carrier
+bytes. Generated Mode-0 input has no default byte, function, parameter, local or
+operand-stack quota. The encoder checks the physical extent
+`384 + 80*F + 64*N + B` against nonnegative I64; 384 is the 160-byte header plus
+seven 32-byte primitive descriptors. The generated policy tag is unbounded and no
+finite proof estimate is required. Functions and admitted Externals share the
+canonical callable directory, and parameters are included in each local count.
+
+Planner function/local rows use u64 fields; operand stack groups and trace
+headers likewise use u64 counts/offsets. A missing local slot is represented by
+the total supplied owner count, which is strictly greater than every valid
+function-local index. State cells carry a u64 type identity and separate u64
+qualifier; scalar facts still encode only the current three scalar types because
+the source language profile has not yet expanded. These changes remove prior
+128-slot sentinels and state-index arithmetic assumptions without weakening
+scope, cycle, typing or complete-carrier admission.
 
 | Diagnostic | Scalar extension |
 | --- | --- |
@@ -552,7 +577,7 @@ no executable bytes.
 ### Bootstrap and evidence boundary
 
 A Rust-built native compiler is permitted as the initial executable. The target
-program crosses that boundary only as complete raw `LKJSG001` bytes and the
+program crosses that boundary only as complete raw `LKJSG002` bytes and the
 caller's canonical TargetId in a source request. Rust may serialize that request,
 transport bytes, launch processes and orchestrate independent controls.
 It must not pre-filter source owners/types or supply semantic or lowering

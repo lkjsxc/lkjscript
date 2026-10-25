@@ -1,6 +1,6 @@
 //! Exact canonical point reads used by change normalization.
 
-use super::budget::{CanonicalReadAdmission, WitnessReadAdmission};
+use super::budget::{BudgetCounter, BudgetDimension, CanonicalReadAdmission, WitnessReadAdmission, WorkSaturation};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     DependencyRecord, ExactOwnerKey, KernelSnapshot, OwnerKey, OwnerRecord, PackageId,
@@ -9,7 +9,7 @@ use crate::platform::kernel::{
 };
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use crate::platform::witness::{
-    FullWitness, MAXIMUM_RELATION_PREFIX_ITEMS, MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS, NamespaceKey,
+    FullWitness, NamespaceKey,
     OwnerSummary, OwnerSummaryDigest, OwnershipEntry, TestDependency, ValidationWitnessManifest,
 };
 use bincode::{Decode, Encode};
@@ -27,21 +27,24 @@ pub struct CanonicalReadWork {
     pub objects_read: u64,
     pub bytes_read: u64,
     pub canonical_records_decoded: u64,
+    pub saturation: WorkSaturation,
 }
 
 impl CanonicalReadWork {
     pub fn add(&mut self, other: Self) {
-        self.point_reads = self.point_reads.saturating_add(other.point_reads);
-        self.map_pages_read = self.map_pages_read.saturating_add(other.map_pages_read);
-        self.map_entries_visited = self
-            .map_entries_visited
-            .saturating_add(other.map_entries_visited);
-        self.catalog_lookups = self.catalog_lookups.saturating_add(other.catalog_lookups);
-        self.objects_read = self.objects_read.saturating_add(other.objects_read);
-        self.bytes_read = self.bytes_read.saturating_add(other.bytes_read);
-        self.canonical_records_decoded = self
-            .canonical_records_decoded
-            .saturating_add(other.canonical_records_decoded);
+        self.saturation.observe(&mut self.point_reads, BudgetDimension::CanonicalPointReads, BudgetCounter { consumed: other.point_reads, saturated: other.saturation.contains(BudgetDimension::CanonicalPointReads) });
+        self.saturation.observe(&mut self.map_pages_read, BudgetDimension::CanonicalMapPages, BudgetCounter { consumed: other.map_pages_read, saturated: other.saturation.contains(BudgetDimension::CanonicalMapPages) });
+        self.saturation.observe(&mut self.map_entries_visited, BudgetDimension::CanonicalMapEntries, BudgetCounter { consumed: other.map_entries_visited, saturated: other.saturation.contains(BudgetDimension::CanonicalMapEntries) });
+        self.saturation.observe(&mut self.catalog_lookups, BudgetDimension::CanonicalCatalogLookups, BudgetCounter { consumed: other.catalog_lookups, saturated: other.saturation.contains(BudgetDimension::CanonicalCatalogLookups) });
+        self.saturation.observe(&mut self.objects_read, BudgetDimension::CanonicalObjects, BudgetCounter { consumed: other.objects_read, saturated: other.saturation.contains(BudgetDimension::CanonicalObjects) });
+        self.saturation.observe(&mut self.bytes_read, BudgetDimension::CanonicalBytes, BudgetCounter { consumed: other.bytes_read, saturated: other.saturation.contains(BudgetDimension::CanonicalBytes) });
+        self.saturation.observe(&mut self.canonical_records_decoded, BudgetDimension::CanonicalDecodedRecords, BudgetCounter { consumed: other.canonical_records_decoded, saturated: other.saturation.contains(BudgetDimension::CanonicalDecodedRecords) });
+    }
+
+    pub fn saturated(self) -> bool { self.saturation.any() }
+
+    pub(crate) fn observation(self, dimension: BudgetDimension, consumed: u64) -> BudgetCounter {
+        BudgetCounter { consumed, saturated: self.saturation.contains(dimension) }
     }
 }
 
@@ -79,21 +82,24 @@ pub struct WitnessReadWork {
     pub objects_read: u64,
     pub bytes_read: u64,
     pub witness_records_decoded: u64,
+    pub saturation: WorkSaturation,
 }
 
 impl WitnessReadWork {
     pub fn add(&mut self, other: Self) {
-        self.point_reads = self.point_reads.saturating_add(other.point_reads);
-        self.map_pages_read = self.map_pages_read.saturating_add(other.map_pages_read);
-        self.map_entries_visited = self
-            .map_entries_visited
-            .saturating_add(other.map_entries_visited);
-        self.catalog_lookups = self.catalog_lookups.saturating_add(other.catalog_lookups);
-        self.objects_read = self.objects_read.saturating_add(other.objects_read);
-        self.bytes_read = self.bytes_read.saturating_add(other.bytes_read);
-        self.witness_records_decoded = self
-            .witness_records_decoded
-            .saturating_add(other.witness_records_decoded);
+        self.saturation.observe(&mut self.point_reads, BudgetDimension::WitnessPointReads, BudgetCounter { consumed: other.point_reads, saturated: other.saturation.contains(BudgetDimension::WitnessPointReads) });
+        self.saturation.observe(&mut self.map_pages_read, BudgetDimension::WitnessMapPages, BudgetCounter { consumed: other.map_pages_read, saturated: other.saturation.contains(BudgetDimension::WitnessMapPages) });
+        self.saturation.observe(&mut self.map_entries_visited, BudgetDimension::WitnessMapEntries, BudgetCounter { consumed: other.map_entries_visited, saturated: other.saturation.contains(BudgetDimension::WitnessMapEntries) });
+        self.saturation.observe(&mut self.catalog_lookups, BudgetDimension::WitnessCatalogLookups, BudgetCounter { consumed: other.catalog_lookups, saturated: other.saturation.contains(BudgetDimension::WitnessCatalogLookups) });
+        self.saturation.observe(&mut self.objects_read, BudgetDimension::WitnessObjects, BudgetCounter { consumed: other.objects_read, saturated: other.saturation.contains(BudgetDimension::WitnessObjects) });
+        self.saturation.observe(&mut self.bytes_read, BudgetDimension::WitnessBytes, BudgetCounter { consumed: other.bytes_read, saturated: other.saturation.contains(BudgetDimension::WitnessBytes) });
+        self.saturation.observe(&mut self.witness_records_decoded, BudgetDimension::WitnessDecodedRecords, BudgetCounter { consumed: other.witness_records_decoded, saturated: other.saturation.contains(BudgetDimension::WitnessDecodedRecords) });
+    }
+
+    pub fn saturated(self) -> bool { self.saturation.any() }
+
+    pub(crate) fn observation(self, dimension: BudgetDimension, consumed: u64) -> BudgetCounter {
+        BudgetCounter { consumed, saturated: self.saturation.contains(dimension) }
     }
 }
 
@@ -320,32 +326,32 @@ pub trait WitnessBaseRead {
     fn read_outgoing_relations(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic>;
 
     fn read_incoming_relations(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic>;
 
     fn read_incoming_relations_of_kind(
         &self,
         owner: OwnerKey,
         kind: RelationKind,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic>;
 
     fn read_incoming_package_relations(
         &self,
         package: PackageId,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic>;
 
     fn read_test_dependencies(
         &self,
         test: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic>;
 
     /// Performs an admitted namespace read. The default fails before an unbounded read.
@@ -388,7 +394,7 @@ pub trait WitnessBaseRead {
     fn read_outgoing_relations_admitted(
         &self,
         _owner: OwnerKey,
-        _maximum_items: usize,
+        _maximum_items: Option<usize>,
         _admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         Err(admission_unsupported("witness outgoing relations"))
@@ -398,7 +404,7 @@ pub trait WitnessBaseRead {
     fn read_incoming_relations_admitted(
         &self,
         _owner: OwnerKey,
-        _maximum_items: usize,
+        _maximum_items: Option<usize>,
         _admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         Err(admission_unsupported("witness incoming relations"))
@@ -410,7 +416,7 @@ pub trait WitnessBaseRead {
         &self,
         _owner: OwnerKey,
         _kind: RelationKind,
-        _maximum_items: usize,
+        _maximum_items: Option<usize>,
         _admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         Err(admission_unsupported("witness incoming relations by kind"))
@@ -420,7 +426,7 @@ pub trait WitnessBaseRead {
     fn read_incoming_package_relations_admitted(
         &self,
         _package: PackageId,
-        _maximum_items: usize,
+        _maximum_items: Option<usize>,
         _admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         Err(admission_unsupported("witness package relations"))
@@ -430,7 +436,7 @@ pub trait WitnessBaseRead {
     fn read_test_dependencies_admitted(
         &self,
         _test: OwnerKey,
-        _maximum_items: usize,
+        _maximum_items: Option<usize>,
         _admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic> {
         Err(admission_unsupported("witness test dependencies"))
@@ -722,7 +728,7 @@ impl<W: WitnessBaseRead + ?Sized> WitnessBaseRead for BudgetedWitnessBase<'_, W>
     fn read_outgoing_relations(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         self.admitted(|admission| {
             self.base
@@ -733,7 +739,7 @@ impl<W: WitnessBaseRead + ?Sized> WitnessBaseRead for BudgetedWitnessBase<'_, W>
     fn read_incoming_relations(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         self.admitted(|admission| {
             self.base
@@ -745,7 +751,7 @@ impl<W: WitnessBaseRead + ?Sized> WitnessBaseRead for BudgetedWitnessBase<'_, W>
         &self,
         owner: OwnerKey,
         kind: RelationKind,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         self.admitted(|admission| {
             self.base.read_incoming_relations_of_kind_admitted(
@@ -760,7 +766,7 @@ impl<W: WitnessBaseRead + ?Sized> WitnessBaseRead for BudgetedWitnessBase<'_, W>
     fn read_incoming_package_relations(
         &self,
         package: PackageId,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         self.admitted(|admission| {
             self.base
@@ -771,7 +777,7 @@ impl<W: WitnessBaseRead + ?Sized> WitnessBaseRead for BudgetedWitnessBase<'_, W>
     fn read_test_dependencies(
         &self,
         test: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic> {
         self.admitted(|admission| {
             self.base
@@ -1066,7 +1072,7 @@ impl WitnessBaseRead for FullWitness {
     fn read_outgoing_relations(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         self.read_outgoing_relations_admitted(
             owner,
@@ -1078,7 +1084,7 @@ impl WitnessBaseRead for FullWitness {
     fn read_outgoing_relations_admitted(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         read_memory_relations(self, owner, None, maximum_items, false, admission)
@@ -1087,7 +1093,7 @@ impl WitnessBaseRead for FullWitness {
     fn read_incoming_relations(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         self.read_incoming_relations_admitted(
             owner,
@@ -1099,7 +1105,7 @@ impl WitnessBaseRead for FullWitness {
     fn read_incoming_relations_admitted(
         &self,
         owner: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         read_memory_relations(self, owner, None, maximum_items, true, admission)
@@ -1109,7 +1115,7 @@ impl WitnessBaseRead for FullWitness {
         &self,
         owner: OwnerKey,
         kind: RelationKind,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         self.read_incoming_relations_of_kind_admitted(
             owner,
@@ -1123,7 +1129,7 @@ impl WitnessBaseRead for FullWitness {
         &self,
         owner: OwnerKey,
         kind: RelationKind,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         read_memory_relations(self, owner, Some(kind), maximum_items, true, admission)
@@ -1132,7 +1138,7 @@ impl WitnessBaseRead for FullWitness {
     fn read_incoming_package_relations(
         &self,
         package: PackageId,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         self.read_incoming_package_relations_admitted(
             package,
@@ -1144,18 +1150,11 @@ impl WitnessBaseRead for FullWitness {
     fn read_incoming_package_relations_admitted(
         &self,
         package: PackageId,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
         admit_witness_point(admission)?;
-        if maximum_items == 0 || maximum_items > MAXIMUM_RELATION_PREFIX_ITEMS {
-            return Err(base_read_error(
-                DiagnosticClass::Resource,
-                "change_relation_item_budget",
-                "relation item budget is outside the current supported range",
-            ));
-        }
-        let mut edges = Vec::with_capacity(maximum_items.min(64));
+        let mut edges = Vec::with_capacity(maximum_items.map_or(64, |maximum| maximum.min(64)));
         let mut truncated = false;
         for edge in self.entries.reverse_relations.iter().filter(|edge| {
             matches!(
@@ -1166,7 +1165,7 @@ impl WitnessBaseRead for FullWitness {
                 }) if target_package == package
             )
         }) {
-            if edges.len() == maximum_items {
+            if maximum_items.is_some_and(|maximum| edges.len() >= maximum) {
                 truncated = true;
                 break;
             }
@@ -1193,7 +1192,7 @@ impl WitnessBaseRead for FullWitness {
     fn read_test_dependencies(
         &self,
         test: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
     ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic> {
         self.read_test_dependencies_admitted(test, maximum_items, WitnessReadAdmission::unbounded())
     }
@@ -1201,17 +1200,10 @@ impl WitnessBaseRead for FullWitness {
     fn read_test_dependencies_admitted(
         &self,
         test: OwnerKey,
-        maximum_items: usize,
+        maximum_items: Option<usize>,
         admission: WitnessReadAdmission,
     ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic> {
         admit_witness_point(admission)?;
-        if maximum_items == 0 || maximum_items > MAXIMUM_TEST_DEPENDENCY_PREFIX_ITEMS {
-            return Err(base_read_error(
-                DiagnosticClass::Resource,
-                "change_test_dependency_item_budget",
-                "test-dependency item budget is outside the current supported range",
-            ));
-        }
         if !matches!(test, OwnerKey::Declaration(_)) {
             return Err(base_read_error(
                 DiagnosticClass::Source,
@@ -1221,7 +1213,7 @@ impl WitnessBaseRead for FullWitness {
         }
         let available = self.entries.test_dependencies_by_test.get(&test);
         let available_count = available.map_or(0, |entries| entries.len());
-        let returned = available_count.min(maximum_items);
+        let returned = maximum_items.map_or(available_count, |maximum| available_count.min(maximum));
         admission.check_work(
             WitnessReadWork {
                 point_reads: 1,
@@ -1237,7 +1229,7 @@ impl WitnessBaseRead for FullWitness {
                     .flat_map(|entries| entries.iter().copied())
                     .take(returned)
                     .collect(),
-                truncated: available_count > maximum_items,
+                truncated: maximum_items.is_some_and(|maximum| available_count > maximum),
             },
             u64::try_from(returned).unwrap_or(u64::MAX),
         ))
@@ -1248,18 +1240,11 @@ fn read_memory_relations(
     witness: &FullWitness,
     owner: OwnerKey,
     kind: Option<RelationKind>,
-    maximum_items: usize,
+    maximum_items: Option<usize>,
     reverse: bool,
     admission: WitnessReadAdmission,
 ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
     admit_witness_point(admission)?;
-    if maximum_items == 0 || maximum_items > MAXIMUM_RELATION_PREFIX_ITEMS {
-        return Err(base_read_error(
-            DiagnosticClass::Resource,
-            "change_relation_item_budget",
-            "relation item budget is outside the current supported range",
-        ));
-    }
     let endpoint = RelationEndpoint::Owner(ExactOwnerKey {
         package: witness.manifest.package_id,
         owner,
@@ -1291,7 +1276,7 @@ fn read_memory_relations(
     } else {
         available
     };
-    let returned = matching.len().min(maximum_items);
+    let returned = maximum_items.map_or(matching.len(), |maximum| matching.len().min(maximum));
     admission.check_work(
         WitnessReadWork {
             point_reads: 1,
@@ -1303,7 +1288,7 @@ fn read_memory_relations(
     Ok(WitnessRead::memory_records(
         WitnessRelationRead {
             edges: matching[..returned].to_vec(),
-            truncated: matching.len() > maximum_items,
+            truncated: maximum_items.is_some_and(|maximum| matching.len() > maximum),
         },
         returned as u64,
     ))
@@ -1601,7 +1586,7 @@ mod tests {
         fn read_outgoing_relations(
             &self,
             owner: OwnerKey,
-            maximum_items: usize,
+            maximum_items: Option<usize>,
         ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
             self.base.read_outgoing_relations(owner, maximum_items)
         }
@@ -1609,7 +1594,7 @@ mod tests {
         fn read_incoming_relations(
             &self,
             owner: OwnerKey,
-            maximum_items: usize,
+            maximum_items: Option<usize>,
         ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
             self.base.read_incoming_relations(owner, maximum_items)
         }
@@ -1618,7 +1603,7 @@ mod tests {
             &self,
             owner: OwnerKey,
             kind: RelationKind,
-            maximum_items: usize,
+            maximum_items: Option<usize>,
         ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
             self.base
                 .read_incoming_relations_of_kind(owner, kind, maximum_items)
@@ -1627,7 +1612,7 @@ mod tests {
         fn read_incoming_package_relations(
             &self,
             package: PackageId,
-            maximum_items: usize,
+            maximum_items: Option<usize>,
         ) -> Result<WitnessRead<WitnessRelationRead>, Diagnostic> {
             self.base
                 .read_incoming_package_relations(package, maximum_items)
@@ -1636,7 +1621,7 @@ mod tests {
         fn read_test_dependencies(
             &self,
             test: OwnerKey,
-            maximum_items: usize,
+            maximum_items: Option<usize>,
         ) -> Result<WitnessRead<WitnessTestDependencyRead>, Diagnostic> {
             self.base.read_test_dependencies(test, maximum_items)
         }
@@ -1752,7 +1737,7 @@ mod tests {
         let zero = BudgetedCanonicalBase::new(
             &source,
             CanonicalReadAdmission {
-                maximum_point_reads: 0,
+                maximum_point_reads: Some(0),
                 ..CanonicalReadAdmission::unbounded()
             },
             CanonicalReadWork::default(),
@@ -1774,7 +1759,7 @@ mod tests {
         let admitted = BudgetedCanonicalBase::new(
             &source,
             CanonicalReadAdmission {
-                maximum_point_reads: 2,
+                maximum_point_reads: Some(2),
                 ..CanonicalReadAdmission::unbounded()
             },
             CanonicalReadWork {
@@ -1806,7 +1791,7 @@ mod tests {
         let zero = BudgetedCanonicalBase::new(
             &source,
             CanonicalReadAdmission {
-                maximum_decoded_records: 0,
+                maximum_decoded_records: Some(0),
                 ..CanonicalReadAdmission::unbounded()
             },
             CanonicalReadWork::default(),
@@ -1823,7 +1808,7 @@ mod tests {
         let admitted = BudgetedCanonicalBase::new(
             &source,
             CanonicalReadAdmission {
-                maximum_decoded_records: 3,
+                maximum_decoded_records: Some(3),
                 ..CanonicalReadAdmission::unbounded()
             },
             CanonicalReadWork {
@@ -1844,7 +1829,7 @@ mod tests {
         assert_eq!(admitted.work(), work);
         assert_eq!(
             source.last_admission.get().unwrap().maximum_decoded_records,
-            0
+            Some(0)
         );
     }
 
@@ -1870,7 +1855,7 @@ mod tests {
         let zero = BudgetedCanonicalBase::new(
             &zero_source,
             CanonicalReadAdmission {
-                maximum_point_reads: 0,
+                maximum_point_reads: Some(0),
                 ..CanonicalReadAdmission::unbounded()
             },
             CanonicalReadWork::default(),
@@ -1893,9 +1878,9 @@ mod tests {
         let admitted = BudgetedCanonicalBase::new(
             &source,
             CanonicalReadAdmission {
-                maximum_point_reads: 2,
-                maximum_map_pages: 7,
-                maximum_bytes: 11,
+                maximum_point_reads: Some(2),
+                maximum_map_pages: Some(7),
+                maximum_bytes: Some(11),
                 ..CanonicalReadAdmission::unbounded()
             },
             initial,
@@ -1905,9 +1890,9 @@ mod tests {
         assert_eq!(admitted.work().point_reads, 2);
         assert_eq!(source.admitted_calls(), 1);
         let source_admission = source.last_admission.get().expect("source admission");
-        assert_eq!(source_admission.maximum_point_reads, 1);
-        assert_eq!(source_admission.maximum_map_pages, 5);
-        assert_eq!(source_admission.maximum_bytes, 8);
+        assert_eq!(source_admission.maximum_point_reads, Some(1));
+        assert_eq!(source_admission.maximum_map_pages, Some(5));
+        assert_eq!(source_admission.maximum_bytes, Some(8));
         let error = admitted
             .read_owner(owner)
             .expect_err("cumulative point budget must reject a second source call");
@@ -2000,7 +1985,7 @@ mod tests {
         let zero = BudgetedWitnessBase::new(
             &zero_source,
             WitnessReadAdmission {
-                maximum_point_reads: 0,
+                maximum_point_reads: Some(0),
                 ..WitnessReadAdmission::unbounded()
             },
             WitnessReadWork::default(),
@@ -2023,9 +2008,9 @@ mod tests {
         let admitted = BudgetedWitnessBase::new(
             &source,
             WitnessReadAdmission {
-                maximum_point_reads: 2,
-                maximum_map_entries: 7,
-                maximum_bytes: 11,
+                maximum_point_reads: Some(2),
+                maximum_map_entries: Some(7),
+                maximum_bytes: Some(11),
                 ..WitnessReadAdmission::unbounded()
             },
             initial,
@@ -2035,9 +2020,9 @@ mod tests {
         assert_eq!(admitted.work().point_reads, 2);
         assert_eq!(source.admitted_calls(), 1);
         let source_admission = source.last_admission.get().expect("source admission");
-        assert_eq!(source_admission.maximum_point_reads, 1);
-        assert_eq!(source_admission.maximum_map_entries, 5);
-        assert_eq!(source_admission.maximum_bytes, 8);
+        assert_eq!(source_admission.maximum_point_reads, Some(1));
+        assert_eq!(source_admission.maximum_map_entries, Some(5));
+        assert_eq!(source_admission.maximum_bytes, Some(8));
         let error = admitted
             .read_namespace(&key)
             .expect_err("cumulative point budget must reject a second source call");
@@ -2127,7 +2112,7 @@ mod tests {
         let admitted = BudgetedWitnessBase::new(
             &base,
             WitnessReadAdmission {
-                maximum_decoded_records: 0,
+                maximum_decoded_records: Some(0),
                 ..WitnessReadAdmission::unbounded()
             },
             WitnessReadWork::default(),

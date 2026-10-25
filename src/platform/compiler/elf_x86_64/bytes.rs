@@ -3,6 +3,16 @@
 use super::Emitter;
 use super::asm::{R::*, *};
 
+/// Bx is a language byte length; Di receives the checked object extent.
+/// Lengths are I64, while allocation extents and pointers use unsigned addresses.
+pub(super) fn allocation_size(a: &mut Asm, trap: Label) {
+    a.group(7, Bx, 0);
+    a.when(L, trap);
+    a.mov(Di, Bx);
+    a.group(0, Di, 24);
+    a.when(B, trap);
+}
+
 impl Emitter<'_> {
     /// Inputs follow the external-function stack ABI. Ax/Cx are its first two
     /// argument values; the result is a value pointer in Ax.
@@ -56,8 +66,8 @@ impl Emitter<'_> {
                 self.a.imm(Bx, 32);
                 self.bytes_allocate();
                 self.a.load(Si, R12, 8);
-                self.a.group(7, Si, 256 * 1024 * 1024 + 1);
-                self.a.when(AE, self.runtime.bytes_capacity);
+                self.a.group(7, Si, 0);
+                self.a.when(L, self.runtime.bytes_capacity);
                 self.a.load(Di, R12, 16);
                 self.a.imm(Dx, 0);
                 self.a.imm(Cx, 8);
@@ -79,8 +89,8 @@ impl Emitter<'_> {
         // The intermediate context key has lexical stack storage, outside output.
         self.a.group(5, Sp, 32);
         self.a.load(Si, R12, 24);
-        self.a.group(7, Si, 256 * 1024 * 1024 + 1);
-        self.a.when(AE, self.runtime.bytes_capacity);
+        self.a.group(7, Si, 0);
+        self.a.when(L, self.runtime.bytes_capacity);
         self.a.load(Di, R12, 32);
         self.a.imm(Dx, 0);
         self.a.imm(Cx, 32 | 8); // DERIVE_KEY_CONTEXT | ROOT.
@@ -89,8 +99,8 @@ impl Emitter<'_> {
         self.a.call(self.runtime.blake3);
         self.argument(Ax, 0);
         self.a.load(Si, Ax, 8);
-        self.a.group(7, Si, 256 * 1024 * 1024 + 1);
-        self.a.when(AE, self.runtime.bytes_capacity);
+        self.a.group(7, Si, 0);
+        self.a.when(L, self.runtime.bytes_capacity);
         self.a.load(Di, Ax, 16);
         self.a.imm(Dx, 0);
         self.a.imm(Cx, 64 | 8); // DERIVE_KEY_MATERIAL | ROOT.
@@ -101,13 +111,10 @@ impl Emitter<'_> {
         self.a.mov(Ax, R13);
     }
 
-    /// Bx is the validated byte length. R13 receives the new object pointer.
-    /// The bound leaves addition/alignment headroom and agrees with the VM's
-    /// finite value bound, independently of its cumulative allocation quota.
+    /// Bx is the byte length. R13 receives the new object pointer.
+    /// Allocation failure is independent of an invocation's optional quota.
     fn bytes_allocate(&mut self) {
-        self.a.group(7, Bx, 256 * 1024 * 1024 + 1);
-        self.a.when(AE, self.runtime.bytes_capacity);
-        self.a.lea(Di, Bx, 24);
+        allocation_size(&mut self.a, self.runtime.bytes_capacity);
         self.a.call(self.runtime.alloc);
         self.a.mov(R13, Ax);
         self.a.imm(Cx, 7);

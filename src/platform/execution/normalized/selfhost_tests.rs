@@ -28,13 +28,13 @@ fn selfhost_normalized_byte_inventory_exports_current_compiler() {
         .unwrap()
         .0 as usize;
     let payload = input::export(program, entry).unwrap();
-    assert_eq!(u32_at(&payload, 8), 4);
+    assert_eq!(u32_at(&payload, 8), 6);
     eprintln!(
         "selfhost byte inventory functions={} nodes={} input_bytes={} types={}",
-        u32_at(&payload, 92),
-        u32_at(&payload, 100),
+        wide_at(&payload, 96),
+        wide_at(&payload, 120),
         payload.len(),
-        u32_at(&payload, 84)
+        wide_at(&payload, 80)
     );
     let crate::platform::execution::normalized::prepare::NormalizedFunctionBody::Code(code) =
         &program.functions[entry].body
@@ -327,6 +327,41 @@ fn compile_with_policy(
     (*code, image.to_vec())
 }
 
+fn wide_at(bytes: &[u8], at: usize) -> u64 {
+    u64::from_le_bytes(bytes[at..at + 8].try_into().unwrap())
+}
+
+fn write_wide(bytes: &mut [u8], at: usize, value: u64) {
+    bytes[at..at + 8].copy_from_slice(&value.to_le_bytes());
+}
+
+fn measured_layout(bytes: &[u8]) -> Vec<u8> {
+    let (source, program) = compiler();
+    let module = source.owners.iter().find_map(|(key, owner)| match (key, owner) {
+        (OwnerKey::Module(id), OwnerRecord::Module(m)) if m.name.as_str() == "machine" => Some(*id),
+        _ => None,
+    }).unwrap();
+    let declaration = source.owners.iter().find_map(|(key, owner)| match (key, owner) {
+        (OwnerKey::Declaration(id), OwnerRecord::Declaration(d))
+            if d.module == module && d.name.as_str() == "layout" => Some(*id),
+        _ => None,
+    }).unwrap();
+    let reference = DeclarationReference { package: source.root.package_id, declaration };
+    let values = vec![NormalizedValue::bytes(bytes)];
+    let control = ExecutionControl::uncancelled();
+    let policy = NormalizedRunPolicy::foreground();
+    let vm = NormalizedVm::for_test(program, policy).invoke(reference, values.clone(), None, &control).unwrap();
+    let oracle = NormalizedReferenceInterpreter::new(source, program, policy)
+        .invoke(reference, values, None, &control).unwrap();
+    assert_eq!(vm.0, oracle.0);
+    let NormalizedValue::Record(NormalizedRecord::Structural { fields }) = vm.0 else { panic!("layout result") };
+    assert!(fields.iter().any(|(name, value)| name.as_str() == "code" && value == &NormalizedValue::I64(0)));
+    fields.iter().find_map(|(name, value)| match value {
+        NormalizedValue::Bytes(bytes) if name.as_str() == "bytes" => Some(bytes.to_vec()),
+        _ => None,
+    }).unwrap()
+}
+
 fn compile(bytes: &[u8]) -> (i64, Vec<u8>) {
     let (source, program) = compiler();
     compile_with(source, program, bytes)
@@ -339,7 +374,7 @@ fn execute(bytes: &[u8], arguments: &[&str]) -> Output {
     crate::platform::owned_output::publish_executable_create_new(
         &path,
         bytes,
-        32 * 1024 * 1024,
+        Some(32 * 1024 * 1024),
         "selfhost test ELF",
     )
     .unwrap();
@@ -476,7 +511,7 @@ fn selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines() 
         assert_eq!(code, 0, "{name}");
         let output = execute(&image, &[]);
         eprintln!(
-            "selfhost profile=4 tier=backend case={name} input_sha256={} elf_sha256={} elf_bytes={} exit={:?}",
+            "selfhost profile=6 tier=backend case={name} input_sha256={} elf_sha256={} elf_bytes={} exit={:?}",
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&bytes)),
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&image)),
             image.len(),
@@ -542,91 +577,50 @@ fn selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines() 
 #[test]
 fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
     let valid = input::arithmetic(&[(1, 42), (6, 0)]).unwrap();
-    for length in [0, 7, 39, 40, 71, 72, 175, 247, valid.len() - 1] {
+    for length in [0, 7, 39, 40, 71, 72, 159, 160, valid.len() - 1] {
         assert_eq!(compile(&valid[..length]), (3, vec![]));
     }
+    let declarations = wide_at(&valid, 88) as usize;
+    let nodes = wide_at(&valid, 104) as usize;
+    let state = wide_at(&valid, nodes + input::NODE_BYTES + 48) as usize;
     for (offset, value, expected) in [
-        (0, 0, 1),
-        (8, 1, 2),
-        (12, 5, 5),
-        (16, 0, 3),
-        (20, 255, 3),
-        (24, 0, 3),
-        (28, 255, 3),
-        (32, 0, 6),
-        (36, 1, 6),
-        (72, 113, 5),
-        (76, 0, 5),
-        (80, 129, 5),
-        (84, 0, 5),
-        (88, 0, 5),
-        (92, 0, 5),
-        (96, 0, 5),
-        (100, 0, 3),
-        (104, 0, 5),
-        (108, 0, 5),
-        (112, 1, 2),
-        (112, 2, 2),
-        (116, 0, 5),
-        (120, 1, 5),
-        (128, 99, 5),
-        (132, 1, 5),
-        (144, 99, 5),
-        (160, 99, 5),
-        (176, 1, 5),
-        (180, 0, 5),
-        (180, 2, 9),
-        (184, 1, 5),
-        (188, 129, 5),
-        (192, 1, 5),
-        (196, 1, 5),
-        (200, 12, 5),
-        (204, 0, 5),
-        (208, 1, 5),
-        (212, 1, 5),
-        (376, 99, 7),
-        (380, 1, 7),
-        (384, 1, 7),
-        (388, 1, 7),
-        (400, 0, 5),
-        (404, 129, 5),
-        (424, 1, 7),
-        (440, 2, 8),
-        (440, 0, 5),
-        (440, 255, 5),
+        (16, 0, 3), (24, 0, 3), (72, 168, 5), (80, 6, 3),
+        (88, declarations as u64 + 8, 5), (96, 4, 5), (104, nodes as u64 + 8, 5),
+        (120, u64::MAX, 3), (128, wide_at(&valid, 128) + 8, 5),
+        (136, wide_at(&valid, 136) + 1, 5), (144, 5, 5), (152, 1, 5),
+        (160, 99, 5), (360, 2, 5),
+        (declarations, 1, 5), (declarations + 8, 2, 9), (declarations + 16, 1, 5),
+        (declarations + 24, i64::MAX as u64, 5), (declarations + 32, 1, 5),
+        (declarations + 40, 1, 5), (declarations + 48, 29, 5),
+        (declarations + 56, 0, 5), (declarations + 64, 1, 5), (declarations + 72, 1, 5),
+        (nodes, 99, 7), (nodes + 8, 1, 7), (nodes + 16, 1, 7), (nodes + 24, 1, 7),
+        (nodes + 40, 1, 5), (nodes + 48, u64::MAX, 5), (nodes + 56, i64::MAX as u64, 5),
+        (nodes + input::NODE_BYTES + 32, 1, 7),
+        (state, 2, 8), (state, 0, 5), (state, u64::MAX, 5), (state + 8, 1, 5),
     ] {
         let mut changed = valid.clone();
-        let offset = if offset >= 176 { offset + 2000 } else { offset };
+        write_wide(&mut changed, offset, value);
+        input::rechecksum(&mut changed);
+        assert_eq!(compile(&changed), (expected, vec![]), "wide field {offset}={value}");
+    }
+    for (offset, value, expected) in [(0, 0, 1), (8, 4, 2), (12, 2, 5), (112, 1, 2), (112, 2, 2)] {
+        let mut changed = valid.clone();
         changed[offset] = value;
         input::rechecksum(&mut changed);
-        assert_eq!(compile(&changed), (expected, vec![]), "byte {offset}");
+        assert_eq!(compile(&changed), (expected, vec![]), "discriminator byte {offset}");
     }
-    // The mode marker cannot turn a profile-4 packet into a profile-5 artifact.
-    // With both discriminators changed, the malformed artifact layout is reached.
     let mut artifact_mode = valid.clone();
     artifact_mode[8..12].copy_from_slice(&5_u32.to_le_bytes());
     artifact_mode[112..116].copy_from_slice(&1_u32.to_le_bytes());
     input::rechecksum(&mut artifact_mode);
     assert_eq!(compile(&artifact_mode), (10, vec![]));
-    for nodes in [
-        vec![(6, 0)],
-        vec![(2, 0), (6, 0)],
-        vec![(1, 1)],
-        vec![(1, 1), (1, 2), (6, 0)],
-        vec![(1, 1), (6, 0), (1, 2)],
-    ] {
+    for nodes in [vec![(6, 0)], vec![(2, 0), (6, 0)], vec![(1, 1)],
+        vec![(1, 1), (1, 2), (6, 0)], vec![(1, 1), (6, 0), (1, 2)]] {
         assert_eq!(compile(&input::arithmetic(&nodes).unwrap()), (8, vec![]));
     }
-    let mut corrupt = valid.clone();
-    corrupt[392] ^= 1;
+    let mut corrupt = valid;
+    corrupt[nodes] ^= 1;
     assert_eq!(compile(&corrupt), (4, vec![]));
-    let mut excessive = valid.clone();
-    excessive[32..40].copy_from_slice(&2_147_483_648_u64.to_le_bytes());
-    input::rechecksum(&mut excessive);
-    assert_eq!(compile(&excessive), (6, vec![]));
-    let mut oversized = valid;
-    oversized.resize(input::MAX_INPUT + 1, 0);
-    assert_eq!(compile(&oversized), (3, vec![]));
 }
 
 #[test]
@@ -662,44 +656,39 @@ fn selfhost_compiler_is_deterministic_and_source_mutation_changes_emitted_behavi
 }
 
 #[test]
-fn selfhost_compiler_accepts_more_than_historical_node_limit_and_exact_fuel() {
+fn selfhost_compiler_accepts_more_than_historical_node_limit_without_default_allowance() {
     const HISTORICAL_MAX_NODES: usize = 32_768;
     let node_count = HISTORICAL_MAX_NODES + 2;
     let mut nodes = vec![(1, 0)];
-    for _ in 0..(node_count - 2) / 2 {
-        nodes.extend_from_slice(&[(1, 1), (2, 0)]);
-    }
+    for _ in 0..(node_count - 2) / 2 { nodes.extend_from_slice(&[(1, 1), (2, 0)]); }
     nodes.push((6, 0));
     assert_eq!(nodes.len(), node_count);
-    assert!(nodes.len() > HISTORICAL_MAX_NODES);
-    let mut bytes = input::arithmetic(&nodes).unwrap();
-    assert_eq!(bytes.len(), 1_100_177);
-    assert_eq!(
-        u32::from_le_bytes(bytes[100..104].try_into().unwrap()) as usize,
-        node_count
-    );
+    let bytes = input::arithmetic(&nodes).unwrap();
+    assert_eq!(wide_at(&bytes, 120) as usize, node_count);
+    assert_eq!(&bytes[12..16], &[0; 4]);
+    assert_eq!(wide_at(&bytes, 32), 0);
     let (source, program) = compiler();
-    let (code, image) =
-        compile_with_policy(source, program, &bytes, NormalizedRunPolicy::foreground());
+    let (code, image) = compile_with_policy(source, program, &bytes, NormalizedRunPolicy::foreground());
     assert_eq!(code, 0);
-    let blob_bytes = u32::from_le_bytes(bytes[108..112].try_into().unwrap()) as usize;
-    assert_eq!(image.len(), 65536 + 5 * 512 + node_count * 128 + blob_bytes);
     let output = execute(&image, &[]);
     assert!(output.status.success());
     assert_eq!(output.stdout, b"16384");
     assert!(output.stderr.is_empty());
-    let fuel = u64::from_le_bytes(bytes[32..40].try_into().unwrap());
-    bytes[32..40].copy_from_slice(&(fuel - 1).to_le_bytes());
-    input::rechecksum(&mut bytes);
-    assert_eq!(compile(&bytes), (6, vec![]));
+    eprintln!("selfhost current profile=6 nodes={node_count} input_bytes={} elf_bytes={} compiler_padding=bounded-runtime-only", bytes.len(), image.len());
+
 }
 
 #[test]
-fn selfhost_compiler_rejects_hash_consistent_node_extent_outside_input() {
-    let mut bytes = input::arithmetic(&[(1, 42), (6, 0)]).unwrap();
-    bytes[100..104].copy_from_slice(&u32::MAX.to_le_bytes());
-    input::rechecksum(&mut bytes);
-    assert_eq!(compile(&bytes), (3, vec![]));
+fn selfhost_compiler_rejects_hash_consistent_wide_extents_outside_input() {
+    let valid = input::arithmetic(&[(1, 42), (6, 0)]).unwrap();
+    for value in [u32::MAX as u64, u64::from(u32::MAX) + 1, i64::MAX as u64, u64::MAX] {
+        for offset in [24, 80, 120] {
+            let mut bytes = valid.clone();
+            write_wide(&mut bytes, offset, value);
+            input::rechecksum(&mut bytes);
+            assert_eq!(compile(&bytes), (3, vec![]), "extent {offset}={value}");
+        }
+    }
 }
 
 #[test]
@@ -727,4 +716,24 @@ fn selfhost_exporter_rejects_unsupported_complete_function_bodies() {
             "{name}"
         );
     }
+}
+
+#[test]
+fn selfhost_mode0_policy_preserves_unbounded_zero_exact_and_maximum() {
+    let mut bytes = input::arithmetic(&[(1, 42), (6, 0)]).unwrap();
+    let (code, expected) = compile(&bytes);
+    assert_eq!(code, 0);
+    let exact = 4096 + wide_at(&bytes, 96) + 64 * wide_at(&bytes, 120) + 256 * wide_at(&bytes, 136);
+    for (allowance, accepted) in [(None, true), (Some(0), false), (Some(exact - 1), false),
+        (Some(exact), true), (Some(u64::MAX), true)] {
+        input::set_allowance(&mut bytes, allowance);
+        let (code, image) = compile(&bytes);
+        assert_eq!(code, if accepted { 0 } else { 6 }, "policy {allowance:?}");
+        assert_eq!(image, if accepted { expected.clone() } else { vec![] });
+    }
+    // The unlimited tag has one canonical payload, and no reserved tag is accepted.
+    input::set_allowance(&mut bytes, None);
+    write_wide(&mut bytes, 32, 1);
+    input::rechecksum(&mut bytes);
+    assert_eq!(compile(&bytes), (5, vec![]));
 }

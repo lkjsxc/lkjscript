@@ -41,14 +41,11 @@ pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?
     });
     // Type/blob objects are immutable storage content, but only live owner roots belong to
     // the logical candidate. Removing a body does not delete its historical stored objects.
-    let maximum_work = usize::try_from(
-        budget
-            .validation
-            .maximum_expression_steps
-            .saturating_sub(initial_work.validation.expression_steps),
-    )
-    .unwrap_or(usize::MAX);
-    let mut pruning_work = 0_usize;
+    let maximum_work = initial_work.observation_saturation()
+        .counter(BudgetDimension::ValidationExpressionSteps, initial_work.validation.expression_steps)
+        .remaining(budget.validation.maximum_expression_steps, "complete repair", "validation_expression_steps")
+        .map_err(single)?;
+    let mut pruning_work = BudgetCounter::default();
     let mut pending_types: BTreeSet<_> = candidate
         .owners
         .values()
@@ -57,16 +54,8 @@ pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?
     let mut live_types = BTreeSet::new();
     while let Some(ty) = pending_types.pop_first() {
         witness_base.validation_checkpoint().map_err(single)?;
-        pruning_work = pruning_work
-            .checked_add(1)
-            .filter(|work| *work <= maximum_work)
-            .ok_or_else(|| {
-                vec![Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "change_budget_validation_expression_steps",
-                    "complete repair type-root reconstruction exhausted validation work",
-                )]
-            })?;
+        pruning_work.charge(BudgetCounter::exact(1), maximum_work,
+            "complete repair type-root reconstruction", "validation_expression_steps").map_err(single)?;
         if live_types.insert(ty)
             && let Some(object) = candidate.types.get(&ty)
         {
@@ -83,7 +72,9 @@ pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?
     candidate
         .blobs
         .retain(|digest, _| live_blobs.contains(digest));
-    let full = rebuild_full_witness_checked(&candidate, maximum_work - pruning_work, &|| {
+    let remaining = pruning_work.remaining(maximum_work, "complete repair", "validation_expression_steps").map_err(single)?;
+    let maximum_full_work = optional_usize(remaining, "validation_expression_steps").map_err(single)?;
+    let full = rebuild_full_witness_checked(&candidate, maximum_full_work, &|| {
         witness_base.validation_checkpoint()
     })?;
     let report = full.report.full_validation.clone();
@@ -144,6 +135,11 @@ pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?
         type_objects_checked: report.type_objects_checked,
         expression_work: report.work_consumed,
         witness_reads: WitnessReadWork::default(),
+        saturation: {
+            let mut flags = WorkSaturation::default();
+            if report.work_saturated { flags.mark(BudgetDimension::ValidationExpressionSteps); }
+            flags
+        },
     };
     let http_routes = super::validate::validate_http_topology_frontier(
         &overlay,
@@ -160,8 +156,10 @@ pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?
             work: validation_work,
         })
         .map_err(single)?;
+    let mut expression_work = pruning_work;
+    expression_work.observe(BudgetCounter { consumed: report.work_consumed, saturated: report.work_saturated });
     meter
-        .observe_expression_validation(report.work_consumed.saturating_add(pruning_work as u64), 0)
+        .observe_expression_validation(expression_work, 0)
         .map_err(single)?;
     let tests = TestDependencyDelta {
         affected_tests: test_owners.clone(),
@@ -188,15 +186,13 @@ pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?
         new_pages: full.pages,
         work: full.report.map_work,
         read_work: WitnessReadWork::default(),
-        edits: WitnessEditCounts {
-            inserted: full
-                .report
-                .namespace_entries
-                .saturating_add(full.report.ownership_entries)
-                .saturating_add(full.report.owners_summarized)
-                .saturating_add(full.report.relation_edges.saturating_mul(2))
-                .saturating_add(full.report.test_dependency_entries),
-            ..WitnessEditCounts::default()
+        edits: {
+            let mut inserted = BudgetCounter::exact(full.report.namespace_entries);
+            for count in [full.report.ownership_entries, full.report.owners_summarized, full.report.test_dependency_entries] {
+                inserted.observe(BudgetCounter::exact(count));
+            }
+            inserted.observe(BudgetCounter::product(full.report.relation_edges, 2));
+            WitnessEditCounts { inserted: inserted.consumed, saturated: inserted.saturated, ..WitnessEditCounts::default() }
         },
     };
     meter.observe_witness(&witness).map_err(single)?;

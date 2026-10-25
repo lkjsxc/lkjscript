@@ -99,7 +99,7 @@ pub(super) fn validate<S: ImmutableObjectStore + ?Sized>(
     suppliers: &BTreeMap<PackageId, KernelSnapshot>,
     prior_semantic_work: u64,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
-) -> Result<u64, Diagnostic> {
+) -> Result<(u64, bool), Diagnostic> {
     checkpoint()?;
     let mut work = StoreWork::default();
     let mut owners = BTreeMap::new();
@@ -137,7 +137,7 @@ pub(super) fn validate<S: ImmutableObjectStore + ?Sized>(
     }
     // These are passive observations. The collecting reader owns its separate
     // read admission; composed semantic work never grants storage capacity.
-    let mut composed_work = 0;
+    let mut composed_work = crate::platform::kernel::ValidationWork::default();
     validate_callable_closure(
         &Candidate {
             package: root.package_id,
@@ -149,7 +149,11 @@ pub(super) fn validate<S: ImmutableObjectStore + ?Sized>(
         &mut composed_work,
         None,
     )?;
-    Ok(prior_semantic_work
-        .saturating_add(store.visits())
-        .saturating_add(composed_work as u64))
+    let (sum, overflowed) = prior_semantic_work.overflowing_add(store.visits());
+    let base = if overflowed { u64::MAX } else { sum };
+    let (sum, final_overflow) = base.overflowing_add(composed_work.consumed as u64);
+    Ok((
+        if final_overflow { u64::MAX } else { sum },
+        overflowed || final_overflow || composed_work.saturated,
+    ))
 }

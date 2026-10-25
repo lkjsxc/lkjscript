@@ -977,7 +977,7 @@ fn unused_family_nominal_frontier(
 ) -> Vec<crate::platform::diagnostic::Diagnostic> {
     let mut diagnostics = Vec::new();
     let mut work = 0;
-    crate::platform::kernel::infer::validate_expression_roots(
+    crate::platform::kernel::test_work::validate_expression_roots(
         source,
         [OwnerKey::Declaration(reference.declaration)],
         &mut diagnostics,

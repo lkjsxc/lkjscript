@@ -7,17 +7,39 @@ declarations.begin
       (parameter create graph (type Bytes))
       (parameter create rows (type Bytes))
       (parameter create row (type I64))
-      (parameter create work (type I64))
-      (returns (record (declaration I64) (work I64)))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (declaration I64)
+          (work
+            (record
+              (code I64)
+              (finite Bool)
+              (high I64)
+              (low I64)
+              (observed-high I64)
+              (observed-low I64)
+              (saturated Bool)))))
       (body
         (if
-          (call ci::lt (local work) (i64 1))
-          (record structural (field declaration (local row)) (field work (i64 -6)))
+          (call source-budget::insufficient (local work) (i64 1))
+          (record structural
+            (field declaration (local row))
+            (field work (call source-budget::fail (local work) (i64 6))))
           (if
             (call ci::eq (local row) (call source-table::count (local graph)))
             (record structural
               (field declaration (local row))
-              (field work (call ci::sub (local work) (i64 1))))
+              (field work (call source-budget::charge (local work) (i64 1))))
             (let
               (binding kind (call source-table::kind (local graph) (local row)))
               (in
@@ -25,12 +47,12 @@ declarations.begin
                   (call ci::both (call ci::lt (i64 1) (local kind)) (call ci::lt (local kind) (i64 11)))
                   (record structural
                     (field declaration (local row))
-                    (field work (call ci::sub (local work) (i64 1))))
+                    (field work (call source-budget::charge (local work) (i64 1))))
                   (call context
                     (local graph)
                     (local rows)
                     (call source-table::parent (local rows) (local row))
-                    (call ci::sub (local work) (i64 1))))))))))
+                    (call source-budget::charge (local work) (i64 1))))))))))
     (function create types
       (visibility private)
       (effect pure)
@@ -40,8 +62,25 @@ declarations.begin
       (parameter create pending (type Bytes))
       (parameter create at (type I64))
       (parameter create seen (type Bytes))
-      (parameter create work (type I64))
-      (returns I64)
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
       (body
         (if
           (call ci::eq (local at) (call ci::length (local pending)))
@@ -51,10 +90,10 @@ declarations.begin
             (binding cost (call ci::add (i64 1) (call ci::div (call ci::length (local seen)) (i64 4))))
             (in
               (if
-                (call ci::lt (local work) (local cost))
-                (i64 -6)
+                (call source-budget::insufficient (local work) (local cost))
+                (call source-budget::fail (local work) (i64 6))
                 (let
-                  (binding remaining (call ci::sub (local work) (local cost)))
+                  (binding remaining (call source-budget::charge (local work) (local cost)))
                   (in
                     (if
                       (call source-type-table::contains (local seen) (i64 0) (local row))
@@ -92,18 +131,18 @@ declarations.begin
                                 (local declaration)
                                 (local remaining))
                               (local remaining))
-                            (i64 -17)))
+                            (call source-budget::fail (local remaining) (i64 17))))
                         (in
                           (if
-                            (call ci::lt (local left) (i64 0))
+                            (call source-budget::failed (local left))
                             (local left)
                             (let
                               (binding children
                                 (call source-type-table::child-count (local graph) (local row)))
                               (in
                                 (if
-                                  (call ci::lt (local left) (local children))
-                                  (i64 -6)
+                                  (call source-budget::insufficient (local left) (local children))
+                                  (call source-budget::fail (local left) (i64 6))
                                   (call types
                                     (local graph)
                                     (local rows)
@@ -113,31 +152,48 @@ declarations.begin
                                       (call source-type-table::children (local graph) (local row)))
                                     (call ci::add (local at) (i64 4))
                                     (call source-type-table::push (local seen) (local row))
-                                    (call ci::sub (local left) (local children))))))))))))))))))
+                                    (call source-budget::charge (local left) (local children))))))))))))))))))
     (function create owners
       (visibility private)
       (effect pure)
       (parameter create graph (type Bytes))
       (parameter create rows (type Bytes))
       (parameter create row (type I64))
-      (parameter create work (type I64))
-      (returns I64)
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
       (body
         (if
           (call ci::eq (local row) (call source-table::count (local graph)))
           (local work)
           (if
-            (call ci::lt (local work) (i64 1))
-            (i64 -6)
+            (call source-budget::insufficient (local work) (i64 1))
+            (call source-budget::fail (local work) (i64 6))
             (let
               (binding data (call source-table::data (local graph) (local row)))
               (binding selected (call source-type-uses::roots (local data)))
               (binding cost (call ci::add (i64 1) (field (local selected) (name count))))
-              (binding remaining (call ci::sub (local work) (local cost)))
+              (binding remaining (call source-budget::charge (local work) (local cost)))
               (binding next
                 (if
-                  (call ci::lt (local remaining) (i64 0))
-                  (i64 -6)
+                  (call source-budget::failed (local remaining))
+                  (call source-budget::fail (local remaining) (i64 6))
                   (if
                     (call ci::eq (field (local selected) (name count)) (i64 0))
                     (local remaining)
@@ -148,7 +204,7 @@ declarations.begin
                       (binding left (field (local found) (name work)))
                       (binding scoped
                         (if
-                          (call ci::lt (local left) (i64 0))
+                          (call source-budget::failed (local left))
                           (local left)
                           (call owner-effect
                             (local graph)
@@ -159,7 +215,7 @@ declarations.begin
                             (local left))))
                       (in
                         (if
-                          (call ci::lt (local scoped) (i64 0))
+                          (call source-budget::failed (local scoped))
                           (local scoped)
                           (call types
                             (local graph)
@@ -171,34 +227,72 @@ declarations.begin
                             (local scoped))))))))
               (in
                 (if
-                  (call ci::lt (local next) (i64 0))
+                  (call source-budget::failed (local next))
                   (local next)
-                  (call owners (local graph) (local rows) (call ci::add (local row) (i64 1)) (local next)))))))))
+                  (call owners
+                    (local graph)
+                    (local rows)
+                    (call ci::add (local row) (i64 1))
+                    (local next)))))))))
     (function create check
       (visibility package)
       (effect pure)
       (parameter create graph (type Bytes))
       (parameter create rows (type Bytes))
-      (parameter create work (type I64))
-      (returns I64)
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
       (body
         (let
           (binding checked (call source-type-dag::check (local graph) (local work)))
           (in
             (if
-              (call ci::lt (local checked) (i64 0))
+              (call source-budget::failed (local checked))
               (local checked)
               (call owners (local graph) (local rows) (i64 0) (local checked)))))))
     (function create admit
       (visibility package)
       (effect pure)
       (parameter create graph (type Bytes))
-      (parameter create work (type I64))
-      (returns I64)
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
       (body
         (if
           (call ci::lt (call ci::length (local graph)) (i64 128))
-          (i64 -12)
+          (call source-budget::fail (local work) (i64 12))
           (let
             (binding prepared (call source-members::prepare (local graph)))
             (binding code (field (local prepared) (name code)))
@@ -206,34 +300,42 @@ declarations.begin
               (if
                 (call ci::eq (local code) (i64 0))
                 (if
-                  (call ci::either
-                    (call ci::lt (local work) (i64 0))
-                    (call ci::lt (i64 2147483647) (local work)))
-                  (i64 -6)
+                  (call source-budget::failed (local work))
+                  (call source-budget::fail (local work) (i64 6))
                   (let
                     (binding rows (field (local prepared) (name rows)))
                     (binding syntax (call source-scope::check (local graph) (local rows) (local work)))
                     (binding names
                       (if
-                        (call ci::lt (local syntax) (i64 0))
+                        (call source-budget::failed (local syntax))
                         (local syntax)
                         (call source-namespace::check (local graph) (local syntax) (local rows))))
                     (in
                       (if
-                        (call ci::lt (local names) (i64 0))
+                        (call source-budget::failed (local names))
                         (local names)
                         (call check (local graph) (local rows) (local names))))))
-                (call ci::sub (i64 0) (local code))))))))
-    (function create with-work
+                (call source-budget::fail (local work) (local code))))))))
+    (function create with-policy
       (visibility public)
       (effect pure)
       (parameter create graph (type Bytes))
-      (parameter create work (type I64))
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
       (returns I64)
       (body
         (let
           (binding result (call admit (local graph) (local work)))
-          (in (if (call ci::lt (local result) (i64 0)) (call ci::sub (i64 0) (local result)) (i64 0))))))
+          (in
+            (if (call source-budget::failed (local result)) (field (local result) (name code)) (i64 0))))))
     (function create validate
       (visibility public)
       (effect pure)
@@ -243,7 +345,7 @@ declarations.begin
         (if
           (call ci::lt (call ci::length (local graph)) (i64 128))
           (i64 12)
-          (call with-work (local graph) (call ci::u32 (local graph) (i64 100))))))
+          (call with-policy (local graph) (call source-budget::from-carrier (local graph))))))
     (function create owner-effect
       (visibility private)
       (effect pure)
@@ -252,8 +354,25 @@ declarations.begin
       (parameter create data (type Bytes))
       (parameter create row (type I64))
       (parameter create declaration (type I64))
-      (parameter create work (type I64))
-      (returns I64)
+      (parameter create work
+        (type
+          (record
+            (code I64)
+            (finite Bool)
+            (high I64)
+            (low I64)
+            (observed-high I64)
+            (observed-low I64)
+            (saturated Bool))))
+      (returns
+        (record
+          (code I64)
+          (finite Bool)
+          (high I64)
+          (low I64)
+          (observed-high I64)
+          (observed-low I64)
+          (saturated Bool)))
       (body
         (let
           (binding kind (call source-table::kind (local graph) (local row)))
@@ -277,5 +396,12 @@ declarations.begin
                       (call ci::add (local effect) (i64 1))
                       (local declaration)
                       (local work)))))
-              (local work))))))))
+              (local work))))))
+    (function create with-work
+      (visibility public)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create work (type I64))
+      (returns I64)
+      (body (call with-policy (local graph) (call source-budget::finite (local work)))))))
 declarations.end

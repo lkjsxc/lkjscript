@@ -162,7 +162,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     0,
                 )?;
                 let result = self.infer(body, &scoped, depth)?;
-                self.require_region_absent(result, region, &mut BTreeSet::new(), 0)?;
+                self.require_region_absent(result, region)?;
                 Ok(result)
             }
             E::Freeze {
@@ -195,7 +195,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                         "region cell operation requires an exact relative-pointer type",
                     ));
                 };
-                self.require_region_cell(item, region, &mut BTreeSet::new(), 0)?;
+                self.require_region_cell(item, region)?;
                 let capability = *operation
                     .capability()
                     .ok_or_else(|| region_error("missing region capability"))?;
@@ -280,26 +280,33 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         &mut self,
         ty: TypeObjectDigest,
         region: TypeObjectDigest,
-        seen: &mut BTreeSet<TypeObjectDigest>,
-        depth: usize,
     ) -> Result<(), Diagnostic> {
-        self.consume_work()?;
-        if depth > MAXIMUM_TYPE_DEPTH || ty == region {
-            return Err(region_error(
-                "result retains its lexical region or exceeds type admission",
-            ));
-        }
-        if !seen.insert(ty) {
-            return Ok(());
-        }
-        let object = self.type_object(ty)?;
-        for child in object.child_types() {
-            self.require_region_absent(child, region, seen, depth + 1)?;
-        }
-        if let Some((declaration, arguments)) = nominal_parts(&object.form) {
-            for child in self.nominal_children(declaration, arguments)? {
-                self.require_region_absent(child, region, seen, depth + 1)?;
+        let mut pending = Vec::new();
+        region_pending(&mut pending, 1)?;
+        pending.push(ty);
+        let mut seen = BTreeSet::new();
+        let mut declarations = BTreeSet::new();
+        while let Some(ty) = pending.pop() {
+            self.consume_work()?;
+            if ty == region {
+                return Err(region_error("result retains its lexical region"));
             }
+            if !seen.insert(ty) { continue; }
+            let object = self.type_object(ty)?;
+            let mut children = object.child_types();
+            if let Some((declaration, arguments)) = nominal_parts(&object.form) {
+                // All actual arguments are already children, including phantom
+                // arguments. Check the fixed member schemas once instead of
+                // generating endlessly larger recursive generic applications.
+                self.nominal_bindings(declaration, arguments)?;
+                if declarations.insert(declaration) {
+                    let members = self.nominal_member_types(declaration)?;
+                    region_pending(&mut children, members.len())?;
+                    children.extend(members);
+                }
+            }
+            region_pending(&mut pending, children.len())?;
+            pending.extend(children.into_iter().rev());
         }
         Ok(())
     }
@@ -308,30 +315,47 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         &mut self,
         ty: TypeObjectDigest,
         region: TypeObjectDigest,
-        active: &mut BTreeSet<TypeObjectDigest>,
-        depth: usize,
     ) -> Result<(), Diagnostic> {
-        self.consume_work()?;
-        if depth > MAXIMUM_TYPE_DEPTH || !active.insert(ty) {
-            return Err(region_error("region cell has an unbounded inline layout"));
-        }
-        match self.type_object(ty)?.form {
-            TypeForm::Unit | TypeForm::Bool | TypeForm::I64 => {}
-            TypeForm::RelPtr { region: actual, .. } if actual == region => {}
-            TypeForm::StructuralRecord { fields } => {
-                for field in fields {
-                    self.require_region_cell(field.ty, region, active, depth + 1)?;
+        enum Task { Enter(TypeObjectDigest), Exit(TypeObjectDigest) }
+        let mut pending = Vec::new();
+        region_pending(&mut pending, 1)?;
+        pending.push(Task::Enter(ty));
+        let mut active = BTreeSet::new();
+        let mut complete = BTreeSet::new();
+        while let Some(task) = pending.pop() {
+            let ty = match task {
+                Task::Exit(ty) => { active.remove(&ty); complete.insert(ty); continue; }
+                Task::Enter(ty) => ty,
+            };
+            self.consume_work()?;
+            if complete.contains(&ty) { continue; }
+            if !active.insert(ty) {
+                return Err(region_error("region cell has a cyclic inline layout"));
+            }
+            region_pending(&mut pending, 1)?;
+            pending.push(Task::Exit(ty));
+            match self.type_object(ty)?.form {
+                TypeForm::Unit | TypeForm::Bool | TypeForm::I64 => {}
+                TypeForm::RelPtr { region: actual, .. } if actual == region => {}
+                TypeForm::StructuralRecord { fields } => {
+                    region_pending(&mut pending, fields.len())?;
+                    pending.extend(fields.into_iter().rev().map(|field| Task::Enter(field.ty)));
                 }
-            }
-            _ => {
-                return Err(region_error(
+                _ => return Err(region_error(
                     "region cells require fixed ordinary data or same-region relative handles",
-                ));
+                )),
             }
         }
-        active.remove(&ty);
         Ok(())
     }
+}
+
+fn region_pending<T>(pending: &mut Vec<T>, additional: usize) -> Result<(), Diagnostic> {
+    pending.try_reserve(additional).map_err(|_| Diagnostic::new(
+        crate::platform::diagnostic::DiagnosticClass::Resource,
+        "kernel_region_storage",
+        "cannot reserve region type traversal storage",
+    ))
 }
 
 fn region_error(message: &str) -> Diagnostic {

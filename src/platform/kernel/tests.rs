@@ -764,7 +764,7 @@ fn normalized_prototype_passes_full_oracle() {
     assert!(required > 0);
     for limit in [0, 1, required - 1] {
         let mut consumed = 0;
-        let diagnostics = super::validate::validate_full_observed(&snapshot, limit, &mut consumed)
+        let diagnostics = crate::platform::kernel::test_work::validate_full_observed(&snapshot, limit, &mut consumed)
             .expect_err("a smaller proof budget cannot complete the same candidate");
         assert!(
             diagnostics
@@ -776,7 +776,7 @@ fn normalized_prototype_passes_full_oracle() {
         assert!(consumed <= u64::try_from(limit + 1).unwrap());
     }
     assert_eq!(
-        validate_full_with_limit(&snapshot, required).unwrap(),
+        crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, required).unwrap(),
         report,
         "fresh exact-capacity retry retains complete meaning and work"
     );
@@ -1696,7 +1696,7 @@ fn type_interner_deduplicates_and_requires_exact_children() {
 
 #[test]
 fn type_interner_admits_before_materializing_a_new_object() {
-    let mut interner = TypeObjectInterner::with_maximum_objects(1);
+    let mut interner = TypeObjectInterner::with_maximum_objects(Some(1));
     let unit = interner.intern(TypeForm::Unit).expect("unit must intern");
     assert_eq!(interner.len(), 1);
     assert_eq!(

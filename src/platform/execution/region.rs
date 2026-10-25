@@ -59,17 +59,18 @@ use std::ops::Range;
 pub mod persistence;
 pub(crate) mod runtime;
 
-const ALIGNMENT: u32 = 64;
-const HEADER_BYTES: u32 = 64;
-const CELL_BYTES: u32 = 48;
-const MAGIC: &[u8; 8] = b"LKJREGNS";
+const ALIGNMENT: u64 = 64;
+const HEADER_BYTES: u64 = 64;
+const CELL_BYTES: u64 = 64;
+const MAGIC: &[u8; 8] = b"LKJREGN2";
+const PROFILE: u16 = 2;
 type Brand<'region> = PhantomData<fn(&'region ()) -> &'region ()>;
 
 /// A byte layout selected by an admitted type derivation, independent of addresses.
 pub struct RegionLayout<T = ()> {
     key: [u8; 32],
-    bytes: u32,
-    alignment: u32,
+    bytes: u64,
+    alignment: u64,
     marker: PhantomData<fn(T) -> T>,
 }
 
@@ -81,10 +82,7 @@ impl<T> Clone for RegionLayout<T> {
 }
 
 impl<T> RegionLayout<T> {
-    pub(crate) fn key(self) -> [u8; 32] {
-        self.key
-    }
-    pub fn new(key: [u8; 32], bytes: u32, alignment: u32) -> Result<Self, ExecutionError> {
+    pub fn new(key: [u8; 32], bytes: u64, alignment: u64) -> Result<Self, ExecutionError> {
         validate_layout(bytes, alignment)?;
         Ok(Self {
             key,
@@ -95,9 +93,9 @@ impl<T> RegionLayout<T> {
     }
 }
 
-/// Exactly four bytes. Dereference requires a live, matching region capability.
+/// Exactly eight bytes. Dereference requires a live, matching region capability.
 pub struct RelPtr<'region, T = ()> {
-    offset: u32,
+    offset: u64,
     brand: Brand<'region>,
     marker: PhantomData<fn(T) -> T>,
 }
@@ -110,15 +108,15 @@ impl<T> Clone for RelPtr<'_, T> {
 }
 
 impl<T> RelPtr<'_, T> {
-    pub fn offset(self) -> u32 {
+    pub fn offset(self) -> u64 {
         self.offset
     }
 }
 
-/// Exactly eight bytes. The count belongs to one complete allocated array.
+/// Exactly sixteen bytes. The count belongs to one complete allocated array.
 pub struct RegionSlice<'region, T = ()> {
     pointer: RelPtr<'region, T>,
-    length: u32,
+    length: u64,
 }
 
 impl<T> Copy for RegionSlice<'_, T> {}
@@ -129,11 +127,11 @@ impl<T> Clone for RegionSlice<'_, T> {
 }
 
 impl<T> RegionSlice<'_, T> {
-    pub fn offset(self) -> u32 {
+    pub fn offset(self) -> u64 {
         self.pointer.offset
     }
 
-    pub fn len(self) -> u32 {
+    pub fn len(self) -> u64 {
         self.length
     }
 
@@ -145,19 +143,19 @@ impl<T> RegionSlice<'_, T> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RegionObservation {
     /// Requested cell area, including cell headers and alignment padding.
-    pub capacity_bytes: u32,
-    pub used_cell_bytes: u32,
-    pub cells: u32,
+    pub capacity_bytes: u64,
+    pub used_cell_bytes: u64,
+    pub cells: u64,
     /// Bytes in the directly readable image, excluding unused cell capacity.
-    pub image_bytes: u32,
+    pub image_bytes: u64,
 }
 
 #[derive(Clone, Copy)]
 struct Header {
-    capacity: u32,
-    payload: u32,
-    used: u32,
-    cells: u32,
+    capacity: u64,
+    payload: u64,
+    used: u64,
+    cells: u64,
 }
 
 struct Slab {
@@ -189,16 +187,13 @@ pub struct RegionRead<'image, 'region> {
 /// Reserve all modeled storage before allocation, then enter a fresh region brand.
 /// The callback's result cannot retain pointers or capabilities with that brand.
 pub fn with_region<Output>(
-    capacity: u32,
+    capacity: u64,
     control: &ExecutionControl,
     mut reserve: impl FnMut(u64) -> Result<(), ExecutionError>,
     body: impl for<'region> FnOnce(UniqueRegion<'region>) -> Result<Output, ExecutionError>,
 ) -> Result<Output, ExecutionError> {
     control.check()?;
-    let payload = payload_start(capacity)?;
-    let total = payload.checked_add(capacity).ok_or_else(capacity_error)?;
-    let allocation = usize::try_from(u64::from(total) + u64::from(ALIGNMENT - 1))
-        .map_err(|_| capacity_error())?;
+    let (payload, allocation) = storage_extent(capacity)?;
     let charge = (allocation as u64)
         .checked_add(std::mem::size_of::<Slab>() as u64)
         .ok_or_else(capacity_error)?;
@@ -252,19 +247,20 @@ impl Slab {
         self.allocation[start..start + 8].copy_from_slice(MAGIC);
         self.allocation[start + 8..start + 10]
             .copy_from_slice(&crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes());
-        self.set_u32(12, self.header.capacity);
-        self.set_u32(16, self.header.payload);
+        self.allocation[start + 10..start + 12].copy_from_slice(&PROFILE.to_le_bytes());
+        self.set_u64(16, self.header.capacity);
+        self.set_u64(24, self.header.payload);
         self.update_cursor();
     }
 
-    fn set_u32(&mut self, offset: usize, value: u32) {
-        self.allocation[self.start + offset..self.start + offset + 4]
+    fn set_u64(&mut self, offset: usize, value: u64) {
+        self.allocation[self.start + offset..self.start + offset + 8]
             .copy_from_slice(&value.to_le_bytes());
     }
 
     fn update_cursor(&mut self) {
-        self.set_u32(20, self.header.used);
-        self.set_u32(24, self.header.cells);
+        self.set_u64(32, self.header.used);
+        self.set_u64(40, self.header.cells);
     }
 
     fn image(&self) -> &[u8] {
@@ -282,13 +278,13 @@ impl Slab {
     fn allocate<T>(
         &mut self,
         layout: RegionLayout<T>,
-        count: u32,
+        count: u64,
         bytes: &[u8],
         control: &ExecutionControl,
-    ) -> Result<u32, ExecutionError> {
+    ) -> Result<u64, ExecutionError> {
         control.check()?;
         let length = layout.bytes.checked_mul(count).ok_or_else(capacity_error)?;
-        if bytes.len() as u64 != u64::from(length) {
+        if u64::try_from(bytes.len()).map_err(|_| capacity_error())? != length {
             return Err(invalid(
                 "region_layout",
                 "value bytes differ from the exact region layout",
@@ -312,16 +308,16 @@ impl Slab {
             .cells
             .checked_add(1)
             .ok_or_else(capacity_error)?;
-        if u64::from(end) > u64::from(self.header.payload) + u64::from(self.header.capacity) {
+        if end > self.header.payload.checked_add(self.header.capacity).ok_or_else(capacity_error)? {
             return Err(capacity_error());
         }
         // All bounds and fallible admission finish before the first mutation.
         let cell = (offset - CELL_BYTES) as usize;
         let start = self.start;
         self.allocation[start + cell..start + cell + 32].copy_from_slice(&layout.key);
-        self.set_u32(cell + 32, layout.bytes);
-        self.set_u32(cell + 36, count);
-        self.set_u32(cell + 40, layout.alignment);
+        self.set_u64(cell + 32, layout.bytes);
+        self.set_u64(cell + 40, count);
+        self.set_u64(cell + 48, layout.alignment);
         self.allocation[start + offset as usize..start + offset as usize + bytes.len()]
             .copy_from_slice(bytes);
         let slot = (offset - self.header.payload) / 8;
@@ -350,7 +346,7 @@ impl<'region> UniqueRegion<'region> {
     pub fn allocate_slice<T>(
         &mut self,
         layout: RegionLayout<T>,
-        count: u32,
+        count: u64,
         bytes: &[u8],
         control: &ExecutionControl,
     ) -> Result<RegionSlice<'region, T>, ExecutionError> {
@@ -441,17 +437,17 @@ impl<'image, 'region> RegionRead<'image, 'region> {
         self,
         layout: RegionLayout<T>,
         slice: RegionSlice<'region, T>,
-        index: u32,
+        index: u64,
         control: &ExecutionControl,
     ) -> Result<&'image [u8], ExecutionError> {
         let bytes = self.read_slice(layout, slice, control)?;
         if index >= slice.length {
             return Err(pointer_error());
         }
-        let offset = u64::from(index) * u64::from(layout.bytes);
+        let offset = index.checked_mul(layout.bytes).ok_or_else(pointer_error)?;
         let start = usize::try_from(offset).map_err(|_| pointer_error())?;
         let end = start
-            .checked_add(layout.bytes as usize)
+            .checked_add(usize::try_from(layout.bytes).map_err(|_| pointer_error())?)
             .ok_or_else(pointer_error)?;
         bytes.get(start..end).ok_or_else(pointer_error)
     }
@@ -460,7 +456,7 @@ impl<'image, 'region> RegionRead<'image, 'region> {
     pub fn resolve<T>(
         self,
         layout: RegionLayout<T>,
-        offset: u32,
+        offset: u64,
         control: &ExecutionControl,
     ) -> Result<RelPtr<'region, T>, ExecutionError> {
         control.check()?;
@@ -471,8 +467,8 @@ impl<'image, 'region> RegionRead<'image, 'region> {
     pub fn resolve_slice<T>(
         self,
         layout: RegionLayout<T>,
-        offset: u32,
-        length: u32,
+        offset: u64,
+        length: u64,
         control: &ExecutionControl,
     ) -> Result<RegionSlice<'region, T>, ExecutionError> {
         control.check()?;
@@ -486,8 +482,8 @@ impl<'image, 'region> RegionRead<'image, 'region> {
     fn range<T>(
         self,
         layout: RegionLayout<T>,
-        offset: u32,
-        count: u32,
+        offset: u64,
+        count: u64,
     ) -> Result<Range<usize>, ExecutionError> {
         let relative = offset
             .checked_sub(self.header.payload)
@@ -505,9 +501,9 @@ impl<'image, 'region> RegionRead<'image, 'region> {
         }
         let header = (offset - CELL_BYTES) as usize;
         if self.image.get(header..header + 32) != Some(layout.key.as_slice())
-            || read_u32(self.image, header + 32)? != layout.bytes
-            || read_u32(self.image, header + 36)? != count
-            || read_u32(self.image, header + 40)? != layout.alignment
+            || read_u64(self.image, header + 32)? != layout.bytes
+            || read_u64(self.image, header + 40)? != count
+            || read_u64(self.image, header + 48)? != layout.alignment
         {
             return Err(invalid(
                 "region_layout",
@@ -519,11 +515,12 @@ impl<'image, 'region> RegionRead<'image, 'region> {
             .checked_add(length)
             .filter(|end| *end <= self.header.used)
             .ok_or_else(pointer_error)?;
-        Ok(offset as usize..end as usize)
+        Ok(usize::try_from(offset).map_err(|_| pointer_error())?
+            ..usize::try_from(end).map_err(|_| pointer_error())?)
     }
 }
 
-fn pointer<'region, T>(offset: u32) -> RelPtr<'region, T> {
+fn pointer<'region, T>(offset: u64) -> RelPtr<'region, T> {
     RelPtr {
         offset,
         brand: PhantomData,
@@ -531,7 +528,18 @@ fn pointer<'region, T>(offset: u32) -> RelPtr<'region, T> {
     }
 }
 
-fn payload_start(capacity: u32) -> Result<u32, ExecutionError> {
+fn storage_extent(capacity: u64) -> Result<(u64, usize), ExecutionError> {
+    let payload = payload_start(capacity)?;
+    let allocation = payload.checked_add(capacity)
+        .and_then(|total| total.checked_add(ALIGNMENT - 1))
+        .and_then(|total| usize::try_from(total).ok())
+        .ok_or_else(capacity_error)?;
+    // This is the host allocation-layout boundary, not a configured quota.
+    std::alloc::Layout::array::<u8>(allocation).map_err(|_| capacity_error())?;
+    Ok((payload, allocation))
+}
+
+fn payload_start(capacity: u64) -> Result<u64, ExecutionError> {
     let bitmap = capacity.div_ceil(64);
     align(
         HEADER_BYTES
@@ -541,14 +549,14 @@ fn payload_start(capacity: u32) -> Result<u32, ExecutionError> {
     )
 }
 
-fn align(value: u32, alignment: u32) -> Result<u32, ExecutionError> {
+fn align(value: u64, alignment: u64) -> Result<u64, ExecutionError> {
     value
         .checked_add(alignment - 1)
         .map(|value| value & !(alignment - 1))
         .ok_or_else(capacity_error)
 }
 
-fn validate_layout(bytes: u32, alignment: u32) -> Result<(), ExecutionError> {
+fn validate_layout(bytes: u64, alignment: u64) -> Result<(), ExecutionError> {
     if alignment == 0
         || !alignment.is_power_of_two()
         || alignment > ALIGNMENT
@@ -562,11 +570,11 @@ fn validate_layout(bytes: u32, alignment: u32) -> Result<(), ExecutionError> {
     Ok(())
 }
 
-fn read_u32(bytes: &[u8], offset: usize) -> Result<u32, ExecutionError> {
-    let end = offset.checked_add(4).ok_or_else(pointer_error)?;
+fn read_u64(bytes: &[u8], offset: usize) -> Result<u64, ExecutionError> {
+    let end = offset.checked_add(8).ok_or_else(pointer_error)?;
     let value = bytes.get(offset..end).ok_or_else(pointer_error)?;
-    let array = <[u8; 4]>::try_from(value).map_err(|_| pointer_error())?;
-    Ok(u32::from_le_bytes(array))
+    let array = <[u8; 8]>::try_from(value).map_err(|_| pointer_error())?;
+    Ok(u64::from_le_bytes(array))
 }
 
 fn admit_image(
@@ -582,16 +590,17 @@ fn admit_image(
         || !(image.as_ptr() as usize).is_multiple_of(ALIGNMENT as usize)
         || image.get(..8) != Some(MAGIC.as_slice())
         || image[8..10] != crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes()
-        || image[10..12] != [0, 0]
-        || image[28..64].iter().any(|byte| *byte != 0)
+        || image[10..12] != PROFILE.to_le_bytes()
+        || image[12..16].iter().any(|byte| *byte != 0)
+        || image[48..64].iter().any(|byte| *byte != 0)
     {
         return Err(image_error());
     }
     let header = Header {
-        capacity: read_u32(image, 12)?,
-        payload: read_u32(image, 16)?,
-        used: read_u32(image, 20)?,
-        cells: read_u32(image, 24)?,
+        capacity: read_u64(image, 16)?,
+        payload: read_u64(image, 24)?,
+        used: read_u64(image, 32)?,
+        cells: read_u64(image, 40)?,
     };
     let total = header
         .payload
@@ -600,13 +609,14 @@ fn admit_image(
     if header.payload != payload_start(header.capacity)?
         || header.used < header.payload
         || header.used > total
-        || image.len() as u64 != u64::from(header.used)
+        || u64::try_from(image.len()).map_err(|_| image_error())? != header.used
     {
         return Err(image_error());
     }
-    let bitmap_end = HEADER_BYTES as usize + header.capacity.div_ceil(64) as usize;
+    let bitmap_end = HEADER_BYTES.checked_add(header.capacity.div_ceil(64))
+        .and_then(|end| usize::try_from(end).ok()).ok_or_else(image_error)?;
     if image
-        .get(bitmap_end..header.payload as usize)
+        .get(bitmap_end..usize::try_from(header.payload).map_err(|_| image_error())?)
         .ok_or_else(image_error)?
         .iter()
         .any(|byte| *byte != 0)
@@ -614,7 +624,7 @@ fn admit_image(
         return Err(image_error());
     }
     let mut previous = header.payload;
-    let mut cells = 0_u32;
+    let mut cells = 0_u64;
     for (index, markers) in image[HEADER_BYTES as usize..bitmap_end]
         .iter()
         .copied()
@@ -627,15 +637,20 @@ fn admit_image(
             if markers & (1 << bit) == 0 {
                 continue;
             }
-            let offset = u64::from(header.payload) + (index as u64 * 8 + bit) * 8;
-            let offset = u32::try_from(offset).map_err(|_| image_error())?;
-            if offset < header.payload.saturating_add(CELL_BYTES) || offset >= header.used {
+            let offset = u64::try_from(index).ok()
+                .and_then(|index| index.checked_mul(8))
+                .and_then(|index| index.checked_add(bit))
+                .and_then(|slot| slot.checked_mul(8))
+                .and_then(|offset| header.payload.checked_add(offset))
+                .ok_or_else(image_error)?;
+            if offset < header.payload.checked_add(CELL_BYTES).ok_or_else(image_error)?
+                || offset >= header.used {
                 return Err(image_error());
             }
             let cell = (offset - CELL_BYTES) as usize;
-            let stride = read_u32(image, cell + 32)?;
-            let count = read_u32(image, cell + 36)?;
-            let alignment = read_u32(image, cell + 40)?;
+            let stride = read_u64(image, cell + 32)?;
+            let count = read_u64(image, cell + 40)?;
+            let alignment = read_u64(image, cell + 48)?;
             validate_layout(stride, alignment)?;
             let expected = align(
                 previous.checked_add(CELL_BYTES).ok_or_else(image_error)?,
@@ -649,7 +664,7 @@ fn admit_image(
             )?;
             if offset != expected
                 || end > header.used
-                || read_u32(image, cell + 44)? != 0
+                || read_u64(image, cell + 56)? != 0
                 || image[previous as usize..cell].iter().any(|byte| *byte != 0)
                 || image[payload_end as usize..end as usize]
                     .iter()

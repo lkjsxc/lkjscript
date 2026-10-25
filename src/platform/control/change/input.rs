@@ -2,17 +2,6 @@
 //! physical-record grammar. No expanded flat text or publicly addressable private labels exist.
 
 use super::*;
-use crate::platform::control::compact::{
-    MAXIMUM_COMPACT_FIELDS, MAXIMUM_COMPACT_INPUT_BYTES, MAXIMUM_COMPACT_RECORDS,
-};
-
-// The existing compact format admits this many field tokens. Parentheses and atoms each cost
-// one structural token, across the entire input, independently of physical record count.
-pub(crate) const MAXIMUM_STRUCTURAL_TOKENS: usize =
-    MAXIMUM_COMPACT_RECORDS * MAXIMUM_COMPACT_FIELDS;
-pub(crate) const MAXIMUM_STRUCTURAL_SYNTAX_NODES: usize =
-    crate::platform::change::MAXIMUM_CHANGE_ALLOCATED_IDENTITIES as usize;
-
 #[derive(Debug)]
 pub(super) struct ChangeInput {
     pub records: Vec<CompactRecord>,
@@ -128,15 +117,6 @@ impl Block {
 }
 
 pub(super) fn parse(path: &str, input: &[u8]) -> Result<ChangeInput, Vec<Diagnostic>> {
-    if input.len() > MAXIMUM_COMPACT_INPUT_BYTES {
-        // Retain the established outer-bound diagnostic.
-        return parse_records(path, input).map(|records| ChangeInput {
-            records,
-            blocks: BTreeMap::new(),
-            units: Vec::new(),
-            public_labels: BTreeSet::new(),
-        });
-    }
     let text = std::str::from_utf8(input)
         .map_err(|_| parse_records(path, input).err().unwrap_or_default())?;
     let mut result = ChangeInput {
@@ -148,7 +128,6 @@ pub(super) fn parse(path: &str, input: &[u8]) -> Result<ChangeInput, Vec<Diagnos
     let mut diagnostics = Vec::new();
     let mut active: Option<(String, CompactRecord, usize, usize)> = None;
     let mut offset = 0;
-    let mut records = 0_usize;
     let mut tokens = 0_usize;
     let mut nodes = 0_usize;
     for (line_index, line) in text.split_inclusive('\n').enumerate() {
@@ -202,20 +181,6 @@ pub(super) fn parse(path: &str, input: &[u8]) -> Result<ChangeInput, Vec<Diagnos
             }
             offset += line.len();
             continue;
-        }
-        if !trimmed.is_empty() {
-            records += 1;
-            if records > MAXIMUM_COMPACT_RECORDS {
-                return Err(vec![line_error(
-                    path,
-                    offset,
-                    line_index + 1,
-                    "control_record_count",
-                    format!(
-                        "compact input exceeds the {MAXIMUM_COMPACT_RECORDS}-record format bound"
-                    ),
-                )]);
-            }
         }
         let parsed = parse_records(path, line.as_bytes()).map_err(|mut errors| {
             for error in &mut errors {
@@ -323,9 +288,6 @@ pub(super) fn parse_expression(path: &str, input: &[u8]) -> Result<Block, Diagno
         line: 1,
         column: 1,
     };
-    if input.len() > MAXIMUM_COMPACT_INPUT_BYTES {
-        return Err(resource(&location, "complete input exceeds its byte bound"));
-    }
     let text = std::str::from_utf8(input).map_err(|_| {
         Diagnostic::source("transaction_utf8", "transaction must be UTF-8", location)
     })?;
@@ -375,12 +337,6 @@ fn tokenize(
         *tokens = tokens
             .checked_add(1)
             .ok_or_else(|| resource(&location, "structural token accounting overflowed"))?;
-        if *tokens > MAXIMUM_STRUCTURAL_TOKENS {
-            return Err(resource(
-                &location,
-                "complete input exceeds its structural token bound",
-            ));
-        }
         if byte == b')' {
             if stack.pop().is_none() {
                 return Err(Diagnostic::source(
@@ -396,12 +352,6 @@ fn tokenize(
         *nodes = nodes
             .checked_add(1)
             .ok_or_else(|| resource(&location, "syntax node accounting overflowed"))?;
-        if *nodes > MAXIMUM_STRUCTURAL_SYNTAX_NODES {
-            return Err(resource(
-                &location,
-                "complete input exceeds its structural syntax-node bound",
-            ));
-        }
         let (kind, next) = match byte {
             b'(' => (SyntaxKind::List(Vec::new()), cursor + 1),
             b'"' => {

@@ -6,7 +6,6 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 static NEXT_ARENA: AtomicU64 = AtomicU64::new(1);
-const MAXIMUM_REGIONS: usize = 65_536;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct Identity {
@@ -18,17 +17,17 @@ pub(crate) struct Identity {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct Pointer {
     identity: Identity,
-    offset: u32,
+    offset: u64,
 }
 
 impl Pointer {
-    pub(crate) fn in_region(identity: Identity, offset: u32) -> Self {
+    pub(crate) fn in_region(identity: Identity, offset: u64) -> Self {
         Self { identity, offset }
     }
     pub(crate) fn belongs_to(self, identity: Identity) -> bool {
         self.identity == identity
     }
-    pub(crate) fn offset(self) -> u32 {
+    pub(crate) fn offset(self) -> u64 {
         self.offset
     }
 }
@@ -130,24 +129,22 @@ impl<Domain: Copy + Eq> Arena<Domain> {
     pub(crate) fn open(
         &self,
         domain: Domain,
-        capacity: u32,
+        capacity: u64,
         control: &ExecutionControl,
         mut reserve: impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<Capability<Domain>, ExecutionError> {
         control.check()?;
         let mut state = self.write_state();
-        if state.live >= MAXIMUM_REGIONS {
-            return Err(capacity_error());
-        }
+        let live = state.live.checked_add(1).ok_or_else(capacity_error)?;
         let slot = if let Some(slot) = state.free {
             slot
         } else {
             if state.slots.len() == state.slots.capacity() {
-                let next = state.slots.len().saturating_add(1).next_power_of_two();
+                let next = slot_capacity::<Domain>(state.slots.len())?;
                 let charge = next
                     .checked_mul(std::mem::size_of::<Slot<Domain>>())
                     .ok_or_else(capacity_error)?;
-                reserve(charge as u64)?;
+                reserve(u64::try_from(charge).map_err(|_| capacity_error())?)?;
                 control.check()?;
                 let mut slots = Vec::new();
                 slots
@@ -184,7 +181,7 @@ impl<Domain: Copy + Eq> Arena<Domain> {
                 next_free: None,
             };
         }
-        state.live += 1;
+        state.live = live;
         Ok(Capability {
             identity: Identity {
                 arena: self.identity,
@@ -339,7 +336,7 @@ impl<Domain: Copy + Eq> Arena<Domain> {
         cap: &Capability<Domain>,
         domain: Domain,
         layout: RegionLayout<T>,
-        offset: u32,
+        offset: u64,
         control: &ExecutionControl,
     ) -> Result<Pointer, ExecutionError> {
         self.with_read(cap, domain, control, |read| {
@@ -468,6 +465,14 @@ impl<Domain: Copy + Eq> Arena<Domain> {
         state.live -= 1;
         Ok(())
     }
+}
+
+fn slot_capacity<Domain>(length: usize) -> Result<usize, ExecutionError> {
+    let required = length.checked_add(1).ok_or_else(capacity_error)?;
+    std::alloc::Layout::array::<Slot<Domain>>(required).map_err(|_| capacity_error())?;
+    Ok(required.checked_next_power_of_two()
+        .filter(|capacity| std::alloc::Layout::array::<Slot<Domain>>(*capacity).is_ok())
+        .unwrap_or(required))
 }
 
 fn custody_error() -> ExecutionError {

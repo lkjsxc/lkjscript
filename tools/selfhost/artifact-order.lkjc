@@ -184,7 +184,7 @@ declarations.begin
           (call byte-count
             (local rows)
             (call ci::add (local at) (i64 48))
-            (call ci::add (local sum) (call flow::field (local rows) (local at) (i64 12)))))))
+            (call ci::add (local sum) (call ci::field32 (local rows) (local at) (i64 12)))))))
     (function create closure-items
       (visibility private)
       (effect pure)
@@ -209,7 +209,7 @@ declarations.begin
                 (local a)))
             (binding c
               (type ByteBuffer)
-              (call wire::be (call flow::field (local rows) (local at) (i64 12)) (i64 8) (local b)))
+              (call wire::be (call ci::field32 (local rows) (local at) (i64 12)) (i64 8) (local b)))
             (in (call closure-items (local rows) (call ci::add (local at) (i64 48)) (local c)))))))
     (function create closure
       (visibility public)

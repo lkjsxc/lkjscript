@@ -1292,7 +1292,7 @@ fn associated_parallel_both_children_share_exact_producer_work_and_metadata_boun
         bounded.derived_type_admission.parallel =
             crate::platform::kernel::owned_associated::OwnedAssociatedAdmission::with_limits(
                 crate::platform::kernel::owned_associated::AssociatedAdmissionLimits {
-                    maximum_metadata_bytes: limit,
+                    maximum_metadata_bytes: Some(limit),
                     ..Default::default()
                 },
             );
