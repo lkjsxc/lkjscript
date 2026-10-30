@@ -605,10 +605,20 @@ fn charge<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     count: usize,
 ) -> Result<(), Diagnostic> {
-    lowerer.work.ownership_steps = lowerer
-        .work
-        .ownership_steps
-        .saturating_add(u64::try_from(count).unwrap_or(u64::MAX));
+    let amount = match u64::try_from(count) {
+        Ok(count) => BudgetCounter::exact(count),
+        Err(_) => BudgetCounter {
+            consumed: u64::MAX,
+            saturated: true,
+        },
+    };
+    lowerer.work.saturation.charge(
+        &mut lowerer.work.ownership_steps,
+        BudgetDimension::ImpactOwnershipSteps,
+        amount,
+        lowerer.budget.impact.maximum_ownership_steps,
+        "test literal ownership correspondence",
+    )?;
     lowerer.check_budget("test literal ownership correspondence")
 }
 fn missing() -> Diagnostic {
@@ -621,12 +631,136 @@ fn missing() -> Diagnostic {
 
 #[cfg(test)]
 mod tests {
+    use super::super::AuthoredLoweringInputs;
     use super::*;
+    use crate::platform::change::ChangeBudget;
     use crate::platform::control::{
         decode_compact_change, decode_compact_change_in_repository, render_native_draft,
     };
     use crate::platform::execution::ExecutionControl;
     use crate::platform::publication::GraphRepository;
+
+    #[test]
+    fn test_literal_ownership_charge_preserves_exact_policy_and_saturation() {
+        let memory = crate::platform::MemProjectStore::new(None).unwrap();
+        let repository = GraphRepository::create_memory(
+            &memory,
+            &crate::platform::kernel::tests::witness_snapshot(),
+            None,
+        )
+        .unwrap()
+        .repository;
+        let view = repository.view_current().unwrap();
+        let before_head = repository.current().unwrap().head;
+        let before_root = crate::platform::kernel::encode_root(view.semantic_root())
+            .unwrap()
+            .0;
+        let make = |maximum| {
+            let mut budget = ChangeBudget::default();
+            budget.impact.maximum_ownership_steps = maximum;
+            AuthoredLowerer::new(
+                &view,
+                &view,
+                AuthoredLoweringInputs {
+                    intent_base: view.revision(),
+                    allocation_seed: [3; 32],
+                    deletion_change: crate::platform::kernel::ChangeDigest::of(
+                        b"test_retention ownership charge policy",
+                    ),
+                    allocated: BTreeMap::new(),
+                    definitions: BTreeMap::new(),
+                    allocations: Vec::new(),
+                    budget,
+                },
+            )
+            .unwrap()
+        };
+        let dimension = BudgetDimension::ImpactOwnershipSteps;
+        let expected_code = "change_budget_impact_ownership_steps";
+        for maximum in [None, Some(0), Some(1), Some(2), Some(u64::MAX)] {
+            let mut lowerer = make(maximum);
+            let before = lowerer.work;
+            let result = charge(&mut lowerer, 2);
+            if matches!(maximum, Some(0 | 1)) {
+                let error = result.unwrap_err();
+                assert_eq!(error.class, DiagnosticClass::Resource);
+                assert_eq!(error.code, expected_code);
+                assert_eq!(lowerer.work, before);
+            } else {
+                result.unwrap();
+                let mut expected = before;
+                expected.ownership_steps = 2;
+                assert_eq!(lowerer.work, expected);
+            }
+            assert!(
+                lowerer.owner_edits.is_empty()
+                    && lowerer.dependency_edits.is_empty()
+                    && lowerer.retirement_edits.is_empty()
+                    && lowerer.type_additions.is_empty()
+            );
+        }
+
+        let mut zero = make(Some(0));
+        let before_zero = zero.work;
+        charge(&mut zero, 0).unwrap();
+        assert_eq!(zero.work, before_zero);
+
+        let mut finite = make(Some(u64::MAX));
+        finite.work.ownership_steps = u64::MAX - 1;
+        charge(&mut finite, 1).unwrap();
+        assert_eq!(
+            finite
+                .work
+                .saturation
+                .counter(dimension, finite.work.ownership_steps),
+            BudgetCounter::exact(u64::MAX)
+        );
+        let exact_maximum = finite.work;
+        charge(&mut finite, 0).unwrap();
+        assert_eq!(finite.work, exact_maximum);
+        let error = charge(&mut finite, 1).unwrap_err();
+        assert_eq!(error.class, DiagnosticClass::Resource);
+        assert_eq!(error.code, expected_code);
+        assert_eq!(finite.work, exact_maximum);
+
+        let mut unbounded = make(None);
+        unbounded.work.ownership_steps = u64::MAX - 1;
+        charge(&mut unbounded, 1).unwrap();
+        assert_eq!(
+            unbounded
+                .work
+                .saturation
+                .counter(dimension, unbounded.work.ownership_steps),
+            BudgetCounter::exact(u64::MAX)
+        );
+        charge(&mut unbounded, 1).unwrap();
+        assert_eq!(unbounded.work.ownership_steps, u64::MAX);
+        assert!(unbounded.work.saturation.contains(dimension));
+        let saturated = unbounded.work;
+        for count in [0, 1] {
+            charge(&mut unbounded, count).unwrap();
+            assert_eq!(unbounded.work, saturated);
+        }
+        let projected = unbounded.work.budget_work();
+        assert_eq!(projected.impact_ownership_steps, u64::MAX);
+        assert!(projected.saturation.contains(dimension));
+        unbounded.budget.impact.maximum_ownership_steps = Some(u64::MAX);
+        for count in [0, 1] {
+            let error = charge(&mut unbounded, count).unwrap_err();
+            assert_eq!(error.class, DiagnosticClass::Resource);
+            assert_eq!(error.code, expected_code);
+            assert_eq!(unbounded.work, saturated);
+        }
+
+        assert_eq!(repository.current().unwrap().head, before_head);
+        let after = repository.view_current().unwrap();
+        assert_eq!(
+            crate::platform::kernel::encode_root(after.semantic_root())
+                .unwrap()
+                .0,
+            before_root
+        );
+    }
 
     #[test]
     fn test_literal_retention_preserves_generated_binders_and_later_symbol_selection() {

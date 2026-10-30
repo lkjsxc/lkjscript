@@ -266,7 +266,7 @@ declarations.begin
       (body (let
         (binding out (type ByteBuffer) (call ci::empty))
         (binding header (type ByteBuffer)
-          (call ci::le (call ci::length (local image)) (i64 4) (local out)))
+          (call ci::le (call ci::length (local image)) (i64 8) (local out)))
         (binding complete (type ByteBuffer) (call ci::append (local image) (i64 0) (local header)))
         (in (call ci::freeze (local complete))))))
     (function create branch

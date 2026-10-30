@@ -3,17 +3,32 @@
 The target is semantic self-hosting. The maintained project provides a normalized
 backend compiler and a restricted raw-source scalar compiler. The backend validates
 LKJCI1 mode 0/profile 6 for standalone Linux x86_64 ELF and
-mode 1/profile 5 for current `.lkja` artifacts. Artifact mode has no default
-aggregate input-byte quota. Its unit map expands through canonical radix pages,
-with no 700-unit guard; per-page, per-unit, offset and value bounds remain explicit.
+mode 1/profile 7 for current `.lkja` artifacts. Both are current-only input
+contracts. Artifact projection and generated pools use 64-bit offsets and lengths;
+there are no independent 4 GiB pool, 8 MiB projected-unit, 100,000-entry,
+32,768-instruction/table or 128-local projection guards. Actual extents, canonical
+u32 semantic indices and the canonical unit/manifest/store codecs remain separate
+admission boundaries. Its unit map expands through canonical radix pages with a
+64 KiB physical page bound and no aggregate 700-unit guard.
+
+Mode 1 defaults to explicit tag 0 (`None`). Tag 1 preserves every finite u64
+allowance, including zero and `u64::MAX`. Finite admission compares the estimated
+proof requirement `4096 + 128*L + 64*(U*U + O)` exactly before carrier hashing or
+deep validation. The estimate is not an execution meter. The Rust exporter first
+measures projected output without allocating its byte buffer, admits the selected
+policy, then reserves and fills the measured extent. Prior host artifact admission,
+map reads, decoding and inventory preparation are outside that embedded policy.
+
 The current input covers pure scalar/byte function closures, buffers, List<I64>,
-structural records, branches and recursion. Focused tests reproduce the complete
-backend in both output formats, with Tier 1 C2/C3 ELF identity and equal artifacts
-from the compiler's VM, reference and native executions.
-The artifact path serializes canonical
-unit fields and carries the admitted source closure; source semantic checking
-remains with Rust. See the
-[contract, schema and dependency inventory](../../docs/spec/selfhosting.md).
+structural records, branches and recursion. The previously accepted backend
+reproduction used Mode-0 profile 6 and Mode-1 profile 5. Profile-7 adoption and
+execution evidence are recorded separately in the
+[cutover decision](../../docs/decisions/20261030-artifact-profile7.md); the format
+change alone supplies no new fixed-point result. The artifact path serializes
+canonical unit fields and carries the admitted source closure; source semantic
+checking remains with Rust. See the
+[contract, schema and dependency inventory](../../docs/spec/selfhosting.md) and
+[artifact layout](../../docs/spec/selfhosting-artifact-input.md).
 
 The `source-read`, `source-shape`, `source-fields`, `source-expr` and `source-owner`
 modules begin semantic-compiler admission with bounded current-format record

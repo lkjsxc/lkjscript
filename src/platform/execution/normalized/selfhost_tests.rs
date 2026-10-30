@@ -657,10 +657,22 @@ fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
         );
     }
     let mut artifact_mode = valid.clone();
-    artifact_mode[8..12].copy_from_slice(&5_u32.to_le_bytes());
+    artifact_mode[8..12].copy_from_slice(&7_u32.to_le_bytes());
     artifact_mode[112..116].copy_from_slice(&1_u32.to_le_bytes());
     input::rechecksum(&mut artifact_mode);
-    assert_eq!(compile(&artifact_mode), (10, vec![]));
+    assert_eq!(
+        compile(&artifact_mode),
+        (10, vec![]),
+        "current artifact profile must reach its structural layout check"
+    );
+    let mut former_artifact_profile = artifact_mode.clone();
+    former_artifact_profile[8..12].copy_from_slice(&5_u32.to_le_bytes());
+    input::rechecksum(&mut former_artifact_profile);
+    assert_eq!(
+        compile(&former_artifact_profile),
+        (2, vec![]),
+        "former artifact profile must fail at the profile discriminator"
+    );
     for nodes in [
         vec![(6, 0)],
         vec![(2, 0), (6, 0)],

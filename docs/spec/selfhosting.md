@@ -26,12 +26,14 @@ retain compact evidence before removing task-owned stage binaries.
 ## Current canonical input: LKJCI1
 
 All integers are little-endian. Magic is `LKJCI001`. The selector at offset 112
-chooses ELF (0, profile `6`) or artifact (1, profile `5`). Each selector admits
-only its current profile. Mode-0 profile 4 is rejected; there is no legacy parser.
-The Tier 1 route retains Rust semantic admission and IR export. The restricted
-scalar source route constructs profile-6 input inside lkjscript after complete
-source admission. The [artifact layout](selfhosting-artifact-input.md) remains a
-separate current format with its own checked u32 framing and allowance convention.
+chooses ELF (0, profile `6`) or artifact (1, profile `7`). Each selector admits
+only its current profile; neither route retains an old-profile reader. The Tier 1
+route retains Rust semantic admission and IR export. The restricted scalar source
+route constructs profile-6 input inside lkjscript after complete source admission.
+The [artifact layout](selfhosting-artifact-input.md) has its own 64-bit unit,
+source-object, metadata and generated-pool framing. Both modes distinguish an
+unbounded policy tag from an exact finite u64 allowance, including zero and
+`u64::MAX`; their modeled admission formulas remain separate.
 
 Mode 0 has a 160-byte header and dynamically placed descriptor, function,
 instruction and byte-pool sections. All counts, offsets, lengths and identities
@@ -198,8 +200,18 @@ authoring proposals admitted through ordinary public operations. `ci`, `flow`,
 `wire`, `unit-wire`, `unit-map`, `pack`, `artifact-order`, `artifact-manifest` and
 `artifact` construct current units, maps, manifests, packs and the container.
 Artifact unit maps use an expandable radix hierarchy with a 64 KiB bound per
-page; every child page enters the artifact inventory. The artifact-input
-specification defines exact generated-pool extent checks and retained boundaries.
+page; every child page enters the artifact inventory. Profile 7 uses 16-byte unit
+directory rows, 56-byte object rows, a 272-byte unit prefix and eight-byte generated
+pool frames. The artifact-input specification defines their complete layout and
+checked host extents. Canonical unit/map/pack bytes and canonical u32 semantic
+indices retain their separate contracts.
+
+Mode-1 policy admission compares the caller's finite allowance with
+`4096 + 128*L + 64*(U*U + O)`, using division and subtraction to avoid overflowing
+intermediates. Tag 0 bypasses that estimate. This is an up-front estimated proof
+admission threshold, not a decrementing execution meter. Cheap framing and policy
+admission precede input hashing and deep layout work; prior Rust artifact
+admission, decoding and map/inventory preparation are outside that embedded scope.
 `elf::compile-elf` returns `{diagnostic: I64, image: Bytes}`. Zero means success;
 the explicit input selector chooses ELF or `.lkja` output. All rejections return
 empty bytes before the binary filter writes stdout.
@@ -207,11 +219,11 @@ empty bytes before the binary filter writes stdout.
 | Code | Rejection |
 | --- | --- |
 | 1 | Magic |
-| 2 | Unsupported profile or flags |
-| 3 | Input extent/count or generated artifact-pool extent bound |
+| 2 | Unsupported profile or emission selector |
+| 3 | Input framing/count/policy encoding or generated artifact extent |
 | 4 | Content digest |
 | 5 | Noncanonical table, index, state extent, reserved word or root |
-| 6 | Insufficient explicit Mode-0 modeled admission or artifact allowance |
+| 6 | Insufficient explicit modeled admission allowance |
 | 7 | Unsupported/malformed instruction form |
 | 8 | Invalid types, UTF-8 literal, stack, custody, primitive signature, call or edge |
 | 9 | Unsupported root signature |
@@ -263,8 +275,9 @@ parameters into variable local storage. Self-tail calls replace parameters and
 jump to the first instruction without growing the stack; other recursion uses
 ordinary frames. The local/stack tests independently exercise 256 arguments,
 257 local slots and 256 operand cells. Explicit launcher output quotas and host
-OS/stack failures remain separate from admission. Mode-1 table and per-unit
-instruction widths remain a separate dependency.
+OS/stack failures remain separate from admission. Mode-1 profile 7 widens private
+table and instruction projection fields; canonical IR indices, unit codecs and
+remaining structural execution policies retain their independent boundaries.
 
 I64, Bool and Unit are unboxed. Bytes/Text use a length and data pointer;
 ByteBuffer adds capacity. Lists and records use a count followed by scalar or

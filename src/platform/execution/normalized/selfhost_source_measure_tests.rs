@@ -106,11 +106,13 @@ fn selfhost_source_measure_maintained_native_closure() {
         .filter(|key| key.domain == ObjectDomain::CompilerUnit)
         .count();
     let word = |bytes: &[u8], at| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
-    let allowance = u64::from_le_bytes(mode1[32..40].try_into().unwrap());
+    let policy_tag = word(&mode1, 12);
+    let allowance = wide_at(&mode1, 32);
     assert_eq!(word(&mode0, 8), 6);
-    assert_eq!(word(&mode1, 8), 5);
+    assert_eq!(word(&mode1, 8), 7);
+    assert_eq!(policy_tag, 0);
     assert_eq!(allowance, 0);
-    assert_eq!(units, word(&mode1, 76) as usize);
+    assert_eq!(u64::try_from(units).unwrap(), wide_at(&mode1, 80));
     let identity = |bytes: &[u8]| {
         json!({
             "bytes": bytes.len(),
@@ -270,8 +272,9 @@ fn selfhost_source_measure_maintained_native_closure() {
         "mode1": {
             "input": identity(&mode1),
             "profile": word(&mode1, 8),
-            "units": word(&mode1, 76),
-            "source_objects": word(&mode1, 84),
+            "units": wide_at(&mode1, 80),
+            "source_objects": wide_at(&mode1, 96),
+            "policy_tag": policy_tag,
             "allowance": allowance,
         },
         "compiler_C1": identity(&c1),

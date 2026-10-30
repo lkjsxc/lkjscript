@@ -506,9 +506,13 @@ fn selfhost_byte_backend_reproduces_its_complete_native_closure() {
         assert_eq!(rejected.status.code(), Some(65));
         assert!(rejected.stdout.is_empty());
         assert_eq!(rejected.stderr, b"compiler_rejected:4\n");
-        for offset in [72, 80] {
+        for offset in [72, 88] {
             let mut malformed = artifact_input.clone();
-            malformed[offset..offset + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+            write_wide(
+                &mut malformed,
+                offset,
+                wide_at(artifact_input, offset) ^ (1_u64 << 32),
+            );
             input::rechecksum(&mut malformed);
             let rejected = native_filter_tests::execute_filter(stage, &malformed, &[], 127);
             assert_eq!(rejected.status.code(), Some(65));

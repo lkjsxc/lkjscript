@@ -21,6 +21,63 @@ fn probes() -> &'static (crate::platform::kernel::KernelSnapshot, NormalizedProg
     })
 }
 
+fn selfhost_native_probe(
+    program: &NormalizedProgram,
+    function: usize,
+    name: &str,
+) -> std::sync::Arc<[u8]> {
+    type Images = BTreeMap<[u8; 32], std::sync::Arc<[u8]>>;
+    static BACKEND: OnceLock<Vec<u8>> = OnceLock::new();
+    static IMAGES: OnceLock<std::sync::Mutex<Images>> = OnceLock::new();
+    let payload = input::export(program, function).unwrap();
+    let payload_hash: [u8; 32] = Sha256::digest(&payload).into();
+    // The backend is immutable in this process. Bind each cached probe to its
+    // complete normalized input rather than a declaration name or function index.
+    let backend = BACKEND.get_or_init(|| {
+        let (source, program) = compiler();
+        let entry = program
+            .function(declaration_named(source, "compile-elf"))
+            .unwrap()
+            .0 as usize;
+        crate::platform::compiler::elf_x86_64::compile_function(program, entry)
+            .unwrap()
+            .0
+    });
+    // Keep the cache lock through the joined emission so concurrent tests never
+    // execute the backend twice for the same payload. The backend initialization
+    // above cannot call this helper or acquire this cache lock.
+    let mut images = IMAGES
+        .get_or_init(|| std::sync::Mutex::new(BTreeMap::new()))
+        .lock()
+        .unwrap();
+    if let Some(image) = images.get(&payload_hash) {
+        return std::sync::Arc::clone(image);
+    }
+    let output = native_filter_tests::execute_filter(backend, &payload, &[], 4093);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "selfhost probe emission for {name}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "selfhost probe emission for {name} wrote diagnostics"
+    );
+    assert!(output.stdout.starts_with(b"\x7fELF"));
+    let image: std::sync::Arc<[u8]> = output.stdout.into();
+    eprintln!(
+        "selfhost artifact probe producer entry={name} backend_sha256={} input_bytes={} input_sha256={} bytes={} sha256={}",
+        crate::platform::semantic_id::encode_hex(&Sha256::digest(backend)),
+        payload.len(),
+        crate::platform::semantic_id::encode_hex(&payload_hash),
+        image.len(),
+        crate::platform::semantic_id::encode_hex(&Sha256::digest(image.as_ref())),
+    );
+    images.insert(payload_hash, std::sync::Arc::clone(&image));
+    image
+}
+
 fn result(name: &str, input: &[u8]) -> (i64, Vec<u8>) {
     let (source, program) = probes();
     let declaration = declaration_named(source, name);
@@ -69,12 +126,10 @@ fn result(name: &str, input: &[u8]) -> (i64, Vec<u8>) {
     else {
         panic!("probe bytes")
     };
-    let native = crate::platform::compiler::elf_x86_64::compile_function(
-        program,
-        program.function(declaration).unwrap().0 as usize,
-    )
-    .unwrap()
-    .0;
+    let function = program.function(declaration).unwrap().0 as usize;
+    let native = crate::platform::compiler::elf_x86_64::compile_function(program, function)
+        .unwrap()
+        .0;
     static PRODUCERS: OnceLock<std::sync::Mutex<BTreeSet<String>>> = OnceLock::new();
     let native_hash = crate::platform::semantic_id::encode_hex(&Sha256::digest(&native));
     if PRODUCERS
@@ -102,26 +157,33 @@ fn result(name: &str, input: &[u8]) -> (i64, Vec<u8>) {
             reference.1.maximum_call_depth
         );
     }
-    let output = native_filter_tests::execute_filter(&native, input, &[], 127);
-    assert_eq!(
-        output.status.code(),
-        Some(if *diagnostic == 0 { 0 } else { 65 }),
-        "{name}: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    if *diagnostic == 0 {
-        assert!(output.stderr.is_empty());
-    } else {
+    let selfhost = selfhost_native_probe(program, function, name);
+    for (emitter, image) in [
+        ("Rust-bootstrap", native.as_slice()),
+        ("selfhost-emitted", selfhost.as_ref()),
+    ] {
+        let output = native_filter_tests::execute_filter(image, input, &[], 127);
         assert_eq!(
-            output.stderr,
-            format!("compiler_rejected:{diagnostic}\n").as_bytes()
+            output.status.code(),
+            Some(if *diagnostic == 0 { 0 } else { 65 }),
+            "{emitter} {name}: {}",
+            String::from_utf8_lossy(&output.stderr)
         );
-        assert!(bytes.is_empty());
+        if *diagnostic == 0 {
+            assert!(output.stderr.is_empty(), "{emitter} {name}");
+        } else {
+            assert_eq!(
+                output.stderr,
+                format!("compiler_rejected:{diagnostic}\n").as_bytes(),
+                "{emitter} {name}"
+            );
+            assert!(bytes.is_empty(), "{emitter} {name}");
+        }
+        assert!(
+            output.stdout == bytes.as_ref(),
+            "{emitter} compiler disagrees for {name}"
+        );
     }
-    assert!(
-        output.stdout == bytes.as_ref(),
-        "native compiler disagrees for {name}"
-    );
     (*diagnostic, bytes.to_vec())
 }
 
@@ -146,9 +208,14 @@ fn selfhost_artifact_input_rejects_malformed_complete_bundles() {
     let source = byte_buffer_tests::author_only("declarations.begin\n(units (module create independent (function create entry (visibility public) (effect pure) (parameter create x (type I64)) (returns I64) (body (i64 42)))))\ndeclarations.end\n").unwrap();
     let program = prepare_snapshot(&source);
     let valid = selfhost_artifact_input::bundle(program.artifact()).unwrap();
-    let at = |offset| u32::from_le_bytes(valid[offset..offset + 4].try_into().unwrap()) as usize;
-    let rows = at(80);
-    let meta = at(88);
+    let at = |offset| {
+        usize::try_from(u64::from_le_bytes(
+            valid[offset..offset + 8].try_into().unwrap(),
+        ))
+        .unwrap()
+    };
+    let rows = at(88);
+    let meta = at(104);
     let unit = at(160);
     let first_object = at(rows + 8);
     assert_eq!(at(meta + 304), 1, "one parameter runtime-owner row");
@@ -158,34 +225,16 @@ fn selfhost_artifact_input_rejects_malformed_complete_bundles() {
     }
     for (offset, value, diagnostic) in [
         (0, 0_u32, 1),
-        (8, 4, 2),
-        (12, 1, 3),
-        (20, 1, 3),
-        (24, 0, 3),
-        (24, 701, 10),
-        (28, 1, 3),
-        (32, 1, 6),
-        (72, 0, 10),
-        (76, 0, 10),
-        (80, u32::MAX, 10),
-        (84, u32::MAX, 10),
-        (88, u32::MAX, 10),
-        (92, u32::MAX, 10),
-        (96, 1, 10),
+        (8, 5, 2),
+        (8, 6, 2),
+        (12, 2, 3),
         (112, 2, 2),
         (116, 1, 10),
-        (160, 0, 10),
-        (164, 335, 10),
-        (164, u32::MAX, 10),
+        (128, 1, 10),
         (unit + 12, 1, 10),
+        (unit + 260, 1, 10),
         (rows, 24, 11),
         (rows + 4, 1, 11),
-        (rows + 8, 0, 11),
-        (rows + 12, u32::MAX, 11),
-        (meta + 196, 1, 10),
-        (meta + 268, 1, 10),
-        (meta + 304, u32::MAX, 10),
-        (meta + 308, 1, 10),
         (meta + 312, 0, 10),
         (meta + 316, 99, 10),
     ] {
@@ -198,10 +247,40 @@ fn selfhost_artifact_input_rejects_malformed_complete_bundles() {
             "field {offset}"
         );
     }
+    for (offset, value, diagnostic) in [
+        (16, valid.len() as u64 + 1, 3),
+        (16, u64::MAX, 3),
+        (24, 0, 3),
+        (24, u64::MAX, 3),
+        (24, 701, 10),
+        (32, 1, 3),
+        (72, 0, 10),
+        (80, 0, 10),
+        (88, u64::MAX, 10),
+        (96, u64::MAX, 10),
+        (104, u64::MAX, 10),
+        (120, u64::MAX, 10),
+        (160, 0, 10),
+        (168, 431, 10),
+        (168, u64::MAX, 10),
+        (rows + 8, 0, 11),
+        (rows + 16, u64::MAX, 11),
+        (meta + 192, 1_u64 << 32, 10),
+        (meta + 304, u64::MAX, 10),
+    ] {
+        let mut changed = valid.clone();
+        changed[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+        input::rechecksum(&mut changed);
+        assert_eq!(
+            result("compile-elf", &changed),
+            (diagnostic, vec![]),
+            "wide field {offset}"
+        );
+    }
     for (offset, diagnostic) in [
         (40, 4),
         (unit + 16, 10),
-        (rows + 16, 11),
+        (rows + 24, 11),
         (first_object, 11),
         (meta + 32, 10),
         (meta + 128, 10),
@@ -220,11 +299,11 @@ fn selfhost_artifact_input_rejects_malformed_complete_bundles() {
             "byte {offset}"
         );
     }
-    // Equal maximum counts pass header agreement and must fail layout before
-    // the allowance estimate can multiply the unit count.
+    // Matching counts above u32 pass common-header representation but must fail
+    // actual layout before finite-policy arithmetic or deep work.
     let mut huge_count = valid.clone();
-    for offset in [24, 76] {
-        huge_count[offset..offset + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+    for offset in [24, 80] {
+        huge_count[offset..offset + 8].copy_from_slice(&(u64::from(u32::MAX) + 1).to_le_bytes());
     }
     input::rechecksum(&mut huge_count);
     assert_eq!(result("compile-elf", &huge_count), (10, vec![]));
@@ -232,27 +311,45 @@ fn selfhost_artifact_input_rejects_malformed_complete_bundles() {
     zero_owner[unit + 32..unit + 48].fill(0);
     input::rechecksum(&mut zero_owner);
     assert_eq!(result("compile-elf", &zero_owner), (10, vec![]));
+
+    // The reference-root count is an opaque admitted-host summary at this
+    // projection layer. Its exact agreement with the stored root page belongs
+    // to the strict artifact reader; a small count mismatch reaches that check.
+    let mut mismatched_reference = valid.clone();
+    let reference_count = u64::from_le_bytes(valid[meta + 264..meta + 272].try_into().unwrap());
+    mismatched_reference[meta + 264..meta + 272]
+        .copy_from_slice(&reference_count.checked_add(1).unwrap().to_le_bytes());
+    input::rechecksum(&mut mismatched_reference);
+    let emitted = image("compile-elf", &mismatched_reference);
+    assert_eq!(
+        crate::platform::compiler::load_artifact(&emitted)
+            .err()
+            .unwrap()
+            .code,
+        "persistent_map_root_summary"
+    );
 }
 
 #[test]
 fn selfhost_artifact_input_preserves_unmetered_and_exact_u64_allowances() {
-    use std::num::NonZeroU64;
-
     let source = byte_buffer_tests::author_only(
         "declarations.begin\n(units (module create allowance (function create entry (visibility public) (effect pure) (returns I64) (body (i64 42)))))\ndeclarations.end\n",
     )
     .unwrap();
     let program = prepare_snapshot(&source);
     let valid = selfhost_artifact_input::bundle(program.artifact()).unwrap();
-    assert_eq!(u32::from_le_bytes(valid[8..12].try_into().unwrap()), 5);
+    assert_eq!(u32::from_le_bytes(valid[8..12].try_into().unwrap()), 7);
+    assert_eq!(&valid[12..16], &[0; 4]);
     assert_eq!(&valid[32..40], &[0; 8]);
     let expected = image("compile-elf", &valid);
-    let units = u64::from(u32::from_le_bytes(valid[76..80].try_into().unwrap()));
-    let objects = u64::from(u32::from_le_bytes(valid[84..88].try_into().unwrap()));
+    let units = u64::from_le_bytes(valid[80..88].try_into().unwrap());
+    let objects = u64::from_le_bytes(valid[96..104].try_into().unwrap());
     // Normative admission estimate, distinct from evaluator execution counters.
     let required = 4096 + 128 * valid.len() as u64 + 64 * (units * units + objects);
     assert!(required < 1_u64 << 31);
     for selected in [
+        0,
+        1,
         required - 1,
         required,
         required + 1,
@@ -267,12 +364,11 @@ fn selfhost_artifact_input_preserves_unmetered_and_exact_u64_allowances() {
         u64::MAX,
     ] {
         let mut input = valid.clone();
+        input[12..16].copy_from_slice(&1_u32.to_le_bytes());
         input[32..40].copy_from_slice(&selected.to_le_bytes());
         input::rechecksum(&mut input);
-        let projected = selfhost_artifact_input::bundle_with_allowance(
-            program.artifact(),
-            NonZeroU64::new(selected),
-        );
+        let projected =
+            selfhost_artifact_input::bundle_with_allowance(program.artifact(), Some(selected));
         if selected < required {
             assert!(projected.is_err());
             assert_eq!(result("compile-elf", &input), (6, vec![]));
@@ -281,12 +377,82 @@ fn selfhost_artifact_input_preserves_unmetered_and_exact_u64_allowances() {
             assert_eq!(result("compile-elf", &input), (0, expected.clone()));
         }
     }
-    for allowance in [0, required] {
+    for (tag, allowance) in [(2_u32, 0_u64), (u32::MAX, 0), (0, 1), (0, u64::MAX)] {
+        let mut invalid = valid.clone();
+        invalid[12..16].copy_from_slice(&tag.to_le_bytes());
+        invalid[32..40].copy_from_slice(&allowance.to_le_bytes());
+        input::rechecksum(&mut invalid);
+        assert_eq!(result("compile-elf", &invalid), (3, vec![]));
+    }
+    for profile in [4_u32, 5, 6, 8] {
         let mut stale = valid.clone();
-        stale[8..12].copy_from_slice(&4_u32.to_le_bytes());
-        stale[32..40].copy_from_slice(&allowance.to_le_bytes());
+        stale[8..12].copy_from_slice(&profile.to_le_bytes());
         input::rechecksum(&mut stale);
         assert_eq!(result("compile-elf", &stale), (2, vec![]));
+    }
+}
+
+#[test]
+fn selfhost_artifact_finite_proof_policy_compares_wide_requirements_exactly() {
+    // These direct arithmetic probes do not claim materialized giant carriers.
+    // The independent oracle computes the formula in u128; the selfhost helper
+    // instead divides and subtracts within positive I64 without squaring U.
+    for (length, units, objects) in [
+        (432_i64, 1_i64, 1_i64),
+        (u32::MAX as i64 + 1, 1, 1),
+        (72_057_594_037_927_903, 1, 1),
+        (144_115_188_075_855_839, 1, 1),
+        (432, (1_i64 << 29) - 1, 1),
+        (432, 1_i64 << 29, 1),
+        (i64::MAX, i64::MAX, i64::MAX),
+        (-1, 1, 1),
+        (432, 0, 1),
+        (432, 1, -1),
+    ] {
+        let required = u128::try_from(units)
+            .ok()
+            .filter(|units| *units > 0)
+            .and_then(|units| units.checked_mul(units))
+            .and_then(|work| work.checked_add(u128::try_from(objects).ok()?))
+            .and_then(|work| work.checked_mul(64))
+            .and_then(|work| work.checked_add(u128::try_from(length).ok()?.checked_mul(128)?))
+            .and_then(|work| work.checked_add(4096));
+        let mut allowances = BTreeSet::from([0_u64, 1, (1_u64 << 63) - 1, 1_u64 << 63, u64::MAX]);
+        if let Some(exact) = required.and_then(|value| u64::try_from(value).ok()) {
+            allowances.insert(exact);
+            if let Some(short) = exact.checked_sub(1) {
+                allowances.insert(short);
+            }
+            if let Some(extra) = exact.checked_add(1) {
+                allowances.insert(extra);
+            }
+        }
+        for allowance in allowances {
+            let fields = [
+                length,
+                units,
+                objects,
+                i64::from(allowance as u32),
+                (allowance >> 32) as i64,
+            ];
+            let input = fields
+                .into_iter()
+                .flat_map(i64::to_le_bytes)
+                .collect::<Vec<_>>();
+            let admitted = required.is_some_and(|required| required <= u128::from(allowance));
+            assert_eq!(
+                result("probe-artifact-budget", &input),
+                (if admitted { 0 } else { 6 }, vec![]),
+                "length={length} units={units} objects={objects} allowance={allowance}"
+            );
+        }
+    }
+    for (low, high) in [(-1_i64, 0_i64), (1_i64 << 32, 0), (0, -1), (0, 1_i64 << 32)] {
+        let input = [432_i64, 1, 1, low, high]
+            .into_iter()
+            .flat_map(i64::to_le_bytes)
+            .collect::<Vec<_>>();
+        assert_eq!(result("probe-artifact-budget", &input), (6, vec![]));
     }
 }
 
@@ -344,33 +510,24 @@ fn selfhost_artifact_unit_layout_rejects_malformed_and_unsupported_ir() {
     let unit = crate::platform::compiler::CompilationUnit::decode(bytes, *key).unwrap();
     let valid = selfhost_artifact_input::unit(&unit).unwrap();
     assert_eq!(image("probe-unit", &valid), *bytes);
-    let at = |offset| u32::from_le_bytes(valid[offset..offset + 4].try_into().unwrap()) as usize;
-    let signature = at(244);
-    let code = at(252);
-    let nodes = at(code + 8);
-    for length in [0, 255, 335, valid.len() - 1] {
+    let at = |offset| {
+        usize::try_from(u64::from_le_bytes(
+            valid[offset..offset + 8].try_into().unwrap(),
+        ))
+        .unwrap()
+    };
+    let tables = at(240);
+    let signature = at(248);
+    let code = at(264);
+    let nodes = at(code + 16);
+    for length in [0, 271, 431, valid.len() - 1] {
         assert_eq!(
             result("probe-unit", &valid[..length]),
             (10, vec![]),
             "length {length}"
         );
     }
-    for (offset, value) in [
-        (0, 0_u32),
-        (8, 0),
-        (12, 1),
-        (240, 0),
-        (248, 99),
-        (252, 0),
-        (308, u32::MAX),
-        (signature + 16, u32::MAX),
-        (code, 1),
-        (nodes, 99),
-        (nodes + 4, 1),
-        (nodes + 12, 1),
-        (nodes + 24, 1),
-        (nodes + 32 + 16, 1),
-    ] {
+    for (offset, value) in [(0, 0_u32), (8, 0), (12, 1), (256, 99), (260, 1)] {
         let mut changed = valid.clone();
         changed[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
         assert_eq!(
@@ -379,20 +536,43 @@ fn selfhost_artifact_unit_layout_rejects_malformed_and_unsupported_ir() {
             "field {offset}"
         );
     }
+    for (offset, value) in [
+        (240, 0_u64),
+        (248, 0),
+        (264, 0),
+        (tables + 6 * 16 + 8, u64::MAX),
+        (signature + 32, u64::MAX),
+        (code, 1),
+        (code + 8, u64::from(u32::MAX) + 1),
+        (nodes, 99),
+        (nodes + 8, 1),
+        (nodes + 16, 1),
+        (nodes + 32, 1),
+        (nodes + 40, 1),
+        (nodes + 48 + 24, 1),
+    ] {
+        let mut changed = valid.clone();
+        changed[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+        assert_eq!(
+            result("probe-unit", &changed),
+            (10, vec![]),
+            "wide unit field {offset}"
+        );
+    }
     for (tag, operand) in [
-        (3_u32, 2_u32),
+        (3_u64, 2_u64),
         (7, 0),
         (11, 0),
-        (12, u32::MAX),
+        (12, u64::from(u32::MAX) + 1),
         (15, 0),
         (17, 0),
-        (18, u32::MAX),
+        (18, u64::from(u32::MAX) + 1),
         (27, 0),
     ] {
         let mut changed = valid.clone();
-        changed[nodes..nodes + 32].fill(0);
-        changed[nodes..nodes + 4].copy_from_slice(&tag.to_le_bytes());
-        changed[nodes + 4..nodes + 8].copy_from_slice(&operand.to_le_bytes());
+        changed[nodes..nodes + 48].fill(0);
+        changed[nodes..nodes + 8].copy_from_slice(&tag.to_le_bytes());
+        changed[nodes + 8..nodes + 16].copy_from_slice(&operand.to_le_bytes());
         assert_eq!(result("probe-unit", &changed), (10, vec![]), "opcode {tag}");
     }
 }
@@ -501,11 +681,14 @@ fn selfhost_artifact_map_pages_match_independent_logical_roots() {
         let mut pages = Vec::new();
         while cursor < pool.len() {
             assert!(
-                pool.len() - cursor >= 4,
+                pool.len() - cursor >= 8,
                 "truncated page length at {cursor}"
             );
-            let length = u32::from_le_bytes(pool[cursor..cursor + 4].try_into().unwrap()) as usize;
-            cursor += 4;
+            let length = usize::try_from(u64::from_le_bytes(
+                pool[cursor..cursor + 8].try_into().unwrap(),
+            ))
+            .unwrap();
+            cursor += 8;
             assert!((1..=65_536).contains(&length), "page length {length}");
             let end = cursor.checked_add(length).unwrap();
             assert!(end <= pool.len(), "truncated page at {cursor}");
@@ -683,12 +866,14 @@ fn selfhost_artifact_map_pages_match_independent_logical_roots() {
 
 #[test]
 fn selfhost_artifact_generated_pools_check_exact_extents() {
-    let maximum = i64::from(u32::MAX);
+    let maximum = i64::MAX;
     for (base, size, accepted) in [
         (0, 0, true),
         (0, maximum, true),
         (maximum, 0, true),
         (maximum - 1, 1, true),
+        (i64::from(u32::MAX), 1, true),
+        (0, i64::from(u32::MAX) + 1, true),
         (maximum, 1, false),
         (-1, 0, false),
         (0, -1, false),
@@ -705,20 +890,23 @@ fn selfhost_artifact_generated_pools_check_exact_extents() {
     let framed = |base: i64, bytes: &[u8]| [base.to_le_bytes().as_slice(), bytes].concat();
     let exact_base = maximum - pool.len() as i64;
     let rows = image("probe-map-rows", &framed(exact_base, &pool));
-    assert_eq!(rows.len(), 48);
-    let word = |at| u32::from_le_bytes(rows[at..at + 4].try_into().unwrap());
-    assert_eq!(word(0), 5);
-    assert_eq!(word(4), 1);
-    assert_eq!(u64::from(word(8)), (exact_base + 4) as u64);
-    assert_eq!(word(12) as usize, pool.len() - 4);
-    assert_eq!(rows[16..48], PageDigest::of(&pool[4..]).bytes());
+    assert_eq!(rows.len(), 56);
+    let narrow = |at| u32::from_le_bytes(rows[at..at + 4].try_into().unwrap());
+    let wide = |at| u64::from_le_bytes(rows[at..at + 8].try_into().unwrap());
+    assert_eq!(narrow(0), 5);
+    assert_eq!(narrow(4), 1);
+    assert_eq!(wide(8), (exact_base + 8) as u64);
+    assert_eq!(usize::try_from(wide(16)).unwrap(), pool.len() - 8);
+    assert_eq!(rows[24..56], PageDigest::of(&pool[8..]).bytes());
     for base in [-1, exact_base + 1, i64::MAX] {
         assert_eq!(result("probe-map-rows", &framed(base, &pool)), (3, vec![]));
     }
     let mut zero_length = pool.clone();
-    zero_length[..4].fill(0);
+    zero_length[..8].fill(0);
     let mut oversize = pool.clone();
-    oversize[..4].copy_from_slice(&65_537_u32.to_le_bytes());
+    oversize[..8].copy_from_slice(&65_537_u64.to_le_bytes());
+    let mut high_bit = pool.clone();
+    high_bit[..8].copy_from_slice(&(1_u64 << 63).to_le_bytes());
     let mut trailing = pool.clone();
     trailing.push(0);
     for malformed in [
@@ -726,6 +914,7 @@ fn selfhost_artifact_generated_pools_check_exact_extents() {
         vec![1, 0, 0],
         zero_length,
         oversize,
+        high_bit,
         pool[..pool.len() - 1].to_vec(),
         trailing,
     ] {
@@ -749,17 +938,17 @@ fn selfhost_artifact_raw_packs_match_current_strict_reader() {
             .into_iter()
             .map(|bytes| (ObjectKey::for_bytes(ObjectDomain::Blob, &bytes), bytes))
             .collect::<BTreeMap<_, _>>();
-        let rows_len = objects.len() * 48;
-        let mut data = vec![0; 4 + rows_len];
-        data[..4].copy_from_slice(&(rows_len as u32).to_le_bytes());
+        let rows_len = objects.len() * 56;
+        let mut data = vec![0; 8 + rows_len];
+        data[..8].copy_from_slice(&(rows_len as u64).to_le_bytes());
         let mut builder = PackBuilder::default();
         for (i, (key, bytes)) in objects.iter().enumerate() {
-            let at = 4 + i * 48;
+            let at = 8 + i * 56;
             let offset = data.len();
             data[at..at + 4].copy_from_slice(&u32::from(key.domain.tag()).to_le_bytes());
-            data[at + 8..at + 12].copy_from_slice(&(offset as u32).to_le_bytes());
-            data[at + 12..at + 16].copy_from_slice(&(bytes.len() as u32).to_le_bytes());
-            data[at + 16..at + 48].copy_from_slice(&key.digest.bytes());
+            data[at + 8..at + 16].copy_from_slice(&(offset as u64).to_le_bytes());
+            data[at + 16..at + 24].copy_from_slice(&(bytes.len() as u64).to_le_bytes());
+            data[at + 24..at + 56].copy_from_slice(&key.digest.bytes());
             data.extend_from_slice(bytes);
             builder.insert(*key, bytes).unwrap();
         }
@@ -770,6 +959,86 @@ fn selfhost_artifact_raw_packs_match_current_strict_reader() {
         read.verify_all(&emitted).unwrap();
         assert_eq!(read.entries.len(), objects.len());
     }
+}
+
+#[test]
+fn selfhost_artifact_wide_pool_totals_preserve_exact_host_extents() {
+    let encoded = |value: i64| bincode::encode_to_vec(value, bincode::config::standard()).unwrap();
+    let maximum = i64::MAX;
+    let maximum_count = (maximum - 144) / 89;
+    for (count, bytes) in [
+        (0_i64, 0_i64),
+        (1, 0),
+        (2, 7),
+        (0, maximum - 144),
+        (1, maximum - 233),
+        (1, maximum - 232),
+        (maximum_count, (maximum - 144) % 89),
+        (maximum_count + 1, 0),
+        (-1, 0),
+        (0, -1),
+        (0, maximum),
+        (maximum, 0),
+        (1, i64::from(u32::MAX) + 1),
+    ] {
+        let mathematical = 144_i128 + i128::from(bytes) + 89 * i128::from(count);
+        let expected = if count >= 0 && bytes >= 0 && mathematical <= i128::from(maximum) {
+            (0, encoded(i64::try_from(mathematical).unwrap()))
+        } else {
+            (3, vec![])
+        };
+        assert_eq!(
+            result(
+                "probe-pack-size",
+                &[count.to_le_bytes(), bytes.to_le_bytes()].concat()
+            ),
+            expected,
+            "count={count} bytes={bytes}"
+        );
+    }
+
+    for sizes in [
+        vec![],
+        vec![0_u64],
+        vec![1, 2],
+        vec![u64::from(u32::MAX) + 1],
+        vec![maximum as u64],
+        vec![maximum as u64 - 1, 1],
+        vec![maximum as u64, 1],
+        vec![1_u64 << 63],
+        vec![u64::MAX],
+    ] {
+        let mut rows = vec![0; sizes.len() * 56];
+        for (index, size) in sizes.iter().enumerate() {
+            rows[index * 56 + 16..index * 56 + 24].copy_from_slice(&size.to_le_bytes());
+        }
+        let sum = sizes.iter().map(|size| u128::from(*size)).sum::<u128>();
+        let expected = if sum <= maximum as u128 {
+            (0, encoded(sum as i64))
+        } else {
+            (3, vec![])
+        };
+        assert_eq!(
+            result("probe-object-bytes", &rows),
+            expected,
+            "sizes={sizes:?}"
+        );
+    }
+    for length in [1, 55, 57, 111] {
+        assert_eq!(result("probe-object-bytes", &vec![0; length]), (3, vec![]));
+    }
+
+    let facts = (0..3 * 138)
+        .map(|index| (index * 17 % 251) as u8)
+        .collect::<Vec<_>>();
+    let expected = facts
+        .as_chunks::<138>()
+        .0
+        .iter()
+        .flat_map(|fact| fact[56..138].iter().copied())
+        .collect::<Vec<_>>();
+    assert_eq!(expected.len(), 3 * 82);
+    assert_eq!(image("probe-fact-bindings", &facts), expected);
 }
 
 #[test]
@@ -823,7 +1092,7 @@ fn selfhost_artifact_object_scans_keep_bounded_call_frames() {
     .unwrap();
     let original = prepare_snapshot(&source);
     let input = selfhost_artifact_input::bundle(original.artifact()).unwrap();
-    let objects = u32::from_le_bytes(input[84..88].try_into().unwrap());
+    let objects = u64::from_le_bytes(input[96..104].try_into().unwrap());
     assert!(objects > 300);
     let emitted = image("compile-elf", &input);
     let program =
@@ -1051,18 +1320,14 @@ pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
         assert_eq!(observed_owners, expected_owners);
 
         let input = selfhost_artifact_input::bundle(original.artifact()).unwrap();
-        let at = |offset| u32::from_le_bytes(input[offset..offset + 4].try_into().unwrap()) as usize;
-        assert_eq!(at(8), 5);
-        assert_eq!(at(76), 800);
+        let at = |offset| {
+            usize::try_from(u64::from_le_bytes(input[offset..offset + 8].try_into().unwrap())).unwrap()
+        };
+        assert_eq!(u32::from_le_bytes(input[8..12].try_into().unwrap()), 7);
+        assert_eq!(at(80), 800);
+        assert_eq!(&input[12..16], &[0; 4]);
         assert_eq!(&input[32..40], &[0; 8]);
         assert!(input.len() > 8 * 1_048_576, "input_bytes={}", input.len());
-        let meta = at(88);
-        for count in [at(84), at(meta + 192), at(meta + 264), at(meta + 304)] {
-            assert!(count <= 100_000);
-        }
-        for index in 0..800 {
-            assert!(at(160 + index * 8 + 4) <= 8 * 1_048_576);
-        }
         let author_ms = author_started.elapsed().as_millis();
         let (compiler_source, compiler_program) = compiler();
         let native = crate::platform::compiler::elf_x86_64::compile_function(
@@ -1165,14 +1430,19 @@ pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
 }
 
 pub(super) fn capacity_invalid_unused_unit(input: &[u8]) -> Vec<u8> {
-    let at = |offset| u32::from_le_bytes(input[offset..offset + 4].try_into().unwrap()) as usize;
-    let count = at(76);
+    let at = |offset| {
+        usize::try_from(u64::from_le_bytes(
+            input[offset..offset + 8].try_into().unwrap(),
+        ))
+        .unwrap()
+    };
+    let count = at(80);
     assert!(count > 700);
     // The entry has no text table; a later text-bearing unit is one of the
     // unused payload functions beyond the former admission boundary.
     let unit = (700..count)
-        .map(|index| at(160 + index * 8))
-        .find(|unit| at(unit + 256 + 9 * 8 + 4) == 1)
+        .map(|index| at(160 + index * 16))
+        .find(|unit| at(unit + 272 + 9 * 16 + 8) == 1)
         .unwrap();
     let mut changed = input.to_vec();
     changed[unit + 12..unit + 16].copy_from_slice(&1_u32.to_le_bytes());

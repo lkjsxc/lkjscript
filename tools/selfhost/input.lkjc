@@ -332,5 +332,13 @@ declarations.begin
       (parameter create at (type I64))
       (parameter create offset (type I64))
       (returns I64)
-      (body (call u32 (local data) (call add (local at) (local offset)))))))
+      (body (call u32 (local data) (call add (local at) (local offset)))))
+    (function create field64
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create offset (type I64))
+      (returns I64)
+      (body (call u64 (local data) (call add (local at) (local offset)))))))
 declarations.end

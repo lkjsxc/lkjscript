@@ -59,19 +59,22 @@ declarations.begin
       (returns I64)
       (body
         (if
-          (call ci::eq (call ci::u32 (local data) (local at)) (local next))
-          (let
-            (binding end
-              (call extent
-                (local data)
-                (local next)
-                (call ci::field32 (local data) (local at) (i64 4))
-                (i64 1)))
-            (in
-              (if
-                (call ci::lt (local end) (i64 0))
-                (i64 -1)
-                (if (call types::utf8 (local data) (local next) (local end)) (local end) (i64 -1)))))
+          (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 16)))
+          (if
+            (call ci::eq (call ci::field64 (local data) (local at) (i64 0)) (local next))
+            (let
+              (binding end
+                (call extent
+                  (local data)
+                  (local next)
+                  (call ci::field64 (local data) (local at) (i64 8))
+                  (i64 1)))
+              (in
+                (if
+                  (call ci::lt (i64 -1) (local end))
+                  (if (call types::utf8 (local data) (local next) (local end)) (local end) (i64 -1))
+                  (i64 -1))))
+            (i64 -1))
           (i64 -1))))
     (function create strings
       (visibility private)
@@ -91,11 +94,7 @@ declarations.begin
               (if
                 (call ci::lt (local after) (i64 0))
                 (i64 -1)
-                (call strings
-                  (local data)
-                  (call ci::add (local at) (i64 8))
-                  (local end)
-                  (local after))))))))
+                (call strings (local data) (call ci::add (local at) (i64 16)) (local end) (local after))))))))
     (function create tables
       (visibility public)
       (effect pure)
@@ -108,33 +107,31 @@ declarations.begin
           (call ci::eq (local i) (i64 10))
           (local next)
           (let
-            (binding at (call ci::add (i64 256) (call ci::mul (local i) (i64 8))))
-            (binding offset (call ci::u32 (local data) (local at)))
-            (binding count (call ci::field32 (local data) (local at) (i64 4)))
+            (binding at (call ci::add (i64 272) (call ci::mul (local i) (i64 16))))
+            (binding offset (call ci::field64 (local data) (local at) (i64 0)))
+            (binding count (call ci::field64 (local data) (local at) (i64 8)))
             (in
               (if
                 (call ci::eq (local i) (i64 8))
                 (if
-                  (call ci::both
+                  (if
                     (call ci::eq (local offset) (i64 0))
-                    (call ci::eq (local count) (i64 0)))
+                    (call ci::eq (local count) (i64 0))
+                    (bool false))
                   (call tables (local data) (call ci::add (local i) (i64 1)) (local next))
                   (i64 -1))
                 (if
-                  (call ci::both
-                    (call ci::eq (local offset) (local next))
-                    (call ci::lt (local count) (i64 32769)))
+                  (call ci::eq (local offset) (local next))
                   (let
                     (binding end
                       (call extent
                         (local data)
                         (local offset)
                         (local count)
-                        (if (call ci::lt (local i) (i64 7)) (i64 32) (i64 8))))
+                        (if (call ci::lt (local i) (i64 7)) (i64 32) (i64 16))))
                     (in
                       (if
-                        (call ci::lt (local end) (i64 0))
-                        (i64 -1)
+                        (call ci::lt (i64 -1) (local end))
                         (let
                           (binding after
                             (if
@@ -143,12 +140,10 @@ declarations.begin
                               (call strings (local data) (local offset) (local end) (local end))))
                           (in
                             (if
-                              (call ci::lt (local after) (i64 0))
-                              (i64 -1)
-                              (call tables
-                                (local data)
-                                (call ci::add (local i) (i64 1))
-                                (local after))))))))
+                              (call ci::lt (i64 -1) (local after))
+                              (call tables (local data) (call ci::add (local i) (i64 1)) (local after))
+                              (i64 -1))))
+                        (i64 -1))))
                   (i64 -1))))))))
     (function create indices
       (visibility public)
@@ -163,8 +158,8 @@ declarations.begin
           (call ci::eq (local at) (local end))
           (bool true)
           (if
-            (call ci::lt (call ci::field32 (local data) (local at) (i64 0)) (local limit))
-            (call indices (local data) (call ci::add (local at) (i64 4)) (local end) (local limit))
+            (call index (call ci::field64 (local data) (local at) (i64 0)) (local limit))
+            (call indices (local data) (call ci::add (local at) (i64 8)) (local end) (local limit))
             (bool false)))))
     (function create parameters
       (visibility public)
@@ -186,25 +181,24 @@ declarations.begin
                 (bool false)
                 (bool true))
               (if
-                (call ci::lt (i64 0) (call ci::field32 (local data) (local at) (i64 20)))
+                (call ci::lt (i64 0) (call ci::field64 (local data) (local at) (i64 24)))
                 (if
-                  (call ci::lt (call ci::field32 (local data) (local at) (i64 24)) (local types))
+                  (call index (call ci::field64 (local data) (local at) (i64 32)) (local types))
                   (if
-                    (call ci::lt (call ci::field32 (local data) (local at) (i64 28)) (i64 3))
-                    (bool true)
+                    (call ci::lt (i64 -1) (call ci::field64 (local data) (local at) (i64 40)))
+                    (call ci::lt (call ci::field64 (local data) (local at) (i64 40)) (i64 3))
                     (bool false))
                   (bool false))
                 (bool false))
               (bool false))
             (let
-              (binding after
-                (call string (local data) (call ci::add (local at) (i64 16)) (local next)))
+              (binding after (call string (local data) (call ci::add (local at) (i64 16)) (local next)))
               (in
                 (if
                   (call ci::lt (i64 -1) (local after))
                   (call parameters
                     (local data)
-                    (call ci::add (local at) (i64 32))
+                    (call ci::add (local at) (i64 48))
                     (local end)
                     (local after)
                     (local types))
@@ -219,28 +213,17 @@ declarations.begin
       (returns I64)
       (body
         (if
-          (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 20)))
+          (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 40)))
           (let
-            (binding tp (call ci::field32 (local data) (local at) (i64 0)))
-            (binding tc (call ci::field32 (local data) (local at) (i64 4)))
-            (binding pp (call ci::field32 (local data) (local at) (i64 8)))
-            (binding pc (call ci::field32 (local data) (local at) (i64 12)))
+            (binding tp (call ci::field64 (local data) (local at) (i64 0)))
+            (binding tc (call ci::field64 (local data) (local at) (i64 8)))
+            (binding pp (call ci::field64 (local data) (local at) (i64 16)))
+            (binding pc (call ci::field64 (local data) (local at) (i64 24)))
             (in
               (if
                 (if
-                  (call ci::eq (local tp) (call ci::add (local at) (i64 20)))
-                  (if
-                    (call ci::lt (local tc) (i64 129))
-                    (if
-                      (call ci::lt (local pc) (i64 129))
-                      (if
-                        (call ci::lt
-                          (call ci::field32 (local data) (local at) (i64 16))
-                          (local types))
-                        (bool true)
-                        (bool false))
-                      (bool false))
-                    (bool false))
+                  (call ci::eq (local tp) (call ci::add (local at) (i64 40)))
+                  (call index (call ci::field64 (local data) (local at) (i64 32)) (local types))
                   (bool false))
                 (let
                   (binding te (call extent (local data) (local tp) (local tc) (i64 16)))
@@ -248,19 +231,14 @@ declarations.begin
                     (if
                       (if
                         (call ci::lt (i64 -1) (local te))
-                        (if (call ci::eq (local pp) (local te)) (bool true) (bool false))
+                        (call ci::eq (local pp) (local te))
                         (bool false))
                       (let
-                        (binding pe (call extent (local data) (local pp) (local pc) (i64 32)))
+                        (binding pe (call extent (local data) (local pp) (local pc) (i64 48)))
                         (in
                           (if
                             (call ci::lt (i64 -1) (local pe))
-                            (call parameters
-                              (local data)
-                              (local pp)
-                              (local pe)
-                              (local pe)
-                              (local types))
+                            (call parameters (local data) (local pp) (local pe) (local pe) (local types))
                             (i64 -1))))
                       (i64 -1))))
                 (i64 -1))))
@@ -280,150 +258,134 @@ declarations.begin
       (parameter create next (type I64))
       (returns I64)
       (body
-        (let
-          (binding tag (call ci::field32 (local data) (local at) (i64 0)))
-          (binding a (call ci::field32 (local data) (local at) (i64 4)))
-          (binding b (call ci::field32 (local data) (local at) (i64 8)))
-          (binding extra (call ci::field32 (local data) (local at) (i64 24)))
-          (binding count (call ci::field32 (local data) (local at) (i64 28)))
-          (in
-            (if
-              (if
-                (call ci::eq (call ci::field32 (local data) (local at) (i64 12)) (i64 0))
-                (if
-                  (if
-                    (call ci::eq (local tag) (i64 4))
-                    (bool true)
-                    (call ci::word-is (local data) (call ci::add (local at) (i64 16)) (i64 0)))
-                  (if
-                    (if
-                      (call ci::eq (local tag) (i64 27))
-                      (call ci::eq (local index) (call ci::sub (local total) (i64 1)))
-                      (call ci::lt (local index) (call ci::sub (local total) (i64 1))))
-                    (bool true)
-                    (bool false))
-                  (bool false))
-                (bool false))
+        (if
+          (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 48)))
+          (let
+            (binding tag (call ci::field64 (local data) (local at) (i64 0)))
+            (binding a (call ci::field64 (local data) (local at) (i64 8)))
+            (binding b (call ci::field64 (local data) (local at) (i64 16)))
+            (binding extra (call ci::field64 (local data) (local at) (i64 32)))
+            (binding count (call ci::field64 (local data) (local at) (i64 40)))
+            (in
               (if
                 (if
-                  (call ci::eq (local tag) (i64 2))
-                  (bool true)
+                  (call canonical-u32 (local a))
                   (if
-                    (call ci::eq (local tag) (i64 4))
-                    (bool true)
+                    (call canonical-u32 (local b))
                     (if
-                      (call ci::eq (local tag) (i64 9))
-                      (bool true)
-                      (if (call ci::eq (local tag) (i64 27)) (bool true) (bool false)))))
-                (if
-                  (if
-                    (call ci::eq (local a) (i64 0))
-                    (if
-                      (call ci::eq (local b) (i64 0))
                       (if
-                        (call ci::eq (local extra) (i64 0))
-                        (if (call ci::eq (local count) (i64 0)) (bool true) (bool false))
-                        (bool false))
+                        (call ci::eq (local tag) (i64 4))
+                        (bool true)
+                        (call ci::word-is (local data) (call ci::add (local at) (i64 24)) (i64 0)))
+                      (if
+                        (call ci::eq (local tag) (i64 27))
+                        (call ci::eq (local index) (call ci::sub (local total) (i64 1)))
+                        (call ci::lt (local index) (call ci::sub (local total) (i64 1))))
                       (bool false))
                     (bool false))
-                  (local next)
-                  (i64 -1))
+                  (bool false))
                 (if
-                  (call ci::eq (local tag) (i64 3))
+                  (if
+                    (call ci::eq (local tag) (i64 2))
+                    (bool true)
+                    (if
+                      (call ci::eq (local tag) (i64 4))
+                      (bool true)
+                      (if
+                        (call ci::eq (local tag) (i64 9))
+                        (bool true)
+                        (call ci::eq (local tag) (i64 27)))))
                   (if
                     (if
-                      (call ci::lt (local a) (i64 2))
+                      (call ci::eq (local a) (i64 0))
                       (if
                         (call ci::eq (local b) (i64 0))
                         (if
                           (call ci::eq (local extra) (i64 0))
-                          (if (call ci::eq (local count) (i64 0)) (bool true) (bool false))
+                          (call ci::eq (local count) (i64 0))
                           (bool false))
                         (bool false))
                       (bool false))
                     (local next)
                     (i64 -1))
                   (if
-                    (if
-                      (call ci::eq (local tag) (i64 5))
-                      (bool true)
-                      (if (call ci::eq (local tag) (i64 6)) (bool true) (bool false)))
+                    (call ci::eq (local tag) (i64 3))
                     (if
                       (if
-                        (call ci::lt (local a) (local texts))
+                        (call ci::lt (local a) (i64 2))
                         (if
                           (call ci::eq (local b) (i64 0))
                           (if
                             (call ci::eq (local extra) (i64 0))
-                            (if (call ci::eq (local count) (i64 0)) (bool true) (bool false))
+                            (call ci::eq (local count) (i64 0))
                             (bool false))
                           (bool false))
                         (bool false))
                       (local next)
                       (i64 -1))
                     (if
-                      (call ci::eq (local tag) (i64 7))
+                      (if
+                        (call ci::eq (local tag) (i64 5))
+                        (bool true)
+                        (call ci::eq (local tag) (i64 6)))
                       (if
                         (if
-                          (call ci::lt (local a) (local locals))
+                          (call index (local a) (local texts))
                           (if
-                            (call ci::lt (local b) (i64 3))
+                            (call ci::eq (local b) (i64 0))
                             (if
                               (call ci::eq (local extra) (i64 0))
-                              (if (call ci::eq (local count) (i64 0)) (bool true) (bool false))
+                              (call ci::eq (local count) (i64 0))
                               (bool false))
                             (bool false))
                           (bool false))
                         (local next)
                         (i64 -1))
                       (if
-                        (call ci::eq (local tag) (i64 8))
+                        (call ci::eq (local tag) (i64 7))
                         (if
                           (if
-                            (call ci::lt (local a) (local locals))
+                            (call index (local a) (local locals))
                             (if
-                              (call ci::eq (local b) (i64 0))
+                              (call ci::lt (local b) (i64 3))
                               (if
                                 (call ci::eq (local extra) (i64 0))
-                                (if (call ci::eq (local count) (i64 0)) (bool true) (bool false))
+                                (call ci::eq (local count) (i64 0))
                                 (bool false))
                               (bool false))
                             (bool false))
                           (local next)
                           (i64 -1))
                         (if
-                          (if
-                            (call ci::eq (local tag) (i64 10))
-                            (bool true)
-                            (if (call ci::eq (local tag) (i64 11)) (bool true) (bool false)))
+                          (call ci::eq (local tag) (i64 8))
                           (if
                             (if
-                              (if
-                                (call ci::lt (local index) (local a))
-                                (if (call ci::lt (local a) (local total)) (bool true) (bool false))
-                                (bool false))
+                              (call index (local a) (local locals))
                               (if
                                 (call ci::eq (local b) (i64 0))
                                 (if
                                   (call ci::eq (local extra) (i64 0))
-                                  (if (call ci::eq (local count) (i64 0)) (bool true) (bool false))
+                                  (call ci::eq (local count) (i64 0))
                                   (bool false))
                                 (bool false))
                               (bool false))
                             (local next)
                             (i64 -1))
                           (if
-                            (call ci::eq (local tag) (i64 17))
+                            (if
+                              (call ci::eq (local tag) (i64 10))
+                              (bool true)
+                              (call ci::eq (local tag) (i64 11)))
                             (if
                               (if
-                                (call ci::lt (local a) (local names))
+                                (call ci::lt (local index) (local a))
                                 (if
-                                  (call ci::eq (local b) (i64 0))
+                                  (call ci::lt (local a) (local total))
                                   (if
-                                    (call ci::eq (local extra) (i64 0))
+                                    (call ci::eq (local b) (i64 0))
                                     (if
+                                      (call ci::eq (local extra) (i64 0))
                                       (call ci::eq (local count) (i64 0))
-                                      (bool true)
                                       (bool false))
                                     (bool false))
                                   (bool false))
@@ -431,75 +393,70 @@ declarations.begin
                               (local next)
                               (i64 -1))
                             (if
-                              (call ci::eq (local tag) (i64 18))
+                              (call ci::eq (local tag) (i64 17))
                               (if
                                 (if
-                                  (call ci::lt (local a) (local types))
+                                  (call index (local a) (local names))
                                   (if
-                                    (call ci::lt (local b) (i64 129))
+                                    (call ci::eq (local b) (i64 0))
                                     (if
                                       (call ci::eq (local extra) (i64 0))
-                                      (if
-                                        (call ci::eq (local count) (i64 0))
-                                        (bool true)
-                                        (bool false))
+                                      (call ci::eq (local count) (i64 0))
                                       (bool false))
                                     (bool false))
                                   (bool false))
                                 (local next)
                                 (i64 -1))
                               (if
-                                (if
-                                  (call ci::eq (local tag) (i64 12))
-                                  (bool true)
-                                  (if (call ci::eq (local tag) (i64 15)) (bool true) (bool false)))
+                                (call ci::eq (local tag) (i64 18))
                                 (if
                                   (if
-                                    (call ci::eq (local extra) (local next))
+                                    (call index (local a) (local types))
                                     (if
-                                      (call ci::lt (local count) (i64 129))
-                                      (if
-                                        (if
-                                          (call ci::eq (local tag) (i64 12))
-                                          (if
-                                            (call ci::lt (local a) (local declarations))
-                                            (if
-                                              (call ci::lt (local b) (i64 129))
-                                              (bool true)
-                                              (bool false))
-                                            (bool false))
-                                          (if
-                                            (call ci::eq (local a) (i64 0))
-                                            (if
-                                              (call ci::eq (local b) (i64 0))
-                                              (bool true)
-                                              (bool false))
-                                            (bool false)))
-                                        (bool true)
-                                        (bool false))
+                                      (call ci::eq (local extra) (i64 0))
+                                      (call ci::eq (local count) (i64 0))
                                       (bool false))
                                     (bool false))
-                                  (let
-                                    (binding end
-                                      (call extent (local data) (local extra) (local count) (i64 4)))
-                                    (in
-                                      (if
-                                        (call ci::lt (i64 -1) (local end))
-                                        (if
-                                          (call indices
-                                            (local data)
-                                            (local extra)
-                                            (local end)
-                                            (if
-                                              (call ci::eq (local tag) (i64 12))
-                                              (local types)
-                                              (local names)))
-                                          (local end)
-                                          (i64 -1))
-                                        (i64 -1))))
+                                  (local next)
                                   (i64 -1))
-                                (i64 -1))))))))))
-              (i64 -1))))))
+                                (if
+                                  (if
+                                    (call ci::eq (local tag) (i64 12))
+                                    (bool true)
+                                    (call ci::eq (local tag) (i64 15)))
+                                  (if
+                                    (if
+                                      (call ci::eq (local extra) (local next))
+                                      (if
+                                        (call ci::eq (local tag) (i64 12))
+                                        (call index (local a) (local declarations))
+                                        (if
+                                          (call ci::eq (local a) (i64 0))
+                                          (call ci::eq (local b) (i64 0))
+                                          (bool false)))
+                                      (bool false))
+                                    (let
+                                      (binding end
+                                        (call extent (local data) (local extra) (local count) (i64 8)))
+                                      (in
+                                        (if
+                                          (call ci::lt (i64 -1) (local end))
+                                          (if
+                                            (call indices
+                                              (local data)
+                                              (local extra)
+                                              (local end)
+                                              (if
+                                                (call ci::eq (local tag) (i64 12))
+                                                (local types)
+                                                (local names)))
+                                            (local end)
+                                            (i64 -1))
+                                          (i64 -1))))
+                                    (i64 -1))
+                                  (i64 -1))))))))))
+                (i64 -1))))
+          (i64 -1))))
     (function create instructions
       (visibility public)
       (effect pure)
@@ -537,7 +494,7 @@ declarations.begin
                 (call ci::lt (i64 -1) (local after))
                 (call instructions
                   (local data)
-                  (call ci::add (local at) (i64 32))
+                  (call ci::add (local at) (i64 48))
                   (local end)
                   (call ci::add (local index) (i64 1))
                   (local total)
@@ -561,33 +518,31 @@ declarations.begin
       (returns I64)
       (body
         (if
-          (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 16)))
+          (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 32)))
           (let
-            (binding locals (call ci::field32 (local data) (local at) (i64 4)))
-            (binding nodes (call ci::field32 (local data) (local at) (i64 8)))
-            (binding count (call ci::field32 (local data) (local at) (i64 12)))
+            (binding locals (call ci::field64 (local data) (local at) (i64 8)))
+            (binding nodes (call ci::field64 (local data) (local at) (i64 16)))
+            (binding count (call ci::field64 (local data) (local at) (i64 24)))
             (in
               (if
                 (if
-                  (call ci::eq
-                    (call ci::field32 (local data) (local at) (i64 0))
-                    (local parameters))
+                  (call canonical-u32 (call ci::field64 (local data) (local at) (i64 0)))
                   (if
-                    (call ci::lt (local locals) (i64 129))
+                    (call ci::eq (call ci::field64 (local data) (local at) (i64 0)) (local parameters))
                     (if
-                      (call ci::lt (call ci::sub (local parameters) (i64 1)) (local locals))
+                      (call canonical-u32 (local locals))
                       (if
-                        (call ci::eq (local nodes) (call ci::add (local at) (i64 16)))
+                        (call ci::lte (local parameters) (local locals))
                         (if
+                          (call ci::eq (local nodes) (call ci::add (local at) (i64 32)))
                           (call ci::lt (i64 0) (local count))
-                          (if (call ci::lt (local count) (i64 32769)) (bool true) (bool false))
                           (bool false))
                         (bool false))
                       (bool false))
                     (bool false))
                   (bool false))
                 (let
-                  (binding end (call extent (local data) (local nodes) (local count) (i64 32)))
+                  (binding end (call extent (local data) (local nodes) (local count) (i64 48)))
                   (in
                     (if
                       (call ci::lt (i64 -1) (local end))
@@ -622,23 +577,18 @@ declarations.begin
           (bool true)
           (if
             (if
-              (call ci::lt (call ci::field32 (local data) (local at) (i64 0)) (local ports))
+              (call index (call ci::field64 (local data) (local at) (i64 0)) (local ports))
               (if
-                (call ci::lt (call ci::field32 (local data) (local at) (i64 4)) (local types))
+                (call index (call ci::field64 (local data) (local at) (i64 8)) (local types))
                 (if
-                  (call ci::eq (call ci::field32 (local data) (local at) (i64 8)) (i64 0))
-                  (if
-                    (call ci::lt
-                      (call ci::field32 (local data) (local at) (i64 12))
-                      (local declarations))
-                    (bool true)
-                    (bool false))
+                  (call ci::eq (call ci::field64 (local data) (local at) (i64 16)) (i64 0))
+                  (call index (call ci::field64 (local data) (local at) (i64 24)) (local declarations))
                   (bool false))
                 (bool false))
               (bool false))
             (call ports
               (local data)
-              (call ci::add (local at) (i64 16))
+              (call ci::add (local at) (i64 32))
               (local end)
               (local types)
               (local declarations)
@@ -655,18 +605,15 @@ declarations.begin
       (returns I64)
       (body
         (if
-          (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 8)))
+          (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 16)))
           (let
-            (binding offset (call ci::field32 (local data) (local at) (i64 0)))
-            (binding count (call ci::field32 (local data) (local at) (i64 4)))
+            (binding offset (call ci::field64 (local data) (local at) (i64 0)))
+            (binding count (call ci::field64 (local data) (local at) (i64 8)))
             (in
               (if
-                (if
-                  (call ci::eq (local offset) (call ci::add (local at) (i64 8)))
-                  (if (call ci::lt (local count) (i64 129)) (bool true) (bool false))
-                  (bool false))
+                (call ci::eq (local offset) (call ci::add (local at) (i64 16)))
                 (let
-                  (binding end (call extent (local data) (local offset) (local count) (i64 16)))
+                  (binding end (call extent (local data) (local offset) (local count) (i64 32)))
                   (in
                     (if
                       (call ci::lt (i64 -1) (local end))
@@ -693,25 +640,25 @@ declarations.begin
       (returns I64)
       (body
         (if
-          (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 16)))
+          (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 32)))
           (if
             (if
-              (call ci::lt (call ci::field32 (local data) (local at) (i64 0)) (local declarations))
+              (call index (call ci::field64 (local data) (local at) (i64 0)) (local declarations))
               (if
-                (call ci::lt (call ci::field32 (local data) (local at) (i64 4)) (i64 2))
                 (if
-                  (call ci::eq (call ci::field32 (local data) (local at) (i64 12)) (i64 0))
+                  (call ci::eq (call ci::field64 (local data) (local at) (i64 8)) (i64 0))
+                  (bool true)
+                  (call ci::eq (call ci::field64 (local data) (local at) (i64 8)) (i64 1)))
+                (if
+                  (call ci::eq (call ci::field64 (local data) (local at) (i64 24)) (i64 0))
                   (if
-                    (if
-                      (call ci::eq (call ci::field32 (local data) (local at) (i64 4)) (i64 0))
-                      (call ci::eq (call ci::field32 (local data) (local at) (i64 8)) (i64 0))
-                      (call ci::lt (call ci::field32 (local data) (local at) (i64 8)) (local ports)))
-                    (bool true)
-                    (bool false))
+                    (call ci::eq (call ci::field64 (local data) (local at) (i64 8)) (i64 0))
+                    (call ci::eq (call ci::field64 (local data) (local at) (i64 16)) (i64 0))
+                    (call index (call ci::field64 (local data) (local at) (i64 16)) (local ports)))
                   (bool false))
                 (bool false))
               (bool false))
-            (call ci::add (local at) (i64 16))
+            (call ci::add (local at) (i64 32))
             (i64 -1))
           (i64 -1))))
     (function create external-name
@@ -861,15 +808,15 @@ declarations.begin
       (returns I64)
       (body
         (if
-          (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 8)))
+          (call ci::lt (i64 -1) (call extent (local data) (local at) (i64 1) (i64 16)))
           (let
-            (binding end (call string (local data) (local at) (call ci::add (local at) (i64 8))))
+            (binding end (call string (local data) (local at) (call ci::add (local at) (i64 16))))
             (in
               (if
                 (call ci::lt (i64 -1) (local end))
                 (if
                   (call external-name
-                    (call ci::slice (local data) (call ci::add (local at) (i64 8)) (local end)))
+                    (call ci::slice (local data) (call ci::add (local at) (i64 16)) (local end)))
                   (local end)
                   (i64 -1))
                 (i64 -1))))
@@ -882,20 +829,17 @@ declarations.begin
       (returns I64)
       (body
         (let
-          (binding tag (call ci::field32 (local data) (i64 0) (i64 248)))
-          (binding at (call ci::field32 (local data) (i64 0) (i64 252)))
-          (binding signature (call ci::field32 (local data) (i64 0) (i64 244)))
-          (binding types (call ci::field32 (local data) (i64 0) (i64 308)))
-          (binding declarations (call ci::field32 (local data) (i64 0) (i64 260)))
-          (binding names (call ci::field32 (local data) (i64 0) (i64 316)))
-          (binding texts (call ci::field32 (local data) (i64 0) (i64 332)))
-          (binding ports (call ci::field32 (local data) (i64 0) (i64 300)))
+          (binding tag (call ci::field32 (local data) (i64 0) (i64 256)))
+          (binding at (call ci::field64 (local data) (i64 0) (i64 264)))
+          (binding signature (call ci::field64 (local data) (i64 0) (i64 248)))
+          (binding types (call ci::field64 (local data) (i64 0) (i64 376)))
+          (binding declarations (call ci::field64 (local data) (i64 0) (i64 280)))
+          (binding names (call ci::field64 (local data) (i64 0) (i64 392)))
+          (binding texts (call ci::field64 (local data) (i64 0) (i64 424)))
+          (binding ports (call ci::field64 (local data) (i64 0) (i64 360)))
           (in
             (if
-              (if
-                (call ci::eq (local tag) (i64 6))
-                (bool true)
-                (if (call ci::eq (local tag) (i64 7)) (bool true) (bool false)))
+              (if (call ci::eq (local tag) (i64 6)) (bool true) (call ci::eq (local tag) (i64 7)))
               (if
                 (call ci::eq (local signature) (local next))
                 (let
@@ -904,7 +848,7 @@ declarations.begin
                     (if
                       (if
                         (call ci::lt (i64 -1) (local after))
-                        (if (call ci::eq (local at) (local after)) (bool true) (bool false))
+                        (call ci::eq (local at) (local after))
                         (bool false))
                       (if
                         (call ci::eq (local tag) (i64 6))
@@ -912,7 +856,7 @@ declarations.begin
                         (call code
                           (local data)
                           (local at)
-                          (call ci::field32 (local data) (local signature) (i64 12))
+                          (call ci::field64 (local data) (local signature) (i64 24))
                           (local types)
                           (local declarations)
                           (local names)
@@ -922,7 +866,7 @@ declarations.begin
               (if
                 (if
                   (call ci::eq (local signature) (i64 0))
-                  (if (call ci::eq (local at) (local next)) (bool true) (bool false))
+                  (call ci::eq (local at) (local next))
                   (bool false))
                 (if
                   (call ci::eq (local tag) (i64 9))
@@ -941,14 +885,11 @@ declarations.begin
       (returns Bool)
       (body
         (if
-          (if
-            (call ci::lt (i64 335) (call ci::length (local data)))
-            (if (call ci::lt (call ci::length (local data)) (i64 8388609)) (bool true) (bool false))
-            (bool false))
+          (call ci::lte (i64 432) (call ci::length (local data)))
           (let
             (binding owner (call ci::field32 (local data) (i64 0) (i64 0)))
             (binding kind (call ci::field32 (local data) (i64 0) (i64 4)))
-            (binding tag (call ci::field32 (local data) (i64 0) (i64 248)))
+            (binding tag (call ci::field32 (local data) (i64 0) (i64 256)))
             (in
               (if
                 (if
@@ -958,41 +899,47 @@ declarations.begin
                   (if
                     (call ci::eq (call ci::field32 (local data) (i64 0) (i64 12)) (i64 0))
                     (if
-                      (call ci::eq (call ci::field32 (local data) (i64 0) (i64 240)) (i64 256))
+                      (call ci::eq (call ci::field64 (local data) (i64 0) (i64 240)) (i64 272))
                       (if
-                        (if (call zeros (local data) (i64 16) (i64 32)) (bool false) (bool true))
+                        (call ci::eq (call ci::field32 (local data) (i64 0) (i64 260)) (i64 0))
                         (if
-                          (if (call zeros (local data) (i64 32) (i64 48)) (bool false) (bool true))
+                          (if (call zeros (local data) (i64 16) (i64 32)) (bool false) (bool true))
                           (if
+                            (if (call zeros (local data) (i64 32) (i64 48)) (bool false) (bool true))
                             (if
-                              (call ci::eq (local tag) (i64 6))
                               (if
-                                (call ci::eq (local owner) (i64 1))
-                                (if (call ci::eq (local kind) (i64 4)) (bool true) (bool false))
-                                (bool false))
-                              (if
-                                (call ci::eq (local tag) (i64 7))
+                                (call ci::eq (local tag) (i64 6))
                                 (if
                                   (call ci::eq (local owner) (i64 1))
-                                  (if (call ci::eq (local kind) (i64 5)) (bool true) (bool false))
+                                  (call ci::eq (local kind) (i64 4))
                                   (bool false))
+                                (bool false))
+                              (bool true)
+                              (if
                                 (if
-                                  (call ci::eq (local tag) (i64 9))
+                                  (call ci::eq (local tag) (i64 7))
                                   (if
                                     (call ci::eq (local owner) (i64 1))
-                                    (if (call ci::eq (local kind) (i64 8)) (bool true) (bool false))
+                                    (call ci::eq (local kind) (i64 5))
                                     (bool false))
+                                  (bool false))
+                                (bool true)
+                                (if
+                                  (if
+                                    (call ci::eq (local tag) (i64 9))
+                                    (if
+                                      (call ci::eq (local owner) (i64 1))
+                                      (call ci::eq (local kind) (i64 8))
+                                      (bool false))
+                                    (bool false))
+                                  (bool true)
                                   (if
                                     (call ci::eq (local tag) (i64 11))
                                     (if
                                       (call ci::eq (local owner) (i64 11))
-                                      (if
-                                        (call ci::eq (local kind) (i64 19))
-                                        (bool true)
-                                        (bool false))
+                                      (call ci::eq (local kind) (i64 19))
                                       (bool false))
                                     (bool false)))))
-                            (bool true)
                             (bool false))
                           (bool false))
                         (bool false))
@@ -1000,7 +947,7 @@ declarations.begin
                     (bool false))
                   (bool false))
                 (let
-                  (binding next (call tables (local data) (i64 0) (i64 336)))
+                  (binding next (call tables (local data) (i64 0) (i64 432)))
                   (in
                     (if
                       (call ci::lt (i64 -1) (local next))
@@ -1009,5 +956,23 @@ declarations.begin
                         (call ci::length (local data)))
                       (bool false))))
                 (bool false))))
-          (bool false))))))
+          (bool false))))
+    (function create canonical-u32
+      (visibility private)
+      (effect pure)
+      (parameter create value (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::lt (i64 -1) (local value))
+          (call ci::lt (local value) (i64 4294967296))
+          (bool false))))
+    (function create index
+      (visibility private)
+      (effect pure)
+      (parameter create value (type I64))
+      (parameter create limit (type I64))
+      (returns Bool)
+      (body
+        (if (call canonical-u32 (local value)) (call ci::lt (local value) (local limit)) (bool false))))))
 declarations.end

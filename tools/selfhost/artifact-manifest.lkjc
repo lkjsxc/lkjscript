@@ -56,7 +56,7 @@ declarations.begin
               (local out)))
           (binding b
             (type ByteBuffer)
-            (call wire::unsigned (call ci::field32 (local data) (local at) (i64 32)) (local a)))
+            (call wire::unsigned (call ci::field64 (local data) (local at) (i64 32)) (local a)))
           (binding c (type ByteBuffer) (call ci::push (i64 1) (local b)))
           (in
             (call wire::range
@@ -186,7 +186,7 @@ declarations.begin
           (binding l (type ByteBuffer) (call ci::append (local compilation) (i64 0) (local k)))
           (binding m
             (type ByteBuffer)
-            (call wire::unsigned (call ci::u32 (local meta) (i64 304)) (local l)))
+            (call wire::unsigned (call ci::u64 (local meta) (i64 304)) (local l)))
           (binding n (type ByteBuffer) (call owners (local meta) (i64 312) (local m)))
           (binding o (type ByteBuffer) (call map-root (local meta) (i64 232) (local n)))
           (binding p (type ByteBuffer) (call ci::append (local closure) (i64 0) (local o)))

@@ -24,7 +24,7 @@ The current carrier has one package and no dependencies or external blobs.
 Recognized unsupported boundaries reject explicitly; importing a package's
 interface or prior validation witness cannot supply its missing source bodies.
 This carrier is separate from normalized LKJCI1: mode 0 uses profile 6 for ELF
-and mode 1 uses profile 5 for canonical artifacts. The existing Tier 1 paths use
+and mode 1 uses profile 7 for canonical artifacts. The existing Tier 1 paths use
 Rust admission and normalization. The scalar source route instead derives its
 mode-0 input inside lkjscript from the raw carrier.
 

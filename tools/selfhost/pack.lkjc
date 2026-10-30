@@ -11,8 +11,8 @@ declarations.begin
       (returns Bytes)
       (body
         (let
-          (binding offset (call ci::field32 (local rows) (local at) (i64 8)))
-          (binding size (call ci::field32 (local rows) (local at) (i64 12)))
+          (binding offset (call ci::field64 (local rows) (local at) (i64 8)))
+          (binding size (call ci::field64 (local rows) (local at) (i64 16)))
           (in
             (call ci::slice
               (if
@@ -36,7 +36,7 @@ declarations.begin
           (call ci::eq (local at) (call ci::length (local rows)))
           (local out)
           (let
-            (binding size (call ci::field32 (local rows) (local at) (i64 12)))
+            (binding size (call ci::field64 (local rows) (local at) (i64 16)))
             (binding checksum
               (call wire::digest
                 (text "lkjscript.object-pack.entry.v1")
@@ -48,8 +48,8 @@ declarations.begin
               (type ByteBuffer)
               (call wire::range
                 (local rows)
-                (call ci::add (local at) (i64 16))
-                (call ci::add (local at) (i64 48))
+                (call ci::add (local at) (i64 24))
+                (call ci::add (local at) (i64 56))
                 (local a)))
             (binding c (type ByteBuffer) (call wire::be (local offset) (i64 8) (local b)))
             (binding d (type ByteBuffer) (call wire::be (local size) (i64 8) (local c)))
@@ -60,7 +60,7 @@ declarations.begin
                 (local input)
                 (local generated)
                 (local rows)
-                (call ci::add (local at) (i64 48))
+                (call ci::add (local at) (i64 56))
                 (call ci::add (local offset) (local size))
                 (local f)))))))
     (function create nonce
@@ -111,8 +111,8 @@ declarations.begin
           (call ci::eq (local at) (call ci::length (local rows)))
           (local out)
           (let
-            (binding offset (call ci::field32 (local rows) (local at) (i64 8)))
-            (binding size (call ci::field32 (local rows) (local at) (i64 12)))
+            (binding offset (call ci::field64 (local rows) (local at) (i64 8)))
+            (binding size (call ci::field64 (local rows) (local at) (i64 16)))
             (binding a
               (type ByteBuffer)
               (call wire::range
@@ -128,8 +128,30 @@ declarations.begin
                 (local input)
                 (local generated)
                 (local rows)
-                (call ci::add (local at) (i64 48))
+                (call ci::add (local at) (i64 56))
                 (local a)))))))
+    (function create encoded-size
+      (visibility public)
+      (effect pure)
+      (parameter create count (type I64))
+      (parameter create bytes (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::either (call ci::lt (local count) (i64 0)) (call ci::lt (local bytes) (i64 0)))
+          (i64 -1)
+          (if
+            (call ci::lt (i64 9223372036854775663) (local bytes))
+            (i64 -1)
+            (let
+              (binding remaining (call ci::sub (i64 9223372036854775663) (local bytes)))
+              (in
+                (if
+                  (call ci::lt (call ci::div (local remaining) (i64 89)) (local count))
+                  (i64 -1)
+                  (call ci::add
+                    (call ci::add (local bytes) (i64 144))
+                    (call ci::mul (local count) (i64 89))))))))))
     (function create encode
       (visibility public)
       (effect pure)
@@ -139,7 +161,7 @@ declarations.begin
       (returns (record (digest Bytes) (image Bytes)))
       (body
         (let
-          (binding count (call ci::div (call ci::length (local rows)) (i64 48)))
+          (binding count (call ci::div (call ci::length (local rows)) (i64 56)))
           (binding index-bytes
             (let
               (binding wire-temp-9

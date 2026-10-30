@@ -1,11 +1,14 @@
 # Capacity removal: boundary census and integration ledger
 
 Updated 2026-10-30 (Asia/Tokyo).
-Status at source freeze: Phase 1 accepted and integrated; the subsequent list candidate has passed focused runtime and supplemental proof/discovery checks, with its complete staged-tree seal and integration pending.
+Current state: Phase 1 and the subsequent list slice are accepted and integrated. Profile-7 producer controls, public adoption/readback, focused four-way artifact controls, complete proposal replay and public GC passed. Native compiler/artifact reproduction passed inside the first frozen-tree run, whose owner joined with exit 1 after one stale fixture failed. The fixture and two ownership-charge repairs are applied; all 20 focused tests and formatting/Clippy passed. The repaired tree awaits the full acceptance retry.
 Reference source: `47e33ae90ec77b176597e45d7917694749526aba`.
 Reference tree: `32ff68b548b2fcb5aecd8c01229b8a7c757490d5`.
 Phase 1 accepted commit: `e7a44d289ddd90daf81125a9f37c66fa17cd3c21`.
 Phase 1 accepted tree: `bc733630e4850e1cc50e91607029a24ca520c6e1`.
+List accepted commit: `932f197ebcd9c17e2702372300ab73996bb20754`.
+List accepted tree: `6717d8249c1db319169b2b32be0e088ef09dea21`.
+Profile-7 working branch: `capacity/20261030-artifact-profile7`.
 Exact staged-tree verification and normal integration are bound by the acceptance commit and receipts.
 
 ## Authority and accounting
@@ -47,7 +50,8 @@ complete only when its listed downstream dependencies and verification are compl
 | `kernel/{callable_flow,composed_callable_flow,nominal_flow,owned_associated,owned_record}.rs` metadata admission | Whole-carrier callable/type evidence and compiler artifact consumers | 1/2. Remove hidden work and 64MiB metadata clamps; carry optional budgets and saturated modeled observations | Applied lower-level work/metadata cut; remaining reference/package/parallel-layout callers must be audited independently |
 | `publication/validation.rs::REBUILD_LIMITS`, `publication/repository.rs` full oracle | Revision-pinned reconstruction and dependency validation; current read-view output | 1. Remove automatic store rebuild quotas and redundant 10M reconstruction ceiling; preserve structural checks | Accepted in Phase 1; current validation output carries work-saturated. The exact tree passed all 29 fresh full gates |
 | `contributor.rs::SemanticInventory`, dev scale `OracleEvidence` | Typed inventory to JSON scale receipts | 1/3. Carry validation/map/store exactness flags; discriminate the changed scale receipt contract | Accepted contract-4 inventory/scale observation cut; Phase 1 full dev gates passed |
-| `change/budget.rs::ChangeBudget` and ten sub-admissions | CLI/control authoring, preparation, repair, selection, refresh, publication revalidation | 1/2/3. Replace 46 scalar default maxima and MAX sentinels with optional exact policies, remove engine clamping, preserve operation-zero semantics | Applied optional 46-dimension policy with exact finite admission and passive saturation. Focused evidence and the accepted Phase 1 full seal are recorded below. |
+| `change/budget.rs::ChangeBudget` and ten sub-admissions | CLI/control authoring, preparation, repair, selection, refresh, publication revalidation | 1/2/3. Replace 46 scalar default maxima and MAX sentinels with optional exact policies, remove engine clamping, preserve operation-zero semantics | Applied optional 46-dimension API with exact finite admission and passive saturation. Focused evidence and accepted Phase 1 seal below do not establish every caller's charging arithmetic; the later literal/test-retention caller audit is separate. |
+| `change/request/{literal,test_retention}.rs::charge` | Authored function-literal edits and retention of accepted test expression trees | 2/3. Charge exact ownership work through `WorkSaturation`, preserve optional finite allowance and failure atomicity | Applied exact charge repairs after finding unflagged saturating additions in both callers. Two direct helper regressions, 16 literal-edit controls and one existing retention control passed; full repaired-tree acceptance remains pending. Prior all-dimension API controls did not cover these callers. |
 | `change/request{,/codec}.rs` budget and request frames | `LKJABUDG`, request digests, retry identity, logical plans, receipts | 1/3. Explicit optional policy encoding and new current-format discrimination; remove 10K-change/4MiB request ceilings with complete readers | Applied LKJABDG2/profile 2 tagged optional allowances and unbounded aggregate requests. Six maintained repositories now use receipt profile 2 after public source republication. |
 | `control/compact.rs`, `control/change/{input,preflight,tx}.rs` | Compact records and structural authoring into ChangeRequest | 1/3. Remove aggregate input/record/token/value ceilings; checked extent parsing and complete diagnostics; retain syntax/schema invariants | Applied absent aggregate input/record/token/value quotas and checked syntax accounting. Kernel expression/type depths remain pending. |
 | `control/logical_plan.rs`, `change/logical_plan.rs` | Logical-plan render/parse, request identities, revalidation | 1/3. Remove derived fixed record/byte maxima, represent optional policies exactly | Applied absent aggregate byte/record quotas, complete optional-policy round trips and atomic explicit output allowance checks. |
@@ -67,7 +71,7 @@ complete only when its listed downstream dependencies and verification are compl
 | --- | --- | --- | --- |
 | `compiler/selfhost_input.rs`, selfhost `input/types/custody/flow/profile/values` | Mode0 producer, verifier, certificates, machine emitter, source-scalar pack | 1/3. Dynamic descriptor directory; wide independent type identity and custody qualifier; wide rows/offsets; clean profile cut | Applied profile6 producer/proposals: 160-byte header, dynamic32-byte descriptors,80-byte functions,64-byte instructions,16-byte identity/qualifier cells. Publicly adopted. Focused Mode0 C2=C3, maintained proposal equivalence and native closure measurement passed; included in the accepted Phase 1 staged tree |
 | selfhost `machine/asm/elf`, `source-scalar-{plan,state,emit,pack}` | Local/stack state, sentinel, ABI frames, emitted branches | 1/3/5. Replace local128 sentinel and fixed slots together; checked wide frame addresses and deterministic wide control flow | Applied with profile6: owner-count sentinel, variable code layout, checked 64-bit R11 transfers/frame addresses. Publicly adopted. Tier 1 native reproduction passed; raw maintained-source self-compilation remains unproved |
-| `compiler/selfhost_artifact_input.rs`, selfhost `artifact-input/unit-wire/unit-map/artifact` | Mode1 profile5 projected units to canonical .lkja | 1/3/4. Widen u32 input/pool/frame offsets and 8MiB unit caps; retain hierarchical 256-way radix branching | Pending widths. Existing hierarchical map is already committed and must not be replaced with a fixed table |
+| `compiler/selfhost_artifact_input.rs`, selfhost `artifact-input/unit-wire/unit-map/artifact` | Mode1 profile7 projected fields to canonical .lkja | 1/3/4. Wide private input/pool/frame extents and optional exact u64 estimated-proof policy; retain hierarchical 256-way radix branching | Applied Profile7 widths and removal of projection-only guards. Twelve Rust producer controls, public adoption/readback, artifact28/replay1 and GC passed. Native reproduction passed inside the first frozen-tree run; acceptance requires the repaired tree's full seal. Canonical unit codec/indices and manifest/query limits remain separate; see the Profile7 decision |
 | selfhost `source-graph/index/map/scope` and proof passes | Complete meaning-graph carrier, directory admission, scope/type/custody proof | 1/2/3/5. LKJSG002 tag + u64-limb allowance; unlimited skips synthetic proof estimate; structural cursor/DAG termination retained | Publicly adopted proposals and matching Rust test producers. Graph100K and map8MiB/100K caps removed. Large-carrier positive controls and the corrected 100,001-retirement binding control passed, including the hash-consistent negative at native diagnostic 12; included in the accepted Phase 1 staged tree |
 | LKJSG002 lengths/counts/offsets and per-object codec guards | Carrier producer, every source pass, diagnostics | 3/5. Current u32 extents remain checked; eventual widening must replace all directory/payload consumers | Explicit remaining representation boundary. New policy width does not imply 64-bit carrier extents |
 | `compiler/elf_x86_64::{Asm,compile,Emitter,elf}` | Rust native command compilation and ELF publication | 1/3/5/6. Fallible code/labels/worklists; usize label identity; absolute64 relocations/indirect transfers; checked wide frame and record offsets | Applied removal of 4,096-function/65,536-instruction/32MiB-image quotas. Arithmetic, wide-offset, 33MiB ELF and ordinary native controls passed. The public 4,097-function fixture publishes and compiles beyond both former inventories; ELF, VM and reference each return 4,097. |
@@ -77,8 +81,8 @@ complete only when its listed downstream dependencies and verification are compl
 | Native allocation lifetime: R14/R15, `heap::allocate`, buffer discard/freeze | Source prepare -> lower -> ELF, repeated process invocation | 4/6. Mapping registry; immutable input, phase scratch, persistent and output domains; explicit escape/copy protocol and munmap/reuse | Pending. Current refill already grows across mappings. Current process-exit release is not same-process phase reclamation |
 | `execution/region{,/runtime,/persistence}.rs`, region value/VM/reference | Lexical region slots, relative pointers, persistence and native Region support | 1/3/5. Remove65,536 live-region cap and checked slot growth; widen u32 pointer/capacity/layout/slice fields coherently | Applied LKJREGN2/profile2 with64-bit header/cell/pointer/count fields, uncapped arena slots and iterative shared-DAG layout/codec/teardown. All46 region tests passed. Native Region/domain reclamation remains incomplete |
 | Kernel depth guards versus recursive consumers | Normalize/lower/interpret, codecs, display, equality/hash/clone/drop, native call stack | 1/3/5/6. Remove synthetic counters only after recursive lifecycle is replaced by heap worklists or justified safe mechanism | Pending full lifecycle cut. Iterative validator loops are identified; 256/1024 depth removal alone is unsafe |
-| Normalized `RunPolicy` call-depth/value-stack and raw admission items | Foreground/default execution, VM/reference, nested invocation | 1/2/5. Optional execution policies throughout; preserve cancellation/effects; stack-safe implementation before unbounded depth | Phase 1 accepted the four exact optional cumulative policies and independent saturation. The applied list candidate removes ordinary raw aggregate-item clamps; its focused controls passed and complete staged-tree seal remains pending. Default 4,096-call-depth, 1M-stack, nesting and remaining specialized item guards require separate cuts |
-| Normalized `list.rs`, `list_bulk.rs`, ordinary value admission and list observations | Raw/checked construction, VM/reference, list traversal/disposal and public work metrics | 1/2/3/4/5. Optional exact length policy; explicit worklists derived from index width; unmetered ordinary raw admission; honest saturation | Applied list candidate on 2026-10-30. No logical 1M/height-3 limit; 32-way physical fanout retained. Focused runtime and supplemental proof/discovery checks passed; complete staged-tree seal and integration remain pending; see the list decision |
+| Normalized `RunPolicy` call-depth/value-stack and raw admission items | Foreground/default execution, VM/reference, nested invocation | 1/2/5. Optional execution policies throughout; preserve cancellation/effects; stack-safe implementation before unbounded depth | Phase 1 accepted the four exact optional cumulative policies and independent saturation. The accepted list slice removes ordinary raw aggregate-item clamps; focused controls and all 29 fresh full gates passed. Default 4,096-call-depth, 1M-stack, nesting and remaining specialized item guards require separate cuts |
+| Normalized `list.rs`, `list_bulk.rs`, ordinary value admission and list observations | Raw/checked construction, VM/reference, list traversal/disposal and public work metrics | 1/2/3/4/5. Optional exact length policy; explicit worklists derived from index width; unmetered ordinary raw admission; honest saturation | Accepted and integrated on 2026-10-30 at 932f197e. No logical 1M/height-3 limit; 32-way physical fanout retained. Focused runtime, supplemental proof/discovery and all 29 fresh full gates passed; exact seal below and structural argument in the list decision |
 | Normalized `map.rs`, prepared/reference types/local-liveness and specialized storage | Ordered maps, schemas, owned/view storage and related admission | 1/3/4/5. Optional schema/work policies; preserve structural balanced-map height proof | Pending remaining map/schema/owned/view cuts. Map height2*usize::BITS is mathematical; specialized logical item guards remain |
 | `compiler/{unit,artifact,manifest,cache}.rs`, artifact loaders | Compilation units, .lkja manifest/segments/bundle, loader coherence | 1/3/4. Remove unit8MiB/1M-item and manifest/package/unit/bundle quotas with complete framed readers | Pending. Source-derived canonical units and host parity require this path, not just Mode1 projected-unit acceptance |
 | `compiler/egraph_opt.rs` | Optional local optimization, subsequent ordinary emission | 4/5. Retain finite search strategy only when exhaustion falls back to correct unoptimized code | Audit fallback and measure; do not report an optimization search cutoff as a semantic admission ceiling |
@@ -170,10 +174,11 @@ These remain Tier 1 equations using the disclosed Rust bootstrap and normalized 
 projected inputs. Accepted Phase 1 gates do not prove full unbounding, raw-source
 compiler fixed points, Tier 2/Tier 3, native reclamation or bounded same-process RSS.
 
-## Applied list candidate after Phase 1
+## Accepted list slice after Phase 1
 
-The next slice is applied and formatted on `capacity/20261030-unbounded-lists`,
-starting from accepted commit `e7a44d289ddd90daf81125a9f37c66fa17cd3c21`. Its 21
+The list slice was developed on `capacity/20261030-unbounded-lists`, starting
+from accepted commit `e7a44d289ddd90daf81125a9f37c66fa17cd3c21`, and is now
+accepted on main at `932f197ebcd9c17e2702372300ab73996bb20754`. Its initial 21
 Rust/tool changes have application receipt SHA-256
 `2469dabd5b802ade4363d8990c820b524b7d7b660d77a7f84abfa81b1a315844`.
 
@@ -215,7 +220,7 @@ This used the candidate with 22 changed source paths, including the map-policy c
 the later stored-proof/public-discovery repair, whose separate terminal verification
 follows. The observed host is x86_64; 32-bit index coverage
 is source/model only, with no 32-bit execution.
-No staged-tree acceptance is established for the list slice. The
+Those focused observations preceded the later full seal recorded below. The
 [list decision](20261030-unbounded-lists.md) records the structural argument, controls
 and remaining depth/map/owned/schema/codec boundaries.
 
@@ -255,11 +260,215 @@ the operations document also carries the changed capability content. This focuse
 verification, including the explicitly disclosed Clippy reuse, grants no fresh-full
 gate acceptance claim.
 
-Pending at source freeze: bootstrap and run this list tree's complete source-bound
-seal, then integrate it with terminal source/tree readback. Record the eventual
-outcome in the acceptance commit and external terminal record, preserving frozen inputs.
+The later complete seal used precommit HEAD
+`e7a44d289ddd90daf81125a9f37c66fa17cd3c21` and exact tree
+`6717d8249c1db319169b2b32be0e088ef09dea21`. Its complete driver, postrun
+collector and independent audit joined with exit 0. Raw bytes and modes remained
+stable across 35 changed paths, 2,193 indexed files and 133,847,296 bytes.
+
+| List seal operation | Observed terminal result |
+| --- | --- |
+| Staged-tree bootstrap | Exit 0; receipt SHA-256 `a196fcd784d6411da50296115d00595bf689707c530a3420dfdd6f6a7b7f4882`; verifier SHA-256 `d10f759ed500cc0dccc918e2939316cdbf160bda601c115f019a2a8f77aa5457` |
+| Literal selfhost script | 138 passed, 0 failed, 2 ignored, 2,703 filtered; 3,367.50s |
+| Native filter | 11 passed, 0 failed, 0 ignored, 2,832 filtered; 119.22s |
+| Maintained native closure | 1 passed, 0 failed, 0 ignored, 2,842 filtered; 22.78s |
+| Whole-owner/type inventory | 1 passed, 0 failed, 0 ignored, 2,842 filtered; 12.92s |
+| Full `--fresh --machine --jobs 4` | All 29 passed fresh, zero reuse/unrun, stable inputs; 3,797,629,862,566 ns |
+| Release target | Passed static-musl policy; no archive publication or deployment |
+
+Full compact receipt SHA-256:
+`4c701f56772b537dc3bcbfac758861e17c4b46c609d5e06df342cc7747a081b8`.
+Accepted staged-tree record SHA-256:
+`cd37083cdce85da2cc988804be00d4a420fee5ddaa6d96baa6daf33a9c4dc2f0`.
+Postrun observation SHA-256:
+`17df0f1be9e8c082acd5981df0f003a63d3e3bffa16146d86cf832507f08298a`.
+Independent audit SHA-256:
+`da307315b77736daeccc7c1ae576c61df4d5976f2a3c9361f64177f12563fec8`.
+Integration record SHA-256:
+`9a705b8413d125eb584d74e92bae285fb46d0cec41be94164c70b7ab75ede10b`.
+
+Normal fast-forward delivery and independent Git/GitHub readback verified main
+commit `932f197ebcd9c17e2702372300ab73996bb20754` and that tree. The source-bound
+records reside under `.artifacts/capacity-unbounding/seal-list-20261030/`.
+Gate freshness does not assert every Cargo unit was rebuilt. Exact workspace
+harness totals were not captured before cleanup and are not inferred from prior
+runs or gate inventory. Checker transient storage was absent, bootstrap retained
+only its receipt, and exactly the three historical repository-artifact ELF files
+remained; the collector did not inventory OS temporary files. Mode-0 profile-6
+and Mode-1 profile-5 fixed-point identities remained the Phase 1 values above.
+This acceptance does not prove Profile-7 behavior, full unbounding or Tier 2.
 The accepted Phase 1 receipts do not accept later source edits. Historical correction
 and failed-attempt records below retain the evidence available at their own checkpoints.
+
+## Profile-7 projection/pool cut after list acceptance
+
+Implemented on `capacity/20261030-artifact-profile7`: coordinated Rust producer,
+selfhost admission/emission and fixture changes for current-only Mode-1 profile 7.
+The header uses explicit `None`/`Some(u64)` policy; unit/source rows are 16/56
+bytes, unit prefixes 272, table directories 160, signatures/parameters 40/48,
+code/instruction records 32/48, and generated frames eight bytes. Unit facts are
+138 bytes with unchanged 82-byte map bindings. Mode 0 remains profile 6; canonical
+unit/map/pack bytes and semantic u32 index types are separate contracts.
+
+Projection-only 4 GiB, 8 MiB, 100,000-entry, 32,768-table/instruction and
+128-parameter/local/operand clamps are removed. Finite estimated proof admission
+compares `A >= 64*(64 + 2*L + U*U + O)` by checked division/subtraction before
+hashing or deep work; `None` does not evaluate that estimate. Measured projected
+output is admitted before its fallible byte-buffer reservation. Earlier Rust
+artifact admission, map reads, decoding and inventory preparation remain outside
+that embedded policy. Checked object-byte/pack/container sums govern allocation;
+passive telemetry never does. The four-way artifact probe helper is applied for
+VM/reference/Rust-bootstrap ELF/selfhost-emitted ELF, with probe executables
+cached by exact emission-payload hash. Its focused executable results are recorded
+below, separately from native compiler reproduction and full acceptance.
+
+Observed producer verification joined at `capacity-resume-1030-143` with exit 0:
+12 passed, zero failed/ignored, 2,842 filtered, 0.01s execution; focused compile/test
+operation 366,873,597,353 ns. Receipt SHA-256:
+`abab2fe578d207b57d3606296619e268a672700d4df163f0310504cf97e2c0ee`.
+Cargo selected an 80,050,464-byte product with `fresh: false`, SHA-256
+`c25a6d576f62bfbe273ea26f1985bd5feaf2d5e45933fd51791c10c2b10ff6d2`.
+The tests cover wide/nonzero-origin layouts, exact policy and a code projection
+above 8 MiB; they do not remove the independent canonical-unit codec boundary.
+
+Public adoption joined at `capacity-resume-1030-148` with exit 0: nine modules,
+69 changed members, zero explicit deletion operations, 79,847 transaction bytes,
+SHA-256 `c3f19cd392712801b4c011662f183e8cce614923851c974c2688fb3e1b7593f4`.
+It reported 4,626 created/60 updated identities and equal authoring differential
+results, with zero selected runtime tests. Accepted graph revision:
+`rev_b14f1d9465fd9d67cad9cc5946607a7028d2a2d26a2a2883ad953422f23a1b05`;
+HEAD SHA-256 `f66f443af7f9e46179c56fc9600113fa72dc65b2284ceb6e4450a83494eccc79`.
+Readback joined at `capacity-resume-1030-150` with exit 0, covering 36,080 owners
+in nine pages. No existing parameter order changed, so no changed-signature pages
+were required. Its 1,065,885-byte receipt has SHA-256
+`5155d7b8f5f991a15c8971c9c3daeb2086f6b12aec3a44ccb765013d92332e8e`.
+The current 28,895-byte preparation/submission record has SHA-256
+`a97bfbe66f62f81ea09e4e16d61919bfa41ef94a4142974e078a89452ea9aa4e`;
+submission took 39,268,461,095 ns with empty stderr. Those proposals are now
+authoritative; complete body replay subsequently passed separately.
+
+The focused owner `capacity-resume-1030-152` joined through request 172 with
+exit 0. Its 2,195-byte receipt has SHA-256
+`81eecca6777b57239d65c3781770f57244826a5f9bf20849d2de2b1f8eb3c3b9`.
+The artifact selection passed 28 tests, zero failed/ignored, 2,826 filtered, in
+658.49s execution; the command took 1,021,724,923,634 ns and its log SHA-256 is
+`92197843dedb6767b6ee239455489e98cc26f87815c50634518753501d189e89`.
+The complete semantic replay passed one test, zero failed/ignored, 2,853 filtered,
+in 46.63s execution; command duration 46,775,859,341 ns and log SHA-256
+`71a69545b308820dc4fd762f2bc972c296003f0d60d7d685c26ccc5de2d64c90`.
+Initial/final source inventory matched: 2,269 files / 154,423,333 bytes, SHA-256
+`ea226ed609fadb3f8476e3dafdb166a0e3552d97d400ea8362599d2260f5ef21`, with unchanged
+public HEAD. Run interval: 2026-10-30T06:14:07.602Z through 06:31:56.355Z.
+
+The artifact probes exercised VM, reference, Rust-bootstrap ELF and selfhost-emitted
+ELF with independent canonical oracles. Complete compiler artifact emission reported
+646 functions, 10,806,949 input bytes and a 10,338,816-byte artifact, SHA-256
+`41dd8141cb12a9501e69c8092e0b8e5d7c020765967511ec051c50bacac18f23`.
+Unit emission covered 650 units with kind tags 5, 6, 9 and 20. Reported VM/reference
+work was 826,834,103 steps / 438,157,491 expressions, cumulative modeled allocation
+86,155,453,261 / 97,782,508,693 bytes, and maximum call depth 21/22. These values
+are work observations, not live retained memory or RSS, and the focused suite does
+not establish repeated native C2/C3 compiler or artifact fixed points.
+
+Public GC owner 173 joined through 174 with exit 0. Physical storage changed
+from 79 packs / 85,802,127 bytes to three packs / 81,763,516 bytes, reclaiming
+4,038,611 bytes. GC took 10,106,528,987 ns; its before/after export commands took
+6,055,138,869 / 5,958,223,363 ns. Receipt SHA-256:
+`947e765ec799733810bca182f26d8ce80be01a557786162ecf0702a834779de3`.
+`preparation_saturated` and `canonical_bytes_retained_saturated` were false.
+HEAD/revision remained unchanged; both complete transports were 15,330,787 bytes,
+SHA-256 `8774b278e0859f0c092af119248fff73ad57d5ca27607a802d1e18e8a3cfc7a1`, digest
+`package_transport_6866de46a96c9839de546be697ff2ee8fbcae78b1cb8882c85b07b5161cf85f9`.
+The duplicate second container was removed. Physical compaction does not remove
+retirement tombstones or preserve the earlier physical source-file inventory;
+that inventory's stability belongs to the preceding focused run.
+
+After the focused run, the artifact test helper replaced `.chunks_exact(138)`
+with the equivalent `.as_chunks::<138>().0.iter()`. Final fmt and workspace,
+all-target/all-feature release Clippy passed at joined request 187; durations
+4,613,727,314 / 31,187,303,762 ns. Preflight receipt SHA-256:
+`0dd326f7895d9650c57740acbadfc2139f1d561b3713a7e5a915658a08a9c4b5`;
+Clippy log SHA-256
+`b11a1884c6cc92803bff7bea6f906f5104d91d90aa694fbb4aface6ad11862ef`.
+Discovery generation/verification passed in 876,021,424 / 857,130,798 ns with no
+generated changes. The focused result retains its earlier source binding; the
+final frozen-tree gates must exercise the corrected helper and documentation.
+
+The first sealing owner, `capacity-resume-1030-195`, joined through request 231
+with exit 1 against tree `13b09cc3e4be24802a6fcbd0433b8a96d45eb33d`. The literal
+selfhost child exited 101 after 3,770,985,268,606 ns: 148 passed, one failed,
+two ignored, zero measured, 2,703 filtered and 3,407.83s test execution. The
+failed checkpoint completed at 2026-10-30T07:51:42.299Z and confirmed the frozen
+tree with 2,194 files / 150,424,720 bytes. The 339,847-byte selfhost raw log has
+SHA-256 `8ec6f51fcf7f230be4341bd081ca942a0856e1f015fb65a388f8e4674a54213f`;
+the 3,947-byte checkpoint has SHA-256
+`96a6c0958e3d876ab867ccbcc6f528e3f324bc1fcc42bde8cd1e1eaf6fbf969a`.
+The 3,241-byte compact failed-seal observation has SHA-256
+`ce5358f5c2070f5a65391fc65c79f4a10f7354b976346ab3c5b8ada0978e7e6c`.
+No native subharness, named complete-compiler controls, full gates or release
+target ran in this attempt.
+
+Its native closure control within the literal harness passed:
+294 functions, 18,261 nodes, 2,021,454 normalized-input bytes. Mode-0 profile-6
+C2 = C3 was 1,249,170 bytes, SHA-256
+`c613d7c604322d42f4cec6bd65d83520828d901fa7f620c792707aeb1caeedb7`.
+Both native stages consumed the same 10,806,949-byte Profile-7 artifact input,
+SHA-256 `c50451cd991e04fe64e38f5a7bae5a4d34497cbfd54e614ad2c9c137bde19791`, and
+emitted the 10,338,816-byte artifact, SHA-256
+`41dd8141cb12a9501e69c8092e0b8e5d7c020765967511ec051c50bacac18f23`.
+The capacity input/output were 11,086,603 / 11,179,173 bytes, with SHA-256 values
+`0e2919a816c9db5bb2c8aa17015fea250bf6ed42f90bea93be5e2f88558e1f6e` and
+`737f18a830ae343e1c7715e840a22edc13507856a8475e7eb68dec745be552b3`.
+
+The sole failed test was a stale generic fixture: it selected retired Profile 5 while
+expecting framing diagnostic 10, so the current dispatcher returned selector
+diagnostic 2 first. The applied correction selects current Profile 7 for the
+structural negative and adds a separate former-Profile-5 rejection control,
+recomputing both carrier hashes. The corrected malformed-input test passed in
+VM/reference/Rust-bootstrap C1. Its framing diagnostic 10 precedes checksum and
+deep-unit validation; this test has no selfhost-emitted C2 execution claim.
+
+A separate audit found unflagged saturating ownership additions in the literal
+and test-retention `charge` helpers. The applied repairs use exact
+`WorkSaturation::charge` admission and direct helper controls for optional finite
+boundaries, exact maximum/overflow, sticky saturation, finite refusal after
+saturation and unchanged work/edits/HEAD/root on refusal. Both direct helper
+regressions passed after independent static review and application. Prior
+46-dimension counter API controls did not exercise these callers and do not prove
+all accumulator callers exact.
+
+Request 235 applied the three Rust corrections under the canonical lease;
+application receipt SHA-256
+`f35a1517fa9ea8c53811c9bb6222de152ccb280a680a40c6227b0e04e21226bd`.
+Focused owner 254 joined through 257 with actual exit 0. From
+2026-10-30T09:24:05.902Z to 09:25:46.368Z, all seven operations passed: formatting,
+two direct charge tests, 16 literal-edit tests, one existing retention control,
+one malformed-input control, formatting check and strict all-target/all-feature
+release workspace Clippy. The four test selections contain 20 nonoverlapping
+passes, zero failed/ignored/measured. Their execution times were 0.01s, 0.82s,
+0.30s and 49.35s; filtered counts were 2,854, 2,840, 2,855 and 2,855. The
+8,609-byte final focused receipt has SHA-256
+`3fff28de686971dda8212a20f5a0458d51de1a2ac7d37a5e9fdd8024c2cbeedb`.
+Initial/final source inventory matched: 2,194 files / 150,435,825 bytes, SHA-256
+`1aed7e766c19e6e36558d0853964c1878354179a63efb411e09e0f8919dc25de`, with unchanged
+public HEAD. These source bytes precede this documentation update and final freeze.
+The first-tree native identities remain separate from these focused repair results.
+
+Pending: finish source/documentation and affected maintained-output checks, then
+freeze/bootstrap the repaired tree. Run
+literal selfhost verification, both named complete compiler controls and both
+native fixed points, then all 29 fresh full gates, release target, audit and
+normal integration without source drift. The
+[Profile-7 decision](20261030-artifact-profile7.md) holds the detailed scope and
+local-model inventory. Individual first-run reproduction results and prior focused
+success grant no repaired-tree acceptance, Tier 2, bounded-RSS or phase-reclamation
+claim.
+
+Canonical unit/packed-codec limits, manifest/cache/query inventory, kernel object
+and storage envelopes, overflow map values and recursive lifecycle work remain
+pending; these are not repaired merely by wider private transport. The next unit
+cut must also cover the outer 4 MiB CompilerUnit and 64 KiB CompilationManifest
+storage-domain allowances and nested recursive allocation/decode/drop obligations.
 
 ## Bootstrap and runtime correction evidence
 
