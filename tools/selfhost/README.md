@@ -2,7 +2,7 @@
 
 The target is semantic self-hosting. The maintained project provides a normalized
 backend compiler and a restricted raw-source scalar compiler. The backend validates
-LKJCI1 mode 0/profile 4 for standalone Linux x86_64 ELF and
+LKJCI1 mode 0/profile 6 for standalone Linux x86_64 ELF and
 mode 1/profile 5 for current `.lkja` artifacts. Artifact mode has no default
 aggregate input-byte quota. Its unit map expands through canonical radix pages,
 with no 700-unit guard; per-page, per-unit, offset and value bounds remain explicit.
@@ -45,7 +45,7 @@ admission or an E3 custody certificate.
 
 The `compile-source-elf` target accepts only `LKJSRQ01` profile-1 requests:
 a 32-byte header carrying the caller's typed TargetId, followed by the exact
-complete `LKJSG001` carrier. Raw-only compilation input rejects with 12.
+complete `LKJSG002` carrier. Raw-only compilation input rejects with 12.
 `source-scalar-profile`, `source-scalar-infer` and `source-scalar` compose the
 existing E1 checks with whole-inventory typing for pure monomorphic functions
 over unrestricted Unit, Bool and I64, including the eight exact scalar intrinsics.
@@ -60,13 +60,14 @@ selectors return 19. The E2 inspection entries continue to consume raw carriers.
 `source-scalar-plan`, `source-scalar-cursor`, `source-scalar-state`,
 `source-scalar-trace`, `source-scalar-emit` and `source-scalar-pack` derive
 layout, instructions and flow certificates inside lkjscript. `source-elf` passes
-that internally generated mode-0/profile-4 input to the existing ELF backend.
+that internally generated mode-0/profile-6 input to the existing ELF backend.
 Rust may bootstrap the compiler executable and serialize the caller's TargetId
 beside the unchanged carrier. It does not map the selector to an entry index,
 pre-filter source owners, lower targets or supply semantic certificates. Generated
-mode-0 input retains its 8 MiB bound. The carrier length, proof allowance and
-object constraints define its supported domain, without a separate aggregate byte
-quota. Calls use ordinary Call/Return; this scalar path establishes no owned-value
+mode-0 input uses checked wide counts, offsets and extents without an 8 MiB quota.
+An absent proof policy is unmetered; an explicit finite u64 allowance is exact,
+including zero and the largest value. Carrier extents and remaining canonical
+object constraints define the supported representation. Calls use ordinary Call/Return; this scalar path establishes no owned-value
 cleanup contract.
 See the [scalar contract](../../docs/spec/selfhosting-source-input.md#scalar-source-admission-and-elf-lowering)
 for exact limits and remaining obligations. The
@@ -77,12 +78,17 @@ canonical artifact parity and native reclamation remain required.
 
 `project/` owns accepted meaning. The `.lkjc` modules in this directory are
 maintained authoring proposals. Changes pass ordinary graph admission before publication.
-Tests reconstruct the complete compiler with bounded public transactions: first
-typed interfaces one module at a time, then bounded groups of function bodies.
-They also replay final definitions in bounded groups on a private copy of the
-accepted graph and compare every canonical compilation unit's tables and payload,
-plus the native backend closure. Publication identities may change during body
-reconstruction.
+Tests reconstruct the complete compiler through incremental public transactions:
+first typed interfaces one module at a time, then independently validated groups
+of function bodies. Replaying final definitions submits one complete public transaction
+on a private copy of the accepted graph and compares every canonical compilation
+unit's tables and payload, plus the complete native backend input. Both semantic
+fixture paths use ordinary unmetered memory repositories (`MemProjectStore::new(None)`)
+and canonical publication admission. Publication identities may change during body
+reconstruction. Interim nested-record results use an explicit heap worklist; independent
+wide-address probes select their entry within the fixture module.
+The deterministic mutation fixture independently reconstructs its baseline and mutant through
+the incremental path; this is separate from the complete replay equality check.
 The Rust test helper exports admitted input programs; the VM, disjoint reference
 interpreter and standalone native ELF execute the same lkjscript compiler. Tests validate the
 generated ELF and execute it in clean child environments. Emitted artifacts pass
@@ -102,7 +108,7 @@ maintained source. Build the native binary filter with
 it reads one LKJCI1 input from stdin and emits complete ELF or `.lkja` bytes on stdout, with
 diagnostics on stderr. Select `--target compile-source-elf` to build the source
 scalar filter instead; its stdin is `LKJSRQ01` profile 1 containing the selected
-TargetId and complete `LKJSG001`, and its output is ELF. Evidence binds the
+TargetId and complete `LKJSG002`, and its output is ELF. Evidence binds the
 complete request, carrier, target, compiler executable, profiles and context.
 An external launcher owns atomic output publication.
 Milestone D requires both native backend closure and `.lkja` emission. Full-profile

@@ -131,7 +131,7 @@ fn aggregate_four_accepts_exactly_two_two_entry_footers() {
 }
 
 #[test]
-fn ordinary_footer_reader_retains_its_per_pack_allowance() {
+fn ordinary_footer_reader_has_no_finite_entry_allowance() {
     let pack = two_entry_pack(0);
     let mut reader = Cursor::new(&pack.bytes);
     let read = PackMetadata::read_footer(&mut reader, pack.bytes.len() as u64)
@@ -145,9 +145,12 @@ fn aggregate_admission_preserves_index_authentication() {
     let index_start = HEADER_BYTES + pack.metadata.payload_bytes as usize;
     pack.bytes[index_start + 1] ^= 1;
     let mut reader = Cursor::new(&pack.bytes);
-    let error =
-        PackMetadata::read_footer_with_entry_allowance(&mut reader, pack.bytes.len() as u64, 4)
-            .expect_err("an admitted count must not bypass index authentication");
+    let error = PackMetadata::read_footer_with_entry_allowance(
+        &mut reader,
+        pack.bytes.len() as u64,
+        Some(4),
+    )
+    .expect_err("an admitted count must not bypass index authentication");
     assert_eq!(error.class, StoreErrorClass::Corrupt);
     assert_eq!(error.code, "pack_index_checksum");
 }
@@ -161,14 +164,70 @@ fn per_pack_count_validation_precedes_aggregate_admission() {
             .try_into()
             .expect("fixture footer offset"),
     ) as usize;
-    let excessive = super::super::contract::MAXIMUM_PACK_ENTRIES as u64 + 1;
+    let excessive = pack.metadata.entries.len() as u64 + 1;
     pack.bytes[footer + 12..footer + 20].copy_from_slice(&excessive.to_be_bytes());
     let index_reads = Rc::new(Cell::new(0));
     let mut reader = IndexReadTripwire::new(&pack, Rc::clone(&index_reads), true);
-    let error =
-        PackMetadata::read_footer_with_entry_allowance(&mut reader, pack.bytes.len() as u64, 0)
-            .expect_err("per-pack bounds must remain independent of the aggregate allowance");
+    let error = PackMetadata::read_footer_with_entry_allowance(
+        &mut reader,
+        pack.bytes.len() as u64,
+        Some(0),
+    )
+    .expect_err("per-pack bounds must remain independent of the aggregate allowance");
     assert_eq!(error.class, StoreErrorClass::Resource);
     assert_eq!(error.code, "pack_index_size");
     assert_eq!(index_reads.get(), 0);
+}
+
+#[test]
+fn optional_footer_entry_policy_is_exact_before_index_allocation() {
+    let pack = two_entry_pack(0);
+    for maximum in [None, Some(0), Some(1), Some(2), Some(usize::MAX)] {
+        let rejected = maximum.is_some_and(|maximum| maximum < 2);
+        let index_reads = Rc::new(Cell::new(0));
+        let mut reader = IndexReadTripwire::new(&pack, Rc::clone(&index_reads), rejected);
+        let result = PackMetadata::read_footer_with_entry_allowance(
+            &mut reader,
+            pack.bytes.len() as u64,
+            maximum,
+        );
+        if rejected {
+            assert_eq!(result.unwrap_err().code, "catalog_entry_count");
+            assert_eq!(index_reads.get(), 0);
+        } else {
+            assert_eq!(result.unwrap().metadata, pack.metadata);
+            assert_eq!(index_reads.get(), 1);
+        }
+    }
+}
+
+#[test]
+fn malformed_footer_framing_rejects_before_index_allocation() {
+    for (offset, code) in [
+        (0, "pack_magic"),
+        (8, "pack_contract"),
+        (10, "pack_contract"),
+    ] {
+        let mut pack = two_entry_pack(0);
+        pack.bytes[offset] ^= 0x80;
+        let index_reads = Rc::new(Cell::new(0));
+        let mut reader = IndexReadTripwire::new(&pack, Rc::clone(&index_reads), true);
+        let error = PackMetadata::read_footer(&mut reader, pack.bytes.len() as u64).unwrap_err();
+        assert_eq!(error.code, code);
+        assert_eq!(index_reads.get(), 0);
+    }
+    for (relative_offset, code) in [
+        (8, "pack_index_contract"),
+        (10, "pack_index_contract"),
+        (20, "pack_payload_length"),
+    ] {
+        let mut pack = two_entry_pack(0);
+        let footer = pack.bytes.len() - TRAILER_BYTES - super::super::pack::FOOTER_BYTES;
+        pack.bytes[footer + relative_offset] ^= 0x80;
+        let index_reads = Rc::new(Cell::new(0));
+        let mut reader = IndexReadTripwire::new(&pack, Rc::clone(&index_reads), true);
+        let error = PackMetadata::read_footer(&mut reader, pack.bytes.len() as u64).unwrap_err();
+        assert_eq!(error.code, code);
+        assert_eq!(index_reads.get(), 0);
+    }
 }

@@ -291,7 +291,9 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             if ty == region {
                 return Err(region_error("result retains its lexical region"));
             }
-            if !seen.insert(ty) { continue; }
+            if !seen.insert(ty) {
+                continue;
+            }
             let object = self.type_object(ty)?;
             let mut children = object.child_types();
             if let Some((declaration, arguments)) = nominal_parts(&object.form) {
@@ -316,7 +318,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         ty: TypeObjectDigest,
         region: TypeObjectDigest,
     ) -> Result<(), Diagnostic> {
-        enum Task { Enter(TypeObjectDigest), Exit(TypeObjectDigest) }
+        enum Task {
+            Enter(TypeObjectDigest),
+            Exit(TypeObjectDigest),
+        }
         let mut pending = Vec::new();
         region_pending(&mut pending, 1)?;
         pending.push(Task::Enter(ty));
@@ -324,11 +329,17 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         let mut complete = BTreeSet::new();
         while let Some(task) = pending.pop() {
             let ty = match task {
-                Task::Exit(ty) => { active.remove(&ty); complete.insert(ty); continue; }
+                Task::Exit(ty) => {
+                    active.remove(&ty);
+                    complete.insert(ty);
+                    continue;
+                }
                 Task::Enter(ty) => ty,
             };
             self.consume_work()?;
-            if complete.contains(&ty) { continue; }
+            if complete.contains(&ty) {
+                continue;
+            }
             if !active.insert(ty) {
                 return Err(region_error("region cell has a cyclic inline layout"));
             }
@@ -341,9 +352,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                     region_pending(&mut pending, fields.len())?;
                     pending.extend(fields.into_iter().rev().map(|field| Task::Enter(field.ty)));
                 }
-                _ => return Err(region_error(
-                    "region cells require fixed ordinary data or same-region relative handles",
-                )),
+                _ => {
+                    return Err(region_error(
+                        "region cells require fixed ordinary data or same-region relative handles",
+                    ));
+                }
             }
         }
         Ok(())
@@ -351,11 +364,13 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
 }
 
 fn region_pending<T>(pending: &mut Vec<T>, additional: usize) -> Result<(), Diagnostic> {
-    pending.try_reserve(additional).map_err(|_| Diagnostic::new(
-        crate::platform::diagnostic::DiagnosticClass::Resource,
-        "kernel_region_storage",
-        "cannot reserve region type traversal storage",
-    ))
+    pending.try_reserve(additional).map_err(|_| {
+        Diagnostic::new(
+            crate::platform::diagnostic::DiagnosticClass::Resource,
+            "kernel_region_storage",
+            "cannot reserve region type traversal storage",
+        )
+    })
 }
 
 fn region_error(message: &str) -> Diagnostic {

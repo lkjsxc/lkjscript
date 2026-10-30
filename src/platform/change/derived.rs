@@ -1,6 +1,9 @@
 //! Locally derived witness deltas from changed canonical owner records.
 
-use super::{BudgetCounter, BudgetDimension, CanonicalBaseRead, CanonicalDelta, KernelOverlay, WitnessBaseRead, WitnessReadWork, WorkSaturation};
+use super::{
+    BudgetCounter, BudgetDimension, CanonicalBaseRead, CanonicalDelta, KernelOverlay,
+    WitnessBaseRead, WitnessReadWork, WorkSaturation,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ExactOwnerKey, OwnerKey, OwnerRecord, RelationEdge, RelationEndpoint, RelationKind,
@@ -120,7 +123,12 @@ pub(crate) fn derive_local_delta_with_admission<
                 },
                 remaining_relation_edges(maximum_relation_edges, relation_edges_examined)?,
             )?;
-            relation_edges_examined.charge(examined, maximum_relation_edges, "derived relation extraction", "relation_edges")?;
+            relation_edges_examined.charge(
+                examined,
+                maximum_relation_edges,
+                "derived relation extraction",
+                "relation_edges",
+            )?;
             before_relations.extend(relations);
         }
         if let Some((_, record)) = &edit.after {
@@ -152,7 +160,12 @@ pub(crate) fn derive_local_delta_with_admission<
                 },
                 remaining_relation_edges(maximum_relation_edges, relation_edges_examined)?,
             )?;
-            relation_edges_examined.charge(examined, maximum_relation_edges, "derived relation extraction", "relation_edges")?;
+            relation_edges_examined.charge(
+                examined,
+                maximum_relation_edges,
+                "derived relation extraction",
+                "relation_edges",
+            )?;
             after_relations.extend(relations);
         }
     }
@@ -205,8 +218,12 @@ pub(crate) fn derive_local_delta_with_admission<
         maximum_ownership_steps,
     )?;
     let mut saturation = WorkSaturation::default();
-    if ownership_steps.saturated { saturation.mark(BudgetDimension::ImpactOwnershipSteps); }
-    if relation_edges_examined.saturated { saturation.mark(BudgetDimension::RelationEdges); }
+    if ownership_steps.saturated {
+        saturation.mark(BudgetDimension::ImpactOwnershipSteps);
+    }
+    if relation_edges_examined.saturated {
+        saturation.mark(BudgetDimension::RelationEdges);
+    }
     Ok(DerivedDelta {
         namespaces,
         ownership,
@@ -353,7 +370,15 @@ where
         case_parent,
         maximum_edges,
     )
-    .map(|(edges, work)| (edges, BudgetCounter { consumed: work.edges_examined, saturated: work.edges_saturated }))
+    .map(|(edges, work)| {
+        (
+            edges,
+            BudgetCounter {
+                consumed: work.edges_examined,
+                saturated: work.edges_saturated,
+            },
+        )
+    })
     .map_err(|diagnostic| {
         if diagnostic.code == "kernel_relation_edge_budget" {
             derived_error(
@@ -367,12 +392,23 @@ where
     })
 }
 
-fn remaining_relation_edges(maximum: Option<u64>, observed: BudgetCounter) -> Result<Option<u64>, Diagnostic> {
+fn remaining_relation_edges(
+    maximum: Option<u64>,
+    observed: BudgetCounter,
+) -> Result<Option<u64>, Diagnostic> {
     observed.remaining(maximum, "derived relation extraction", "relation_edges")
 }
 
-fn admit_relation_edge(observed: &mut BudgetCounter, maximum: Option<u64>) -> Result<(), Diagnostic> {
-    observed.charge(BudgetCounter::exact(1), maximum, "derived relation work", "relation_edges")
+fn admit_relation_edge(
+    observed: &mut BudgetCounter,
+    maximum: Option<u64>,
+) -> Result<(), Diagnostic> {
+    observed.charge(
+        BudgetCounter::exact(1),
+        maximum,
+        "derived relation work",
+        "relation_edges",
+    )
 }
 
 fn summary_candidates<W: WitnessBaseRead + ?Sized>(
@@ -444,8 +480,12 @@ fn walk_summary_ancestors(
                 "candidate summary ownership path is cyclic",
             ));
         }
-        ownership_steps.charge(BudgetCounter::exact(1), maximum_ownership_steps,
-            "summary ownership traversal", "impact_ownership_steps")?;
+        ownership_steps.charge(
+            BudgetCounter::exact(1),
+            maximum_ownership_steps,
+            "summary ownership traversal",
+            "impact_ownership_steps",
+        )?;
         affected.insert(current);
         let Some(entry) = ownership(current)? else {
             break;

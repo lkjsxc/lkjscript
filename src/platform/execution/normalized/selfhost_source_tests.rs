@@ -60,7 +60,7 @@ fn probes(module: &str) -> &'static (KernelSnapshot, NormalizedProgram) {
     // test entrypoints do not need to share one finite-admission transaction history.
     PROBES[index].get_or_init(|| {
         let changes = proposals::updates(proposal).unwrap();
-        let memory = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+        let memory = crate::platform::MemProjectStore::new(None).unwrap();
         let repository = GraphRepository::create_memory(&memory, &compiler().0, None)
             .unwrap()
             .repository;
@@ -286,11 +286,7 @@ fn emitted_result_bytes(name: &str, bytes: &[u8], code: i64, expected: &[u8]) {
         "self-produced validator {name}: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(
-        output.stdout,
-        expected,
-        "self-produced validator {name}"
-    );
+    assert_eq!(output.stdout, expected, "self-produced validator {name}");
     assert_eq!(
         output.stderr,
         if code == 0 {
@@ -882,7 +878,6 @@ mod parents;
 #[path = "selfhost_source_scalar_tests.rs"]
 mod scalar;
 
-
 #[test]
 fn selfhost_source_proof_policy_preserves_zero_maximum_and_saturated_observation() {
     let maximum = i64::MAX as u64;
@@ -893,8 +888,22 @@ fn selfhost_source_proof_policy_preserves_zero_maximum_and_saturated_observation
         (Some(17), vec![8, 9], 0, 0, 17, false),
         (Some(17), vec![8, 10], 6, 9, 8, false),
         (Some(1_u64 << 32), vec![1], 0, u64::from(u32::MAX), 1, false),
-        (Some(u64::MAX), vec![maximum, maximum, 1], 0, 0, u64::MAX, false),
-        (Some(u64::MAX), vec![maximum, maximum, 1, 1], 6, 0, u64::MAX, false),
+        (
+            Some(u64::MAX),
+            vec![maximum, maximum, 1],
+            0,
+            0,
+            u64::MAX,
+            false,
+        ),
+        (
+            Some(u64::MAX),
+            vec![maximum, maximum, 1, 1],
+            6,
+            0,
+            u64::MAX,
+            false,
+        ),
         (None, vec![maximum, maximum, 1, 1], 0, 0, u64::MAX, true),
     ] {
         let mut bytes = u32::from(allowance.is_some()).to_le_bytes().to_vec();

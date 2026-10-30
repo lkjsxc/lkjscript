@@ -20,8 +20,8 @@ reject without aliases.
 `--generate-docs DIR` and `--verify-generated DIR` are the sole generated-document owner.
 
 The public operation set is closed: `capabilities`, `new`, top-level operational `data`, native
-installation `runtime`, `status`,
-`inspect`, `query`, `change`, normalized built-in `package`, `check`, `build`, `run`, and
+installation `runtime`, `status`, `gc`,
+`inspect`, `query`, `change`, `tx`, normalized built-in `package`, `check`, `build`, `run`, and
 artifact-runtime `serve` and `worker`.
 An unknown command or option returns `cli_usage`. There is no universal namespace, compatibility
 alias, marker-selected alternate dispatcher, or fallback parser.
@@ -32,16 +32,31 @@ stable predecessor-authority diagnostic before cache, output, or mutation work.
 
 ## Finite responses and errors
 
-Every finite operation emits deterministic bounded compact line records. A classified finite
-outcome keeps stderr empty. Capability success begins with its product and digest records; other
-success begins with `result status=success|accepted|... command=...`. Failure begins with
+Finite compact operations emit deterministic line records. Symbolic `tx` success uses its
+complete JSON-line result described in [reviewed concurrent changes](concurrent-changes.md).
+Successful `gc` also returns one complete JSON object followed by a newline.
+A classified finite outcome keeps stderr empty. Capability success begins with its product and
+digest records; other compact success begins with `result status=success|accepted|... command=...`.
+Failure begins with
 `result status=failure` and includes stable diagnostic class, code, boundary, message, and safe
 identity/location fields.
 
-Compact output has independent byte and record limits. Growing results paginate with a logical
-continuation or write to an explicit bounded file. Output is never silently truncated. Project
-reads name the exact observed revision. Large artifacts, logical plans, and logs are referenced by
-path and digest rather than repeated in stdout.
+Compact output supports independent optional byte and record allowances; both are unmetered
+by default. An operation may select its own explicit finite output policy. Growing results
+paginate with a logical continuation or write to an explicit output file. Output is never
+silently truncated. Project reads name the exact observed revision. Large artifacts, logical
+plans, and logs are referenced by path and digest rather than repeated in stdout.
+
+`gc` performs ordinary repository garbage collection and accepts no operation-specific options.
+Its JSON receipt names the revision, retained/reclaimed object inventory, retained canonical bytes,
+preparation observations and optional disk-compaction receipt. `preparation.saturated` preserves
+inexact contributing store work and local counter overflow; `canonical_bytes_retained_saturated`
+separately marks retained-byte overflow. A true flag makes the associated observation a lower
+bound. These counters and flags are passive telemetry: they do not grant capacity, determine
+allocation sizes or replace checked structural bounds. Saturation does not change admission.
+`preparation.references_visited` counts unique pending object bindings after visited-set
+deduplication. Modeled retained bytes are an accounting estimate, not allocator or RSS measurements.
+Physical pack/catalog collection retains its separate structural and admission requirements.
 
 Exit classes distinguish source/semantic rejection, capability or cancellation, resource
 exhaustion, corruption, infrastructure, stale base, and invalid candidate according to the
@@ -167,15 +182,18 @@ Creation and editing are distinct: `(FAMILY create NAME ...)` allocates an owner
 `(FAMILY edit EXACT_OWNER NAME ...)` requires the exact owner, family, displayed name and parent
 at the bound base. A displayed name never grants editing authority or causes upsert. A module
 edit is a patch; unselected declarations survive. Complete edited contracts must retain every
-existing child unless a precise `delete.owner` accounts for its removal. Positional contract
-children retain order, and additions explicitly create and append. Keyed fields/cases use the
+existing child unless a precise `delete.owner` accounts for its removal. Complete function,
+external and operation edits specify their final value-parameter order. Insertions and reorders
+lower to the explicit typed parameter-order operation, preserving retained parameter identities;
+omission alone never deletes a parameter. Type, effect and requirement parameters retain their
+existing order, and additions explicitly create and append. Keyed fields/cases use the
 existing canonical identity ordering; the language adds no stored source-order dimension.
 Rename, move, deletion and exact dependency changes use the existing precise operations and
 complete-candidate validation. A supplied repository/package binding must agree with the base.
 
 `change draft (--owner OWNER | --module NAME | --declaration MODULE::NAME | --target NAME)...
---output PATH [--bytes N]` reads one accepted revision. At least one and at most 10,000
-selectors are admitted, sharing the complete authored-change count bound. `--owner` retains
+--output PATH [--bytes N]` reads one accepted revision. At least one selector is required;
+the CLI imposes no synthetic selector-count maximum. `--owner` retains
 strict exact local module, declaration or target IDs. Named selectors use the exact local
 module/target namespace, or exactly one module and declaration name separated by `::`.
 Names are case-sensitive and must satisfy ordinary name admission; no fuzzy search, dependency
@@ -195,7 +213,9 @@ bodies, and selected targets include their routes. References outside the select
 exact typed locators. Canonical reads use the maintained aggregate definition admission, share
 cancellation, and charge expanded types and output growth before allocation. Unsupported or
 unrepresentable content is an error; the complete result must pass native input admission before
-it can be exposed. The byte maximum is positive and at most the complete change-input maximum.
+it can be exposed. Omitted `--bytes` supplies no output-byte allowance. An explicit value is a
+nonnegative host-addressable byte count, including zero; it does not override the independent
+canonical definition-read and representation requirements.
 Output is atomically created at an absent destination outside accepted project storage; existing
 files are not overwritten. No draft operation changes accepted meaning.
 
@@ -341,7 +361,7 @@ Normalized query supports exactly:
 
 ```text
 query owners [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN]
-query find CLASS NAME [--parent OWNER]
+query find CLASS NAME [--parent OWNER] [--bytes N]
 query relations OWNER|package --direction incoming|outgoing \
   [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN]
 query context OWNER --direction incoming|outgoing|both --depth N \
@@ -353,25 +373,45 @@ repository view. Stateless `qcont_` continuations bind repository, package, exac
 operation, normalized selector, order, and exclusive logical resume key. They do not persist a
 cursor or session. Malformed, oversized, foreign, selector-mismatched, or stale tokens reject.
 
-Context requires one live local owner, an explicit direction, and a canonical depth from 1 through
-8. The root has depth zero. Breadth-first traversal expands only local owners whose minimum depth is
-below the requested maximum. It selects every unique canonical incoming, outgoing, or both-direction
-relation encountered during that expansion. Package and foreign-package endpoints remain relation
+Paginated operations default to 50 result items per page. This is a resumable page size, not a
+ceiling on the complete result inventory. `--limit N` selects the exact canonical u64 item
+allowance. Exact `find` retains its single-result semantics and does not accept pagination options.
+For every query operation, omitted `--bytes` means `None`: output has no synthetic default byte
+quota. `--bytes N` selects `Some(N)` for an exact canonical host-addressable byte count, including
+zero and `usize::MAX`; neither value means unbounded. These policies do not change the pinned
+logical query or its continuation identity.
+
+Finite output fitting reserves only actual invariant header/schema bytes before the range read.
+It measures the actual candidate page, including its summary, work records and any continuation,
+before deciding whether a suffix must be withheld. A complete terminal page is considered before
+a shorter nonterminal prefix, because the latter needs a continuation record. Fitting never
+repeats the repository read or discards its observed work. A withheld suffix resumes after the
+last emitted logical key; an untrimmed page retains the original scan cursor, including progress
+through filtered nonmatches. If the actual envelope and first result cannot fit, the query reports
+a resource failure. Success reports the exact rendered byte count and never silently truncates.
+
+Context requires one live local owner, an explicit direction, and a canonical u64 depth from zero
+through `u64::MAX`. The root has depth zero. Breadth-first traversal expands only local owners
+whose minimum depth is below the requested maximum. It selects every unique canonical incoming,
+outgoing, or both-direction relation encountered during that expansion. Package and foreign-package endpoints remain relation
 output boundaries: they receive no local owner record and are never expanded. Cycles, self-edges,
 diamonds, and equal-length paths neither duplicate owners nor change minimum distances.
 
-A complete context request admits at most 4,096 unique local owners, 16,384 unique selected
-relations, and 32,768 visited relation witnesses. Canonical record decoding has the same 4,096-owner
-bound. The executable derives and advertises the separate map and object-store admissions from
-those logical maxima and the current bounded persistent-map/object encodings. It constructs the
-complete admitted neighborhood before rendering a successful page. Exceeding any logical or
-physical dimension is an atomic resource failure, never a partial neighborhood.
+A complete context request has no synthetic owner, relation, witness-visit or canonical-read
+quota. Its map and object-store work admissions are unmetered. An explicit heap frontier and
+visited-owner deduplication terminate over the finite accepted graph, independently of a work
+counter. The executable constructs the complete neighborhood before rendering a successful page;
+page item and byte allowances govern output, not neighborhood completeness. Checked arithmetic,
+allocation failure, cancellation, and the remaining canonical object/representation requirements
+still apply. A failure exposes no partial neighborhood as success.
 
 Context output first emits existing `owner` records with required `depth`, ordered by
 `(depth, canonical owner key)`, then existing `relation` records in canonical forward-edge order.
-Every page repeats exact total owner, relation, and expanded-owner counts plus separate map, store,
-decode, witness-visit, selected-result, and rendered-byte work. The item limit counts emitted owner
-and relation records. Byte and item page limits may change on resumption.
+Every page repeats total owner, relation, and expanded-owner observations plus separate map, store,
+decode, witness-visit, selected-result, and rendered-byte work. Passive counters saturate with
+an explicit `work saturated=true` flag; a saturated observation is a lower bound and never an
+admission allowance or a traversal bound. The item limit counts emitted owner and relation
+records. Byte and item page limits may change on resumption.
 
 A context continuation additionally binds root, direction, depth, the owner/relation section, and
 its exclusive canonical key. Every page recomputes the same complete neighborhood from the pinned
@@ -483,6 +523,30 @@ edges, or structural expression bodies. Request-local labels are notation only; 
 intent owns stable allocation and request commitment.
 
 ### Evolving callable inputs
+
+`set.parameter-order function=DECLARATION parameters="OWNER_OR_SYMBOL ..."` and
+`set.parameter-order operation=OPERATION parameters="OWNER_OR_SYMBOL ..."` select a complete
+final value-parameter order. Exactly one parent selector is required. The declaration form
+covers pure/task functions and external declarations. Each member may name an exact value-parameter
+identity, a typed request alias, or a newly added parameter symbol. An empty `parameters=""`
+list asserts an empty final inventory.
+
+Typed `SetParameterOrder` runs after explicit deletions and requires a bijection of the selected
+parent's surviving candidate parameters. Missing, duplicate, foreign, deleted and wrong-kind
+members reject, as do multiple orders for the same resolved parent. The operation changes only
+the parent's ordered parameter vector: it creates, reparents and retires no child, and retained
+parameter records keep their identities. Deleting a parameter still requires `delete.owner`.
+Complete native callable edits and symbolic upserts generate this operation only when additions
+and explicit deletions alone do not yield the displayed value-parameter order. Unchanged,
+append-only and deletion-only inventories retain their existing normalized operations.
+
+Symbolic transactions can explicitly delete a value parameter with
+`(delete parameter MODULE::CALLABLE::PARAMETER (policy reject|owned-closure))`, or with
+`MODULE::INTERFACE::OPERATION::PARAMETER` for an interface operation. The path resolves in the
+bound accepted base and uses the ordinary deletion engine. The complete edited signature must
+retain every surviving child. Parameter ordering, explicit removals, additions and affected caller
+repairs pass complete-candidate validation and publish atomically; omission grants no deletion.
+The canonical authored encoding commits the parent and ordered selector list under tag 106.
 
 `set.parameter-type parameter=OWNER type=TYPE` changes one existing callable input through the
 ordinary reviewed typed change. `parameter` accepts an exact local `param_...` owner or a typed
@@ -653,20 +717,22 @@ an epoch or checksum is not permission.
 Review tokens remain bound to their executable's capabilities and verifier, so a changed review context
 requires a new plan.
 
-Complete input remains bounded at 4 MiB. Outer flat-record bounds remain in force. Structural
-token admission is 2,560,000 across all blocks, derived from the existing 10,000-record by 256-field
-format dimensions. Each parenthesis and atom costs one token. Syntax admission is 1,000,000 nodes
-across blocks, counting list wrappers and atoms. Resulting expression/binder/public identities keep
-the existing 100,000-identity authored default. Complete expanded type/effect input, cache and copy work
-is separately bounded at 1,000,000 nodes. The public request's impact ownership-step default is
-2,000,000 (hard ceiling 10,000,000). A 1,024-deep expression chain exhausted the former 1,000,000
-default between derivation and impact planning; the revised default admits that same useful
-boundary. It changes the default review budget commitment, not canonical meaning or identities.
-Change processing uses a joined worker with a 64 MiB stack for the already bounded recursive
-semantic owners; framing, mixed-depth preflight and symbol collection are iterative. This keeps
-the declared depth usable in debug and production builds. Checked charges precede growth. Physical line count is
-not structural node admission, and budgets do not reset for each block. The authored identity
-allowance remains unchanged.
+Compact input, record inventories, structural syntax inventories, generated private identities,
+expanded type/effect accounting and logical-plan output have no synthetic default quota.
+All 46 authored change dimensions default to an absent allowance. A caller can select an exact
+finite allowance with `change.policy name=DIMENSION limit=N`, or explicitly restore the absent
+allowance with `limit=unbounded`; symbolic transactions use `(policy DIMENSION N|unbounded)`.
+Zero permits no charged work. The largest u64 remains finite. These policy states survive request,
+logical-plan and receipt encoding without clamping or sentinel substitution.
+
+Finite admission precedes its owned work or allocation. Work observations saturate independently
+and mark their loss of exactness; they neither grant finite capacity nor reject an unmetered request.
+Input cursors, explicit syntax stacks and checked size arithmetic establish framing progress.
+Canonical expression/type depth and per-object representation bounds remain separate pending
+lifecycle cuts; removing an outer input quota does not remove those inner boundaries. Change
+processing still uses a joined worker with a 64 MiB host stack for the remaining recursive semantic
+owners. The [capacity ledger](../decisions/20261025-capacity-unbounding.md) records those outstanding
+worklist, object-envelope and map-overflow changes.
 
 Combined normalized expression depth, including flat ancestors around block roots, is admitted
 before recursive construction; the root has depth one and syntax wrapper lists add no semantic
@@ -895,6 +961,8 @@ package builtin query owners [--kind KIND] [--name NAME] [--parent OWNER] \
 package builtin inspect owner KIND ID
 package builtin export --kind transport|artifact --output PATH
 package current export --kind transport --output PATH
+package current republish --kind transport --transport DIGEST --input-file PATH \
+  --expected-head SHA256
 package dependency stage --transport DIGEST --input-file PATH
 package dependency inspect [owner KIND ID] --package-revision REVISION
 package dependency query owners --package-revision REVISION \
@@ -923,6 +991,16 @@ bindings. The logical review contains ordered `package-before` and `package-afte
 binding package, semantic revision, logical revision, and interface. Its bounded response summarizes
 added/removed/changed members and interface changes; the plan commitment binds the complete file.
 Apply rechecks the exact union, source availability, and validation contract under the publication lock.
+
+Current republication requires an explicit project and the SHA-256 of its complete accepted
+HEAD. It independently admits a code-complete exported transport, authenticates its exact
+RevisionCore and semantic-root binding, and starts one current-format acceptance and retry
+history under the repository lock. Owner, type, retirement, blob, dependency, repository and
+package identities and the complete semantic-state digest are preserved. The atomic operation
+reports both revision/HEAD identities and the input container hash. Old retry bases and a repeat
+using the old HEAD hash reject as stale. The operation never decodes an older receipt format;
+[the cutover decision](../decisions/20261025-policy-publication-cutover.md) defines its authority
+and failure boundary. Ordinary source changes remain separate public authoring transactions.
 
 Dependency inspection requires the exact logical package revision, including for staged closure
 members. It uses the same public-interface projection, filters, budgets, ordering, and continuation
@@ -1173,11 +1251,29 @@ Omitted execution policy selects the named trusted foreground profile: no cumula
 allocation, collection-work or invocation capability-call quota. Omitted runtime policy supplies
 no invocation deadline, while cancellation and bounded cleanup grace remain. Supplied complete
 numeric fields retain their explicit limits; omitted optional cumulative fields impose no
-quota. Ordinary project differential execution and source batch rows without an execution
-override also have no default cumulative quotas. Structural call/stack, single-value/container,
-preparation/codec and adapter limits and canonical per-grant quotas remain binding.
-Saturated observation counters are lower bounds; real storage arithmetic and explicit quota
-overflow still reject. Resident descriptors require execution and runtime objects;
+quota. The cumulative fields `instruction_fuel`, `maximum_allocated_bytes`,
+`maximum_collection_items` and `maximum_capability_calls` accept every nonnegative value,
+including zero and `u64::MAX`, as an exact finite allowance. Zero permits operations that
+consume nothing in that dimension and rejects the first positive charge with the dimension
+resource diagnostic; it is neither unlimited nor an invalid execution policy. Explicit null
+means unbounded. Ordinary project differential execution and source batch rows without an
+execution override also have no default cumulative quotas. `maximum_call_depth` and
+`maximum_value_stack` remain required positive structural limits in this slice. Single-value/
+container, preparation/codec and adapter limits and canonical per-grant quotas remain binding.
+The four cumulative observations each carry an independent saturation flag. Production JSON
+uses `instructions_saturated`, `allocated_bytes_saturated`, `collection_items_saturated`
+and `capability_calls_saturated`; the canonical reference uses `expressions_saturated`
+for its instruction-independent expression work and the same other three flag names.
+Compact project-run fields expose `production-instructions-saturated` and
+`reference-expressions-saturated`, plus production/reference `allocated-bytes-saturated`,
+`collection-items-saturated` and `capability-calls-saturated` fields. Compact check
+totals expose the production-instruction and reference-expression saturation flags.
+The `counter-semantics` value is
+`per-counter-saturation-flag-true-means-lower-bound`: a true flag means the associated
+count is a lower bound, while an exactly reached `u64::MAX` remains unsaturated.
+Saturation never grants finite capacity or supplies allocation sizes or index proofs.
+Real storage arithmetic and explicit quota overflow still reject through checked admission.
+Resident descriptors require execution and runtime objects;
 instruction_fuel and both structural limits remain required inside execution. Each cumulative
 quota may explicitly be null, and fresh HTTP recipes select four nulls. No old numeric limits
 are inserted for omitted optional fields. The named trusted foreground profile is reported only

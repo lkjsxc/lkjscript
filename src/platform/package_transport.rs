@@ -807,7 +807,7 @@ fn read_revision<S: ImmutableObjectStore + ?Sized>(
 ) -> Result<PackageRevision, Diagnostic> {
     let key = ObjectKey::from_digest(ObjectDomain::PackageRevision, digest.bytes());
     let bytes = store
-        .read(key, MAXIMUM_PACKAGE_REVISION_BYTES, work)
+        .read(key, Some(MAXIMUM_PACKAGE_REVISION_BYTES), work)
         .map_err(|error| source_revision_diagnostic(store_diagnostic(error), digest))?
         .ok_or_else(|| {
             source_revision_diagnostic(
@@ -840,7 +840,7 @@ fn read_transport<S: ImmutableObjectStore + ?Sized>(
 ) -> Result<PackageTransport, Diagnostic> {
     let key = ObjectKey::from_digest(ObjectDomain::PackageTransport, digest.bytes());
     let bytes = store
-        .read(key, MAXIMUM_PACKAGE_TRANSPORT_BYTES, work)
+        .read(key, Some(MAXIMUM_PACKAGE_TRANSPORT_BYTES), work)
         .map_err(store_diagnostic)?
         .ok_or_else(|| {
             package_error(
@@ -2161,7 +2161,7 @@ mod tests {
                         ObjectDomain::PackageTransport,
                         leaf.transport_digest.bytes(),
                     ),
-                    MAXIMUM_PACKAGE_TRANSPORT_BYTES,
+                    Some(MAXIMUM_PACKAGE_TRANSPORT_BYTES),
                     &mut StoreWork::default(),
                 )
                 .unwrap()

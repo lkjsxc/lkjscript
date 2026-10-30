@@ -470,7 +470,8 @@ impl<Domain: Copy + Eq> Arena<Domain> {
 fn slot_capacity<Domain>(length: usize) -> Result<usize, ExecutionError> {
     let required = length.checked_add(1).ok_or_else(capacity_error)?;
     std::alloc::Layout::array::<Slot<Domain>>(required).map_err(|_| capacity_error())?;
-    Ok(required.checked_next_power_of_two()
+    Ok(required
+        .checked_next_power_of_two()
         .filter(|capacity| std::alloc::Layout::array::<Slot<Domain>>(*capacity).is_ok())
         .unwrap_or(required))
 }

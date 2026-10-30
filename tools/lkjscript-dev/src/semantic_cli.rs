@@ -1,8 +1,6 @@
 //! Linked public operations produce return-value evidence; only real children produce process evidence.
 use crate::{error::DevError, evidence, process};
-use lkjscript::platform::contract::{
-    diagnostic_class_name, exit_status_for,
-};
+use lkjscript::platform::contract::{diagnostic_class_name, exit_status_for};
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::{self, Diagnostic};
 use serde::{Deserialize, Serialize};
@@ -457,7 +455,7 @@ fn publish_call(
 
 fn failure_bytes(command: &str, diagnostics: &[Diagnostic]) -> Result<Vec<u8>, DevError> {
     let mut output = CompactResponseWriter::new(CompactResponseLimits::default())
-    .map_err(|error| DevError::corrupt(error.to_string()))?;
+        .map_err(|error| DevError::corrupt(error.to_string()))?;
     output
         .append_record("result", &[("status", "failure"), ("command", command)])
         .map_err(|error| DevError::corrupt(error.to_string()))?;
@@ -518,8 +516,14 @@ mod tests {
         let response = root.path().join("probe.stdout");
         let diagnostic = root.path().join("probe.stderr");
         let observed = observe_json(
-            "contributor.probe", &[], &response, &diagnostic, root.path(), || Ok(value),
-        ).unwrap();
+            "contributor.probe",
+            &[],
+            &response,
+            &diagnostic,
+            root.path(),
+            || Ok(value),
+        )
+        .unwrap();
         observed.require_outcome(true).unwrap();
         assert_eq!(std::fs::read(&response).unwrap(), expected);
         assert!(std::fs::read(&diagnostic).unwrap().is_empty());
@@ -527,16 +531,29 @@ mod tests {
 
     #[test]
     fn failure_projection_keeps_every_diagnostic_beyond_former_record_defaults() {
-        let diagnostics = (0..10_001).map(|index| Diagnostic::new(
-            platform::DiagnosticClass::Semantic, "complete_diagnostic", index.to_string(),
-        )).collect::<Vec<_>>();
+        let diagnostics = (0..10_001)
+            .map(|index| {
+                Diagnostic::new(
+                    platform::DiagnosticClass::Semantic,
+                    "complete_diagnostic",
+                    index.to_string(),
+                )
+            })
+            .collect::<Vec<_>>();
         let bytes = failure_bytes("change", &diagnostics).unwrap();
         let records = parse_records("response", &bytes).unwrap();
         assert_eq!(records.len(), diagnostics.len() + 1);
         for (record, diagnostic) in records[1..].iter().zip(&diagnostics) {
             assert_eq!(record.operation, "diagnostic");
-            assert_eq!(record.fields.iter().find(|field| field.name == "message").unwrap().value,
-                diagnostic.message);
+            assert_eq!(
+                record
+                    .fields
+                    .iter()
+                    .find(|field| field.name == "message")
+                    .unwrap()
+                    .value,
+                diagnostic.message
+            );
         }
     }
 
@@ -592,7 +609,7 @@ mod tests {
     #[test]
     fn memory_authority_rejects_a_filesystem_project_selector() {
         let root = tempfile::tempdir().unwrap();
-        let project = platform::MemProjectStore::new(1024 * 1024).unwrap();
+        let project = platform::MemProjectStore::new(None).unwrap();
         let forbidden = root.path().join("unselected-project");
         let arguments = vec![
             "--project".into(),
@@ -626,7 +643,7 @@ mod tests {
     #[test]
     fn reviewed_current_request_retains_stale_base_protocol_seven() {
         let root = tempfile::tempdir().unwrap();
-        let project = platform::MemProjectStore::new(16 * 1024 * 1024).unwrap();
+        let project = platform::MemProjectStore::new(None).unwrap();
         platform::create_memory_project(&project, "current-review", "minimal").unwrap();
         let sibling = project.fork().unwrap();
         let mut index = 0;

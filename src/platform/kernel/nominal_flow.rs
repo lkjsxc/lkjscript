@@ -35,7 +35,14 @@ impl Flow {
     }
 
     fn reserve_product<T>(&mut self, count: usize, multiple: usize) -> Result<(), Diagnostic> {
-        self.bytes.charge_factors(&[count, std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>(), multiple], None);
+        self.bytes.charge_factors(
+            &[
+                count,
+                std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>(),
+                multiple,
+            ],
+            None,
+        );
         Ok(())
     }
 

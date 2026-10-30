@@ -1,4 +1,4 @@
-//! Test authoring only: split maintained proposals into bounded public changes.
+//! Test authoring only: reconstruct and replay maintained public proposals.
 //! This rewrites proposal syntax, never repository objects or compiler output.
 pub const SOURCE: &str = concat!(
     include_str!("../../tools/selfhost/input.lkjc"),
@@ -234,6 +234,57 @@ fn parse(source: &str) -> Vec<Form> {
     }
     forms
 }
+// Compose structural records from the existing unrestricted fixture leaves.
+// The explicit stack follows finite type syntax without a recursive depth guard.
+fn record_stub(ty: &Form) -> Result<String, String> {
+    enum Part<'a> {
+        Value(&'a Form),
+        Field(&'a Form),
+        Close,
+    }
+    let mut pending = vec![Part::Value(ty)];
+    let mut result = String::new();
+    while let Some(part) = pending.pop() {
+        match part {
+            Part::Value(Form::Atom(name)) => result.push_str(match name.as_str() {
+                "Bytes" => "(call ci::text-bytes (text \"\"))",
+                "I64" => "(i64 0)",
+                "Bool" => "(bool false)",
+                other => return Err(format!("unsupported bootstrap record field {other}")),
+            }),
+            Part::Value(ty) if ty.head() == Some("record") => {
+                let Form::List(fields) = ty else {
+                    unreachable!()
+                };
+                result.push_str("(record structural");
+                pending.push(Part::Close);
+                pending.extend(fields[1..].iter().rev().map(Part::Field));
+            }
+            Part::Value(other) => {
+                return Err(format!(
+                    "unsupported bootstrap record field {}",
+                    other.text()
+                ));
+            }
+            Part::Field(field) => {
+                let Form::List(field) = field else {
+                    return Err("invalid bootstrap record field".to_owned());
+                };
+                if field.len() != 2 {
+                    return Err("invalid bootstrap record field".to_owned());
+                }
+                result.push_str(" (field ");
+                result.push_str(&field[0].text());
+                result.push(' ');
+                pending.push(Part::Close);
+                pending.push(Part::Value(&field[1]));
+            }
+            Part::Close => result.push(')'),
+        }
+    }
+    Ok(result)
+}
+
 fn stub(function: &mut [Form]) -> Result<(), String> {
     let result = function
         .iter()
@@ -242,55 +293,30 @@ fn stub(function: &mut [Form]) -> Result<(), String> {
     let Form::List(result) = result else {
         unreachable!()
     };
-    let body = match result[1].text().as_str() {
-        "I64" => "(i64 0)".to_owned(),
-        "Bool" => "(bool false)".to_owned(),
-        "Unit" => "(unit)".to_owned(),
-        "Text" => "(text \"\")".to_owned(),
-        "Bytes" => "(call ci::text-bytes (text \"\"))".to_owned(),
-        "(list I64)" => "(list I64)".to_owned(),
-        "ByteBuffer" => {
-            let owner = function.iter().find_map(|f| {
-                let Form::List(p) = f else {
-                    return None;
-                };
-                (f.head() == Some("parameter")
-                    && p.iter().any(|x| x.text() == "(type ByteBuffer)")
-                    && p.iter().any(|x| x.text() == "(use consume)"))
-                .then(|| p[2].text())
-            });
-            owner.map_or_else(|| "(call ci::empty)".to_owned(), |p| format!("(local {p})"))
-        }
-        "(record (diagnostic I64) (image Bytes))" => concat!(
-            "(record structural (field diagnostic (i64 0)) ",
-            "(field image (call ci::text-bytes (text \"\"))))"
-        )
-        .to_owned(),
-        _ if result[1].head() == Some("record") => {
-            let Form::List(fields) = &result[1] else {
-                unreachable!()
-            };
-            let fields = fields[1..]
-                .iter()
-                .map(|field| {
-                    let Form::List(field) = field else {
-                        return Err("invalid bootstrap record field".to_owned());
+    let body = if result[1].head() == Some("record") {
+        record_stub(&result[1])?
+    } else {
+        match result[1].text().as_str() {
+            "I64" => "(i64 0)".to_owned(),
+            "Bool" => "(bool false)".to_owned(),
+            "Unit" => "(unit)".to_owned(),
+            "Text" => "(text \"\")".to_owned(),
+            "Bytes" => "(call ci::text-bytes (text \"\"))".to_owned(),
+            "(list I64)" => "(list I64)".to_owned(),
+            "ByteBuffer" => {
+                let owner = function.iter().find_map(|f| {
+                    let Form::List(p) = f else {
+                        return None;
                     };
-                    if field.len() != 2 {
-                        return Err("invalid bootstrap record field".to_owned());
-                    }
-                    let value = match field[1].text().as_str() {
-                        "Bytes" => "(call ci::text-bytes (text \"\"))",
-                        "I64" => "(i64 0)",
-                        "Bool" => "(bool false)",
-                        other => return Err(format!("unsupported bootstrap record field {other}")),
-                    };
-                    Ok(format!("(field {} {value})", field[0].text()))
-                })
-                .collect::<Result<Vec<_>, String>>()?;
-            format!("(record structural {})", fields.join(" "))
+                    (f.head() == Some("parameter")
+                        && p.iter().any(|x| x.text() == "(type ByteBuffer)")
+                        && p.iter().any(|x| x.text() == "(use consume)"))
+                    .then(|| p[2].text())
+                });
+                owner.map_or_else(|| "(call ci::empty)".to_owned(), |p| format!("(local {p})"))
+            }
+            other => return Err(format!("unsupported test bootstrap result {other}")),
         }
-        other => return Err(format!("unsupported test bootstrap result {other}")),
     };
     let original = function
         .iter_mut()
@@ -328,12 +354,13 @@ fn upsert(form: &Form, module: &str) -> Form {
 }
 
 fn proposal_batch_size(module: &str) -> usize {
-    // Four source-owner bodies exceeded the default transaction witness allowance.
+    // Incremental reconstruction retains small independently validated transitions.
+    // These fixture groups do not limit the complete compiler inventory.
     if module == "source-owner" { 2 } else { 4 }
 }
 
 /// Declare typed interfaces one module at a time, then replace small groups of
-/// bodies through tx. Every intermediate graph uses the default request bounds.
+/// bodies through tx. Every intermediate graph passes ordinary typed publication.
 pub fn steps(source: &str) -> Result<(String, Vec<String>), String> {
     let mut units = vec![];
     for form in parse(source) {
@@ -421,15 +448,15 @@ pub fn updates(source: &str) -> Result<Vec<String>, String> {
     Ok(changes)
 }
 
-/// Reapply final definitions to an existing graph in bounded public changes.
+/// Reapply every final definition to an existing graph in one public transaction.
 /// Existing interfaces already resolve forward references; installing temporary
-/// stubs would needlessly invalidate the complete caller closure.
+/// stubs or publishing partial groups is unnecessary for this final-state check.
 #[allow(
     dead_code,
     reason = "shared helper is also compiled by the public CLI test harness"
 )]
 pub fn replay(source: &str) -> Vec<String> {
-    let mut changes = vec![];
+    let mut units_to_replay = vec![];
     for form in parse(source) {
         if form.head() != Some("units") {
             continue;
@@ -442,18 +469,15 @@ pub fn replay(source: &str) -> Vec<String> {
                 unreachable!()
             };
             let name = items[2].text();
-            if unit.head() == Some("module") {
-                for members in items[3..].chunks(proposal_batch_size(&name)) {
-                    let group = Form::List(items[..3].iter().chain(members).cloned().collect());
-                    changes.push(format!(
-                        "(tx (base @head) {})",
-                        upsert(&group, &name).text()
-                    ));
-                }
-            } else {
-                changes.push(format!("(tx (base @head) {})", upsert(unit, &name).text()));
-            }
+            units_to_replay.push(upsert(unit, &name).text());
         }
     }
-    changes
+    if units_to_replay.is_empty() {
+        Vec::new()
+    } else {
+        vec![format!(
+            "(tx (base @head)\n  {}\n)",
+            units_to_replay.join("\n  ")
+        )]
+    }
 }

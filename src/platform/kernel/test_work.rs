@@ -5,13 +5,13 @@ use super::*;
 use crate::platform::diagnostic::Diagnostic;
 use crate::platform::semantic_id::{DeclarationId, ExpressionId};
 
-pub(crate) fn observe<T>(
-    work: &mut usize,
-    run: impl FnOnce(&mut ValidationWork) -> T,
-) -> T {
+pub(crate) fn observe<T>(work: &mut usize, run: impl FnOnce(&mut ValidationWork) -> T) -> T {
     let mut observation = ValidationWork::exact(*work);
     let result = run(&mut observation);
-    assert!(!observation.saturated, "numeric fixture requires an exact work observation");
+    assert!(
+        !observation.saturated,
+        "numeric fixture requires an exact work observation"
+    );
     *work = observation.consumed;
     result
 }
@@ -38,7 +38,8 @@ pub(crate) fn validate_full_checked(
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
 ) -> Result<FullValidationReport, Vec<Diagnostic>> {
     let mut observation = ValidationWork::default();
-    let result = super::validate_full_checked(snapshot, Some(maximum_work), &mut observation, checkpoint);
+    let result =
+        super::validate_full_checked(snapshot, Some(maximum_work), &mut observation, checkpoint);
     assert!(!observation.saturated, "finite validation cannot saturate");
     *consumed = observation.consumed as u64;
     result
@@ -50,7 +51,9 @@ pub(crate) fn validate_expression_roots<R: ExpressionRead>(
     diagnostics: &mut Vec<Diagnostic>,
     work: &mut usize,
 ) {
-    observe(work, |work| super::validate_expression_roots(read, roots, diagnostics, work));
+    observe(work, |work| {
+        super::validate_expression_roots(read, roots, diagnostics, work)
+    });
 }
 
 pub(crate) fn validate_expression_roots_with_limits<R: ExpressionRead>(
@@ -60,7 +63,9 @@ pub(crate) fn validate_expression_roots_with_limits<R: ExpressionRead>(
     work: &mut usize,
     limits: ExpressionValidationLimits,
 ) -> Result<(), ExpressionValidationExhaustion> {
-    observe(work, |work| super::validate_expression_roots_with_limits(read, roots, diagnostics, work, limits))
+    observe(work, |work| {
+        super::validate_expression_roots_with_limits(read, roots, diagnostics, work, limits)
+    })
 }
 
 pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
@@ -70,7 +75,9 @@ pub(crate) fn validate_affine_roots_with_limits<R: ExpressionRead>(
     work: &mut usize,
     limits: ExpressionValidationLimits,
 ) -> Result<(), ExpressionValidationExhaustion> {
-    observe(work, |work| super::validate_affine_roots_with_limits(read, roots, diagnostics, work, limits))
+    observe(work, |work| {
+        super::validate_affine_roots_with_limits(read, roots, diagnostics, work, limits)
+    })
 }
 
 pub(crate) fn validate_affine_meaning(
@@ -80,7 +87,15 @@ pub(crate) fn validate_affine_meaning(
     work: &mut usize,
     maximum_steps: usize,
 ) {
-    observe(work, |work| super::affine::validate_affine_meaning(snapshot, read, diagnostics, work, Some(maximum_steps)));
+    observe(work, |work| {
+        super::affine::validate_affine_meaning(
+            snapshot,
+            read,
+            diagnostics,
+            work,
+            Some(maximum_steps),
+        )
+    });
 }
 
 pub(crate) fn infer_function_expression_type<R: ExpressionRead>(
@@ -91,7 +106,16 @@ pub(crate) fn infer_function_expression_type<R: ExpressionRead>(
     work: &mut usize,
     maximum_steps: usize,
 ) -> Result<TypeObjectDigest, Diagnostic> {
-    observe(work, |work| super::infer_function_expression_type(read, declaration, expression, effect, work, Some(maximum_steps)))
+    observe(work, |work| {
+        super::infer_function_expression_type(
+            read,
+            declaration,
+            expression,
+            effect,
+            work,
+            Some(maximum_steps),
+        )
+    })
 }
 
 pub(crate) fn infer_function_expression_type_object<R: ExpressionRead>(
@@ -102,7 +126,16 @@ pub(crate) fn infer_function_expression_type_object<R: ExpressionRead>(
     work: &mut usize,
     maximum_steps: usize,
 ) -> Result<TypeObject, Diagnostic> {
-    observe(work, |work| super::infer_function_expression_type_object(read, declaration, expression, effect, work, Some(maximum_steps)))
+    observe(work, |work| {
+        super::infer_function_expression_type_object(
+            read,
+            declaration,
+            expression,
+            effect,
+            work,
+            Some(maximum_steps),
+        )
+    })
 }
 
 pub(crate) fn validate_callable_flow<R: ExpressionRead>(
@@ -111,7 +144,9 @@ pub(crate) fn validate_callable_flow<R: ExpressionRead>(
     work: &mut usize,
     maximum_work: usize,
 ) -> Result<callable_flow::CallableFlowWork, Diagnostic> {
-    observe(work, |work| callable_flow::validate_callable_flow(read, roots, work, Some(maximum_work)))
+    observe(work, |work| {
+        callable_flow::validate_callable_flow(read, roots, work, Some(maximum_work))
+    })
 }
 
 pub(crate) fn validate_callable_closure<R: callable_flow::CallableClosureRead + ?Sized>(
@@ -119,7 +154,9 @@ pub(crate) fn validate_callable_closure<R: callable_flow::CallableClosureRead + 
     work: &mut usize,
     maximum_work: Option<usize>,
 ) -> Result<callable_flow::CallableFlowWork, Diagnostic> {
-    observe(work, |work| callable_flow::validate_callable_closure(read, work, maximum_work))
+    observe(work, |work| {
+        callable_flow::validate_callable_closure(read, work, maximum_work)
+    })
 }
 
 pub(crate) fn validate_snapshot_callable_closure(
@@ -128,7 +165,9 @@ pub(crate) fn validate_snapshot_callable_closure(
     work: &mut usize,
     maximum_work: Option<usize>,
 ) -> Result<callable_flow::CallableFlowWork, Diagnostic> {
-    observe(work, |work| callable_flow::validate_snapshot_callable_closure(snapshots, checkpoint, work, maximum_work))
+    observe(work, |work| {
+        callable_flow::validate_snapshot_callable_closure(snapshots, checkpoint, work, maximum_work)
+    })
 }
 
 pub(crate) fn validate_snapshot_callable_closure_eager(
@@ -137,7 +176,14 @@ pub(crate) fn validate_snapshot_callable_closure_eager(
     work: &mut usize,
     maximum_work: Option<usize>,
 ) -> Result<callable_flow::CallableFlowWork, Diagnostic> {
-    observe(work, |work| callable_flow::validate_snapshot_callable_closure_eager(snapshots, checkpoint, work, maximum_work))
+    observe(work, |work| {
+        callable_flow::validate_snapshot_callable_closure_eager(
+            snapshots,
+            checkpoint,
+            work,
+            maximum_work,
+        )
+    })
 }
 
 pub(crate) fn validate_snapshot_callable_closure_with_limits(
@@ -148,5 +194,14 @@ pub(crate) fn validate_snapshot_callable_closure_with_limits(
     maximum_metadata_bytes: usize,
     eager: bool,
 ) -> Result<callable_flow::CallableFlowWork, Diagnostic> {
-    observe(work, |work| callable_flow::validate_snapshot_callable_closure_with_limits(snapshots, checkpoint, work, maximum_work, Some(maximum_metadata_bytes), eager))
+    observe(work, |work| {
+        callable_flow::validate_snapshot_callable_closure_with_limits(
+            snapshots,
+            checkpoint,
+            work,
+            maximum_work,
+            Some(maximum_metadata_bytes),
+            eager,
+        )
+    })
 }

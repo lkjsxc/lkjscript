@@ -16,7 +16,12 @@ impl ValidationWork {
     }
 
     /// Charge a modeled product without making overflow a hidden unbounded quota.
-    pub(crate) fn charge_product(&mut self, count: usize, width: usize, maximum: Option<usize>) -> bool {
+    pub(crate) fn charge_product(
+        &mut self,
+        count: usize,
+        width: usize,
+        maximum: Option<usize>,
+    ) -> bool {
         self.charge_factors(&[count, width], maximum)
     }
 
@@ -24,7 +29,9 @@ impl ValidationWork {
         let amount = if factors.contains(&0) {
             Some(0)
         } else {
-            factors.iter().try_fold(1_usize, |product, factor| product.checked_mul(*factor))
+            factors
+                .iter()
+                .try_fold(1_usize, |product, factor| product.checked_mul(*factor))
         };
         match amount {
             Some(amount) => self.charge(amount, maximum),
@@ -68,6 +75,34 @@ impl ValidationWork {
 #[cfg(test)]
 mod tests {
     use super::ValidationWork;
+
+    #[test]
+    fn factor_products_preserve_zero_exact_and_maximum_policies() {
+        for maximum in [None, Some(0), Some(5), Some(6), Some(usize::MAX)] {
+            let mut work = ValidationWork::default();
+            assert!(work.charge_factors(&[usize::MAX, usize::MAX, 0], maximum));
+            assert_eq!(work, ValidationWork::default());
+            let admitted = maximum.is_none_or(|limit| limit >= 6);
+            assert_eq!(work.charge_factors(&[2, 3], maximum), admitted);
+            assert_eq!(work, ValidationWork::exact(if admitted { 6 } else { 0 }));
+        }
+    }
+
+    #[test]
+    fn factor_overflow_is_passive_only_without_finite_admission() {
+        for maximum in [0, usize::MAX] {
+            let mut work = ValidationWork::default();
+            assert!(!work.charge_product(usize::MAX, 2, Some(maximum)));
+            assert_eq!(work, ValidationWork::default());
+        }
+        let mut work = ValidationWork::default();
+        assert!(work.charge_product(usize::MAX, 2, None));
+        assert_eq!(work.consumed, usize::MAX);
+        assert!(work.saturated);
+        assert!(work.charge_factors(&[usize::MAX, usize::MAX, 0], None));
+        assert!(work.saturated);
+        assert!(!work.charge_factors(&[0], Some(usize::MAX)));
+    }
 
     #[test]
     fn zero_and_exact_finite_admission_precede_consumption() {

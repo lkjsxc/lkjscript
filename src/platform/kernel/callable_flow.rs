@@ -91,7 +91,14 @@ impl<R: ExpressionRead> Flow<'_, R> {
             consumed: self.observation.metadata_bytes,
             saturated: self.observation.metadata_saturated,
         };
-        observed.charge_factors(&[count, std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>(), multiple], None);
+        observed.charge_factors(
+            &[
+                count,
+                std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>(),
+                multiple,
+            ],
+            None,
+        );
         self.observation.metadata_bytes = observed.consumed;
         self.observation.metadata_saturated = observed.saturated;
         Ok(())
@@ -847,7 +854,12 @@ pub(super) mod read_view_tests {
         }
 
         fn admit(&self) -> Result<CallableFlowWork, Diagnostic> {
-            crate::platform::kernel::test_work::validate_callable_flow(self, self.owners.keys().copied(), &mut 0, 100_000)
+            crate::platform::kernel::test_work::validate_callable_flow(
+                self,
+                self.owners.keys().copied(),
+                &mut 0,
+                100_000,
+            )
         }
     }
 
@@ -933,8 +945,13 @@ pub(super) mod read_view_tests {
                 }),
             }),
         );
-        let error = crate::platform::kernel::test_work::validate_callable_flow(&read, read.owners.keys().copied(), &mut 0, 64)
-            .expect_err("unused inline fields remain within work admission");
+        let error = crate::platform::kernel::test_work::validate_callable_flow(
+            &read,
+            read.owners.keys().copied(),
+            &mut 0,
+            64,
+        )
+        .expect_err("unused inline fields remain within work admission");
         assert_eq!(error.class, DiagnosticClass::Resource);
         assert_eq!(error.code, "kernel_callable_flow_work");
     }

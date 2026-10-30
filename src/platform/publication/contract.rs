@@ -29,10 +29,7 @@ pub const IDEMPOTENCY_BINDING_ENVELOPE_DOMAIN: &str = "lkjscript.idempotency-bin
 
 pub const MAXIMUM_REVISION_BYTES: usize = 64 * 1024;
 pub const MAXIMUM_RECEIPT_BYTES: usize = 64 * 1024;
-pub const MAXIMUM_TRANSACTION_BYTES: usize = 4 * 1024 * 1024;
-pub const MAXIMUM_SEMANTIC_DIFF_BYTES: usize = 4 * 1024 * 1024;
 pub const MAXIMUM_HEAD_BYTES: usize = 4 * 1024;
-pub const MAXIMUM_INLINE_HISTORY_EDITS: usize = 100_000;
 pub const MAXIMUM_INTENT_BYTES: usize = 4 * 1024;
 pub const MAXIMUM_IDEMPOTENCY_KEY_BYTES: usize = 128;
 pub const MAXIMUM_IDEMPOTENCY_BINDING_BYTES: usize = 4 * 1024;

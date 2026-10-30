@@ -394,7 +394,10 @@ fn invalid_resident_quota_configuration_rejects_before_artifact_secret_or_listen
         json!([{"name":"must-not-read", "variable":"LKJSCRIPT_ABSENT_RESIDENT_POLICY_SECRET"}]);
     let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     descriptor["listen"] = json!(occupied.local_addr().unwrap().to_string());
-    for (index, field) in QUOTAS.iter().enumerate() {
+    for (index, field) in ["maximum_call_depth", "maximum_value_stack"]
+        .into_iter()
+        .enumerate()
+    {
         let mut invalid = descriptor.clone();
         invalid["execution"][field] = json!(0);
         let path = public.input(&format!("invalid-{index}.json"), &invalid.to_string());
@@ -406,6 +409,21 @@ fn invalid_resident_quota_configuration_rejects_before_artifact_secret_or_listen
         assert!(!result.status.success());
         let output = String::from_utf8(result.stdout).unwrap();
         assert!(output.contains("deployment_execution_limit"), "{output}");
+        assert!(!output.contains("\"event\":\"ready\""));
+        assert!(!public.root.path().join("absent.lkja").exists());
+    }
+    for field in QUOTAS {
+        let mut invalid = descriptor.clone();
+        invalid["execution"][field] = json!(-1);
+        let path = public.input(&format!("negative-{field}.json"), &invalid.to_string());
+        let result = command_at(
+            &public.executable,
+            public.root.path(),
+            &["serve", "--deployment", super::path(&path)],
+        );
+        assert!(!result.status.success());
+        let output = String::from_utf8(result.stdout).unwrap();
+        assert!(output.contains("deployment_json"), "{output}");
         assert!(!output.contains("\"event\":\"ready\""));
         assert!(!public.root.path().join("absent.lkja").exists());
     }
@@ -428,6 +446,111 @@ fn invalid_resident_quota_configuration_rejects_before_artifact_secret_or_listen
                 .unwrap()
                 .contains("deployment_json")
         );
+    }
+}
+
+#[test]
+fn foreground_cumulative_policies_preserve_zero_exact_and_maximum() {
+    let public = Native::template("command");
+    let mut descriptor: Value = serde_json::from_slice(
+        &std::fs::read(public.project.join("command.deployment.json")).unwrap(),
+    )
+    .unwrap();
+    descriptor["artifact"] = json!("exact-policy.lkja");
+    public.cli(
+        &[
+            "build",
+            "--output",
+            path(&public.root.path().join("exact-policy.lkja")),
+        ],
+        true,
+    );
+    descriptor["execution"] = json!({"instruction_fuel":null,"maximum_call_depth":4096,
+        "maximum_value_stack":1000000,"maximum_allocated_bytes":null,
+        "maximum_collection_items":null,"maximum_capability_calls":null});
+    let baseline = public.input("exact-policy-baseline.json", &descriptor.to_string());
+    let records = public.cli(&["run", "--deployment", path(&baseline)], true);
+    let baseline = compact_record(&records, "execution");
+    let measured: Value =
+        serde_json::from_str(compact_field(baseline, "production-observation")).unwrap();
+    assert_eq!(compact_field(baseline, "value"), "\"hello\"");
+    assert_eq!(measured["capability_calls"], 0);
+    assert_eq!(measured["collection_items"], 0);
+    for (policy, counter, diagnostic, reported_limit) in [
+        (
+            "instruction_fuel",
+            "instructions",
+            "normalized_instruction_steps",
+            "instruction-limit",
+        ),
+        (
+            "maximum_allocated_bytes",
+            "allocated_bytes",
+            "normalized_allocation",
+            "allocation-limit",
+        ),
+        (
+            "maximum_collection_items",
+            "collection_items",
+            "normalized_collection_items",
+            "collection-limit",
+        ),
+        (
+            "maximum_capability_calls",
+            "capability_calls",
+            "normalized_capability_calls",
+            "capability-call-limit",
+        ),
+    ] {
+        let exact = measured[counter].as_u64().unwrap();
+        let mut choices = vec![None, Some(0), Some(exact), Some(u64::MAX)];
+        if exact > 0 {
+            choices.push(Some(exact - 1));
+        }
+        choices.sort_unstable();
+        choices.dedup();
+        for (ordinal, maximum) in choices.into_iter().enumerate() {
+            let mut selected = descriptor.clone();
+            selected["execution"][policy] = json!(maximum);
+            let input = public.input(
+                &format!("exact-policy-{policy}-{ordinal}.json"),
+                &selected.to_string(),
+            );
+            let admitted = maximum.is_none_or(|limit| limit >= exact);
+            let records = public.cli(&["run", "--deployment", path(&input)], admitted);
+            if admitted {
+                let execution = compact_record(&records, "execution");
+                assert_eq!(compact_field(execution, "value"), "\"hello\"");
+                assert_eq!(
+                    compact_field(execution, "execution-profile"),
+                    if maximum.is_some() {
+                        "bounded"
+                    } else {
+                        "trusted-foreground"
+                    }
+                );
+                assert_eq!(
+                    compact_field(execution, reported_limit),
+                    maximum.map_or_else(|| "absent".to_owned(), |limit| limit.to_string())
+                );
+                let observed: Value =
+                    serde_json::from_str(compact_field(execution, "production-observation"))
+                        .unwrap();
+                assert_eq!(observed[counter], exact, "{policy}: {maximum:?}");
+                for field in [
+                    "instructions",
+                    "allocated_bytes",
+                    "collection_items",
+                    "capability_calls",
+                ] {
+                    assert_eq!(observed[format!("{field}_saturated")], false);
+                }
+            } else {
+                let failure = compact_record(&records, "diagnostic");
+                assert_eq!(compact_field(failure, "class"), "resource");
+                assert_eq!(compact_field(failure, "code"), diagnostic);
+            }
+        }
     }
 }
 
@@ -487,6 +610,12 @@ fn foreground_policy_reporting_does_not_hide_partial_cumulative_limits() {
         compact_field(quotas, "new-http-recipe"),
         "four-explicit-nulls"
     );
+    assert_eq!(compact_field(quotas, "numeric"), "nonnegative-u64");
+    assert_eq!(compact_field(quotas, "zero"), "exact-finite-zero");
+    assert_eq!(
+        compact_field(quotas, "u64-max"),
+        "exact-finite-maximum-not-unbounded"
+    );
     for name in QUOTAS {
         let expected = format!("execution.{name}");
         let field = records
@@ -497,5 +626,7 @@ fn foreground_policy_reporting_does_not_hide_partial_cumulative_limits() {
             })
             .unwrap();
         assert_eq!(compact_field(field, "scalar"), "null|u64");
+        assert_eq!(compact_field(field, "minimum"), "0");
+        assert_eq!(compact_field(field, "maximum"), u64::MAX.to_string());
     }
 }

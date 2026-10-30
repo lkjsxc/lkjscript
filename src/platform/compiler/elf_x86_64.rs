@@ -13,12 +13,12 @@ mod asm;
 mod blake3;
 mod buffer;
 mod bytes;
+#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+mod capacity_tests;
 mod filter;
 mod runtime;
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod stack_tests;
-#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
-mod capacity_tests;
 use asm::{Asm, Label, R::*, *};
 use runtime::Runtime;
 
@@ -36,20 +36,25 @@ fn unsupported(message: impl Into<String>) -> Diagnostic {
 
 fn reserve<T>(storage: &mut Vec<T>, additional: usize) -> Result<()> {
     storage.try_reserve(additional).map_err(|_| {
-        Diagnostic::new(DiagnosticClass::Resource, "native_elf_allocation",
-            "cannot allocate native compilation storage")
+        Diagnostic::new(
+            DiagnosticClass::Resource,
+            "native_elf_allocation",
+            "cannot allocate native compilation storage",
+        )
     })
 }
 
 fn layout_extent(count: usize, stride: u64, header: u64) -> Result<u64> {
-    u64::try_from(count).ok()
+    u64::try_from(count)
+        .ok()
         .and_then(|count| count.checked_mul(stride))
         .and_then(|size| size.checked_add(header))
         .ok_or_else(|| error("native_elf_layout", "native allocation extent overflowed"))
 }
 
 fn layout_offset(index: usize, stride: i64, header: i64) -> Result<i64> {
-    i64::try_from(index).ok()
+    i64::try_from(index)
+        .ok()
         .and_then(|index| index.checked_mul(stride))
         .and_then(|offset| offset.checked_add(header))
         .ok_or_else(|| error("native_elf_layout", "native field offset overflowed"))
@@ -136,7 +141,9 @@ pub(crate) fn compile_function(
     let mut scheduled = Vec::new();
     reserve(&mut scheduled, program.functions.len())?;
     scheduled.resize(program.functions.len(), false);
-    *scheduled.get_mut(entry).ok_or_else(|| unsupported("native entry is absent"))? = true;
+    *scheduled
+        .get_mut(entry)
+        .ok_or_else(|| unsupported("native entry is absent"))? = true;
     let mut pending = Vec::new();
     reserve(&mut pending, 1)?;
     pending.push(entry);
@@ -162,7 +169,8 @@ pub(crate) fn compile_function(
                 | I::FunctionValue { function, .. } = instruction
                 {
                     let target = function.0 as usize;
-                    let queued = scheduled.get_mut(target)
+                    let queued = scheduled
+                        .get_mut(target)
                         .ok_or_else(|| unsupported("native call target is absent"))?;
                     if !*queued {
                         reserve(&mut pending, 1)?;
@@ -289,8 +297,11 @@ fn admit_result(
             continue;
         }
         seen.try_reserve(1).map_err(|_| {
-            Diagnostic::new(DiagnosticClass::Resource, "native_elf_allocation",
-                "cannot allocate native result admission storage")
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "native_elf_allocation",
+                "cannot allocate native result admission storage",
+            )
         })?;
         seen.insert(ty);
         match program.types.get(&ty).map(|ty| &ty.form) {
@@ -348,7 +359,8 @@ fn admit_result(
 }
 
 fn elf(code: &[u8]) -> Result<Vec<u8>> {
-    let size = TEXT_OFFSET.checked_add(code.len())
+    let size = TEXT_OFFSET
+        .checked_add(code.len())
         .ok_or_else(|| error("native_elf_layout", "native ELF extent overflowed"))?;
     absolute_address(code.len())?;
     let mut out = Vec::new();
@@ -408,7 +420,8 @@ impl Emitter<'_> {
         self.a.imm(R14, 0);
         self.a.imm(R15, 0);
         for parameter in 0..parameters {
-            self.a.load_offset(Di, R12, layout_offset(parameter, 8, 16)?);
+            self.a
+                .load_offset(Di, R12, layout_offset(parameter, 8, 16)?);
             self.a.call(self.runtime.parse);
             self.a.push(Ax);
         }
@@ -440,7 +453,8 @@ impl Emitter<'_> {
     }
     fn argument(&mut self, destination: R, offset: u32) {
         self.a.load(destination, Bp, 24);
-        self.a.load_offset(destination, destination, i64::from(offset) * 8);
+        self.a
+            .load_offset(destination, destination, i64::from(offset) * 8);
     }
     fn function(&mut self, index: usize) -> Result<()> {
         self.a.bind(self.label(index)?);
@@ -672,7 +686,8 @@ impl Emitter<'_> {
         self.a.jump(next);
         self.a.bind(ready);
         for argument in 0..arguments {
-            self.a.load_offset(Ax, Bx, i64::from(arguments - 1 - argument) * 8);
+            self.a
+                .load_offset(Ax, Bx, i64::from(arguments - 1 - argument) * 8);
             self.a.push(Ax);
         }
         self.a.load(Ax, R12, 8);
@@ -730,7 +745,8 @@ impl Emitter<'_> {
         self.a.shift(4, Ax, 3);
         self.a.bin(0x01, Ax, Bx);
         for argument in 0..arguments {
-            self.a.load_offset(Cx, Sp, i64::from(arguments - 1 - argument) * 8);
+            self.a
+                .load_offset(Cx, Sp, i64::from(arguments - 1 - argument) * 8);
             self.a.store_offset(Ax, 24 + i64::from(argument) * 8, Cx);
         }
         self.a.group_wide(0, Sp, (u64::from(arguments) + 1) * 8);

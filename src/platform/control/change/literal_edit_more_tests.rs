@@ -463,11 +463,21 @@ fn literal_edit_missing_identity_is_a_read_only_failure() {
     let mut values = literals(&request).to_vec();
     values[0].expression = ExpressionId::allocate(&[91; 32], 1);
     request.changes = vec![AuthoredChange::SetFunctionLiterals {
-        function: DeclarationSelector::Id { declaration: fixture.function },
+        function: DeclarationSelector::Id {
+            declaration: fixture.function,
+        },
         literals: values,
     }];
-    let errors = fixture.repository.prepare_authored_change(&request, Default::default()).unwrap_err();
-    assert!(errors.iter().any(|error| error.code == "change_literal_foreign"), "{errors:#?}");
+    let errors = fixture
+        .repository
+        .prepare_authored_change(&request, Default::default())
+        .unwrap_err();
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.code == "change_literal_foreign"),
+        "{errors:#?}"
+    );
     assert_eq!(fixture.view().revision(), request.base);
 }
 
@@ -477,9 +487,13 @@ fn authored_intent_codec_accepts_scalar_bytes_beyond_the_former_default() {
     let mut request = fixture.edit().semantic;
     let mut values = literals(&request).to_vec();
     let former_default_bytes = 4 * 1024 * 1024;
-    values[0].value = AuthoredLiteralValue::Text { value: "x".repeat(former_default_bytes + 1) };
+    values[0].value = AuthoredLiteralValue::Text {
+        value: "x".repeat(former_default_bytes + 1),
+    };
     request.changes = vec![AuthoredChange::SetFunctionLiterals {
-        function: DeclarationSelector::Id { declaration: fixture.function },
+        function: DeclarationSelector::Id {
+            declaration: fixture.function,
+        },
         literals: values,
     }];
     // Authoring byte encoding precedes semantic admission of the supplied literal and its type.

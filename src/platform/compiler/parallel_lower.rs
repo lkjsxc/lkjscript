@@ -67,13 +67,13 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         result: TypeObjectDigest,
         types: &BTreeMap<TypeObjectDigest, TypeObject>,
     ) -> Result<(), Diagnostic> {
+        proof_step(&self.derived_type_admission.parallel_steps)?;
         self.derived_type_admission
             .parallel
             .reserve::<TypeObjectDigest>(1)?;
         let mut pending = vec![result];
         let mut seen = BTreeSet::new();
         while let Some(ty) = pending.pop() {
-            proof_step(&self.derived_type_admission.parallel_steps)?;
             self.canonical.code_step()?;
             if seen.contains(&ty) {
                 continue;
@@ -83,6 +83,11 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
                 .reserve::<TypeObjectDigest>(1)?;
             seen.insert(ty);
             if let Some(object) = types.get(&ty) {
+                self.derived_type_admission.parallel_steps.reserve(
+                    object.child_type_count(),
+                    "compiler_parallel_proof_work",
+                    "parallel signature proof",
+                )?;
                 self.derived_type_admission
                     .parallel
                     .reserve::<TypeObjectDigest>(object.child_type_count())?;
@@ -90,6 +95,11 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
                 self.retain_derived_type(Some(ty), object)?;
             } else {
                 let object = self.parallel_type(ty)?;
+                self.derived_type_admission.parallel_steps.reserve(
+                    object.child_type_count(),
+                    "compiler_parallel_proof_work",
+                    "parallel signature proof",
+                )?;
                 self.derived_type_admission
                     .parallel
                     .reserve::<TypeObjectDigest>(object.child_type_count())?;
@@ -119,41 +129,30 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
     }
 }
 
-pub(super) fn proof_step(steps: &Cell<usize>) -> Result<(), Diagnostic> {
-    let next = steps
-        .get()
-        .checked_add(1)
-        .filter(|next| *next <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-        .ok_or_else(|| {
-            compiler_error(
-                DiagnosticClass::Resource,
-                "compiler_parallel_proof_work",
-                "parallel signature proof exceeds its cumulative work allowance",
-            )
-        })?;
-    steps.set(next);
-    Ok(())
+pub(super) fn proof_step(steps: &CompilerWorkAdmission) -> Result<(), Diagnostic> {
+    steps.reserve(
+        1,
+        "compiler_parallel_proof_work",
+        "parallel signature proof",
+    )
 }
 
-/// Point reads, canonical re-lowering and table copies consume one link-wide
-/// allowance. This adapter never enters compiler-unit or artifact caches.
+/// Logical point reads, canonical re-lowering and table copies are prepaid against one
+/// optional link-wide policy. Physical canonical-read work remains independent telemetry.
+/// This adapter never enters compiler-unit or artifact caches.
 pub(super) struct ReconstructionRead<'a, B: ?Sized> {
     pub(super) source: &'a B,
-    pub(super) remaining: &'a Cell<usize>,
+    pub(super) admission: &'a CompilerWorkAdmission,
 }
 
 impl<B: CanonicalBaseRead + ?Sized> ReconstructionRead<'_, B> {
     pub(super) fn reserve(&self, count: usize) -> Result<(), Diagnostic> {
         self.source.validation_checkpoint()?;
-        let next = self.remaining.get().checked_sub(count).ok_or_else(|| {
-            compiler_error(
-                DiagnosticClass::Resource,
-                "compiler_parallel_result_type_limit",
-                "canonical type reconstruction exceeds the existing validation work bound",
-            )
-        })?;
-        self.remaining.set(next);
-        Ok(())
+        self.admission.reserve(
+            count,
+            "compiler_parallel_result_type_limit",
+            "canonical type reconstruction",
+        )
     }
 
     fn observed<T>(
@@ -162,35 +161,24 @@ impl<B: CanonicalBaseRead + ?Sized> ReconstructionRead<'_, B> {
         operation: impl FnOnce() -> Result<CanonicalRead<T>, Diagnostic>,
     ) -> Result<CanonicalRead<T>, Diagnostic> {
         self.reserve(prepaid)?;
-        let read = operation()?;
-        let cost = read
-            .work
-            .point_reads
-            .checked_add(read.work.map_entries_visited)
-            .and_then(|cost| cost.checked_add(read.work.canonical_records_decoded))
-            .and_then(|cost| usize::try_from(cost).ok())
-            .ok_or_else(|| {
-                compiler_error(
-                    DiagnosticClass::Resource,
-                    "compiler_parallel_result_type_limit",
-                    "canonical read work overflowed",
-                )
-            })?;
-        self.reserve(cost.saturating_sub(prepaid))?;
-        Ok(read)
+        operation()
     }
 
-    fn representation_prepaid(&self) -> Result<usize, Diagnostic> {
-        usize::try_from(self.source.dependency_count())
-            .ok()
-            .and_then(|count| count.checked_add(1))
-            .ok_or_else(|| {
-                compiler_error(
-                    DiagnosticClass::Resource,
-                    "compiler_parallel_result_type_limit",
-                    "canonical dependency work overflowed",
-                )
-            })
+    fn representation_prepaid(&self) -> Result<(), Diagnostic> {
+        self.source.validation_checkpoint()?;
+        let mut amount = usize::try_from(self.source.dependency_count()).map_or(
+            ValidationWork {
+                consumed: usize::MAX,
+                saturated: true,
+            },
+            ValidationWork::exact,
+        );
+        amount.charge(1, None);
+        self.admission.reserve_observation(
+            amount,
+            "compiler_parallel_result_type_limit",
+            "canonical dependency reconstruction",
+        )
     }
 }
 
@@ -224,18 +212,16 @@ impl<B: CanonicalBaseRead + ?Sized> CodeRead for ReconstructionRead<'_, B> {
         &self,
         package: PackageId,
     ) -> Result<CanonicalRead<bool>, Diagnostic> {
-        self.observed(self.representation_prepaid()?, || {
-            self.source.code_representation_dependency(package)
-        })
+        self.representation_prepaid()?;
+        self.source.code_representation_dependency(package)
     }
     fn code_representation_owner(
         &self,
         package: PackageId,
         owner: OwnerKey,
     ) -> Result<CanonicalRead<Option<PackageInterfaceRecord>>, Diagnostic> {
-        self.observed(self.representation_prepaid()?, || {
-            self.source.code_representation_owner(package, owner)
-        })
+        self.representation_prepaid()?;
+        self.source.code_representation_owner(package, owner)
     }
 }
 
@@ -244,11 +230,12 @@ fn contains_associated(
     root: TypeObjectDigest,
     admission: &crate::platform::kernel::owned_associated::OwnedAssociatedAdmission,
 ) -> Result<bool, Diagnostic> {
+    read.validation_work()?;
     admission.reserve::<(TypeObjectDigest, usize)>(1)?;
     let mut pending = vec![(root, 0_usize)];
     let mut seen = BTreeSet::new();
     while let Some((ty, depth)) = pending.pop() {
-        read.validation_work()?;
+        read.validation_checkpoint()?;
         if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
             return Err(compiler_error(
                 DiagnosticClass::Resource,
@@ -269,6 +256,9 @@ fn contains_associated(
         })?;
         if object.form.is_associated() {
             return Ok(true);
+        }
+        for _ in 0..object.child_type_count() {
+            read.validation_work()?;
         }
         admission.reserve::<(TypeObjectDigest, usize)>(object.child_type_count())?;
         pending.extend(

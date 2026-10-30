@@ -184,11 +184,14 @@ impl Machine<'_> {
             control: self.control,
             policy: self.policy,
             admission_bytes: 0,
+            admission_bytes_saturated: false,
             admission_items: 0,
             work: &mut self.observation.value_work,
             allocated: &mut self.observation.allocated_bytes,
+            allocated_saturated: &mut self.observation.allocated_bytes_saturated,
             allocation_charges: &mut self.observation.allocation_charges,
             items: &mut self.observation.collection_items,
+            items_saturated: &mut self.observation.collection_items_saturated,
         }
         .inspect(raw, ty, None, true)?;
         if class != Class::Free {
@@ -700,14 +703,34 @@ impl NormalizedRunObservation {
     fn include_child(&mut self, child: &Self) {
         macro_rules! add { ($($field:ident),* $(,)?) => { $(self.$field = self.$field.saturating_add(child.$field);)* }; }
         macro_rules! maximum { ($($field:ident),* $(,)?) => { $(self.$field = self.$field.max(child.$field);)* }; }
+        crate::platform::execution::cumulative_observe(
+            &mut self.instructions,
+            &mut self.instructions_saturated,
+            child.instructions,
+            child.instructions_saturated,
+        );
+        crate::platform::execution::cumulative_observe(
+            &mut self.capability_calls,
+            &mut self.capability_calls_saturated,
+            child.capability_calls,
+            child.capability_calls_saturated,
+        );
+        crate::platform::execution::cumulative_observe(
+            &mut self.allocated_bytes,
+            &mut self.allocated_bytes_saturated,
+            child.allocated_bytes,
+            child.allocated_bytes_saturated,
+        );
+        crate::platform::execution::cumulative_observe(
+            &mut self.collection_items,
+            &mut self.collection_items_saturated,
+            child.collection_items,
+            child.collection_items_saturated,
+        );
         add!(
-            instructions,
             calls,
             external_calls,
-            capability_calls,
-            allocated_bytes,
             allocation_charges,
-            collection_items,
             tail_transfers,
             parallel_scopes,
             parallel_worker_dispatches,
@@ -723,5 +746,65 @@ impl NormalizedRunObservation {
             maximum_live_transactions
         );
         super::super::parallel::include_value_work(&mut self.value_work, &child.value_work);
+    }
+}
+
+#[cfg(test)]
+mod cumulative_observation_tests {
+    use super::*;
+
+    #[test]
+    fn child_observations_preserve_exact_maximum_and_each_saturation_flag() {
+        let mut parent = NormalizedRunObservation {
+            instructions: u64::MAX - 1,
+            capability_calls: u64::MAX - 1,
+            allocated_bytes: u64::MAX - 1,
+            collection_items: u64::MAX - 1,
+            ..NormalizedRunObservation::default()
+        };
+        let child = NormalizedRunObservation {
+            instructions: 1,
+            capability_calls: 1,
+            allocated_bytes: 1,
+            collection_items: 1,
+            ..NormalizedRunObservation::default()
+        };
+        parent.include_child(&child);
+        assert_eq!(parent.instructions, u64::MAX);
+        assert!(!parent.instructions_saturated);
+        assert_eq!(parent.capability_calls, u64::MAX);
+        assert!(!parent.capability_calls_saturated);
+        assert_eq!(parent.allocated_bytes, u64::MAX);
+        assert!(!parent.allocated_bytes_saturated);
+        assert_eq!(parent.collection_items, u64::MAX);
+        assert!(!parent.collection_items_saturated);
+        parent.include_child(&child);
+        assert_eq!(parent.instructions, u64::MAX);
+        assert!(parent.instructions_saturated);
+        assert_eq!(parent.capability_calls, u64::MAX);
+        assert!(parent.capability_calls_saturated);
+        assert_eq!(parent.allocated_bytes, u64::MAX);
+        assert!(parent.allocated_bytes_saturated);
+        assert_eq!(parent.collection_items, u64::MAX);
+        assert!(parent.collection_items_saturated);
+        let mut inherited = NormalizedRunObservation::default();
+        inherited.include_child(&parent);
+        assert_eq!(inherited.instructions, u64::MAX);
+        assert!(inherited.instructions_saturated);
+        assert_eq!(inherited.capability_calls, u64::MAX);
+        assert!(inherited.capability_calls_saturated);
+        assert_eq!(inherited.allocated_bytes, u64::MAX);
+        assert!(inherited.allocated_bytes_saturated);
+        assert_eq!(inherited.collection_items, u64::MAX);
+        assert!(inherited.collection_items_saturated);
+        let serialized = serde_json::to_value(&inherited).unwrap();
+        for field in [
+            "instructions_saturated",
+            "capability_calls_saturated",
+            "allocated_bytes_saturated",
+            "collection_items_saturated",
+        ] {
+            assert_eq!(serialized[field], serde_json::Value::Bool(true));
+        }
     }
 }

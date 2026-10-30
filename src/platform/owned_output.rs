@@ -371,21 +371,28 @@ mod tests {
         let temporary = tempfile::TempDir::new().expect("temporary output parent");
         for (index, limit) in [None, Some(7), Some(usize::MAX)].into_iter().enumerate() {
             let output = temporary.path().join(format!("complete-{index}"));
-            publish_create_new(&output, b"payload", limit, "test output").expect("exact publication");
+            publish_create_new(&output, b"payload", limit, "test output")
+                .expect("exact publication");
             assert_eq!(fs::read(&output).expect("read output"), b"payload");
         }
         for limit in [0, 6] {
             let output = temporary.path().join(format!("rejected-{limit}"));
             assert_eq!(
                 publish_create_new(&output, b"payload", Some(limit), "test output")
-                    .expect_err("finite exhaustion").code,
+                    .expect_err("finite exhaustion")
+                    .code,
                 "output_byte_limit",
             );
             assert!(!output.exists());
         }
         let empty = temporary.path().join("zero-fit");
         publish_create_new(&empty, b"", Some(0), "empty output").expect("zero fit");
-        assert_eq!(fs::read_dir(temporary.path()).expect("only accepted outputs").count(), 4);
+        assert_eq!(
+            fs::read_dir(temporary.path())
+                .expect("only accepted outputs")
+                .count(),
+            4
+        );
     }
 
     #[test]

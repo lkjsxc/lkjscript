@@ -85,16 +85,19 @@ pub fn prepare_change_analysis_with_budget<
         &overlay,
         &canonical,
         &witness_base,
-        budget.remaining_impact_ownership_steps("derived witness delta")
+        budget
+            .remaining_impact_ownership_steps("derived witness delta")
             .map_err(|error| vec![error])?,
-        budget.remaining_relation_edges("derived witness delta")
+        budget
+            .remaining_relation_edges("derived witness delta")
             .map_err(|error| vec![error])?,
     )
     .map_err(|error| vec![error])?;
     budget
         .observe_derived(&derived)
         .map_err(|error| vec![error])?;
-    let validation_admission = budget.validation_admission("candidate validation")
+    let validation_admission = budget
+        .validation_admission("candidate validation")
         .map_err(|error| vec![error])?;
     let structural = validate_structural_frontier_with_admission(
         &overlay,

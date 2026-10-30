@@ -546,6 +546,7 @@ impl NormalizedHttpApplication {
                     queue_nanoseconds: 0,
                     execution_nanoseconds: 0,
                     instructions: 0,
+                    instructions_saturated: false,
                 },
             ));
         };
@@ -585,6 +586,7 @@ impl NormalizedHttpApplication {
                 queue_nanoseconds: receipt.queue_nanoseconds,
                 execution_nanoseconds: receipt.execution_nanoseconds,
                 instructions: receipt.execution.instructions,
+                instructions_saturated: receipt.execution.instructions_saturated,
             },
         ))
     }

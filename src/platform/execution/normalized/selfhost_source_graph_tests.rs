@@ -16,6 +16,14 @@ pub(super) fn set_allowance(bytes: &mut [u8], allowance: Option<u64>) {
 }
 
 pub(super) fn packet(source: &KernelSnapshot) -> Vec<u8> {
+    packet_with_commitment(source, kernel::semantic_state_digest(source).unwrap())
+}
+
+// The ordinary helper retains the strict independent snapshot oracle. A fixture
+// targeting an object/directory binding error must instead supply a commitment
+// rebuilt from its actual encoded map rows, because that oracle rejects the
+// intended defect before the native reader can observe it.
+fn packet_with_commitment(source: &KernelSnapshot, state: kernel::SemanticStateDigest) -> Vec<u8> {
     assert!(source.dependencies.is_empty());
     assert!(source.dependency_types.is_empty());
     assert!(source.blobs.is_empty());
@@ -52,7 +60,7 @@ pub(super) fn packet(source: &KernelSnapshot) -> Vec<u8> {
     word(&mut bytes, 20, source.retirements.len());
     word(&mut bytes, 24, name.len());
     bytes[32..48].copy_from_slice(&source.root.package_id.bytes());
-    bytes[48..80].copy_from_slice(&kernel::semantic_state_digest(source).unwrap().bytes());
+    bytes[48..80].copy_from_slice(&state.bytes());
     bytes.extend_from_slice(name);
     for (at, section) in [(80, owners), (84, types), (88, retirements)] {
         let start = bytes.len();
@@ -80,21 +88,43 @@ pub(super) fn packet(source: &KernelSnapshot) -> Vec<u8> {
 // both logical commitments exactly as the public authoring result would, before
 // using the independent kernel oracle or serializing the carrier.
 fn rebind_capacity_inventory(source: &mut KernelSnapshot) {
-    let owners = source.owners.iter().map(|(key, record)| {
-        let (object, _) = kernel::encode_owner(record).unwrap();
-        (kernel::owner_map_key(*key).to_vec(),
-            kernel::encode_owner_binding(&kernel::OwnerBinding { kind: record.kind(), object }))
-    }).collect::<Vec<_>>();
-    let retired = source.retirements.iter().map(|(key, record)| {
-        let (object, _) = kernel::encode_retirement(record).unwrap();
-        (kernel::retirement_map_key(*key).to_vec(), object.bytes().to_vec())
-    }).collect::<Vec<_>>();
+    let owners = source
+        .owners
+        .iter()
+        .map(|(key, record)| {
+            let (object, _) = kernel::encode_owner(record).unwrap();
+            (
+                kernel::owner_map_key(*key).to_vec(),
+                kernel::encode_owner_binding(&kernel::OwnerBinding {
+                    kind: record.kind(),
+                    object,
+                }),
+            )
+        })
+        .collect::<Vec<_>>();
+    let retired = source
+        .retirements
+        .iter()
+        .map(|(key, record)| {
+            let (object, _) = kernel::encode_retirement(record).unwrap();
+            (
+                kernel::retirement_map_key(*key).to_vec(),
+                object.bytes().to_vec(),
+            )
+        })
+        .collect::<Vec<_>>();
     let owners = crate::platform::persistent_map::MapContentRoot::from_sorted(owners).unwrap();
     let retired = crate::platform::persistent_map::MapContentRoot::from_sorted(retired).unwrap();
     source.root.owners = crate::platform::persistent_map::MapRoot::from_parts(
-        source.root.owners.page(), u64::try_from(source.owners.len()).unwrap(), owners.digest());
+        source.root.owners.page(),
+        u64::try_from(source.owners.len()).unwrap(),
+        owners.digest(),
+    );
     source.root.retirements = crate::platform::persistent_map::MapRoot::from_parts(
-        source.root.retirements.page(), u64::try_from(source.retirements.len()).unwrap(), retired.digest());
+        source.root.retirements.page(),
+        u64::try_from(source.retirements.len()).unwrap(),
+        retired.digest(),
+    );
 }
 
 fn nominal() -> KernelSnapshot {
@@ -181,7 +211,8 @@ fn selfhost_source_graph_native_admits_complete_carriers_above_former_byte_and_p
     kernel::validate_full(&source).unwrap();
     let bytes = packet(&source);
     assert!(bytes.len() > 8_388_608);
-    let obsolete_proof_estimate = 4096 + 128 * bytes.len()
+    let obsolete_proof_estimate = 4096
+        + 128 * bytes.len()
         + 1024 * (source.owners.len() + source.types.len() + source.retirements.len());
     assert!(obsolete_proof_estimate > i32::MAX as usize);
     assert_eq!(&bytes[100..112], &[0; 12]);
@@ -506,7 +537,13 @@ fn selfhost_source_graph_handles_empty_directories_and_tagged_allowances() {
     assert_eq!(read_word(&empty, 16), 0);
     assert_eq!(read_word(&empty, 20), 0);
     expect("read-graph", &empty, 0);
-    for allowance in [None, Some(0), Some(1), Some(u64::from(u32::MAX)), Some(u64::MAX)] {
+    for allowance in [
+        None,
+        Some(0),
+        Some(1),
+        Some(u64::from(u32::MAX)),
+        Some(u64::MAX),
+    ] {
         let mut selected = empty.clone();
         set_allowance(&mut selected, allowance);
         expect("read-graph", &selected, 0);
@@ -676,6 +713,10 @@ fn selfhost_source_graph_native_admits_carriers_above_former_entity_quota() {
     rebind_capacity_inventory(&mut source);
     kernel::validate_full(&source).unwrap();
     let expected = kernel::semantic_state_digest(&source).unwrap();
+    assert_eq!(
+        kernel::semantic_state_digest_from_root(&source.root).unwrap(),
+        expected
+    );
     let bytes = packet(&source);
     assert_eq!(read_word(&bytes, 12), 0);
     assert_eq!(read_word(&bytes, 16), 0);
@@ -696,13 +737,61 @@ fn selfhost_source_graph_native_admits_carriers_above_former_entity_quota() {
         b"source-entity-final-binding",
         0,
     ));
+    assert_ne!(
+        *source.retirements.last_key_value().unwrap().0,
+        changed_owner
+    );
     source.retirements.last_entry().unwrap().get_mut().owner = changed_owner;
     rebind_capacity_inventory(&mut source);
     assert!(kernel::validate_full(&source).is_err());
-    let invalid = packet(&source);
+    assert_eq!(
+        kernel::semantic_state_digest(&source).unwrap_err().code,
+        "kernel_state_retirement_key"
+    );
+    let invalid_state = kernel::semantic_state_digest_from_root(&source.root).unwrap();
+    assert_ne!(expected, invalid_state);
+    let invalid = packet_with_commitment(&source, invalid_state);
+    assert_eq!(invalid.len(), bytes.len());
     assert_eq!(read_word(&invalid, 20), RETIREMENTS);
+    assert_eq!(&invalid[48..80], &invalid_state.bytes());
     assert_ne!(carrier_digest, Sha256::digest(&invalid));
-    // Fresh object digests and a fresh semantic-state commitment leave the final
-    // object's owner/directory mismatch as the intended rejection boundary.
+
+    // Independently run the source state engine on the actual carrier directories.
+    // This establishes the new logical commitment without asking it to admit the
+    // object/directory owner binding, which is the intentionally invalid relation.
+    let owner_at = read_word(&invalid, 80);
+    let type_at = read_word(&invalid, 84);
+    let retirement_at = read_word(&invalid, 88);
+    let span_at = read_word(&invalid, 92);
+    let mut state_input = vec![0; 32];
+    state_input[..16].copy_from_slice(&invalid[32..48]);
+    word(&mut state_input, 16, owner_at - 128);
+    word(&mut state_input, 20, type_at - owner_at);
+    word(&mut state_input, 28, span_at - retirement_at);
+    state_input.extend_from_slice(&invalid[128..owner_at]);
+    state_input.extend_from_slice(&invalid[owner_at..type_at]);
+    state_input.extend_from_slice(&invalid[retirement_at..span_at]);
+    emitted_result_bytes("read-state", &state_input, 0, &invalid_state.bytes());
+
+    // The exact same final canonical object and digest admit with its own owner
+    // key, then reject with the carrier's different key. Earlier record decoding
+    // and digest checks therefore cannot explain this targeted binding refusal.
+    let (key, record) = source.retirements.last_key_value().unwrap();
+    let (digest, object) = kernel::encode_retirement(record).unwrap();
+    let mut binding = kernel::retirement_map_key(record.owner).to_vec();
+    binding.extend_from_slice(&digest.bytes());
+    binding.extend_from_slice(&object);
+    emitted_result_bytes("bind-retirement", &binding, 0, &[]);
+    binding[..17].copy_from_slice(&kernel::retirement_map_key(*key));
+    emitted_result_bytes("bind-retirement", &binding, 12, &[]);
+
+    // Carrier admission owns the object/directory correspondence check; the graph
+    // entry propagates its diagnostic rather than reclassifying it as a link error.
+    eprintln!(
+        "selfhost source entity capacity control=final-retirement-binding engine=self-produced-native retirements={RETIREMENTS} bytes={} sha256={} state={invalid_state} expected=12",
+        invalid.len(),
+        crate::platform::semantic_id::encode_hex(&Sha256::digest(&invalid)),
+    );
+    emitted_result("read-carrier", &invalid, 12);
     emitted_result("read-graph", &invalid, 12);
 }

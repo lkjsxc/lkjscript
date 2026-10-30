@@ -4,6 +4,7 @@ use super::*;
 struct BlobSource {
     keys: BTreeMap<ObjectKey, u8>,
     length: usize,
+    additional_work: StoreWork,
 }
 
 impl BlobSource {
@@ -16,7 +17,11 @@ impl BlobSource {
                 )
             })
             .collect();
-        Self { keys, length }
+        Self {
+            keys,
+            length,
+            additional_work: StoreWork::default(),
+        }
     }
 }
 
@@ -24,22 +29,32 @@ impl ImmutableObjectStore for BlobSource {
     fn read(
         &self,
         key: ObjectKey,
-        maximum: usize,
+        maximum: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
-        work.add(crate::platform::storage::object::StoreWork { catalog_lookups: 1, ..crate::platform::storage::object::StoreWork::default() });
+        work.add(self.additional_work);
+        work.add(crate::platform::storage::object::StoreWork {
+            catalog_lookups: 1,
+            ..crate::platform::storage::object::StoreWork::default()
+        });
         let Some(marker) = self.keys.get(&key) else {
             return Ok(None);
         };
-        if self.length > maximum {
+        if maximum.is_some_and(|maximum| self.length > maximum) {
             return Err(StoreError::new(
                 StoreErrorClass::Resource,
                 "fixture_object_limit",
                 "explicit object limit",
             ));
         }
-        work.add(crate::platform::storage::object::StoreWork { objects_read: 1, ..crate::platform::storage::object::StoreWork::default() });
-        work.add(crate::platform::storage::object::StoreWork { bytes_read: self.length as u64, ..crate::platform::storage::object::StoreWork::default() });
+        work.add(crate::platform::storage::object::StoreWork {
+            objects_read: 1,
+            ..crate::platform::storage::object::StoreWork::default()
+        });
+        work.add(crate::platform::storage::object::StoreWork {
+            bytes_read: self.length as u64,
+            ..crate::platform::storage::object::StoreWork::default()
+        });
         Ok(Some(vec![*marker; self.length]))
     }
 
@@ -73,6 +88,7 @@ fn gc_retains_real_payloads_beyond_the_former_512_mib_ceiling() {
         33 * (base.length as u64 + OBJECT_OVERHEAD)
     );
     assert_eq!(observation.objects_read, 33);
+    assert!(!observation.saturated);
     let objects = store.finish();
     assert_eq!(objects.len(), 33);
     assert_eq!(
@@ -97,6 +113,7 @@ fn gc_repeated_reads_cross_the_former_four_gib_aggregate_ceiling() {
         observation.retained_modeled_bytes,
         base.length as u64 + OBJECT_OVERHEAD
     );
+    assert!(!observation.saturated);
     assert_eq!(store.finish().len(), 1);
 }
 
@@ -115,7 +132,7 @@ fn gc_explicit_read_allowances_still_refuse_before_payload_growth() {
     });
     assert_eq!(
         store
-            .read_admitted(key, 7, &mut outer, &mut work)
+            .read_admitted(key, Some(7), &mut outer, &mut work)
             .unwrap_err()
             .class,
         StoreErrorClass::Resource
@@ -128,7 +145,9 @@ fn gc_explicit_read_allowances_still_refuse_before_payload_growth() {
         maximum_bytes: Some(7),
     });
     assert_eq!(
-        store.read_admitted(key, 7, &mut exact, &mut work).unwrap(),
+        store
+            .read_admitted(key, Some(7), &mut exact, &mut work)
+            .unwrap(),
         Some(b"bounded".to_vec())
     );
 }
@@ -146,6 +165,7 @@ fn gc_saturated_telemetry_does_not_authorize_or_refuse_reads() {
         objects_read: u64::MAX,
         bytes_read: u64::MAX,
         references_visited: u64::MAX,
+        saturated: false,
     });
     assert_eq!(
         store.required(key.domain, key.digest.bytes()).unwrap(),
@@ -153,6 +173,37 @@ fn gc_saturated_telemetry_does_not_authorize_or_refuse_reads() {
     );
     assert_eq!(store.observation().retained_modeled_bytes, u64::MAX);
     assert_eq!(store.observation().bytes_read, u64::MAX);
+    assert!(store.observation().saturated);
+    assert_eq!(
+        store.required(key.domain, key.digest.bytes()).unwrap(),
+        b"observed"
+    );
+    let mut work = StoreWork::default();
+    let mut insufficient = StoreReadAdmission::new(StoreReadLimits {
+        maximum_catalog_lookups: Some(1),
+        maximum_objects: Some(1),
+        maximum_bytes: Some(7),
+    });
+    assert_eq!(
+        store
+            .read_admitted(key, None, &mut insufficient, &mut work)
+            .unwrap_err()
+            .class,
+        StoreErrorClass::Resource
+    );
+    assert_eq!(work.objects_read, 0);
+    let mut exact = StoreReadAdmission::new(StoreReadLimits {
+        maximum_catalog_lookups: Some(1),
+        maximum_objects: Some(1),
+        maximum_bytes: Some(8),
+    });
+    assert_eq!(
+        store
+            .read_admitted(key, None, &mut exact, &mut work)
+            .unwrap(),
+        Some(b"observed".to_vec())
+    );
+    assert!(store.observation().saturated);
     control.cancel();
     assert_eq!(
         store
@@ -162,6 +213,77 @@ fn gc_saturated_telemetry_does_not_authorize_or_refuse_reads() {
         DiagnosticClass::Cancelled
     );
     assert_eq!(store.finish().len(), 1);
+}
+
+#[test]
+fn gc_each_preparation_counter_distinguishes_exact_maximum_from_overflow() {
+    type Counter = fn(&mut PreparationObservation) -> &mut u64;
+    let counters: [(&str, Counter, u64); 4] = [
+        ("catalog", |work| &mut work.catalog_lookups, 1),
+        ("objects", |work| &mut work.objects_read, 1),
+        ("bytes", |work| &mut work.bytes_read, 8),
+        (
+            "retention",
+            |work| &mut work.retained_modeled_bytes,
+            8 + OBJECT_OVERHEAD,
+        ),
+    ];
+    let base = BlobSource::new(1, 8);
+    let key = *base.keys.keys().next().unwrap();
+    let control = ExecutionControl::uncancelled();
+    for (name, counter, additional) in counters {
+        for overflow in [false, true] {
+            let store = Retained::new(&base, &control);
+            let mut observation = PreparationObservation::default();
+            *counter(&mut observation) = u64::MAX - additional + u64::from(overflow);
+            store.observation.set(observation);
+            assert_eq!(
+                store.required(key.domain, key.digest.bytes()).unwrap(),
+                vec![0; 8],
+                "{name} overflow={overflow}"
+            );
+            let mut observed = store.observation();
+            assert_eq!(*counter(&mut observed), u64::MAX, "{name}");
+            assert_eq!(observed.saturated, overflow, "{name}");
+            let encoded = serde_json::to_value(observed).unwrap();
+            assert_eq!(encoded["saturated"], overflow, "{name}");
+            assert_eq!(store.finish().len(), 1, "{name}");
+        }
+    }
+}
+
+#[test]
+fn gc_preserves_saturation_reported_by_the_underlying_store() {
+    let mut base = BlobSource::new(1, 8);
+    base.additional_work.saturated = true;
+    let key = *base.keys.keys().next().unwrap();
+    let control = ExecutionControl::uncancelled();
+    let store = Retained::new(&base, &control);
+    let mut work = StoreWork::default();
+    assert_eq!(store.read(key, None, &mut work).unwrap(), Some(vec![0; 8]));
+    assert!(work.saturated);
+    let observation = store.observation();
+    assert_eq!(observation.catalog_lookups, 1);
+    assert_eq!(observation.objects_read, 1);
+    assert_eq!(observation.bytes_read, 8);
+    assert_eq!(observation.retained_modeled_bytes, 8 + OBJECT_OVERHEAD);
+    assert!(observation.saturated);
+    assert_eq!(store.finish().len(), 1);
+}
+
+#[test]
+fn gc_canonical_byte_totals_preserve_exact_maximum_and_saturated_lower_bounds() {
+    assert_eq!(canonical_byte_observation([]), (0, false));
+    assert_eq!(canonical_byte_observation([u64::MAX, 0]), (u64::MAX, false));
+    assert_eq!(
+        canonical_byte_observation([u64::MAX - 1, 1]),
+        (u64::MAX, false)
+    );
+    assert_eq!(canonical_byte_observation([u64::MAX, 1]), (u64::MAX, true));
+    assert_eq!(
+        canonical_byte_observation([u64::MAX, 1, 0]),
+        (u64::MAX, true)
+    );
 }
 
 #[test]

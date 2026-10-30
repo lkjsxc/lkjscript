@@ -103,12 +103,17 @@ fn omitted_cumulative_fields_do_not_install_implicit_quotas() {
 }
 
 #[test]
-fn explicit_null_disables_only_the_selected_quota() {
+fn explicit_cumulative_quotas_preserve_null_zero_finite_and_maximum() {
     for (index, name) in QUOTAS.iter().enumerate() {
-        for choice in [None, Some(1), Some(u64::MAX)] {
+        for choice in [None, Some(0), Some(1), Some(17), Some(u64::MAX)] {
             let mut execution = explicit();
             execution[name] = json!(choice);
             let decoded = decode(&descriptor(execution)).unwrap();
+            let encoded = encode_deployment(&decoded).unwrap();
+            assert_eq!(
+                decode_deployment(&encoded).unwrap().execution,
+                decoded.execution
+            );
             let normalized = normalized_run_policy(decoded.execution.unwrap());
             let mut expected = [Some(7), Some(11), Some(13), Some(17)];
             expected[index] = choice;
@@ -158,7 +163,6 @@ fn new_http_recipe_has_no_hidden_cumulative_quotas_but_keeps_live_controls() {
 fn malformed_quotas_and_missing_live_limits_fail_strict_admission() {
     for name in QUOTAS {
         for value in [
-            json!(0),
             json!(-1),
             json!(1.5),
             json!(false),
@@ -168,14 +172,7 @@ fn malformed_quotas_and_missing_live_limits_fail_strict_admission() {
             let mut execution = explicit();
             execution[name] = value.clone();
             let error = decode(&descriptor(execution)).unwrap_err();
-            assert_eq!(
-                error.code,
-                if value == json!(0) {
-                    "deployment_execution_limit"
-                } else {
-                    "deployment_json"
-                }
-            );
+            assert_eq!(error.code, "deployment_json");
         }
     }
     for name in [
@@ -245,7 +242,13 @@ fn discovered_execution_fields_match_required_and_nullable_decoder_contracts() {
             field.scalar.starts_with("null|"),
             "{name}"
         );
-        assert_eq!(field.minimum, Some(1));
+        assert_eq!(field.minimum, Some(u64::from(!QUOTAS.contains(&name))));
+        let mut execution = explicit();
+        execution[name] = json!(0);
+        assert_eq!(
+            decode(&descriptor(execution)).is_ok(),
+            QUOTAS.contains(&name)
+        );
     }
 }
 

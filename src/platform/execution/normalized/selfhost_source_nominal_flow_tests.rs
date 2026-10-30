@@ -321,7 +321,10 @@ fn selfhost_source_nominal_flow_preserves_resource_refusal() {
         emitted_result("read-nominal-budget", &packet, 6);
     }
     let large = [u32::MAX.to_le_bytes().as_slice(), bytes.as_slice()].concat();
-    assert_eq!(result("read-nominal-budget", &large), (0, bytes[48..80].to_vec()));
+    assert_eq!(
+        result("read-nominal-budget", &large),
+        (0, bytes[48..80].to_vec())
+    );
     emitted_result("read-nominal-budget", &large, 0);
     expect(&source, 0, None);
     exact_budget_boundary("read-nominal-budget", &source);

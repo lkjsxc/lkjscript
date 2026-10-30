@@ -89,13 +89,9 @@ const SOURCE: &str = proposals::SOURCE;
 #[test]
 fn selfhost_maintained_proposals_match_authoritative_function_bodies() {
     let (source, program) = compiler();
-    // Replaying a complete compiler retains both old and new accepted bodies.
-    // Use ordinary disk history instead of exhausting a finite memory arena.
-    let temporary = tempfile::tempdir().unwrap();
-    let repository = GraphRepository::create(&temporary.path().join("replay"), source, None)
-        .unwrap()
-        .repository;
-    let replayed = publish_proposals(&repository, proposals::replay(SOURCE));
+    // This semantic equality check uses one complete public transaction and the
+    // ordinary unmetered memory repository, including canonical publication checks.
+    let replayed = apply_proposals(source, proposals::replay(SOURCE));
     let replayed = prepare_snapshot(&replayed);
     // Canonical units include helpers with arbitrary parameter/result types;
     // backend filter exports deliberately restrict their root entry signature.
@@ -146,7 +142,7 @@ fn apply_proposals(
     initial: &crate::platform::kernel::KernelSnapshot,
     changes: Vec<String>,
 ) -> crate::platform::kernel::KernelSnapshot {
-    let memory = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+    let memory = crate::platform::MemProjectStore::new(None).unwrap();
     let repo = GraphRepository::create_memory(&memory, initial, None)
         .unwrap()
         .repository;
@@ -202,17 +198,9 @@ fn proposed_compiler(
         };
         let (initial, changes) = proposals::steps(&proposal).unwrap();
         let initial = byte_buffer_tests::author_only(&initial).unwrap();
-        // Full reconstruction retains its accepted authoring history. Use the
-        // ordinary disk repository instead of exhausting a finite memory arena.
-        let directory = tempfile::tempdir().unwrap();
-        let repository = GraphRepository::create(
-            &directory.path().join("compiler-reconstruction"),
-            &initial,
-            None,
-        )
-        .unwrap()
-        .repository;
-        let source = publish_proposals(&repository, changes);
+        // Preserve every incremental publication while retaining its history in
+        // the ordinary unmetered memory repository until reconstruction completes.
+        let source = apply_proposals(&initial, changes);
         let program = prepare_snapshot(&source);
         (source, program)
     })
@@ -337,29 +325,57 @@ fn write_wide(bytes: &mut [u8], at: usize, value: u64) {
 
 fn measured_layout(bytes: &[u8]) -> Vec<u8> {
     let (source, program) = compiler();
-    let module = source.owners.iter().find_map(|(key, owner)| match (key, owner) {
-        (OwnerKey::Module(id), OwnerRecord::Module(m)) if m.name.as_str() == "machine" => Some(*id),
-        _ => None,
-    }).unwrap();
-    let declaration = source.owners.iter().find_map(|(key, owner)| match (key, owner) {
-        (OwnerKey::Declaration(id), OwnerRecord::Declaration(d))
-            if d.module == module && d.name.as_str() == "layout" => Some(*id),
-        _ => None,
-    }).unwrap();
-    let reference = DeclarationReference { package: source.root.package_id, declaration };
+    let module = source
+        .owners
+        .iter()
+        .find_map(|(key, owner)| match (key, owner) {
+            (OwnerKey::Module(id), OwnerRecord::Module(m)) if m.name.as_str() == "machine" => {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .unwrap();
+    let declaration = source
+        .owners
+        .iter()
+        .find_map(|(key, owner)| match (key, owner) {
+            (OwnerKey::Declaration(id), OwnerRecord::Declaration(d))
+                if d.module == module && d.name.as_str() == "layout" =>
+            {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .unwrap();
+    let reference = DeclarationReference {
+        package: source.root.package_id,
+        declaration,
+    };
     let values = vec![NormalizedValue::bytes(bytes)];
     let control = ExecutionControl::uncancelled();
     let policy = NormalizedRunPolicy::foreground();
-    let vm = NormalizedVm::for_test(program, policy).invoke(reference, values.clone(), None, &control).unwrap();
+    let vm = NormalizedVm::for_test(program, policy)
+        .invoke(reference, values.clone(), None, &control)
+        .unwrap();
     let oracle = NormalizedReferenceInterpreter::new(source, program, policy)
-        .invoke(reference, values, None, &control).unwrap();
+        .invoke(reference, values, None, &control)
+        .unwrap();
     assert_eq!(vm.0, oracle.0);
-    let NormalizedValue::Record(NormalizedRecord::Structural { fields }) = vm.0 else { panic!("layout result") };
-    assert!(fields.iter().any(|(name, value)| name.as_str() == "code" && value == &NormalizedValue::I64(0)));
-    fields.iter().find_map(|(name, value)| match value {
-        NormalizedValue::Bytes(bytes) if name.as_str() == "bytes" => Some(bytes.to_vec()),
-        _ => None,
-    }).unwrap()
+    let NormalizedValue::Record(NormalizedRecord::Structural { fields }) = vm.0 else {
+        panic!("layout result")
+    };
+    assert!(
+        fields
+            .iter()
+            .any(|(name, value)| name.as_str() == "code" && value == &NormalizedValue::I64(0))
+    );
+    fields
+        .iter()
+        .find_map(|(name, value)| match value {
+            NormalizedValue::Bytes(bytes) if name.as_str() == "bytes" => Some(bytes.to_vec()),
+            _ => None,
+        })
+        .unwrap()
 }
 
 fn compile(bytes: &[u8]) -> (i64, Vec<u8>) {
@@ -584,38 +600,74 @@ fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
     let nodes = wide_at(&valid, 104) as usize;
     let state = wide_at(&valid, nodes + input::NODE_BYTES + 48) as usize;
     for (offset, value, expected) in [
-        (16, 0, 3), (24, 0, 3), (72, 168, 5), (80, 6, 3),
-        (88, declarations as u64 + 8, 5), (96, 4, 5), (104, nodes as u64 + 8, 5),
-        (120, u64::MAX, 3), (128, wide_at(&valid, 128) + 8, 5),
-        (136, wide_at(&valid, 136) + 1, 5), (144, 5, 5), (152, 1, 5),
-        (160, 99, 5), (360, 2, 5),
-        (declarations, 1, 5), (declarations + 8, 2, 9), (declarations + 16, 1, 5),
-        (declarations + 24, i64::MAX as u64, 5), (declarations + 32, 1, 5),
-        (declarations + 40, 1, 5), (declarations + 48, 29, 5),
-        (declarations + 56, 0, 5), (declarations + 64, 1, 5), (declarations + 72, 1, 5),
-        (nodes, 99, 7), (nodes + 8, 1, 7), (nodes + 16, 1, 7), (nodes + 24, 1, 7),
-        (nodes + 40, 1, 5), (nodes + 48, u64::MAX, 5), (nodes + 56, i64::MAX as u64, 5),
+        (16, 0, 3),
+        (24, 0, 3),
+        (72, 168, 5),
+        (80, 6, 3),
+        (88, declarations as u64 + 8, 5),
+        (96, 4, 5),
+        (104, nodes as u64 + 8, 5),
+        (120, u64::MAX, 3),
+        (128, wide_at(&valid, 128) + 8, 5),
+        (136, wide_at(&valid, 136) + 1, 5),
+        (144, 5, 5),
+        (152, 1, 5),
+        (160, 99, 5),
+        (360, 2, 5),
+        (declarations, 1, 5),
+        (declarations + 8, 2, 9),
+        (declarations + 16, 1, 5),
+        (declarations + 24, i64::MAX as u64, 5),
+        (declarations + 32, 1, 5),
+        (declarations + 40, 1, 5),
+        (declarations + 48, 29, 5),
+        (declarations + 56, 0, 5),
+        (declarations + 64, 1, 5),
+        (declarations + 72, 1, 5),
+        (nodes, 99, 7),
+        (nodes + 8, 1, 7),
+        (nodes + 16, 1, 7),
+        (nodes + 24, 1, 7),
+        (nodes + 40, 1, 5),
+        (nodes + 48, u64::MAX, 5),
+        (nodes + 56, i64::MAX as u64, 5),
         (nodes + input::NODE_BYTES + 32, 1, 7),
-        (state, 2, 8), (state, 0, 5), (state, u64::MAX, 5), (state + 8, 1, 5),
+        (state, 2, 8),
+        (state, 0, 5),
+        (state, u64::MAX, 5),
+        (state + 8, 1, 5),
     ] {
         let mut changed = valid.clone();
         write_wide(&mut changed, offset, value);
         input::rechecksum(&mut changed);
-        assert_eq!(compile(&changed), (expected, vec![]), "wide field {offset}={value}");
+        assert_eq!(
+            compile(&changed),
+            (expected, vec![]),
+            "wide field {offset}={value}"
+        );
     }
     for (offset, value, expected) in [(0, 0, 1), (8, 4, 2), (12, 2, 5), (112, 1, 2), (112, 2, 2)] {
         let mut changed = valid.clone();
         changed[offset] = value;
         input::rechecksum(&mut changed);
-        assert_eq!(compile(&changed), (expected, vec![]), "discriminator byte {offset}");
+        assert_eq!(
+            compile(&changed),
+            (expected, vec![]),
+            "discriminator byte {offset}"
+        );
     }
     let mut artifact_mode = valid.clone();
     artifact_mode[8..12].copy_from_slice(&5_u32.to_le_bytes());
     artifact_mode[112..116].copy_from_slice(&1_u32.to_le_bytes());
     input::rechecksum(&mut artifact_mode);
     assert_eq!(compile(&artifact_mode), (10, vec![]));
-    for nodes in [vec![(6, 0)], vec![(2, 0), (6, 0)], vec![(1, 1)],
-        vec![(1, 1), (1, 2), (6, 0)], vec![(1, 1), (6, 0), (1, 2)]] {
+    for nodes in [
+        vec![(6, 0)],
+        vec![(2, 0), (6, 0)],
+        vec![(1, 1)],
+        vec![(1, 1), (1, 2), (6, 0)],
+        vec![(1, 1), (6, 0), (1, 2)],
+    ] {
         assert_eq!(compile(&input::arithmetic(&nodes).unwrap()), (8, vec![]));
     }
     let mut corrupt = valid;
@@ -660,7 +712,9 @@ fn selfhost_compiler_accepts_more_than_historical_node_limit_without_default_all
     const HISTORICAL_MAX_NODES: usize = 32_768;
     let node_count = HISTORICAL_MAX_NODES + 2;
     let mut nodes = vec![(1, 0)];
-    for _ in 0..(node_count - 2) / 2 { nodes.extend_from_slice(&[(1, 1), (2, 0)]); }
+    for _ in 0..(node_count - 2) / 2 {
+        nodes.extend_from_slice(&[(1, 1), (2, 0)]);
+    }
     nodes.push((6, 0));
     assert_eq!(nodes.len(), node_count);
     let bytes = input::arithmetic(&nodes).unwrap();
@@ -668,20 +722,29 @@ fn selfhost_compiler_accepts_more_than_historical_node_limit_without_default_all
     assert_eq!(&bytes[12..16], &[0; 4]);
     assert_eq!(wide_at(&bytes, 32), 0);
     let (source, program) = compiler();
-    let (code, image) = compile_with_policy(source, program, &bytes, NormalizedRunPolicy::foreground());
+    let (code, image) =
+        compile_with_policy(source, program, &bytes, NormalizedRunPolicy::foreground());
     assert_eq!(code, 0);
     let output = execute(&image, &[]);
     assert!(output.status.success());
     assert_eq!(output.stdout, b"16384");
     assert!(output.stderr.is_empty());
-    eprintln!("selfhost current profile=6 nodes={node_count} input_bytes={} elf_bytes={} compiler_padding=bounded-runtime-only", bytes.len(), image.len());
-
+    eprintln!(
+        "selfhost current profile=6 nodes={node_count} input_bytes={} elf_bytes={} compiler_padding=bounded-runtime-only",
+        bytes.len(),
+        image.len()
+    );
 }
 
 #[test]
 fn selfhost_compiler_rejects_hash_consistent_wide_extents_outside_input() {
     let valid = input::arithmetic(&[(1, 42), (6, 0)]).unwrap();
-    for value in [u32::MAX as u64, u64::from(u32::MAX) + 1, i64::MAX as u64, u64::MAX] {
+    for value in [
+        u32::MAX as u64,
+        u64::from(u32::MAX) + 1,
+        i64::MAX as u64,
+        u64::MAX,
+    ] {
         for offset in [24, 80, 120] {
             let mut bytes = valid.clone();
             write_wide(&mut bytes, offset, value);
@@ -724,8 +787,13 @@ fn selfhost_mode0_policy_preserves_unbounded_zero_exact_and_maximum() {
     let (code, expected) = compile(&bytes);
     assert_eq!(code, 0);
     let exact = 4096 + wide_at(&bytes, 96) + 64 * wide_at(&bytes, 120) + 256 * wide_at(&bytes, 136);
-    for (allowance, accepted) in [(None, true), (Some(0), false), (Some(exact - 1), false),
-        (Some(exact), true), (Some(u64::MAX), true)] {
+    for (allowance, accepted) in [
+        (None, true),
+        (Some(0), false),
+        (Some(exact - 1), false),
+        (Some(exact), true),
+        (Some(u64::MAX), true),
+    ] {
         input::set_allowance(&mut bytes, allowance);
         let (code, image) = compile(&bytes);
         assert_eq!(code, if accepted { 0 } else { 6 }, "policy {allowance:?}");

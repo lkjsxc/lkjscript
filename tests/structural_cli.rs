@@ -28,7 +28,7 @@ impl Public {
         }
         let directory = tempfile::tempdir().unwrap();
         let project = directory.path().join("author");
-        let memory = lkjscript::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+        let memory = lkjscript::platform::MemProjectStore::new(None).unwrap();
         lkjscript::platform::create_memory_project(&memory, "structural", template).unwrap();
         Self {
             directory,
@@ -552,8 +552,7 @@ fn depth_request(base: &str, flat_ancestors: usize, block_depth: usize) -> Strin
 }
 
 #[test]
-fn copied_binary_admits_useful_depth_and_rejects_combined_depth_and_cumulative_growth_without_crashing()
- {
+fn copied_binary_admits_depth_and_unmetered_growth_and_enforces_explicit_identity_policy() {
     let public = Public::new("minimal");
     let base = public.revision();
     let head = std::fs::read(public.project.join("HEAD")).unwrap();
@@ -592,47 +591,58 @@ fn copied_binary_admits_useful_depth_and_rejects_combined_depth_and_cumulative_g
         );
     }
 
-    // Each block is below the default 100,000-identity request admission. Together they exceed
-    // it despite using few physical records and less than the complete 4 MiB input allowance.
+    // The complete request exceeds the former identity default and is admitted without a
+    // policy. An explicit identity policy applies cumulatively across both complete bodies.
     let body = format!("(sequence {})", "(unit) ".repeat(60_000));
-    let many = public.write("cumulative.lkjc", &format!(
+    let input = format!(
         "request base={base}\ncreate.module as=$module name=cumulative\nexpression.block as=$first\n{body}\nexpression.end\ncreate.function as=$a module=$module name=a visibility=private result=unit effect=pure body=$first\nexpression.block as=$second\n{body}\nexpression.end\ncreate.function as=$b module=$module name=b visibility=private result=unit effect=pure body=$second\n"
-    ));
+    );
+    let unmetered = public.write("cumulative-unmetered.lkjc", &input);
+    public.plan(&unmetered);
+    assert_eq!(head, std::fs::read(public.project.join("HEAD")).unwrap());
+
+    let finite = public.write(
+        "cumulative-finite.lkjc",
+        &format!("{input}change.policy name=allocated-identities limit=100000\n"),
+    );
     let errors = public.failure(&[
         "--project",
         path(&public.project),
         "change",
         "plan",
         "--input-file",
-        path(&many),
+        path(&finite),
     ]);
     assert!(
         errors
             .iter()
             .filter(|record| record.operation == "diagnostic")
-            .any(|record| optional_field(record, "class") == Some("resource")),
+            .any(|record| {
+                optional_field(record, "class") == Some("resource")
+                    && field(record, "code") == "change_budget_allocated_identities"
+            }),
         "{errors:#?}"
     );
     assert_eq!(head, std::fs::read(public.project.join("HEAD")).unwrap());
 }
 
 #[test]
-fn copied_binary_charges_expanded_type_and_effect_copies_before_allocation() {
+fn copied_binary_checks_expanded_type_extent_and_effect_reference_integrity() {
     let public = Public::new("minimal");
     let base = public.revision();
     let head = std::fs::read(public.project.join("HEAD")).unwrap();
-    // Very few physical records describe an exponentially expanded type tree. The preflight
-    // rejects it before cloning or recursively constructing the expanded value.
+    // A small type DAG describes an expanded node extent that cannot fit usize. Checked
+    // arithmetic rejects it before cloning or recursively constructing the expanded value.
     let mut types = format!("request base={base}\ntype.map as=@T0 key=unit value=unit\n");
-    for index in 1..20 {
+    for index in 1..usize::BITS {
         types.push_str(&format!(
             "type.map as=@T{index} key=@T{} value=@T{}\n",
             index - 1,
             index - 1
         ));
     }
-    // Structural density must also charge every materialized effect row, including repeated
-    // use of a shared alias. These invalid repeated requirements never reach semantic admission.
+    // Repeated aliases materialize more than one million effect-row entries without a
+    // default copy quota. Their foreign references then reach dependency-integrity admission.
     let mut effects = format!("request base={base}\neffect.row as=@E\n");
     for index in 0..1_000 {
         effects.push_str(&format!(
@@ -642,7 +652,20 @@ fn copied_binary_charges_expanded_type_and_effect_copies_before_allocation() {
     effects.push_str("expression.block as=$body\n(sequence ");
     effects.push_str(&"(function-value $function (effects @E)) ".repeat(1_100));
     effects.push_str(");\nexpression.end\ncreate.module as=$module name=capacity\ncreate.function as=$function module=$module name=function visibility=private result=unit effect=pure body=$body\n");
-    for (name, input) in [("expanded-types", types), ("expanded-effects", effects)] {
+    for (name, input, expected_class, expected_code) in [
+        (
+            "expanded-types",
+            types,
+            "resource",
+            "change_input_type_capacity",
+        ),
+        (
+            "expanded-effects",
+            effects,
+            "corrupt",
+            "witness_dependency_target",
+        ),
+    ] {
         let input = public.write(&format!("{name}.lkjc"), &input);
         let errors = public.failure(&[
             "--project",
@@ -657,8 +680,8 @@ fn copied_binary_charges_expanded_type_and_effect_copies_before_allocation() {
                 .iter()
                 .filter(|record| record.operation == "diagnostic")
                 .any(|record| {
-                    optional_field(record, "class") == Some("resource")
-                        && field(record, "code") == "change_input_type_capacity"
+                    optional_field(record, "class") == Some(expected_class)
+                        && field(record, "code") == expected_code
                 }),
             "{name}: {errors:#?}"
         );

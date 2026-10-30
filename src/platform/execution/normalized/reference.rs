@@ -64,19 +64,25 @@ mod associated_invoke_tests;
 #[path = "reference_associated_runtime_tests.rs"]
 mod associated_runtime_tests;
 
+/// Each cumulative policy counter has a companion lower-bound flag. Exact
+/// `u64::MAX` remains unsaturated; only overflow or inherited saturation sets it.
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize)]
 pub struct NormalizedReferenceObservation {
     pub expressions: u64,
+    pub expressions_saturated: bool,
     pub calls: u64,
     pub external_calls: u64,
     pub capability_calls: u64,
+    pub capability_calls_saturated: bool,
     pub allocated_bytes: u64,
+    pub allocated_bytes_saturated: bool,
     pub allocation_charges: u64,
     pub type_derivation_steps: u64,
     pub source_admission_steps: u64,
     pub type_metadata_bytes: u64,
     pub(crate) value_work: super::value::ValueWork,
     pub collection_items: u64,
+    pub collection_items_saturated: bool,
     pub maximum_call_depth: usize,
     pub canonical_owner_reads: u64,
     pub canonical_map_pages_read: u64,
@@ -662,16 +668,20 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
             root_allowance: None,
             observation: NormalizedReferenceObservation {
                 expressions: 0,
+                expressions_saturated: false,
                 calls: 0,
                 external_calls: 0,
                 capability_calls: 0,
+                capability_calls_saturated: false,
                 allocated_bytes: 0,
+                allocated_bytes_saturated: false,
                 allocation_charges: 0,
                 type_derivation_steps,
                 source_admission_steps,
                 type_metadata_bytes,
                 value_work: super::value::ValueWork::default(),
                 collection_items: 0,
+                collection_items_saturated: false,
                 maximum_call_depth: 0,
                 canonical_owner_reads: schema_work.owner_reads,
                 canonical_map_pages_read: schema_work.map_pages_read,
@@ -849,23 +859,47 @@ fn charge_reference_allocation(
     shared_budget: Option<&super::shared_budget::SharedBudget>,
     bytes: u64,
 ) -> Result<(), ExecutionError> {
+    charge_reference_storage(policy, observation, shared_budget, bytes, 0)
+}
+
+// The count, exactness flag and shared finite reservation commit as one pair.
+fn charge_reference_storage(
+    policy: NormalizedRunPolicy,
+    observation: &mut NormalizedReferenceObservation,
+    shared_budget: Option<&super::shared_budget::SharedBudget>,
+    bytes: u64,
+    items: u64,
+) -> Result<(), ExecutionError> {
+    let mut items_saturated = observation.collection_items_saturated;
+    let mut bytes_saturated = observation.allocated_bytes_saturated;
+    let next_items = crate::platform::execution::cumulative_charge(
+        observation.collection_items,
+        items,
+        policy.maximum_collection_items,
+        "normalized_reference_collection_items",
+        "execution exhausted its collection-item budget",
+        &mut items_saturated,
+    )?;
     let next_bytes = crate::platform::execution::cumulative_charge(
         observation.allocated_bytes,
         bytes,
         policy.maximum_allocated_bytes,
         "normalized_reference_allocation",
         "execution exhausted its allocation budget",
+        &mut bytes_saturated,
     )?;
     if let Some(budget) = shared_budget {
-        budget.reserve(bytes, 0)?;
+        budget.reserve(bytes, items)?;
     }
+    observation.collection_items = next_items;
+    observation.collection_items_saturated = items_saturated;
     observation.allocated_bytes = next_bytes;
+    observation.allocated_bytes_saturated = bytes_saturated;
     if bytes != 0 {
         observation.allocation_charges = observation.allocation_charges.saturating_add(1);
     }
     Ok(())
 }
-
 // Break completes the trampoline; Continue transfers an already admitted tail call.
 // Ordinary checked results stay inline; only tail targets retain their existing Box.
 type ReferenceStep = std::ops::ControlFlow<CheckedValue, Box<AdmittedGraphCall>>;
@@ -3485,7 +3519,12 @@ impl ReferenceState<'_> {
         if let Some(budget) = &self.shared_budget {
             budget.step("normalized_reference_expression_steps")?;
         }
-        self.observation.expressions = self.observation.expressions.saturating_add(1);
+        crate::platform::execution::cumulative_observe(
+            &mut self.observation.expressions,
+            &mut self.observation.expressions_saturated,
+            1,
+            false,
+        );
         match self.owner(OwnerKey::Expression(expression))? {
             Some(OwnerRecord::Expression(record)) => {
                 self.check_associated_occurrence(
@@ -5214,9 +5253,18 @@ impl ReferenceState<'_> {
                     "structural record repeats one exact field name",
                 ));
             }
-            self.charge_allocation(fields.iter().fold(0_u64, |total, (name, _)| {
-                total.saturating_add(name.as_str().len() as u64)
-            }))?;
+            let name_bytes = fields
+                .iter()
+                .try_fold(0_u64, |total, (name, _)| {
+                    total.checked_add(name.as_str().len() as u64)
+                })
+                .ok_or_else(|| {
+                    reference_resource(
+                        "normalized_reference_allocation",
+                        "structural record field-name storage size overflowed",
+                    )
+                })?;
+            self.charge_allocation(name_bytes)?;
             self.record_value(None, fields)
         }
     }
@@ -5666,30 +5714,30 @@ impl ReferenceState<'_> {
         &mut self,
         requirement: RequirementReference,
     ) -> Result<(), ExecutionError> {
-        if self
-            .policy
-            .maximum_capability_calls
-            .is_some_and(|maximum| self.observation.capability_calls >= maximum)
-        {
-            return Err(reference_resource(
-                "normalized_reference_capability_calls",
-                "reference execution exhausted its capability-call budget",
-            ));
-        }
+        let mut saturated = self.observation.capability_calls_saturated;
+        let next_calls = crate::platform::execution::cumulative_charge(
+            self.observation.capability_calls,
+            1,
+            self.policy.maximum_capability_calls,
+            "normalized_reference_capability_calls",
+            "reference execution exhausted its capability-call budget",
+            &mut saturated,
+        )?;
         let capabilities = self
             .capabilities
             .ok_or_else(reference_capabilities_unbound)?;
         let maximum = capabilities.maximum_calls_exact(requirement)?;
         let canonical = capabilities.canonical_requirement_exact(self.program, requirement)?;
         let calls = self.calls_by_requirement.entry(canonical).or_default();
-        *calls = crate::platform::execution::cumulative_charge(
+        *calls = crate::platform::execution::finite_charge(
             *calls,
             1,
-            Some(maximum),
+            maximum,
             "normalized_reference_grant_calls",
             "reference execution exhausted one deployment-grant call bound",
         )?;
-        self.observation.capability_calls = self.observation.capability_calls.saturating_add(1);
+        self.observation.capability_calls = next_calls;
+        self.observation.capability_calls_saturated = saturated;
         Ok(())
     }
 
@@ -5700,23 +5748,18 @@ impl ReferenceState<'_> {
                 "one container exceeds finite item admission",
             ));
         }
-        let next_items = crate::platform::execution::cumulative_charge(
-            self.observation.collection_items,
-            items as u64,
-            self.policy.maximum_collection_items,
-            "normalized_reference_collection_items",
-            "execution exhausted its collection-item budget",
-        )?;
-        if let Some(budget) = &self.shared_budget {
-            budget.reserve(0, items as u64)?;
-        }
-        self.observation.collection_items = next_items;
         let bytes = super::value::collection_storage_bytes(
             items as u64,
             item_bytes as u64,
             "normalized_reference_allocation",
         )?;
-        self.charge_allocation(bytes)
+        charge_reference_storage(
+            self.policy,
+            &mut self.observation,
+            self.shared_budget.as_deref(),
+            bytes,
+            items as u64,
+        )
     }
 
     fn charge_allocation(&mut self, bytes: u64) -> Result<(), ExecutionError> {
@@ -5736,18 +5779,13 @@ impl ReferenceState<'_> {
                 "one external value exceeds finite item admission",
             ));
         }
-        let next_items = crate::platform::execution::cumulative_charge(
-            self.observation.collection_items,
+        charge_reference_storage(
+            self.policy,
+            &mut self.observation,
+            self.shared_budget.as_deref(),
+            bytes,
             items,
-            self.policy.maximum_collection_items,
-            "normalized_reference_collection_items",
-            "external value exceeds the collection-item budget",
-        )?;
-        if let Some(budget) = &self.shared_budget {
-            budget.reserve(0, items)?;
-        }
-        self.observation.collection_items = next_items;
-        self.charge_allocation(bytes)
+        )
     }
 
     fn rollback_all(&mut self) {
@@ -7205,16 +7243,10 @@ fn reference_map_key_bytes(key: &NormalizedMapKey) -> u64 {
 }
 
 fn validate_reference_policy(policy: NormalizedRunPolicy) -> Result<(), ExecutionError> {
-    if policy.instruction_steps == Some(0)
-        || policy.maximum_call_depth == 0
-        || policy.maximum_value_stack == 0
-        || policy.maximum_allocated_bytes == Some(0)
-        || policy.maximum_collection_items == Some(0)
-        || policy.maximum_capability_calls == Some(0)
-    {
+    if policy.maximum_call_depth == 0 || policy.maximum_value_stack == 0 {
         return Err(reference_resource(
             "normalized_reference_policy",
-            "normalized reference policy dimensions must all be positive",
+            "normalized reference call-depth and value-stack limits must be positive",
         ));
     }
     Ok(())
@@ -7307,7 +7339,6 @@ fn direct_memory_type(
     Err(reference_type_error("cyclic memory type substitution"))
 }
 
-
 #[cfg(test)]
 mod allocation_capacity_tests {
     use super::*;
@@ -7317,23 +7348,152 @@ mod allocation_capacity_tests {
         let amount = 256 * 1024 * 1024 + 1;
         assert_eq!(NormalizedRunPolicy::default().maximum_allocated_bytes, None);
         for limit in [None, Some(amount)] {
-            let policy = NormalizedRunPolicy { maximum_allocated_bytes: limit,
-                ..NormalizedRunPolicy::default() };
+            let policy = NormalizedRunPolicy {
+                maximum_allocated_bytes: limit,
+                ..NormalizedRunPolicy::default()
+            };
             let mut observation = NormalizedReferenceObservation::default();
             charge_reference_allocation(policy, &mut observation, None, amount).unwrap();
             assert_eq!(observation.allocated_bytes, amount);
             assert_eq!(observation.allocation_charges, 1);
             let next = charge_reference_allocation(policy, &mut observation, None, 1);
             assert_eq!(next.is_ok(), limit.is_none());
-            assert_eq!(observation.allocated_bytes, amount + u64::from(limit.is_none()));
+            assert_eq!(
+                observation.allocated_bytes,
+                amount + u64::from(limit.is_none())
+            );
         }
         for limit in [0, u64::MAX] {
-            let policy = NormalizedRunPolicy { maximum_allocated_bytes: Some(limit),
-                ..NormalizedRunPolicy::default() };
+            let policy = NormalizedRunPolicy {
+                maximum_allocated_bytes: Some(limit),
+                ..NormalizedRunPolicy::default()
+            };
             let mut observation = NormalizedReferenceObservation::default();
             charge_reference_allocation(policy, &mut observation, None, limit).unwrap();
             assert!(charge_reference_allocation(policy, &mut observation, None, 1).is_err());
             assert_eq!(observation.allocated_bytes, limit);
         }
+    }
+}
+
+#[cfg(test)]
+mod cumulative_allocation_tests {
+    use super::super::shared_budget::SharedBudget;
+    use super::*;
+
+    fn charge(
+        policy: NormalizedRunPolicy,
+        shared: Option<&SharedBudget>,
+        work: &mut NormalizedReferenceObservation,
+        bytes: u64,
+    ) -> Result<(), ExecutionError> {
+        charge_reference_allocation(policy, work, shared, bytes)
+    }
+
+    #[test]
+    fn allocation_observation_preserves_exact_maximum_and_shared_failure_atomically() {
+        let finite = NormalizedRunPolicy {
+            maximum_allocated_bytes: Some(u64::MAX),
+            ..NormalizedRunPolicy::foreground()
+        };
+        let mut work = NormalizedReferenceObservation {
+            allocated_bytes: u64::MAX - 1,
+            ..NormalizedReferenceObservation::default()
+        };
+        charge(finite, None, &mut work, 1).unwrap();
+        assert_eq!(work.allocated_bytes, u64::MAX);
+        assert!(!work.allocated_bytes_saturated);
+        let before = work.clone();
+        assert!(charge(finite, None, &mut work, 1).is_err());
+        assert_eq!(work, before);
+        charge(NormalizedRunPolicy::foreground(), None, &mut work, 1).unwrap();
+        assert_eq!(work.allocated_bytes, u64::MAX);
+        assert!(work.allocated_bytes_saturated);
+        charge(NormalizedRunPolicy::foreground(), None, &mut work, 1).unwrap();
+        assert!(work.allocated_bytes_saturated);
+        let before = work.clone();
+        assert!(charge(finite, None, &mut work, 0).is_err());
+        assert_eq!(work, before);
+
+        let shared = SharedBudget::new(
+            NormalizedRunPolicy {
+                maximum_allocated_bytes: Some(0),
+                ..NormalizedRunPolicy::foreground()
+            },
+            None,
+            0,
+            0,
+        );
+        let mut work = NormalizedReferenceObservation {
+            allocated_bytes: u64::MAX,
+            ..NormalizedReferenceObservation::default()
+        };
+        let before = work.clone();
+        assert!(
+            charge(
+                NormalizedRunPolicy::foreground(),
+                Some(&shared),
+                &mut work,
+                1
+            )
+            .is_err()
+        );
+        assert_eq!(
+            work, before,
+            "failed shared reservation must not commit local count or saturation"
+        );
+    }
+    #[test]
+    fn allocation_and_collection_pair_refusal_preserves_both_counts_and_flags() {
+        for finite_bytes in [false, true] {
+            let mut policy = NormalizedRunPolicy::foreground();
+            let mut work = NormalizedReferenceObservation {
+                allocation_charges: 3,
+                ..NormalizedReferenceObservation::default()
+            };
+            if finite_bytes {
+                policy.maximum_allocated_bytes = Some(0);
+                work.collection_items = u64::MAX;
+            } else {
+                policy.maximum_collection_items = Some(0);
+                work.allocated_bytes = u64::MAX;
+            }
+            let before = work.clone();
+            assert!(charge_reference_storage(policy, &mut work, None, 1, 1).is_err());
+            assert_eq!(work, before);
+        }
+        let shared = SharedBudget::new(
+            NormalizedRunPolicy {
+                maximum_allocated_bytes: Some(0),
+                ..NormalizedRunPolicy::foreground()
+            },
+            None,
+            0,
+            0,
+        );
+        let mut work = NormalizedReferenceObservation {
+            allocated_bytes: u64::MAX,
+            collection_items: u64::MAX,
+            allocation_charges: 3,
+            ..NormalizedReferenceObservation::default()
+        };
+        let before = work.clone();
+        assert!(
+            charge_reference_storage(
+                NormalizedRunPolicy::foreground(),
+                &mut work,
+                Some(&shared),
+                1,
+                1
+            )
+            .is_err()
+        );
+        assert_eq!(work, before);
+        charge_reference_storage(NormalizedRunPolicy::foreground(), &mut work, None, 1, 1).unwrap();
+        assert_eq!(work.allocated_bytes, u64::MAX);
+        assert_eq!(work.collection_items, u64::MAX);
+        assert!(work.allocated_bytes_saturated);
+        assert!(work.collection_items_saturated);
+        assert_eq!(work.allocation_charges, 4);
     }
 }

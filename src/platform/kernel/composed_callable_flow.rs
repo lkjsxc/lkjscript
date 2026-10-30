@@ -9,11 +9,23 @@ mod prerequisites;
 #[path = "recursive_callable_flow.rs"]
 mod recursive;
 
-use super::{CallableFlowWork, MAXIMUM_DIAGNOSTIC_PATH, semantic};
+#[cfg(test)]
+fn test_validate_callable_closure_with_scope<R: CallableClosureRead + ?Sized>(
+    read: &R,
+    work: &mut usize,
+    maximum_work: Option<usize>,
+    scope: recursive::ProofScope,
+) -> Result<CallableFlowWork, Diagnostic> {
+    crate::platform::kernel::test_work::observe(work, |work| {
+        validate_callable_closure_with_scope(read, work, maximum_work, scope)
+    })
+}
+
 #[cfg(test)]
 use super::MAXIMUM_ANALYSIS_BYTES;
-use crate::platform::kernel::work::ValidationWork;
+use super::{CallableFlowWork, MAXIMUM_DIAGNOSTIC_PATH, semantic};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::kernel::work::ValidationWork;
 use crate::platform::kernel::{
     AssociatedTypeBindingValue, AssociatedTypeBound, BindingKind, DeclarationPayload,
     DeclarationRecord, DeclarationReference, ExpressionOperation, ImplementationOperand,
@@ -348,7 +360,14 @@ fn reserve_metadata_product<T>(
         consumed: observation.metadata_bytes,
         saturated: observation.metadata_saturated,
     };
-    if !observed.charge_factors(&[count, std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>(), multiple], maximum) {
+    if !observed.charge_factors(
+        &[
+            count,
+            std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>(),
+            multiple,
+        ],
+        maximum,
+    ) {
         return Err(Diagnostic::new(
             DiagnosticClass::Resource,
             "kernel_callable_flow_storage",
@@ -1210,7 +1229,9 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             .and_then(|n| n.checked_add(1))
             .and_then(|n| n.checked_mul(searches));
         self.steps_checked(
-            width.checked_add(1).and_then(|width| comparisons.and_then(|comparisons| width.checked_mul(comparisons))),
+            width.checked_add(1).and_then(|width| {
+                comparisons.and_then(|comparisons| width.checked_mul(comparisons))
+            }),
         )
     }
     fn intern_selection(
@@ -1283,14 +1304,23 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
     ) -> Result<&'c [usize], Diagnostic> {
         let comparisons =
             (usize::BITS - context.witnesses.len().saturating_add(1).leading_zeros()) as usize + 1;
-        self.steps_checked(path.len().checked_add(1).and_then(|width| width.checked_mul(comparisons)))?;
+        self.steps_checked(
+            path.len()
+                .checked_add(1)
+                .and_then(|width| width.checked_mul(comparisons)),
+        )?;
         Ok(context.witness_slots(path))
     }
     fn reserve<T>(&mut self, count: usize) -> Result<(), Diagnostic> {
         reserve_metadata::<T>(&mut self.observation, self.maximum_metadata_bytes, count)
     }
     fn reserve_product<T>(&mut self, count: usize, multiple: usize) -> Result<(), Diagnostic> {
-        reserve_metadata_product::<T>(&mut self.observation, self.maximum_metadata_bytes, count, multiple)
+        reserve_metadata_product::<T>(
+            &mut self.observation,
+            self.maximum_metadata_bytes,
+            count,
+            multiple,
+        )
     }
     fn declaration(
         &mut self,
@@ -3359,17 +3389,4 @@ mod read_view_tests {
             );
         }
     }
-}
-
-
-#[cfg(test)]
-fn test_validate_callable_closure_with_scope<R: CallableClosureRead + ?Sized>(
-    read: &R,
-    work: &mut usize,
-    maximum_work: Option<usize>,
-    scope: recursive::ProofScope,
-) -> Result<CallableFlowWork, Diagnostic> {
-    crate::platform::kernel::test_work::observe(work, |work| {
-        validate_callable_closure_with_scope(read, work, maximum_work, scope)
-    })
 }

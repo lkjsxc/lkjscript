@@ -426,7 +426,10 @@ fn full_associated_parameter_shapes_preserve_work_cancellation_and_fresh_retry()
         .expect_err("cancelled owner read");
     assert_eq!(error.code, "parameter_cancelled");
     assert!(cancelled.interrupted);
-    assert_eq!(cancelled.work.consumed, 1, "work before the refusal is retained");
+    assert_eq!(
+        cancelled.work.consumed, 1,
+        "work before the refusal is retained"
+    );
     let mut retry = validator(&f.source, MAXIMUM_VALIDATION_WORK, &healthy);
     assert!(
         retry

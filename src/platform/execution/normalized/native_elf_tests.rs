@@ -333,7 +333,7 @@ fn native_egraph_plan_is_bounded_and_preserves_exact_vm_quota_boundaries() {
 
 #[test]
 fn native_egraph_fuses_exact_standard_map_fold_only_after_trap_free_proof() {
-    let memory = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+    let memory = crate::platform::MemProjectStore::new(None).unwrap();
     crate::platform::project_creation::create_memory_project(&memory, "fusion", "command").unwrap();
     let repository = GraphRepository::open_memory(&memory).unwrap();
     let input = format!(
@@ -400,13 +400,12 @@ fn native_egraph_fuses_exact_standard_map_fold_only_after_trap_free_proof() {
     }
 }
 
-
 #[test]
 fn native_elf_compiles_beyond_former_function_and_instruction_inventories() {
     use std::fmt::Write as _;
     let count = 4097;
     let mut input = String::from(
-        "declarations.begin\n(units (module create native-capacity\n         (external create length (visibility private) (implementation core.list.length)          (type-parameter create T) (parameter create values (type (list T))) (returns I64))\n"
+        "declarations.begin\n(units (module create native-capacity\n         (external create length (visibility private) (implementation core.list.length)          (type-parameter create T) (parameter create values (type (list T))) (returns I64))\n",
     );
     let items = " (i64 0)".repeat(16);
     for index in 0..count {
@@ -421,20 +420,18 @@ fn native_elf_compiles_beyond_former_function_and_instruction_inventories() {
         write!(input, " (call f{index})").unwrap();
     }
     input.push_str("))))\n))\ndeclarations.end\n");
-    // This intentionally large fixture selects a finite authoring allowance;
-    // ordinary helper defaults remain independent of the native inventory test.
+    // Exercise ordinary unmetered authoring and project storage; finite-policy
+    // boundaries are covered independently by their exact admission controls.
     let empty = empty_normalized_snapshot(b"native-capacity");
-    let memory = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+    let memory = crate::platform::MemProjectStore::new(None).unwrap();
     let repository = GraphRepository::create_memory(&memory, &empty, None)
         .unwrap()
         .repository;
     let base = repository.view_current().unwrap().revision();
-    let request = format!("request base={base}\nchange.policy name=operations limit=5000\n{input}");
-    let decoded = crate::platform::control::decode_compact_change(
-        "native-capacity",
-        request.as_bytes(),
-    )
-    .unwrap();
+    let request = format!("request base={base}\n{input}");
+    let decoded =
+        crate::platform::control::decode_compact_change("native-capacity", request.as_bytes())
+            .unwrap();
     let prepared = repository
         .prepare_authored_change(&decoded.semantic, decoded.options)
         .unwrap();
@@ -446,10 +443,14 @@ fn native_elf_compiles_beyond_former_function_and_instruction_inventories() {
         .unwrap()
         .value;
     let program = prepare_snapshot(&source);
-    let instructions: usize = program.functions.iter().map(|function| match &function.body {
-        NormalizedFunctionBody::Code(code) => code.instructions.len(),
-        _ => 0,
-    }).sum();
+    let instructions: usize = program
+        .functions
+        .iter()
+        .map(|function| match &function.body {
+            NormalizedFunctionBody::Code(code) => code.instructions.len(),
+            _ => 0,
+        })
+        .sum();
     assert!(instructions > 65_536);
     let declaration = declaration_named(&source, "entry");
     let index = program.function(declaration).unwrap().0 as usize;
@@ -462,9 +463,13 @@ fn native_elf_compiles_beyond_former_function_and_instruction_inventories() {
     let policy = NormalizedRunPolicy::default();
     let control = ExecutionControl::uncancelled();
     let vm = NormalizedVm::for_test(&program, policy)
-        .invoke(declaration, vec![], None, &control).unwrap().0;
+        .invoke(declaration, vec![], None, &control)
+        .unwrap()
+        .0;
     let reference = NormalizedReferenceInterpreter::new(&source, &program, policy)
-        .invoke(declaration, vec![], None, &control).unwrap().0;
+        .invoke(declaration, vec![], None, &control)
+        .unwrap()
+        .0;
     assert_eq!(vm, NormalizedValue::I64(4097));
     assert_eq!(reference, vm);
 }

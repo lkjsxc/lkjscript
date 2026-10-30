@@ -166,16 +166,18 @@ impl ObjectDomain {
         }
     }
 
-    pub const fn maximum_bytes(self) -> usize {
+    /// Current object-format boundary, separate from a caller's optional read policy.
+    pub const fn maximum_bytes(self) -> Option<usize> {
         match self {
-            Self::MapPage => crate::platform::persistent_map::MAXIMUM_PAGE_BYTES,
+            Self::Transaction | Self::SemanticDiff => None,
+            Self::MapPage => Some(crate::platform::persistent_map::MAXIMUM_PAGE_BYTES),
             Self::SemanticRoot
             | Self::Revision
             | Self::Receipt
             | Self::Retirement
-            | Self::CompilationManifest => 64 * 1024,
+            | Self::CompilationManifest => Some(64 * 1024),
             Self::Type | Self::OwnerSummary | Self::Dependency | Self::PackageInterface => {
-                1024 * 1024
+                Some(1024 * 1024)
             }
             Self::Owner
             | Self::Sequence
@@ -187,10 +189,8 @@ impl ObjectDomain {
             | Self::PackageRevision
             | Self::PackageTransport
             | Self::BackupManifest
-            | Self::Change
-            | Self::Transaction
-            | Self::SemanticDiff => 4 * 1024 * 1024,
-            Self::Blob | Self::BackupSegment => contract::MAXIMUM_PACK_ENTRY_BYTES,
+            | Self::Change => Some(4 * 1024 * 1024),
+            Self::Blob | Self::BackupSegment => Some(64 * 1024 * 1024),
         }
     }
 }
@@ -240,7 +240,9 @@ impl ObjectKey {
     }
 
     pub fn verify(self, bytes: &[u8]) -> Result<(), StoreError> {
-        if bytes.len() > self.domain.maximum_bytes() {
+        if let Some(maximum) = self.domain.maximum_bytes()
+            && bytes.len() > maximum
+        {
             return Err(StoreError::new(
                 StoreErrorClass::Resource,
                 "object_domain_size",
@@ -248,7 +250,7 @@ impl ObjectKey {
                     "{} object has {} bytes; maximum is {}",
                     self.domain.name(),
                     bytes.len(),
-                    self.domain.maximum_bytes()
+                    maximum
                 ),
             ));
         }
@@ -285,7 +287,9 @@ pub enum StoreWorkCounter {
 }
 
 impl StoreWorkCounter {
-    const fn bit(self) -> u16 { 1_u16 << self as u8 }
+    const fn bit(self) -> u16 {
+        1_u16 << self as u8
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -314,15 +318,51 @@ impl StoreWork {
         self.saturated |= other.saturated;
         self.saturated_counters |= other.saturated_counters;
         for (counter, additional, field) in [
-            (&mut self.catalog_lookups, other.catalog_lookups, StoreWorkCounter::CatalogLookups),
-            (&mut self.packs_opened, other.packs_opened, StoreWorkCounter::PacksOpened),
-            (&mut self.objects_read, other.objects_read, StoreWorkCounter::ObjectsRead),
-            (&mut self.objects_staged, other.objects_staged, StoreWorkCounter::ObjectsStaged),
-            (&mut self.objects_reused, other.objects_reused, StoreWorkCounter::ObjectsReused),
-            (&mut self.bytes_read, other.bytes_read, StoreWorkCounter::BytesRead),
-            (&mut self.bytes_staged, other.bytes_staged, StoreWorkCounter::BytesStaged),
-            (&mut self.pages_staged, other.pages_staged, StoreWorkCounter::PagesStaged),
-            (&mut self.packs_sealed, other.packs_sealed, StoreWorkCounter::PacksSealed),
+            (
+                &mut self.catalog_lookups,
+                other.catalog_lookups,
+                StoreWorkCounter::CatalogLookups,
+            ),
+            (
+                &mut self.packs_opened,
+                other.packs_opened,
+                StoreWorkCounter::PacksOpened,
+            ),
+            (
+                &mut self.objects_read,
+                other.objects_read,
+                StoreWorkCounter::ObjectsRead,
+            ),
+            (
+                &mut self.objects_staged,
+                other.objects_staged,
+                StoreWorkCounter::ObjectsStaged,
+            ),
+            (
+                &mut self.objects_reused,
+                other.objects_reused,
+                StoreWorkCounter::ObjectsReused,
+            ),
+            (
+                &mut self.bytes_read,
+                other.bytes_read,
+                StoreWorkCounter::BytesRead,
+            ),
+            (
+                &mut self.bytes_staged,
+                other.bytes_staged,
+                StoreWorkCounter::BytesStaged,
+            ),
+            (
+                &mut self.pages_staged,
+                other.pages_staged,
+                StoreWorkCounter::PagesStaged,
+            ),
+            (
+                &mut self.packs_sealed,
+                other.packs_sealed,
+                StoreWorkCounter::PacksSealed,
+            ),
         ] {
             match counter.checked_add(additional) {
                 Some(value) => *counter = value,
@@ -364,7 +404,10 @@ impl StoreReadLimits {
             (left, None) => left,
         };
         Self {
-            maximum_catalog_lookups: intersect(self.maximum_catalog_lookups, other.maximum_catalog_lookups),
+            maximum_catalog_lookups: intersect(
+                self.maximum_catalog_lookups,
+                other.maximum_catalog_lookups,
+            ),
             maximum_objects: intersect(self.maximum_objects, other.maximum_objects),
             maximum_bytes: intersect(self.maximum_bytes, other.maximum_bytes),
         }
@@ -402,8 +445,16 @@ impl StoreReadObservation {
         self.saturated |= other.saturated;
         self.saturated_counters |= other.saturated_counters;
         for (counter, additional, field) in [
-            (&mut self.catalog_lookups, other.catalog_lookups, StoreWorkCounter::CatalogLookups),
-            (&mut self.objects, other.objects, StoreWorkCounter::ObjectsRead),
+            (
+                &mut self.catalog_lookups,
+                other.catalog_lookups,
+                StoreWorkCounter::CatalogLookups,
+            ),
+            (
+                &mut self.objects,
+                other.objects,
+                StoreWorkCounter::ObjectsRead,
+            ),
             (&mut self.bytes, other.bytes, StoreWorkCounter::BytesRead),
         ] {
             match counter.checked_add(additional) {
@@ -458,21 +509,33 @@ impl StoreReadAdmission {
     /// reservations made before a rejected read. Finite consumption is derived from
     /// checked remaining permission, never from a possibly saturated observation.
     pub fn charged_from(mut self, joint: &Self) -> Result<Self, StoreError> {
-        let charge = |current: Option<u64>, initial: Option<u64>, remaining: Option<u64>| {
-            match (current, initial, remaining) {
-                (None, _, _) => Ok(None),
-                (Some(current), Some(initial), Some(remaining)) => initial
-                    .checked_sub(remaining)
-                    .and_then(|used| current.checked_sub(used))
-                    .map(Some)
-                    .ok_or_else(read_admission_accounting),
-                _ => Err(read_admission_accounting()),
-            }
+        let charge = |current: Option<u64>, initial: Option<u64>, remaining: Option<u64>| match (
+            current, initial, remaining,
+        ) {
+            (None, _, _) => Ok(None),
+            (Some(current), Some(initial), Some(remaining)) => initial
+                .checked_sub(remaining)
+                .and_then(|used| current.checked_sub(used))
+                .map(Some)
+                .ok_or_else(read_admission_accounting),
+            _ => Err(read_admission_accounting()),
         };
         let remaining = StoreReadLimits {
-            maximum_catalog_lookups: charge(self.remaining.maximum_catalog_lookups, joint.initial.maximum_catalog_lookups, joint.remaining.maximum_catalog_lookups)?,
-            maximum_objects: charge(self.remaining.maximum_objects, joint.initial.maximum_objects, joint.remaining.maximum_objects)?,
-            maximum_bytes: charge(self.remaining.maximum_bytes, joint.initial.maximum_bytes, joint.remaining.maximum_bytes)?,
+            maximum_catalog_lookups: charge(
+                self.remaining.maximum_catalog_lookups,
+                joint.initial.maximum_catalog_lookups,
+                joint.remaining.maximum_catalog_lookups,
+            )?,
+            maximum_objects: charge(
+                self.remaining.maximum_objects,
+                joint.initial.maximum_objects,
+                joint.remaining.maximum_objects,
+            )?,
+            maximum_bytes: charge(
+                self.remaining.maximum_bytes,
+                joint.initial.maximum_bytes,
+                joint.remaining.maximum_bytes,
+            )?,
         };
         self.remaining = remaining;
         self.observation.add(joint.observation);
@@ -481,12 +544,15 @@ impl StoreReadAdmission {
 
     pub fn admit_catalog_lookup(&mut self) -> Result<(), StoreError> {
         let remaining = read_remaining(
-            self.remaining.maximum_catalog_lookups, 1,
-            "object_read_catalog_lookups_exhausted", "catalog lookups",
+            self.remaining.maximum_catalog_lookups,
+            1,
+            "object_read_catalog_lookups_exhausted",
+            "catalog lookups",
         )?;
         self.remaining.maximum_catalog_lookups = remaining;
         self.observation.add(StoreReadObservation {
-            catalog_lookups: 1, ..StoreReadObservation::default()
+            catalog_lookups: 1,
+            ..StoreReadObservation::default()
         });
         Ok(())
     }
@@ -503,24 +569,42 @@ impl StoreReadAdmission {
     }
 
     pub fn admit_object_bytes(&mut self, byte_count: u64) -> Result<(), StoreError> {
-        let objects = read_remaining(self.remaining.maximum_objects, 1,
-            "object_read_objects_exhausted", "objects")?;
-        let bytes = read_remaining(self.remaining.maximum_bytes, byte_count,
-            "object_read_bytes_exhausted", "bytes")?;
+        let objects = read_remaining(
+            self.remaining.maximum_objects,
+            1,
+            "object_read_objects_exhausted",
+            "objects",
+        )?;
+        let bytes = read_remaining(
+            self.remaining.maximum_bytes,
+            byte_count,
+            "object_read_bytes_exhausted",
+            "bytes",
+        )?;
         self.remaining.maximum_objects = objects;
         self.remaining.maximum_bytes = bytes;
         self.observation.add(StoreReadObservation {
-            objects: 1, bytes: byte_count, ..StoreReadObservation::default()
+            objects: 1,
+            bytes: byte_count,
+            ..StoreReadObservation::default()
         });
         Ok(())
     }
 }
 
 fn read_remaining(
-    remaining: Option<u64>, required: u64, code: &'static str, unit: &'static str,
+    remaining: Option<u64>,
+    required: u64,
+    code: &'static str,
+    unit: &'static str,
 ) -> Result<Option<u64>, StoreError> {
-    remaining.map(|remaining| remaining.checked_sub(required)
-        .ok_or_else(|| read_exhausted(code, unit, required, remaining))).transpose()
+    remaining
+        .map(|remaining| {
+            remaining
+                .checked_sub(required)
+                .ok_or_else(|| read_exhausted(code, unit, required, remaining))
+        })
+        .transpose()
 }
 
 fn read_admission_accounting() -> StoreError {
@@ -542,7 +626,7 @@ pub trait ImmutableObjectStore {
     fn read(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError>;
 
@@ -554,7 +638,7 @@ pub trait ImmutableObjectStore {
     fn read_admitted(
         &self,
         _key: ObjectKey,
-        _maximum_bytes: usize,
+        _maximum_bytes: Option<usize>,
         _admission: &mut StoreReadAdmission,
         _work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
@@ -685,12 +769,12 @@ impl<'a, S: ImmutableObjectStore + ?Sized> ObjectStage<'a, S> {
     fn read_inner(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         admission: Option<&mut StoreReadAdmission>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         if let Some(bytes) = self.objects.get(&key) {
-            if bytes.len() > maximum_bytes {
+            if maximum_bytes.is_some_and(|maximum| bytes.len() > maximum) {
                 return Err(StoreError::new(
                     StoreErrorClass::Resource,
                     "object_stage_read_limit",
@@ -701,9 +785,15 @@ impl<'a, S: ImmutableObjectStore + ?Sized> ObjectStage<'a, S> {
                 admission.admit_object(bytes.len())?;
             }
             key.verify(bytes)?;
-            work.add(crate::platform::storage::object::StoreWork { objects_read: 1, ..crate::platform::storage::object::StoreWork::default() });
-            work.add(crate::platform::storage::object::StoreWork { bytes_read: bytes.len() as u64, ..crate::platform::storage::object::StoreWork::default() });
-            return Ok(Some(bytes.clone()));
+            work.add(crate::platform::storage::object::StoreWork {
+                objects_read: 1,
+                ..crate::platform::storage::object::StoreWork::default()
+            });
+            work.add(crate::platform::storage::object::StoreWork {
+                bytes_read: bytes.len() as u64,
+                ..crate::platform::storage::object::StoreWork::default()
+            });
+            return Ok(Some(copy_object_bytes(bytes)?));
         }
         self.read_base(key, maximum_bytes, admission, work)
     }
@@ -736,7 +826,10 @@ impl<'a, S: ImmutableObjectStore + ?Sized> ObjectStage<'a, S> {
                     "one staged immutable object identity is bound to different bytes",
                 ));
             }
-            work.add(crate::platform::storage::object::StoreWork { objects_reused: 1, ..crate::platform::storage::object::StoreWork::default() });
+            work.add(crate::platform::storage::object::StoreWork {
+                objects_reused: 1,
+                ..crate::platform::storage::object::StoreWork::default()
+            });
             return Ok(StageOutcome::Reused);
         }
         let existing = self.read_base(key, key.domain.maximum_bytes(), admission, work)?;
@@ -748,7 +841,10 @@ impl<'a, S: ImmutableObjectStore + ?Sized> ObjectStage<'a, S> {
                     "accepted storage binds one immutable object identity to different bytes",
                 ));
             }
-            work.add(crate::platform::storage::object::StoreWork { objects_reused: 1, ..crate::platform::storage::object::StoreWork::default() });
+            work.add(crate::platform::storage::object::StoreWork {
+                objects_reused: 1,
+                ..crate::platform::storage::object::StoreWork::default()
+            });
             return Ok(StageOutcome::Reused);
         }
         let byte_count = u64::try_from(bytes.len()).map_err(|_| {
@@ -806,8 +902,14 @@ impl<'a, S: ImmutableObjectStore + ?Sized> ObjectStage<'a, S> {
         let outcome = stage_into_map(&mut self.objects, key, bytes)?;
         self.staged_bytes = admitted_bytes;
         self.staged_pages = admitted_pages;
-        work.add(crate::platform::storage::object::StoreWork { objects_staged: 1, ..crate::platform::storage::object::StoreWork::default() });
-        work.add(crate::platform::storage::object::StoreWork { bytes_staged: byte_count, ..crate::platform::storage::object::StoreWork::default() });
+        work.add(crate::platform::storage::object::StoreWork {
+            objects_staged: 1,
+            ..crate::platform::storage::object::StoreWork::default()
+        });
+        work.add(crate::platform::storage::object::StoreWork {
+            bytes_staged: byte_count,
+            ..crate::platform::storage::object::StoreWork::default()
+        });
         work.add(StoreWork {
             pages_staged: u64::from(key.domain == ObjectDomain::MapPage),
             ..StoreWork::default()
@@ -818,7 +920,7 @@ impl<'a, S: ImmutableObjectStore + ?Sized> ObjectStage<'a, S> {
     fn read_base(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         admission: Option<&mut StoreReadAdmission>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
@@ -859,7 +961,7 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for ObjectStage<'_, 
     fn read(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         self.read_inner(key, maximum_bytes, None, work)
@@ -868,7 +970,7 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for ObjectStage<'_, 
     fn read_admitted(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         admission: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
@@ -914,7 +1016,9 @@ fn check_stage_limit(
     observed: u64,
     maximum: Option<u64>,
 ) -> Result<(), StoreError> {
-    if let Some(maximum) = maximum && observed > maximum {
+    if let Some(maximum) = maximum
+        && observed > maximum
+    {
         return Err(StoreError::new(
             StoreErrorClass::Resource,
             code,
@@ -928,7 +1032,7 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for &mut S {
     fn read(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         (**self).read(key, maximum_bytes, work)
@@ -937,7 +1041,7 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for &mut S {
     fn read_admitted(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         admission: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
@@ -1031,6 +1135,19 @@ fn read_exhausted(
     )
 }
 
+pub(crate) fn copy_object_bytes(bytes: &[u8]) -> Result<Vec<u8>, StoreError> {
+    let mut copy = Vec::new();
+    copy.try_reserve_exact(bytes.len()).map_err(|_| {
+        StoreError::new(
+            StoreErrorClass::Resource,
+            "object_allocation",
+            "immutable object allocation exceeds available capacity",
+        )
+    })?;
+    copy.extend_from_slice(bytes);
+    Ok(copy)
+}
+
 pub fn stage_into_map(
     objects: &mut BTreeMap<ObjectKey, Vec<u8>>,
     key: ObjectKey,
@@ -1045,7 +1162,7 @@ pub fn stage_into_map(
             "one immutable object identity is bound to different bytes",
         )),
         None => {
-            objects.insert(key, bytes.to_vec());
+            objects.insert(key, copy_object_bytes(bytes)?);
             Ok(StageOutcome::Inserted)
         }
     }
@@ -1054,6 +1171,74 @@ pub fn stage_into_map(
 #[cfg(test)]
 mod admission_policy_tests {
     use super::*;
+
+    #[test]
+    fn every_store_read_field_preserves_the_complete_policy_boundary_matrix() {
+        for (dimension, code) in [
+            "object_read_catalog_lookups_exhausted",
+            "object_read_objects_exhausted",
+            "object_read_bytes_exhausted",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for maximum in [None, Some(0), Some(2), Some(3), Some(u64::MAX)] {
+                let mut limits = StoreReadLimits::unbounded();
+                match dimension {
+                    0 => limits.maximum_catalog_lookups = maximum,
+                    1 => limits.maximum_objects = maximum,
+                    _ => limits.maximum_bytes = maximum,
+                }
+                let mut admission = StoreReadAdmission::new(limits);
+                for ordinal in 1_u64..=4 {
+                    let before = admission;
+                    let result = match dimension {
+                        0 => admission.admit_catalog_lookup(),
+                        1 => admission.admit_object_bytes(0),
+                        _ => admission.admit_object_bytes(1),
+                    };
+                    assert_eq!(
+                        result.is_ok(),
+                        maximum.is_none_or(|limit| ordinal <= limit),
+                        "dimension={dimension} maximum={maximum:?} ordinal={ordinal}"
+                    );
+                    if let Err(error) = result {
+                        assert_eq!(error.class, StoreErrorClass::Resource);
+                        assert_eq!(error.code, code);
+                        assert_eq!(admission, before);
+                    }
+                }
+                let consumed = maximum.map_or(4, |limit| limit.min(4));
+                let mut expected_remaining = [None; 3];
+                expected_remaining[dimension] = maximum.map(|limit| limit - consumed);
+                let remaining = admission.remaining();
+                assert_eq!(
+                    [
+                        remaining.maximum_catalog_lookups,
+                        remaining.maximum_objects,
+                        remaining.maximum_bytes,
+                    ],
+                    expected_remaining
+                );
+                let observation = admission.observation();
+                let expected_observation = match dimension {
+                    0 => [consumed, 0, 0],
+                    1 => [0, consumed, 0],
+                    _ => [0, consumed, consumed],
+                };
+                assert_eq!(
+                    [
+                        observation.catalog_lookups,
+                        observation.objects,
+                        observation.bytes
+                    ],
+                    expected_observation
+                );
+                assert!(!observation.saturated);
+                assert_eq!(observation.saturated_counters, 0);
+            }
+        }
+    }
 
     #[test]
     fn default_and_unbounded_are_distinct_from_finite_zero_and_maximum() {
@@ -1096,11 +1281,14 @@ mod admission_policy_tests {
         assert!(admission.admit_object_bytes(536_870_914).is_err());
         assert_eq!(admission, before);
         admission.admit_object_bytes(536_870_913).unwrap();
-        assert_eq!(admission.remaining(), StoreReadLimits {
-            maximum_catalog_lookups: Some(0),
-            maximum_objects: Some(0),
-            maximum_bytes: Some(0),
-        });
+        assert_eq!(
+            admission.remaining(),
+            StoreReadLimits {
+                maximum_catalog_lookups: Some(0),
+                maximum_objects: Some(0),
+                maximum_bytes: Some(0),
+            }
+        );
         assert!(admission.admit_object_bytes(0).is_err());
     }
 
@@ -1124,8 +1312,13 @@ mod admission_policy_tests {
                 let next_inner = inner.charged_from(&joint).unwrap();
                 let next_outer = outer.charged_from(&joint).unwrap();
                 for (before, after) in [(inner, next_inner), (outer, next_outer)] {
-                    assert_eq!(after.remaining().maximum_bytes,
-                        before.remaining().maximum_bytes.map(|n| n - if accepted { 3 } else { 0 }));
+                    assert_eq!(
+                        after.remaining().maximum_bytes,
+                        before
+                            .remaining()
+                            .maximum_bytes
+                            .map(|n| n - if accepted { 3 } else { 0 })
+                    );
                     assert_eq!(after.observation().catalog_lookups, 1);
                     assert_eq!(after.observation().objects, u64::from(accepted));
                 }
@@ -1156,14 +1349,24 @@ mod admission_policy_tests {
         });
         let mut unbounded = StoreReadAdmission::unbounded();
         unbounded.admit_object_bytes(2).unwrap();
-        assert_eq!(finite.charged_from(&unbounded).unwrap_err().code,
-            "object_read_admission_accounting");
+        assert_eq!(
+            finite.charged_from(&unbounded).unwrap_err().code,
+            "object_read_admission_accounting"
+        );
         assert_eq!(finite.remaining().maximum_bytes, Some(1));
     }
     #[test]
     fn independent_store_saturation_preserves_an_exact_maximum_in_another_dimension() {
-        let mut work = StoreWork { bytes_read: u64::MAX, objects_read: u64::MAX - 1, ..StoreWork::default() };
-        work.add(StoreWork { bytes_read: 1, objects_read: 1, ..StoreWork::default() });
+        let mut work = StoreWork {
+            bytes_read: u64::MAX,
+            objects_read: u64::MAX - 1,
+            ..StoreWork::default()
+        };
+        work.add(StoreWork {
+            bytes_read: 1,
+            objects_read: 1,
+            ..StoreWork::default()
+        });
         assert!(work.saturated);
         assert!(work.counter_saturated(StoreWorkCounter::BytesRead));
         assert!(!work.counter_saturated(StoreWorkCounter::ObjectsRead));
@@ -1172,15 +1375,21 @@ mod admission_policy_tests {
         combined.add(work);
         assert_eq!(combined, work);
 
-        let mut admission = StoreReadAdmission::new(StoreReadLimits { maximum_objects: Some(2), ..StoreReadLimits::unbounded() });
+        let mut admission = StoreReadAdmission::new(StoreReadLimits {
+            maximum_objects: Some(2),
+            ..StoreReadLimits::unbounded()
+        });
         admission.admit_object_bytes(u64::MAX).unwrap();
         admission.admit_object_bytes(1).unwrap();
         let observation = admission.observation();
         assert!(observation.counter_saturated(StoreWorkCounter::BytesRead));
         assert!(!observation.counter_saturated(StoreWorkCounter::ObjectsRead));
-        assert!(observation.as_store_work().counter_saturated(StoreWorkCounter::BytesRead));
+        assert!(
+            observation
+                .as_store_work()
+                .counter_saturated(StoreWorkCounter::BytesRead)
+        );
         assert_eq!(admission.remaining().maximum_objects, Some(0));
         assert!(admission.admit_object_bytes(0).is_err());
     }
-
 }

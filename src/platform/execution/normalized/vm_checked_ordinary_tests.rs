@@ -28,6 +28,8 @@ fn with_admission<T>(
     let mut bytes = 0;
     let mut charges = 0;
     let mut items = 0;
+    let mut allocated_saturated = false;
+    let mut items_saturated = false;
     let result = run(&mut Admission {
         shared_budget: None,
         program: &f.program,
@@ -37,9 +39,12 @@ fn with_admission<T>(
         policy,
         work: &mut work,
         allocated: &mut bytes,
+        allocated_saturated: &mut allocated_saturated,
         allocation_charges: &mut charges,
         items: &mut items,
+        items_saturated: &mut items_saturated,
         admission_bytes: 0,
+        admission_bytes_saturated: false,
         admission_items: 0,
     });
     assert_eq!(resources.live_resources(), 0);
@@ -81,6 +86,44 @@ fn exact(f: &Fixture, value: &Value, ty: TypeObjectDigest) -> bool {
     value
         .has_exact_ordinary_type(&f.program, ty, &mut ValueWork::default())
         .unwrap()
+}
+
+#[test]
+fn raw_admission_pair_refusal_preserves_subtotals_counts_and_saturation() {
+    let fixture = Fixture::new(0);
+    let outcome = with_admission(
+        &fixture,
+        &Bindings::new(),
+        super::super::NormalizedRunPolicy {
+            maximum_allocated_bytes: Some(0),
+            ..super::super::NormalizedRunPolicy::foreground()
+        },
+        &ExecutionControl::uncancelled(),
+        |admission| {
+            admission.admission_bytes = u64::MAX;
+            *admission.items = u64::MAX;
+            *admission.allocation_charges = 7;
+            assert!(admission.reserve_storage(1, 1).is_err());
+            assert_eq!(admission.admission_bytes, u64::MAX);
+            assert!(!admission.admission_bytes_saturated);
+            assert_eq!(admission.admission_items, 0);
+            assert_eq!(*admission.items, u64::MAX);
+            assert!(!*admission.items_saturated);
+            assert_eq!(*admission.allocated, 0);
+            assert!(!*admission.allocated_saturated);
+            assert_eq!(*admission.allocation_charges, 7);
+
+            admission.policy.maximum_allocated_bytes = None;
+            admission.reserve_storage(1, 1)?;
+            assert!(admission.admission_bytes_saturated);
+            assert!(*admission.items_saturated);
+            assert_eq!(*admission.allocated, 1);
+            assert!(!*admission.allocated_saturated);
+            assert_eq!(*admission.allocation_charges, 8);
+            Ok(())
+        },
+    );
+    outcome.result.unwrap();
 }
 
 #[test]

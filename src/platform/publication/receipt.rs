@@ -201,8 +201,11 @@ impl PublicationReceipt {
         if !self.work.budget.observation_flags_valid()
             || (self.work.budget.observation_saturation().any() && !self.work.saturated)
         {
-            return Err(receipt_error(DiagnosticClass::Corrupt, "publication_receipt_work_flags",
-                "receipt work exactness flags are invalid or omit saturated budget observations"));
+            return Err(receipt_error(
+                DiagnosticClass::Corrupt,
+                "publication_receipt_work_flags",
+                "receipt work exactness flags are invalid or omit saturated budget observations",
+            ));
         }
         if self.validation.tests_passed > self.validation.tests_executed
             || self.validation.tests_executed > self.validation.tests_selected

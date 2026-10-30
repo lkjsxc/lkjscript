@@ -185,7 +185,7 @@ impl ImmutableObjectStore for SourceValidationReuseMutableStore {
     fn read(
         &self,
         key: ObjectKey,
-        maximum: usize,
+        maximum: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         self.read_admitted(key, maximum, &mut StoreReadAdmission::unbounded(), work)
@@ -194,7 +194,7 @@ impl ImmutableObjectStore for SourceValidationReuseMutableStore {
     fn read_admitted(
         &self,
         key: ObjectKey,
-        maximum: usize,
+        maximum: Option<usize>,
         admission: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {

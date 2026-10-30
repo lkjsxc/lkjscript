@@ -66,7 +66,8 @@ fn before_and_candidate_ownership_cycles_never_become_unit_sets() {
         };
         let derived = delta(&witness.entries.ownership, &after);
         let mut ownership = CandidateOwnership::new(&derived, &witness);
-        let error = owning_units(a, &mut ownership, &mut ImpactWork::default(), Some(8)).unwrap_err();
+        let error =
+            owning_units(a, &mut ownership, &mut ImpactWork::default(), Some(8)).unwrap_err();
         assert_eq!(error.class, DiagnosticClass::Corrupt);
         assert_eq!(error.code, "change_impact_unit_cycle");
     }

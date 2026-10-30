@@ -40,12 +40,8 @@ fn execute(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>> {
     let (source, bytes) = match (inline, file) {
         (Some(value), None) => ("<transaction-input>".into(), value.into_bytes()),
         (None, Some(path)) => {
-            let bytes = read_with_limit(
-                Path::new(&path),
-                None,
-                "transaction input",
-            )
-            .map_err(single_diagnostic)?;
+            let bytes = read_with_limit(Path::new(&path), None, "transaction input")
+                .map_err(single_diagnostic)?;
             (path, bytes)
         }
         _ => {
@@ -113,7 +109,7 @@ fn execute(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>> {
         .record_verified_tests(&tests, normalized.semantic.budget)
         .map_err(single_diagnostic)?;
     let tests = tests.receipt();
-    // Encode and bound the complete result before any durable mutation.
+    // Encode the complete result before any durable mutation.
     let result = serde_json::json!({
         "operation": "tx", "status": "accepted", "base": base.revision.to_string(),
         "revision": prepared.publication.head.revision.to_string(),
@@ -151,15 +147,51 @@ fn run_value(
 }
 
 fn encode_result(result: serde_json::Value) -> Result<Vec<u8>, Vec<Diagnostic>> {
-    let mut bytes = serde_json::to_vec(&result)
-        .map_err(|error| single_diagnostic(internal_error(error.to_string())))?;
-    bytes.push(b'\n');
-    if bytes.len() > crate::platform::control::MAXIMUM_TRANSACTION_RESULT_BYTES {
-        return Err(single_diagnostic(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "transaction_result_capacity",
-            "transaction result exceeds 65536 bytes",
-        )));
+    use std::io::Write;
+    let mut output = TransactionResultBuffer::default();
+    if let Err(error) = serde_json::to_writer(&mut output, &result) {
+        return Err(if output.allocation_failed {
+            transaction_result_allocation()
+        } else {
+            single_diagnostic(internal_error(error.to_string()))
+        });
     }
-    Ok(bytes)
+    output
+        .write_all(b"\n")
+        .map_err(|_| transaction_result_allocation())?;
+    Ok(output.bytes)
+}
+
+#[derive(Default)]
+struct TransactionResultBuffer {
+    bytes: Vec<u8>,
+    allocation_failed: bool,
+}
+
+impl std::io::Write for TransactionResultBuffer {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        if self.bytes.len().checked_add(bytes.len()).is_none()
+            || self.bytes.try_reserve(bytes.len()).is_err()
+        {
+            self.allocation_failed = true;
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::OutOfMemory,
+                "cannot allocate transaction result bytes",
+            ));
+        }
+        self.bytes.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+fn transaction_result_allocation() -> Vec<Diagnostic> {
+    single_diagnostic(Diagnostic::new(
+        DiagnosticClass::Resource,
+        "transaction_result_allocation",
+        "cannot allocate the complete transaction result",
+    ))
 }

@@ -151,7 +151,7 @@ fn fifo_admission_child() {
             let key = ObjectKey::for_bytes(ObjectDomain::Blob, PAYLOAD);
             assert_eq!(
                 store
-                    .read(key, PAYLOAD.len(), &mut StoreWork::default())
+                    .read(key, Some(PAYLOAD.len()), &mut StoreWork::default())
                     .expect("read regular-file control"),
                 Some(PAYLOAD.to_vec())
             );

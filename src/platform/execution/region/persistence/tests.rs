@@ -7,7 +7,7 @@ fn key() -> DataKey {
 }
 
 fn memory_store() -> DataStore {
-    crate::platform::MemProjectStore::new(1_048_576)
+    crate::platform::MemProjectStore::new(None)
         .unwrap()
         .data_store("region-tests", DataLimits::default())
         .unwrap()
@@ -169,7 +169,14 @@ fn digest_layout_and_capacity_are_independent_load_requirements() {
     .unwrap();
     assert_eq!(error.code, "region_capacity");
     assert!(!charged);
-    for (offset, byte) in [(0, 0), (8, image[8] ^ 1), (24, 0), (32, 0), (65, 0), (184, 1)] {
+    for (offset, byte) in [
+        (0, 0),
+        (8, image[8] ^ 1),
+        (24, 0),
+        (32, 0),
+        (65, 0),
+        (184, 1),
+    ] {
         let mut corrupted = image.clone();
         corrupted[offset] = byte;
         let digest = digest(&corrupted, &control).unwrap();

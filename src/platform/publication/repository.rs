@@ -108,7 +108,7 @@ impl ImmutableObjectStore for AncestorStore<'_> {
     fn read(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         self.read_admitted(
@@ -122,7 +122,7 @@ impl ImmutableObjectStore for AncestorStore<'_> {
     fn read_admitted(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         external: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
@@ -134,7 +134,9 @@ impl ImmutableObjectStore for AncestorStore<'_> {
         let own = *self.admission.borrow();
         let other = *external;
         let mut merged = StoreReadAdmission::new(own.remaining().intersect(other.remaining()));
-        let result = self.base.read_admitted(key, maximum_bytes, &mut merged, work);
+        let result = self
+            .base
+            .read_admitted(key, maximum_bytes, &mut merged, work);
         let next_own = own.charged_from(&merged)?;
         let next_other = other.charged_from(&merged)?;
         *self.admission.borrow_mut() = next_own;
@@ -1919,12 +1921,20 @@ impl CandidateReferenceAdmission {
 
     fn admit_visits(&self, count: usize) -> Result<(), Diagnostic> {
         if let Some(remaining) = self.remaining_visits.get() {
-            let count = u64::try_from(count).map_err(|_| repository_error(
-                DiagnosticClass::Resource, "publication_repository_reference_visits_exhausted",
-                "candidate reference count cannot fit a finite caller allowance"))?;
-            let remaining = remaining.checked_sub(count).ok_or_else(|| repository_error(
-                DiagnosticClass::Resource, "publication_repository_reference_visits_exhausted",
-                "candidate reference traversal exceeds its aggregate preparation allowance"))?;
+            let count = u64::try_from(count).map_err(|_| {
+                repository_error(
+                    DiagnosticClass::Resource,
+                    "publication_repository_reference_visits_exhausted",
+                    "candidate reference count cannot fit a finite caller allowance",
+                )
+            })?;
+            let remaining = remaining.checked_sub(count).ok_or_else(|| {
+                repository_error(
+                    DiagnosticClass::Resource,
+                    "publication_repository_reference_visits_exhausted",
+                    "candidate reference traversal exceeds its aggregate preparation allowance",
+                )
+            })?;
             self.remaining_visits.set(Some(remaining));
         }
         Ok(())
@@ -2911,11 +2921,15 @@ fn install_package_container(
     let mut install_admission = crate::platform::storage::object::StoreReadAdmission::new(
         crate::platform::storage::object::StoreReadLimits {
             maximum_catalog_lookups: Some(reserved_visits),
-            maximum_objects: Some(crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS
-                - admitted.validation_visits
-                - stage_input_visits),
-            maximum_bytes: Some(crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES
-                - admitted.validation_read_bytes),
+            maximum_objects: Some(
+                crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS
+                    - admitted.validation_visits
+                    - stage_input_visits,
+            ),
+            maximum_bytes: Some(
+                crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES
+                    - admitted.validation_read_bytes,
+            ),
         },
     );
     package_stage_checkpoint(fault, PackageStagePoint::BeforeObjects)?;

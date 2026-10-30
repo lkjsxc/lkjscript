@@ -5,6 +5,7 @@ use crate::platform::kernel::{
     BlobObjectDigest, CaseReference, ComparisonPolicy, DeclarationReference, ExternalVisibility,
     FieldReference, Idempotency, ImplementationName, Name, OperationReference, OwnerKey, OwnerKind,
     PackageId, ParameterUse, PortReference, RequirementReference, ResourceLimit, TypeObjectDigest,
+    ValidationWork,
 };
 use crate::platform::package::RunnerKind;
 use crate::platform::semantic_id::{HttpRouteId, ParameterId, TypeParameterId};
@@ -865,9 +866,9 @@ impl CompilationTables {
                 }
                 CompiledText::Blob { bytes, .. }
                     if *bytes > 0
-                        && *bytes
-                            <= crate::platform::storage::object::ObjectDomain::Blob.maximum_bytes()
-                                as u64 => {}
+                        && crate::platform::storage::object::ObjectDomain::Blob
+                            .maximum_bytes()
+                            .is_none_or(|maximum| *bytes <= maximum as u64) => {}
                 CompiledText::Blob { .. } => {
                     return Err(unit_corrupt(
                         "compiler_unit_blob_length",
@@ -2932,20 +2933,17 @@ fn verify_stack(code: &CompiledCode) -> Result<Vec<usize>, Diagnostic> {
         .collect())
 }
 
-/// Admit lexical loan custody independently of operand-stack shape. Persistent scope nodes
-/// keep branch states small; every traversal, including rejected input, shares a finite bound.
+/// Admit lexical loan custody independently of operand-stack shape. Instruction states are
+/// visited once, and scope parents always refer to earlier nodes, so termination is structural.
 fn verify_owned_borrow_scopes(code: &CompiledCode, depths: &[usize]) -> Result<(), Diagnostic> {
-    verify_owned_borrow_scopes_with_limit(
-        code,
-        depths,
-        crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
-    )
+    verify_owned_borrow_scopes_with_limit(code, depths, None, &mut ValidationWork::default())
 }
 
 fn verify_owned_borrow_scopes_with_limit(
     code: &CompiledCode,
     depths: &[usize],
-    mut remaining: usize,
+    maximum: Option<usize>,
+    work: &mut ValidationWork,
 ) -> Result<(), Diagnostic> {
     #[derive(Clone, Copy)]
     struct Scope {
@@ -2956,20 +2954,22 @@ fn verify_owned_borrow_scopes_with_limit(
         view: bool,
     }
     let mut reserve = || {
-        remaining = remaining.checked_sub(1).ok_or_else(|| {
-            unit_error(
+        if !work.charge(1, maximum) {
+            return Err(unit_error(
                 DiagnosticClass::Resource,
                 "compiler_unit_borrow_work",
-                "lexical loan admission exceeds the validation work bound",
-            )
-        })?;
+                "lexical loan admission exceeds its explicit work allowance",
+            ));
+        }
         Ok::<_, Diagnostic>(())
     };
+    // Admit each instruction state when scheduled, before growing the worklist. The
+    // initial state also precedes allocation of the instruction-indexed state table.
+    reserve()?;
     let mut scopes = Vec::<Scope>::new();
     let mut pending = vec![(0_usize, None::<usize>)];
     let mut states = vec![None::<Option<usize>>; code.instructions.len()];
     while let Some((index, active)) = pending.pop() {
-        reserve()?;
         let slot = states.get_mut(index).ok_or_else(|| {
             unit_corrupt(
                 "compiler_unit_borrow_control",
@@ -3126,6 +3126,7 @@ fn verify_owned_borrow_scopes_with_limit(
                         "lexical read body must leave exactly one independent result above its enclosing prefix",
                     ));
                 }
+                reserve()?;
                 pending.push((index + 1, scope.parent));
             }
             CompiledInstruction::MatchBorrowedOwned {
@@ -3156,6 +3157,7 @@ fn verify_owned_borrow_scopes_with_limit(
                         entry_depth: depth,
                         view: false,
                     });
+                    reserve()?;
                     pending.push((case.target as usize, Some(scope)));
                 }
             }
@@ -3172,9 +3174,14 @@ fn verify_owned_borrow_scopes_with_limit(
             CompiledInstruction::Return
             | CompiledInstruction::ReturnBorrowed
             | CompiledInstruction::ReturnView => {}
-            CompiledInstruction::Jump(target) => pending.push((*target as usize, next)),
-            CompiledInstruction::JumpIfFalse(target) => {
+            CompiledInstruction::Jump(target) => {
+                reserve()?;
                 pending.push((*target as usize, next));
+            }
+            CompiledInstruction::JumpIfFalse(target) => {
+                reserve()?;
+                pending.push((*target as usize, next));
+                reserve()?;
                 pending.push((index + 1, next));
             }
             CompiledInstruction::MatchOwned { cases, .. } => {
@@ -3192,6 +3199,7 @@ fn verify_owned_borrow_scopes_with_limit(
                         }
                         ancestor = scope.parent;
                     }
+                    reserve()?;
                     pending.push((case.target as usize, next));
                 }
             }
@@ -3211,10 +3219,14 @@ fn verify_owned_borrow_scopes_with_limit(
                             ancestor = scope.parent;
                         }
                     }
+                    reserve()?;
                     pending.push((arm.target as usize, next));
                 }
             }
-            _ => pending.push((index + 1, next)),
+            _ => {
+                reserve()?;
+                pending.push((index + 1, next));
+            }
         }
     }
     Ok(())
@@ -3223,7 +3235,17 @@ fn verify_owned_borrow_scopes_with_limit(
 /// Protect the selected source before any initializer is evaluated. This structural protocol
 /// checks custody and authored field order; canonical occurrence admission separately proves
 /// each initializer's exact accessible path and the complete view declaration inventory.
+/// Visited instruction states and backward parent links establish termination without fuel.
 fn verify_read_view_construction(code: &CompiledCode, depths: &[usize]) -> Result<(), Diagnostic> {
+    verify_read_view_construction_with_limit(code, depths, None, &mut ValidationWork::default())
+}
+
+fn verify_read_view_construction_with_limit(
+    code: &CompiledCode,
+    depths: &[usize],
+    maximum: Option<usize>,
+    work: &mut ValidationWork,
+) -> Result<(), Diagnostic> {
     if !code.instructions.iter().any(|i| {
         matches!(
             i,
@@ -3243,15 +3265,14 @@ fn verify_read_view_construction(code: &CompiledCode, depths: &[usize]) -> Resul
         prefix: usize,
         lifetime: Option<usize>,
     }
-    let mut remaining = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
     let mut tick = || {
-        remaining = remaining.checked_sub(1).ok_or_else(|| {
-            unit_error(
+        if !work.charge(1, maximum) {
+            return Err(unit_error(
                 DiagnosticClass::Resource,
                 "compiler_unit_view_work",
-                "view construction proof exceeds its finite work allowance",
-            )
-        })?;
+                "view construction proof exceeds its explicit work allowance",
+            ));
+        }
         Ok::<_, Diagnostic>(())
     };
     let invalid = || {
@@ -3714,6 +3735,29 @@ mod borrow_scope_tests {
         }
     }
 
+    fn nested_branch(destination: u32) -> CompiledCode {
+        CompiledCode {
+            parameter_count: 1,
+            local_count: 4,
+            instructions: vec![
+                field(0, 1),
+                field(1, 2),
+                Unit,
+                MatchOwned {
+                    choice_type: 0,
+                    cases: vec![CompiledOwnedChoiceJump {
+                        target: 4,
+                        binding_local: destination,
+                    }],
+                },
+                Unit,
+                EndOwnedBorrow { binding_local: 2 },
+                EndOwnedBorrow { binding_local: 1 },
+                Return,
+            ],
+        }
+    }
+
     fn check(instructions: Vec<CompiledInstruction>) -> Result<(), Diagnostic> {
         let code = CompiledCode {
             parameter_count: 1,
@@ -4052,42 +4096,205 @@ mod borrow_scope_tests {
 
     #[test]
     fn lexical_loan_work_bound_distinguishes_exhaustion_from_nested_branch_corruption() {
-        let code = |destination| CompiledCode {
-            parameter_count: 1,
-            local_count: 4,
-            instructions: vec![
-                field(0, 1),
-                field(1, 2),
-                Unit,
-                MatchOwned {
-                    choice_type: 0,
-                    cases: vec![CompiledOwnedChoiceJump {
-                        target: 4,
-                        binding_local: destination,
-                    }],
-                },
-                Unit,
-                EndOwnedBorrow { binding_local: 2 },
-                EndOwnedBorrow { binding_local: 1 },
-                Return,
-            ],
-        };
-        let invalid = code(0);
+        let invalid = nested_branch(0);
         let depths = verify_stack(&invalid).expect("the adversary has valid operand flow");
         // The smaller allowance reaches the inner scope but cannot inspect the outer
         // ancestor. One more step exposes the forbidden write instead of exhaustion.
-        let exhausted = verify_owned_borrow_scopes_with_limit(&invalid, &depths, 9).unwrap_err();
+        let mut work = ValidationWork::default();
+        let exhausted =
+            verify_owned_borrow_scopes_with_limit(&invalid, &depths, Some(9), &mut work)
+                .unwrap_err();
         assert_eq!(exhausted.class, DiagnosticClass::Resource);
         assert_eq!(exhausted.code, "compiler_unit_borrow_work");
-        let corrupt = verify_owned_borrow_scopes_with_limit(&invalid, &depths, 10).unwrap_err();
+        assert_eq!(work, ValidationWork::exact(9));
+        for maximum in [None, Some(10), Some(usize::MAX)] {
+            let mut work = ValidationWork::default();
+            let corrupt =
+                verify_owned_borrow_scopes_with_limit(&invalid, &depths, maximum, &mut work)
+                    .unwrap_err();
+            assert_eq!(corrupt.class, DiagnosticClass::Corrupt);
+            assert_eq!(corrupt.code, "compiler_unit_borrow_custody");
+            assert_eq!(work, ValidationWork::exact(10));
+        }
+
+        let valid = nested_branch(3);
+        let depths = verify_stack(&valid).unwrap();
+        verify_owned_borrow_scopes(&valid, &depths).unwrap();
+        for maximum in [None, Some(14), Some(usize::MAX)] {
+            let mut work = ValidationWork::default();
+            verify_owned_borrow_scopes_with_limit(&valid, &depths, maximum, &mut work).unwrap();
+            assert_eq!(work, ValidationWork::exact(14));
+        }
+        for maximum in [0, 13] {
+            let mut work = ValidationWork::default();
+            let exhausted =
+                verify_owned_borrow_scopes_with_limit(&valid, &depths, Some(maximum), &mut work)
+                    .unwrap_err();
+            assert_eq!(exhausted.class, DiagnosticClass::Resource);
+            assert_eq!(exhausted.code, "compiler_unit_borrow_work");
+            assert_eq!(work, ValidationWork::exact(maximum));
+        }
+    }
+
+    #[test]
+    fn lexical_loan_saturation_is_passive_and_never_grants_finite_capacity() {
+        let valid = nested_branch(3);
+        let depths = verify_stack(&valid).unwrap();
+        let mut exact = ValidationWork::exact(usize::MAX - 14);
+        verify_owned_borrow_scopes_with_limit(&valid, &depths, Some(usize::MAX), &mut exact)
+            .unwrap();
+        assert_eq!(exact, ValidationWork::exact(usize::MAX));
+
+        let mut insufficient = ValidationWork::exact(usize::MAX - 13);
+        let exhausted = verify_owned_borrow_scopes_with_limit(
+            &valid,
+            &depths,
+            Some(usize::MAX),
+            &mut insufficient,
+        )
+        .unwrap_err();
+        assert_eq!(exhausted.class, DiagnosticClass::Resource);
+        assert_eq!(exhausted.code, "compiler_unit_borrow_work");
+        assert_eq!(insufficient, ValidationWork::exact(usize::MAX));
+
+        let mut work = ValidationWork::exact(usize::MAX - 13);
+        verify_owned_borrow_scopes_with_limit(&valid, &depths, None, &mut work).unwrap();
+        let saturated = ValidationWork {
+            consumed: usize::MAX,
+            saturated: true,
+        };
+        assert_eq!(work, saturated);
+        verify_owned_borrow_scopes_with_limit(&valid, &depths, None, &mut work).unwrap();
+        assert_eq!(work, saturated);
+        let exhausted =
+            verify_owned_borrow_scopes_with_limit(&valid, &depths, Some(usize::MAX), &mut work)
+                .unwrap_err();
+        assert_eq!(exhausted.class, DiagnosticClass::Resource);
+        assert_eq!(exhausted.code, "compiler_unit_borrow_work");
+        assert_eq!(work, saturated);
+
+        let invalid = nested_branch(0);
+        let depths = verify_stack(&invalid).unwrap();
+        let corrupt =
+            verify_owned_borrow_scopes_with_limit(&invalid, &depths, None, &mut work).unwrap_err();
         assert_eq!(corrupt.class, DiagnosticClass::Corrupt);
         assert_eq!(corrupt.code, "compiler_unit_borrow_custody");
+        assert_eq!(work, saturated);
+    }
+}
 
-        let valid = code(3);
+#[cfg(test)]
+mod read_view_work_tests {
+    use super::*;
+    use CompiledInstruction::*;
+
+    // These fixtures enter the private structural proof; no artifact seal is involved.
+    fn construction(finish_field: u32) -> CompiledCode {
+        CompiledCode {
+            parameter_count: 1,
+            local_count: 1,
+            instructions: vec![
+                BeginReadView {
+                    view_type: 0,
+                    source_local: 0,
+                    fields: vec![0],
+                },
+                Unit,
+                FinishReadView {
+                    view_type: 0,
+                    fields: vec![finish_field],
+                },
+                Return,
+            ],
+        }
+    }
+
+    #[test]
+    fn view_work_policy_preserves_zero_exact_maximum_and_protocol_diagnostics() {
+        let valid = construction(0);
         let depths = verify_stack(&valid).unwrap();
-        assert!(verify_owned_borrow_scopes_with_limit(&valid, &depths, 14).is_ok());
-        let exhausted = verify_owned_borrow_scopes_with_limit(&valid, &depths, 13).unwrap_err();
+        verify_owned_borrow_scopes(&valid, &depths).unwrap();
+        verify_read_view_construction(&valid, &depths).unwrap();
+        for maximum in [None, Some(12), Some(usize::MAX)] {
+            let mut work = ValidationWork::default();
+            verify_read_view_construction_with_limit(&valid, &depths, maximum, &mut work).unwrap();
+            assert_eq!(work, ValidationWork::exact(12));
+        }
+        for maximum in [0, 11] {
+            let mut work = ValidationWork::default();
+            let exhausted =
+                verify_read_view_construction_with_limit(&valid, &depths, Some(maximum), &mut work)
+                    .unwrap_err();
+            assert_eq!(exhausted.class, DiagnosticClass::Resource);
+            assert_eq!(exhausted.code, "compiler_unit_view_work");
+            assert_eq!(work, ValidationWork::exact(maximum));
+        }
+
+        let invalid = construction(1);
+        let depths = verify_stack(&invalid).unwrap();
+        verify_owned_borrow_scopes(&invalid, &depths).unwrap();
+        let mut work = ValidationWork::default();
+        let exhausted =
+            verify_read_view_construction_with_limit(&invalid, &depths, Some(9), &mut work)
+                .unwrap_err();
         assert_eq!(exhausted.class, DiagnosticClass::Resource);
-        assert_eq!(exhausted.code, "compiler_unit_borrow_work");
+        assert_eq!(exhausted.code, "compiler_unit_view_work");
+        assert_eq!(work, ValidationWork::exact(9));
+        for maximum in [None, Some(10), Some(usize::MAX)] {
+            let mut work = ValidationWork::default();
+            let corrupt =
+                verify_read_view_construction_with_limit(&invalid, &depths, maximum, &mut work)
+                    .unwrap_err();
+            assert_eq!(corrupt.class, DiagnosticClass::Corrupt);
+            assert_eq!(corrupt.code, "compiler_unit_view_protocol");
+            assert_eq!(work, ValidationWork::exact(10));
+        }
+    }
+
+    #[test]
+    fn view_work_saturation_is_passive_and_never_grants_finite_capacity() {
+        let valid = construction(0);
+        let depths = verify_stack(&valid).unwrap();
+        let mut exact = ValidationWork::exact(usize::MAX - 12);
+        verify_read_view_construction_with_limit(&valid, &depths, Some(usize::MAX), &mut exact)
+            .unwrap();
+        assert_eq!(exact, ValidationWork::exact(usize::MAX));
+
+        let mut insufficient = ValidationWork::exact(usize::MAX - 11);
+        let exhausted = verify_read_view_construction_with_limit(
+            &valid,
+            &depths,
+            Some(usize::MAX),
+            &mut insufficient,
+        )
+        .unwrap_err();
+        assert_eq!(exhausted.class, DiagnosticClass::Resource);
+        assert_eq!(exhausted.code, "compiler_unit_view_work");
+        assert_eq!(insufficient, ValidationWork::exact(usize::MAX));
+
+        let mut work = ValidationWork::exact(usize::MAX - 11);
+        verify_read_view_construction_with_limit(&valid, &depths, None, &mut work).unwrap();
+        let saturated = ValidationWork {
+            consumed: usize::MAX,
+            saturated: true,
+        };
+        assert_eq!(work, saturated);
+        verify_read_view_construction_with_limit(&valid, &depths, None, &mut work).unwrap();
+        assert_eq!(work, saturated);
+        let exhausted =
+            verify_read_view_construction_with_limit(&valid, &depths, Some(usize::MAX), &mut work)
+                .unwrap_err();
+        assert_eq!(exhausted.class, DiagnosticClass::Resource);
+        assert_eq!(exhausted.code, "compiler_unit_view_work");
+        assert_eq!(work, saturated);
+
+        let invalid = construction(1);
+        let depths = verify_stack(&invalid).unwrap();
+        verify_owned_borrow_scopes(&invalid, &depths).unwrap();
+        let corrupt = verify_read_view_construction_with_limit(&invalid, &depths, None, &mut work)
+            .unwrap_err();
+        assert_eq!(corrupt.class, DiagnosticClass::Corrupt);
+        assert_eq!(corrupt.code, "compiler_unit_view_protocol");
+        assert_eq!(work, saturated);
     }
 }

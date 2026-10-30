@@ -90,7 +90,7 @@ fn multi_domain_pack_is_deterministic_and_exact() {
         assert_eq!(
             forward
                 .metadata
-                .read(&forward.bytes, key, expected.len())
+                .read(&forward.bytes, key, Some(expected.len()))
                 .expect("entry must read")
                 .expect("entry must exist"),
             expected
@@ -128,13 +128,13 @@ fn object_stage_reads_through_without_mutating_accepted_storage() {
         assert_eq!(stage.stored_bytes(), candidate_bytes.len());
         assert_eq!(
             stage
-                .read(accepted_key, accepted_bytes.len(), &mut work)
+                .read(accepted_key, Some(accepted_bytes.len()), &mut work)
                 .expect("accepted read"),
             Some(accepted_bytes.clone())
         );
         assert_eq!(
             stage
-                .read(candidate_key, candidate_bytes.len(), &mut work)
+                .read(candidate_key, Some(candidate_bytes.len()), &mut work)
                 .expect("candidate read"),
             Some(candidate_bytes.clone())
         );
@@ -144,7 +144,7 @@ fn object_stage_reads_through_without_mutating_accepted_storage() {
     assert!(
         base.read(
             candidate_key,
-            candidate_bytes.len(),
+            Some(candidate_bytes.len()),
             &mut StoreWork::default()
         )
         .expect("base lookup")
@@ -168,7 +168,7 @@ fn admitted_memory_reads_reject_before_payload_consumption() {
     let mut admission = read_admission(0, 1, byte_count);
     let mut work = StoreWork::default();
     let error = store
-        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .read_admitted(key, Some(bytes.len()), &mut admission, &mut work)
         .expect_err("zero catalog allowance must reject");
     assert_eq!(error.code, "object_read_catalog_lookups_exhausted");
     assert_eq!(work, StoreWork::default());
@@ -180,7 +180,7 @@ fn admitted_memory_reads_reject_before_payload_consumption() {
     let mut admission = read_admission(1, 0, byte_count);
     let mut work = StoreWork::default();
     let error = store
-        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .read_admitted(key, Some(bytes.len()), &mut admission, &mut work)
         .expect_err("zero object allowance must reject");
     assert_eq!(error.code, "object_read_objects_exhausted");
     assert_eq!(work.catalog_lookups, 1);
@@ -191,7 +191,7 @@ fn admitted_memory_reads_reject_before_payload_consumption() {
     let mut admission = read_admission(1, 1, byte_count - 1);
     let mut work = StoreWork::default();
     let error = store
-        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .read_admitted(key, Some(bytes.len()), &mut admission, &mut work)
         .expect_err("short byte allowance must reject");
     assert_eq!(error.code, "object_read_bytes_exhausted");
     assert_eq!(work.catalog_lookups, 1);
@@ -205,7 +205,7 @@ fn admitted_memory_reads_reject_before_payload_consumption() {
     let mut work = StoreWork::default();
     assert_eq!(
         store
-            .read_admitted(key, bytes.len(), &mut admission, &mut work)
+            .read_admitted(key, Some(bytes.len()), &mut admission, &mut work)
             .expect("exact allowance must read"),
         Some(bytes.clone())
     );
@@ -220,7 +220,7 @@ fn admitted_memory_reads_reject_before_payload_consumption() {
     let mut work = StoreWork::default();
     assert_eq!(
         store
-            .read_admitted(missing, 0, &mut admission, &mut work)
+            .read_admitted(missing, Some(0), &mut admission, &mut work)
             .expect("missing lookup needs no payload allowance"),
         None
     );
@@ -241,7 +241,7 @@ fn admitted_object_stage_reads_local_objects_without_catalog_work() {
     let mut admission = read_admission(0, 0, byte_count);
     let mut work = StoreWork::default();
     let error = stage
-        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .read_admitted(key, Some(bytes.len()), &mut admission, &mut work)
         .expect_err("zero object allowance must reject the staged payload");
     assert_eq!(error.code, "object_read_objects_exhausted");
     assert_eq!(work, StoreWork::default());
@@ -249,7 +249,7 @@ fn admitted_object_stage_reads_local_objects_without_catalog_work() {
     let mut admission = read_admission(0, 1, byte_count - 1);
     let mut work = StoreWork::default();
     let error = stage
-        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .read_admitted(key, Some(bytes.len()), &mut admission, &mut work)
         .expect_err("short byte allowance must reject the staged payload");
     assert_eq!(error.code, "object_read_bytes_exhausted");
     assert_eq!(work, StoreWork::default());
@@ -259,7 +259,7 @@ fn admitted_object_stage_reads_local_objects_without_catalog_work() {
     let mut work = StoreWork::default();
     assert_eq!(
         stage
-            .read_admitted(key, bytes.len(), &mut admission, &mut work)
+            .read_admitted(key, Some(bytes.len()), &mut admission, &mut work)
             .expect("exact staged allowance must read"),
         Some(bytes.clone())
     );
@@ -347,7 +347,7 @@ fn request_local_object_stage_shares_one_base_read_admission() {
     );
     assert_eq!(
         stage
-            .read(second.0, second.1.len(), &mut work)
+            .read(second.0, Some(second.1.len()), &mut work)
             .expect("ordinary read must use the same shared admission"),
         Some(second.1.clone())
     );
@@ -359,7 +359,7 @@ fn request_local_object_stage_shares_one_base_read_admission() {
     );
 
     let error = stage
-        .read(third.0, third.1.len(), &mut work)
+        .read(third.0, Some(third.1.len()), &mut work)
         .expect_err("next base payload must reject after cumulative object exhaustion");
     assert_eq!(error.code, "object_read_objects_exhausted");
     assert_eq!(work.catalog_lookups, 4);
@@ -566,7 +566,7 @@ fn memory_store_deduplicates_seals_and_verifies_reads() {
     assert_eq!(store.pack_len(), 1);
     assert_eq!(
         store
-            .read(owner, owner_bytes.len(), &mut work)
+            .read(owner, Some(owner_bytes.len()), &mut work)
             .expect("read must succeed"),
         Some(owner_bytes)
     );
@@ -621,13 +621,13 @@ fn malformed_pack_footer_payload_and_domain_reject() {
     let payload_offset = pack.metadata.entries[0].offset as usize;
     payload[payload_offset] ^= 1;
     let metadata = PackMetadata::decode(&payload, false).expect("footer remains valid");
-    assert!(metadata.read(&payload, key, bytes.len()).is_err());
+    assert!(metadata.read(&payload, key, Some(bytes.len())).is_err());
 
     let foreign = ObjectKey::for_bytes(ObjectDomain::Type, &bytes);
     assert_ne!(foreign.digest, key.digest);
     assert!(
         pack.metadata
-            .read(&pack.bytes, foreign, bytes.len())
+            .read(&pack.bytes, foreign, Some(bytes.len()))
             .unwrap()
             .is_none()
     );
@@ -650,9 +650,9 @@ fn pack_decoder_rejects_truncation_trailing_bounds_order_and_foreign_domain() {
     let footer = pack_footer_offset(&pack.bytes);
     let mut excessive = pack.bytes.clone();
     excessive[footer + 12..footer + 20]
-        .copy_from_slice(&((super::contract::MAXIMUM_PACK_ENTRIES as u64) + 1).to_be_bytes());
+        .copy_from_slice(&(pack.metadata.entries.len() as u64 + 1).to_be_bytes());
     let error = PackMetadata::decode(&excessive, false).expect_err("count must reject");
-    assert_eq!(error.code, "pack_entry_count");
+    assert_eq!(error.code, "pack_index_length");
 
     let (index, _) = pack_index_bounds(&pack.bytes);
     let mut overlapping = pack.bytes.clone();
@@ -755,7 +755,7 @@ fn directory_store_seals_reopens_rebuilds_and_deep_verifies() {
     for (key, bytes) in &entries {
         assert_eq!(
             reopened
-                .read(*key, bytes.len(), &mut work)
+                .read(*key, Some(bytes.len()), &mut work)
                 .expect("object must read"),
             Some(bytes.clone())
         );
@@ -851,7 +851,7 @@ fn admitted_directory_reads_reject_before_opening_pack_payload() {
     let mut work = StoreWork::default();
     assert_eq!(
         store
-            .read_admitted(key, bytes.len(), &mut admission, &mut work)
+            .read_admitted(key, Some(bytes.len()), &mut admission, &mut work)
             .expect("exact directory allowance must read"),
         Some(bytes.clone())
     );
@@ -868,7 +868,7 @@ fn admitted_directory_reads_reject_before_opening_pack_payload() {
     let mut admission = read_admission(0, 1, byte_count);
     let mut work = StoreWork::default();
     let error = store
-        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .read_admitted(key, Some(bytes.len()), &mut admission, &mut work)
         .expect_err("zero catalog allowance must reject before opening the missing pack");
     assert_eq!(error.code, "object_read_catalog_lookups_exhausted");
     assert_eq!(work, StoreWork::default());
@@ -876,7 +876,7 @@ fn admitted_directory_reads_reject_before_opening_pack_payload() {
     let mut admission = read_admission(1, 0, byte_count);
     let mut work = StoreWork::default();
     let error = store
-        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .read_admitted(key, Some(bytes.len()), &mut admission, &mut work)
         .expect_err("zero object allowance must reject before opening the missing pack");
     assert_eq!(error.code, "object_read_objects_exhausted");
     assert_eq!(work.catalog_lookups, 1);
@@ -887,7 +887,7 @@ fn admitted_directory_reads_reject_before_opening_pack_payload() {
     let mut admission = read_admission(1, 1, byte_count - 1);
     let mut work = StoreWork::default();
     let error = store
-        .read_admitted(key, bytes.len(), &mut admission, &mut work)
+        .read_admitted(key, Some(bytes.len()), &mut admission, &mut work)
         .expect_err("short byte allowance must reject before opening the missing pack");
     assert_eq!(error.code, "object_read_bytes_exhausted");
     assert_eq!(work.catalog_lookups, 1);
@@ -961,7 +961,7 @@ fn every_pack_seal_checkpoint_reopens_and_retries_safely() {
         );
         assert_eq!(
             reopened
-                .read(key, bytes.len(), &mut StoreWork::default())
+                .read(key, Some(bytes.len()), &mut StoreWork::default())
                 .expect("interrupted lookup"),
             catalog_visible.then_some(bytes.clone()),
             "wrong visible immutable object state at {checkpoint:?}"
@@ -983,7 +983,7 @@ fn every_pack_seal_checkpoint_reopens_and_retries_safely() {
             .expect("retry seal must complete");
         assert_eq!(
             reopened
-                .read(key, bytes.len(), &mut StoreWork::default())
+                .read(key, Some(bytes.len()), &mut StoreWork::default())
                 .expect("retried lookup"),
             Some(bytes)
         );
@@ -1068,7 +1068,7 @@ fn every_catalog_recovery_checkpoint_reopens_or_repairs_exactly() {
         assert_eq!(repaired.catalog_work().full_footer_scan_runs, 1);
         assert_eq!(
             repaired
-                .read(key, bytes.len(), &mut StoreWork::default())
+                .read(key, Some(bytes.len()), &mut StoreWork::default())
                 .expect("read repaired object"),
             Some(bytes)
         );
@@ -1138,7 +1138,7 @@ fn directory_block_reuse_preserves_reads_across_catalog_replacement() {
         for (key, bytes) in [&first, &second] {
             assert_eq!(
                 source
-                    .read_admitted(*key, bytes.len(), &mut admission, &mut reads)
+                    .read_admitted(*key, Some(bytes.len()), &mut admission, &mut reads)
                     .expect("admitted reads"),
                 Some(bytes.clone())
             );
@@ -1164,7 +1164,7 @@ fn directory_block_reuse_preserves_reads_across_catalog_replacement() {
     for (key, bytes) in [&first, &second, &third] {
         assert_eq!(
             store
-                .read(*key, bytes.len(), &mut work)
+                .read(*key, Some(bytes.len()), &mut work)
                 .expect("new view read"),
             Some(bytes.clone())
         );
@@ -1176,7 +1176,7 @@ fn directory_block_reuse_preserves_reads_across_catalog_replacement() {
         3
     );
     assert_eq!(
-        old.read(first.0, first.1.len(), &mut work)
+        old.read(first.0, Some(first.1.len()), &mut work)
             .expect("retained old view read"),
         Some(first.1)
     );
@@ -1188,7 +1188,7 @@ fn directory_block_reuse_preserves_reads_across_catalog_replacement() {
     assert_eq!(reopened.catalog_work().segment_blocks_read, 0);
     assert_eq!(
         reopened
-            .read(third.0, third.1.len(), &mut work)
+            .read(third.0, Some(third.1.len()), &mut work)
             .expect("fresh read"),
         Some(third.1)
     );
@@ -1231,7 +1231,7 @@ fn directory_rejects_corrupt_blocks_before_retaining_any_entry() {
     for source in [&store, &reopened] {
         let mut reads = StoreWork::default();
         let error = source
-            .read(objects[0].0, objects[0].1.len(), &mut reads)
+            .read(objects[0].0, Some(objects[0].1.len()), &mut reads)
             .expect_err("whole block must reject before serving its first entry");
         assert_eq!(error.code, "catalog_block_checksum");
         assert_eq!(reads.packs_opened, 0);
@@ -1242,7 +1242,7 @@ fn directory_rejects_corrupt_blocks_before_retaining_any_entry() {
     for source in [&store, &reopened] {
         assert_eq!(
             source
-                .read(objects[0].0, objects[0].1.len(), &mut work)
+                .read(objects[0].0, Some(objects[0].1.len()), &mut work)
                 .expect("failed block was not retained"),
             Some(objects[0].1.clone())
         );
@@ -1273,7 +1273,7 @@ fn directory_reads_beyond_block_retention_bound_without_admission_failure() {
     for (key, bytes) in objects.iter().step_by(64) {
         assert_eq!(
             store
-                .read_admitted(*key, bytes.len(), &mut admission, &mut reads)
+                .read_admitted(*key, Some(bytes.len()), &mut admission, &mut reads)
                 .expect("cache capacity must not limit reads"),
             Some(bytes.clone())
         );
@@ -1282,7 +1282,7 @@ fn directory_reads_beyond_block_retention_bound_without_admission_failure() {
     for (key, bytes) in [&objects[0], &objects[64 * 64]] {
         assert_eq!(
             store
-                .read_admitted(*key, bytes.len(), &mut admission, &mut reads)
+                .read_admitted(*key, Some(bytes.len()), &mut admission, &mut reads)
                 .expect("cached or fallback read"),
             Some(bytes.clone())
         );
@@ -1315,7 +1315,9 @@ fn directory_cached_metadata_still_detects_payload_and_length_corruption() {
             store = PackDirectoryStore::open(&root).expect("store must reopen");
         }
         assert_eq!(
-            store.read(key, bytes.len(), &mut work).expect("warm read"),
+            store
+                .read(key, Some(bytes.len()), &mut work)
+                .expect("warm read"),
             Some(bytes.clone())
         );
         assert!(store.contains(key, &mut work).expect("cached membership"));
@@ -1334,7 +1336,7 @@ fn directory_cached_metadata_still_detects_payload_and_length_corruption() {
         file.sync_all().expect("payload corruption sync");
         let mut corrupt_work = StoreWork::default();
         let error = store
-            .read(key, bytes.len(), &mut corrupt_work)
+            .read(key, Some(bytes.len()), &mut corrupt_work)
             .expect_err("cached metadata must not authorize corrupted payload bytes");
         assert_eq!(error.code, "pack_entry_checksum");
         assert_eq!(corrupt_work.objects_read, 0);
@@ -1344,7 +1346,7 @@ fn directory_cached_metadata_still_detects_payload_and_length_corruption() {
             .expect("pack truncation");
         file.sync_all().expect("pack truncation sync");
         let error = store
-            .read(key, bytes.len(), &mut work)
+            .read(key, Some(bytes.len()), &mut work)
             .expect_err("cached metadata must not hide a changed pack length");
         assert_eq!(error.code, "pack_length_changed");
         assert_eq!(
@@ -1397,4 +1399,90 @@ fn staging_leftovers_are_classified_without_becoming_authority() {
         &[".pack-stage-interrupted".to_owned()]
     );
     assert_eq!(store.catalog_observation().entries, 0);
+}
+
+fn assert_optional_object_read_policy<S: ImmutableObjectStore>(
+    store: &S,
+    key: ObjectKey,
+    bytes: &[u8],
+) {
+    for maximum in [
+        None,
+        Some(0),
+        Some(bytes.len() - 1),
+        Some(bytes.len()),
+        Some(usize::MAX),
+    ] {
+        let mut admission = StoreReadAdmission::unbounded();
+        let mut work = StoreWork::default();
+        let read = store.read_admitted(key, maximum, &mut admission, &mut work);
+        if maximum.is_some_and(|maximum| maximum < bytes.len()) {
+            assert_eq!(
+                read.unwrap_err().class,
+                super::object::StoreErrorClass::Resource
+            );
+            assert_eq!(work.objects_read, 0);
+            assert_eq!(work.bytes_read, 0);
+            assert_eq!(admission.observation().objects, 0);
+            assert_eq!(admission.observation().bytes, 0);
+        } else {
+            assert_eq!(read.unwrap().as_deref(), Some(bytes));
+            assert_eq!(work.objects_read, 1);
+            assert_eq!(work.bytes_read, bytes.len() as u64);
+            assert_eq!(admission.observation().objects, 1);
+            assert_eq!(admission.observation().bytes, bytes.len() as u64);
+        }
+    }
+}
+
+#[test]
+fn history_objects_cross_the_former_domain_bound_with_exact_optional_reads() {
+    let bytes = vec![0x5a; 4 * 1024 * 1024 + 17];
+    for domain in [ObjectDomain::Transaction, ObjectDomain::SemanticDiff] {
+        assert_eq!(domain.maximum_bytes(), None);
+        let key = ObjectKey::for_bytes(domain, &bytes);
+        let mut memory = MemoryPackedStore::default();
+        memory
+            .stage(key, &bytes, &mut StoreWork::default())
+            .unwrap();
+        assert_optional_object_read_policy(&memory, key, &bytes);
+        memory
+            .seal_staged(
+                super::contract::TARGET_PACK_BYTES,
+                &mut StoreWork::default(),
+            )
+            .unwrap();
+        assert_optional_object_read_policy(&memory, key, &bytes);
+        let mut stage = ObjectStage::new(&memory);
+        assert_optional_object_read_policy(&stage, key, &bytes);
+        let staged_bytes = [bytes.as_slice(), &[1]].concat();
+        let staged_key = ObjectKey::for_bytes(domain, &staged_bytes);
+        stage
+            .stage(staged_key, &staged_bytes, &mut StoreWork::default())
+            .unwrap();
+        assert_optional_object_read_policy(&stage, staged_key, &staged_bytes);
+
+        let temporary = tempfile::TempDir::new().unwrap();
+        let root = temporary.path().join("objects");
+        let mut directory = PackDirectoryStore::initialize(&root).unwrap();
+        directory
+            .stage(key, &bytes, &mut StoreWork::default())
+            .unwrap();
+        assert_optional_object_read_policy(&directory, key, &bytes);
+        let sealed = directory
+            .seal_staged(
+                super::contract::TARGET_PACK_BYTES,
+                &mut StoreWork::default(),
+            )
+            .unwrap();
+        assert_eq!(
+            sealed.packs.len(),
+            1,
+            "a physical target does not reject a larger singleton"
+        );
+        drop(directory);
+        let reopened = PackDirectoryStore::open(&root).unwrap();
+        assert_optional_object_read_policy(&reopened, key, &bytes);
+        assert!(reopened.deep_verify().unwrap().catalog_equal);
+    }
 }

@@ -1,0 +1,211 @@
+{
+  "schema": "lkjscript.maintained-current-format-cutover.v1",
+  "date": "2026-10-27",
+  "accepted_base": "47e33ae90ec77b176597e45d7917694749526aba",
+  "accepted_base_tree": "32ff68b548b2fcb5aecd8c01229b8a7c757490d5",
+  "checkpoint": "dad67f97c6b9b008300d59d83e3e4e7540acfa4f",
+  "export_bootstrap_sha256": "74396ec769c27cec06bbf321d8633e20cd993b3a626447cad05d292adf9ce423",
+  "republication_bootstrap_sha256": "6ac561bf62f0bc5c8c810fc20eddb44d582b7eef099eaece30990efa668aecff",
+  "status": "republished-and-verified",
+  "scope": "Operational receipt/retry history only; publicly re-exported complete source inventories compared byte-for-byte through canonical object digests and independent SHA-256. Compiler proposal adoption and staged-tree acceptance are separate.",
+  "projects": [
+    {
+      "project": "packages/standard",
+      "previous_head_sha256": "9dbe3109d73eefce11a03a3214fa3d157e5be1277ea5854d385c475c495b3d3a",
+      "current_head_sha256": "2db888e2435d5509232720b9c6111e106bdb4665b157c27ae9561a58ba6bc59d",
+      "previous_revision": "rev_2c307fbdefe23a178a2762148447fdac853f8e9b198b53294da8302f28270ced",
+      "current_revision": "rev_2c307fbdefe23a178a2762148447fdac853f8e9b198b53294da8302f28270ced",
+      "semantic_state": "semantic_state_58484e589b8bcee6356a7b4546ecd873e0a7beb7ef4e69412f0064b169ca0ce5",
+      "input_transport": "package_transport_a0646e9a61973a84b9b29bebf2d3f520a5cb981921b5637e3a38f3956b93bbc7",
+      "input_container_sha256": "5ab39dfc50b8e8eb07b25f1243cda6d594cbe9cbe82f08d15a6bdad1bc61838f",
+      "input_container_bytes": 1064337,
+      "current_container_sha256": "5ab39dfc50b8e8eb07b25f1243cda6d594cbe9cbe82f08d15a6bdad1bc61838f",
+      "current_transport": "package_transport_a0646e9a61973a84b9b29bebf2d3f520a5cb981921b5637e3a38f3956b93bbc7",
+      "local_inventory": {
+        "owners": 2800,
+        "types": 247,
+        "retirements": 552,
+        "blobs": 0,
+        "dependencies": 0
+      },
+      "preserved_complete_source_inventory": {
+        "owners": 2800,
+        "types": 247,
+        "blobs": 0,
+        "dependencies": 0,
+        "retirements": 552
+      },
+      "preserved_complete_source_inventory_sha256": "7a968bc3f9b1fc5daccb2cdb4015179509c53e287ecf636d72aa1dac72b963bf",
+      "republication_exit_code": 0,
+      "current_only_reopen_export_exit_code": 0,
+      "stale_pinned_republication_code": "publication_republish_stale",
+      "stale_retry_head_unchanged": true,
+      "elapsed_ms": 1011.185377
+    },
+    {
+      "project": "applications/lkjournal",
+      "previous_head_sha256": "ebb6b2d1db26bb7f0cf0f8dc15b6ef07cc66b1cad242baae7259faa27bcf9658",
+      "current_head_sha256": "508bbeb09e0b115d16514eeff48e70f4ca558458165aa480606973aff9f303f1",
+      "previous_revision": "rev_d9d75fb4c967b2e2a45cdea1d2656d04106bcadd8234b1ce4d27b881581c3fd1",
+      "current_revision": "rev_d9d75fb4c967b2e2a45cdea1d2656d04106bcadd8234b1ce4d27b881581c3fd1",
+      "semantic_state": "semantic_state_360f53cdef3ffe8c8ed9988ab1f8474bcecf1bfad7379f295cb268d82ea2a888",
+      "input_transport": "package_transport_19fd0a2d1e983b651d2dd24daa65272dac0d525491d20cb1d321d95c4ad644c2",
+      "input_container_sha256": "5d18bec5fbdabba28e3f36072563a5a4ad40140ab342010f76e31145cdbea209",
+      "input_container_bytes": 1320515,
+      "current_container_sha256": "5d18bec5fbdabba28e3f36072563a5a4ad40140ab342010f76e31145cdbea209",
+      "current_transport": "package_transport_19fd0a2d1e983b651d2dd24daa65272dac0d525491d20cb1d321d95c4ad644c2",
+      "local_inventory": {
+        "owners": 2044,
+        "types": 78,
+        "retirements": 1094,
+        "blobs": 0,
+        "dependencies": 1
+      },
+      "preserved_complete_source_inventory": {
+        "owners": 3056,
+        "types": 213,
+        "blobs": 0,
+        "dependencies": 1,
+        "retirements": 1186
+      },
+      "preserved_complete_source_inventory_sha256": "6ca0e5d60ada956b6609110927bfab791b8d443c4e6a2dd54c0d739ed77ecca4",
+      "republication_exit_code": 0,
+      "current_only_reopen_export_exit_code": 0,
+      "stale_pinned_republication_code": "publication_republish_stale",
+      "stale_retry_head_unchanged": true,
+      "elapsed_ms": 1333.9918
+    },
+    {
+      "project": "tools/native-guides/project",
+      "previous_head_sha256": "d5897ad386003b59503a1ced857104442b3ee51dad6385717d78a97a473598b0",
+      "current_head_sha256": "922f06aacf9c1c4026e3fe5514c6e475e27f43b26a41832c9b28ab8010ff2c97",
+      "previous_revision": "rev_d6be8b693b73a27fcb23ba3b64a4a92214ea2502f8944dcf2b6239172ada3198",
+      "current_revision": "rev_d6be8b693b73a27fcb23ba3b64a4a92214ea2502f8944dcf2b6239172ada3198",
+      "semantic_state": "semantic_state_f4b6b3ce7c7c2d599bdfc604604a447156f5e38690464b83ad338b1d2435cd8c",
+      "input_transport": "package_transport_bf21a152af68f6b78d8afc955ed0d2ff8be42711929187a7d5e9da17568c34e4",
+      "input_container_sha256": "755db37aa7894326f95d4c188d2f9c2885c074aa273acc8881084f652ad9d380",
+      "input_container_bytes": 805468,
+      "current_container_sha256": "755db37aa7894326f95d4c188d2f9c2885c074aa273acc8881084f652ad9d380",
+      "current_transport": "package_transport_bf21a152af68f6b78d8afc955ed0d2ff8be42711929187a7d5e9da17568c34e4",
+      "local_inventory": {
+        "owners": 847,
+        "types": 32,
+        "retirements": 39,
+        "blobs": 0,
+        "dependencies": 1
+      },
+      "preserved_complete_source_inventory": {
+        "owners": 2204,
+        "types": 193,
+        "blobs": 0,
+        "dependencies": 1,
+        "retirements": 131
+      },
+      "preserved_complete_source_inventory_sha256": "d816598fb7db756d5c320186b306b365f47a5d434ddb1a831e3de227a222a3e1",
+      "republication_exit_code": 0,
+      "current_only_reopen_export_exit_code": 0,
+      "stale_pinned_republication_code": "publication_republish_stale",
+      "stale_retry_head_unchanged": true,
+      "elapsed_ms": 746.985259
+    },
+    {
+      "project": "tools/native-package-plan/project",
+      "previous_head_sha256": "7e506efadd8ca7659b4a2c699edeaea01b575a3d0293ee7fe974febeb34d290b",
+      "current_head_sha256": "6d7819c1d877fc2d70d95a4036fb05da35cc95fb490104b3c9d4070213319d62",
+      "previous_revision": "rev_a51e3265ff184450ebc91753289a6f2b1742b9edd5cff322416aa400eb166a6e",
+      "current_revision": "rev_a51e3265ff184450ebc91753289a6f2b1742b9edd5cff322416aa400eb166a6e",
+      "semantic_state": "semantic_state_7aad5e12386981749950f801e1d8b82fbe4ec6f70400c8d64fe98f84fd727438",
+      "input_transport": "package_transport_c88c5cb5a445d58a47b1db7eaab0bf43dbaeb532331166c00342423466778851",
+      "input_container_sha256": "3336c9204b54797bec7ef24dbb663b54a687943ed91603f8ed3498f680cf4a16",
+      "input_container_bytes": 2806242,
+      "current_container_sha256": "3336c9204b54797bec7ef24dbb663b54a687943ed91603f8ed3498f680cf4a16",
+      "current_transport": "package_transport_c88c5cb5a445d58a47b1db7eaab0bf43dbaeb532331166c00342423466778851",
+      "local_inventory": {
+        "owners": 471,
+        "types": 20,
+        "retirements": 0,
+        "blobs": 0,
+        "dependencies": 9
+      },
+      "preserved_complete_source_inventory": {
+        "owners": 9103,
+        "types": 536,
+        "blobs": 0,
+        "dependencies": 9,
+        "retirements": 552
+      },
+      "preserved_complete_source_inventory_sha256": "81905b61390536aa2d625879bfc4436cbb551319e743bbaac81c56095fc72423",
+      "republication_exit_code": 0,
+      "current_only_reopen_export_exit_code": 0,
+      "stale_pinned_republication_code": "publication_republish_stale",
+      "stale_retry_head_unchanged": true,
+      "elapsed_ms": 2302.660044
+    },
+    {
+      "project": "tools/native-policy/project",
+      "previous_head_sha256": "03b9c5be0f988e03cd6becdc0e7e1a35fcfaa0b578a503b7c89659987f69295c",
+      "current_head_sha256": "b64aa3179f3924ac1e32119923dc08dd08cc9758167236ab651e60116f24da39",
+      "previous_revision": "rev_82eb9ed8f5f0e6c55449d416ba73850d6ba54780fbd468c70774313ac6576c7b",
+      "current_revision": "rev_82eb9ed8f5f0e6c55449d416ba73850d6ba54780fbd468c70774313ac6576c7b",
+      "semantic_state": "semantic_state_cea0136f33d4ed05ab623f3ae52667bf7ab5bfc12f8987392466691327e4fe36",
+      "input_transport": "package_transport_3a195b2dee450d2edc0bcf6c1cb7171c4be300bb4627d0a3cf377cd7098c2be3",
+      "input_container_sha256": "9e26f1c92de55086f5d9312b9ee0c701e17169217e34b95c60bd558082e6a875",
+      "input_container_bytes": 575738,
+      "current_container_sha256": "9e26f1c92de55086f5d9312b9ee0c701e17169217e34b95c60bd558082e6a875",
+      "current_transport": "package_transport_3a195b2dee450d2edc0bcf6c1cb7171c4be300bb4627d0a3cf377cd7098c2be3",
+      "local_inventory": {
+        "owners": 224,
+        "types": 9,
+        "retirements": 168,
+        "blobs": 0,
+        "dependencies": 1
+      },
+      "preserved_complete_source_inventory": {
+        "owners": 1421,
+        "types": 169,
+        "blobs": 0,
+        "dependencies": 1,
+        "retirements": 260
+      },
+      "preserved_complete_source_inventory_sha256": "d79e43c98bac522d0bc7494fbe5ccf23a55d02392fdb7a6971547a1feda65ec3",
+      "republication_exit_code": 0,
+      "current_only_reopen_export_exit_code": 0,
+      "stale_pinned_republication_code": "publication_republish_stale",
+      "stale_retry_head_unchanged": true,
+      "elapsed_ms": 565.579829
+    },
+    {
+      "project": "tools/selfhost/project",
+      "previous_head_sha256": "4e4b59dd042c43e5d4c7c95d9d59e1ba4243dd7feec025bb2858af23eb949d35",
+      "current_head_sha256": "088ae65054a7c63617e45f3f82decd04e18a116390c342e10d3eb6defa45c781",
+      "previous_revision": "rev_1c34f3f6a0fd193b5077c8ceaf6c10f078e16416b990e796542790e649910472",
+      "current_revision": "rev_016c676fe85bfdc2a476b222ba26a3c6017863ef0a8b1fa8aeb0d46c183967f1",
+      "semantic_state": "semantic_state_50c336e1c41ed4515a9ccb5c9db482c48f84513296d0dd22189e8dbc1e4b8cd5",
+      "input_transport": "package_transport_aab593585df8dc463a32b8e70558cba82a19f0ac6dc91a3d60818a991a9266ae",
+      "input_container_sha256": "f4fda082eea67b6f2d9103509c7a8384b586b7bbe96beab084a1e1b0629f1aaf",
+      "input_container_bytes": 10783582,
+      "current_container_sha256": "90cde776bc1196b1de8e0362cab49cba27574615c208dd6b53c7ef93539cd8e0",
+      "current_transport": "package_transport_433d2e9b6f2298de476eab00ecf0f8727df13bb7c140891a8584dddc48c3e886",
+      "local_inventory": {
+        "owners": 34550,
+        "types": 40,
+        "retirements": 12612,
+        "blobs": 0,
+        "dependencies": 0
+      },
+      "preserved_complete_source_inventory": {
+        "owners": 34550,
+        "types": 40,
+        "blobs": 0,
+        "dependencies": 0,
+        "retirements": 12612
+      },
+      "preserved_complete_source_inventory_sha256": "c6066f439191e0b3bae12d4913d8ce69ef5620d9d53b404df595966934209eb5",
+      "republication_exit_code": 0,
+      "current_only_reopen_export_exit_code": 0,
+      "stale_pinned_republication_code": "publication_republish_stale",
+      "stale_retry_head_unchanged": true,
+      "elapsed_ms": 9251.225731
+    }
+  ]
+}

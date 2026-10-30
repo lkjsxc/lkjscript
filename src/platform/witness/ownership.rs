@@ -415,6 +415,7 @@ pub(super) fn derive_test_dependencies(
     snapshot: &KernelSnapshot,
     ownership: &BTreeMap<OwnerKey, OwnershipEntry>,
     relations: &[RelationEdge],
+    maximum_per_test: Option<u64>,
 ) -> Result<BTreeSet<TestDependency>, Diagnostic> {
     let tests = snapshot
         .owners
@@ -422,6 +423,7 @@ pub(super) fn derive_test_dependencies(
         .filter_map(|(owner, record)| (record.kind() == OwnerKind::Test).then_some(*owner))
         .collect::<BTreeSet<_>>();
     let mut dependencies = BTreeSet::new();
+    let mut dependency_counts = BTreeMap::<OwnerKey, u64>::new();
     for edge in relations {
         let RelationEndpoint::Owner(source) = edge.source else {
             continue;
@@ -448,11 +450,32 @@ pub(super) fn derive_test_dependencies(
         {
             continue;
         }
-        dependencies.insert(TestDependency {
+        let dependency = TestDependency {
             test,
             kind: edge.kind,
             target: edge.target,
-        });
+        };
+        if let Some(maximum) = maximum_per_test
+            && !dependencies.contains(&dependency)
+        {
+            let next = dependency_counts
+                .get(&test)
+                .copied()
+                .unwrap_or(0)
+                .checked_add(1)
+                .filter(|next| *next <= maximum)
+                .ok_or_else(|| {
+                    witness_error(
+                        DiagnosticClass::Resource,
+                        "witness_test_dependency_budget",
+                        format!(
+                            "full witness exceeds the declared {maximum}-dependency per-test budget"
+                        ),
+                    )
+                })?;
+            dependency_counts.insert(test, next);
+        }
+        dependencies.insert(dependency);
     }
     Ok(dependencies)
 }

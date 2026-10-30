@@ -7,12 +7,12 @@ mod extraction_tests;
 
 use super::change::ChangeRequestCommitment;
 use super::{CompactRecord, parse_records, render_record};
+use crate::platform::change::budget::BudgetCounter;
 use crate::platform::change::{
     AuthoredAllocation, ChangeBudget, FunctionExtractionEvidence, HttpRoutePlanEvidence,
     ImpactReason, ImpactReasonKind, LogicalChangePlanEvidence,
 };
 use crate::platform::contract::{capabilities_snapshot, registry_snapshot};
-use crate::platform::change::budget::BudgetCounter;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ChangeDigest, DependencyObjectDigest, DependencyRecord, EncodedOwnerKey, ExactOwnerKey,
@@ -719,7 +719,11 @@ impl<F> PlanEncoder<'_, F>
 where
     F: FnMut(&[u8]) -> Result<(), Diagnostic>,
 {
-    fn new(emit: &mut F, maximum_bytes: Option<u64>, maximum_records: Option<u64>) -> PlanEncoder<'_, F> {
+    fn new(
+        emit: &mut F,
+        maximum_bytes: Option<u64>,
+        maximum_records: Option<u64>,
+    ) -> PlanEncoder<'_, F> {
         PlanEncoder {
             emit,
             hasher: blake3::Hasher::new_derive_key(PREPARED_CHANGE_PLAN_COMMITMENT_DOMAIN),
@@ -759,10 +763,20 @@ where
                 "logical plan record length exceeds the platform counter domain",
             )
         })?;
-        let bytes = plan_charge(self.bytes, additional, self.maximum_bytes,
-            "change_plan_output_byte_budget", "logical plan byte")?;
-        let records = plan_charge(self.records, 1, self.maximum_records,
-            "change_plan_output_record_budget", "logical plan record")?;
+        let bytes = plan_charge(
+            self.bytes,
+            additional,
+            self.maximum_bytes,
+            "change_plan_output_byte_budget",
+            "logical plan byte",
+        )?;
+        let records = plan_charge(
+            self.records,
+            1,
+            self.maximum_records,
+            "change_plan_output_record_budget",
+            "logical plan record",
+        )?;
         if hashed {
             self.hasher.update(record.as_bytes());
         }
@@ -1295,7 +1309,10 @@ where
     encoder.append(
         "logical-plan.budget-authored",
         &[
-            ("operations", render_policy(budget.authored.maximum_operations)),
+            (
+                "operations",
+                render_policy(budget.authored.maximum_operations),
+            ),
             (
                 "preconditions",
                 render_policy(budget.authored.maximum_preconditions),
@@ -1304,7 +1321,10 @@ where
                 "allocated-identities",
                 render_policy(budget.authored.maximum_allocated_identities),
             ),
-            ("type-nodes", render_policy(budget.authored.maximum_type_nodes)),
+            (
+                "type-nodes",
+                render_policy(budget.authored.maximum_type_nodes),
+            ),
         ],
     )?;
     encoder.append(
@@ -1950,19 +1970,35 @@ pub fn decode_logical_change_plan<R: BufRead>(
     loop {
         line.clear();
         loop {
-            let buffered = reader.fill_buf().map_err(|error| plan_source_error(
-                "change_plan_file_read", format!("logical plan file could not be read: {error}")))?;
-            if buffered.is_empty() { break; }
-            let count = buffered.iter().position(|byte| *byte == b'\n')
+            let buffered = reader.fill_buf().map_err(|error| {
+                plan_source_error(
+                    "change_plan_file_read",
+                    format!("logical plan file could not be read: {error}"),
+                )
+            })?;
+            if buffered.is_empty() {
+                break;
+            }
+            let count = buffered
+                .iter()
+                .position(|byte| *byte == b'\n')
                 .map_or(buffered.len(), |index| index + 1);
             let terminated = buffered[count - 1] == b'\n';
-            line.try_reserve(count).map_err(|_| plan_resource_error(
-                "change_plan_file_allocation", "logical plan record allocation failed"))?;
+            line.try_reserve(count).map_err(|_| {
+                plan_resource_error(
+                    "change_plan_file_allocation",
+                    "logical plan record allocation failed",
+                )
+            })?;
             line.extend_from_slice(&buffered[..count]);
             reader.consume(count);
-            if terminated { break; }
+            if terminated {
+                break;
+            }
         }
-        if line.is_empty() { break; }
+        if line.is_empty() {
+            break;
+        }
         if line.last() != Some(&b'\n') {
             return Err(plan_source_error(
                 "change_plan_file_truncated",
@@ -2335,20 +2371,16 @@ impl PlanDecoder {
         let changed = parse_u64(field(record, 14), "changed owner count")?;
         let generated = parse_u64(field(record, 15), "generated owner count")?;
         let affine = parse_bool(field(record, 16), "affine capture presence")?;
-        let expected_generated = captures.checked_mul(2).and_then(|value| value.checked_add(2))
-            .ok_or_else(|| plan_source_error("change_plan_file_extraction_counts",
-                "generated extraction owner count exceeds u64 framing"))?;
-        if moved == 0
-
-            || caller_body == 0
-
-            || helper_body != moved
-
-
-
-
-
-            || generated != expected_generated
+        let expected_generated = captures
+            .checked_mul(2)
+            .and_then(|value| value.checked_add(2))
+            .ok_or_else(|| {
+                plan_source_error(
+                    "change_plan_file_extraction_counts",
+                    "generated extraction owner count exceeds u64 framing",
+                )
+            })?;
+        if moved == 0 || caller_body == 0 || helper_body != moved || generated != expected_generated
         {
             return Err(plan_source_error(
                 "change_plan_file_extraction_counts",
@@ -2500,8 +2532,7 @@ impl PlanDecoder {
             ));
         }
         let expression = OwnerKey::Expression(field(record, 2).parse::<ExpressionId>()?);
-        if !self.extraction_capture_uses.insert(expression)
-        {
+        if !self.extraction_capture_uses.insert(expression) {
             return Err(plan_source_error(
                 "change_plan_file_extraction_use_identity",
                 "extraction capture uses exceed their bound or contain an exact duplicate",
@@ -3169,7 +3200,8 @@ fn bind_internal_registry(hasher: &mut blake3::Hasher, digest: &str) {
 }
 
 fn validate_header(record: &CompactRecord) -> Result<(), Diagnostic> {
-    if field(record, 0) != "lkjscript" || field(record, 1) != crate::PRODUCT_VERSION
+    if field(record, 0) != "lkjscript"
+        || field(record, 1) != crate::PRODUCT_VERSION
         || field(record, 2) != LOGICAL_CHANGE_PLAN_CONTRACT_VERSION.to_string()
     {
         return Err(plan_source_error(
@@ -3275,10 +3307,12 @@ fn decode_budget_witness_reads(
     budget.witness_reads.maximum_point_reads = parse_policy(field(record, 0), "point reads")?;
     budget.witness_reads.maximum_map_pages = parse_policy(field(record, 1), "map pages")?;
     budget.witness_reads.maximum_map_entries = parse_policy(field(record, 2), "map entries")?;
-    budget.witness_reads.maximum_catalog_lookups = parse_policy(field(record, 3), "catalog lookups")?;
+    budget.witness_reads.maximum_catalog_lookups =
+        parse_policy(field(record, 3), "catalog lookups")?;
     budget.witness_reads.maximum_objects = parse_policy(field(record, 4), "objects")?;
     budget.witness_reads.maximum_bytes = parse_policy(field(record, 5), "bytes")?;
-    budget.witness_reads.maximum_decoded_records = parse_policy(field(record, 6), "decoded records")?;
+    budget.witness_reads.maximum_decoded_records =
+        parse_policy(field(record, 6), "decoded records")?;
     Ok(())
 }
 
@@ -3301,9 +3335,11 @@ fn decode_budget_validation(
     budget: &mut ChangeBudget,
 ) -> Result<(), Diagnostic> {
     budget.validation.maximum_owner_records = parse_policy(field(record, 0), "owner records")?;
-    budget.validation.maximum_ownership_entries = parse_policy(field(record, 1), "ownership entries")?;
+    budget.validation.maximum_ownership_entries =
+        parse_policy(field(record, 1), "ownership entries")?;
     budget.validation.maximum_type_objects = parse_policy(field(record, 2), "type objects")?;
-    budget.validation.maximum_expression_steps = parse_policy(field(record, 3), "expression steps")?;
+    budget.validation.maximum_expression_steps =
+        parse_policy(field(record, 3), "expression steps")?;
     budget.validation.maximum_diagnostics = parse_policy(field(record, 4), "diagnostics")?;
     Ok(())
 }
@@ -3596,18 +3632,30 @@ fn render_policy(maximum: Option<u64>) -> String {
 }
 
 fn parse_policy(value: &str, label: &str) -> Result<Option<u64>, Diagnostic> {
-    if value == "unbounded" { return Ok(None); }
+    if value == "unbounded" {
+        return Ok(None);
+    }
     parse_u64(value, label).map(Some)
 }
 
-fn plan_charge(mut observed: BudgetCounter, additional: u64, maximum: Option<u64>,
-    code: &'static str, label: &str) -> Result<BudgetCounter, Diagnostic>
-{
+fn plan_charge(
+    mut observed: BudgetCounter,
+    additional: u64,
+    maximum: Option<u64>,
+    code: &'static str,
+    label: &str,
+) -> Result<BudgetCounter, Diagnostic> {
     if let Some(maximum) = maximum
-        && (observed.saturated || observed.consumed.checked_add(additional)
-            .is_none_or(|next| next > maximum))
+        && (observed.saturated
+            || observed
+                .consumed
+                .checked_add(additional)
+                .is_none_or(|next| next > maximum))
     {
-        return Err(plan_resource_error(code, format!("{label} allowance {maximum} exhausted")));
+        return Err(plan_resource_error(
+            code,
+            format!("{label} allowance {maximum} exhausted"),
+        ));
     }
     observed.observe(BudgetCounter::exact(additional));
     Ok(observed)
@@ -4038,23 +4086,21 @@ fn validate_extraction_evidence(
             requirements,
         } => requirements.as_slice(),
     };
-    let expected_generated = capture_count.checked_mul(2).and_then(|value| value.checked_add(2))
-        .ok_or_else(|| plan_corrupt("change_logical_plan_extraction_counts",
-            "generated extraction owner count exceeds u64 framing"))?;
+    let expected_generated = capture_count
+        .checked_mul(2)
+        .and_then(|value| value.checked_add(2))
+        .ok_or_else(|| {
+            plan_corrupt(
+                "change_logical_plan_extraction_counts",
+                "generated extraction owner count exceeds u64 framing",
+            )
+        })?;
     if extraction.base_definition.is_none()
         || extraction.function == extraction.helper
         || moved_count == 0
-
-
-
-
-
-
-
         || generated_count != expected_generated
         || extraction.helper_body_records != moved_count
         || extraction.caller_body_records == 0
-
     {
         return Err(plan_corrupt(
             "change_logical_plan_extraction_bounds",
@@ -4663,18 +4709,31 @@ mod tests {
     #[test]
     fn logical_plan_budget_records_preserve_all_optional_policy_states() {
         type Decoder = fn(&CompactRecord, &mut ChangeBudget) -> Result<(), Diagnostic>;
-        let decoders: [Decoder; 10] = [decode_budget_authored, decode_budget_canonical_edits,
-            decode_budget_canonical_reads, decode_budget_canonical_map, decode_budget_witness_reads,
-            decode_budget_impact, decode_budget_validation, decode_budget_tests,
-            decode_budget_witness_update, decode_budget_staging];
+        let decoders: [Decoder; 10] = [
+            decode_budget_authored,
+            decode_budget_canonical_edits,
+            decode_budget_canonical_reads,
+            decode_budget_canonical_map,
+            decode_budget_witness_reads,
+            decode_budget_impact,
+            decode_budget_validation,
+            decode_budget_tests,
+            decode_budget_witness_update,
+            decode_budget_staging,
+        ];
         for maximum in [None, Some(0), Some(10_000_001), Some(u64::MAX)] {
             let mut budget = ChangeBudget::default();
             for dimension in crate::platform::change::budget::BudgetDimension::ALL {
-                budget.set_policy_limit(dimension.policy_name(), maximum).unwrap();
+                budget
+                    .set_policy_limit(dimension.policy_name(), maximum)
+                    .unwrap();
             }
             let mut bytes = Vec::new();
             {
-                let mut emit = |record: &[u8]| { bytes.extend_from_slice(record); Ok(()) };
+                let mut emit = |record: &[u8]| {
+                    bytes.extend_from_slice(record);
+                    Ok(())
+                };
                 let mut encoder = PlanEncoder::new(&mut emit, None, None);
                 encode_budget(budget, &mut encoder).unwrap();
                 assert_eq!(encoder.records, BudgetCounter::exact(10));
@@ -4688,7 +4747,15 @@ mod tests {
             }
             assert_eq!(decoded, budget);
         }
-        for invalid in ["", "+1", "-1", "00", "01", "18446744073709551616", "Unlimited"] {
+        for invalid in [
+            "",
+            "+1",
+            "-1",
+            "00",
+            "01",
+            "18446744073709551616",
+            "Unlimited",
+        ] {
             assert!(parse_policy(invalid, "test policy").is_err(), "{invalid}");
         }
     }
@@ -4697,25 +4764,63 @@ mod tests {
     fn logical_plan_explicit_limits_are_atomic_and_passive_counts_are_honest() {
         let mut output = Vec::new();
         {
-            let mut emit = |part: &[u8]| { output.extend_from_slice(part); Ok(()) };
+            let mut emit = |part: &[u8]| {
+                output.extend_from_slice(part);
+                Ok(())
+            };
             let mut encoder = PlanEncoder::new(&mut emit, Some(u64::MAX), Some(1));
             encoder.append("probe", &[]).unwrap();
-            let before = (encoder.bytes, encoder.records, encoder.hasher.clone().finalize());
-            assert_eq!(encoder.append("probe", &[]).unwrap_err().code,
-                "change_plan_output_record_budget");
-            assert_eq!((encoder.bytes, encoder.records, encoder.hasher.clone().finalize()), before);
+            let before = (
+                encoder.bytes,
+                encoder.records,
+                encoder.hasher.clone().finalize(),
+            );
+            assert_eq!(
+                encoder.append("probe", &[]).unwrap_err().code,
+                "change_plan_output_record_budget"
+            );
+            assert_eq!(
+                (
+                    encoder.bytes,
+                    encoder.records,
+                    encoder.hasher.clone().finalize()
+                ),
+                before
+            );
         }
         assert_eq!(output, b"probe\n");
         for maximum in [0, 1, u64::MAX] {
-            let fit = plan_charge(BudgetCounter::default(), maximum, Some(maximum),
-                "test_limit", "test bytes").unwrap();
+            let fit = plan_charge(
+                BudgetCounter::default(),
+                maximum,
+                Some(maximum),
+                "test_limit",
+                "test bytes",
+            )
+            .unwrap();
             assert_eq!(fit, BudgetCounter::exact(maximum));
-            assert_eq!(plan_charge(fit, 1, Some(maximum), "test_limit", "test bytes")
-                .unwrap_err().code, "test_limit");
+            assert_eq!(
+                plan_charge(fit, 1, Some(maximum), "test_limit", "test bytes")
+                    .unwrap_err()
+                    .code,
+                "test_limit"
+            );
         }
-        let saturated = plan_charge(BudgetCounter::exact(u64::MAX), 1, None,
-            "unused_limit", "passive bytes").unwrap();
-        assert_eq!(saturated, BudgetCounter { consumed: u64::MAX, saturated: true });
+        let saturated = plan_charge(
+            BudgetCounter::exact(u64::MAX),
+            1,
+            None,
+            "unused_limit",
+            "passive bytes",
+        )
+        .unwrap();
+        assert_eq!(
+            saturated,
+            BudgetCounter {
+                consumed: u64::MAX,
+                saturated: true
+            }
+        );
         let mut decoder = PlanDecoder::new();
         decoder.bytes = BudgetCounter::exact(u64::MAX);
         decoder.observe_meter(1);
@@ -4736,8 +4841,12 @@ mod tests {
             assert!(text.contains("operations=unbounded"));
             assert!(text.contains("profile=2"));
             let obsolete = text.replacen("profile=2", "profile=1", 1);
-            assert_eq!(decode_logical_change_plan(Cursor::new(obsolete.as_bytes()))
-                .unwrap_err().code, "change_plan_file_product");
+            assert_eq!(
+                decode_logical_change_plan(Cursor::new(obsolete.as_bytes()))
+                    .unwrap_err()
+                    .code,
+                "change_plan_file_product"
+            );
         });
     }
 
@@ -4751,5 +4860,4 @@ mod tests {
         hasher.update(record.as_bytes());
         *hasher.finalize().as_bytes()
     }
-
 }

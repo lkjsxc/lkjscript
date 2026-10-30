@@ -5,6 +5,7 @@ mod creation;
 mod deletion;
 mod extraction;
 mod literal;
+mod parameter_order;
 mod precondition;
 mod references;
 mod test_retention;
@@ -40,8 +41,9 @@ pub use precondition::{
 };
 
 use super::{
-    AuthoredAllocation, BudgetCounter, BudgetDimension, CanonicalBaseRead, CanonicalReadWork, ChangeBudget, ChangeBudgetWork, WorkSaturation, optional_usize,
-    PrimitiveEdit, WitnessBaseRead, WitnessReadWork,
+    AuthoredAllocation, BudgetCounter, BudgetDimension, CanonicalBaseRead, CanonicalReadWork,
+    ChangeBudget, ChangeBudgetWork, PrimitiveEdit, WitnessBaseRead, WitnessReadWork,
+    WorkSaturation, optional_usize,
 };
 use crate::platform::contract::registry::CHANGE_ALLOCATION_SEED_DOMAIN;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -271,6 +273,11 @@ pub enum AuthoredChange {
     AddParameter {
         parent: ParameterParentSelector,
         parameter: AuthoredParameter,
+    },
+    /// Complete order of the parent's surviving value parameters after explicit deletions.
+    SetParameterOrder {
+        parent: ParameterParentSelector,
+        parameters: Vec<OwnerSelector>,
     },
     AddRequirement {
         component: DeclarationSelector,
@@ -605,16 +612,27 @@ pub struct AuthoredLoweringWork {
 
 impl AuthoredLoweringWork {
     pub(crate) fn validation_observation(self) -> BudgetCounter {
-        let mut steps = BudgetCounter { consumed: self.effect_normalization_steps, saturated: self.effect_normalization_saturated };
-        steps.observe(BudgetCounter { consumed: self.associated_inventory_steps, saturated: self.associated_inventory_saturated });
-        steps.observe(BudgetCounter { consumed: self.expression_analysis_steps, saturated: self.expression_analysis_saturated });
+        let mut steps = BudgetCounter {
+            consumed: self.effect_normalization_steps,
+            saturated: self.effect_normalization_saturated,
+        };
+        steps.observe(BudgetCounter {
+            consumed: self.associated_inventory_steps,
+            saturated: self.associated_inventory_saturated,
+        });
+        steps.observe(BudgetCounter {
+            consumed: self.expression_analysis_steps,
+            saturated: self.expression_analysis_saturated,
+        });
         steps
     }
 
     pub(crate) fn budget_work(self) -> ChangeBudgetWork {
         let steps = self.validation_observation();
         let mut saturation = self.saturation;
-        if steps.saturated { saturation.mark(BudgetDimension::ValidationExpressionSteps); }
+        if steps.saturated {
+            saturation.mark(BudgetDimension::ValidationExpressionSteps);
+        }
         ChangeBudgetWork {
             authored_operations: self.operations_lowered,
             preconditions_checked: self.preconditions_checked,
@@ -632,7 +650,6 @@ impl AuthoredLoweringWork {
             ..ChangeBudgetWork::default()
         }
     }
-
 }
 
 #[derive(Clone, Debug)]
@@ -1066,6 +1083,7 @@ pub(crate) fn lower_authored_changes_with_publication_base<
             | AuthoredChange::AddEffectParameter { .. }
             | AuthoredChange::SetTypeParameterConstraint { .. }
             | AuthoredChange::AddParameter { .. }
+            | AuthoredChange::SetParameterOrder { .. }
             | AuthoredChange::AddRequirement { .. }
             | AuthoredChange::AddPort { .. }
             | AuthoredChange::AddHttpRoute { .. }
@@ -1252,6 +1270,16 @@ pub(crate) fn lower_authored_changes_with_publication_base<
         }),
     )?;
     lowerer.check_budget("authored deletion lowering")?;
+    parameter_order::lower(
+        &mut lowerer,
+        request.changes.iter().filter_map(|change| match change {
+            AuthoredChange::SetParameterOrder { parent, parameters } => {
+                Some((parent, parameters.as_slice()))
+            }
+            _ => None,
+        }),
+    )?;
+    lowerer.check_budget("authored parameter order lowering")?;
     lowerer.finish()
 }
 
@@ -1284,7 +1312,7 @@ fn collect_symbol_definitions(
                     )?;
                 }
             }
-            AuthoredChange::SetReadView { .. } => {}
+            AuthoredChange::SetReadView { .. } | AuthoredChange::SetParameterOrder { .. } => {}
             AuthoredChange::CreateModule { symbol, .. } => {
                 define_symbol(&mut definitions, symbol, SymbolKind::Module)?;
             }
@@ -1480,24 +1508,38 @@ impl SymbolDefinitions {
     }
 
     fn identity_count(&self) -> Result<usize, Diagnostic> {
-        self.entries.len().checked_add(self.anonymous_identities).ok_or_else(|| {
-            request_error(DiagnosticClass::Resource, "change_authored_identity_count",
-                "identity inventory length exceeds the host collection representation")
-        })
+        self.entries
+            .len()
+            .checked_add(self.anonymous_identities)
+            .ok_or_else(|| {
+                request_error(
+                    DiagnosticClass::Resource,
+                    "change_authored_identity_count",
+                    "identity inventory length exceeds the host collection representation",
+                )
+            })
     }
 
     pub(super) fn define_anonymous_identity(&mut self) -> Result<(), Diagnostic> {
         self.admit_one_identity()?;
         self.anonymous_identities = self.anonymous_identities.checked_add(1).ok_or_else(|| {
-            request_error(DiagnosticClass::Resource, "change_authored_identity_count",
-                "anonymous identity inventory length exceeds the host collection representation")
+            request_error(
+                DiagnosticClass::Resource,
+                "change_authored_identity_count",
+                "anonymous identity inventory length exceeds the host collection representation",
+            )
         })?;
         Ok(())
     }
 
     fn admit_one_identity(&self) -> Result<(), Diagnostic> {
         let mut observed = BudgetCounter::exact(self.identity_count()? as u64);
-        observed.charge(BudgetCounter::exact(1), self.maximum, "request-local identity collection", "allocated_identities")
+        observed.charge(
+            BudgetCounter::exact(1),
+            self.maximum,
+            "request-local identity collection",
+            "allocated_identities",
+        )
     }
 }
 
@@ -1766,15 +1808,29 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
     }
 
     fn remaining_validation_steps(&self, phase: &str) -> Result<Option<u64>, Diagnostic> {
-        self.work.validation_observation().remaining(self.budget.validation.maximum_expression_steps,
-            phase, "validation_expression_steps")
+        self.work.validation_observation().remaining(
+            self.budget.validation.maximum_expression_steps,
+            phase,
+            "validation_expression_steps",
+        )
     }
 
-    fn observe_expression_analysis(&mut self, work: BudgetCounter, phase: &str) -> Result<(), Diagnostic> {
+    fn observe_expression_analysis(
+        &mut self,
+        work: BudgetCounter,
+        phase: &str,
+    ) -> Result<(), Diagnostic> {
         let mut total = self.work.validation_observation();
-        total.charge(work, self.budget.validation.maximum_expression_steps, phase, "validation_expression_steps")?;
-        let mut observed = BudgetCounter { consumed: self.work.expression_analysis_steps,
-            saturated: self.work.expression_analysis_saturated };
+        total.charge(
+            work,
+            self.budget.validation.maximum_expression_steps,
+            phase,
+            "validation_expression_steps",
+        )?;
+        let mut observed = BudgetCounter {
+            consumed: self.work.expression_analysis_steps,
+            saturated: self.work.expression_analysis_saturated,
+        };
         observed.observe(work);
         self.work.expression_analysis_steps = observed.consumed;
         self.work.expression_analysis_saturated = observed.saturated;
@@ -2445,15 +2501,27 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
             u64::try_from(self.retirement_edits.len()).unwrap_or(u64::MAX),
             "authored canonical edit preflight",
         )?;
-        let estimated_edits = self.owner_edits.len()
+        let estimated_edits = self
+            .owner_edits
+            .len()
             .checked_add(self.type_additions.len())
             .and_then(|count| count.checked_add(self.dependency_edits.len()))
             .and_then(|count| count.checked_add(self.retirement_edits.len()))
-            .ok_or_else(|| request_error(DiagnosticClass::Resource,
-                "change_authored_allocation", "canonical edit layout exceeds the host address space"))?;
+            .ok_or_else(|| {
+                request_error(
+                    DiagnosticClass::Resource,
+                    "change_authored_allocation",
+                    "canonical edit layout exceeds the host address space",
+                )
+            })?;
         let mut edits = Vec::new();
-        edits.try_reserve(estimated_edits).map_err(|_| request_error(DiagnosticClass::Resource,
-            "change_authored_allocation", "canonical edit allocation failed"))?;
+        edits.try_reserve(estimated_edits).map_err(|_| {
+            request_error(
+                DiagnosticClass::Resource,
+                "change_authored_allocation",
+                "canonical edit allocation failed",
+            )
+        })?;
         let mut http_route_befores = BTreeMap::new();
         for owner in &self.owner_edits {
             let OwnerKey::HttpRoute(route) = owner else {

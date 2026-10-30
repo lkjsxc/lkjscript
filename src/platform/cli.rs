@@ -33,22 +33,22 @@ use super::contract::{
     FUNCTION_DEFINITION_DEFAULT_OUTPUT_BYTES, FUNCTION_DEFINITION_LOGICAL_DIGEST_DOMAIN,
     FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY,
     FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION, FUNCTION_DEFINITION_RECORD_KEY_DOMAIN,
-    FUNCTION_DEFINITION_RESPONSE_FIELDS,
-    MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS, MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES,
-    MAXIMUM_FUNCTION_DEFINITION_DEPTH, MAXIMUM_FUNCTION_DEFINITION_EDGES,
-    MAXIMUM_FUNCTION_DEFINITION_FACT_READS, MAXIMUM_FUNCTION_DEFINITION_ITEMS,
-    MAXIMUM_FUNCTION_DEFINITION_LITERAL_FRAGMENT_BYTES, MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES,
-    MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES, MINIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES,
-    PublicOperation, RegistrySection, capabilities_snapshot, diagnostic_class_name,
-    generated_documents, operation_descriptors, operation_record,
+    FUNCTION_DEFINITION_RESPONSE_FIELDS, MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS,
+    MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES, MAXIMUM_FUNCTION_DEFINITION_DEPTH,
+    MAXIMUM_FUNCTION_DEFINITION_EDGES, MAXIMUM_FUNCTION_DEFINITION_FACT_READS,
+    MAXIMUM_FUNCTION_DEFINITION_ITEMS, MAXIMUM_FUNCTION_DEFINITION_LITERAL_FRAGMENT_BYTES,
+    MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES, MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES,
+    MINIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES, PublicOperation, RegistrySection,
+    capabilities_snapshot, diagnostic_class_name, generated_documents, operation_descriptors,
+    operation_record,
 };
 #[cfg(test)]
 use super::control::decode_compact_change;
 use super::control::{
     ChangePlanToken, CompactChangeOperation, CompactResponseLimits, CompactResponseWriter,
-    LogicalChangePlan, LogicalPlanEncoding, MAXIMUM_COMPACT_INPUT_BYTES,
-    NormalizedChangeRequest, compact_change_operation_descriptor,
-    encode_logical_change_plan, normalize_change_request, render_record,
+    LogicalChangePlan, LogicalPlanEncoding, MAXIMUM_COMPACT_INPUT_BYTES, NormalizedChangeRequest,
+    compact_change_operation_descriptor, encode_logical_change_plan, normalize_change_request,
+    render_record,
 };
 use super::data::{DataLimits, DataStore};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
@@ -679,8 +679,16 @@ pub fn execute_check(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
                 checked.production_instructions.to_string(),
             ),
             (
+                "production-instructions-saturated",
+                checked.production_instructions_saturated.to_string(),
+            ),
+            (
                 "reference-expressions",
                 checked.reference_expressions.to_string(),
+            ),
+            (
+                "reference-expressions-saturated",
+                checked.reference_expressions_saturated.to_string(),
             ),
         ],
     )?;
@@ -1135,7 +1143,7 @@ fn foreground_receipt_output(
                 ),
                 (
                     "counter-semantics",
-                    "saturated-u64-is-lower-bound".to_owned(),
+                    "per-counter-saturation-flag-true-means-lower-bound".to_owned(),
                 ),
                 (
                     "preparation-nanoseconds",
@@ -1241,8 +1249,16 @@ fn source_run_receipt_output(
             run.production.instructions.to_string(),
         ),
         (
+            "production-instructions-saturated",
+            run.production.instructions_saturated.to_string(),
+        ),
+        (
             "reference-expressions",
             run.reference.expressions.to_string(),
+        ),
+        (
+            "reference-expressions-saturated",
+            run.reference.expressions_saturated.to_string(),
         ),
         (
             "production-peak-call-frames",
@@ -1368,6 +1384,10 @@ fn source_run_receipt_output(
             run.production.allocated_bytes.to_string(),
         ),
         (
+            "production-allocated-bytes-saturated",
+            run.production.allocated_bytes_saturated.to_string(),
+        ),
+        (
             "production-map-node-visits",
             run.production.value_work.maps.node_visits.to_string(),
         ),
@@ -1414,6 +1434,18 @@ fn source_run_receipt_output(
         (
             "production-collection-items",
             run.production.collection_items.to_string(),
+        ),
+        (
+            "production-collection-items-saturated",
+            run.production.collection_items_saturated.to_string(),
+        ),
+        (
+            "production-capability-calls",
+            run.production.capability_calls.to_string(),
+        ),
+        (
+            "production-capability-calls-saturated",
+            run.production.capability_calls_saturated.to_string(),
         ),
         (
             "production-allocation-charges",
@@ -1524,6 +1556,10 @@ fn source_run_receipt_output(
             run.reference.allocated_bytes.to_string(),
         ),
         (
+            "reference-allocated-bytes-saturated",
+            run.reference.allocated_bytes_saturated.to_string(),
+        ),
+        (
             "reference-map-node-visits",
             run.reference.value_work.maps.node_visits.to_string(),
         ),
@@ -1558,6 +1594,18 @@ fn source_run_receipt_output(
         (
             "reference-collection-items",
             run.reference.collection_items.to_string(),
+        ),
+        (
+            "reference-collection-items-saturated",
+            run.reference.collection_items_saturated.to_string(),
+        ),
+        (
+            "reference-capability-calls",
+            run.reference.capability_calls.to_string(),
+        ),
+        (
+            "reference-capability-calls-saturated",
+            run.reference.capability_calls_saturated.to_string(),
         ),
     ];
     if let Some(executor) = executor {
@@ -1941,8 +1989,12 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
                     ));
                 }
             };
-            let publication =
-                publish_create_new(Path::new(&path), bytes, Some(maximum), "built-in standard asset")?;
+            let publication = publish_create_new(
+                Path::new(&path),
+                bytes,
+                Some(maximum),
+                "built-in standard asset",
+            )?;
             append_compact_record(
                 &mut output,
                 "output",
@@ -2401,7 +2453,9 @@ fn execute_change_draft(
             "--output" if destination.is_none() => destination = Some(PathBuf::from(value)),
             "--bytes" if !maximum_seen => {
                 maximum = Some(value.parse::<usize>().map_err(|_| {
-                    single_diagnostic(usage_error("draft --bytes requires a non-negative byte count"))
+                    single_diagnostic(usage_error(
+                        "draft --bytes requires a non-negative byte count",
+                    ))
                 })?);
                 maximum_seen = true;
             }
@@ -2499,12 +2553,8 @@ fn decode_record_change(
     let (source, bytes) = match (inline, file) {
         (Some(value), None) => ("<change-input>".to_owned(), value.into_bytes()),
         (None, Some(path)) => {
-            let bytes = read_with_limit(
-                Path::new(&path),
-                None,
-                "compact change input",
-            )
-            .map_err(single_diagnostic)?;
+            let bytes = read_with_limit(Path::new(&path), None, "compact change input")
+                .map_err(single_diagnostic)?;
             (path, bytes)
         }
         (Some(_), Some(_)) => {
@@ -3494,7 +3544,10 @@ fn compact_change_response(
             ("tests-selected", validation.tests_selected.to_string()),
             ("tests-passed", validation.tests_passed.to_string()),
             ("saturated", validation.saturated.to_string()),
-            ("preparation-work-saturated", publication.receipt.work.saturated.to_string()),
+            (
+                "preparation-work-saturated",
+                publication.receipt.work.saturated.to_string(),
+            ),
             (
                 "compiler-units",
                 validation.compiler_units_planned.to_string(),
@@ -8784,9 +8837,11 @@ fn execute_function_definition(
             message,
         )
     })?;
-    let output_limit = response_limits.maximum_bytes.map_or(request.output_bytes, |limit| {
-        request.output_bytes.min(limit)
-    });
+    let output_limit = response_limits
+        .maximum_bytes
+        .map_or(request.output_bytes, |limit| {
+            request.output_bytes.min(limit)
+        });
     let record_limit = response_limits.maximum_records;
     render_definition_page(
         repository,
@@ -8826,17 +8881,18 @@ fn render_definition_page(
         ));
     }
     const FIXED_RECORDS_WITH_CONTINUATION: usize = 8;
-    let item_record_capacity = record_limit
-        .map(|limit| {
-            limit.checked_sub(FIXED_RECORDS_WITH_CONTINUATION).ok_or_else(|| {
+    let item_record_capacity =
+        record_limit
+            .map(|limit| {
+                limit.checked_sub(FIXED_RECORDS_WITH_CONTINUATION).ok_or_else(|| {
                 owner_inspection_error(
                     DiagnosticClass::Resource,
                     "definition_output_envelope_too_large",
                     "compact response record capacity cannot hold the definition page envelope",
                 )
             })
-        })
-        .transpose()?;
+            })
+            .transpose()?;
     if item_record_capacity == Some(0) {
         return Err(owner_inspection_error(
             DiagnosticClass::Resource,
@@ -8860,7 +8916,9 @@ fn render_definition_page(
         )
     })?;
     let maximum_end = start
-        .checked_add(item_record_capacity.map_or(requested_items, |limit| requested_items.min(limit)))
+        .checked_add(
+            item_record_capacity.map_or(requested_items, |limit| requested_items.min(limit)),
+        )
         .map(|end| end.min(projection.records.len()))
         .ok_or_else(|| {
             owner_inspection_error(
@@ -9386,12 +9444,8 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
         )?;
         for document in documents {
             let path = directory.join(document.relative_path);
-            let status = write_derived_output(
-                &path,
-                &document.bytes,
-                None,
-                "generated public guide",
-            )?;
+            let status =
+                write_derived_output(&path, &document.bytes, None, "generated public guide")?;
             append_file_record(
                 &mut output,
                 "markdown",
@@ -9418,8 +9472,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
         )?;
         for document in &documents {
             let path = directory.join(document.relative_path);
-            let observed =
-                read_with_limit(&path, None, "generated public guide")?;
+            let observed = read_with_limit(&path, None, "generated public guide")?;
             if observed != document.bytes {
                 return Err(Diagnostic::new(
                     DiagnosticClass::Source,
@@ -9462,12 +9515,7 @@ pub fn execute_capabilities(arguments: &[String]) -> Result<Vec<u8>, Diagnostic>
             ),
         };
         let path = PathBuf::from(path);
-        let status = write_derived_output(
-            &path,
-            bytes,
-            None,
-            "compact capabilities output",
-        )?;
+        let status = write_derived_output(&path, bytes, None, "compact capabilities output")?;
         let mut output = capabilities_response_writer(&snapshot, None)?;
         append_capability_record(
             &mut output,
@@ -9791,7 +9839,6 @@ fn compact_response_writer() -> Result<CompactResponseWriter, Diagnostic> {
     })
 }
 
-
 fn validate_capability_digest(value: &str, option: &str) -> Result<(), Diagnostic> {
     if value.len() != 64
         || !value
@@ -10102,15 +10149,23 @@ mod tests {
         for maximum in [0, 6] {
             assert_eq!(
                 read_with_limit(&input, Some(maximum), "test input")
-                    .expect_err("exact finite rejection").code,
+                    .expect_err("exact finite rejection")
+                    .code,
                 "read_limit",
             );
         }
         fs::write(&input, b"").expect("write empty input");
-        assert!(read_with_limit(&input, Some(0), "empty input").expect("zero fit").is_empty());
+        assert!(
+            read_with_limit(&input, Some(0), "empty input")
+                .expect("zero fit")
+                .is_empty()
+        );
         let bytes = vec![0x51; 4 * 1024 * 1024 + 1];
         fs::write(&input, &bytes).expect("write historical-limit input");
-        assert_eq!(read_with_limit(&input, None, "complete input").expect("unbounded read"), bytes);
+        assert_eq!(
+            read_with_limit(&input, None, "complete input").expect("unbounded read"),
+            bytes
+        );
     }
 
     #[test]

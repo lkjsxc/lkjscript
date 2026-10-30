@@ -1,11 +1,11 @@
 //! Identity-preserving lowering for the bounded `extract.function` authored operation.
 
 use super::{AuthoredLowerer, DeclarationSelector, request_error};
+use crate::platform::change::{BudgetCounter, BudgetDimension, optional_usize};
 use crate::platform::change::{
     CanonicalBaseRead, FunctionExtractionCapture, FunctionExtractionEvidence, WitnessBaseRead,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::change::{BudgetCounter, BudgetDimension, optional_usize};
 use crate::platform::kernel::contract::MAXIMUM_NAME_BYTES;
 use crate::platform::kernel::{
     BindingKind, CallableResult, DeclarationPayload, DeclarationRecord, DeclarationReference,
@@ -179,7 +179,10 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         })?;
     reject_escaping_bindings(&inventory)?;
 
-    let maximum_inference = optional_usize(lowerer.remaining_validation_steps("function extraction inference")?, "validation_expression_steps")?;
+    let maximum_inference = optional_usize(
+        lowerer.remaining_validation_steps("function extraction inference")?,
+        "validation_expression_steps",
+    )?;
     let (mut captures, result, mut requirements, requires_task, analysis_read_work, inference_work) = {
         let reader = CandidateRead::new(lowerer);
         let mut inference_work = crate::platform::kernel::ValidationWork::default();
@@ -232,10 +235,23 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
             &mut inference_work,
             maximum_inference,
         )?;
-        (captures, result, requirements, requires_task, reader.work(), inference_work)
+        (
+            captures,
+            result,
+            requirements,
+            requires_task,
+            reader.work(),
+            inference_work,
+        )
     };
     lowerer.work.canonical.add(analysis_read_work);
-    lowerer.observe_expression_analysis(BudgetCounter { consumed: inference_work.consumed as u64, saturated: inference_work.saturated }, "function extraction inference")?;
+    lowerer.observe_expression_analysis(
+        BudgetCounter {
+            consumed: inference_work.consumed as u64,
+            saturated: inference_work.saturated,
+        },
+        "function extraction inference",
+    )?;
 
     let resource_capture = captures
         .iter()
@@ -873,7 +889,13 @@ fn require_structural_owner<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + 
             format!("owner {owner:?} does not have its exact expected structural parent"),
         ));
     }
-    lowerer.work.saturation.charge(&mut lowerer.work.ownership_steps, BudgetDimension::ImpactOwnershipSteps, BudgetCounter::exact(1), lowerer.budget.impact.maximum_ownership_steps, "function extraction ownership traversal")?;
+    lowerer.work.saturation.charge(
+        &mut lowerer.work.ownership_steps,
+        BudgetDimension::ImpactOwnershipSteps,
+        BudgetCounter::exact(1),
+        lowerer.budget.impact.maximum_ownership_steps,
+        "function extraction ownership traversal",
+    )?;
     lowerer.check_budget("function extraction ownership traversal")
 }
 
@@ -1711,20 +1733,28 @@ fn require_acyclic_local_call_graph<B: CanonicalBaseRead + ?Sized>(
             complete.insert(function);
             continue;
         }
-        if complete.contains(&function) { continue; }
+        if complete.contains(&function) {
+            continue;
+        }
         if !visiting.insert(function) {
             return Err(extract_error(
                 "change_extract_recursive_target",
                 "extract.function does not admit a target with a recursive local call cycle",
             ));
         }
-        let record = reader.owner(OwnerKey::Declaration(function))?.ok_or_else(|| {
-            extract_corrupt("change_extract_call_graph_function",
-                "local call-graph declaration disappeared during extraction analysis")
-        })?;
+        let record = reader
+            .owner(OwnerKey::Declaration(function))?
+            .ok_or_else(|| {
+                extract_corrupt(
+                    "change_extract_call_graph_function",
+                    "local call-graph declaration disappeared during extraction analysis",
+                )
+            })?;
         let OwnerRecord::Declaration(DeclarationRecord { payload, .. }) = record else {
-            return Err(extract_corrupt("change_extract_call_graph_function",
-                "local call-graph identity is bound to another owner kind"));
+            return Err(extract_corrupt(
+                "change_extract_call_graph_function",
+                "local call-graph identity is bound to another owner kind",
+            ));
         };
         let body = match payload {
             DeclarationPayload::Function(function) => function.body,
@@ -1733,12 +1763,23 @@ fn require_acyclic_local_call_graph<B: CanonicalBaseRead + ?Sized>(
                 complete.insert(function);
                 continue;
             }
-            _ => return Err(extract_corrupt("change_extract_call_graph_function",
-                "direct call names a local declaration that is not callable")),
+            _ => {
+                return Err(extract_corrupt(
+                    "change_extract_call_graph_function",
+                    "direct call names a local declaration that is not callable",
+                ));
+            }
         };
         let mut calls = BTreeSet::new();
-        collect_local_calls(reader, body, &mut BTreeSet::new(), &mut calls,
-            expression_work, maximum_expression_work, 0)?;
+        collect_local_calls(
+            reader,
+            body,
+            &mut BTreeSet::new(),
+            &mut calls,
+            expression_work,
+            maximum_expression_work,
+            0,
+        )?;
         pending.push((function, true));
         pending.extend(calls.into_iter().rev().map(|called| (called, false)));
     }
@@ -1761,8 +1802,12 @@ fn collect_local_calls<B: CanonicalBaseRead + ?Sized>(
             "local call-graph expression traversal exceeds the structural-depth bound",
         ));
     }
-    work.charge(BudgetCounter::exact(1), maximum_work,
-        "local call-graph traversal", "validation_expression_steps")?;
+    work.charge(
+        BudgetCounter::exact(1),
+        maximum_work,
+        "local call-graph traversal",
+        "validation_expression_steps",
+    )?;
     let owner = OwnerKey::Expression(expression);
     if !seen.insert(owner) {
         return Err(extract_corrupt(
@@ -1873,7 +1918,10 @@ fn validate_affine_candidate<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
     function: DeclarationId,
     helper: DeclarationId,
 ) -> Result<(), Diagnostic> {
-    let maximum_inference = optional_usize(lowerer.remaining_validation_steps("function extraction affine validation")?, "validation_expression_steps")?;
+    let maximum_inference = optional_usize(
+        lowerer.remaining_validation_steps("function extraction affine validation")?,
+        "validation_expression_steps",
+    )?;
     let (result, read_work, work) = {
         let reader = CandidateRead::new(lowerer);
         let mut diagnostics = Vec::new();
@@ -1911,7 +1959,13 @@ fn validate_affine_candidate<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead +
         (result, reader.work(), work)
     };
     lowerer.work.canonical.add(read_work);
-    lowerer.observe_expression_analysis(BudgetCounter { consumed: work.consumed as u64, saturated: work.saturated }, "function extraction affine validation")?;
+    lowerer.observe_expression_analysis(
+        BudgetCounter {
+            consumed: work.consumed as u64,
+            saturated: work.saturated,
+        },
+        "function extraction affine validation",
+    )?;
     result
 }
 

@@ -88,7 +88,7 @@ impl<'a, S: ImmutableObjectStore + ?Sized> Retained<'a, S> {
     fn read_inner(
         &self,
         key: ObjectKey,
-        maximum: usize,
+        maximum: Option<usize>,
         external: Option<&mut StoreReadAdmission>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
@@ -101,13 +101,22 @@ impl<'a, S: ImmutableObjectStore + ?Sized> Retained<'a, S> {
         };
         work.add(observed);
         let mut observation = self.observation.get();
-        observation.catalog_lookups = observation
-            .catalog_lookups
-            .saturating_add(observed.catalog_lookups);
-        observation.objects_read = observation
-            .objects_read
-            .saturating_add(observed.objects_read);
-        observation.bytes_read = observation.bytes_read.saturating_add(observed.bytes_read);
+        observation.saturated |= observed.saturated;
+        observe(
+            &mut observation.catalog_lookups,
+            observed.catalog_lookups,
+            &mut observation.saturated,
+        );
+        observe(
+            &mut observation.objects_read,
+            observed.objects_read,
+            &mut observation.saturated,
+        );
+        observe(
+            &mut observation.bytes_read,
+            observed.bytes_read,
+            &mut observation.saturated,
+        );
         self.observation.set(observation);
         let bytes = result?;
         if let Some(bytes) = &bytes {
@@ -132,10 +141,16 @@ impl<'a, S: ImmutableObjectStore + ?Sized> Retained<'a, S> {
                 })?;
                 retained.extend_from_slice(bytes);
                 objects.insert(key, retained);
-                observation.retained_modeled_bytes = observation
-                    .retained_modeled_bytes
-                    .saturating_add(bytes.len() as u64)
-                    .saturating_add(OBJECT_OVERHEAD);
+                observe(
+                    &mut observation.retained_modeled_bytes,
+                    bytes.len() as u64,
+                    &mut observation.saturated,
+                );
+                observe(
+                    &mut observation.retained_modeled_bytes,
+                    OBJECT_OVERHEAD,
+                    &mut observation.saturated,
+                );
                 self.observation.set(observation);
             }
         }
@@ -151,7 +166,7 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for Retained<'_, S> 
     fn read(
         &self,
         key: ObjectKey,
-        maximum: usize,
+        maximum: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         self.read_inner(key, maximum, None, work)
@@ -160,7 +175,7 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for Retained<'_, S> 
     fn read_admitted(
         &self,
         key: ObjectKey,
-        maximum: usize,
+        maximum: Option<usize>,
         external: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {

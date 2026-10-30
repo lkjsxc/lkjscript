@@ -26,7 +26,7 @@ The successful response is `result status=prepared command=change.refresh`. Its
 `refresh` record reports `onto`, `original-plan`, `intent-reads` and
 `intent-read-guards`. The existing `plan` record returns a new `refresh_` token.
 Inspect the renewed candidate and logical plan before explicit apply. `--output`
-uses the same bounded atomic plan-file output owner as ordinary planning.
+uses the same complete atomic plan-file output owner as ordinary planning.
 
 The original token binds the request commitment and original prepared candidate.
 The refreshed token additionally binds the original prepared commitment, exact
@@ -38,7 +38,7 @@ they cannot be imported as accepted meaning or substitute for token validation.
 
 `tx --input-file delta.lkjx [--run TARGET] [--compact]` resolves and executes one
 proposal against a captured HEAD. `--input FORM` is the inline equivalent. Success
-is one JSON line, at most 64 KiB; failures use ordinary bounded diagnostics.
+is one complete JSON line with fallible buffer growth; failures use ordinary diagnostics.
 
 ```text
 (tx (base @head)
@@ -59,18 +59,64 @@ within the proposal are collected before bodies. Quoted text is never rewritten.
 `@module("math")` and `@fn("math::square")` require existing owners of that kind
 and scope. An explicit revision may replace `@head`; stale bases never auto-refresh.
 
+The displayed value-parameter list is the complete final order for an edited
+function, external declaration or interface operation. An insertion or reorder
+lowers to typed `SetParameterOrder` intent when additions and deletions alone would
+not produce that order. After explicit deletions, the engine requires a bijection
+of the parent's surviving parameter inventory: each exact existing identity or
+new request-local symbol occurs once and belongs to that parent. Missing,
+duplicate, foreign, deleted or wrong-kind members reject, as do repeated order
+operations for the same parent. Ordering changes only the parent's parameter
+vector; retained parameter identities and records survive. Parameter type/use
+changes and all affected call sites still require ordinary complete-candidate
+validation. Type, effect and requirement parameters retain their existing order
+and append-only addition rules.
+
+Explicit deletion can share the same atomic transaction with caller/body updates:
+
+```text
+(delete function math::obsolete (policy owned-closure))
+(delete module obsolete-module (policy reject))
+(delete parameter math::combine::obsolete (policy reject))
+(delete parameter transport::channel::send::obsolete (policy reject))
+```
+
+The selector names an exact module, module-scoped declaration family or value
+parameter in the bound base. Parameter paths have the form
+`MODULE::CALLABLE::PARAMETER` for a function or external declaration, or
+`MODULE::INTERFACE::OPERATION::PARAMETER` for an interface operation. A name
+introduced only by the current proposal cannot be selected for deletion.
+The policy is mandatory: `reject` refuses owned children, while `owned-closure` retires
+the selected owner and its ordinary owned closure. All forms use the existing
+`delete.owner` engine, including incoming-reference, duplicate-deletion, retirement
+and candidate-integrity checks. A mismatched family or stale base rejects the entire
+transaction. Omission from an upsert never implicitly deletes a declaration or
+contract child; a removed parameter must have an explicit deletion in the same
+complete edit.
+
+The corresponding compact ordering operation is
+`set.parameter-order function=DECLARATION parameters="OWNER_OR_SYMBOL ..."` or
+`set.parameter-order operation=OPERATION parameters="OWNER_OR_SYMBOL ..."`.
+Exactly one parent selector is required. An empty `parameters=""` list asserts an
+empty surviving inventory; it does not delete members. Ordering, additions,
+explicit deletions and caller repairs share one atomic publication.
+
 The implicit `std` alias requires the already-selected exact builtin dependency,
 included by the command starter. A local module named `std` takes precedence.
-Transactions do not stage or select dependencies implicitly. The 4 MiB input and
-structural limits are shared with native changes; candidate preview additionally
-admits at most 64 MiB of staged object bytes and modeled object metadata.
+Transactions do not stage or select dependencies implicitly. Input, declaration
+inventories and result encoding have no synthetic aggregate quota. All 46 optional
+change dimensions use the same exact policies as native changes: `(policy DIMENSION
+unbounded)` selects no allowance, and `(policy DIMENSION N)` selects the exact u64
+allowance, including zero and the largest value. Canonical object representation and
+remaining recursive lifecycle boundaries are independent pending cuts, recorded in
+the [capacity ledger](../decisions/20261025-capacity-unbounding.md).
 
 The ordinary change engine validates the complete candidate and computes its
 transitive reverse-dependency test cone. A read-only overlay admits the complete
 source closure and canonical test inventory, compiles it, and runs only selected
 tests in both production and independent reference evaluators. Optional `--run`
 uses an empty argument list and requires a pure target. Execution, cleanup and
-bounded result encoding finish before the ordinary locked publisher compares the
+complete result encoding finish before the ordinary locked publisher compares the
 exact base and advances HEAD. Failed tests, invalid selectors, capacity failures
 and stale candidates publish nothing. Verified counts bind the accepted receipt.
 An empty semantic delta returns `unchanged`; no historical acceptance or cached

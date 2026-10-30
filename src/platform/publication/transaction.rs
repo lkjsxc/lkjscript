@@ -1,8 +1,7 @@
 //! Exact normalized transaction records over Graph 10 canonical map bindings.
 
 use super::contract::{
-    MAXIMUM_INLINE_HISTORY_EDITS, MAXIMUM_TRANSACTION_BYTES, TRANSACTION_CONTRACT_VERSION,
-    TRANSACTION_ENVELOPE_DOMAIN, TRANSACTION_MAGIC,
+    TRANSACTION_CONTRACT_VERSION, TRANSACTION_ENVELOPE_DOMAIN, TRANSACTION_MAGIC,
 };
 use super::digest::TransactionDigest;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -55,7 +54,7 @@ pub struct RetirementTransactionEdit {
     pub objects: DigestEdit<RetirementObjectDigest>,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum TransactionBody {
     Bootstrap {
@@ -82,34 +81,54 @@ pub struct NormalizedTransaction {
     pub body: TransactionBody,
 }
 
+impl<Context> Decode<Context> for TransactionBody {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        use crate::platform::packed::linear::decode_vec;
+        match u32::decode(decoder)? {
+            0 => Ok(Self::Bootstrap {
+                result_root: Decode::decode(decoder)?,
+            }),
+            1 => Ok(Self::Change {
+                base: Decode::decode(decoder)?,
+                base_root: Decode::decode(decoder)?,
+                result_root: Decode::decode(decoder)?,
+                owners: decode_vec(decoder)?,
+                supplied_types: decode_vec(decoder)?,
+                dependencies: decode_vec(decoder)?,
+                retirements: decode_vec(decoder)?,
+            }),
+            _ => Err(bincode::error::DecodeError::Other(
+                "unknown transaction body",
+            )),
+        }
+    }
+}
+bincode::impl_borrow_decode!(TransactionBody);
+impl crate::platform::packed::linear::LinearDecode for NormalizedTransaction {}
+
 impl NormalizedTransaction {
     pub fn encode(&self) -> Result<(TransactionDigest, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let bytes = crate::platform::packed::encode_canonical(
+        let bytes = crate::platform::packed::linear::encode(
             TRANSACTION_MAGIC,
             TRANSACTION_ENVELOPE_DOMAIN,
             self,
-            MAXIMUM_TRANSACTION_BYTES,
+            None,
         )?;
         Ok((TransactionDigest::of(&bytes), bytes))
     }
 
     pub fn decode(bytes: &[u8], expected: TransactionDigest) -> Result<Self, Diagnostic> {
         require_digest(expected, bytes)?;
-        let value: Self = crate::platform::packed::decode_canonical(
+        let value: Self = crate::platform::packed::linear::decode_canonical(
             bytes,
             TRANSACTION_MAGIC,
             TRANSACTION_ENVELOPE_DOMAIN,
-            MAXIMUM_TRANSACTION_BYTES,
+            None,
         )?;
         value.validate()?;
-        if value.encode()?.1 != bytes {
-            return Err(transaction_error(
-                DiagnosticClass::Corrupt,
-                "publication_transaction_canonical",
-                "transaction object is not canonically encoded",
-            ));
-        }
         Ok(value)
     }
 
@@ -163,13 +182,11 @@ impl NormalizedTransaction {
                     "transaction edit count overflows this platform",
                 )
             })?;
-        if edits == 0 || edits > MAXIMUM_INLINE_HISTORY_EDITS {
+        if edits == 0 {
             return Err(transaction_error(
                 DiagnosticClass::Resource,
                 "publication_transaction_edit_count",
-                format!(
-                    "inline transaction contains {edits} edits; current bound is {MAXIMUM_INLINE_HISTORY_EDITS}"
-                ),
+                "inline transaction contains no edits",
             ));
         }
         validate_sorted(owners, |edit| edit.owner, "owner")?;

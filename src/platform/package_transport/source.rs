@@ -298,7 +298,10 @@ impl PackageContainer {
             previous = Some(order);
             let length = usize::try_from(u64::from_be_bytes(cursor.array()?))
                 .map_err(|_| limit("object bytes"))?;
-            if length > domain.maximum_bytes() {
+            if domain
+                .maximum_bytes()
+                .is_some_and(|maximum| length > maximum)
+            {
                 return Err(limit("per-object bytes"));
             }
             let object = cursor.take(length)?;
@@ -456,7 +459,7 @@ impl ImmutableObjectStore for BTreeMap<ObjectKey, Vec<u8>> {
     fn read(
         &self,
         key: ObjectKey,
-        maximum: usize,
+        maximum: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         self.read_admitted(key, maximum, &mut StoreReadAdmission::unbounded(), work)
@@ -464,16 +467,19 @@ impl ImmutableObjectStore for BTreeMap<ObjectKey, Vec<u8>> {
     fn read_admitted(
         &self,
         key: ObjectKey,
-        maximum: usize,
+        maximum: Option<usize>,
         admission: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         admission.admit_catalog_lookup()?;
-        work.catalog_lookups += 1;
+        work.add(StoreWork {
+            catalog_lookups: 1,
+            ..StoreWork::default()
+        });
         let Some(bytes) = self.get(&key) else {
             return Ok(None);
         };
-        if bytes.len() > maximum {
+        if maximum.is_some_and(|maximum| bytes.len() > maximum) {
             return Err(StoreError::new(
                 StoreErrorClass::Resource,
                 "package_source_object_bytes",
@@ -482,12 +488,20 @@ impl ImmutableObjectStore for BTreeMap<ObjectKey, Vec<u8>> {
         }
         admission.admit_object(bytes.len())?;
         key.verify(bytes)?;
-        work.objects_read += 1;
-        work.bytes_read += bytes.len() as u64;
-        Ok(Some(bytes.clone()))
+        work.add(StoreWork {
+            objects_read: 1,
+            bytes_read: bytes.len() as u64,
+            ..StoreWork::default()
+        });
+        Ok(Some(crate::platform::storage::object::copy_object_bytes(
+            bytes,
+        )?))
     }
     fn contains(&self, key: ObjectKey, work: &mut StoreWork) -> Result<bool, StoreError> {
-        work.catalog_lookups += 1;
+        work.add(StoreWork {
+            catalog_lookups: 1,
+            ..StoreWork::default()
+        });
         Ok(self.contains_key(&key))
     }
     fn stage(
@@ -528,7 +542,11 @@ impl<'a, S: ?Sized> CollectingStore<'a, S> {
         }
     }
     pub(crate) fn visits(&self) -> u64 {
-        self.admission.borrow().observation().objects.saturating_add(self.semantic_visits.get())
+        self.admission
+            .borrow()
+            .observation()
+            .objects
+            .saturating_add(self.semantic_visits.get())
     }
     pub(crate) fn read_bytes(&self) -> u64 {
         self.admission.borrow().observation().bytes
@@ -549,7 +567,7 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for CollectingStore<
     fn read(
         &self,
         key: ObjectKey,
-        maximum: usize,
+        maximum: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         self.read_admitted(key, maximum, &mut StoreReadAdmission::unbounded(), work)
@@ -557,7 +575,7 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for CollectingStore<
     fn read_admitted(
         &self,
         key: ObjectKey,
-        maximum: usize,
+        maximum: Option<usize>,
         external: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
@@ -573,16 +591,18 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for CollectingStore<
         let maximum = if self.objects.borrow().contains_key(&key) {
             maximum
         } else {
-            maximum.min(
-                MAXIMUM_CONTAINER_BYTES
+            {
+                let remaining = MAXIMUM_CONTAINER_BYTES
                     .saturating_sub(self.retained_bytes.get())
-                    .saturating_sub(41),
-            )
+                    .saturating_sub(41);
+                Some(maximum.map_or(remaining, |maximum| maximum.min(remaining)))
+            }
         };
         let internal = *self.admission.borrow();
         let outer = *external;
         let mut allowance = internal.remaining();
-        allowance.maximum_objects = allowance.maximum_objects
+        allowance.maximum_objects = allowance
+            .maximum_objects
             .map(|remaining| remaining.saturating_sub(self.semantic_visits.get()));
         let mut admission = StoreReadAdmission::new(allowance.intersect(outer.remaining()));
         let result = self.base.read_admitted(key, maximum, &mut admission, work);
@@ -871,7 +891,10 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
                     &snapshot,
                     external,
                     &mut intrinsic_work,
-                    Some(usize::try_from(maximum_visits - store.visits()).map_err(|_| limit("validation visits"))?),
+                    Some(
+                        usize::try_from(maximum_visits - store.visits())
+                            .map_err(|_| limit("validation visits"))?,
+                    ),
                 )?;
             }
         }

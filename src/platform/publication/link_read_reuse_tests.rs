@@ -652,7 +652,10 @@ fn link_reuse_default_and_finite_policy_keep_passive_overflow_separate() {
         assert!(reuse.observation.saturated);
     }
     for limit in [0, 1, usize::MAX] {
-        let mut exact = LinkTransportReuse { remaining_work: Some(limit), ..Default::default() };
+        let mut exact = LinkTransportReuse {
+            remaining_work: Some(limit),
+            ..Default::default()
+        };
         exact.charge_work(limit).unwrap();
         assert_eq!(exact.remaining_work, Some(0));
         assert!(exact.charge_work(1).is_err());

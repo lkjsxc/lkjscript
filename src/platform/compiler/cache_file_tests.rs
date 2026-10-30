@@ -17,7 +17,7 @@ fn implementation_changes_expire_disk_and_memory_caches_without_changing_meaning
         let directory = tempfile::tempdir().unwrap();
         let snapshot = crate::platform::kernel::tests::transport_snapshot();
         let repository = if memory {
-            let arena = crate::platform::MemProjectStore::new(64 * 1_048_576).unwrap();
+            let arena = crate::platform::MemProjectStore::new(None).unwrap();
             GraphRepository::create_memory(&arena, &snapshot, None)
                 .unwrap()
                 .repository

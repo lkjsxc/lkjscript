@@ -398,6 +398,13 @@ pub struct ArtifactLoadWork {
     pub map: MapWork,
     pub store: StoreWork,
     pub implementation_inventory_steps: u64,
+    pub implementation_inventory_saturated: bool,
+    pub reference_type_inventory_steps: u64,
+    pub reference_type_inventory_saturated: bool,
+    pub nominal_inventory_steps: u64,
+    pub nominal_inventory_saturated: bool,
+    pub interface_source_steps: u64,
+    pub interface_source_saturated: bool,
     pub callable_analysis_steps: u64,
     pub callable_analysis_saturated: bool,
     pub callable_analysis_bytes_saturated: bool,
@@ -552,14 +559,16 @@ impl ImmutableObjectStore for LoadedArtifact {
     fn read(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         work.catalog_lookups = work.catalog_lookups.saturating_add(1);
         let Some(bytes) = self.objects.get(&key) else {
             return Ok(None);
         };
-        if bytes.len() > maximum_bytes {
+        if let Some(maximum_bytes) = maximum_bytes
+            && bytes.len() > maximum_bytes
+        {
             return Err(StoreError::new(
                 StoreErrorClass::Resource,
                 "artifact_object_read_limit",
@@ -1511,9 +1520,35 @@ impl RuntimeOwnerExpectation {
     }
 }
 
+/// Exact finite admission and passive work observation have separate failure semantics.
+/// A saturated observation is a lower bound, never additional finite allowance.
+fn charge_artifact_work(
+    steps: &mut u64,
+    saturated: &mut bool,
+    amount: u64,
+    maximum: Option<u64>,
+    code: &'static str,
+    message: &'static str,
+) -> Result<(), Diagnostic> {
+    let next = steps.checked_add(amount);
+    if maximum.is_some_and(|maximum| *saturated || next.is_none_or(|next| next > maximum)) {
+        return Err(artifact_error(DiagnosticClass::Resource, code, message));
+    }
+    match next {
+        Some(next) => *steps = next,
+        None => {
+            *steps = u64::MAX;
+            *saturated = true;
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn runtime_owner_expectations(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     inventory_steps: &mut u64,
+    inventory_saturated: &mut bool,
+    maximum_work: Option<u64>,
     mut type_object: impl FnMut(TypeObjectDigest) -> Result<TypeObject, Diagnostic>,
     mut nominal_owned: impl FnMut(DeclarationReference) -> Result<bool, Diagnostic>,
     mut checkpoint: impl FnMut() -> Result<(), Diagnostic>,
@@ -1521,15 +1556,14 @@ pub(crate) fn runtime_owner_expectations(
     let mut method_targets = BTreeSet::new();
     let mut inventory_step = || {
         checkpoint()?;
-        if *inventory_steps >= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64 {
-            return Err(artifact_error(
-                DiagnosticClass::Resource,
-                "artifact_owned_contract_work",
-                "static method inventory exceeds artifact proof admission",
-            ));
-        }
-        *inventory_steps += 1;
-        Ok(())
+        charge_artifact_work(
+            inventory_steps,
+            inventory_saturated,
+            1,
+            maximum_work,
+            "artifact_owned_contract_work",
+            "static method inventory exceeds its explicit work allowance",
+        )
     };
     for unit in units.values() {
         inventory_step()?;
@@ -2609,6 +2643,7 @@ fn trace_object_closure(
         &store,
         &mut store_work,
         &mut work.implementation_inventory_steps,
+        &mut work.implementation_inventory_saturated,
     )?;
     let reference_owners = validate_reference_owners(
         manifest,
@@ -2622,17 +2657,15 @@ fn trace_object_closure(
 
     // These records have already been selected by exact source-owner commitments.
     // A binding annotation need not be an instruction relocation in a cached unit.
-    // Share the already-spent method budget without changing its reported metric.
-    let mut type_inventory_steps = work.implementation_inventory_steps;
     for record in reference_owners.values() {
-        type_inventory_steps = type_inventory_steps
-            .checked_add(1)
-            .filter(|steps| *steps <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64)
-            .ok_or_else(|| artifact_error(
-                DiagnosticClass::Resource,
-                "artifact_reference_type_work",
-                "canonical binding type inventory exceeds the existing artifact proof allowance",
-            ))?;
+        charge_artifact_work(
+            &mut work.reference_type_inventory_steps,
+            &mut work.reference_type_inventory_saturated,
+            1,
+            None,
+            "artifact_reference_type_work",
+            "canonical binding type inventory exceeds its explicit work allowance",
+        )?;
         let OwnerRecord::Binding(binding) = record else {
             continue;
         };
@@ -2683,7 +2716,15 @@ fn trace_object_closure(
         types.insert(digest, object);
     }
     validate_loaded_http_route_requirement_closure(&units, &runtime_owners, &types)?;
-    validate_interface_source_coherence(manifest, &interfaces, &runtime_owners, &reference_owners)?;
+    validate_interface_source_coherence(
+        manifest,
+        &interfaces,
+        &runtime_owners,
+        &reference_owners,
+        &mut work.interface_source_steps,
+        &mut work.interface_source_saturated,
+        None,
+    )?;
     for record in reference_owners.values().chain(runtime_owners.values()) {
         if record.header().contract_version != manifest.graph_contract_version {
             return Err(artifact_error(
@@ -2702,7 +2743,14 @@ fn trace_object_closure(
         &types,
         &logical.revisions,
     )?;
-    validate_nominal_instruction_inventory(&units, &reference_owners, &runtime_owners)?;
+    validate_nominal_instruction_inventory(
+        &units,
+        &reference_owners,
+        &runtime_owners,
+        &mut work.nominal_inventory_steps,
+        &mut work.nominal_inventory_saturated,
+        None,
+    )?;
     code_admission::validate(
         manifest,
         &units,
@@ -2743,10 +2791,13 @@ enum ArtifactSessionRecord {
     Interface(PackageInterfaceRecord),
 }
 
-fn validate_nominal_instruction_inventory(
+pub(super) fn validate_nominal_instruction_inventory(
     units: &BTreeMap<(PackageId, OwnerKey), CompilationUnit>,
     owners: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
     runtime: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+    inventory_steps: &mut u64,
+    inventory_saturated: &mut bool,
+    maximum_work: Option<u64>,
 ) -> Result<(), Diagnostic> {
     use super::unit::{CompiledFieldSelector, CompiledInstruction};
     use crate::platform::kernel::{ExpressionOperation, FieldSelector};
@@ -2789,19 +2840,15 @@ fn validate_nominal_instruction_inventory(
             Vec<ReadScopeArgument>,
         ),
     }
-    let mut work = 0usize;
     let mut tick = || {
-        work = work
-            .checked_add(1)
-            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
-                artifact_error(
-                    DiagnosticClass::Resource,
-                    "artifact_nominal_work",
-                    "nominal instruction inventory exhausted its work bound",
-                )
-            })?;
-        Ok::<(), Diagnostic>(())
+        charge_artifact_work(
+            inventory_steps,
+            inventory_saturated,
+            1,
+            maximum_work,
+            "artifact_nominal_work",
+            "nominal instruction inventory exceeds its explicit work allowance",
+        )
     };
     for ((package, owner), unit) in units {
         let codes = match &unit.payload {
@@ -2837,6 +2884,9 @@ fn validate_nominal_instruction_inventory(
                     )
                 })?
                 .expression_roots()
+                .into_iter()
+                .map(|expression| (expression, false))
+                .collect()
         };
         if let CompilationPayload::Component { ports, .. } = &unit.payload {
             for port in ports {
@@ -2856,12 +2906,32 @@ fn validate_nominal_instruction_inventory(
                                 "constructor inventory omits a canonical port",
                             )
                         })?;
-                    pending.extend(canonical.expression_roots());
+                    pending.extend(
+                        canonical
+                            .expression_roots()
+                            .into_iter()
+                            .map(|expression| (expression, false)),
+                    );
                 }
             }
         }
-        while let Some(expression) = pending.pop() {
+        // Enter/exit states detect a cycle without relying on admission fuel. An
+        // acyclic shared subtree still contributes once for each source occurrence.
+        let mut active = BTreeSet::new();
+        while let Some((expression, exiting)) = pending.pop() {
+            if exiting {
+                active.remove(&expression);
+                continue;
+            }
             tick()?;
+            if !active.insert(expression) {
+                return Err(artifact_error(
+                    DiagnosticClass::Corrupt,
+                    "artifact_nominal_instruction_cycle",
+                    "canonical constructor inventory contains a cyclic expression path",
+                ));
+            }
+            pending.push((expression, true));
             let Some(OwnerRecord::Expression(record)) =
                 owners.get(&(*package, OwnerKey::Expression(expression)))
             else {
@@ -3000,13 +3070,18 @@ fn validate_nominal_instruction_inventory(
                 for binding in bindings {
                     tick()?;
                     if let Some(owner) = owners.get(&(*package, OwnerKey::Binding(*binding))) {
-                        pending.extend(owner.expression_roots());
+                        pending.extend(
+                            owner
+                                .expression_roots()
+                                .into_iter()
+                                .map(|expression| (expression, false)),
+                        );
                     }
                 }
             }
             for child in record.children() {
                 tick()?;
-                pending.push(child.expression);
+                pending.push((child.expression, false));
             }
         }
         let mut actual = BTreeMap::new();
@@ -3336,8 +3411,10 @@ fn validate_interface_source_coherence(
     interfaces: &BTreeMap<PackageRevisionDigest, PackageInterfaceValidation>,
     runtime: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
     reference: &BTreeMap<(PackageId, OwnerKey), OwnerRecord>,
+    inventory_steps: &mut u64,
+    inventory_saturated: &mut bool,
+    maximum_work: Option<u64>,
 ) -> Result<(), Diagnostic> {
-    let mut remaining = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
     for package in &manifest.packages {
         let interface = interfaces.get(&package.package_revision).ok_or_else(|| {
             artifact_error(
@@ -3347,17 +3424,16 @@ fn validate_interface_source_coherence(
             )
         })?;
         for (owner, projected) in &interface.owners {
-            let visits = usize::try_from(
-                crate::platform::package_interface::interface_owner_validation_visits(projected),
-            )
-            .unwrap_or(usize::MAX);
-            remaining = remaining.checked_sub(visits).ok_or_else(|| {
-                artifact_error(
-                    DiagnosticClass::Resource,
-                    "artifact_interface_source_work",
-                    "interface coherence exceeds the existing validation work bound",
-                )
-            })?;
+            // One observed step is one exact owner projection/equality operation.
+            // Canonical decoding and nested owner validation have their own accounting.
+            charge_artifact_work(
+                inventory_steps,
+                inventory_saturated,
+                1,
+                maximum_work,
+                "artifact_interface_source_work",
+                "interface coherence exceeds its explicit work allowance",
+            )?;
             let canonical = runtime
                 .get(&(package.package, *owner))
                 .or_else(|| reference.get(&(package.package, *owner)))
@@ -3399,7 +3475,8 @@ fn artifact_representation_scope(
         fn step(&mut self) -> Result<(), Diagnostic> {
             if !self.work.charge(1, self.maximum_work) {
                 return Err(artifact_error(
-                    DiagnosticClass::Resource, "artifact_representation_work",
+                    DiagnosticClass::Resource,
+                    "artifact_representation_work",
                     "exact representation dependency traversal exceeds its explicit work admission",
                 ));
             }
@@ -3594,11 +3671,8 @@ fn validate_artifact_nominal_meaning(
         affine_roots.entry(*package).or_default().push(*owner);
         roots.entry(*package).or_default();
     }
-    let has_associated_types = associated_admission::contains_associated_types(
-        types,
-        &mut work,
-        None,
-    )?;
+    let has_associated_types =
+        associated_admission::contains_associated_types(types, &mut work, None)?;
     let associated = crate::platform::kernel::owned_associated::OwnedAssociatedAdmission::new();
     let mut unit_cursor = units.iter().peekable();
     for (package, roots) in roots {
@@ -3614,12 +3688,8 @@ fn validate_artifact_nominal_meaning(
                     "body validation lost its source package's exact logical revision",
                 )
             })?;
-        let representation_packages = artifact_representation_scope(
-            &exact.dependencies,
-            revisions,
-            &mut work,
-            None,
-        )?;
+        let representation_packages =
+            artifact_representation_scope(&exact.dependencies, revisions, &mut work, None)?;
         let read = Read {
             package,
             runtime,
@@ -3633,10 +3703,7 @@ fn validate_artifact_nominal_meaning(
             let associated_work = std::cell::Cell::new(work);
             let checkpoint = || {
                 let mut next = associated_work.get();
-                associated_admission::admit_work(
-                    &mut next,
-                    None,
-                )?;
+                associated_admission::admit_work(&mut next, None)?;
                 associated_work.set(next);
                 Ok(())
             };
@@ -3685,10 +3752,7 @@ fn validate_artifact_nominal_meaning(
             ));
         }
         crate::platform::kernel::callable_flow::validate_callable_flow(
-            &read,
-            roots,
-            &mut work,
-            None,
+            &read, roots, &mut work, None,
         )?;
         let mut diagnostics = Vec::new();
         let exhausted = crate::platform::kernel::validate_affine_roots_with_limits(
@@ -4218,10 +4282,13 @@ fn validate_runtime_owners(
     store: &TrackingObjectStore<'_>,
     work: &mut StoreWork,
     inventory_steps: &mut u64,
+    inventory_saturated: &mut bool,
 ) -> Result<BTreeMap<(PackageId, OwnerKey), OwnerRecord>, Diagnostic> {
     let expected = runtime_owner_expectations(
         units,
         inventory_steps,
+        inventory_saturated,
+        None,
         |ty| {
             let bytes = required_object(
                 store,
@@ -5052,13 +5119,15 @@ impl ImmutableObjectStore for TrackingObjectStore<'_> {
     fn read(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         let Some(bytes) = self.objects.get(&key) else {
             return Ok(None);
         };
-        if bytes.len() > maximum_bytes {
+        if let Some(maximum_bytes) = maximum_bytes
+            && bytes.len() > maximum_bytes
+        {
             return Err(StoreError::new(
                 StoreErrorClass::Resource,
                 "artifact_object_read_limit",
@@ -5236,3 +5305,80 @@ mod contract_tests;
 #[cfg(test)]
 #[path = "artifact_read_view_tests.rs"]
 mod read_view_tests;
+
+#[cfg(test)]
+mod work_policy_tests {
+    use super::*;
+
+    #[test]
+    fn artifact_work_policy_is_exact_and_saturation_is_passive() {
+        for maximum in [None, Some(0), Some(6), Some(7), Some(u64::MAX)] {
+            let mut steps = 0;
+            let mut saturated = false;
+            let result = charge_artifact_work(
+                &mut steps,
+                &mut saturated,
+                7,
+                maximum,
+                "artifact_test_work",
+                "explicit test allowance",
+            );
+            if maximum.is_some_and(|maximum| maximum < 7) {
+                assert_eq!(result.unwrap_err().code, "artifact_test_work");
+                assert_eq!(steps, 0);
+            } else {
+                result.unwrap();
+                assert_eq!(steps, 7);
+            }
+            assert!(!saturated);
+        }
+        let mut steps = u64::MAX;
+        let mut saturated = false;
+        assert!(
+            charge_artifact_work(
+                &mut steps,
+                &mut saturated,
+                1,
+                Some(u64::MAX),
+                "artifact_test_work",
+                "explicit test allowance"
+            )
+            .is_err()
+        );
+        assert_eq!(steps, u64::MAX);
+        assert!(!saturated);
+        charge_artifact_work(
+            &mut steps,
+            &mut saturated,
+            1,
+            None,
+            "artifact_test_work",
+            "unbounded test",
+        )
+        .unwrap();
+        assert_eq!(steps, u64::MAX);
+        assert!(saturated);
+        charge_artifact_work(
+            &mut steps,
+            &mut saturated,
+            1,
+            None,
+            "artifact_test_work",
+            "unbounded test",
+        )
+        .unwrap();
+        assert!(
+            charge_artifact_work(
+                &mut steps,
+                &mut saturated,
+                0,
+                Some(u64::MAX),
+                "artifact_test_work",
+                "a lower bound cannot grant finite capacity"
+            )
+            .is_err()
+        );
+        assert_eq!(steps, u64::MAX);
+        assert!(saturated);
+    }
+}

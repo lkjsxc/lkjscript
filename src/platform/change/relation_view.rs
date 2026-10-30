@@ -1,6 +1,8 @@
 //! Exact bounded forward and reverse relation reads over one derived delta.
 
-use super::{BudgetCounter, DerivedDelta, WitnessBaseRead, WitnessReadWork, minimum_limit, optional_usize};
+use super::{
+    BudgetCounter, DerivedDelta, WitnessBaseRead, WitnessReadWork, minimum_limit, optional_usize,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{ExactOwnerKey, OwnerKey, PackageId, RelationEdge, RelationEndpoint};
 use std::collections::{BTreeMap, BTreeSet};
@@ -61,6 +63,7 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
         maximum_fanout: Option<u64>,
     ) -> Result<CandidateRelationRead, Diagnostic> {
         let base = if let Some(cached) = self.outgoing.get(&owner) {
+            admit_cached_prefix(cached, maximum_work, maximum_fanout)?;
             cached.clone()
         } else {
             let read = self
@@ -101,6 +104,7 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
         maximum_fanout: Option<u64>,
     ) -> Result<CandidateRelationRead, Diagnostic> {
         let base = if let Some(cached) = self.incoming.get(&owner) {
+            admit_cached_prefix(cached, maximum_work, maximum_fanout)?;
             cached.clone()
         } else {
             let read = self
@@ -141,6 +145,7 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
         maximum_fanout: Option<u64>,
     ) -> Result<CandidateRelationRead, Diagnostic> {
         let base = if let Some(cached) = self.incoming_packages.get(&package) {
+            admit_cached_prefix(cached, maximum_work, maximum_fanout)?;
             cached.clone()
         } else {
             let read = self.base.read_incoming_package_relations(
@@ -176,15 +181,22 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateRelations<'a, W> {
         )
     }
 
-    fn ensure_delta_index(&mut self, maximum_work: Option<u64>) -> Result<BudgetCounter, Diagnostic> {
+    fn ensure_delta_index(
+        &mut self,
+        maximum_work: Option<u64>,
+    ) -> Result<BudgetCounter, Diagnostic> {
         if self.delta_index.is_some() {
             return Ok(BudgetCounter::default());
         }
         let removed = u64::try_from(self.derived.relations.removed.len()).unwrap_or(u64::MAX);
         let added = u64::try_from(self.derived.relations.added.len()).unwrap_or(u64::MAX);
         let mut relation_count = BudgetCounter::exact(removed);
-        relation_count.charge(BudgetCounter::exact(added), maximum_work,
-            "candidate relation delta indexing", "relation_edges")?;
+        relation_count.charge(
+            BudgetCounter::exact(added),
+            maximum_work,
+            "candidate relation delta indexing",
+            "relation_edges",
+        )?;
         let mut index = CandidateRelationDeltaIndex::default();
         for edge in &self.derived.relations.removed {
             index_relation_delta(&mut index, self.package, *edge, true);
@@ -263,9 +275,32 @@ fn insert_indexed_relation(indexed: &mut IndexedRelationDelta, edge: RelationEdg
     }
 }
 
-fn remaining_after_base(maximum_work: Option<u64>, base: &[RelationEdge]) -> Result<Option<u64>, Diagnostic> {
+fn remaining_after_base(
+    maximum_work: Option<u64>,
+    base: &[RelationEdge],
+) -> Result<Option<u64>, Diagnostic> {
     BudgetCounter::exact(base.len() as u64).remaining(
-        maximum_work, "candidate base relation prefix", "relation_edges")
+        maximum_work,
+        "candidate base relation prefix",
+        "relation_edges",
+    )
+}
+
+fn admit_cached_prefix(
+    edges: &[RelationEdge],
+    maximum_work: Option<u64>,
+    maximum_fanout: Option<u64>,
+) -> Result<(), Diagnostic> {
+    if minimum_limit(maximum_work, maximum_fanout)
+        .is_some_and(|maximum| edges.len() as u64 > maximum)
+    {
+        return Err(relation_error(
+            DiagnosticClass::Resource,
+            relation_prefix_code(maximum_work, maximum_fanout),
+            "cached relation prefix exceeds the remaining work or endpoint fanout budget",
+        ));
+    }
+    Ok(())
 }
 
 fn insert_relation(
@@ -286,13 +321,26 @@ fn insert_relation(
     Ok(())
 }
 
-fn charge_relation_edge(observed: &mut BudgetCounter, maximum_items: Option<u64>) -> Result<(), Diagnostic> {
-    observed.charge(BudgetCounter::exact(1), maximum_items,
-        "candidate relation traversal", "relation_edges")
+fn charge_relation_edge(
+    observed: &mut BudgetCounter,
+    maximum_items: Option<u64>,
+) -> Result<(), Diagnostic> {
+    observed.charge(
+        BudgetCounter::exact(1),
+        maximum_items,
+        "candidate relation traversal",
+        "relation_edges",
+    )
 }
 
-fn bounded_maximum(maximum_work: Option<u64>, maximum_fanout: Option<u64>) -> Result<Option<usize>, Diagnostic> {
-    optional_usize(minimum_limit(maximum_work, maximum_fanout), "relation_edges")
+fn bounded_maximum(
+    maximum_work: Option<u64>,
+    maximum_fanout: Option<u64>,
+) -> Result<Option<usize>, Diagnostic> {
+    optional_usize(
+        minimum_limit(maximum_work, maximum_fanout),
+        "relation_edges",
+    )
 }
 
 fn relation_prefix_code(maximum_work: Option<u64>, maximum_fanout: Option<u64>) -> &'static str {
@@ -316,6 +364,61 @@ mod tests {
     use super::*;
     use crate::platform::semantic_id::DeclarationId;
     use crate::platform::witness::rebuild_full_witness;
+
+    #[test]
+    fn relation_prefix_policies_apply_to_cold_and_cached_reads() {
+        let snapshot = crate::platform::kernel::tests::witness_snapshot();
+        let witness = rebuild_full_witness(&snapshot).expect("base witness");
+        let package = snapshot.root.package_id;
+        let owner = witness
+            .entries
+            .relations
+            .iter()
+            .find_map(|edge| match edge.source {
+                RelationEndpoint::Owner(source) if source.package == package => Some(source.owner),
+                _ => None,
+            })
+            .expect("a local relation source");
+        let derived = DerivedDelta::default();
+        let mut cached = CandidateRelations::new(package, &derived, &witness);
+        let complete = cached
+            .outgoing(owner, None, None)
+            .expect("unbounded prefix");
+        let count = complete.edges.len() as u64;
+        assert!(count > 0);
+        for maximum in [None, Some(0), Some(count - 1), Some(count), Some(u64::MAX)] {
+            let mut cold = CandidateRelations::new(package, &derived, &witness);
+            let before = cached.work();
+            for result in [
+                cold.outgoing(owner, None, maximum),
+                cached.outgoing(owner, None, maximum),
+            ] {
+                if maximum.is_some_and(|maximum| maximum < count) {
+                    assert_eq!(result.unwrap_err().code, "change_budget_relation_fanout");
+                } else {
+                    let read = result.expect("complete fanout fits its policy");
+                    assert_eq!(read.edges, complete.edges);
+                    assert_eq!(read.edges_examined, BudgetCounter::exact(count));
+                }
+            }
+            assert_eq!(cached.work(), before, "cached reads perform no witness I/O");
+
+            let mut cold = CandidateRelations::new(package, &derived, &witness);
+            for result in [
+                cold.outgoing(owner, maximum, None),
+                cached.outgoing(owner, maximum, None),
+            ] {
+                if maximum.is_some_and(|maximum| maximum < count) {
+                    assert_eq!(result.unwrap_err().code, "change_budget_relation_edges");
+                } else {
+                    assert_eq!(
+                        result.expect("complete work fits its policy").edges,
+                        complete.edges
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn candidate_relation_delta_index_is_bounded_charged_once_and_preserves_fanout() {

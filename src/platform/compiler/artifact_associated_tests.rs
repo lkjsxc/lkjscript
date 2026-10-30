@@ -954,7 +954,12 @@ fn artifact_associated_table_helper_measures_exact_cumulative_work_and_storage()
         let error = validate_unit_types(&f.read, &unit, &admission).unwrap_err();
         assert_eq!(error.class, DiagnosticClass::Resource);
         assert!(admission.work().0 <= limits.maximum_steps.expect("explicit test allowance"));
-        assert!(admission.work().1 <= limits.maximum_metadata_bytes.expect("explicit test allowance"));
+        assert!(
+            admission.work().1
+                <= limits
+                    .maximum_metadata_bytes
+                    .expect("explicit test allowance")
+        );
     }
     // A fresh unit reader or repeated table hit must not reset the shared budget.
     let error = validate_unit_types(&f.read, &unit, &exact).unwrap_err();
@@ -1043,7 +1048,9 @@ fn artifact_associated_discovery_inherits_work_and_refuses_before_the_next_objec
     assert_eq!(short.consumed, maximum);
     let mut ceiling = crate::platform::kernel::ValidationWork::exact(usize::MAX);
     assert_eq!(
-        admit_work(&mut ceiling, Some(usize::MAX)).unwrap_err().class,
+        admit_work(&mut ceiling, Some(usize::MAX))
+            .unwrap_err()
+            .class,
         DiagnosticClass::Resource
     );
     assert_eq!(ceiling.consumed, usize::MAX);

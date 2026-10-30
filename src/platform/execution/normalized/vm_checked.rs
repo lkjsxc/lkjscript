@@ -1161,9 +1161,12 @@ pub(super) struct Admission<'a> {
     pub policy: super::NormalizedRunPolicy,
     pub work: &'a mut ValueWork,
     pub allocated: &'a mut u64,
+    pub allocated_saturated: &'a mut bool,
     pub allocation_charges: &'a mut u64,
     pub items: &'a mut u64,
+    pub items_saturated: &'a mut bool,
     pub admission_bytes: u64,
+    pub admission_bytes_saturated: bool,
     pub admission_items: u64,
 }
 
@@ -2174,24 +2177,54 @@ impl Admission<'_> {
     }
 
     fn allocate(&mut self, bytes: u64) -> Result<(), ExecutionError> {
-        self.admission_bytes = crate::platform::execution::cumulative_charge(
+        self.reserve_storage(bytes, 0)
+    }
+
+    fn reserve_storage(&mut self, bytes: u64, items: u64) -> Result<(), ExecutionError> {
+        let next_admission_items = crate::platform::execution::finite_charge(
+            self.admission_items,
+            items,
+            super::super::value::MAXIMUM_ADMISSION_ITEMS,
+            "normalized_collection_items",
+            "single raw admission exceeds finite collection items",
+        )?;
+        let mut admission_saturated = self.admission_bytes_saturated;
+        let next_admission_bytes = crate::platform::execution::cumulative_charge(
             self.admission_bytes,
             bytes,
             None,
             "normalized_allocation",
-            "single raw admission exceeds finite storage",
+            "single raw admission byte observation",
+            &mut admission_saturated,
         )?;
-        let next = crate::platform::execution::cumulative_charge(
+        let mut items_saturated = *self.items_saturated;
+        let mut bytes_saturated = *self.allocated_saturated;
+        let next_items = crate::platform::execution::cumulative_charge(
+            *self.items,
+            items,
+            self.policy.maximum_collection_items,
+            "normalized_collection_items",
+            "value admission exceeds aggregate collection items; reduce the input",
+            &mut items_saturated,
+        )?;
+        let next_bytes = crate::platform::execution::cumulative_charge(
             *self.allocated,
             bytes,
             self.policy.maximum_allocated_bytes,
             "normalized_allocation",
             "value admission exceeds cumulative allocated bytes; reduce the input",
+            &mut bytes_saturated,
         )?;
         if let Some(budget) = self.shared_budget {
-            budget.reserve(bytes, 0)?;
+            budget.reserve(bytes, items)?;
         }
-        *self.allocated = next;
+        self.admission_items = next_admission_items;
+        self.admission_bytes = next_admission_bytes;
+        self.admission_bytes_saturated = admission_saturated;
+        *self.items = next_items;
+        *self.items_saturated = items_saturated;
+        *self.allocated = next_bytes;
+        *self.allocated_saturated = bytes_saturated;
         if bytes != 0 {
             *self.allocation_charges = self.allocation_charges.saturating_add(1);
         }
@@ -2199,31 +2232,14 @@ impl Admission<'_> {
     }
 
     fn collection(&mut self, count: usize) -> Result<(), ExecutionError> {
-        self.admission_items = crate::platform::execution::cumulative_charge(
-            self.admission_items,
-            count as u64,
-            Some(super::super::value::MAXIMUM_ADMISSION_ITEMS),
-            "normalized_collection_items",
-            "single raw admission exceeds finite collection items",
-        )?;
-        let next = crate::platform::execution::cumulative_charge(
-            *self.items,
-            count as u64,
-            self.policy.maximum_collection_items,
-            "normalized_collection_items",
-            "value admission exceeds aggregate collection items; reduce the input",
-        )?;
-        if let Some(budget) = self.shared_budget {
-            budget.reserve(0, count as u64)?;
-        }
-        *self.items = next;
-        // Raw payload storage and both bounded traversal worklists are charged before growth.
+        // Raw payload storage and both traversal worklists are reserved together.
         let unit = std::mem::size_of::<NormalizedValue>()
             + std::mem::size_of::<(&NormalizedValue, TypeObjectDigest, bool)>()
             + std::mem::size_of::<Visit<'_>>();
-        self.allocate((count as u64).checked_mul(unit as u64).ok_or_else(|| {
+        let bytes = (count as u64).checked_mul(unit as u64).ok_or_else(|| {
             resource_error("normalized_allocation", "value admission size overflowed")
-        })?)
+        })?;
+        self.reserve_storage(bytes, count as u64)
     }
 }
 

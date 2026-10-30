@@ -261,6 +261,7 @@ pub struct HttpDispatchObservation {
     pub queue_nanoseconds: u64,
     pub execution_nanoseconds: u64,
     pub instructions: u64,
+    pub instructions_saturated: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]

@@ -12,9 +12,9 @@ mod budget_tests;
 mod associated_shape_tests;
 
 use super::contract::MAXIMUM_EXPRESSION_DEPTH;
-use super::work::ValidationWork;
 use super::infer::{ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits};
 use super::owned_associated::{OwnedAssociatedAdmission, OwnedTypeOccurrence};
+use super::work::ValidationWork;
 use super::{
     BindingKind, BindingRecord, CaseRecord, DeclarationPayload, DeclarationReference,
     ExpressionOperation, FunctionDeclaration, FunctionEffect, LocalValueReference, OperationRecord,

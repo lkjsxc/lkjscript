@@ -248,14 +248,12 @@ impl NormalizedValue {
         let mut bytes = 0_u64;
         super::map::Map::from_items(entries, MAXIMUM_ADMISSION_ITEMS, &mut |charge| {
             control.check()?;
-            bytes = bytes
-                .checked_add(charge.bytes)
-                .ok_or_else(|| {
-                    crate::platform::execution::ExecutionError::resource(
-                        "normalized_map_storage",
-                        "raw map construction storage accounting overflowed",
-                    )
-                })?;
+            bytes = bytes.checked_add(charge.bytes).ok_or_else(|| {
+                crate::platform::execution::ExecutionError::resource(
+                    "normalized_map_storage",
+                    "raw map construction storage accounting overflowed",
+                )
+            })?;
             Ok(())
         })
         .map(Self::Map)
@@ -266,15 +264,13 @@ impl NormalizedValue {
     pub fn list(items: Vec<Self>) -> Result<Self, crate::platform::execution::ExecutionError> {
         let mut bytes = 0_u64;
         super::list::List::from_items(items, super::list::MAXIMUM_LENGTH as u64, &mut |charge| {
-            bytes = bytes
-                .checked_add(charge.bytes)
-                .ok_or_else(|| {
-                    crate::platform::execution::ExecutionError::new(
-                        crate::platform::execution::ExecutionFailureClass::Resource,
-                        "normalized_list_storage",
-                        "raw list construction storage accounting overflowed",
-                    )
-                })?;
+            bytes = bytes.checked_add(charge.bytes).ok_or_else(|| {
+                crate::platform::execution::ExecutionError::new(
+                    crate::platform::execution::ExecutionFailureClass::Resource,
+                    "normalized_list_storage",
+                    "raw list construction storage accounting overflowed",
+                )
+            })?;
             Ok(())
         })
         .map(Self::List)
@@ -411,14 +407,12 @@ pub(super) fn raw_map_reservation(
     let mut bytes = 0_u64;
     move |charge| {
         control.check()?;
-        bytes = bytes
-            .checked_add(charge.bytes)
-            .ok_or_else(|| {
-                crate::platform::execution::ExecutionError::resource(
-                    "normalized_map_storage",
-                    "raw map operation storage accounting overflowed",
-                )
-            })?;
+        bytes = bytes.checked_add(charge.bytes).ok_or_else(|| {
+            crate::platform::execution::ExecutionError::resource(
+                "normalized_map_storage",
+                "raw map operation storage accounting overflowed",
+            )
+        })?;
         Ok(())
     }
 }

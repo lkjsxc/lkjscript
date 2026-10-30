@@ -201,7 +201,8 @@ fn descendant_cycle_returns_its_semantic_rejection_with_finite_work() {
         },
     );
     function(&mut snapshot, 0, "unused", root, unit);
-    let errors = crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 512).unwrap_err();
+    let errors =
+        crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 512).unwrap_err();
     assert!(has(&errors, "kernel_full_expression_cycle"));
     assert!(!has(&errors, "kernel_full_work"));
 }
@@ -311,7 +312,8 @@ fn incremental_rejects_cross_function_self_and_forward_binding_references() {
             "{mode}: {errors:?}"
         );
         assert!(has(
-            &crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 2048).unwrap_err(),
+            &crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 2048)
+                .unwrap_err(),
             "kernel_full_lexical_scope"
         ));
     }
@@ -549,11 +551,19 @@ fn resource_shape_dag_work_is_admitted_and_interruptible() {
         }
     };
     let mut work = 0;
-    let errors = crate::platform::kernel::test_work::validate_full_checked(&snapshot, 4096, &mut work, &checkpoint).unwrap_err();
+    let errors = crate::platform::kernel::test_work::validate_full_checked(
+        &snapshot,
+        4096,
+        &mut work,
+        &checkpoint,
+    )
+    .unwrap_err();
     assert!(has(&errors, "finite_fixture_cancelled"));
     assert!(work < 100);
     let mut work = 0;
-    let errors = crate::platform::kernel::test_work::validate_full_observed(&snapshot, 4096, &mut work).unwrap_err();
+    let errors =
+        crate::platform::kernel::test_work::validate_full_observed(&snapshot, 4096, &mut work)
+            .unwrap_err();
     assert!(has(&errors, "kernel_full_type_unreachable"));
     assert!(!has(&errors, "kernel_full_work"));
     assert!(work < 4096);
@@ -650,7 +660,8 @@ fn imported_target_checks_both_port_parent_and_component_inventory() {
             "kernel_full_target_port_owner"
         ));
         assert!(has(
-            &crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 2048).unwrap_err(),
+            &crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 2048)
+                .unwrap_err(),
             "kernel_full_target_port_owner"
         ));
         let owners =
@@ -796,7 +807,8 @@ declarations.end
             "kernel_type_nominal_resource"
         ));
         assert!(has(
-            &crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 100_000).unwrap_err(),
+            &crate::platform::kernel::test_work::validate_full_with_limit(&snapshot, 100_000)
+                .unwrap_err(),
             "kernel_type_nominal_resource"
         ));
     }

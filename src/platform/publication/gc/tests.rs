@@ -133,7 +133,7 @@ fn disk_gc_retains_history_idempotency_compilation_and_exact_meaning() {
         repository
             .object_store()
             .unwrap()
-            .read(key, orphan.len(), &mut StoreWork::default())
+            .read(key, Some(orphan.len()), &mut StoreWork::default())
             .unwrap()
             .is_none()
     );
@@ -145,7 +145,7 @@ fn disk_gc_retains_history_idempotency_compilation_and_exact_meaning() {
 
 #[test]
 fn memory_gc_retains_readers_dependencies_and_independent_execution() {
-    let memory = MemProjectStore::new(512 * 1_048_576).unwrap();
+    let memory = MemProjectStore::new(None).unwrap();
     crate::platform::create_memory_project(&memory, "gc-command", "command").unwrap();
     let repository = GraphRepository::open_memory(&memory).unwrap();
     crate::platform::execute_in_memory(&memory, vec!["check".into()]).unwrap();
@@ -182,7 +182,7 @@ fn memory_gc_retains_readers_dependencies_and_independent_execution() {
         repository
             .object_store()
             .unwrap()
-            .read(key, orphan.len(), &mut StoreWork::default())
+            .read(key, Some(orphan.len()), &mut StoreWork::default())
             .unwrap()
             .is_none()
     );
@@ -190,7 +190,7 @@ fn memory_gc_retains_readers_dependencies_and_independent_execution() {
 
 #[test]
 fn corrupt_missing_and_cancelled_reachability_never_changes_publication_or_storage() {
-    let memory = MemProjectStore::new(32 * 1_048_576).unwrap();
+    let memory = MemProjectStore::new(None).unwrap();
     crate::platform::create_memory_project(&memory, "gc-corruption", "minimal").unwrap();
     let repository = GraphRepository::open_memory(&memory).unwrap();
     let root = repository
@@ -244,7 +244,7 @@ fn corrupt_missing_and_cancelled_reachability_never_changes_publication_or_stora
 
 #[test]
 fn inferred_parallel_types_are_reconstructed_metadata_not_missing_storage_roots() {
-    let memory = MemProjectStore::new(512 * 1_048_576).unwrap();
+    let memory = MemProjectStore::new(None).unwrap();
     crate::platform::create_memory_project(&memory, "gc-inferred", "command").unwrap();
     let proposal = r#"(tx (base @head)
       (upsert-module parallel_gc

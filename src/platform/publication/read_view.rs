@@ -6,17 +6,16 @@ use super::validation::{RevalidatedBase, ViewStore};
 mod link_read_reuse;
 use super::{CurrentPublication, PreparedPublication, PublicationOptions};
 use crate::platform::change::{
-    BudgetCounter, BudgetDimension, WorkSaturation,
     AuthoredAllocation, AuthoredChangeSet, AuthoredLoweringWork, AuthoredReadFootprint,
-    BoundOwnerSummary, BudgetedCanonicalBase, BudgetedWitnessBase, CanonicalBaseRead,
-    CanonicalDelta, CanonicalRead, CanonicalReadAdmission, CanonicalReadWork, ChangeBudget,
-    ChangeBudgetWork, DerivedDelta, HttpRoutePlanEvidence, LogicalChangePlanEvidence,
+    BoundOwnerSummary, BudgetCounter, BudgetDimension, BudgetedCanonicalBase, BudgetedWitnessBase,
+    CanonicalBaseRead, CanonicalDelta, CanonicalRead, CanonicalReadAdmission, CanonicalReadWork,
+    ChangeBudget, ChangeBudgetWork, DerivedDelta, HttpRoutePlanEvidence, LogicalChangePlanEvidence,
     LogicalDependencyValues, LogicalRetirementValues, PreparedChangeAnalysis, PrimitiveEdit,
     RecordedCanonicalBase, RecordedWitnessBase, SummaryDelta, TestDependencyDelta, WitnessBaseRead,
     WitnessMapAdmission, WitnessMapBase, WitnessMapUpdate, WitnessRead, WitnessReadAdmission,
-    WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead, include_prior_refresh_work,
-    lower_authored_changes_with_publication_base, prepare_change_analysis_with_budget,
-    remaining_refresh_budget, update_witness_maps_from,
+    WitnessReadWork, WitnessRelationRead, WitnessTestDependencyRead, WorkSaturation,
+    include_prior_refresh_work, lower_authored_changes_with_publication_base,
+    prepare_change_analysis_with_budget, remaining_refresh_budget, update_witness_maps_from,
 };
 
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -39,7 +38,8 @@ use crate::platform::package_transport::{
     PackageTransportClosureValidation,
 };
 use crate::platform::persistent_map::{
-    MapAdmission, MapError, MapErrorClass, MapRangeControl, MapRoot, MapWork, MapWorkCounter, PersistentMap,
+    MapAdmission, MapError, MapErrorClass, MapRangeControl, MapRoot, MapWork, MapWorkCounter,
+    PersistentMap,
 };
 use crate::platform::semantic_id::RevisionId;
 use crate::platform::storage::backend::StorageBackend;
@@ -83,68 +83,175 @@ impl RepositoryReadWork {
     pub(crate) fn add(&mut self, other: Self) {
         self.add_map(other.map);
         self.store.add(other.store);
-        self.saturation.observe(&mut self.canonical_records_decoded, BudgetDimension::CanonicalDecodedRecords,
-            other.saturation.counter(BudgetDimension::CanonicalDecodedRecords, other.canonical_records_decoded));
-        self.saturation.observe(&mut self.witness_records_decoded, BudgetDimension::WitnessDecodedRecords,
-            other.saturation.counter(BudgetDimension::WitnessDecodedRecords, other.witness_records_decoded));
-        self.saturation.observe(&mut self.items_returned, BudgetDimension::CanonicalPointReads,
-            other.saturation.counter(BudgetDimension::CanonicalPointReads, other.items_returned));
+        self.saturation.observe(
+            &mut self.canonical_records_decoded,
+            BudgetDimension::CanonicalDecodedRecords,
+            other.saturation.counter(
+                BudgetDimension::CanonicalDecodedRecords,
+                other.canonical_records_decoded,
+            ),
+        );
+        self.saturation.observe(
+            &mut self.witness_records_decoded,
+            BudgetDimension::WitnessDecodedRecords,
+            other.saturation.counter(
+                BudgetDimension::WitnessDecodedRecords,
+                other.witness_records_decoded,
+            ),
+        );
+        self.saturation.observe(
+            &mut self.items_returned,
+            BudgetDimension::CanonicalPointReads,
+            other
+                .saturation
+                .counter(BudgetDimension::CanonicalPointReads, other.items_returned),
+        );
     }
 
-    fn add_map(&mut self, other: MapWork) { self.map.add_observation(other); }
+    fn add_map(&mut self, other: MapWork) {
+        self.map.add_observation(other);
+    }
 
-    pub fn saturated(self) -> bool { self.map.saturated || self.store.saturated || self.saturation.any() }
+    pub fn saturated(self) -> bool {
+        self.map.saturated || self.store.saturated || self.saturation.any()
+    }
 
     fn observe_canonical_records(&mut self, count: BudgetCounter) {
-        self.saturation.observe(&mut self.canonical_records_decoded, BudgetDimension::CanonicalDecodedRecords, count);
+        self.saturation.observe(
+            &mut self.canonical_records_decoded,
+            BudgetDimension::CanonicalDecodedRecords,
+            count,
+        );
     }
 
     pub(crate) fn add_canonical(&mut self, other: CanonicalReadWork) {
         let mut map = MapWork::default();
         map.pages_read = other.map_pages_read;
         map.entries_visited = other.map_entries_visited;
-        for (dimension, counter) in [(BudgetDimension::CanonicalMapPages, MapWorkCounter::PagesRead),
-            (BudgetDimension::CanonicalMapEntries, MapWorkCounter::EntriesVisited)] {
-            if other.saturation.contains(dimension) { map.mark_counter_saturated(counter); }
+        for (dimension, counter) in [
+            (
+                BudgetDimension::CanonicalMapPages,
+                MapWorkCounter::PagesRead,
+            ),
+            (
+                BudgetDimension::CanonicalMapEntries,
+                MapWorkCounter::EntriesVisited,
+            ),
+        ] {
+            if other.saturation.contains(dimension) {
+                map.mark_counter_saturated(counter);
+            }
         }
-        let mut store = StoreWork { catalog_lookups: other.catalog_lookups,
-            objects_read: other.objects_read, bytes_read: other.bytes_read, ..StoreWork::default() };
-        for (dimension, counter) in [(BudgetDimension::CanonicalCatalogLookups, StoreWorkCounter::CatalogLookups),
-            (BudgetDimension::CanonicalObjects, StoreWorkCounter::ObjectsRead),
-            (BudgetDimension::CanonicalBytes, StoreWorkCounter::BytesRead)] {
+        let mut store = StoreWork {
+            catalog_lookups: other.catalog_lookups,
+            objects_read: other.objects_read,
+            bytes_read: other.bytes_read,
+            ..StoreWork::default()
+        };
+        for (dimension, counter) in [
+            (
+                BudgetDimension::CanonicalCatalogLookups,
+                StoreWorkCounter::CatalogLookups,
+            ),
+            (
+                BudgetDimension::CanonicalObjects,
+                StoreWorkCounter::ObjectsRead,
+            ),
+            (BudgetDimension::CanonicalBytes, StoreWorkCounter::BytesRead),
+        ] {
             if other.saturation.contains(dimension) {
                 store.saturated = true;
                 store.saturated_counters |= 1_u16 << counter as u8;
             }
         }
-        self.add(Self { map, store, canonical_records_decoded: other.canonical_records_decoded,
-            items_returned: other.point_reads, saturation: other.saturation, ..Self::default() });
+        self.add(Self {
+            map,
+            store,
+            canonical_records_decoded: other.canonical_records_decoded,
+            items_returned: other.point_reads,
+            saturation: other.saturation,
+            ..Self::default()
+        });
     }
 
     fn canonical_saturation(self, inventory_points: bool) -> WorkSaturation {
         let mut flags = WorkSaturation::default();
         for (dimension, saturated) in [
-            (BudgetDimension::CanonicalPointReads, inventory_points && self.saturation.contains(BudgetDimension::CanonicalPointReads)),
-            (BudgetDimension::CanonicalMapPages, self.map.counter_saturated(MapWorkCounter::PagesRead)),
-            (BudgetDimension::CanonicalMapEntries, self.map.counter_saturated(MapWorkCounter::EntriesVisited)),
-            (BudgetDimension::CanonicalCatalogLookups, self.store.counter_saturated(StoreWorkCounter::CatalogLookups)),
-            (BudgetDimension::CanonicalObjects, self.store.counter_saturated(StoreWorkCounter::ObjectsRead)),
-            (BudgetDimension::CanonicalBytes, self.store.counter_saturated(StoreWorkCounter::BytesRead)),
-            (BudgetDimension::CanonicalDecodedRecords, self.saturation.contains(BudgetDimension::CanonicalDecodedRecords)),
-        ] { if saturated { flags.mark(dimension); } }
+            (
+                BudgetDimension::CanonicalPointReads,
+                inventory_points
+                    && self
+                        .saturation
+                        .contains(BudgetDimension::CanonicalPointReads),
+            ),
+            (
+                BudgetDimension::CanonicalMapPages,
+                self.map.counter_saturated(MapWorkCounter::PagesRead),
+            ),
+            (
+                BudgetDimension::CanonicalMapEntries,
+                self.map.counter_saturated(MapWorkCounter::EntriesVisited),
+            ),
+            (
+                BudgetDimension::CanonicalCatalogLookups,
+                self.store
+                    .counter_saturated(StoreWorkCounter::CatalogLookups),
+            ),
+            (
+                BudgetDimension::CanonicalObjects,
+                self.store.counter_saturated(StoreWorkCounter::ObjectsRead),
+            ),
+            (
+                BudgetDimension::CanonicalBytes,
+                self.store.counter_saturated(StoreWorkCounter::BytesRead),
+            ),
+            (
+                BudgetDimension::CanonicalDecodedRecords,
+                self.saturation
+                    .contains(BudgetDimension::CanonicalDecodedRecords),
+            ),
+        ] {
+            if saturated {
+                flags.mark(dimension);
+            }
+        }
         flags
     }
 
     fn witness_saturation(self) -> WorkSaturation {
         let mut flags = WorkSaturation::default();
         for (dimension, saturated) in [
-            (BudgetDimension::WitnessMapPages, self.map.counter_saturated(MapWorkCounter::PagesRead)),
-            (BudgetDimension::WitnessMapEntries, self.map.counter_saturated(MapWorkCounter::EntriesVisited)),
-            (BudgetDimension::WitnessCatalogLookups, self.store.counter_saturated(StoreWorkCounter::CatalogLookups)),
-            (BudgetDimension::WitnessObjects, self.store.counter_saturated(StoreWorkCounter::ObjectsRead)),
-            (BudgetDimension::WitnessBytes, self.store.counter_saturated(StoreWorkCounter::BytesRead)),
-            (BudgetDimension::WitnessDecodedRecords, self.saturation.contains(BudgetDimension::WitnessDecodedRecords)),
-        ] { if saturated { flags.mark(dimension); } }
+            (
+                BudgetDimension::WitnessMapPages,
+                self.map.counter_saturated(MapWorkCounter::PagesRead),
+            ),
+            (
+                BudgetDimension::WitnessMapEntries,
+                self.map.counter_saturated(MapWorkCounter::EntriesVisited),
+            ),
+            (
+                BudgetDimension::WitnessCatalogLookups,
+                self.store
+                    .counter_saturated(StoreWorkCounter::CatalogLookups),
+            ),
+            (
+                BudgetDimension::WitnessObjects,
+                self.store.counter_saturated(StoreWorkCounter::ObjectsRead),
+            ),
+            (
+                BudgetDimension::WitnessBytes,
+                self.store.counter_saturated(StoreWorkCounter::BytesRead),
+            ),
+            (
+                BudgetDimension::WitnessDecodedRecords,
+                self.saturation
+                    .contains(BudgetDimension::WitnessDecodedRecords),
+            ),
+        ] {
+            if saturated {
+                flags.mark(dimension);
+            }
+        }
         flags
     }
 }
@@ -173,9 +280,16 @@ pub(crate) struct RepositoryQueryAdmission {
 
 impl RepositoryQueryAdmission {
     pub const fn unbounded() -> Self {
-        Self { map_pages: None, map_bytes: None, map_entries: None,
-            catalog_lookups: None, store_objects: None, store_bytes: None,
-            canonical_records: None, witness_records: None }
+        Self {
+            map_pages: None,
+            map_bytes: None,
+            map_entries: None,
+            catalog_lookups: None,
+            store_objects: None,
+            store_bytes: None,
+            canonical_records: None,
+            witness_records: None,
+        }
     }
 }
 
@@ -331,7 +445,8 @@ impl RepositoryReadAdmission {
                 maximum_bytes: admission.store_bytes,
             }),
             maximum_canonical_records: widen_optional(admission.canonical_records),
-            maximum_witness_records: match (admission.ownership_records, admission.summary_records) {
+            maximum_witness_records: match (admission.ownership_records, admission.summary_records)
+            {
                 (Some(owners), Some(summaries)) => Some(owners as u128 + summaries as u128),
                 _ => None,
             },
@@ -369,7 +484,11 @@ struct AdmittedRepositoryStore<'a> {
 }
 
 impl<'a> AdmittedRepositoryStore<'a> {
-    const fn new(base: &'a ViewStore, store: StoreReadAdmission, canonical_records: Option<u128>) -> Self {
+    const fn new(
+        base: &'a ViewStore,
+        store: StoreReadAdmission,
+        canonical_records: Option<u128>,
+    ) -> Self {
         Self {
             base,
             store: Cell::new(store),
@@ -398,9 +517,13 @@ impl<'a> AdmittedRepositoryStore<'a> {
             return Ok(());
         }
         if let Some(remaining) = self.canonical_records.get() {
-            let remaining = remaining.checked_sub(1).ok_or_else(|| StoreError::new(
-                StoreErrorClass::Resource, "change_budget_canonical_decoded_records",
-                "package closure exhausted its canonical decoded-record admission"))?;
+            let remaining = remaining.checked_sub(1).ok_or_else(|| {
+                StoreError::new(
+                    StoreErrorClass::Resource,
+                    "change_budget_canonical_decoded_records",
+                    "package closure exhausted its canonical decoded-record admission",
+                )
+            })?;
             self.canonical_records.set(Some(remaining));
         }
         let mut observed = self.observed_records.get();
@@ -414,7 +537,7 @@ impl ImmutableObjectStore for AdmittedRepositoryStore<'_> {
     fn read(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         let mut admission = self.store.get();
@@ -985,7 +1108,11 @@ impl RepositoryView {
                     catalog_lookups: work.catalog_lookups,
                     objects_read: work.objects_read,
                     bytes_read: work.bytes_read,
-                    saturation: RepositoryReadWork { store: work, ..Default::default() }.canonical_saturation(false),
+                    saturation: RepositoryReadWork {
+                        store: work,
+                        ..Default::default()
+                    }
+                    .canonical_saturation(false),
                     ..CanonicalReadWork::default()
                 };
                 validation
@@ -1026,13 +1153,18 @@ impl RepositoryView {
                     catalog_lookups: rebuild_work.catalog_lookups,
                     objects_read: rebuild_work.objects_read,
                     bytes_read: rebuild_work.bytes_read,
-                    saturation: RepositoryReadWork { store: rebuild_work, ..snapshot.work }.canonical_saturation(true),
+                    saturation: RepositoryReadWork {
+                        store: rebuild_work,
+                        ..snapshot.work
+                    }
+                    .canonical_saturation(true),
                 };
                 let mut validation =
                     RevalidatedBase::rebuild(snapshot.value, &|| self.validation_checkpoint())?;
                 let (dependency_work, dependency_saturated) =
                     dependencies.as_ref().copied().unwrap_or_default();
-                let (semantic_work, overflow) = validation.semantic_work.overflowing_add(dependency_work);
+                let (semantic_work, overflow) =
+                    validation.semantic_work.overflowing_add(dependency_work);
                 self.validation_steps = if overflow { u64::MAX } else { semantic_work };
                 self.validation_work_saturated = overflow
                     || validation.semantic_work_saturated
@@ -1092,7 +1224,11 @@ impl RepositoryView {
     }
 
     pub(crate) fn validation_work(&self) -> (CanonicalReadWork, u64, bool) {
-        (self.validation_read_work, self.validation_steps, self.validation_work_saturated || self.validation_read_work.saturated())
+        (
+            self.validation_read_work,
+            self.validation_steps,
+            self.validation_work_saturated || self.validation_read_work.saturated(),
+        )
     }
 
     fn witness_roots(&self) -> crate::platform::witness::WitnessRoots {
@@ -1970,7 +2106,7 @@ impl RepositoryView {
             interfaces.insert(dependency.package_revision, validated.root_interface);
             for (revision_digest, revision) in revisions {
                 self.validation_checkpoint()?;
-                    let binding = DependencyRecord {
+                let binding = DependencyRecord {
                     graph_contract_version:
                         crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
                     package: revision.package,
@@ -2369,12 +2505,21 @@ impl RepositoryView {
             catalog_lookups: rebuild_work.catalog_lookups,
             objects_read: rebuild_work.objects_read,
             bytes_read: rebuild_work.bytes_read,
-            saturation: RepositoryReadWork { store: rebuild_work, ..local_work }.canonical_saturation(true),
+            saturation: RepositoryReadWork {
+                store: rebuild_work,
+                ..local_work
+            }
+            .canonical_saturation(true),
         };
-        let (semantic_work, overflow) = validation.semantic_work.overflowing_add(built.admitted.validation_visits);
+        let (semantic_work, overflow) = validation
+            .semantic_work
+            .overflowing_add(built.admitted.validation_visits);
         self.validation_steps = if overflow { u64::MAX } else { semantic_work };
-        self.validation_work_saturated = overflow || validation.semantic_work_saturated
-            || rebuild_work.saturated || local_work.map.saturated || local_work.store.saturated;
+        self.validation_work_saturated = overflow
+            || validation.semantic_work_saturated
+            || rebuild_work.saturated
+            || local_work.map.saturated
+            || local_work.store.saturated;
         let objects = self.store.take_rebuild_objects();
         // Export admission owns its private snapshot and dependency maps. Its collector
         // can also read optional physical objects absent from another repository with
@@ -3194,7 +3339,8 @@ impl RepositoryView {
             |key, relation_value| {
                 let operation = (|| {
                     if maximum_scan.is_some_and(|limit| value.visited >= limit)
-                        || maximum_items.is_some_and(|limit| value.returned >= limit) {
+                        || maximum_items.is_some_and(|limit| value.returned >= limit)
+                    {
                         return Ok(MapRangeControl::StopBefore);
                     }
                     admission.admit_witness_records(1)?;
@@ -3329,11 +3475,19 @@ impl RepositoryView {
                             .to_owned(),
                     });
                 }
-                keys.try_reserve(1).map_err(|_| MapError { class: MapErrorClass::Resource,
-                    code: "publication_prefix_allocation", message: "cannot retain a witness prefix key".to_owned() })?;
+                keys.try_reserve(1).map_err(|_| MapError {
+                    class: MapErrorClass::Resource,
+                    code: "publication_prefix_allocation",
+                    message: "cannot retain a witness prefix key".to_owned(),
+                })?;
                 let mut retained = Vec::new();
-                retained.try_reserve_exact(key.len()).map_err(|_| MapError { class: MapErrorClass::Resource,
-                    code: "publication_prefix_allocation", message: "cannot allocate a witness prefix key".to_owned() })?;
+                retained
+                    .try_reserve_exact(key.len())
+                    .map_err(|_| MapError {
+                        class: MapErrorClass::Resource,
+                        code: "publication_prefix_allocation",
+                        message: "cannot allocate a witness prefix key".to_owned(),
+                    })?;
                 retained.extend_from_slice(key);
                 keys.push(retained);
                 Ok(())
@@ -3426,11 +3580,19 @@ impl RepositoryView {
                             .to_owned(),
                     });
                 }
-                keys.try_reserve(1).map_err(|_| MapError { class: MapErrorClass::Resource,
-                    code: "publication_prefix_allocation", message: "cannot retain a witness prefix key".to_owned() })?;
+                keys.try_reserve(1).map_err(|_| MapError {
+                    class: MapErrorClass::Resource,
+                    code: "publication_prefix_allocation",
+                    message: "cannot retain a witness prefix key".to_owned(),
+                })?;
                 let mut retained = Vec::new();
-                retained.try_reserve_exact(key.len()).map_err(|_| MapError { class: MapErrorClass::Resource,
-                    code: "publication_prefix_allocation", message: "cannot allocate a witness prefix key".to_owned() })?;
+                retained
+                    .try_reserve_exact(key.len())
+                    .map_err(|_| MapError {
+                        class: MapErrorClass::Resource,
+                        code: "publication_prefix_allocation",
+                        message: "cannot allocate a witness prefix key".to_owned(),
+                    })?;
                 retained.extend_from_slice(key);
                 keys.push(retained);
                 Ok(())
@@ -3517,11 +3679,19 @@ impl RepositoryView {
                         message: "bounded relation prefix has more matching entries".to_owned(),
                     });
                 }
-                keys.try_reserve(1).map_err(|_| MapError { class: MapErrorClass::Resource,
-                    code: "publication_prefix_allocation", message: "cannot retain a witness prefix key".to_owned() })?;
+                keys.try_reserve(1).map_err(|_| MapError {
+                    class: MapErrorClass::Resource,
+                    code: "publication_prefix_allocation",
+                    message: "cannot retain a witness prefix key".to_owned(),
+                })?;
                 let mut retained = Vec::new();
-                retained.try_reserve_exact(key.len()).map_err(|_| MapError { class: MapErrorClass::Resource,
-                    code: "publication_prefix_allocation", message: "cannot allocate a witness prefix key".to_owned() })?;
+                retained
+                    .try_reserve_exact(key.len())
+                    .map_err(|_| MapError {
+                        class: MapErrorClass::Resource,
+                        code: "publication_prefix_allocation",
+                        message: "cannot allocate a witness prefix key".to_owned(),
+                    })?;
                 retained.extend_from_slice(key);
                 keys.push(retained);
                 Ok(())
@@ -3938,16 +4108,28 @@ fn read_error(
 }
 
 const fn widen_optional(value: Option<u64>) -> Option<u128> {
-    match value { Some(value) => Some(value as u128), None => None }
+    match value {
+        Some(value) => Some(value as u128),
+        None => None,
+    }
 }
 
 fn admit_decoded_records(
-    remaining: &mut Option<u128>, records: u64, code: &'static str, unit: &'static str,
+    remaining: &mut Option<u128>,
+    records: u64,
+    code: &'static str,
+    unit: &'static str,
 ) -> Result<(), Diagnostic> {
-    let Some(limit) = *remaining else { return Ok(()); };
-    let next = limit.checked_sub(u128::from(records)).ok_or_else(|| read_error(
-        DiagnosticClass::Resource, code,
-        format!("read requires {records} {unit}, exceeding the remaining admission {limit}")))?;
+    let Some(limit) = *remaining else {
+        return Ok(());
+    };
+    let next = limit.checked_sub(u128::from(records)).ok_or_else(|| {
+        read_error(
+            DiagnosticClass::Resource,
+            code,
+            format!("read requires {records} {unit}, exceeding the remaining admission {limit}"),
+        )
+    })?;
     *remaining = Some(next);
     Ok(())
 }
@@ -4504,20 +4686,24 @@ mod query_read_tests {
         assert_eq!(ordinary.maximum_canonical_records, None);
         for allowance in [0, 1, u64::MAX] {
             let mut canonical = RepositoryReadAdmission::canonical(CanonicalReadAdmission {
-                maximum_decoded_records: Some(allowance), ..Default::default()
+                maximum_decoded_records: Some(allowance),
+                ..Default::default()
             });
             canonical.admit_canonical_records(allowance).unwrap();
             assert_eq!(canonical.maximum_canonical_records, Some(0));
             assert!(canonical.admit_canonical_records(1).is_err());
             assert_eq!(canonical.maximum_canonical_records, Some(0));
             let mut witness = RepositoryReadAdmission::witness(WitnessReadAdmission {
-                maximum_decoded_records: Some(allowance), ..Default::default()
+                maximum_decoded_records: Some(allowance),
+                ..Default::default()
             });
             witness.admit_witness_records(allowance).unwrap();
             assert!(witness.admit_witness_records(1).is_err());
         }
         let mut combined = RepositoryReadAdmission::definition(RepositoryDefinitionAdmission {
-            ownership_records: Some(u64::MAX), summary_records: Some(u64::MAX), ..defaults
+            ownership_records: Some(u64::MAX),
+            summary_records: Some(u64::MAX),
+            ..defaults
         });
         combined.admit_witness_records(u64::MAX).unwrap();
         combined.admit_witness_records(u64::MAX).unwrap();
@@ -4526,9 +4712,14 @@ mod query_read_tests {
 
     #[test]
     fn read_work_projection_preserves_independent_saturation_flags() {
-        let mut canonical = CanonicalReadWork { map_pages_read: u64::MAX,
-            bytes_read: u64::MAX, ..Default::default() };
-        canonical.saturation.mark(BudgetDimension::CanonicalMapPages);
+        let mut canonical = CanonicalReadWork {
+            map_pages_read: u64::MAX,
+            bytes_read: u64::MAX,
+            ..Default::default()
+        };
+        canonical
+            .saturation
+            .mark(BudgetDimension::CanonicalMapPages);
         let mut work = RepositoryReadWork::default();
         work.add_canonical(canonical);
         let flags = work.canonical_saturation(false);
@@ -4538,9 +4729,16 @@ mod query_read_tests {
         assert!(witness.contains(BudgetDimension::WitnessMapPages));
         assert!(!witness.contains(BudgetDimension::WitnessBytes));
         work.observe_canonical_records(BudgetCounter::exact(u64::MAX));
-        assert!(!work.saturation.contains(BudgetDimension::CanonicalDecodedRecords));
+        assert!(
+            !work
+                .saturation
+                .contains(BudgetDimension::CanonicalDecodedRecords)
+        );
         work.observe_canonical_records(BudgetCounter::exact(1));
-        assert!(work.saturation.contains(BudgetDimension::CanonicalDecodedRecords));
+        assert!(
+            work.saturation
+                .contains(BudgetDimension::CanonicalDecodedRecords)
+        );
         assert_eq!(work.canonical_records_decoded, u64::MAX);
         assert!(work.saturated());
     }

@@ -314,8 +314,12 @@ pub(super) fn validate(
             .ok_or_else(missing)?;
         if representation_package != Some(*package) {
             let mut work = crate::platform::kernel::ValidationWork::default();
-            representation_packages =
-                artifact_representation_scope(dependencies, revisions, &mut work, Some(remaining.get()))?;
+            representation_packages = artifact_representation_scope(
+                dependencies,
+                revisions,
+                &mut work,
+                Some(remaining.get()),
+            )?;
             remaining.set(remaining.get() - work.consumed);
             representation_package = Some(*package);
         }

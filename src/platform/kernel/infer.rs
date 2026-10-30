@@ -1,7 +1,6 @@
 //! Independent exact-ID expression type and effect oracle for Graph 14.
 
 use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH};
-use super::work::ValidationWork;
 use super::digest::TypeObjectDigest;
 use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference};
 use super::id::{OwnerKey, OwnerKind, PackageId};
@@ -13,6 +12,7 @@ use super::owner::{
 use super::reference::{DeclarationReference, FieldReference, RequirementReference};
 use super::type_object::{StructuralTypeField, TypeForm, TypeObject};
 use super::validate::KernelSnapshot;
+use super::work::ValidationWork;
 use super::{PackageInterfaceDeclarationPayload, PackageInterfaceRecord, TypeObjectInterner};
 use super::{ReadScopeArgument, ReadScopeBinder, ResultRelation};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -5075,11 +5075,23 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 _ => Some(0),
             };
             match children {
-                Some(count) => { self.type_metadata_bytes.charge_product(count, std::mem::size_of::<StructuralTypeField>(), None); }
-                None => { self.type_metadata_bytes.charge_product(usize::MAX, 2, None); }
+                Some(count) => {
+                    self.type_metadata_bytes.charge_product(
+                        count,
+                        std::mem::size_of::<StructuralTypeField>(),
+                        None,
+                    );
+                }
+                None => {
+                    self.type_metadata_bytes.charge_product(usize::MAX, 2, None);
+                }
             }
             self.type_metadata_bytes.charge(bytes.len(), None);
-            self.type_metadata_bytes.charge(std::mem::size_of::<(TypeObjectDigest, TypeObject)>() + 4 * std::mem::size_of::<usize>(), None);
+            self.type_metadata_bytes.charge(
+                std::mem::size_of::<(TypeObjectDigest, TypeObject)>()
+                    + 4 * std::mem::size_of::<usize>(),
+                None,
+            );
             self.ephemeral_types.insert(digest, object);
         }
         Ok(digest)
@@ -5330,7 +5342,10 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             super::owned_product::validate_owning_type_depth(read, ty)?;
             admission.validate_occurrence_at(read, &[ty], occurrence)
         })?;
-        self.type_metadata_bytes.charge(std::mem::size_of_val(&key) + 4 * std::mem::size_of::<usize>(), None);
+        self.type_metadata_bytes.charge(
+            std::mem::size_of_val(&key) + 4 * std::mem::size_of::<usize>(),
+            None,
+        );
         self.admitted_occurrences.insert(key);
         Ok(())
     }
@@ -5407,7 +5422,11 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         if self.exhaustion.is_some() {
             return;
         }
-        if self.limits.maximum_diagnostics.is_some_and(|maximum| self.diagnostics.len() >= maximum) {
+        if self
+            .limits
+            .maximum_diagnostics
+            .is_some_and(|maximum| self.diagnostics.len() >= maximum)
+        {
             self.exhaustion = Some(ExpressionValidationExhaustion::Diagnostics);
             return;
         }
@@ -5463,10 +5482,18 @@ mod tests {
     #[test]
     fn default_inference_observes_work_beyond_the_old_limit_and_saturates_honestly() {
         let snapshot = super::super::tests::witness_snapshot();
-        let root = snapshot.owners.iter().find_map(|(owner, record)| match record {
-            OwnerRecord::Declaration(declaration) if declaration.name.as_str() == "unit_constant" => Some(*owner),
-            _ => None,
-        }).expect("unit constant declaration");
+        let root = snapshot
+            .owners
+            .iter()
+            .find_map(|(owner, record)| match record {
+                OwnerRecord::Declaration(declaration)
+                    if declaration.name.as_str() == "unit_constant" =>
+                {
+                    Some(*owner)
+                }
+                _ => None,
+            })
+            .expect("unit constant declaration");
         for initial in [10_000_000, usize::MAX] {
             let mut work = ValidationWork::exact(initial);
             let mut diagnostics = Vec::new();

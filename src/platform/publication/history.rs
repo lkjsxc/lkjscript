@@ -159,7 +159,7 @@ fn read_object(
     store
         .read_admitted(
             ObjectKey::from_digest(domain, digest),
-            maximum_bytes,
+            Some(maximum_bytes),
             admission,
             work,
         )

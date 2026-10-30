@@ -1,6 +1,9 @@
 //! Exact path-copy updates for all six committed validation-witness maps.
 
-use super::{BudgetCounter, BudgetDimension, DerivedDelta, SummaryDelta, TestDependencyDelta, WitnessBaseRead, WitnessReadWork, WorkSaturation};
+use super::{
+    BudgetCounter, BudgetDimension, DerivedDelta, SummaryDelta, TestDependencyDelta,
+    WitnessBaseRead, WitnessReadWork, WorkSaturation,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::persistent_map::{
     BatchOutcome, MapAdmission, MapEdit, MapError, MapErrorClass, MapWork, MemoryPageStore,
@@ -185,10 +188,15 @@ pub fn update_witness_maps_from<P: PageStore + ?Sized>(
     use crate::platform::persistent_map::MapWorkCounter;
     for (counter, dimension) in [
         (MapWorkCounter::PagesRead, BudgetDimension::WitnessMapPages),
-        (MapWorkCounter::EntriesVisited, BudgetDimension::WitnessMapEntries),
+        (
+            MapWorkCounter::EntriesVisited,
+            BudgetDimension::WitnessMapEntries,
+        ),
         (MapWorkCounter::BytesRead, BudgetDimension::WitnessBytes),
     ] {
-        if work.counter_saturated(counter) { saturation.mark(dimension); }
+        if work.counter_saturated(counter) {
+            saturation.mark(dimension);
+        }
     }
     let read_work = WitnessReadWork {
         map_pages_read: work.pages_read,

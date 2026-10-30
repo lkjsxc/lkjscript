@@ -398,7 +398,9 @@ fn stage_full_semantic<S: ImmutableObjectStore + ?Sized>(
         bytes,
         map_work,
         map_edits: {
-            let inserted = owners.entries().checked_add(dependencies.entries())
+            let inserted = owners
+                .entries()
+                .checked_add(dependencies.entries())
                 .and_then(|value| value.checked_add(retirements.entries()));
             CanonicalMapEditCounts {
                 inserted: inserted.unwrap_or(u64::MAX),

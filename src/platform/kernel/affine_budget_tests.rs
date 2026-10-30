@@ -390,7 +390,13 @@ fn affine_budget_whole_snapshot_wrapper_never_silences_exhaustion() {
     let (snapshot, _) = task_fixture();
     let mut work = 0;
     let mut diagnostics = Vec::new();
-    crate::platform::kernel::test_work::validate_affine_meaning(&snapshot, &snapshot, &mut diagnostics, &mut work, 0);
+    crate::platform::kernel::test_work::validate_affine_meaning(
+        &snapshot,
+        &snapshot,
+        &mut diagnostics,
+        &mut work,
+        0,
+    );
     assert_eq!(work, 0);
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(diagnostics[0].class, DiagnosticClass::Resource);
@@ -565,7 +571,6 @@ fn affine_budget_does_not_visit_another_root_after_exhaustion() {
     }
 }
 
-
 #[test]
 fn affine_unbounded_observation_keeps_validation_after_counter_saturation() {
     let (snapshot, root, _) = constant_fixture();
@@ -581,7 +586,8 @@ fn affine_unbounded_observation_keeps_validation_after_counter_saturation() {
             maximum_steps: None,
             maximum_diagnostics: Some(1),
         },
-    ).expect("unbounded metadata admission");
+    )
+    .expect("unbounded metadata admission");
     assert!(diagnostics.is_empty());
     assert!(work.saturated);
     assert_eq!(work.consumed, usize::MAX);

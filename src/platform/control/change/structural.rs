@@ -33,9 +33,13 @@ impl PrivateSymbols {
     }
 
     fn admit(&mut self, location: &SourceLocation) -> Result<(), Diagnostic> {
-        self.identities = self.identities.checked_add(1).ok_or_else(|| capacity(
-            location, "change_block_capacity", "private identity count exceeds the host address space",
-        ))?;
+        self.identities = self.identities.checked_add(1).ok_or_else(|| {
+            capacity(
+                location,
+                "change_block_capacity",
+                "private identity count exceeds the host address space",
+            )
+        })?;
         Ok(())
     }
 

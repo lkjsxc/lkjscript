@@ -45,7 +45,8 @@ fn warm_pages_recheck_current_bytes_and_charge_every_read_dimension() {
                 "persistent_map_admission_bytes_read"
             }
             _ => {
-                limit.maximum_entries_visited = limit.maximum_entries_visited.map(|value| value - 1);
+                limit.maximum_entries_visited =
+                    limit.maximum_entries_visited.map(|value| value - 1);
                 "persistent_map_admission_entries_visited"
             }
         };
@@ -166,9 +167,11 @@ fn count_and_byte_eviction_release_only_cache_retention() {
 fn saturated_cold_observation_keeps_exact_warm_cache_admission() {
     let (store, map) = fixture(32);
     let cache = Mutex::new(Cache::new(2, SHARD_BYTES));
-    let mut cold_work = MapWork::default();
-    cold_work.entries_visited = u64::MAX - 1;
-    cold_work.pages_decoded = u64::MAX;
+    let mut cold_work = MapWork {
+        entries_visited: u64::MAX - 1,
+        pages_decoded: u64::MAX,
+        ..MapWork::default()
+    };
     let cold = load_with_cache(&store, map.root.page, &mut cold_work, &cache).unwrap();
     assert_eq!(cold.visited, 32);
     assert_eq!(cold_work.entries_visited, u64::MAX);
@@ -184,7 +187,10 @@ fn saturated_cold_observation_keeps_exact_warm_cache_admission() {
         });
         let read = load_with_cache(&store, map.root.page, &mut work, &cache);
         if maximum.is_some_and(|maximum| maximum < 32) {
-            assert_eq!(read.unwrap_err().code, "persistent_map_admission_entries_visited");
+            assert_eq!(
+                read.unwrap_err().code,
+                "persistent_map_admission_entries_visited"
+            );
             assert_eq!(work.entries_visited, 0);
         } else {
             let warm = read.unwrap();

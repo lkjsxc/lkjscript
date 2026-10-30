@@ -55,11 +55,11 @@ mod requirement;
 mod root;
 mod scoped;
 mod state;
+#[cfg(test)]
+pub(crate) mod test_work;
 mod type_object;
 mod validate;
 mod work;
-#[cfg(test)]
-pub(crate) mod test_work;
 pub(crate) use work::ValidationWork;
 
 pub(crate) use affine::validate_affine_roots_with_limits;
@@ -92,9 +92,10 @@ pub use name::Name;
 pub use namespace::{NamespaceClass, NamespaceEntryRef, owner_namespace};
 pub use owner::*;
 pub use reference::*;
+pub(crate) use relation::extract_relations_with_fanout_limit;
 pub use relation::{
-    PropagationClass, RelationEdge, RelationEndpoint, RelationExtractionWork, RelationKind, extract_owner_relations,
-    extract_owner_relations_with_limit, extract_relations,
+    PropagationClass, RelationEdge, RelationEndpoint, RelationExtractionWork, RelationKind,
+    extract_owner_relations, extract_owner_relations_with_limit, extract_relations,
 };
 pub use requirement::*;
 pub use root::*;

@@ -26,6 +26,10 @@ Cargo configuration/environment. Bind checker identity to its compiled checkout.
 For a frozen precommit tree, use the explicit
 [staged-tree bootstrap](../decisions/20261020-staged-tree-verifier-bootstrap.md)
 contract; acceptance must precede committing that exact tree.
+Bootstrap captures complete source status through evidence files, without passing it
+as one OS argument. Its receipt retains the full source, context and binary bindings
+without an aggregate byte ceiling. Before/after source admission and ordinary
+compact/archive retention remain unchanged.
 
 Default checks atomically replace `.artifacts/lkjscript-dev/latest-receipt.json`
 with a complete compact receipt, without an aggregate size ceiling. It records
@@ -74,11 +78,12 @@ and final executable behavior retain distinct evidence. See [release](../release
 
 ## Semantic and process tests
 
-Run finite public adapters in process. Use bounded `MemProjectStore` projects and
+Run finite public adapters in process. Use `MemProjectStore::new(None)` projects and
 copy-on-write forks where the test does not exercise filesystem publication.
 Integration modules share `public_cli` and its caches; focus by module or test name.
 Clones share heads; forks have independent graph/data heads and share immutable
-charged bytes. Reuse admitted standard packages and compiled supplier programs
+charged bytes. Explicit capacity controls use `Some(limit)`, including zero; ordinary
+fixtures do not select a synthetic arena quota. Reuse admitted standard packages and compiled supplier programs
 once per process. Memory storage must retain the same canonical decoding, complete
 validation, idempotency, stale-base and atomic publication rules as disk storage.
 Explicit file, process, signal, deployment, installation and release boundaries

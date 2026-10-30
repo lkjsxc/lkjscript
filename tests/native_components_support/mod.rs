@@ -311,7 +311,7 @@ impl Native {
             static ARENA: std::sync::OnceLock<lkjscript::platform::MemProjectStore> =
                 std::sync::OnceLock::new();
             let store = ARENA
-                .get_or_init(|| lkjscript::platform::MemProjectStore::new(256 * 1_048_576).unwrap())
+                .get_or_init(|| lkjscript::platform::MemProjectStore::new(None).unwrap())
                 .fork()
                 .unwrap();
             lkjscript::platform::create_memory_project(&store, name, "minimal").unwrap();

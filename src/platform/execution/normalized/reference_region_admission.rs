@@ -276,20 +276,20 @@ impl Resolver<'_, '_> {
         }
     }
 
-    fn region_absent(
-        &mut self,
-        ty: TypeObjectDigest,
-        region: TypeObjectDigest,
-    ) -> Result<()> {
+    fn region_absent(&mut self, ty: TypeObjectDigest, region: TypeObjectDigest) -> Result<()> {
         let mut pending = Vec::new();
         region_pending(&mut pending, 1)?;
         pending.push(ty);
         let mut seen = BTreeSet::new();
         while let Some(ty) = pending.pop() {
             self.budget.step_iterative()?;
-            if ty == region { return Err(invalid("result escapes its lexical region")); }
+            if ty == region {
+                return Err(invalid("result escapes its lexical region"));
+            }
             self.budget.reserve(1)?;
-            if !seen.insert(ty) { continue; }
+            if !seen.insert(ty) {
+                continue;
+            }
             let children = self.object(ty)?.child_types();
             region_pending(&mut pending, children.len())?;
             pending.extend(children.into_iter().rev());
@@ -297,12 +297,11 @@ impl Resolver<'_, '_> {
         Ok(())
     }
 
-    fn region_cell(
-        &mut self,
-        ty: TypeObjectDigest,
-        region: TypeObjectDigest,
-    ) -> Result<()> {
-        enum Task { Enter(TypeObjectDigest), Exit(TypeObjectDigest) }
+    fn region_cell(&mut self, ty: TypeObjectDigest, region: TypeObjectDigest) -> Result<()> {
+        enum Task {
+            Enter(TypeObjectDigest),
+            Exit(TypeObjectDigest),
+        }
         let mut pending = Vec::new();
         region_pending(&mut pending, 1)?;
         pending.push(Task::Enter(ty));
@@ -310,12 +309,18 @@ impl Resolver<'_, '_> {
         let mut complete = BTreeSet::new();
         while let Some(task) = pending.pop() {
             let ty = match task {
-                Task::Exit(ty) => { active.remove(&ty); complete.insert(ty); continue; }
+                Task::Exit(ty) => {
+                    active.remove(&ty);
+                    complete.insert(ty);
+                    continue;
+                }
                 Task::Enter(ty) => ty,
             };
             self.budget.step_iterative()?;
             self.budget.reserve(1)?;
-            if complete.contains(&ty) { continue; }
+            if complete.contains(&ty) {
+                continue;
+            }
             if !active.insert(ty) {
                 return Err(invalid("region cell has a cyclic inline layout"));
             }
@@ -328,7 +333,11 @@ impl Resolver<'_, '_> {
                     region_pending(&mut pending, fields.len())?;
                     pending.extend(fields.into_iter().rev().map(|field| Task::Enter(field.ty)));
                 }
-                _ => return Err(invalid("region cell contains non-flat or foreign-region data")),
+                _ => {
+                    return Err(invalid(
+                        "region cell contains non-flat or foreign-region data",
+                    ));
+                }
             }
         }
         Ok(())
@@ -336,8 +345,10 @@ impl Resolver<'_, '_> {
 }
 
 fn region_pending<T>(pending: &mut Vec<T>, additional: usize) -> Result<()> {
-    pending.try_reserve(additional).map_err(|_| ExecutionError::resource(
-        "reference_region_storage",
-        "cannot reserve canonical region traversal storage",
-    ))
+    pending.try_reserve(additional).map_err(|_| {
+        ExecutionError::resource(
+            "reference_region_storage",
+            "cannot reserve canonical region traversal storage",
+        )
+    })
 }

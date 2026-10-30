@@ -190,7 +190,8 @@ fn raw_read_view_readback_reserves_complete_fields_and_cancels_empty_inventory_b
             BTreeMap::new(),
             types.clone(),
         );
-        reader.type_nodes = crate::platform::change::budget::BudgetCounter::exact(u64::MAX - available);
+        reader.type_nodes =
+            crate::platform::change::budget::BudgetCounter::exact(u64::MAX - available);
         assert_eq!(
             reader.view_fields(vec![field.clone()]).unwrap(),
             vec![AuthoredReadViewField {

@@ -988,7 +988,7 @@ fn selfhost_source_scalar_e3_lowers_more_than_historical_node_limit_natively() {
         .checked_add(5)
         .unwrap();
     let empty = empty_normalized_snapshot(b"owned-byte-buffer");
-    let memory = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+    let memory = crate::platform::MemProjectStore::new(None).unwrap();
     let repo = GraphRepository::create_memory(&memory, &empty, None)
         .unwrap()
         .repository;
@@ -1006,8 +1006,14 @@ fn selfhost_source_scalar_e3_lowers_more_than_historical_node_limit_natively() {
     );
     let decoded =
         crate::platform::control::decode_compact_change("buffer", request.as_bytes()).unwrap();
-    assert_eq!(decoded.semantic.budget.impact.maximum_affected_owners, Some(owner_budget));
-    assert_eq!(decoded.semantic.budget.impact.maximum_relation_edges, Some(relation_budget));
+    assert_eq!(
+        decoded.semantic.budget.impact.maximum_affected_owners,
+        Some(owner_budget)
+    );
+    assert_eq!(
+        decoded.semantic.budget.impact.maximum_relation_edges,
+        Some(relation_budget)
+    );
     let plan = repo
         .prepare_authored_change(&decoded.semantic, decoded.options)
         .unwrap();
@@ -1375,7 +1381,8 @@ fn selfhost_source_scalar_e3_rejects_hash_consistent_disconnected_expression_cyc
 
 #[test]
 fn selfhost_source_scalar_e3_derives_wide_frames_without_host_projection() {
-    let source = byte_buffer_tests::author_only(&super::super::closure::wide_parameter_source()).unwrap();
+    let source =
+        byte_buffer_tests::author_only(&super::super::closure::wide_parameter_source()).unwrap();
     let carrier = graph::packet(&source);
     let request = source_request(&carrier, target_id(&source, "wide-main"));
     let compiler = native_compiler();
@@ -1393,9 +1400,12 @@ fn selfhost_source_scalar_e3_derives_wide_frames_without_host_projection() {
     let declaration = declaration_reference(&source, "entry");
     let control = ExecutionControl::uncancelled();
     let policy = NormalizedRunPolicy::foreground();
-    let vm = NormalizedVm::for_test(&program, policy).invoke(declaration, vec![], None, &control).unwrap();
+    let vm = NormalizedVm::for_test(&program, policy)
+        .invoke(declaration, vec![], None, &control)
+        .unwrap();
     let reference = NormalizedReferenceInterpreter::new(&source, &program, policy)
-        .invoke(declaration, vec![], None, &control).unwrap();
+        .invoke(declaration, vec![], None, &control)
+        .unwrap();
     assert_eq!(vm.0, NormalizedValue::I64(255));
     assert_eq!(reference.0, vm.0);
 }

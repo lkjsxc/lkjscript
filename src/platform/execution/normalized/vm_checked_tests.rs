@@ -81,6 +81,8 @@ fn raw_generic_structural_identity_reserves_scratch_before_cloning_or_encoding()
         let mut allocated = 0;
         let mut charges = 0;
         let mut items = 0;
+        let mut allocated_saturated = false;
+        let mut items_saturated = false;
         let mut policy = super::super::NormalizedRunPolicy::foreground();
         policy.maximum_allocated_bytes = maximum;
         let result = Admission {
@@ -92,9 +94,12 @@ fn raw_generic_structural_identity_reserves_scratch_before_cloning_or_encoding()
             policy,
             work: &mut work,
             allocated: &mut allocated,
+            allocated_saturated: &mut allocated_saturated,
             allocation_charges: &mut charges,
             items: &mut items,
+            items_saturated: &mut items_saturated,
             admission_bytes: 0,
+            admission_bytes_saturated: false,
             admission_items: 0,
         }
         .type_identity(template_id, &bindings);

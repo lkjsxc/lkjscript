@@ -61,19 +61,27 @@ fn reserve_slots<T>(
     reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
 ) -> Result<(), ExecutionError> {
     control.check()?;
-    let required = values.len().checked_add(additional).ok_or_else(storage_error)?;
+    let required = values
+        .len()
+        .checked_add(additional)
+        .ok_or_else(storage_error)?;
     if required <= values.capacity() {
         return Ok(());
     }
     std::alloc::Layout::array::<T>(required).map_err(|_| storage_error())?;
-    let capacity = required.checked_next_power_of_two()
+    let capacity = required
+        .checked_next_power_of_two()
         .filter(|capacity| std::alloc::Layout::array::<T>(*capacity).is_ok())
         .unwrap_or(required);
-    let bytes = capacity.checked_mul(std::mem::size_of::<T>())
-        .and_then(|bytes| u64::try_from(bytes).ok()).ok_or_else(storage_error)?;
+    let bytes = capacity
+        .checked_mul(std::mem::size_of::<T>())
+        .and_then(|bytes| u64::try_from(bytes).ok())
+        .ok_or_else(storage_error)?;
     reserve(bytes)?;
     control.check()?;
-    values.try_reserve_exact(capacity - values.len()).map_err(|_| storage_error())
+    values
+        .try_reserve_exact(capacity - values.len())
+        .map_err(|_| storage_error())
 }
 
 fn push<T>(
@@ -109,7 +117,9 @@ pub(super) fn check_plain(
                 TypeForm::StructuralRecord { fields },
                 NormalizedValue::Record(NormalizedRecord::Structural { fields: values }),
             ) if fields.len() == values.len() => {
-                pending.try_reserve(fields.len()).map_err(|_| storage_error())?;
+                pending
+                    .try_reserve(fields.len())
+                    .map_err(|_| storage_error())?;
                 for (field, (name, value)) in fields.iter().zip(values.iter()).rev() {
                     if field.name != *name {
                         return Err(error());
@@ -132,7 +142,10 @@ impl Layout {
         reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         control.check()?;
-        enum Task { Enter(TypeObjectDigest), Record(TypeObjectDigest, usize) }
+        enum Task {
+            Enter(TypeObjectDigest),
+            Record(TypeObjectDigest, usize),
+        }
         let mut pending = Vec::new();
         let mut completed = Vec::new();
         let mut active = HashSet::new();
@@ -161,7 +174,10 @@ impl Layout {
                             hasher.update(&[2]);
                             (Form::I64, 8, 8)
                         }
-                        TypeForm::RelPtr { region: actual, item } if *actual == region => {
+                        TypeForm::RelPtr {
+                            region: actual,
+                            item,
+                        } if *actual == region => {
                             hasher.update(&[3]);
                             fingerprint(types, *item, region, &mut hasher, control, reserve)?;
                             (Form::Pointer(ty), 8, 8)
@@ -181,11 +197,22 @@ impl Layout {
                         }
                         _ => return Err(error()),
                     };
-                    (ty, Node { form, size, alignment, key: *hasher.finalize().as_bytes() })
+                    (
+                        ty,
+                        Node {
+                            form,
+                            size,
+                            alignment,
+                            key: *hasher.finalize().as_bytes(),
+                        },
+                    )
                 }
                 Task::Record(ty, first) => {
                     let TypeForm::StructuralRecord { fields } =
-                        &types.get(&ty).ok_or_else(error)?.form else { return Err(error()); };
+                        &types.get(&ty).ok_or_else(error)?.form
+                    else {
+                        return Err(error());
+                    };
                     if completed.len().checked_sub(first) != Some(fields.len()) {
                         return Err(error());
                     }
@@ -205,17 +232,24 @@ impl Layout {
                         hasher.update(&child.key);
                         reserve(field.name.as_str().len() as u64)?;
                         control.check()?;
-                        entries.push(Field { name: field.name.clone(), offset: size, node });
+                        entries.push(Field {
+                            name: field.name.clone(),
+                            offset: size,
+                            node,
+                        });
                         size = size.checked_add(child.size).ok_or_else(storage_error)?;
                     }
                     completed.truncate(first);
                     active.remove(&ty);
-                    (ty, Node {
-                        form: Form::Record(entries),
-                        size: align_up(size, alignment)?,
-                        alignment,
-                        key: *hasher.finalize().as_bytes(),
-                    })
+                    (
+                        ty,
+                        Node {
+                            form: Form::Record(entries),
+                            size: align_up(size, alignment)?,
+                            alignment,
+                            key: *hasher.finalize().as_bytes(),
+                        },
+                    )
                 }
             };
             let index = nodes.len();
@@ -229,10 +263,16 @@ impl Layout {
         }
         let root = completed[0];
         let node = &nodes[root];
-        let storage = RegionLayout::new(node.key,
+        let storage = RegionLayout::new(
+            node.key,
             u64::try_from(node.size).map_err(|_| storage_error())?,
-            u64::try_from(node.alignment).map_err(|_| storage_error())?)?;
-        Ok(Self { storage, nodes, root })
+            u64::try_from(node.alignment).map_err(|_| storage_error())?,
+        )?;
+        Ok(Self {
+            storage,
+            nodes,
+            root,
+        })
     }
 
     pub(super) fn encode(
@@ -259,20 +299,31 @@ impl Layout {
             match (&node.form, value) {
                 (Form::Unit, NormalizedValue::Unit) => {}
                 (Form::Bool, NormalizedValue::Bool(value)) => output[0] = u8::from(*value),
-                (Form::I64, NormalizedValue::I64(value)) => output.copy_from_slice(&value.to_le_bytes()),
-                (Form::Pointer(ty), NormalizedValue::RegionPointer { ty: actual, pointer })
-                    if ty == actual && pointer.belongs_to(identity) => {
-                        output.copy_from_slice(&pointer.offset().to_le_bytes());
-                    }
-                (Form::Record(fields), NormalizedValue::Record(NormalizedRecord::Structural { fields: values }))
-                    if fields.len() == values.len() => {
-                        reserve_slots(&mut pending, fields.len(), control, reserve)?;
-                        for (field, (name, value)) in fields.iter().zip(values.iter()).rev() {
-                            if field.name != *name { return Err(error()); }
-                            let child_offset = offset.checked_add(field.offset).ok_or_else(error)?;
-                            pending.push((field.node, value, child_offset));
+                (Form::I64, NormalizedValue::I64(value)) => {
+                    output.copy_from_slice(&value.to_le_bytes())
+                }
+                (
+                    Form::Pointer(ty),
+                    NormalizedValue::RegionPointer {
+                        ty: actual,
+                        pointer,
+                    },
+                ) if ty == actual && pointer.belongs_to(identity) => {
+                    output.copy_from_slice(&pointer.offset().to_le_bytes());
+                }
+                (
+                    Form::Record(fields),
+                    NormalizedValue::Record(NormalizedRecord::Structural { fields: values }),
+                ) if fields.len() == values.len() => {
+                    reserve_slots(&mut pending, fields.len(), control, reserve)?;
+                    for (field, (name, value)) in fields.iter().zip(values.iter()).rev() {
+                        if field.name != *name {
+                            return Err(error());
                         }
+                        let child_offset = offset.checked_add(field.offset).ok_or_else(error)?;
+                        pending.push((field.node, value, child_offset));
                     }
+                }
                 _ => return Err(error()),
             }
         }
@@ -286,9 +337,14 @@ impl Layout {
         control: &ExecutionControl,
         reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<NormalizedValue, ExecutionError> {
-        enum Task { Read(usize, usize), Record(usize, usize) }
+        enum Task {
+            Read(usize, usize),
+            Record(usize, usize),
+        }
         control.check()?;
-        if bytes.len() != self.nodes[self.root].size { return Err(error()); }
+        if bytes.len() != self.nodes[self.root].size {
+            return Err(error());
+        }
         let mut pending = Vec::new();
         // Guards release even partially decoded deep values iteratively on error.
         let mut values: Vec<RawValue> = Vec::new();
@@ -307,19 +363,25 @@ impl Layout {
                             Some(1) => true,
                             _ => return Err(error()),
                         }),
-                        Form::I64 => NormalizedValue::I64(i64::from_le_bytes(input.try_into().map_err(|_| error())?)),
+                        Form::I64 => NormalizedValue::I64(i64::from_le_bytes(
+                            input.try_into().map_err(|_| error())?,
+                        )),
                         Form::Pointer(ty) => NormalizedValue::RegionPointer {
                             ty: *ty,
-                            pointer: runtime::Pointer::in_region(identity,
-                                u64::from_le_bytes(input.try_into().map_err(|_| error())?)),
+                            pointer: runtime::Pointer::in_region(
+                                identity,
+                                u64::from_le_bytes(input.try_into().map_err(|_| error())?),
+                            ),
                         },
                         Form::Record(fields) => {
                             let first = values.len();
                             push(&mut pending, Task::Record(index, first), control, reserve)?;
                             reserve_slots(&mut pending, fields.len(), control, reserve)?;
                             for field in fields.iter().rev() {
-                                pending.push(Task::Read(field.node,
-                                    offset.checked_add(field.offset).ok_or_else(error)?));
+                                pending.push(Task::Read(
+                                    field.node,
+                                    offset.checked_add(field.offset).ok_or_else(error)?,
+                                ));
                             }
                             continue;
                         }
@@ -327,10 +389,15 @@ impl Layout {
                 }
                 Task::Record(index, first) => {
                     let Form::Record(fields) = &self.nodes.get(index).ok_or_else(error)?.form
-                        else { return Err(error()); };
-                    if values.len().checked_sub(first) != Some(fields.len()) { return Err(error()); }
+                    else {
+                        return Err(error());
+                    };
+                    if values.len().checked_sub(first) != Some(fields.len()) {
+                        return Err(error());
+                    }
                     let metadata = std::mem::size_of::<Vec<(Name, NormalizedValue)>>()
-                        .checked_add(2 * std::mem::size_of::<usize>()).ok_or_else(storage_error)?;
+                        .checked_add(2 * std::mem::size_of::<usize>())
+                        .ok_or_else(storage_error)?;
                     reserve(metadata as u64)?;
                     let mut record = Vec::new();
                     reserve_slots(&mut record, fields.len(), control, reserve)?;
@@ -342,19 +409,24 @@ impl Layout {
                     for (field, value) in fields.iter().zip(values.drain(first..)) {
                         record.push((field.name.clone(), value.into_raw()));
                     }
-                    NormalizedValue::Record(NormalizedRecord::Structural { fields: Arc::new(record) })
+                    NormalizedValue::Record(NormalizedRecord::Structural {
+                        fields: Arc::new(record),
+                    })
                 }
             };
             push(&mut values, RawValue::new(value), control, reserve)?;
         }
-        if values.len() != 1 { return Err(error()); }
+        if values.len() != 1 {
+            return Err(error());
+        }
         values.pop().map(RawValue::into_raw).ok_or_else(error)
     }
 }
 
 fn align_up(size: usize, alignment: usize) -> Result<usize, ExecutionError> {
     size.checked_add(alignment - 1)
-        .map(|size| size & !(alignment - 1)).ok_or_else(storage_error)
+        .map(|size| size & !(alignment - 1))
+        .ok_or_else(storage_error)
 }
 
 fn fingerprint(
@@ -389,27 +461,58 @@ fn fingerprint(
                 } else {
                     let object = types.get(&ty).ok_or_else(error)?;
                     match &object.form {
-                        TypeForm::RelPtr { region: next_region, item }
-                        | TypeForm::RegionSlice { region: next_region, item } => {
+                        TypeForm::RelPtr {
+                            region: next_region,
+                            item,
+                        }
+                        | TypeForm::RegionSlice {
+                            region: next_region,
+                            item,
+                        } => {
                             active.try_reserve(1).map_err(|_| storage_error())?;
-                            if !active.insert((ty, region)) { return Err(error()); }
-                            push(&mut pending, Task::Finish(ty, region, completed.len()), control, reserve)?;
-                            push(&mut pending, Task::Type(*item, *next_region), control, reserve)?;
+                            if !active.insert((ty, region)) {
+                                return Err(error());
+                            }
+                            push(
+                                &mut pending,
+                                Task::Finish(ty, region, completed.len()),
+                                control,
+                                reserve,
+                            )?;
+                            push(
+                                &mut pending,
+                                Task::Type(*item, *next_region),
+                                control,
+                                reserve,
+                            )?;
                             continue;
                         }
                         TypeForm::StructuralRecord { fields } => {
                             active.try_reserve(1).map_err(|_| storage_error())?;
-                            if !active.insert((ty, region)) { return Err(error()); }
-                            push(&mut pending, Task::Finish(ty, region, completed.len()), control, reserve)?;
+                            if !active.insert((ty, region)) {
+                                return Err(error());
+                            }
+                            push(
+                                &mut pending,
+                                Task::Finish(ty, region, completed.len()),
+                                control,
+                                reserve,
+                            )?;
                             reserve_slots(&mut pending, fields.len(), control, reserve)?;
                             for field in fields.iter().rev() {
                                 pending.push(Task::Type(field.ty, region));
                             }
                             continue;
                         }
-                        TypeForm::Unit => { node.update(&[4]); }
-                        TypeForm::Bool => { node.update(&[5]); }
-                        TypeForm::I64 => { node.update(&[6]); }
+                        TypeForm::Unit => {
+                            node.update(&[4]);
+                        }
+                        TypeForm::Bool => {
+                            node.update(&[5]);
+                        }
+                        TypeForm::I64 => {
+                            node.update(&[6]);
+                        }
                         _ => return Err(error()),
                     }
                 }
@@ -420,12 +523,20 @@ fn fingerprint(
                 let mut node = blake3::Hasher::new_derive_key("lkjscript.region.type.v2");
                 match &object.form {
                     TypeForm::RelPtr { .. } | TypeForm::RegionSlice { .. } => {
-                        if completed.len().checked_sub(first) != Some(1) { return Err(error()); }
-                        node.update(&[if matches!(object.form, TypeForm::RelPtr { .. }) { 1 } else { 2 }]);
+                        if completed.len().checked_sub(first) != Some(1) {
+                            return Err(error());
+                        }
+                        node.update(&[if matches!(object.form, TypeForm::RelPtr { .. }) {
+                            1
+                        } else {
+                            2
+                        }]);
                         node.update(&completed[first]);
                     }
                     TypeForm::StructuralRecord { fields } => {
-                        if completed.len().checked_sub(first) != Some(fields.len()) { return Err(error()); }
+                        if completed.len().checked_sub(first) != Some(fields.len()) {
+                            return Err(error());
+                        }
                         node.update(&[3]);
                         node.update(&(fields.len() as u64).to_le_bytes());
                         for (field, key) in fields.iter().zip(&completed[first..]) {
@@ -445,7 +556,9 @@ fn fingerprint(
         known.insert((ty, region), key);
         push(&mut completed, key, control, reserve)?;
     }
-    if completed.len() != 1 { return Err(error()); }
+    if completed.len() != 1 {
+        return Err(error());
+    }
     hasher.update(&completed[0]);
     Ok(())
 }

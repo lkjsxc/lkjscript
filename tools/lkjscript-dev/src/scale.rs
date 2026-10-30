@@ -9,9 +9,7 @@ use lkjscript::platform::contributor::{
     SemanticInventory, catalog_inventory, compact_change_default_maximum_operations,
     semantic_inventory,
 };
-use lkjscript::platform::control::{
-    MAXIMUM_COMPACT_INPUT_BYTES, parse_records, render_record,
-};
+use lkjscript::platform::control::{MAXIMUM_COMPACT_INPUT_BYTES, parse_records, render_record};
 use model::{
     AdmissionClassification, ArtifactEvidence, BatchEvidence, BuildEvidence, CandidateIdentity,
     CapabilityIdentity, CapabilitySection, CheckEvidence, CleanupEvidence, CleanupStatus,
@@ -146,14 +144,16 @@ impl RequestBuilder {
             .len()
             .checked_add(rendered.len())
             .ok_or_else(|| DevError::infrastructure("scale request byte count overflow"))?;
-        if let Some(maximum) = MAXIMUM_COMPACT_INPUT_BYTES && required > maximum {
+        if let Some(maximum) = MAXIMUM_COMPACT_INPUT_BYTES
+            && required > maximum
+        {
             return Err(DevError::usage(format!(
                 "scale batch requires {required} compact bytes, exceeding the selected {maximum}-byte input allowance"
             )));
         }
-        self.bytes.try_reserve(rendered.len()).map_err(|_| {
-            DevError::infrastructure("scale request allocation failed")
-        })?;
+        self.bytes
+            .try_reserve(rendered.len())
+            .map_err(|_| DevError::infrastructure("scale request allocation failed"))?;
         self.bytes.extend_from_slice(rendered.as_bytes());
         self.records = self
             .records
@@ -1775,7 +1775,9 @@ fn parse_options(arguments: impl Iterator<Item = OsString>) -> Result<Options, D
         )));
     }
     let maximum_batch = topology.maximum_batch();
-    let batch = batch.unwrap_or_else(|| maximum_batch.map_or(DEFAULT_BATCH, |maximum| DEFAULT_BATCH.min(maximum)));
+    let batch = batch.unwrap_or_else(|| {
+        maximum_batch.map_or(DEFAULT_BATCH, |maximum| DEFAULT_BATCH.min(maximum))
+    });
     if batch == 0 || maximum_batch.is_some_and(|maximum| batch > maximum) {
         return Err(DevError::usage(format!(
             "--batch for {} must be positive and within its explicit operation allowance {maximum_batch:?}",
@@ -2669,13 +2671,16 @@ mod tests {
                 assert_eq!(encoded[field], serde_json::Value::Bool(expected));
             }
             for field in [
-                "validation_work", "map_pages_read", "map_bytes_read",
-                "store_objects_read", "store_bytes_read",
+                "validation_work",
+                "map_pages_read",
+                "map_bytes_read",
+                "store_objects_read",
+                "store_bytes_read",
             ] {
                 assert_eq!(encoded[field], serde_json::Value::from(u64::MAX));
             }
-            let decoded: OracleEvidence = serde_json::from_value(encoded)
-                .expect("decode current observed work");
+            let decoded: OracleEvidence =
+                serde_json::from_value(encoded).expect("decode current observed work");
             assert_eq!(decoded, evidence);
         }
     }
@@ -2683,7 +2688,11 @@ mod tests {
     #[test]
     fn topology_grammar_preserves_arbitrary_positive_batch_sizes() {
         for topology in [
-            "independent-modules", "small-functions", "wide-module", "deep-chain", "wide-fanout",
+            "independent-modules",
+            "small-functions",
+            "wide-module",
+            "deep-chain",
+            "wide-fanout",
         ] {
             assert_eq!(options(&[topology, "--items", "1"]).items, 1);
             for batch in [1, 1_001, 100_001, u64::MAX] {
@@ -2693,7 +2702,9 @@ mod tests {
                 assert_eq!(parsed.topology.maximum_batch(), None);
             }
             // The chunk stride must advance; zero is not a physical batch size.
-            assert!(parse_options([topology, "--batch", "0"].into_iter().map(OsString::from)).is_err());
+            assert!(
+                parse_options([topology, "--batch", "0"].into_iter().map(OsString::from)).is_err()
+            );
         }
         assert!(parse_options(["full"].into_iter().map(OsString::from)).is_err());
         assert!(HELP.contains("contract 4"));

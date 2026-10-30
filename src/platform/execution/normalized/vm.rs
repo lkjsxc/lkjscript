@@ -91,21 +91,27 @@ impl NormalizedRunPolicy {
     }
 }
 
+/// Each cumulative policy counter has a companion lower-bound flag. Exact
+/// `u64::MAX` remains unsaturated; only overflow or inherited saturation sets it.
 #[derive(Clone, Debug, Default, Eq, PartialEq, serde::Serialize)]
 pub struct NormalizedRunObservation {
     pub parallel_scopes: u64,
     pub parallel_worker_dispatches: u64,
     pub parallel_inline_fallbacks: u64,
     pub instructions: u64,
+    pub instructions_saturated: bool,
     pub calls: u64,
     pub external_calls: u64,
     pub capability_calls: u64,
+    pub capability_calls_saturated: bool,
     pub allocated_bytes: u64,
+    pub allocated_bytes_saturated: bool,
     pub allocation_charges: u64,
     pub type_derivation_steps: u64,
     pub type_metadata_bytes: u64,
     pub(crate) value_work: super::value::ValueWork,
     pub collection_items: u64,
+    pub collection_items_saturated: bool,
     pub maximum_call_depth: usize,
     pub maximum_value_stack: usize,
     pub production_tier: &'static str,
@@ -448,15 +454,19 @@ impl<'a> NormalizedVm<'a> {
                 parallel_worker_dispatches: 0,
                 parallel_inline_fallbacks: 0,
                 instructions: 0,
+                instructions_saturated: false,
                 calls: 0,
                 external_calls: 0,
                 capability_calls: 0,
+                capability_calls_saturated: false,
                 allocated_bytes: 0,
+                allocated_bytes_saturated: false,
                 allocation_charges: 0,
                 type_derivation_steps: self.program.work.type_derivation_steps,
                 type_metadata_bytes: self.program.work.type_metadata_bytes,
                 value_work: super::value::ValueWork::default(),
                 collection_items: 0,
+                collection_items_saturated: false,
                 maximum_call_depth: 0,
                 maximum_value_stack: 0,
                 production_tier: "graph14_dense_bytecode_10",
@@ -700,23 +710,47 @@ fn reserve_execution_allocation(
     observation: &mut NormalizedRunObservation,
     bytes: u64,
 ) -> Result<(), ExecutionError> {
+    reserve_execution_storage(policy, shared_budget, observation, bytes, 0)
+}
+
+// The count, exactness flag and shared finite reservation commit as one pair.
+fn reserve_execution_storage(
+    policy: NormalizedRunPolicy,
+    shared_budget: Option<&super::shared_budget::SharedBudget>,
+    observation: &mut NormalizedRunObservation,
+    bytes: u64,
+    items: u64,
+) -> Result<(), ExecutionError> {
+    let mut items_saturated = observation.collection_items_saturated;
+    let mut bytes_saturated = observation.allocated_bytes_saturated;
+    let next_items = crate::platform::execution::cumulative_charge(
+        observation.collection_items,
+        items,
+        policy.maximum_collection_items,
+        "normalized_collection_items",
+        "execution exhausted its collection-item budget",
+        &mut items_saturated,
+    )?;
     let next_bytes = crate::platform::execution::cumulative_charge(
         observation.allocated_bytes,
         bytes,
         policy.maximum_allocated_bytes,
         "normalized_allocation",
         "execution exhausted its allocation budget",
+        &mut bytes_saturated,
     )?;
     if let Some(budget) = shared_budget {
-        budget.reserve(bytes, 0)?;
+        budget.reserve(bytes, items)?;
     }
+    observation.collection_items = next_items;
+    observation.collection_items_saturated = items_saturated;
     observation.allocated_bytes = next_bytes;
+    observation.allocated_bytes_saturated = bytes_saturated;
     if bytes != 0 {
         observation.allocation_charges = observation.allocation_charges.saturating_add(1);
     }
     Ok(())
 }
-
 impl Drop for Machine<'_> {
     fn drop(&mut self) {
         // Vec's default order would destroy ancestors before younger read
@@ -881,7 +915,12 @@ impl Machine<'_> {
             if let Some(budget) = &self.shared_budget {
                 budget.step("normalized_instruction_steps")?;
             }
-            self.observation.instructions = self.observation.instructions.saturating_add(1);
+            crate::platform::execution::cumulative_observe(
+                &mut self.observation.instructions,
+                &mut self.observation.instructions_saturated,
+                1,
+                false,
+            );
             let (mut instruction, application, position) = {
                 let frame = self.current_frame_mut()?;
                 let position = frame.instruction;
@@ -1590,11 +1629,14 @@ impl Machine<'_> {
                         control: self.control,
                         policy: self.policy,
                         admission_bytes: 0,
+                        admission_bytes_saturated: false,
                         admission_items: 0,
                         work: &mut self.observation.value_work,
                         allocated: &mut self.observation.allocated_bytes,
+                        allocated_saturated: &mut self.observation.allocated_bytes_saturated,
                         allocation_charges: &mut self.observation.allocation_charges,
                         items: &mut self.observation.collection_items,
+                        items_saturated: &mut self.observation.collection_items_saturated,
                     }
                     .begin_bind(callee, arguments as usize)?;
                     self.push(value)?;
@@ -1620,11 +1662,14 @@ impl Machine<'_> {
                         control: self.control,
                         policy: self.policy,
                         admission_bytes: 0,
+                        admission_bytes_saturated: false,
                         admission_items: 0,
                         work: &mut self.observation.value_work,
                         allocated: &mut self.observation.allocated_bytes,
+                        allocated_saturated: &mut self.observation.allocated_bytes_saturated,
                         allocation_charges: &mut self.observation.allocation_charges,
                         items: &mut self.observation.collection_items,
+                        items_saturated: &mut self.observation.collection_items_saturated,
                     }
                     .capture(callee, argument, index as usize)?;
                     self.push(value)?;
@@ -1640,11 +1685,14 @@ impl Machine<'_> {
                         control: self.control,
                         policy: self.policy,
                         admission_bytes: 0,
+                        admission_bytes_saturated: false,
                         admission_items: 0,
                         work: &mut self.observation.value_work,
                         allocated: &mut self.observation.allocated_bytes,
+                        allocated_saturated: &mut self.observation.allocated_bytes_saturated,
                         allocation_charges: &mut self.observation.allocation_charges,
                         items: &mut self.observation.collection_items,
+                        items_saturated: &mut self.observation.collection_items_saturated,
                     }
                     .bind(callee, arguments)?;
                     self.push(value)?;
@@ -4273,9 +4321,18 @@ impl Machine<'_> {
                     "structural record repeats one exact field name",
                 ));
             }
-            self.charge_allocation(structural.iter().fold(0_u64, |total, (name, _)| {
-                total.saturating_add(name.as_str().len() as u64)
-            }))?;
+            let name_bytes = structural
+                .iter()
+                .try_fold(0_u64, |total, (name, _)| {
+                    total.checked_add(name.as_str().len() as u64)
+                })
+                .ok_or_else(|| {
+                    resource_error(
+                        "normalized_allocation",
+                        "structural record field-name storage size overflowed",
+                    )
+                })?;
+            self.charge_allocation(name_bytes)?;
             CheckedValue::record(
                 self.program,
                 None,
@@ -4289,28 +4346,28 @@ impl Machine<'_> {
         &mut self,
         requirement: RequirementIndex,
     ) -> Result<(), ExecutionError> {
-        if self
-            .policy
-            .maximum_capability_calls
-            .is_some_and(|maximum| self.observation.capability_calls >= maximum)
-        {
-            return Err(resource_error(
-                "normalized_capability_calls",
-                "normalized execution exhausted its capability-call budget",
-            ));
-        }
+        let mut saturated = self.observation.capability_calls_saturated;
+        let next_calls = crate::platform::execution::cumulative_charge(
+            self.observation.capability_calls,
+            1,
+            self.policy.maximum_capability_calls,
+            "normalized_capability_calls",
+            "normalized execution exhausted its capability-call budget",
+            &mut saturated,
+        )?;
         let capabilities = self.capabilities.ok_or_else(capabilities_unbound)?;
         let maximum = capabilities.maximum_calls(requirement)?;
         let canonical = capabilities.canonical_requirement(requirement)?;
         let calls = self.calls_by_requirement.entry(canonical).or_default();
-        *calls = crate::platform::execution::cumulative_charge(
+        *calls = crate::platform::execution::finite_charge(
             *calls,
             1,
-            Some(maximum),
+            maximum,
             "normalized_grant_calls",
             "normalized execution exhausted one deployment-grant call bound",
         )?;
-        self.observation.capability_calls = self.observation.capability_calls.saturating_add(1);
+        self.observation.capability_calls = next_calls;
+        self.observation.capability_calls_saturated = saturated;
         Ok(())
     }
 
@@ -4321,23 +4378,18 @@ impl Machine<'_> {
                 "one container exceeds finite item admission",
             ));
         }
-        let next_items = crate::platform::execution::cumulative_charge(
-            self.observation.collection_items,
-            items as u64,
-            self.policy.maximum_collection_items,
-            "normalized_collection_items",
-            "execution exhausted its collection-item budget",
-        )?;
-        if let Some(budget) = &self.shared_budget {
-            budget.reserve(0, items as u64)?;
-        }
-        self.observation.collection_items = next_items;
         let bytes = super::value::collection_storage_bytes(
             items as u64,
             item_bytes as u64,
             "normalized_allocation",
         )?;
-        self.charge_allocation(bytes)
+        reserve_execution_storage(
+            self.policy,
+            self.shared_budget.as_deref(),
+            &mut self.observation,
+            bytes,
+            items as u64,
+        )
     }
 
     fn charge_allocation(&mut self, bytes: u64) -> Result<(), ExecutionError> {
@@ -4357,18 +4409,13 @@ impl Machine<'_> {
                 "one external value exceeds finite item admission",
             ));
         }
-        let next_items = crate::platform::execution::cumulative_charge(
-            self.observation.collection_items,
+        reserve_execution_storage(
+            self.policy,
+            self.shared_budget.as_deref(),
+            &mut self.observation,
+            bytes,
             items,
-            self.policy.maximum_collection_items,
-            "normalized_collection_items",
-            "external value exceeds the collection-item budget",
-        )?;
-        if let Some(budget) = &self.shared_budget {
-            budget.reserve(0, items)?;
-        }
-        self.observation.collection_items = next_items;
-        self.charge_allocation(bytes)
+        )
     }
 
     fn current_frame(&self) -> Result<&Frame, ExecutionError> {
@@ -5966,16 +6013,10 @@ fn i64_pair(arguments: &[NormalizedValue]) -> Result<(i64, i64), ExecutionError>
 }
 
 fn validate_policy(policy: NormalizedRunPolicy) -> Result<(), ExecutionError> {
-    if policy.instruction_steps == Some(0)
-        || policy.maximum_call_depth == 0
-        || policy.maximum_value_stack == 0
-        || policy.maximum_allocated_bytes == Some(0)
-        || policy.maximum_collection_items == Some(0)
-        || policy.maximum_capability_calls == Some(0)
-    {
+    if policy.maximum_call_depth == 0 || policy.maximum_value_stack == 0 {
         return Err(resource_error(
             "normalized_run_policy",
-            "normalized runtime policy dimensions must all be positive",
+            "normalized call-depth and value-stack limits must be positive",
         ));
     }
     Ok(())
@@ -6258,7 +6299,6 @@ fn direct_memory_type(
     Err(type_error("cyclic memory type substitution"))
 }
 
-
 #[cfg(test)]
 mod allocation_capacity_tests {
     use super::*;
@@ -6268,23 +6308,153 @@ mod allocation_capacity_tests {
         let amount = 256 * 1024 * 1024 + 1;
         assert_eq!(NormalizedRunPolicy::default().maximum_allocated_bytes, None);
         for limit in [None, Some(amount)] {
-            let policy = NormalizedRunPolicy { maximum_allocated_bytes: limit,
-                ..NormalizedRunPolicy::default() };
+            let policy = NormalizedRunPolicy {
+                maximum_allocated_bytes: limit,
+                ..NormalizedRunPolicy::default()
+            };
             let mut observation = NormalizedRunObservation::default();
             reserve_execution_allocation(policy, None, &mut observation, amount).unwrap();
             assert_eq!(observation.allocated_bytes, amount);
             assert_eq!(observation.allocation_charges, 1);
             let next = reserve_execution_allocation(policy, None, &mut observation, 1);
             assert_eq!(next.is_ok(), limit.is_none());
-            assert_eq!(observation.allocated_bytes, amount + u64::from(limit.is_none()));
+            assert_eq!(
+                observation.allocated_bytes,
+                amount + u64::from(limit.is_none())
+            );
         }
         for limit in [0, u64::MAX] {
-            let policy = NormalizedRunPolicy { maximum_allocated_bytes: Some(limit),
-                ..NormalizedRunPolicy::default() };
+            let policy = NormalizedRunPolicy {
+                maximum_allocated_bytes: Some(limit),
+                ..NormalizedRunPolicy::default()
+            };
             let mut observation = NormalizedRunObservation::default();
             reserve_execution_allocation(policy, None, &mut observation, limit).unwrap();
             assert!(reserve_execution_allocation(policy, None, &mut observation, 1).is_err());
             assert_eq!(observation.allocated_bytes, limit);
         }
+    }
+}
+
+#[cfg(test)]
+mod cumulative_allocation_tests {
+    use super::super::shared_budget::SharedBudget;
+    use super::*;
+
+    fn charge(
+        policy: NormalizedRunPolicy,
+        shared: Option<&SharedBudget>,
+        work: &mut NormalizedRunObservation,
+        bytes: u64,
+    ) -> Result<(), ExecutionError> {
+        reserve_execution_allocation(policy, shared, work, bytes)
+    }
+
+    #[test]
+    fn allocation_observation_preserves_exact_maximum_and_shared_failure_atomically() {
+        let finite = NormalizedRunPolicy {
+            maximum_allocated_bytes: Some(u64::MAX),
+            ..NormalizedRunPolicy::foreground()
+        };
+        let mut work = NormalizedRunObservation {
+            allocated_bytes: u64::MAX - 1,
+            ..NormalizedRunObservation::default()
+        };
+        charge(finite, None, &mut work, 1).unwrap();
+        assert_eq!(work.allocated_bytes, u64::MAX);
+        assert!(!work.allocated_bytes_saturated);
+        let before = work.clone();
+        assert!(charge(finite, None, &mut work, 1).is_err());
+        assert_eq!(work, before);
+        charge(NormalizedRunPolicy::foreground(), None, &mut work, 1).unwrap();
+        assert_eq!(work.allocated_bytes, u64::MAX);
+        assert!(work.allocated_bytes_saturated);
+        charge(NormalizedRunPolicy::foreground(), None, &mut work, 1).unwrap();
+        assert!(work.allocated_bytes_saturated);
+        let before = work.clone();
+        assert!(charge(finite, None, &mut work, 0).is_err());
+        assert_eq!(work, before);
+
+        let shared = SharedBudget::new(
+            NormalizedRunPolicy {
+                maximum_allocated_bytes: Some(0),
+                ..NormalizedRunPolicy::foreground()
+            },
+            None,
+            0,
+            0,
+        );
+        let mut work = NormalizedRunObservation {
+            allocated_bytes: u64::MAX,
+            ..NormalizedRunObservation::default()
+        };
+        let before = work.clone();
+        assert!(
+            charge(
+                NormalizedRunPolicy::foreground(),
+                Some(&shared),
+                &mut work,
+                1
+            )
+            .is_err()
+        );
+        assert_eq!(
+            work, before,
+            "failed shared reservation must not commit local count or saturation"
+        );
+    }
+    #[test]
+    fn allocation_and_collection_pair_refusal_preserves_both_counts_and_flags() {
+        for finite_bytes in [false, true] {
+            let mut policy = NormalizedRunPolicy::foreground();
+            let mut work = NormalizedRunObservation {
+                allocation_charges: 3,
+                ..NormalizedRunObservation::default()
+            };
+            if finite_bytes {
+                policy.maximum_allocated_bytes = Some(0);
+                work.collection_items = u64::MAX;
+            } else {
+                policy.maximum_collection_items = Some(0);
+                work.allocated_bytes = u64::MAX;
+            }
+            let before = work.clone();
+            assert!(reserve_execution_storage(policy, None, &mut work, 1, 1).is_err());
+            assert_eq!(work, before);
+        }
+        let shared = SharedBudget::new(
+            NormalizedRunPolicy {
+                maximum_allocated_bytes: Some(0),
+                ..NormalizedRunPolicy::foreground()
+            },
+            None,
+            0,
+            0,
+        );
+        let mut work = NormalizedRunObservation {
+            allocated_bytes: u64::MAX,
+            collection_items: u64::MAX,
+            allocation_charges: 3,
+            ..NormalizedRunObservation::default()
+        };
+        let before = work.clone();
+        assert!(
+            reserve_execution_storage(
+                NormalizedRunPolicy::foreground(),
+                Some(&shared),
+                &mut work,
+                1,
+                1
+            )
+            .is_err()
+        );
+        assert_eq!(work, before);
+        reserve_execution_storage(NormalizedRunPolicy::foreground(), None, &mut work, 1, 1)
+            .unwrap();
+        assert_eq!(work.allocated_bytes, u64::MAX);
+        assert_eq!(work.collection_items, u64::MAX);
+        assert!(work.allocated_bytes_saturated);
+        assert!(work.collection_items_saturated);
+        assert_eq!(work.allocation_charges, 4);
     }
 }

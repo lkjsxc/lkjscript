@@ -1,8 +1,8 @@
 //! One deterministic reverse-impact plan from owner-summary dimension changes.
 
 use super::relation_view::CandidateRelations;
-use super::{BudgetCounter, BudgetDimension, WorkSaturation};
 use super::summary_delta::derive_summary_delta_for_with_relation_limit;
+use super::{BudgetCounter, BudgetDimension, WorkSaturation};
 use super::{
     CanonicalBaseRead, CanonicalDelta, DerivedDelta, ImpactAdmission, KernelOverlay,
     OwnerSummaryEdit, SummaryDelta, WitnessBaseRead, WitnessReadWork,
@@ -268,8 +268,11 @@ pub(crate) fn plan_impact_and_summaries_with_admission<
             )?,
             admission.maximum_relation_fanout,
         )?;
-        plan.work.saturation.observe(&mut plan.work.reverse_edges_visited,
-            BudgetDimension::RelationEdges, relation_read.edges_examined);
+        plan.work.saturation.observe(
+            &mut plan.work.reverse_edges_visited,
+            BudgetDimension::RelationEdges,
+            relation_read.edges_examined,
+        );
         for edge in relation_read.edges {
             if !change.affects_validation(edge.kind.propagation()) {
                 continue;
@@ -323,8 +326,11 @@ pub(crate) fn plan_impact_and_summaries_with_admission<
             )?,
             admission.maximum_relation_fanout,
         )?;
-        plan.work.saturation.observe(&mut plan.work.reverse_edges_visited,
-            BudgetDimension::RelationEdges, relation_read.edges_examined);
+        plan.work.saturation.observe(
+            &mut plan.work.reverse_edges_visited,
+            BudgetDimension::RelationEdges,
+            relation_read.edges_examined,
+        );
         for edge in relation_read.edges {
             let Some(source) = local_owner(edge.source, package) else {
                 continue;
@@ -379,8 +385,11 @@ pub(crate) fn plan_impact_and_summaries_with_admission<
             )?,
             admission.maximum_relation_fanout,
         )?;
-        plan.work.saturation.observe(&mut plan.work.reverse_edges_visited,
-            BudgetDimension::RelationEdges, relation_read.edges_examined);
+        plan.work.saturation.observe(
+            &mut plan.work.reverse_edges_visited,
+            BudgetDimension::RelationEdges,
+            relation_read.edges_examined,
+        );
         for edge in relation_read.edges {
             if matches!(
                 edge.kind.propagation(),
@@ -434,9 +443,13 @@ pub(crate) fn plan_impact_and_summaries_with_admission<
         relation_observation(&initial, &plan.work),
     )?;
     let final_summary_owners = u64::try_from(plan.summary_owners.len()).unwrap_or(u64::MAX);
-    plan.work.saturation.charge(&mut plan.work.summary_owners_examined,
-        BudgetDimension::ImpactSummaryOwners, BudgetCounter::exact(final_summary_owners),
-        admission.maximum_summary_owners, "impact planning")?;
+    plan.work.saturation.charge(
+        &mut plan.work.summary_owners_examined,
+        BudgetDimension::ImpactSummaryOwners,
+        BudgetCounter::exact(final_summary_owners),
+        admission.maximum_summary_owners,
+        "impact planning",
+    )?;
     let final_delta = derive_summary_delta_for_with_relation_limit(
         overlay,
         derived,
@@ -639,7 +652,8 @@ fn admit_affected(
         return Ok(());
     }
     if let Some(maximum) = maximum
-        && admitted.len() as u64 >= maximum {
+        && admitted.len() as u64 >= maximum
+    {
         return Err(Diagnostic::new(
             DiagnosticClass::Resource,
             "change_budget_affected_frontier_owners",
@@ -651,13 +665,23 @@ fn admit_affected(
 }
 
 fn admit_summary_edit(work: &mut ImpactWork, maximum: Option<u64>) -> Result<(), Diagnostic> {
-    work.saturation.charge(&mut work.summary_edits_examined, BudgetDimension::ImpactSummaryEdits,
-        BudgetCounter::exact(1), maximum, "impact planning")
+    work.saturation.charge(
+        &mut work.summary_edits_examined,
+        BudgetDimension::ImpactSummaryEdits,
+        BudgetCounter::exact(1),
+        maximum,
+        "impact planning",
+    )
 }
 
 fn admit_behavior_owner(work: &mut ImpactWork, maximum: Option<u64>) -> Result<(), Diagnostic> {
-    work.saturation.charge(&mut work.behavior_owners_visited, BudgetDimension::ImpactBehaviorOwners,
-        BudgetCounter::exact(1), maximum, "impact planning")
+    work.saturation.charge(
+        &mut work.behavior_owners_visited,
+        BudgetDimension::ImpactBehaviorOwners,
+        BudgetCounter::exact(1),
+        maximum,
+        "impact planning",
+    )
 }
 
 fn admit_count(
@@ -666,7 +690,9 @@ fn admit_count(
     observed: u64,
     maximum: Option<u64>,
 ) -> Result<(), Diagnostic> {
-    if let Some(maximum) = maximum && observed > maximum {
+    if let Some(maximum) = maximum
+        && observed > maximum
+    {
         return Err(impact_resource_error(
             code,
             format!("impact planning requires {observed} {unit}, exceeding the declared {maximum}"),
@@ -676,18 +702,31 @@ fn admit_count(
 }
 
 fn relation_observation(initial: &SummaryDelta, work: &ImpactWork) -> BudgetCounter {
-    let mut total = initial.saturation.counter(BudgetDimension::RelationEdges, initial.relation_edges_read);
-    total.observe(work.saturation.counter(BudgetDimension::RelationEdges, work.reverse_edges_visited));
+    let mut total = initial
+        .saturation
+        .counter(BudgetDimension::RelationEdges, initial.relation_edges_read);
+    total.observe(
+        work.saturation
+            .counter(BudgetDimension::RelationEdges, work.reverse_edges_visited),
+    );
     total
 }
 
-fn remaining_relations(maximum: Option<u64>, observed: BudgetCounter) -> Result<Option<u64>, Diagnostic> {
+fn remaining_relations(
+    maximum: Option<u64>,
+    observed: BudgetCounter,
+) -> Result<Option<u64>, Diagnostic> {
     observed.remaining(maximum, "impact relation traversal", "relation_edges")
 }
 
 fn admit_ownership_step(work: &mut ImpactWork, maximum: Option<u64>) -> Result<(), Diagnostic> {
-    work.saturation.charge(&mut work.ownership_steps, BudgetDimension::ImpactOwnershipSteps,
-        BudgetCounter::exact(1), maximum, "impact ownership traversal")
+    work.saturation.charge(
+        &mut work.ownership_steps,
+        BudgetDimension::ImpactOwnershipSteps,
+        BudgetCounter::exact(1),
+        maximum,
+        "impact ownership traversal",
+    )
 }
 
 fn owning_units<W: WitnessBaseRead + ?Sized>(

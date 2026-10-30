@@ -1,6 +1,8 @@
 //! Exact canonical point reads used by change normalization.
 
-use super::budget::{BudgetCounter, BudgetDimension, CanonicalReadAdmission, WitnessReadAdmission, WorkSaturation};
+use super::budget::{
+    BudgetCounter, BudgetDimension, CanonicalReadAdmission, WitnessReadAdmission, WorkSaturation,
+};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     DependencyRecord, ExactOwnerKey, KernelSnapshot, OwnerKey, OwnerRecord, PackageId,
@@ -9,8 +11,8 @@ use crate::platform::kernel::{
 };
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use crate::platform::witness::{
-    FullWitness, NamespaceKey,
-    OwnerSummary, OwnerSummaryDigest, OwnershipEntry, TestDependency, ValidationWitnessManifest,
+    FullWitness, NamespaceKey, OwnerSummary, OwnerSummaryDigest, OwnershipEntry, TestDependency,
+    ValidationWitnessManifest,
 };
 use bincode::{Decode, Encode};
 use std::cell::Cell;
@@ -32,19 +34,83 @@ pub struct CanonicalReadWork {
 
 impl CanonicalReadWork {
     pub fn add(&mut self, other: Self) {
-        self.saturation.observe(&mut self.point_reads, BudgetDimension::CanonicalPointReads, BudgetCounter { consumed: other.point_reads, saturated: other.saturation.contains(BudgetDimension::CanonicalPointReads) });
-        self.saturation.observe(&mut self.map_pages_read, BudgetDimension::CanonicalMapPages, BudgetCounter { consumed: other.map_pages_read, saturated: other.saturation.contains(BudgetDimension::CanonicalMapPages) });
-        self.saturation.observe(&mut self.map_entries_visited, BudgetDimension::CanonicalMapEntries, BudgetCounter { consumed: other.map_entries_visited, saturated: other.saturation.contains(BudgetDimension::CanonicalMapEntries) });
-        self.saturation.observe(&mut self.catalog_lookups, BudgetDimension::CanonicalCatalogLookups, BudgetCounter { consumed: other.catalog_lookups, saturated: other.saturation.contains(BudgetDimension::CanonicalCatalogLookups) });
-        self.saturation.observe(&mut self.objects_read, BudgetDimension::CanonicalObjects, BudgetCounter { consumed: other.objects_read, saturated: other.saturation.contains(BudgetDimension::CanonicalObjects) });
-        self.saturation.observe(&mut self.bytes_read, BudgetDimension::CanonicalBytes, BudgetCounter { consumed: other.bytes_read, saturated: other.saturation.contains(BudgetDimension::CanonicalBytes) });
-        self.saturation.observe(&mut self.canonical_records_decoded, BudgetDimension::CanonicalDecodedRecords, BudgetCounter { consumed: other.canonical_records_decoded, saturated: other.saturation.contains(BudgetDimension::CanonicalDecodedRecords) });
+        self.saturation.observe(
+            &mut self.point_reads,
+            BudgetDimension::CanonicalPointReads,
+            BudgetCounter {
+                consumed: other.point_reads,
+                saturated: other
+                    .saturation
+                    .contains(BudgetDimension::CanonicalPointReads),
+            },
+        );
+        self.saturation.observe(
+            &mut self.map_pages_read,
+            BudgetDimension::CanonicalMapPages,
+            BudgetCounter {
+                consumed: other.map_pages_read,
+                saturated: other
+                    .saturation
+                    .contains(BudgetDimension::CanonicalMapPages),
+            },
+        );
+        self.saturation.observe(
+            &mut self.map_entries_visited,
+            BudgetDimension::CanonicalMapEntries,
+            BudgetCounter {
+                consumed: other.map_entries_visited,
+                saturated: other
+                    .saturation
+                    .contains(BudgetDimension::CanonicalMapEntries),
+            },
+        );
+        self.saturation.observe(
+            &mut self.catalog_lookups,
+            BudgetDimension::CanonicalCatalogLookups,
+            BudgetCounter {
+                consumed: other.catalog_lookups,
+                saturated: other
+                    .saturation
+                    .contains(BudgetDimension::CanonicalCatalogLookups),
+            },
+        );
+        self.saturation.observe(
+            &mut self.objects_read,
+            BudgetDimension::CanonicalObjects,
+            BudgetCounter {
+                consumed: other.objects_read,
+                saturated: other.saturation.contains(BudgetDimension::CanonicalObjects),
+            },
+        );
+        self.saturation.observe(
+            &mut self.bytes_read,
+            BudgetDimension::CanonicalBytes,
+            BudgetCounter {
+                consumed: other.bytes_read,
+                saturated: other.saturation.contains(BudgetDimension::CanonicalBytes),
+            },
+        );
+        self.saturation.observe(
+            &mut self.canonical_records_decoded,
+            BudgetDimension::CanonicalDecodedRecords,
+            BudgetCounter {
+                consumed: other.canonical_records_decoded,
+                saturated: other
+                    .saturation
+                    .contains(BudgetDimension::CanonicalDecodedRecords),
+            },
+        );
     }
 
-    pub fn saturated(self) -> bool { self.saturation.any() }
+    pub fn saturated(self) -> bool {
+        self.saturation.any()
+    }
 
     pub(crate) fn observation(self, dimension: BudgetDimension, consumed: u64) -> BudgetCounter {
-        BudgetCounter { consumed, saturated: self.saturation.contains(dimension) }
+        BudgetCounter {
+            consumed,
+            saturated: self.saturation.contains(dimension),
+        }
     }
 }
 
@@ -87,19 +153,81 @@ pub struct WitnessReadWork {
 
 impl WitnessReadWork {
     pub fn add(&mut self, other: Self) {
-        self.saturation.observe(&mut self.point_reads, BudgetDimension::WitnessPointReads, BudgetCounter { consumed: other.point_reads, saturated: other.saturation.contains(BudgetDimension::WitnessPointReads) });
-        self.saturation.observe(&mut self.map_pages_read, BudgetDimension::WitnessMapPages, BudgetCounter { consumed: other.map_pages_read, saturated: other.saturation.contains(BudgetDimension::WitnessMapPages) });
-        self.saturation.observe(&mut self.map_entries_visited, BudgetDimension::WitnessMapEntries, BudgetCounter { consumed: other.map_entries_visited, saturated: other.saturation.contains(BudgetDimension::WitnessMapEntries) });
-        self.saturation.observe(&mut self.catalog_lookups, BudgetDimension::WitnessCatalogLookups, BudgetCounter { consumed: other.catalog_lookups, saturated: other.saturation.contains(BudgetDimension::WitnessCatalogLookups) });
-        self.saturation.observe(&mut self.objects_read, BudgetDimension::WitnessObjects, BudgetCounter { consumed: other.objects_read, saturated: other.saturation.contains(BudgetDimension::WitnessObjects) });
-        self.saturation.observe(&mut self.bytes_read, BudgetDimension::WitnessBytes, BudgetCounter { consumed: other.bytes_read, saturated: other.saturation.contains(BudgetDimension::WitnessBytes) });
-        self.saturation.observe(&mut self.witness_records_decoded, BudgetDimension::WitnessDecodedRecords, BudgetCounter { consumed: other.witness_records_decoded, saturated: other.saturation.contains(BudgetDimension::WitnessDecodedRecords) });
+        self.saturation.observe(
+            &mut self.point_reads,
+            BudgetDimension::WitnessPointReads,
+            BudgetCounter {
+                consumed: other.point_reads,
+                saturated: other
+                    .saturation
+                    .contains(BudgetDimension::WitnessPointReads),
+            },
+        );
+        self.saturation.observe(
+            &mut self.map_pages_read,
+            BudgetDimension::WitnessMapPages,
+            BudgetCounter {
+                consumed: other.map_pages_read,
+                saturated: other.saturation.contains(BudgetDimension::WitnessMapPages),
+            },
+        );
+        self.saturation.observe(
+            &mut self.map_entries_visited,
+            BudgetDimension::WitnessMapEntries,
+            BudgetCounter {
+                consumed: other.map_entries_visited,
+                saturated: other
+                    .saturation
+                    .contains(BudgetDimension::WitnessMapEntries),
+            },
+        );
+        self.saturation.observe(
+            &mut self.catalog_lookups,
+            BudgetDimension::WitnessCatalogLookups,
+            BudgetCounter {
+                consumed: other.catalog_lookups,
+                saturated: other
+                    .saturation
+                    .contains(BudgetDimension::WitnessCatalogLookups),
+            },
+        );
+        self.saturation.observe(
+            &mut self.objects_read,
+            BudgetDimension::WitnessObjects,
+            BudgetCounter {
+                consumed: other.objects_read,
+                saturated: other.saturation.contains(BudgetDimension::WitnessObjects),
+            },
+        );
+        self.saturation.observe(
+            &mut self.bytes_read,
+            BudgetDimension::WitnessBytes,
+            BudgetCounter {
+                consumed: other.bytes_read,
+                saturated: other.saturation.contains(BudgetDimension::WitnessBytes),
+            },
+        );
+        self.saturation.observe(
+            &mut self.witness_records_decoded,
+            BudgetDimension::WitnessDecodedRecords,
+            BudgetCounter {
+                consumed: other.witness_records_decoded,
+                saturated: other
+                    .saturation
+                    .contains(BudgetDimension::WitnessDecodedRecords),
+            },
+        );
     }
 
-    pub fn saturated(self) -> bool { self.saturation.any() }
+    pub fn saturated(self) -> bool {
+        self.saturation.any()
+    }
 
     pub(crate) fn observation(self, dimension: BudgetDimension, consumed: u64) -> BudgetCounter {
-        BudgetCounter { consumed, saturated: self.saturation.contains(dimension) }
+        BudgetCounter {
+            consumed,
+            saturated: self.saturation.contains(dimension),
+        }
     }
 }
 
@@ -1213,7 +1341,8 @@ impl WitnessBaseRead for FullWitness {
         }
         let available = self.entries.test_dependencies_by_test.get(&test);
         let available_count = available.map_or(0, |entries| entries.len());
-        let returned = maximum_items.map_or(available_count, |maximum| available_count.min(maximum));
+        let returned =
+            maximum_items.map_or(available_count, |maximum| available_count.min(maximum));
         admission.check_work(
             WitnessReadWork {
                 point_reads: 1,

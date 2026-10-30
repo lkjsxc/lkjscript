@@ -25,7 +25,29 @@ pub(crate) struct PreparationObservation {
     pub catalog_lookups: u64,
     pub objects_read: u64,
     pub bytes_read: u64,
+    /// Unique pending object bindings settled after visited-set deduplication.
     pub references_visited: u64,
+    /// False proves exact observations; true also preserves inexact contributing store work.
+    pub saturated: bool,
+}
+
+fn observe(total: &mut u64, additional: u64, saturated: &mut bool) {
+    match total.checked_add(additional) {
+        Some(value) => *total = value,
+        None => {
+            *total = u64::MAX;
+            *saturated = true;
+        }
+    }
+}
+
+fn canonical_byte_observation(lengths: impl IntoIterator<Item = u64>) -> (u64, bool) {
+    let mut total = 0;
+    let mut saturated = false;
+    for length in lengths {
+        observe(&mut total, length, &mut saturated);
+    }
+    (total, saturated)
 }
 
 struct Collected {
@@ -42,6 +64,7 @@ pub(crate) struct GarbageCollectionReceipt {
     pub objects_retained: usize,
     pub objects_reclaimed: usize,
     pub canonical_bytes_retained: u64,
+    pub canonical_bytes_retained_saturated: bool,
     pub preparation: PreparationObservation,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disk: Option<PackCompactionReceipt>,
@@ -113,6 +136,8 @@ fn receipt(
     disk: Option<PackCompactionReceipt>,
 ) -> GarbageCollectionReceipt {
     let objects = &collected.objects;
+    let (canonical_bytes_retained, canonical_bytes_retained_saturated) =
+        canonical_byte_observation(objects.values().map(|bytes| bytes.len() as u64));
     GarbageCollectionReceipt {
         operation: "gc",
         status: "compacted",
@@ -120,9 +145,8 @@ fn receipt(
         objects_before: before,
         objects_retained: objects.len(),
         objects_reclaimed: before.saturating_sub(objects.len()),
-        canonical_bytes_retained: objects.values().fold(0_u64, |total, bytes| {
-            total.saturating_add(bytes.len() as u64)
-        }),
+        canonical_bytes_retained,
+        canonical_bytes_retained_saturated,
         preparation: collected.preparation,
         disk,
     }

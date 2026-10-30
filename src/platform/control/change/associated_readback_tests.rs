@@ -9,7 +9,7 @@ use crate::platform::semantic_id::{AssociatedTypeMemberId, ImplementationParamet
 
 #[test]
 fn raw_candidate_associated_readback_preserves_exact_coordinates_unused_inventory_and_observations()
- {
+{
     let temporary = tempfile::tempdir().unwrap();
     let base = k::tests::witness_snapshot();
     let created = GraphRepository::create(&temporary.path().join("ordinary"), &base, None).unwrap();
@@ -102,7 +102,10 @@ fn raw_candidate_associated_readback_preserves_exact_coordinates_unused_inventor
         }
     );
     // Two member entries, two bindings, and each of the two raw type occurrences.
-    assert_eq!(reader.type_nodes, crate::platform::change::budget::BudgetCounter::exact(6));
+    assert_eq!(
+        reader.type_nodes,
+        crate::platform::change::budget::BudgetCounter::exact(6)
+    );
     for available in [5, 6] {
         let mut reader = Reader::for_raw_lowered_candidate(
             &view,
@@ -110,9 +113,13 @@ fn raw_candidate_associated_readback_preserves_exact_coordinates_unused_inventor
             BTreeMap::new(),
             types.clone(),
         );
-        reader.type_nodes = crate::platform::change::budget::BudgetCounter::exact(u64::MAX - available);
+        reader.type_nodes =
+            crate::platform::change::budget::BudgetCounter::exact(u64::MAX - available);
         reader.associated_members(&members).unwrap();
-        assert_eq!(reader.associated_bindings(&bindings).unwrap(), authored_bindings);
+        assert_eq!(
+            reader.associated_bindings(&bindings).unwrap(),
+            authored_bindings
+        );
         assert_eq!(reader.type_nodes.consumed, u64::MAX);
         assert_eq!(reader.type_nodes.saturated, available < 6);
     }

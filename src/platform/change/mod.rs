@@ -38,9 +38,9 @@ pub(crate) use base_read::{BudgetedCanonicalBase, BudgetedWitnessBase};
 pub use budget::{
     AuthoredChangeAdmission, CanonicalEditAdmission, CanonicalEditWork,
     CanonicalMapUpdateAdmission, CanonicalMapUpdateWork, CanonicalReadAdmission, ChangeBudget,
-    ChangeBudgetWork, ImpactAdmission, StagingAdmission,
-    StagingBudgetWork, TestAdmission, TestBudgetWork, ValidationAdmission, ValidationBudgetWork,
-    WitnessReadAdmission, WitnessUpdateAdmission, WitnessUpdateWork, WorkSaturation,
+    ChangeBudgetWork, ImpactAdmission, StagingAdmission, StagingBudgetWork, TestAdmission,
+    TestBudgetWork, ValidationAdmission, ValidationBudgetWork, WitnessReadAdmission,
+    WitnessUpdateAdmission, WitnessUpdateWork, WorkSaturation,
 };
 pub(crate) use budget::{BudgetCounter, BudgetDimension, minimum_limit, optional_usize};
 pub use delta::{CanonicalDelta, CanonicalNormalization, ExactEdit, PrimitiveEdit};
@@ -85,10 +85,9 @@ pub use request::{
     AuthoredRequirementParameter, AuthoredRequirementReference, AuthoredResourceLimit,
     AuthoredResultRelation, AuthoredSelectedPrecondition, AuthoredStructuralTypeField,
     AuthoredTransactionOutcomeContract, AuthoredType, AuthoredTypeParameter,
-    AuthoredTypeParameterReference, DeclarationSelector,
-    ModuleSelector, OwnerSelector, ParameterParentSelector,
-    ResolvedOwnerReference, ResolvedReferenceBindings, ResolvedReferencePackage,
-    lower_authored_changes,
+    AuthoredTypeParameterReference, DeclarationSelector, ModuleSelector, OwnerSelector,
+    ParameterParentSelector, ResolvedOwnerReference, ResolvedReferenceBindings,
+    ResolvedReferencePackage, lower_authored_changes,
 };
 pub(crate) use request::{
     canonical_authored_budget_bytes, canonical_authored_intent_bytes,

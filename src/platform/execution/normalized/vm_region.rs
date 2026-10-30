@@ -1,8 +1,8 @@
 //! Bytecode region execution. Checked values retain exact prepared types while
 //! the region owner checks live activation custody and every relative offset.
 use super::super::region_value::{self, Layout};
-use super::*;
 use super::super::value::RawValue;
+use super::*;
 use crate::platform::compiler::unit::RegionInstruction as I;
 use crate::platform::kernel::RegionMode;
 
@@ -90,7 +90,9 @@ impl Machine<'_> {
                 };
                 let value = CheckedValue::scalar(
                     self.program,
-                    NormalizedValue::I64(i64::try_from(pointer.offset()).map_err(|_| region_value::error())?),
+                    NormalizedValue::I64(
+                        i64::try_from(pointer.offset()).map_err(|_| region_value::error())?,
+                    ),
                 )?;
                 self.push(value)
             }
@@ -219,7 +221,9 @@ impl Machine<'_> {
                         )
                     }
                     I::Read { .. } | I::Write { .. } => {
-                        let Some(NormalizedValue::RegionPointer { ty, pointer }) = input.as_ref().map(RawValue::as_raw) else {
+                        let Some(NormalizedValue::RegionPointer { ty, pointer }) =
+                            input.as_ref().map(RawValue::as_raw)
+                        else {
                             return Err(region_value::error());
                         };
                         if *ty != pointer_type {
@@ -232,7 +236,14 @@ impl Machine<'_> {
                                 control,
                                 &mut reserve,
                             )?;
-                            arena.write(token, domain, layout.storage, *pointer, &bytes, control)?;
+                            arena.write(
+                                token,
+                                domain,
+                                layout.storage,
+                                *pointer,
+                                &bytes,
+                                control,
+                            )?;
                             let value = CheckedValue::scalar(self.program, NormalizedValue::Unit)?;
                             return self.push(value);
                         }
@@ -249,7 +260,9 @@ impl Machine<'_> {
                         )
                     }
                     I::Resolve { .. } => {
-                        let Some(NormalizedValue::I64(offset)) = input.as_ref().map(RawValue::as_raw) else {
+                        let Some(NormalizedValue::I64(offset)) =
+                            input.as_ref().map(RawValue::as_raw)
+                        else {
                             return Err(region_value::error());
                         };
                         let offset = u64::try_from(*offset).map_err(|_| region_value::error())?;

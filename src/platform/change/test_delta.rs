@@ -11,8 +11,7 @@ use crate::platform::kernel::{
     ExactOwnerKey, OwnerKey, OwnerKind, OwnerRecord, PropagationClass, RelationEndpoint,
 };
 use crate::platform::witness::{
-    OwnershipEntry, OwnershipParent, TestDependency,
-    aggregation_children_with_bindings,
+    OwnershipEntry, OwnershipParent, TestDependency, aggregation_children_with_bindings,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -68,7 +67,10 @@ impl Default for TestDependencyAdmission {
             budget.impact.maximum_relation_edges,
             budget.impact.maximum_relation_fanout,
             budget.witness_reads.maximum_decoded_records,
-            budget.witness_update.maximum_edits.map(|maximum| maximum / 2),
+            budget
+                .witness_update
+                .maximum_edits
+                .map(|maximum| maximum / 2),
         )
     }
 }
@@ -193,8 +195,13 @@ fn candidate_test_dependencies<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
         if visited.contains(&owner) {
             continue;
         }
-        work.saturation.charge(&mut work.owners_visited, BudgetDimension::TestOwnersVisited,
-            BudgetCounter::exact(1), admission.tests.maximum_owners_visited, "test dependency traversal")?;
+        work.saturation.charge(
+            &mut work.owners_visited,
+            BudgetDimension::TestOwnersVisited,
+            BudgetCounter::exact(1),
+            admission.tests.maximum_owners_visited,
+            "test dependency traversal",
+        )?;
         visited.insert(owner);
         let record = overlay.owner(owner)?.ok_or_else(|| {
             test_error(
@@ -218,15 +225,24 @@ fn candidate_test_dependencies<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead
             .filter(|(role, _)| role.aggregates_into_parent())
             .map(|(_, child)| child),
         );
-        let remaining_relations = work.saturation
+        let remaining_relations = work
+            .saturation
             .counter(BudgetDimension::RelationEdges, work.relation_edges_visited)
-            .remaining(admission.maximum_relation_edges, "test dependency traversal", "relation_edges")?;
+            .remaining(
+                admission.maximum_relation_edges,
+                "test dependency traversal",
+                "relation_edges",
+            )?;
         let relation_read = relations.outgoing(
             owner,
             remaining_relations,
             admission.maximum_relation_fanout,
         )?;
-        work.saturation.observe(&mut work.relation_edges_visited, BudgetDimension::RelationEdges, relation_read.edges_examined);
+        work.saturation.observe(
+            &mut work.relation_edges_visited,
+            BudgetDimension::RelationEdges,
+            relation_read.edges_examined,
+        );
         for edge in relation_read.edges {
             if matches!(
                 edge.kind.propagation(),
@@ -329,17 +345,35 @@ impl<'a, W: WitnessBaseRead + ?Sized> CandidateTestWitness<'a, W> {
         maximum_per_test: Option<u64>,
     ) -> Result<BTreeSet<TestDependency>, Diagnostic> {
         if let Some(cached) = self.dependencies.get(&test) {
+            super::budget::check_dimension(
+                "cached test dependency prefix",
+                "test_dependencies_per_test",
+                cached.len() as u64,
+                maximum_per_test,
+            )?;
             return Ok(cached.clone());
         }
-        let remaining_records = self.work.observation(BudgetDimension::WitnessDecodedRecords,
-            self.work.witness_records_decoded).remaining(self.maximum_witness_records,
-                "test dependency reads", "witness_decoded_records")?;
+        let remaining_records = self
+            .work
+            .observation(
+                BudgetDimension::WitnessDecodedRecords,
+                self.work.witness_records_decoded,
+            )
+            .remaining(
+                self.maximum_witness_records,
+                "test dependency reads",
+                "witness_decoded_records",
+            )?;
         let maximum_items = minimum_limit(maximum_per_test, remaining_records);
-        let read = self.base.read_test_dependencies(test,
-            optional_usize(maximum_items, "test_dependencies_per_test")?)?;
+        let read = self.base.read_test_dependencies(
+            test,
+            optional_usize(maximum_items, "test_dependencies_per_test")?,
+        )?;
         self.work.add(read.work);
         if read.value.truncated {
-            let (code, limit) = if remaining_records.is_some_and(|records| maximum_per_test.is_none_or(|per_test| records < per_test)) {
+            let (code, limit) = if remaining_records
+                .is_some_and(|records| maximum_per_test.is_none_or(|per_test| records < per_test))
+            {
                 ("change_budget_witness_decoded_records", remaining_records)
             } else {
                 ("change_budget_test_dependencies_per_test", maximum_per_test)
@@ -366,7 +400,12 @@ fn admit_dependency_change(
     }
     let mut observed = BudgetCounter::exact(destination.len() as u64);
     observed.observe(BudgetCounter::exact(other.len() as u64));
-    observed.charge(BudgetCounter::exact(1), maximum, "test dependency delta", "witness_edits")?;
+    observed.charge(
+        BudgetCounter::exact(1),
+        maximum,
+        "test dependency delta",
+        "witness_edits",
+    )?;
     destination.insert(dependency);
     Ok(())
 }
@@ -379,7 +418,9 @@ fn admit_test_dependency(
     if dependencies.contains(&dependency) {
         return Ok(());
     }
-    if let Some(maximum) = maximum && dependencies.len() as u64 >= maximum {
+    if let Some(maximum) = maximum
+        && dependencies.len() as u64 >= maximum
+    {
         return Err(test_resource_error(
             "change_budget_test_dependencies_per_test",
             format!(
@@ -401,8 +442,13 @@ fn owning_declaration<W: WitnessBaseRead + ?Sized>(
     let mut current = owner;
     let mut observed = BTreeSet::new();
     loop {
-        work.saturation.charge(&mut work.ownership_steps, BudgetDimension::TestOwnershipSteps,
-            BudgetCounter::exact(1), admission.maximum_ownership_steps, "test ownership traversal")?;
+        work.saturation.charge(
+            &mut work.ownership_steps,
+            BudgetDimension::TestOwnershipSteps,
+            BudgetCounter::exact(1),
+            admission.maximum_ownership_steps,
+            "test ownership traversal",
+        )?;
         if matches!(current, OwnerKey::Declaration(_)) {
             return Ok(Some(current));
         }
@@ -430,7 +476,9 @@ fn admit_test(
     if selected.contains(&test) {
         return Ok(());
     }
-    if let Some(maximum) = maximum && selected.len() as u64 >= maximum {
+    if let Some(maximum) = maximum
+        && selected.len() as u64 >= maximum
+    {
         return Err(test_resource_error(
             "change_budget_tests_selected",
             format!("test selection exceeds the declared {maximum}-test budget"),
@@ -466,6 +514,48 @@ mod tests {
     use super::*;
     use crate::platform::kernel::{ExactOwnerKey, RelationKind};
     use crate::platform::semantic_id::DeclarationId;
+
+    #[test]
+    fn test_dependency_policies_apply_to_cold_and_cached_reads() {
+        let snapshot = crate::platform::kernel::tests::witness_snapshot();
+        let witness =
+            crate::platform::witness::rebuild_full_witness(&snapshot).expect("base witness");
+        let test = witness
+            .entries
+            .test_dependencies
+            .iter()
+            .next()
+            .expect("a fixture test dependency")
+            .test;
+        let derived = DerivedDelta::default();
+        let mut cached = CandidateTestWitness::new(&derived, &witness, None);
+        let complete = cached
+            .test_dependencies(test, None)
+            .expect("unbounded dependencies");
+        let count = complete.len() as u64;
+        assert!(count > 0);
+        for maximum in [None, Some(0), Some(count - 1), Some(count), Some(u64::MAX)] {
+            let mut cold = CandidateTestWitness::new(&derived, &witness, None);
+            let before = cached.work();
+            for result in [
+                cold.test_dependencies(test, maximum),
+                cached.test_dependencies(test, maximum),
+            ] {
+                if maximum.is_some_and(|maximum| maximum < count) {
+                    assert_eq!(
+                        result.unwrap_err().code,
+                        "change_budget_test_dependencies_per_test"
+                    );
+                } else {
+                    assert_eq!(
+                        result.expect("complete dependencies fit their policy"),
+                        complete
+                    );
+                }
+            }
+            assert_eq!(cached.work(), before, "cached reads perform no witness I/O");
+        }
+    }
 
     #[test]
     fn candidate_test_dependencies_admit_before_insertion() {
@@ -507,5 +597,11 @@ mod tests {
             "change_budget_test_dependencies_per_test"
         );
         assert_eq!(dependencies.len(), 1);
+        for maximum in [None, Some(u64::MAX)] {
+            let mut unbounded = dependencies.clone();
+            admit_test_dependency(&mut unbounded, second, maximum)
+                .expect("unbounded and maximum finite policies admit the second dependency");
+            assert_eq!(unbounded.len(), 2);
+        }
     }
 }

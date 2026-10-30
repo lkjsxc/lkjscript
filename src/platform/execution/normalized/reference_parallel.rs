@@ -1566,14 +1566,34 @@ impl NormalizedReferenceObservation {
     fn include_child(&mut self, child: &Self) {
         macro_rules! add { ($($field:ident),* $(,)?) => { $(self.$field = self.$field.saturating_add(child.$field);)* }; }
         macro_rules! maximum { ($($field:ident),* $(,)?) => { $(self.$field = self.$field.max(child.$field);)* }; }
+        crate::platform::execution::cumulative_observe(
+            &mut self.expressions,
+            &mut self.expressions_saturated,
+            child.expressions,
+            child.expressions_saturated,
+        );
+        crate::platform::execution::cumulative_observe(
+            &mut self.capability_calls,
+            &mut self.capability_calls_saturated,
+            child.capability_calls,
+            child.capability_calls_saturated,
+        );
+        crate::platform::execution::cumulative_observe(
+            &mut self.allocated_bytes,
+            &mut self.allocated_bytes_saturated,
+            child.allocated_bytes,
+            child.allocated_bytes_saturated,
+        );
+        crate::platform::execution::cumulative_observe(
+            &mut self.collection_items,
+            &mut self.collection_items_saturated,
+            child.collection_items,
+            child.collection_items_saturated,
+        );
         add!(
-            expressions,
             calls,
             external_calls,
-            capability_calls,
-            allocated_bytes,
             allocation_charges,
-            collection_items,
             canonical_owner_reads,
             canonical_map_pages_read,
             canonical_objects_read,
@@ -1589,5 +1609,65 @@ impl NormalizedReferenceObservation {
             maximum_live_allowances
         );
         parallel::include_value_work(&mut self.value_work, &child.value_work);
+    }
+}
+
+#[cfg(test)]
+mod cumulative_observation_tests {
+    use super::*;
+
+    #[test]
+    fn child_observations_preserve_exact_maximum_and_each_saturation_flag() {
+        let mut parent = NormalizedReferenceObservation {
+            expressions: u64::MAX - 1,
+            capability_calls: u64::MAX - 1,
+            allocated_bytes: u64::MAX - 1,
+            collection_items: u64::MAX - 1,
+            ..NormalizedReferenceObservation::default()
+        };
+        let child = NormalizedReferenceObservation {
+            expressions: 1,
+            capability_calls: 1,
+            allocated_bytes: 1,
+            collection_items: 1,
+            ..NormalizedReferenceObservation::default()
+        };
+        parent.include_child(&child);
+        assert_eq!(parent.expressions, u64::MAX);
+        assert!(!parent.expressions_saturated);
+        assert_eq!(parent.capability_calls, u64::MAX);
+        assert!(!parent.capability_calls_saturated);
+        assert_eq!(parent.allocated_bytes, u64::MAX);
+        assert!(!parent.allocated_bytes_saturated);
+        assert_eq!(parent.collection_items, u64::MAX);
+        assert!(!parent.collection_items_saturated);
+        parent.include_child(&child);
+        assert_eq!(parent.expressions, u64::MAX);
+        assert!(parent.expressions_saturated);
+        assert_eq!(parent.capability_calls, u64::MAX);
+        assert!(parent.capability_calls_saturated);
+        assert_eq!(parent.allocated_bytes, u64::MAX);
+        assert!(parent.allocated_bytes_saturated);
+        assert_eq!(parent.collection_items, u64::MAX);
+        assert!(parent.collection_items_saturated);
+        let mut inherited = NormalizedReferenceObservation::default();
+        inherited.include_child(&parent);
+        assert_eq!(inherited.expressions, u64::MAX);
+        assert!(inherited.expressions_saturated);
+        assert_eq!(inherited.capability_calls, u64::MAX);
+        assert!(inherited.capability_calls_saturated);
+        assert_eq!(inherited.allocated_bytes, u64::MAX);
+        assert!(inherited.allocated_bytes_saturated);
+        assert_eq!(inherited.collection_items, u64::MAX);
+        assert!(inherited.collection_items_saturated);
+        let serialized = serde_json::to_value(&inherited).unwrap();
+        for field in [
+            "expressions_saturated",
+            "capability_calls_saturated",
+            "allocated_bytes_saturated",
+            "collection_items_saturated",
+        ] {
+            assert_eq!(serialized[field], serde_json::Value::Bool(true));
+        }
     }
 }

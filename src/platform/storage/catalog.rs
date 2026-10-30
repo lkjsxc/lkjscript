@@ -351,12 +351,12 @@ impl PackDescriptor {
     }
 
     fn validate(&self) -> Result<(), StoreError> {
-        if self.byte_length == 0
-            || self.byte_length > contract::MAXIMUM_PACK_BYTES as u64
-            || self.payload_bytes > self.byte_length
-            || self.entries == 0
-            || self.entries > contract::MAXIMUM_PACK_ENTRIES as u64
-        {
+        let framed_length = self
+            .entries
+            .checked_mul(super::pack::INDEX_ENTRY_BYTES as u64)
+            .and_then(|index| index.checked_add(self.payload_bytes))
+            .and_then(|length| length.checked_add(super::pack::MINIMUM_PACK_BYTES as u64));
+        if self.entries == 0 || framed_length != Some(self.byte_length) {
             return Err(resource(
                 "catalog_pack_descriptor",
                 "catalog pack descriptor is outside typed bounds",
@@ -1486,8 +1486,10 @@ fn decode_history(bytes: &[u8], offset: usize) -> Result<CatalogHistory, StoreEr
 }
 
 fn validate_location(key: ObjectKey, location: CatalogLocation) -> Result<(), StoreError> {
-    if location.length > key.domain.maximum_bytes() as u64
-        || location.length > contract::MAXIMUM_PACK_ENTRY_BYTES as u64
+    if key
+        .domain
+        .maximum_bytes()
+        .is_some_and(|maximum| location.length > maximum as u64)
     {
         return Err(resource(
             "catalog_object_size",

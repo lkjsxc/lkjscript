@@ -11,7 +11,8 @@ use super::summary_build::build_owner_summaries;
 use super::{OwnerSummaryDigest, ValidationWitnessDigest, witness_error};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
-    FullValidationReport, KernelSnapshot, OwnerKey, RelationEdge, extract_relations, validate_full,
+    FullValidationReport, KernelSnapshot, OwnerKey, RelationEdge,
+    extract_relations_with_fanout_limit, validate_full,
 };
 use crate::platform::persistent_map::{
     MapError, MapErrorClass, MapRoot, MapWork, MemoryPageStore, PersistentMap,
@@ -57,6 +58,14 @@ pub struct WitnessBuildReport {
     pub map_work: MapWork,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct WitnessRebuildAdmission {
+    /// Unique outgoing relations retained for each owner during full summary reconstruction.
+    pub maximum_owner_fanout: Option<u64>,
+    /// Unique external dependencies retained for each test in the full repair frontier.
+    pub maximum_dependencies_per_test: Option<u64>,
+}
+
 pub fn rebuild_full_witness(snapshot: &KernelSnapshot) -> Result<FullWitness, Vec<Diagnostic>> {
     let full_validation = validate_full(snapshot)?;
     build_validated_witness(snapshot, full_validation).map_err(|diagnostic| vec![diagnostic])
@@ -86,12 +95,30 @@ pub(crate) fn rebuild_full_witness_checked(
     maximum_work: Option<usize>,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
 ) -> Result<FullWitness, Vec<Diagnostic>> {
-    let validation =
-        crate::platform::kernel::validate_full_checked(snapshot, maximum_work, &mut crate::platform::kernel::ValidationWork::default(), checkpoint)?;
+    rebuild_full_witness_checked_with_admission(
+        snapshot,
+        maximum_work,
+        WitnessRebuildAdmission::default(),
+        checkpoint,
+    )
+}
+
+pub(crate) fn rebuild_full_witness_checked_with_admission(
+    snapshot: &KernelSnapshot,
+    maximum_work: Option<usize>,
+    admission: WitnessRebuildAdmission,
+    checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+) -> Result<FullWitness, Vec<Diagnostic>> {
+    let validation = crate::platform::kernel::validate_full_checked(
+        snapshot,
+        maximum_work,
+        &mut crate::platform::kernel::ValidationWork::default(),
+        checkpoint,
+    )?;
     #[cfg(test)]
     CHECKED_FULL_VALIDATIONS.with(|count| count.set(count.get().saturating_add(1)));
-    let witness =
-        build_validated_witness(snapshot, validation).map_err(|diagnostic| vec![diagnostic])?;
+    let witness = build_validated_witness_with_admission(snapshot, validation, admission)
+        .map_err(|diagnostic| vec![diagnostic])?;
     checkpoint().map_err(|error| vec![error])?;
     Ok(witness)
 }
@@ -194,6 +221,18 @@ fn build_validated_witness(
     snapshot: &KernelSnapshot,
     full_validation: FullValidationReport,
 ) -> Result<FullWitness, Diagnostic> {
+    build_validated_witness_with_admission(
+        snapshot,
+        full_validation,
+        WitnessRebuildAdmission::default(),
+    )
+}
+
+fn build_validated_witness_with_admission(
+    snapshot: &KernelSnapshot,
+    full_validation: FullValidationReport,
+    admission: WitnessRebuildAdmission,
+) -> Result<FullWitness, Diagnostic> {
     let CanonicalWitnessFacts {
         summaries,
         summary_objects,
@@ -201,7 +240,7 @@ fn build_validated_witness(
         pages,
         map_work,
         roots,
-    } = rebuild_canonical_facts(snapshot)?;
+    } = rebuild_canonical_facts_with_admission(snapshot, admission)?;
     let (semantic_root, _) = crate::platform::kernel::encode_root(&snapshot.root)?;
     let (manifest, manifest_digest, manifest_bytes) = bind_witness_manifest(
         snapshot.root.repository_id,
@@ -248,11 +287,19 @@ pub(crate) struct CanonicalWitnessFacts {
 pub(crate) fn rebuild_canonical_facts(
     snapshot: &KernelSnapshot,
 ) -> Result<CanonicalWitnessFacts, Diagnostic> {
-    let relations = extract_relations(
+    rebuild_canonical_facts_with_admission(snapshot, WitnessRebuildAdmission::default())
+}
+
+fn rebuild_canonical_facts_with_admission(
+    snapshot: &KernelSnapshot,
+    admission: WitnessRebuildAdmission,
+) -> Result<CanonicalWitnessFacts, Diagnostic> {
+    let relations = extract_relations_with_fanout_limit(
         snapshot.root.package_id,
         &snapshot.owners,
         &snapshot.types,
         &snapshot.dependencies,
+        admission.maximum_owner_fanout,
     )?;
     let ownership = derive_ownership(snapshot)?;
     let namespaces = derive_namespaces(snapshot)?;
@@ -274,7 +321,12 @@ pub(crate) fn rebuild_canonical_facts(
         summary_bindings.insert(*owner, digest);
     }
 
-    let test_dependencies = derive_test_dependencies(snapshot, &ownership, &relations)?;
+    let test_dependencies = derive_test_dependencies(
+        snapshot,
+        &ownership,
+        &relations,
+        admission.maximum_dependencies_per_test,
+    )?;
     let mut test_dependencies_by_test = BTreeMap::<OwnerKey, BTreeSet<TestDependency>>::new();
     for dependency in &test_dependencies {
         test_dependencies_by_test

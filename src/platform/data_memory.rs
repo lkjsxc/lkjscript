@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn memory_transactions_preserve_snapshot_cas_namespaces_and_ordered_scans() {
-        let memory = crate::platform::MemProjectStore::new(1_048_576).unwrap();
+        let memory = crate::platform::MemProjectStore::new(None).unwrap();
         let store = memory.data_store("app", DataLimits::default()).unwrap();
         let empty = store.begin().unwrap();
         let mut first = store.begin().unwrap();
@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn memory_forks_share_data_history_and_isolate_later_transactions() {
-        let memory = crate::platform::MemProjectStore::new(1_048_576).unwrap();
+        let memory = crate::platform::MemProjectStore::new(None).unwrap();
         let store = memory.data_store("app", DataLimits::default()).unwrap();
         let mut initial = store.begin().unwrap();
         initial
@@ -442,7 +442,7 @@ mod tests {
 
     #[test]
     fn memory_quota_failure_keeps_revision_and_capacity_unchanged() {
-        let memory = crate::platform::MemProjectStore::new(8_192).unwrap();
+        let memory = crate::platform::MemProjectStore::new(Some(8_192)).unwrap();
         let store = memory.data_store("app", DataLimits::default()).unwrap();
         let before = memory.used_bytes();
         let head = store.current_revision().unwrap();
@@ -475,7 +475,7 @@ mod tests {
             CommitCheckpoint::HeadPublished,
             CommitCheckpoint::RootSynced,
         ] {
-            let memory = crate::platform::MemProjectStore::new(1_048_576).unwrap();
+            let memory = crate::platform::MemProjectStore::new(None).unwrap();
             let store = memory.data_store("app", DataLimits::default()).unwrap();
             let before = store.current_revision().unwrap();
             let mut transaction = store.begin().unwrap();
@@ -516,7 +516,7 @@ mod tests {
 
     #[test]
     fn memory_admission_and_corruption_release_live_transaction_slots() {
-        let memory = crate::platform::MemProjectStore::new(1_048_576).unwrap();
+        let memory = crate::platform::MemProjectStore::new(None).unwrap();
         let limits = DataLimits {
             maximum_live_transactions: 1,
             ..DataLimits::default()

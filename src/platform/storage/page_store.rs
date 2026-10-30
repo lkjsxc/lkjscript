@@ -84,7 +84,7 @@ impl<S: ImmutableObjectStore + ?Sized> PageStore for ObjectPageReader<'_, S> {
         maximum_bytes: usize,
     ) -> Result<Option<Vec<u8>>, MapError> {
         let key = ObjectKey::from_digest(ObjectDomain::MapPage, digest.bytes());
-        let maximum_bytes = maximum_bytes.min(crate::platform::persistent_map::MAXIMUM_PAGE_BYTES);
+        let maximum_bytes = Some(maximum_bytes);
         let mut work = self.work.borrow_mut();
         match &self.admission {
             Some(admission) => self.objects.read_admitted(
@@ -140,11 +140,7 @@ impl<S: ImmutableObjectStore> PageStore for ObjectPageStore<S> {
     ) -> Result<Option<Vec<u8>>, MapError> {
         let key = ObjectKey::from_digest(ObjectDomain::MapPage, digest.bytes());
         self.objects
-            .read(
-                key,
-                maximum_bytes.min(crate::platform::persistent_map::MAXIMUM_PAGE_BYTES),
-                &mut self.work.borrow_mut(),
-            )
+            .read(key, Some(maximum_bytes), &mut self.work.borrow_mut())
             .map_err(map_error)
     }
 

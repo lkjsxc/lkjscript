@@ -390,7 +390,7 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
     schema_field(
         "execution.instruction_fuel",
         "null|u64",
-        Some(1),
+        Some(0),
         Some(u64::MAX),
         false,
         None,
@@ -414,7 +414,7 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
     optional_schema_field(
         "execution.maximum_allocated_bytes",
         "null|u64",
-        Some(1),
+        Some(0),
         Some(u64::MAX),
         false,
         None,
@@ -422,7 +422,7 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
     optional_schema_field(
         "execution.maximum_collection_items",
         "null|u64",
-        Some(1),
+        Some(0),
         Some(u64::MAX),
         false,
         None,
@@ -430,7 +430,7 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
     optional_schema_field(
         "execution.maximum_capability_calls",
         "null|u64",
-        Some(1),
+        Some(0),
         Some(u64::MAX),
         false,
         None,
@@ -2274,19 +2274,11 @@ fn validate_descriptor(descriptor: &DeploymentDescriptor) -> Result<(), Diagnost
         return Err(missing_resident_policy());
     }
     if descriptor.execution.is_some_and(|execution| {
-        [
-            execution.instruction_fuel,
-            execution.maximum_allocated_bytes,
-            execution.maximum_collection_items,
-            execution.maximum_capability_calls,
-        ]
-        .contains(&Some(0))
-            || execution.maximum_call_depth == 0
-            || execution.maximum_value_stack == 0
+        execution.maximum_call_depth == 0 || execution.maximum_value_stack == 0
     }) {
         return Err(deployment_error(
             "deployment_execution_limit",
-            "specified cumulative quotas, call depth, and value stack limits must be positive",
+            "call depth and value stack limits must be positive",
         ));
     }
     if let Some(http) = &descriptor.http {

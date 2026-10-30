@@ -740,11 +740,13 @@ fn reject_kernel_view_escape<R: ExpressionRead + ?Sized>(
     use crate::platform::kernel::owned_associated::{
         AssociatedAdmissionLimits, OwnedAssociatedAdmission, read_view_admission,
     };
-    let exhausted = || Diagnostic::new(
-        DiagnosticClass::Resource,
-        "kernel_full_work",
-        "intrinsic signature exhausted canonical validation visits",
-    );
+    let exhausted = || {
+        Diagnostic::new(
+            DiagnosticClass::Resource,
+            "kernel_full_work",
+            "intrinsic signature exhausted canonical validation visits",
+        )
+    };
     let remaining = match maximum {
         Some(maximum) => {
             if work.saturated {
@@ -928,8 +930,14 @@ mod read_view_boundary_tests {
             view, associated, projected, nested, hidden, inactive, phantom,
         ] {
             let mut work = ValidationWork::default();
-            let error = kernel_type(&read, root, 0, &mut work, Some(contract::MAXIMUM_VALIDATION_WORK))
-                .unwrap_err();
+            let error = kernel_type(
+                &read,
+                root,
+                0,
+                &mut work,
+                Some(contract::MAXIMUM_VALIDATION_WORK),
+            )
+            .unwrap_err();
             assert_eq!(error.class, DiagnosticClass::Semantic);
             assert_eq!(error.code, "intrinsic_signature");
             assert!(error.message.contains("read views"));
@@ -937,10 +945,18 @@ mod read_view_boundary_tests {
         }
         let mut work = ValidationWork::default();
         assert_eq!(
-            kernel_type(&read, unit, 0, &mut work, Some(contract::MAXIMUM_VALIDATION_WORK)).unwrap(),
+            kernel_type(
+                &read,
+                unit,
+                0,
+                &mut work,
+                Some(contract::MAXIMUM_VALIDATION_WORK)
+            )
+            .unwrap(),
             IntrinsicType::Unit
         );
-        let error = kernel_type(&read, unit, 0, &mut ValidationWork::default(), Some(0)).unwrap_err();
+        let error =
+            kernel_type(&read, unit, 0, &mut ValidationWork::default(), Some(0)).unwrap_err();
         assert_eq!(error.class, DiagnosticClass::Resource);
     }
 }

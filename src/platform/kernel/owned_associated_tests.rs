@@ -1864,7 +1864,10 @@ fn owned_associated_repeated_deep_walks_reuse_queue_storage_with_exact_contexts(
             .expect("valid repeated near-boundary traversal fits the existing budget");
     }
     let (steps, bytes) = associated.work();
-    assert!(steps > 1_000 && bytes < 64 * 1_048_576, "fixture metadata regression bound");
+    assert!(
+        steps > 1_000 && bytes < 64 * 1_048_576,
+        "fixture metadata regression bound"
+    );
     assert!(!associated.metadata_observation().saturated);
     // A different read is not a cache hit even when semantic coordinates match.
     let form = projection(&f, f.lexical);
@@ -1940,7 +1943,12 @@ fn owned_associated_nominal_absence_keeps_scope_independent_work_within_shared_s
             GENERATION,
         )
         .expect("all256 exact nominal fields fit without unused per-declaration absence scopes");
-    assert!(admission.work().1 < limits.maximum_metadata_bytes.expect("explicit test allowance"));
+    assert!(
+        admission.work().1
+            < limits
+                .maximum_metadata_bytes
+                .expect("explicit test allowance")
+    );
 
     // A shallower visit to Unit never suppresses a later depth refusal. Depth is
     // checked before the shared absence key may skip a completed ordinary node.
@@ -2164,7 +2172,6 @@ fn owned_associated_raw_nominal_field_and_case_generations_remain_exact() {
     }
 }
 
-
 #[test]
 fn associated_default_metadata_is_unbounded_and_explicit_maximum_remains_finite() {
     let defaults = AssociatedAdmissionLimits::default();
@@ -2182,7 +2189,10 @@ fn associated_default_metadata_is_unbounded_and_explicit_maximum_remains_finite(
     });
     finite.reserve_bytes(usize::MAX).unwrap();
     assert!(finite.reserve_bytes(1).is_err());
-    assert_eq!(finite.metadata_observation(), ValidationWork::exact(usize::MAX));
+    assert_eq!(
+        finite.metadata_observation(),
+        ValidationWork::exact(usize::MAX)
+    );
     let zero = OwnedAssociatedAdmission::with_limits(AssociatedAdmissionLimits {
         maximum_metadata_bytes: Some(0),
         ..defaults

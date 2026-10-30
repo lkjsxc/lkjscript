@@ -235,26 +235,36 @@ fn byte_storage_cancelled_copy_never_mutates_retained_payload_or_keys() {
     assert!(cancelled > 1 && completed > 0);
 }
 
-
 #[test]
 fn byte_storage_unbounded_and_exact_value_limits_remain_distinct() {
     let former = 256 * 1024 * 1024;
     assert!(admit_length(former + 1, None).is_ok());
     assert!(admit_length(former + 1, Some(former as u64)).is_err());
-    assert_eq!(growth_capacity(former, former + 1, None).unwrap(), former * 2);
+    assert_eq!(
+        growth_capacity(former, former + 1, None).unwrap(),
+        former * 2
+    );
     assert_eq!(
         growth_capacity(former, former + 1, Some(former as u64 + 1)).unwrap(),
         former + 1
     );
     let maximum = isize::MAX as usize;
-    assert_eq!(growth_capacity(maximum - 1, maximum, None).unwrap(), maximum);
+    assert_eq!(
+        growth_capacity(maximum - 1, maximum, None).unwrap(),
+        maximum
+    );
     assert!(admit_length(maximum + 1, None).is_err());
     for maximum in [None, Some(2), Some(u64::MAX)] {
         let mut work = Work::default();
-        let result = BytePayload::from([1]).concat(
-            [2].into(), maximum, &ExecutionControl::uncancelled(),
-            &mut |_| Ok(()), &mut work,
-        ).unwrap();
+        let result = BytePayload::from([1])
+            .concat(
+                [2].into(),
+                maximum,
+                &ExecutionControl::uncancelled(),
+                &mut |_| Ok(()),
+                &mut work,
+            )
+            .unwrap();
         assert_eq!(result.as_ref(), &[1, 2]);
     }
     for (left, right, maximum, accepted) in [
@@ -263,8 +273,11 @@ fn byte_storage_unbounded_and_exact_value_limits_remain_distinct() {
         (vec![1], vec![2], Some(1), false),
     ] {
         let result = BytePayload::from(left).concat(
-            right.into(), maximum, &ExecutionControl::uncancelled(),
-            &mut |_| Ok(()), &mut Work::default(),
+            right.into(),
+            maximum,
+            &ExecutionControl::uncancelled(),
+            &mut |_| Ok(()),
+            &mut Work::default(),
         );
         assert_eq!(result.is_ok(), accepted);
     }
@@ -272,12 +285,20 @@ fn byte_storage_unbounded_and_exact_value_limits_remain_distinct() {
 
 #[test]
 fn byte_storage_observation_saturation_is_explicit_and_never_refuses_work() {
-    let mut work = Work { concatenations: u64::MAX - 1, ..Work::default() };
+    let mut work = Work {
+        concatenations: u64::MAX - 1,
+        ..Work::default()
+    };
     for saturated in [false, true] {
-        BytePayload::from([]).concat(
-            [].into(), None, &ExecutionControl::uncancelled(),
-            &mut |_| Ok(()), &mut work,
-        ).unwrap();
+        BytePayload::from([])
+            .concat(
+                [].into(),
+                None,
+                &ExecutionControl::uncancelled(),
+                &mut |_| Ok(()),
+                &mut work,
+            )
+            .unwrap();
         assert_eq!(work.concatenations, u64::MAX);
         assert_eq!(work.saturated, saturated);
     }
@@ -288,11 +309,19 @@ fn byte_storage_cancel_during_reservation_precedes_physical_allocation() {
     let control = ExecutionControl::uncancelled();
     let mut work = Work::default();
     let result = BytePayload::from([1]).concat(
-        [2].into(), None, &control,
-        &mut |_| { control.cancel(); Ok(()) }, &mut work,
+        [2].into(),
+        None,
+        &control,
+        &mut |_| {
+            control.cancel();
+            Ok(())
+        },
+        &mut work,
     );
-    assert_eq!(result.unwrap_err().class,
-        crate::platform::execution::ExecutionFailureClass::Cancelled);
+    assert_eq!(
+        result.unwrap_err().class,
+        crate::platform::execution::ExecutionFailureClass::Cancelled
+    );
     assert_eq!(work.requested_capacity_bytes, 0);
     assert_eq!(work.payload_bytes_copied, 0);
 }

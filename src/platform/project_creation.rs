@@ -399,7 +399,7 @@ fn lower_recipe(
     if recipe.changes.is_empty() && recipe.native_inputs.is_empty() {
         return Ok(empty);
     }
-    let lowering = MemProjectStore::new(256 * 1_048_576)?;
+    let lowering = MemProjectStore::new(None)?;
     let created = GraphRepository::create_memory_with_package_transports(
         &lowering,
         &empty,

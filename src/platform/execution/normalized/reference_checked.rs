@@ -915,30 +915,13 @@ impl ReferenceState<'_> {
         charge: super::super::map::Charge,
     ) -> Result<(), ExecutionError> {
         self.control.check()?;
-        let items = crate::platform::execution::cumulative_charge(
-            self.observation.collection_items,
-            charge.slots,
-            self.policy.maximum_collection_items,
-            "normalized_reference_collection_items",
-            "map storage exceeds collection items",
-        )?;
-        let bytes = crate::platform::execution::cumulative_charge(
-            self.observation.allocated_bytes,
+        charge_reference_storage(
+            self.policy,
+            &mut self.observation,
+            self.shared_budget.as_deref(),
             charge.bytes,
-            self.policy.maximum_allocated_bytes,
-            "normalized_reference_allocation",
-            "map storage exceeds allocated bytes",
-        )?;
-        if let Some(budget) = &self.shared_budget {
-            budget.reserve(charge.bytes, charge.slots)?;
-        }
-        self.observation.collection_items = items;
-        self.observation.allocated_bytes = bytes;
-        if charge.bytes != 0 {
-            self.observation.allocation_charges =
-                self.observation.allocation_charges.saturating_add(1);
-        }
-        Ok(())
+            charge.slots,
+        )
     }
 
     pub(super) fn map_key_value(&mut self, key: Value) -> Result<NormalizedMapKey, ExecutionError> {
@@ -1008,18 +991,13 @@ impl ReferenceState<'_> {
 
     fn reserve_list(&mut self, charge: super::super::list::Charge) -> Result<(), ExecutionError> {
         self.control.check()?;
-        let slots = crate::platform::execution::cumulative_charge(
-            self.observation.collection_items,
+        charge_reference_storage(
+            self.policy,
+            &mut self.observation,
+            self.shared_budget.as_deref(),
+            charge.bytes,
             charge.slots,
-            self.policy.maximum_collection_items,
-            "normalized_reference_collection_items",
-            "list storage exceeds collection items",
-        )?;
-        if let Some(budget) = &self.shared_budget {
-            budget.reserve(0, charge.slots)?;
-        }
-        self.observation.collection_items = slots;
-        self.charge_allocation(charge.bytes)
+        )
     }
 
     pub(super) fn record_value(
@@ -1359,7 +1337,8 @@ impl ReferenceState<'_> {
         input: bool,
     ) -> Result<Ownership, ExecutionError> {
         let mut ownership = None;
-        let mut admission_bytes = 0_u64;
+        // The raw-admission subtotal is passive, with independent exactness.
+        let mut admission_bytes = (0_u64, false);
         let mut admission_items = 0_u64;
         let mut capture_types = BTreeSet::new();
         while let Some((node, mut expected, depth, owner_position, bindings, captured)) =
@@ -1931,14 +1910,14 @@ impl ReferenceState<'_> {
     fn charge_admission_children(
         &mut self,
         admission_items: &mut u64,
-        admission_bytes: &mut u64,
+        admission_bytes: &mut (u64, bool),
         count: usize,
         payload_bytes: usize,
     ) -> Result<(), ExecutionError> {
-        *admission_items = crate::platform::execution::cumulative_charge(
+        let next_items = crate::platform::execution::finite_charge(
             *admission_items,
             count as u64,
-            Some(super::super::value::MAXIMUM_ADMISSION_ITEMS),
+            super::super::value::MAXIMUM_ADMISSION_ITEMS,
             "normalized_reference_collection_items",
             "single raw admission exceeds finite collection items",
         )?;
@@ -1951,32 +1930,41 @@ impl ReferenceState<'_> {
                     "raw admission storage size overflowed",
                 )
             })?;
-        *admission_bytes = crate::platform::execution::cumulative_charge(
-            *admission_bytes,
+        let mut saturated = admission_bytes.1;
+        let next_bytes = crate::platform::execution::cumulative_charge(
+            admission_bytes.0,
             bytes as u64,
             None,
             "normalized_reference_allocation",
             "single raw admission exceeds finite storage",
+            &mut saturated,
         )?;
         self.charge_items(
             count,
             payload_bytes + std::mem::size_of::<ReferenceVisit<'_>>(),
-        )
+        )?;
+        *admission_items = next_items;
+        *admission_bytes = (next_bytes, saturated);
+        Ok(())
     }
 
     fn charge_admission_bytes(
         &mut self,
-        total: &mut u64,
+        total: &mut (u64, bool),
         bytes: u64,
     ) -> Result<(), ExecutionError> {
-        *total = crate::platform::execution::cumulative_charge(
-            *total,
+        let mut saturated = total.1;
+        let next = crate::platform::execution::cumulative_charge(
+            total.0,
             bytes,
             None,
             "normalized_reference_allocation",
             "single raw admission exceeds finite storage",
+            &mut saturated,
         )?;
-        self.charge_allocation(bytes)
+        self.charge_allocation(bytes)?;
+        *total = (next, saturated);
+        Ok(())
     }
 
     pub(super) fn admit_call_arguments(

@@ -322,7 +322,10 @@ impl OwnedAssociatedAdmission {
     }
 
     pub(crate) fn work(&self) -> (usize, usize) {
-        (self.steps.get().consumed, self.metadata_bytes.get().consumed)
+        (
+            self.steps.get().consumed,
+            self.metadata_bytes.get().consumed,
+        )
     }
 
     pub(crate) fn work_observation(&self) -> ValidationWork {
@@ -335,8 +338,14 @@ impl OwnedAssociatedAdmission {
 
     pub(crate) fn reserve<T>(&self, count: usize) -> Result<(), Diagnostic> {
         let mut observed = self.metadata_bytes.get();
-        if !observed.charge_product(count, std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>(), self.limits.maximum_metadata_bytes) {
-            return Err(exhausted("associated type metadata exceeds its explicit storage admission"));
+        if !observed.charge_product(
+            count,
+            std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>(),
+            self.limits.maximum_metadata_bytes,
+        ) {
+            return Err(exhausted(
+                "associated type metadata exceeds its explicit storage admission",
+            ));
         }
         self.metadata_bytes.set(observed);
         Ok(())
@@ -345,7 +354,9 @@ impl OwnedAssociatedAdmission {
     pub(crate) fn reserve_bytes(&self, bytes: usize) -> Result<(), Diagnostic> {
         let mut observed = self.metadata_bytes.get();
         if !observed.charge(bytes, self.limits.maximum_metadata_bytes) {
-            return Err(exhausted("associated type metadata exceeds its explicit storage admission"));
+            return Err(exhausted(
+                "associated type metadata exceeds its explicit storage admission",
+            ));
         }
         self.metadata_bytes.set(observed);
         Ok(())
@@ -1600,7 +1611,9 @@ impl<R: ExpressionRead + ?Sized> ExpressionRead for AssociatedRead<'_, R> {
     fn validation_work(&self) -> Result<(), Diagnostic> {
         let mut steps = self.admission.steps.get();
         if !steps.charge(1, self.admission.limits.maximum_steps) {
-            return Err(exhausted("associated type proof exceeds its work admission"));
+            return Err(exhausted(
+                "associated type proof exceeds its work admission",
+            ));
         }
         self.read.validation_work()?;
         self.admission.steps.set(steps);

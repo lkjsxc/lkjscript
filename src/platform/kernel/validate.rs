@@ -1,7 +1,6 @@
 //! Implementation-disjoint full validator for normalized Graph 10 authority.
 
 use super::affine::validate_affine_meaning;
-use super::work::ValidationWork;
 use super::contract::{
     MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_HTTP_ROUTES_PER_TARGET, MAXIMUM_TYPE_DEPTH,
 };
@@ -16,6 +15,7 @@ use super::owner_namespace;
 use super::relation::{RelationEdge, extract_relations};
 use super::root::{DependencyRecord, RetirementRecord, SemanticRoot};
 use super::type_object::{TypeForm, TypeObject};
+use super::work::ValidationWork;
 use super::{
     BlobObjectDigest, DeclarationReference, HttpRouteRecord, PackageInterfaceDeclarationPayload,
     PackageInterfaceRecord, PackageRevisionDigest, ReadScopeArgument, ReadScopeBinder,

@@ -1,7 +1,6 @@
 //! Single deterministic relation extractor for Graph 14 records.
 
 use super::TypeObjectDigest;
-use super::work::ValidationWork;
 use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference};
 use super::id::{ExactOwnerKey, OwnerKey, PackageId};
 use super::owner::{
@@ -9,6 +8,7 @@ use super::owner::{
 };
 use super::root::DependencyRecord;
 use super::type_object::{TypeForm, TypeObject};
+use super::work::ValidationWork;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -312,7 +312,17 @@ pub fn extract_relations(
     types: &BTreeMap<TypeObjectDigest, TypeObject>,
     dependencies: &BTreeMap<PackageId, DependencyRecord>,
 ) -> Result<Vec<RelationEdge>, Diagnostic> {
-    let mut edges = RelationCollector::new(None);
+    extract_relations_with_fanout_limit(package, owners, types, dependencies, None)
+}
+
+pub(crate) fn extract_relations_with_fanout_limit(
+    package: PackageId,
+    owners: &BTreeMap<OwnerKey, OwnerRecord>,
+    types: &BTreeMap<TypeObjectDigest, TypeObject>,
+    dependencies: &BTreeMap<PackageId, DependencyRecord>,
+    maximum_owner_fanout: Option<u64>,
+) -> Result<Vec<RelationEdge>, Diagnostic> {
+    let mut edges = RelationCollector::with_fanout_limit(None, maximum_owner_fanout);
     let mut work = ValidationWork::default();
     for (key, record) in owners {
         work.charge(1, None);
@@ -362,15 +372,8 @@ where
         crate::platform::semantic_id::CaseId,
     ) -> Result<Option<crate::platform::semantic_id::DeclarationId>, Diagnostic>,
 {
-    extract_owner_relations_with_limit(
-        package,
-        owner,
-        record,
-        type_object,
-        case_parent,
-        None,
-    )
-    .map(|(edges, _)| edges)
+    extract_owner_relations_with_limit(package, owner, record, type_object, case_parent, None)
+        .map(|(edges, _)| edges)
 }
 
 pub fn extract_owner_relations_with_limit<F, C>(
@@ -1513,27 +1516,63 @@ struct RelationCollector {
     examined: u64,
     saturated: bool,
     maximum: Option<u64>,
+    maximum_owner_fanout: Option<u64>,
+    owner_fanout: BTreeMap<ExactOwnerKey, u64>,
 }
 
 impl RelationCollector {
     fn new(maximum: Option<u64>) -> Self {
-        Self { edges: BTreeSet::new(), examined: 0, saturated: false, maximum }
+        Self::with_fanout_limit(maximum, None)
+    }
+
+    fn with_fanout_limit(maximum: Option<u64>, maximum_owner_fanout: Option<u64>) -> Self {
+        Self {
+            edges: BTreeSet::new(),
+            examined: 0,
+            saturated: false,
+            maximum,
+            maximum_owner_fanout,
+            owner_fanout: BTreeMap::new(),
+        }
     }
 
     fn insert(&mut self, edge: RelationEdge) -> Result<(), Diagnostic> {
         let next = self.examined.checked_add(1);
-        if let Some(maximum) = self.maximum {
-            if self.saturated || next.is_none_or(|next| next > maximum) {
-                return Err(Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "kernel_relation_edge_budget",
-                    format!("relation extraction exceeds the declared {maximum}-edge budget"),
-                ));
-            }
+        if let Some(maximum) = self.maximum
+            && (self.saturated || next.is_none_or(|next| next > maximum))
+        {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Resource,
+                "kernel_relation_edge_budget",
+                format!("relation extraction exceeds the declared {maximum}-edge budget"),
+            ));
         }
+        let next_fanout =
+            if let Some(maximum) = self.maximum_owner_fanout
+                && let RelationEndpoint::Owner(source) = edge.source
+                && !self.edges.contains(&edge)
+            {
+                let next = self.owner_fanout.get(&source).copied().unwrap_or(0)
+                .checked_add(1)
+                .filter(|next| *next <= maximum)
+                .ok_or_else(|| Diagnostic::new(
+                    DiagnosticClass::Resource,
+                    "kernel_relation_fanout_budget",
+                    format!("relation extraction exceeds the declared {maximum}-edge owner fanout"),
+                ))?;
+                Some((source, next))
+            } else {
+                None
+            };
         match next {
             Some(next) => self.examined = next,
-            None => { self.examined = u64::MAX; self.saturated = true; }
+            None => {
+                self.examined = u64::MAX;
+                self.saturated = true;
+            }
+        }
+        if let Some((source, count)) = next_fanout {
+            self.owner_fanout.insert(source, count);
         }
         self.edges.insert(edge);
         Ok(())
@@ -1567,4 +1606,67 @@ fn implementation_edge(
         )?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod fanout_admission_tests {
+    use super::*;
+    use crate::platform::semantic_id::DeclarationId;
+
+    #[test]
+    fn full_relation_fanout_admits_unique_edges_before_retention() {
+        let package = PackageId::migrate(b"full-relation-fanout", 0);
+        let source = exact(
+            package,
+            OwnerKey::Declaration(DeclarationId::migrate(b"full-relation-fanout", 1)),
+        );
+        let first = RelationEdge {
+            source: RelationEndpoint::Owner(source),
+            kind: RelationKind::FunctionCall,
+            target: RelationEndpoint::Owner(exact(
+                package,
+                OwnerKey::Declaration(DeclarationId::migrate(b"full-relation-fanout", 2)),
+            )),
+        };
+        let second = RelationEdge {
+            target: RelationEndpoint::Owner(exact(
+                package,
+                OwnerKey::Declaration(DeclarationId::migrate(b"full-relation-fanout", 3)),
+            )),
+            ..first
+        };
+        for maximum in [None, Some(0), Some(1), Some(2), Some(u64::MAX)] {
+            let mut collector = RelationCollector::with_fanout_limit(None, maximum);
+            if maximum == Some(0) {
+                assert_eq!(
+                    collector.insert(first).unwrap_err().code,
+                    "kernel_relation_fanout_budget"
+                );
+                assert!(collector.edges.is_empty());
+                assert!(collector.owner_fanout.is_empty());
+                assert_eq!(collector.examined, 0);
+                continue;
+            }
+            collector.insert(first).expect("first edge fits");
+            collector
+                .insert(first)
+                .expect("an identical edge consumes no additional fanout");
+            let before = (
+                collector.edges.clone(),
+                collector.owner_fanout.clone(),
+                collector.examined,
+            );
+            let result = collector.insert(second);
+            if maximum == Some(1) {
+                assert_eq!(result.unwrap_err().code, "kernel_relation_fanout_budget");
+                assert_eq!(
+                    (collector.edges, collector.owner_fanout, collector.examined),
+                    before
+                );
+            } else {
+                result.expect("second edge fits its policy");
+                assert_eq!(collector.edges.len(), 2);
+            }
+        }
+    }
 }

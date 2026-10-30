@@ -18,10 +18,7 @@ struct Scratch<'a> {
 
 impl Scratch<'_> {
     fn add(&mut self, bytes: u64) -> Result<(), ExecutionError> {
-        self.bytes = self
-            .bytes
-            .checked_add(bytes)
-            .ok_or_else(capacity)?;
+        self.bytes = self.bytes.checked_add(bytes).ok_or_else(capacity)?;
         Ok(())
     }
 

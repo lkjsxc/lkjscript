@@ -83,12 +83,15 @@ capture_bootstrap_source() {
   source_head=$(git rev-parse HEAD) || return "$?"
   source_head_tree=$(git rev-parse 'HEAD^{tree}') || return "$?"
   source_tree=$(git write-tree) || return "$?"
-  source_status=$(git status --porcelain=v1 --untracked-files=all) || return "$?"
+  local bootstrap_status_file="$1.status"
+  git status --porcelain=v1 --untracked-files=all > "$bootstrap_status_file" || return "$?"
   source_mode=committed
   if [[ -n "$expected_tree" ]]; then source_mode=staged-tree; fi
+  # Preserve trailing-LF semantics without passing complete status in one OS argument.
   jq -n --arg source "$source_head" --arg tree "$source_tree" --arg head_tree "$source_head_tree" \
-    --arg mode "$source_mode" --arg status "$source_status" \
-    '{source:$source,tree:$tree,head_tree:$head_tree,mode:$mode,status:$status}' > "$1"
+    --arg mode "$source_mode" --rawfile status "$bootstrap_status_file" \
+    '{source:$source,tree:$tree,head_tree:$head_tree,mode:$mode,
+      status:($status | sub("\n+$"; ""))}' > "$1"
 }
 admit_bootstrap_source() {
   local entry metadata path mode object stage actual_mode actual_object
@@ -381,7 +384,6 @@ jq -cn --slurpfile source "$evidence/bootstrap-source-after.json" \
     context_sha256:$context,binaries:$binaries,originals_retained:$archived,
     cargo_reused:([$selection[0].workspace_artifacts[]|select(.fresh)]|length)}' \
   > "$bootstrap_root/receipt.pending"
-test "$(wc -c < "$bootstrap_root/receipt.pending")" -lt 65536
 mv -- "$bootstrap_root/receipt.pending" "$bootstrap_root/receipt.json"
 if ! "$retain_archive"; then rm -r -- "$evidence"; fi
 printf '%s\n' "$bootstrap_target/bootstrap"

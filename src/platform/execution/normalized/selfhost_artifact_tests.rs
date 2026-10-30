@@ -982,7 +982,7 @@ pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
             "declarations.begin\n(units (module create capacity-entry (function create entry (visibility public) (effect pure) (returns I64) (body (i64 42)))))\ndeclarations.end\n",
         )
         .unwrap();
-        let memory = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+        let memory = crate::platform::MemProjectStore::new(None).unwrap();
         let repository = GraphRepository::create_memory(&memory, &initial, None)
             .unwrap()
             .repository;

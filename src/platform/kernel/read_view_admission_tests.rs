@@ -537,7 +537,12 @@ fn wide_value_result_retains_complete_view_exclusion_without_an_unused_owned_que
         &admitted,
     )
     .unwrap();
-    assert!(admitted.work().1 < limits.maximum_metadata_bytes.expect("explicit test allowance"));
+    assert!(
+        admitted.work().1
+            < limits
+                .maximum_metadata_bytes
+                .expect("explicit test allowance")
+    );
 
     let source_tied = OwnedAssociatedAdmission::with_limits(limits);
     let error = read_view_admission::validate_result(

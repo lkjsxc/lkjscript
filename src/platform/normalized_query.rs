@@ -1,8 +1,6 @@
 //! Revision-pinned normalized semantic query model, continuation, execution, and compact output.
 
-use super::contract::{
-    capabilities_snapshot,
-};
+use super::contract::capabilities_snapshot;
 use super::control::{CompactResponseLimits, CompactResponseWriter};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 use super::execution::ExecutionControl;
@@ -18,7 +16,7 @@ use super::publication::{
 use super::semantic_id::{RepositoryId, RevisionId, encode_hex};
 use super::witness::{
     NamespaceKey, decode_forward_relation_key, decode_reverse_relation_key, forward_relation_key,
-    forward_relation_prefix, reverse_relation_prefix,
+    forward_relation_prefix, reverse_relation_key, reverse_relation_prefix,
 };
 use base64::Engine;
 use std::collections::BTreeMap;
@@ -28,7 +26,7 @@ use std::path::Path;
 pub const QUERY_CONTRACT_VERSION: u16 = 7;
 pub const QUERY_CONTRACT_IDENTITY: &str = "lkjscript-query";
 pub const DEFAULT_QUERY_ITEMS: u64 = 50;
-pub const DEFAULT_QUERY_OUTPUT_BYTES: usize = 64 * 1_024;
+pub const DEFAULT_QUERY_OUTPUT_BYTES: Option<usize> = None;
 pub const MAXIMUM_QUERY_CONTINUATION_BYTES: usize = 320;
 const MAXIMUM_QUERY_RESUME_KEY_BYTES: usize = 70;
 const MAXIMUM_QUERY_CONTINUATION_DECODED_BYTES: usize = 224;
@@ -66,9 +64,9 @@ pub(crate) const QUERY_OPERATION_DESCRIPTORS: [QueryOperationDescriptor; 4] = [
     QueryOperationDescriptor {
         action: "find",
         command: "query.find",
-        usage: "query find CLASS NAME [--parent OWNER]",
+        usage: "query find CLASS NAME [--parent OWNER] [--bytes N]",
         positionals: &["class", "name"],
-        options: &["--parent"],
+        options: &["--parent", "--bytes"],
     },
     QueryOperationDescriptor {
         action: "relations",
@@ -336,7 +334,7 @@ impl QuerySelection {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct QueryPageLimits {
     pub items: u64,
-    pub output_bytes: usize,
+    pub output_bytes: Option<usize>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -439,6 +437,10 @@ fn parse_find_arguments(
         .map(|value| parse_owner_identity(value, "--parent"))
         .transpose()?;
     validate_parent_rule(class, parent)?;
+    let output_bytes = options
+        .get("--bytes")
+        .map(|value| parse_page_byte_limit(value))
+        .transpose()?;
     Ok(NormalizedQueryRequest {
         selection: QuerySelection::Find {
             class,
@@ -447,7 +449,7 @@ fn parse_find_arguments(
         },
         limits: QueryPageLimits {
             items: 1,
-            output_bytes: DEFAULT_QUERY_OUTPUT_BYTES,
+            output_bytes,
         },
         continuation: None,
     })
@@ -537,10 +539,16 @@ fn parse_context_arguments(
 
 fn parse_context_depth(value: &str) -> Result<u64, Diagnostic> {
     let parsed = value.parse::<u64>().map_err(|_| {
-        query_input_error("query_invalid_context_depth", "context depth must be a canonical u64")
+        query_input_error(
+            "query_invalid_context_depth",
+            "context depth must be a canonical u64",
+        )
     })?;
     if parsed.to_string() != value {
-        return Err(query_input_error("query_invalid_context_depth", "context depth must be canonical"));
+        return Err(query_input_error(
+            "query_invalid_context_depth",
+            "context depth must be canonical",
+        ));
     }
     Ok(parsed)
 }
@@ -622,8 +630,7 @@ fn parse_page_limits(options: &BTreeMap<String, String>) -> Result<QueryPageLimi
     let output_bytes = options
         .get("--bytes")
         .map(|value| parse_page_byte_limit(value))
-        .transpose()?
-        .unwrap_or(DEFAULT_QUERY_OUTPUT_BYTES);
+        .transpose()?;
     Ok(QueryPageLimits {
         items,
         output_bytes,
@@ -632,20 +639,32 @@ fn parse_page_limits(options: &BTreeMap<String, String>) -> Result<QueryPageLimi
 
 fn parse_page_item_limit(value: &str) -> Result<u64, Diagnostic> {
     let parsed = value.parse::<u64>().map_err(|_| {
-        query_input_error("query_invalid_limit", "query item limit must be a canonical u64")
+        query_input_error(
+            "query_invalid_limit",
+            "query item limit must be a canonical u64",
+        )
     })?;
     if parsed.to_string() != value {
-        return Err(query_input_error("query_invalid_limit", "query item limit must be canonical"));
+        return Err(query_input_error(
+            "query_invalid_limit",
+            "query item limit must be canonical",
+        ));
     }
     Ok(parsed)
 }
 
 fn parse_page_byte_limit(value: &str) -> Result<usize, Diagnostic> {
     let parsed = value.parse::<usize>().map_err(|_| {
-        query_input_error("query_invalid_byte_limit", "query byte limit must fit the host address space")
+        query_input_error(
+            "query_invalid_byte_limit",
+            "query byte limit must fit the host address space",
+        )
     })?;
     if parsed.to_string() != value {
-        return Err(query_input_error("query_invalid_byte_limit", "query byte limit must be canonical"));
+        return Err(query_input_error(
+            "query_invalid_byte_limit",
+            "query byte limit must be canonical",
+        ));
     }
     Ok(parsed)
 }
@@ -1159,7 +1178,10 @@ fn validate_context_resume_key(key: &[u8], maximum_depth: u64) -> Result<(), Dia
                 ));
             }
             let depth = u64::from_be_bytes(key[1..9].try_into().map_err(|_| {
-                query_input_error("query_continuation_resume_key", "context depth field is malformed")
+                query_input_error(
+                    "query_continuation_resume_key",
+                    "context depth field is malformed",
+                )
             })?);
             if depth > maximum_depth {
                 return Err(query_input_error(
@@ -1370,11 +1392,76 @@ enum QueryItems {
     },
 }
 
+impl QueryItems {
+    fn record_count(&self) -> Result<usize, Diagnostic> {
+        match self {
+            Self::Owners(owners) => Ok(owners.len()),
+            Self::Relations(relations) => Ok(relations.len()),
+            Self::Context { owners, relations } => owners
+                .len()
+                .checked_add(relations.len())
+                .ok_or_else(|| query_work_overflow("context page item count")),
+        }
+    }
+
+    fn pop_record_bytes(&mut self) -> Result<usize, Diagnostic> {
+        let absent = || query_corrupt("query_output_items", "query page has no last record");
+        match self {
+            Self::Owners(owners) => {
+                compact_record_bytes("owner", &owners.pop().ok_or_else(absent)?.fields())
+            }
+            Self::Relations(relations) => compact_record_bytes(
+                "relation",
+                &relation_fields(relations.pop().ok_or_else(absent)?),
+            ),
+            Self::Context { owners, relations } => {
+                if let Some(edge) = relations.pop() {
+                    compact_record_bytes("relation", &relation_fields(edge))
+                } else {
+                    let owner = owners.pop().ok_or_else(absent)?;
+                    compact_record_bytes("owner", &owner.projection.fields_with_depth(owner.depth))
+                }
+            }
+        }
+    }
+
+    fn last_resume_key(&self, selection: &QuerySelection) -> Result<Vec<u8>, Diagnostic> {
+        let key = match (self, selection) {
+            (Self::Owners(owners), QuerySelection::Owners { .. }) => owners
+                .last()
+                .map(|owner| EncodedOwnerKey::new(owner.owner).bytes().to_vec()),
+            (Self::Relations(relations), QuerySelection::Relations { direction, .. }) => {
+                relations.last().map(|edge| match direction {
+                    QueryDirection::Incoming => reverse_relation_key(*edge),
+                    QueryDirection::Outgoing => forward_relation_key(*edge),
+                })
+            }
+            (Self::Context { owners, relations }, QuerySelection::Context { .. }) => relations
+                .last()
+                .map(|edge| context_relation_resume_key(*edge))
+                .or_else(|| {
+                    owners
+                        .last()
+                        .map(|owner| context_owner_resume_key(owner.depth, owner.projection.owner))
+                }),
+            _ => None,
+        };
+        key.ok_or_else(|| {
+            query_corrupt(
+                "query_output_resume_key",
+                "query page has no last logical key matching its selector",
+            )
+        })
+    }
+}
+
 #[derive(Clone, Debug)]
 struct QueryExecution {
     operation: QueryOperation,
     selector: QueryDigest,
     items: QueryItems,
+    /// Exact rendered bytes of retained logical records, independent of work telemetry.
+    item_bytes: usize,
     returned: u64,
     visited: u64,
     matched: Option<bool>,
@@ -1434,32 +1521,18 @@ fn execute_normalized_query_with_cancellation(
         revision: binding.revision,
         capabilities_digest: &snapshot.digest,
     };
-    let (fixed_bytes, _fixed_records) = if request.selection.operation() == QueryOperation::Context {
-        (0, 0)
+    let item_byte_budget = if request.selection.operation() == QueryOperation::Context {
+        None
     } else {
-        fixed_response_reserve(
+        query_item_byte_budget(
             &context,
             request.selection.operation(),
             selector,
             request.limits.output_bytes,
-        )
-        .map_err(classify_query_output_diagnostic)?
+        )?
     };
-    let item_byte_budget = request
-        .limits
-        .output_bytes
-        .checked_sub(fixed_bytes)
-        .ok_or_else(|| {
-            Diagnostic::new(
-                DiagnosticClass::Resource,
-                "query_output_envelope_too_large",
-                format!(
-                    "query fixed response envelope requires at least {fixed_bytes} bytes; increase --bytes"
-                ),
-            )
-        })?;
     let item_record_budget: Option<usize> = None;
-    let execution = match &request.selection {
+    let mut execution = match &request.selection {
         QuerySelection::Owners { kind } => execute_owners(
             view,
             request,
@@ -1474,15 +1547,7 @@ fn execute_normalized_query_with_cancellation(
             class,
             name,
             parent,
-        } => execute_find(
-            view,
-            request,
-            selector,
-            *class,
-            name,
-            *parent,
-            item_byte_budget,
-        ),
+        } => execute_find(view, request, selector, *class, name, *parent),
         QuerySelection::Relations {
             endpoint,
             direction,
@@ -1518,7 +1583,12 @@ fn execute_normalized_query_with_cancellation(
         ),
     }
     .map_err(classify_query_read_diagnostic)?;
-    render_query_response(&context, &execution, request.limits.output_bytes)
+    render_query_response(
+        &context,
+        &request.selection,
+        &mut execution,
+        request.limits.output_bytes,
+    )
 }
 
 fn check_query_control(control: &ExecutionControl) -> Result<(), Diagnostic> {
@@ -1569,15 +1639,16 @@ fn execute_owners(
     selector: QueryDigest,
     resume_key: Option<&[u8]>,
     kind: Option<OwnerKind>,
-    item_byte_budget: usize,
+    item_byte_budget: Option<usize>,
     item_record_budget: Option<usize>,
 ) -> Result<QueryExecution, Diagnostic> {
     let scan_quantum = owner_scan_quantum(request.limits.items)?;
     let logical_item_limit = match item_record_budget {
         None => request.limits.items,
-        Some(records) => request.limits.items.min(u64::try_from(records).map_err(|_| {
-            query_work_overflow("response record count")
-        })?),
+        Some(records) => request
+            .limits
+            .items
+            .min(u64::try_from(records).map_err(|_| query_work_overflow("response record count"))?),
     };
     if logical_item_limit == 0 {
         return Err(Diagnostic::new(
@@ -1605,7 +1676,7 @@ fn execute_owners(
                     "owner result byte accounting overflowed",
                 )
             })?;
-            if required > item_byte_budget {
+            if item_byte_budget.is_some_and(|maximum| required > maximum) {
                 if owners.is_empty() {
                     return Err(Diagnostic::new(
                         DiagnosticClass::Resource,
@@ -1637,6 +1708,7 @@ fn execute_owners(
         operation: QueryOperation::Owners,
         selector,
         items: QueryItems::Owners(owners),
+        item_bytes,
         returned: read.value.returned,
         visited: read.value.visited,
         matched: None,
@@ -1655,7 +1727,6 @@ fn execute_find(
     class: NamespaceClass,
     name: &Name,
     parent: Option<OwnerKey>,
-    item_byte_budget: usize,
 ) -> Result<QueryExecution, Diagnostic> {
     if request.continuation.is_some() {
         return Err(query_input_error(
@@ -1694,6 +1765,7 @@ fn execute_find(
             operation: QueryOperation::Find,
             selector,
             items: QueryItems::Owners(Vec::new()),
+            item_bytes: 0,
             returned: 0,
             visited: 0,
             matched: Some(false),
@@ -1713,17 +1785,12 @@ fn execute_find(
         )
     })?;
     let projection = exact_namespace_projection(owner, &record, class, name, parent)?;
-    if compact_record_bytes("owner", &projection.fields())? > item_byte_budget {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "query_output_item_too_large",
-            "the exact owner projection cannot fit the bounded query response",
-        ));
-    }
+    let item_bytes = compact_record_bytes("owner", &projection.fields())?;
     Ok(QueryExecution {
         operation: QueryOperation::Find,
         selector,
         items: QueryItems::Owners(vec![projection]),
+        item_bytes,
         returned: 1,
         visited: 1,
         matched: Some(true),
@@ -1748,7 +1815,7 @@ fn execute_relations(
     endpoint_selector: QueryEndpointSelector,
     direction: QueryDirection,
     kind: Option<RelationKind>,
-    item_byte_budget: usize,
+    item_byte_budget: Option<usize>,
     item_record_budget: Option<usize>,
 ) -> Result<QueryExecution, Diagnostic> {
     let total_admission = query_admission(request.limits.items, request.limits.items)?;
@@ -1777,9 +1844,10 @@ fn execute_relations(
     };
     let logical_item_limit = match item_record_budget {
         None => request.limits.items,
-        Some(records) => request.limits.items.min(u64::try_from(records).map_err(|_| {
-            query_work_overflow("response record count")
-        })?),
+        Some(records) => request
+            .limits
+            .items
+            .min(u64::try_from(records).map_err(|_| query_work_overflow("response record count"))?),
     };
     if logical_item_limit == 0 {
         return Err(Diagnostic::new(
@@ -1809,7 +1877,7 @@ fn execute_relations(
                     "relation result byte accounting overflowed",
                 )
             })?;
-            if required > item_byte_budget {
+            if item_byte_budget.is_some_and(|maximum| required > maximum) {
                 if relations.is_empty() {
                     return Err(Diagnostic::new(
                         DiagnosticClass::Resource,
@@ -1842,6 +1910,7 @@ fn execute_relations(
         operation: QueryOperation::Relations,
         selector,
         items: QueryItems::Relations(relations),
+        item_bytes,
         returned: relation_read.value.returned,
         visited: relation_read.value.visited,
         matched: None,
@@ -1876,6 +1945,12 @@ fn execute_context(
     maximum_depth: u64,
     cancellation: &mut dyn FnMut() -> Result<(), Diagnostic>,
 ) -> Result<QueryExecution, Diagnostic> {
+    let item_byte_budget = query_item_byte_budget(
+        render_context,
+        QueryOperation::Context,
+        selector,
+        request.limits.output_bytes,
+    )?;
     let mut work = RepositoryReadWork::default();
     let root_projection =
         read_context_owner(view, root, binding, total_admission, &mut work, true)?;
@@ -1947,27 +2022,36 @@ fn execute_context(
     cancellation()?;
 
     let mut owners = Vec::new();
-    owners.try_reserve(selected_owners.len()).map_err(|error| {
-        query_input_allocation("context owners", error)
-    })?;
+    owners
+        .try_reserve(selected_owners.len())
+        .map_err(|error| query_input_allocation("context owners", error))?;
     for (_owner, (depth, projection)) in selected_owners {
         owners.push(ContextOwnerProjection { depth, projection });
     }
-    owners.sort_by_key(|owner| (owner.depth, EncodedOwnerKey::new(owner.projection.owner).bytes()));
+    owners.sort_by_key(|owner| {
+        (
+            owner.depth,
+            EncodedOwnerKey::new(owner.projection.owner).bytes(),
+        )
+    });
     let mut relations = Vec::new();
-    relations.try_reserve(selected_relations.len()).map_err(|error| {
-        query_input_allocation("context relations", error)
-    })?;
+    relations
+        .try_reserve(selected_relations.len())
+        .map_err(|error| query_input_allocation("context relations", error))?;
     relations.extend(selected_relations.into_values());
     let total_owners = u64::try_from(owners.len())
         .map_err(|_| query_work_overflow("selected context owner count"))?;
     let total_relations = u64::try_from(relations.len())
         .map_err(|_| query_work_overflow("selected context relation count"))?;
 
-    let stream_len = owners.len().checked_add(relations.len())
+    let stream_len = owners
+        .len()
+        .checked_add(relations.len())
         .ok_or_else(|| query_work_overflow("context stream length"))?;
     let mut stream = Vec::new();
-    stream.try_reserve(stream_len).map_err(|error| query_input_allocation("context stream", error))?;
+    stream
+        .try_reserve(stream_len)
+        .map_err(|error| query_input_allocation("context stream", error))?;
     for owner in owners {
         stream.push((
             context_owner_resume_key(owner.depth, owner.projection.owner),
@@ -1992,34 +2076,6 @@ fn execute_context(
         selected_owners: total_owners,
         selected_relations: total_relations,
     };
-    let continuation_key = (stream.len() > 1)
-        .then(|| stream.iter().max_by_key(|(key, _item)| key.len()))
-        .flatten()
-        .map(|(key, _item)| key.as_slice());
-    let (fixed_bytes, _fixed_records) = context_response_reserve(
-        render_context,
-        binding,
-        selector,
-        context_summary,
-        context_work,
-        &work,
-        continuation_key,
-        request.limits.output_bytes,
-    )
-    .map_err(classify_query_output_diagnostic)?;
-    let item_byte_budget = request
-        .limits
-        .output_bytes
-        .checked_sub(fixed_bytes)
-        .ok_or_else(|| {
-            Diagnostic::new(
-                DiagnosticClass::Resource,
-                "query_output_envelope_too_large",
-                format!(
-                    "context fixed response envelope requires at least {fixed_bytes} bytes; increase --bytes"
-                ),
-            )
-        })?;
     let item_record_budget: Option<usize> = None;
     let start = match resume_key {
         None => 0,
@@ -2042,9 +2098,10 @@ fn execute_context(
     }
     let logical_item_limit = match item_record_budget {
         None => request.limits.items,
-        Some(records) => request.limits.items.min(u64::try_from(records).map_err(|_| {
-            query_work_overflow("response record count")
-        })?),
+        Some(records) => request
+            .limits
+            .items
+            .min(u64::try_from(records).map_err(|_| query_work_overflow("response record count"))?),
     };
     if logical_item_limit == 0 {
         return Err(Diagnostic::new(
@@ -2078,7 +2135,7 @@ fn execute_context(
                 "context result byte accounting overflowed",
             )
         })?;
-        if required > item_byte_budget {
+        if item_byte_budget.is_some_and(|maximum| required > maximum) {
             if returned == 0 {
                 return Err(Diagnostic::new(
                     DiagnosticClass::Resource,
@@ -2129,6 +2186,7 @@ fn execute_context(
             owners: page_owners,
             relations: page_relations,
         },
+        item_bytes,
         returned,
         visited: relation_witnesses,
         matched: None,
@@ -2251,11 +2309,10 @@ fn observe_context_count(value: &mut u64, additional: u64, saturated: &mut bool)
     *saturated |= overflow;
 }
 
-fn query_input_allocation(
-    label: &str, error: std::collections::TryReserveError,
-) -> Diagnostic {
+fn query_input_allocation(label: &str, error: std::collections::TryReserveError) -> Diagnostic {
     Diagnostic::new(
-        DiagnosticClass::Resource, "query_allocation",
+        DiagnosticClass::Resource,
+        "query_allocation",
         format!("cannot allocate {label}: {error}"),
     )
 }
@@ -2308,39 +2365,83 @@ fn remaining_admission(
     use super::persistent_map::MapWorkCounter;
     use super::storage::object::StoreWorkCounter;
     Ok(RepositoryQueryAdmission {
-        map_pages: remaining_dimension(total.map_pages, work.map.pages_read,
-            work.map.counter_saturated(MapWorkCounter::PagesRead), "map pages")?,
-        map_bytes: remaining_dimension(total.map_bytes, work.map.bytes_read,
-            work.map.counter_saturated(MapWorkCounter::BytesRead), "map bytes")?,
-        map_entries: remaining_dimension(total.map_entries, work.map.entries_visited,
-            work.map.counter_saturated(MapWorkCounter::EntriesVisited), "map entries")?,
-        catalog_lookups: remaining_dimension(total.catalog_lookups, work.store.catalog_lookups,
-            work.store.counter_saturated(StoreWorkCounter::CatalogLookups), "catalog lookups")?,
-        store_objects: remaining_dimension(total.store_objects, work.store.objects_read,
-            work.store.counter_saturated(StoreWorkCounter::ObjectsRead), "store objects")?,
-        store_bytes: remaining_dimension(total.store_bytes, work.store.bytes_read,
-            work.store.counter_saturated(StoreWorkCounter::BytesRead), "store bytes")?,
-        canonical_records: remaining_dimension(total.canonical_records, work.canonical_records_decoded,
-            work.saturation.contains(BudgetDimension::CanonicalDecodedRecords), "canonical records")?,
-        witness_records: remaining_dimension(total.witness_records, work.witness_records_decoded,
-            work.saturation.contains(BudgetDimension::WitnessDecodedRecords), "witness records")?,
+        map_pages: remaining_dimension(
+            total.map_pages,
+            work.map.pages_read,
+            work.map.counter_saturated(MapWorkCounter::PagesRead),
+            "map pages",
+        )?,
+        map_bytes: remaining_dimension(
+            total.map_bytes,
+            work.map.bytes_read,
+            work.map.counter_saturated(MapWorkCounter::BytesRead),
+            "map bytes",
+        )?,
+        map_entries: remaining_dimension(
+            total.map_entries,
+            work.map.entries_visited,
+            work.map.counter_saturated(MapWorkCounter::EntriesVisited),
+            "map entries",
+        )?,
+        catalog_lookups: remaining_dimension(
+            total.catalog_lookups,
+            work.store.catalog_lookups,
+            work.store
+                .counter_saturated(StoreWorkCounter::CatalogLookups),
+            "catalog lookups",
+        )?,
+        store_objects: remaining_dimension(
+            total.store_objects,
+            work.store.objects_read,
+            work.store.counter_saturated(StoreWorkCounter::ObjectsRead),
+            "store objects",
+        )?,
+        store_bytes: remaining_dimension(
+            total.store_bytes,
+            work.store.bytes_read,
+            work.store.counter_saturated(StoreWorkCounter::BytesRead),
+            "store bytes",
+        )?,
+        canonical_records: remaining_dimension(
+            total.canonical_records,
+            work.canonical_records_decoded,
+            work.saturation
+                .contains(BudgetDimension::CanonicalDecodedRecords),
+            "canonical records",
+        )?,
+        witness_records: remaining_dimension(
+            total.witness_records,
+            work.witness_records_decoded,
+            work.saturation
+                .contains(BudgetDimension::WitnessDecodedRecords),
+            "witness records",
+        )?,
     })
 }
 
 fn remaining_dimension(
-    maximum: Option<u64>, used: u64, saturated: bool, dimension: &str,
+    maximum: Option<u64>,
+    used: u64,
+    saturated: bool,
+    dimension: &str,
 ) -> Result<Option<u64>, Diagnostic> {
-    let Some(maximum) = maximum else { return Ok(None); };
+    let Some(maximum) = maximum else {
+        return Ok(None);
+    };
     if saturated {
         return Err(Diagnostic::new(
-            DiagnosticClass::Resource, "query_admission_exhausted",
+            DiagnosticClass::Resource,
+            "query_admission_exhausted",
             format!("query {dimension} observation exceeds every finite u64 allowance"),
         ));
     }
-    maximum.checked_sub(used).map(Some).ok_or_else(|| Diagnostic::new(
-        DiagnosticClass::Resource, "query_admission_exhausted",
-        format!("query {dimension} work exceeded its owning admission"),
-    ))
+    maximum.checked_sub(used).map(Some).ok_or_else(|| {
+        Diagnostic::new(
+            DiagnosticClass::Resource,
+            "query_admission_exhausted",
+            format!("query {dimension} work exceeded its owning admission"),
+        )
+    })
 }
 
 fn add_query_work(
@@ -2458,170 +2559,111 @@ fn endpoint_fields(endpoint: RelationEndpoint) -> (String, Option<String>) {
     }
 }
 
-#[allow(
-    clippy::too_many_arguments,
-    reason = "the context envelope reserve binds exact selector, totals, work, continuation, and output dimensions"
-)]
-fn context_response_reserve(
-    context: &QueryRenderContext<'_>,
-    binding: QueryBinding,
-    selector: QueryDigest,
-    summary: ContextSummary,
-    context_work: ContextWork,
-    work: &RepositoryReadWork,
-    continuation_key: Option<&[u8]>,
-    output_limit: usize,
-) -> Result<(usize, usize), Diagnostic> {
-    let mut writer = CompactResponseWriter::new(CompactResponseLimits {
-        maximum_bytes: Some(output_limit),
-        maximum_records: None,
-    })?;
-    append_response_header(&mut writer, context, QueryOperation::Context, selector)?;
-    append_fields(
-        &mut writer,
-        "summary",
-        &[
-            ("returned", request_maximum_returned_text()),
-            ("truncated", "false".to_owned()),
-            ("total-owners", summary.total_owners.to_string()),
-            ("total-relations", summary.total_relations.to_string()),
-            ("expanded-owners", summary.expanded_owners.to_string()),
-        ],
-    )?;
-    if let Some(key) = continuation_key {
-        append_fields(
-            &mut writer,
-            "continuation",
-            &[(
-                "token",
-                encode_continuation(binding, QueryOperation::Context, selector, key)?,
-            )],
-        )?;
-    }
-    append_work_record(
-        &mut writer,
-        work,
-        Some(context_work),
-        output_limit,
-    )?;
-    append_fields(
-        &mut writer,
-        "schema",
-        &[("capabilities", context.capabilities_digest.to_owned())],
-    )?;
-    Ok((writer.byte_count(), writer.record_count()))
-}
-
-fn request_maximum_returned_text() -> String {
-    u64::MAX.to_string()
-}
-
-fn fixed_response_reserve(
+/// Preflight only invariant bytes that every actual response contains. Work, summary and
+/// continuation records are measured after the single range read, never padded with maxima.
+fn query_item_byte_budget(
     context: &QueryRenderContext<'_>,
     operation: QueryOperation,
     selector: QueryDigest,
-    output_limit: usize,
-) -> Result<(usize, usize), Diagnostic> {
+    maximum: Option<usize>,
+) -> Result<Option<usize>, Diagnostic> {
+    let Some(maximum) = maximum else {
+        return Ok(None);
+    };
     let mut writer = CompactResponseWriter::new(CompactResponseLimits {
-        maximum_bytes: Some(output_limit),
+        maximum_bytes: Some(maximum),
         maximum_records: None,
     })?;
-    append_response_header(&mut writer, context, operation, selector)?;
-    let maximum = u64::MAX.to_string();
-    match operation {
-        QueryOperation::Find => append_fields(
-            &mut writer,
-            "summary",
-            &[
-                ("returned", maximum.clone()),
-                ("visited", maximum.clone()),
-                ("match", "false".to_owned()),
-            ],
-        )?,
-        QueryOperation::Owners | QueryOperation::Relations => {
-            append_fields(
-                &mut writer,
-                "summary",
-                &[
-                    ("returned", maximum.clone()),
-                    ("visited", maximum.clone()),
-                    ("truncated", "false".to_owned()),
-                ],
-            )?;
-            append_fields(
-                &mut writer,
-                "continuation",
-                &[("token", "x".repeat(MAXIMUM_QUERY_CONTINUATION_BYTES))],
-            )?;
-        }
-        QueryOperation::Context => {
-            append_fields(
-                &mut writer,
-                "summary",
-                &[
-                    ("returned", maximum.clone()),
-                    ("truncated", "false".to_owned()),
-                    ("total-owners", maximum.clone()),
-                    ("total-relations", maximum.clone()),
-                    ("expanded-owners", maximum.clone()),
-                ],
-            )?;
-            append_fields(
-                &mut writer,
-                "continuation",
-                &[("token", "x".repeat(MAXIMUM_QUERY_CONTINUATION_BYTES))],
-            )?;
-        }
-    }
-    let mut maximum_map_work = super::persistent_map::MapWork::default();
-    maximum_map_work.pages_read = u64::MAX;
-    maximum_map_work.bytes_read = u64::MAX;
-    maximum_map_work.entries_visited = u64::MAX;
-    let maximum_store_work = super::storage::object::StoreWork {
-        catalog_lookups: u64::MAX,
-        objects_read: u64::MAX,
-        bytes_read: u64::MAX,
-        ..super::storage::object::StoreWork::default()
-    };
-    append_work_record(
-        &mut writer,
-        &RepositoryReadWork {
-            map: maximum_map_work,
-            store: maximum_store_work,
-            canonical_records_decoded: u64::MAX,
-            witness_records_decoded: u64::MAX,
-            items_returned: u64::MAX,
-            ..RepositoryReadWork::default()
-        },
-        (operation == QueryOperation::Context).then_some(ContextWork {
-            saturated: false,
-            relation_witnesses_visited: u64::MAX,
-            expanded_owners: u64::MAX,
-            selected_owners: u64::MAX,
-            selected_relations: u64::MAX,
-        }),
-        output_limit,
-    )?;
+    append_response_header(&mut writer, context, operation, selector)
+        .map_err(classify_query_output_diagnostic)?;
     append_fields(
         &mut writer,
         "schema",
         &[("capabilities", context.capabilities_digest.to_owned())],
-    )?;
-    Ok((writer.byte_count(), writer.record_count()))
+    )
+    .map_err(classify_query_output_diagnostic)?;
+    maximum
+        .checked_sub(writer.byte_count())
+        .map(Some)
+        .ok_or_else(|| query_work_overflow("query invariant output bytes"))
 }
 
 fn render_query_response(
     context: &QueryRenderContext<'_>,
-    execution: &QueryExecution,
-    output_limit: usize,
+    selection: &QuerySelection,
+    execution: &mut QueryExecution,
+    output_limit: Option<usize>,
 ) -> Result<Vec<u8>, Diagnostic> {
-    let mut rendered_bytes = 0_usize;
-    for _ in 0..4 {
-        let bytes = render_query_response_once(context, execution, output_limit, rendered_bytes)?;
-        if bytes.len() == rendered_bytes {
-            return Ok(bytes);
+    loop {
+        let rendered_bytes = query_response_length(context, execution)?;
+        if output_limit.is_none_or(|maximum| rendered_bytes <= maximum) {
+            return render_query_response_once(context, execution, output_limit, rendered_bytes);
         }
-        rendered_bytes = bytes.len();
+        let items = execution.items.record_count()?;
+        if items <= 1 || matches!(selection, QuerySelection::Find { .. }) {
+            return Err(Diagnostic::new(
+                DiagnosticClass::Resource,
+                if items == 0 {
+                    "query_output_envelope_too_large"
+                } else {
+                    "query_output_item_too_large"
+                },
+                "the actual query envelope and first logical result cannot fit the requested --bytes limit",
+            ));
+        }
+        // Test the complete candidate before trimming: a terminal page can be smaller
+        // than its shorter nonterminal prefix because it needs no continuation. Each
+        // iteration removes one suffix record, preserves all read telemetry, and never
+        // repeats a repository read. Measuring removed records is linear in their bytes.
+        let removed = execution.items.pop_record_bytes()?;
+        execution.item_bytes = execution.item_bytes.checked_sub(removed).ok_or_else(|| {
+            query_corrupt(
+                "query_output_item_bytes",
+                "query page record bytes underflowed",
+            )
+        })?;
+        execution.returned = u64::try_from(items - 1)
+            .map_err(|_| query_work_overflow("returned query page items"))?;
+        execution.truncated = Some(true);
+        execution.continuation = Some(encode_continuation(
+            QueryBinding {
+                repository: context.repository,
+                package: context.package,
+                revision: context.revision,
+            },
+            execution.operation,
+            execution.selector,
+            &execution.items.last_resume_key(selection)?,
+        )?);
+    }
+}
+
+fn query_response_length(
+    context: &QueryRenderContext<'_>,
+    execution: &QueryExecution,
+) -> Result<usize, Diagnostic> {
+    let mut rendered_bytes = 0_usize;
+    // Only the decimal byte-count field changes: L(n) = constant + digits(n).
+    // Starting at zero, the second length can cross at most one decimal-width
+    // boundary; the next refinement adds at most one byte, then the fourth is fixed.
+    // Measure only the envelope during refinement; render the complete body once.
+    for _ in 0..4 {
+        let mut writer = CompactResponseWriter::new(CompactResponseLimits::default())?;
+        append_response_header(
+            &mut writer,
+            context,
+            execution.operation,
+            execution.selector,
+        )?;
+        append_response_footer(&mut writer, context, execution, rendered_bytes)?;
+        let next = execution
+            .item_bytes
+            .checked_add(writer.byte_count())
+            .ok_or_else(|| query_work_overflow("query rendered output bytes"))?;
+        if next == rendered_bytes {
+            return Ok(next);
+        }
+        rendered_bytes = next;
     }
     Err(Diagnostic::new(
         DiagnosticClass::Infrastructure,
@@ -2633,11 +2675,11 @@ fn render_query_response(
 fn render_query_response_once(
     context: &QueryRenderContext<'_>,
     execution: &QueryExecution,
-    output_limit: usize,
+    output_limit: Option<usize>,
     rendered_bytes: usize,
 ) -> Result<Vec<u8>, Diagnostic> {
     let mut writer = CompactResponseWriter::new(CompactResponseLimits {
-        maximum_bytes: Some(output_limit),
+        maximum_bytes: output_limit,
         maximum_records: None,
     })?;
     append_response_header(
@@ -2670,6 +2712,24 @@ fn render_query_response_once(
             }
         }
     }
+    append_response_footer(&mut writer, context, execution, rendered_bytes)?;
+    let bytes = writer.finish();
+    if bytes.len() != rendered_bytes {
+        return Err(Diagnostic::new(
+            DiagnosticClass::Infrastructure,
+            "query_output_size_convergence",
+            "complete query encoding disagrees with its exact measured length",
+        ));
+    }
+    Ok(bytes)
+}
+
+fn append_response_footer(
+    writer: &mut CompactResponseWriter,
+    context: &QueryRenderContext<'_>,
+    execution: &QueryExecution,
+    rendered_bytes: usize,
+) -> Result<(), Diagnostic> {
     let mut summary = vec![("returned", execution.returned.to_string())];
     if execution.context_summary.is_none() {
         summary.push(("visited", execution.visited.to_string()));
@@ -2685,26 +2745,22 @@ fn render_query_response_once(
         summary.push(("total-relations", context.total_relations.to_string()));
         summary.push(("expanded-owners", context.expanded_owners.to_string()));
     }
-    append_fields(&mut writer, "summary", &summary)?;
+    append_fields(writer, "summary", &summary)?;
     if let Some(continuation) = &execution.continuation {
-        append_fields(
-            &mut writer,
-            "continuation",
-            &[("token", continuation.clone())],
-        )?;
+        append_fields(writer, "continuation", &[("token", continuation.clone())])?;
     }
     append_work_record(
-        &mut writer,
+        writer,
         &execution.work,
         execution.context_work,
         rendered_bytes,
     )?;
     append_fields(
-        &mut writer,
+        writer,
         "schema",
         &[("capabilities", context.capabilities_digest.to_owned())],
     )?;
-    Ok(writer.finish())
+    Ok(())
 }
 
 fn append_response_header(
@@ -2753,7 +2809,10 @@ fn append_work_record(
     rendered_bytes: usize,
 ) -> Result<(), Diagnostic> {
     let mut fields = vec![
-        ("saturated", (work.saturated() || context.is_some_and(|value| value.saturated)).to_string()),
+        (
+            "saturated",
+            (work.saturated() || context.is_some_and(|value| value.saturated)).to_string(),
+        ),
         ("map-pages-read", work.map.pages_read.to_string()),
         ("map-bytes-read", work.map.bytes_read.to_string()),
         ("map-entries-visited", work.map.entries_visited.to_string()),
@@ -2853,6 +2912,21 @@ mod tests {
         parse_records("<normalized-query-test>", bytes).expect("compact query response")
     }
 
+    fn output_context<'a>(
+        repository: &'a GraphRepository,
+        view: &'a RepositoryView,
+        capabilities_digest: &'a str,
+    ) -> QueryRenderContext<'a> {
+        QueryRenderContext {
+            repository_root: repository.root(),
+            project_name: view.current().semantic_root.package_name.as_str(),
+            repository: view.current().head.repository_id,
+            package: view.package(),
+            revision: view.revision(),
+            capabilities_digest,
+        }
+    }
+
     fn raw_continuation(token: &str) -> Vec<u8> {
         base64::engine::general_purpose::URL_SAFE_NO_PAD
             .decode(
@@ -2882,8 +2956,8 @@ mod tests {
         static BASE: std::sync::OnceLock<(crate::platform::MemProjectStore, KernelSnapshot)> =
             std::sync::OnceLock::new();
         let (base, snapshot) = BASE.get_or_init(|| {
-            let memory = crate::platform::MemProjectStore::new(128 * 1_048_576)
-                .expect("query fixture capacity");
+            let memory =
+                crate::platform::MemProjectStore::new(None).expect("query fixture capacity");
             let snapshot = crate::platform::kernel::tests::witness_snapshot();
             GraphRepository::create_memory(&memory, &snapshot, None)
                 .expect("normalized query repository");
@@ -2897,7 +2971,7 @@ mod tests {
     fn memory_repository(
         snapshot: &KernelSnapshot,
     ) -> Result<crate::platform::publication::CreatedRepository, Diagnostic> {
-        let memory = crate::platform::MemProjectStore::new(128 * 1_048_576)?;
+        let memory = crate::platform::MemProjectStore::new(None)?;
         GraphRepository::create_memory(&memory, snapshot, None)
     }
 
@@ -3054,7 +3128,7 @@ mod tests {
             },
             limits: QueryPageLimits {
                 items: 1,
-                output_bytes: TEST_QUERY_OUTPUT_BYTES,
+                output_bytes: Some(TEST_QUERY_OUTPUT_BYTES),
             },
             continuation: None,
         };
@@ -3066,11 +3140,11 @@ mod tests {
         let mut relation_section = false;
         for page_index in 0..10_000_u64 {
             request.limits.items = if page_index.is_multiple_of(2) { 1 } else { 7 };
-            request.limits.output_bytes = if page_index.is_multiple_of(3) {
+            request.limits.output_bytes = Some(if page_index.is_multiple_of(3) {
                 TEST_QUERY_OUTPUT_BYTES
             } else {
                 4_096
-            };
+            });
             let bytes =
                 execute_normalized_query(repository, view, &request).expect("context query page");
             let page = records(&bytes);
@@ -3520,13 +3594,225 @@ mod tests {
     }
 
     #[test]
+    fn query_output_defaults_and_exact_find_preserve_optional_byte_policy() {
+        let (_memory, repository, _snapshot) = fixture();
+        let view = repository.view_current().expect("output policy view");
+        let owners = parse_query_arguments(&["owners".to_owned()]).unwrap();
+        assert_eq!(owners.limits.items, DEFAULT_QUERY_ITEMS);
+        assert_eq!(owners.limits.output_bytes, None);
+        let request = |maximum: Option<usize>| {
+            let mut arguments = vec!["find".to_owned(), "module".to_owned(), "first".to_owned()];
+            if let Some(maximum) = maximum {
+                arguments.extend(["--bytes".to_owned(), maximum.to_string()]);
+            }
+            let request = parse_query_arguments(&arguments).unwrap();
+            assert_eq!(request.limits.items, 1);
+            assert_eq!(request.limits.output_bytes, maximum);
+            request
+        };
+        let before = repository_inventory(&repository);
+        let baseline = execute_normalized_query(&repository, &view, &request(None)).unwrap();
+        for maximum in [None, Some(baseline.len()), Some(usize::MAX)] {
+            assert_eq!(
+                execute_normalized_query(&repository, &view, &request(maximum)).unwrap(),
+                baseline
+            );
+        }
+        for (maximum, diagnostic) in [
+            (0, "query_output_envelope_too_large"),
+            (baseline.len() - 1, "query_output_item_too_large"),
+        ] {
+            let error =
+                execute_normalized_query(&repository, &view, &request(Some(maximum))).unwrap_err();
+            assert_eq!(error.class, DiagnosticClass::Resource);
+            assert_eq!(error.code, diagnostic);
+        }
+        assert_eq!(repository_inventory(&repository), before);
+    }
+
+    #[test]
+    fn exact_terminal_page_fits_even_when_its_one_record_continuation_page_does_not() {
+        let (snapshot, _root) = owner_limit_context_snapshot(1);
+        let created = memory_repository(&snapshot).unwrap();
+        let repository = &created.repository;
+        let view = repository.view_current().unwrap();
+        let request = |maximum: Option<usize>| {
+            let mut arguments = vec!["owners".to_owned(), "--limit".to_owned(), "2".to_owned()];
+            if let Some(maximum) = maximum {
+                arguments.extend(["--bytes".to_owned(), maximum.to_string()]);
+            }
+            parse_query_arguments(&arguments).unwrap()
+        };
+        let baseline = execute_normalized_query(repository, &view, &request(None)).unwrap();
+        let page = records(&baseline);
+        assert_eq!(
+            page.iter()
+                .filter(|record| record.operation == "owner")
+                .count(),
+            2
+        );
+        assert!(!page.iter().any(|record| record.operation == "continuation"));
+        let mut first = request(None);
+        first.limits.items = 1;
+        let prefix = execute_normalized_query(repository, &view, &first).unwrap();
+        assert!(
+            records(&prefix)
+                .iter()
+                .any(|record| record.operation == "continuation")
+        );
+        assert!(
+            prefix.len() > baseline.len(),
+            "the continuation must reach the target boundary"
+        );
+        for maximum in [None, Some(baseline.len()), Some(usize::MAX)] {
+            let selected = request(maximum);
+            assert_eq!(selected.limits.output_bytes, maximum);
+            assert_eq!(
+                execute_normalized_query(repository, &view, &selected).unwrap(),
+                baseline
+            );
+        }
+        for (maximum, diagnostic) in [
+            (0, "query_output_envelope_too_large"),
+            (baseline.len() - 1, "query_output_item_too_large"),
+        ] {
+            let error =
+                execute_normalized_query(repository, &view, &request(Some(maximum))).unwrap_err();
+            assert_eq!(error.class, DiagnosticClass::Resource);
+            assert_eq!(error.code, diagnostic);
+        }
+    }
+
+    #[test]
+    fn query_output_suffix_trim_retains_all_read_work_and_resumes_at_first_withheld_owner() {
+        let (_memory, repository, snapshot) = fixture();
+        let view = repository.view_current().unwrap();
+        let capabilities = capabilities_snapshot().unwrap();
+        let context = output_context(&repository, &view, &capabilities.digest);
+        let request = NormalizedQueryRequest {
+            selection: QuerySelection::Owners { kind: None },
+            limits: QueryPageLimits {
+                items: u64::MAX,
+                output_bytes: None,
+            },
+            continuation: None,
+        };
+        let selector = query_digest(&request.selection).unwrap();
+        let binding = QueryBinding {
+            repository: context.repository,
+            package: context.package,
+            revision: context.revision,
+        };
+        let mut execution =
+            execute_owners(&view, &request, binding, selector, None, None, None, None).unwrap();
+        let before_visited = execution.visited;
+        let before_returned = execution.returned;
+        let mut before_work = CompactResponseWriter::new(CompactResponseLimits::default()).unwrap();
+        append_work_record(&mut before_work, &execution.work, None, 0).unwrap();
+        let before_work = before_work.finish();
+        let bytes =
+            render_query_response(&context, &request.selection, &mut execution, Some(2_048))
+                .unwrap();
+        assert!(bytes.len() <= 2_048);
+        assert!(execution.returned > 0 && execution.returned < before_returned);
+        assert_eq!(execution.visited, before_visited);
+        let mut after_work = CompactResponseWriter::new(CompactResponseLimits::default()).unwrap();
+        append_work_record(&mut after_work, &execution.work, None, 0).unwrap();
+        assert_eq!(after_work.finish(), before_work);
+        let mut expected = snapshot.owners.keys().copied().collect::<Vec<_>>();
+        expected.sort_by_key(|owner| EncodedOwnerKey::new(*owner).bytes());
+        let count = usize::try_from(execution.returned).unwrap();
+        let token = execution.continuation.clone().unwrap();
+        assert_eq!(
+            decode_continuation(&token).unwrap().resume_key,
+            EncodedOwnerKey::new(expected[count - 1]).bytes()
+        );
+        let resumed = NormalizedQueryRequest {
+            continuation: Some(token),
+            ..request
+        };
+        let next = records(&execute_normalized_query(&repository, &view, &resumed).unwrap());
+        assert_eq!(
+            next.iter()
+                .find(|record| record.operation == "owner")
+                .and_then(|record| field(record, "id")),
+            Some(expected[count].to_string().as_str())
+        );
+    }
+
+    #[test]
+    fn unbounded_query_renderer_accepts_one_projection_larger_than_the_former_default() {
+        let (_memory, repository, snapshot) = fixture();
+        let view = repository.view_current().unwrap();
+        let capabilities = capabilities_snapshot().unwrap();
+        let context = output_context(&repository, &view, &capabilities.digest);
+        let owner = named_owner(&snapshot, "first");
+        let mut projection = OwnerProjection::from_record(owner, &snapshot.owners[&owner]);
+        // This isolated rendering fixture tests output geometry, independently of Name admission.
+        projection.namespace.as_mut().unwrap().name = "n".repeat(65_537);
+        let item_bytes = compact_record_bytes("owner", &projection.fields()).unwrap();
+        assert!(item_bytes > 65_536);
+        let selection = QuerySelection::Owners { kind: None };
+        let mut execution = QueryExecution {
+            operation: QueryOperation::Owners,
+            selector: query_digest(&selection).unwrap(),
+            items: QueryItems::Owners(vec![projection]),
+            item_bytes,
+            returned: 1,
+            visited: 1,
+            matched: None,
+            truncated: Some(false),
+            context_summary: None,
+            context_work: None,
+            continuation: None,
+            work: RepositoryReadWork::default(),
+        };
+        let bytes = render_query_response(
+            &context,
+            &selection,
+            &mut execution,
+            DEFAULT_QUERY_OUTPUT_BYTES,
+        )
+        .unwrap();
+        assert!(bytes.len() > 65_536);
+        let output = records(&bytes);
+        assert_eq!(
+            output
+                .iter()
+                .find(|record| record.operation == "owner")
+                .and_then(|record| field(record, "name"))
+                .unwrap()
+                .len(),
+            65_537
+        );
+        assert_eq!(
+            render_query_response(&context, &selection, &mut execution, Some(65_536))
+                .unwrap_err()
+                .code,
+            "query_output_item_too_large"
+        );
+    }
+
+    #[test]
     fn query_optional_policies_distinguish_zero_full_width_and_saturated_observation() {
-        assert_eq!(remaining_dimension(None, u64::MAX, true, "test").unwrap(), None);
-        assert_eq!(remaining_dimension(Some(0), 0, false, "test").unwrap(), Some(0));
+        assert_eq!(
+            remaining_dimension(None, u64::MAX, true, "test").unwrap(),
+            None
+        );
+        assert_eq!(
+            remaining_dimension(Some(0), 0, false, "test").unwrap(),
+            Some(0)
+        );
         assert!(remaining_dimension(Some(0), 1, false, "test").is_err());
-        assert_eq!(remaining_dimension(Some(7), 7, false, "test").unwrap(), Some(0));
+        assert_eq!(
+            remaining_dimension(Some(7), 7, false, "test").unwrap(),
+            Some(0)
+        );
         assert!(remaining_dimension(Some(6), 7, false, "test").is_err());
-        assert_eq!(remaining_dimension(Some(u64::MAX), u64::MAX, false, "test").unwrap(), Some(0));
+        assert_eq!(
+            remaining_dimension(Some(u64::MAX), u64::MAX, false, "test").unwrap(),
+            Some(0)
+        );
         assert!(remaining_dimension(Some(u64::MAX), u64::MAX, true, "test").is_err());
 
         let mut total = RepositoryReadWork::default();
@@ -3537,22 +3823,40 @@ mod tests {
         assert!(total.saturated());
         assert_eq!(total.map.pages_read, u64::MAX);
         let independent = RepositoryQueryAdmission {
-            store_bytes: Some(0), ..RepositoryQueryAdmission::default()
+            store_bytes: Some(0),
+            ..RepositoryQueryAdmission::default()
         };
-        assert_eq!(remaining_admission(independent, &total).expect("unrelated finite policy"), independent);
+        assert_eq!(
+            remaining_admission(independent, &total).expect("unrelated finite policy"),
+            independent
+        );
         let exhausted = RepositoryQueryAdmission {
-            map_pages: Some(u64::MAX), ..RepositoryQueryAdmission::default()
+            map_pages: Some(u64::MAX),
+            ..RepositoryQueryAdmission::default()
         };
-        assert_eq!(remaining_admission(exhausted, &total).expect_err("overflow exceeds finite MAX").code,
-            "query_admission_exhausted");
+        assert_eq!(
+            remaining_admission(exhausted, &total)
+                .expect_err("overflow exceeds finite MAX")
+                .code,
+            "query_admission_exhausted"
+        );
 
         let (_temporary, repository, _snapshot) = fixture();
         let view = repository.view_current().expect("zero query view");
         let mut called = false;
-        let zero = view.visit_query_owners(
-            None, None, Some(0), Some(0), RepositoryQueryAdmission::default(),
-            |_owner, _record| { called = true; Ok(MapRangeControl::Continue) },
-        ).expect("zero result range");
+        let zero = view
+            .visit_query_owners(
+                None,
+                None,
+                Some(0),
+                Some(0),
+                RepositoryQueryAdmission::default(),
+                |_owner, _record| {
+                    called = true;
+                    Ok(MapRangeControl::Continue)
+                },
+            )
+            .expect("zero result range");
         assert!(!called);
         assert_eq!(zero.value.visited, 0);
         assert_eq!(zero.value.returned, 0);
@@ -3569,13 +3873,20 @@ mod tests {
             assert_eq!(u64::from_be_bytes(key[1..9].try_into().unwrap()), depth);
             validate_context_resume_key(key, depth).expect("exact depth");
             if depth > 0 {
-                assert_eq!(validate_context_resume_key(key, depth - 1).unwrap_err().code,
-                    "query_continuation_resume_key");
+                assert_eq!(
+                    validate_context_resume_key(key, depth - 1)
+                        .unwrap_err()
+                        .code,
+                    "query_continuation_resume_key"
+                );
             }
             assert!(validate_context_resume_key(&key[..25], depth).is_err());
         }
         assert!(keys.windows(2).all(|pair| pair[0] < pair[1]));
-        assert_eq!(parse_context_depth(&u64::MAX.to_string()).unwrap(), u64::MAX);
+        assert_eq!(
+            parse_context_depth(&u64::MAX.to_string()).unwrap(),
+            u64::MAX
+        );
         assert_eq!(parse_context_depth("0").unwrap(), 0);
         assert!(parse_context_depth("18446744073709551616").is_err());
         assert!(parse_context_depth("00").is_err());
@@ -3621,7 +3932,7 @@ mod tests {
         ])
         .expect("owners grammar");
         assert_eq!(owners.limits.items, 7);
-        assert_eq!(owners.limits.output_bytes, 4096);
+        assert_eq!(owners.limits.output_bytes, Some(4096));
         assert!(matches!(
             owners.selection,
             QuerySelection::Owners {
@@ -3654,7 +3965,6 @@ mod tests {
         for arguments in [
             vec!["context", context_root, "--direction", "both"],
             vec!["context", context_root, "--depth", "1"],
-
             vec![
                 "context",
                 context_root,
@@ -3716,16 +4026,30 @@ mod tests {
             "query_parent_forbidden"
         );
         let exact = parse_query_arguments(&[
-            "owners".to_owned(), "--limit".to_owned(), u64::MAX.to_string(),
-            "--bytes".to_owned(), usize::MAX.to_string(),
-        ]).expect("full-width exact finite page request");
+            "owners".to_owned(),
+            "--limit".to_owned(),
+            u64::MAX.to_string(),
+            "--bytes".to_owned(),
+            usize::MAX.to_string(),
+        ])
+        .expect("full-width exact finite page request");
         assert_eq!(exact.limits.items, u64::MAX);
-        assert_eq!(exact.limits.output_bytes, usize::MAX);
+        assert_eq!(exact.limits.output_bytes, Some(usize::MAX));
         let zero = parse_query_arguments(&[
-            "owners".to_owned(), "--limit".to_owned(), "0".to_owned(),
-            "--bytes".to_owned(), "0".to_owned(),
-        ]).expect("zero is an explicit finite allowance");
-        assert_eq!(zero.limits, QueryPageLimits { items: 0, output_bytes: 0 });
+            "owners".to_owned(),
+            "--limit".to_owned(),
+            "0".to_owned(),
+            "--bytes".to_owned(),
+            "0".to_owned(),
+        ])
+        .expect("zero is an explicit finite allowance");
+        assert_eq!(
+            zero.limits,
+            QueryPageLimits {
+                items: 0,
+                output_bytes: Some(0)
+            }
+        );
     }
 
     #[test]
@@ -3741,7 +4065,7 @@ mod tests {
             selection: QuerySelection::Owners { kind: None },
             limits: QueryPageLimits {
                 items: 1,
-                output_bytes: 4096,
+                output_bytes: Some(4096),
             },
             continuation: None,
         };
@@ -3762,7 +4086,7 @@ mod tests {
         let mut resumed = request.clone();
         resumed.continuation = Some(token.clone());
         resumed.limits.items = 99;
-        resumed.limits.output_bytes = 8192;
+        resumed.limits.output_bytes = Some(8192);
         assert_eq!(
             bind_continuation(&resumed, binding, selector)
                 .expect("limit-independent binding")
@@ -4281,7 +4605,7 @@ mod tests {
             selection: selection.clone(),
             limits: QueryPageLimits {
                 items: 1,
-                output_bytes: TEST_QUERY_OUTPUT_BYTES,
+                output_bytes: Some(TEST_QUERY_OUTPUT_BYTES),
             },
             continuation: None,
         };
@@ -4387,7 +4711,7 @@ mod tests {
                 selection,
                 limits: QueryPageLimits {
                     items: 7,
-                    output_bytes: 4_096,
+                    output_bytes: Some(4_096),
                 },
                 continuation: None,
             },
@@ -4739,9 +5063,14 @@ mod tests {
             ),
         ] {
             let error = view
-                .visit_query_owners(None, None, Some(4), Some(4), admission, |_owner, _record| {
-                    Ok(MapRangeControl::Continue)
-                })
+                .visit_query_owners(
+                    None,
+                    None,
+                    Some(4),
+                    Some(4),
+                    admission,
+                    |_owner, _record| Ok(MapRangeControl::Continue),
+                )
                 .expect_err(name);
             assert_eq!(error.class, DiagnosticClass::Resource, "{name}");
             assert_eq!(error.code, expected, "{name}");
@@ -4781,27 +5110,57 @@ mod tests {
         ];
         for (snapshot, root) in fixtures {
             let created = memory_repository(&snapshot).expect("wide context repository");
-            let view = created.repository.view_current().expect("wide context view");
+            let view = created
+                .repository
+                .view_current()
+                .expect("wide context view");
             let before = repository_inventory(&created.repository);
             let expected = full_context_oracle(&snapshot, root, ContextDirection::Both, u64::MAX);
             let request = NormalizedQueryRequest {
                 selection: QuerySelection::Context {
-                    root, direction: ContextDirection::Both, depth: u64::MAX,
+                    root,
+                    direction: ContextDirection::Both,
+                    depth: u64::MAX,
                 },
-                limits: QueryPageLimits { items: 7, output_bytes: 4_096 },
+                limits: QueryPageLimits {
+                    items: 7,
+                    output_bytes: Some(4_096),
+                },
                 continuation: None,
             };
             let bytes = execute_normalized_query(&created.repository, &view, &request)
                 .expect("complete context admits counts above historical maxima");
             let output = records(&bytes);
-            let summary = output.iter().find(|record| record.operation == "summary").expect("summary");
-            let work = output.iter().find(|record| record.operation == "work").expect("work");
-            assert_eq!(field(summary, "total-owners"), Some(expected.owners.len().to_string().as_str()));
-            assert_eq!(field(summary, "total-relations"), Some(expected.relations.len().to_string().as_str()));
-            assert_eq!(field(summary, "expanded-owners"), Some(expected.expanded_owners.to_string().as_str()));
-            assert_eq!(field(work, "relation-witnesses-visited"), Some(expected.relation_witnesses.to_string().as_str()));
+            let summary = output
+                .iter()
+                .find(|record| record.operation == "summary")
+                .expect("summary");
+            let work = output
+                .iter()
+                .find(|record| record.operation == "work")
+                .expect("work");
+            assert_eq!(
+                field(summary, "total-owners"),
+                Some(expected.owners.len().to_string().as_str())
+            );
+            assert_eq!(
+                field(summary, "total-relations"),
+                Some(expected.relations.len().to_string().as_str())
+            );
+            assert_eq!(
+                field(summary, "expanded-owners"),
+                Some(expected.expanded_owners.to_string().as_str())
+            );
+            assert_eq!(
+                field(work, "relation-witnesses-visited"),
+                Some(expected.relation_witnesses.to_string().as_str())
+            );
             assert_eq!(field(work, "saturated"), Some("false"));
-            assert!(output.iter().any(|record| record.operation == "continuation"));
+            assert!(
+                output
+                    .iter()
+                    .any(|record| record.operation == "continuation")
+            );
             assert_eq!(repository_inventory(&created.repository), before);
         }
     }
@@ -4820,7 +5179,7 @@ mod tests {
             selection: selection.clone(),
             limits: QueryPageLimits {
                 items: 7,
-                output_bytes: 4_096,
+                output_bytes: Some(4_096),
             },
             continuation: None,
         };
@@ -4897,7 +5256,12 @@ mod tests {
         assert_eq!(exact_fit.context_summary, baseline.context_summary);
         assert_eq!(exact_fit.context_work, baseline.context_work);
 
-        let one_less = |value: Option<u64>| value.expect("finite context work").checked_sub(1).expect("positive context work");
+        let one_less = |value: Option<u64>| {
+            value
+                .expect("finite context work")
+                .checked_sub(1)
+                .expect("positive context work")
+        };
         for (name, admission, expected_code) in [
             (
                 "map-pages",
@@ -4982,7 +5346,10 @@ mod tests {
             assert_eq!(error.class, DiagnosticClass::Resource, "{name}");
             assert_eq!(error.code, expected_code, "{name}");
         }
-        assert_eq!(context_query_admission(), RepositoryQueryAdmission::default());
+        assert_eq!(
+            context_query_admission(),
+            RepositoryQueryAdmission::default()
+        );
     }
 
     #[test]

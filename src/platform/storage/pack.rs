@@ -13,10 +13,10 @@ use std::fmt;
 use std::io::{Read, Seek, SeekFrom};
 
 pub(super) const HEADER_BYTES: usize = 8 + 2 + 2 + 16;
-const INDEX_ENTRY_BYTES: usize = 1 + 32 + 8 + 8 + 8 + 32;
+pub(super) const INDEX_ENTRY_BYTES: usize = 1 + 32 + 8 + 8 + 8 + 32;
 pub(super) const FOOTER_BYTES: usize = 8 + 2 + 2 + 8 + 8 + 8 + 32;
 pub(super) const TRAILER_BYTES: usize = 8 + 32 + 8;
-const MINIMUM_PACK_BYTES: usize = HEADER_BYTES + FOOTER_BYTES + TRAILER_BYTES;
+pub(super) const MINIMUM_PACK_BYTES: usize = HEADER_BYTES + FOOTER_BYTES + TRAILER_BYTES;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PackId([u8; 32]);
@@ -119,17 +119,17 @@ impl PackMetadata {
         reader: &mut R,
         byte_length: u64,
     ) -> Result<PackMetadataRead, StoreError> {
-        Self::read_footer_with_entry_allowance(reader, byte_length, contract::MAXIMUM_PACK_ENTRIES)
+        Self::read_footer_with_entry_allowance(reader, byte_length, None)
     }
 
     /// Admit retained physical entries before allocating or reading the footer index.
     pub(super) fn read_footer_with_entry_allowance<R: Read + Seek>(
         reader: &mut R,
         byte_length: u64,
-        remaining_entries: usize,
+        remaining_entries: Option<usize>,
     ) -> Result<PackMetadataRead, StoreError> {
         let length = usize_from_u64(byte_length, "pack_file_length")?;
-        if !(MINIMUM_PACK_BYTES..=contract::MAXIMUM_PACK_BYTES).contains(&length) {
+        if length < MINIMUM_PACK_BYTES {
             return Err(pack_error(
                 StoreErrorClass::Resource,
                 "pack_size",
@@ -138,6 +138,16 @@ impl PackMetadata {
         }
         let mut header = [0_u8; HEADER_BYTES];
         read_at(reader, 0, &mut header)?;
+        if header[..8] != contract::PACK_MAGIC {
+            return Err(corrupt("pack_magic", "pack header magic is not current"));
+        }
+        if read_u16(&header, 8)? != contract::PACK_CONTRACT_VERSION {
+            return Err(corrupt(
+                "pack_contract",
+                "pack contract version is not current",
+            ));
+        }
+        let encoding = PackEncoding::from_flags(read_u16(&header, 10)?)?;
         let trailer_start = length - TRAILER_BYTES;
         let mut trailer = [0_u8; TRAILER_BYTES];
         read_at(reader, trailer_start as u64, &mut trailer)?;
@@ -171,6 +181,14 @@ impl PackMetadata {
                 "pack footer index magic is not current",
             ));
         }
+        if read_u16(&footer, 8)? != contract::PACK_CONTRACT_VERSION
+            || read_u16(&footer, 10)? != encoding.flags()
+        {
+            return Err(corrupt(
+                "pack_index_contract",
+                "pack footer contract or codec disagrees with the header",
+            ));
+        }
         let entry_count = usize_from_u64(
             u64::from_be_bytes(
                 footer[12..20]
@@ -187,7 +205,6 @@ impl PackMetadata {
                 "pack_index_bytes",
             )?;
         if entry_count == 0
-            || entry_count > contract::MAXIMUM_PACK_ENTRIES
             || entry_count.checked_mul(INDEX_ENTRY_BYTES) != Some(index_bytes)
             || index_bytes > footer_offset.saturating_sub(HEADER_BYTES)
         {
@@ -197,15 +214,21 @@ impl PackMetadata {
                 "pack footer declares an invalid or excessive index",
             ));
         }
-        if entry_count > remaining_entries {
+        let index_start = footer_offset - index_bytes;
+        if read_u64(&footer, 20)? != (index_start - HEADER_BYTES) as u64 {
+            return Err(corrupt(
+                "pack_payload_length",
+                "pack payload byte count disagrees with its exact region",
+            ));
+        }
+        if remaining_entries.is_some_and(|remaining| entry_count > remaining) {
             return Err(pack_error(
                 StoreErrorClass::Resource,
                 "catalog_entry_count",
                 "footer reconstruction exceeds the catalog entry bound",
             ));
         }
-        let index_start = footer_offset - index_bytes;
-        let mut index = vec![0_u8; index_bytes];
+        let mut index = zeroed_pack_bytes(index_bytes)?;
         read_at(reader, index_start as u64, &mut index)?;
         let metadata = decode_footer_parts(&header, &index, &footer, &trailer, byte_length)?;
         Ok(PackMetadataRead {
@@ -215,7 +238,7 @@ impl PackMetadata {
     }
 
     pub fn decode(bytes: &[u8], verify_complete_checksum: bool) -> Result<Self, StoreError> {
-        if bytes.len() < MINIMUM_PACK_BYTES || bytes.len() > contract::MAXIMUM_PACK_BYTES {
+        if bytes.len() < MINIMUM_PACK_BYTES {
             return Err(pack_error(
                 StoreErrorClass::Resource,
                 "pack_size",
@@ -268,7 +291,7 @@ impl PackMetadata {
             ));
         }
         let entry_count = usize_from_u64(read_u64(bytes, footer_offset + 12)?, "pack_entry_count")?;
-        if entry_count == 0 || entry_count > contract::MAXIMUM_PACK_ENTRIES {
+        if entry_count == 0 {
             return Err(pack_error(
                 StoreErrorClass::Resource,
                 "pack_entry_count",
@@ -303,7 +326,7 @@ impl PackMetadata {
                 "pack footer index checksum does not match",
             ));
         }
-        let mut entries = Vec::with_capacity(entry_count);
+        let mut entries = pack_vec(entry_count)?;
         let mut expected_offset = HEADER_BYTES as u64;
         let mut previous = None;
         for ordinal in 0..entry_count {
@@ -389,7 +412,7 @@ impl PackMetadata {
     pub(crate) fn bounded_read_entry(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
     ) -> Result<Option<(&PackIndexEntry, usize)>, StoreError> {
         let Some(entry) = self.find(key) else {
             return Ok(None);
@@ -400,11 +423,11 @@ impl PackMetadata {
             entry.uncompressed_length,
         )?;
         let length = usize_from_u64(entry.uncompressed_length, "pack_read_length")?;
-        if length > maximum_bytes || length > key.domain.maximum_bytes() {
+        if maximum_bytes.is_some_and(|maximum| length > maximum) {
             return Err(pack_error(
                 StoreErrorClass::Resource,
                 "pack_read_limit",
-                format!("object has {length} bytes; caller allowed {maximum_bytes}"),
+                format!("object has {length} bytes; caller allowance is {maximum_bytes:?}"),
             ));
         }
         Ok(Some((
@@ -437,7 +460,7 @@ impl PackMetadata {
         &self,
         bytes: &[u8],
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         let Some((entry, length)) = self.bounded_read_entry(key, maximum_bytes)? else {
             return Ok(None);
@@ -464,12 +487,12 @@ impl PackMetadata {
         &self,
         reader: &mut R,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         let Some((entry, length)) = self.bounded_read_entry(key, maximum_bytes)? else {
             return Ok(None);
         };
-        let mut value = vec![0_u8; length];
+        let mut value = zeroed_pack_bytes(length)?;
         read_at(reader, entry.offset, &mut value)?;
         if digest(contract::PACK_ENTRY_CHECKSUM_DOMAIN, &value) != entry.checksum {
             return Err(corrupt(
@@ -638,10 +661,7 @@ fn decode_footer_parts(
         ),
         "pack_entry_count",
     )?;
-    if entry_count == 0
-        || entry_count > contract::MAXIMUM_PACK_ENTRIES
-        || entry_count.checked_mul(INDEX_ENTRY_BYTES) != Some(index.len())
-    {
+    if entry_count == 0 || entry_count.checked_mul(INDEX_ENTRY_BYTES) != Some(index.len()) {
         return Err(pack_error(
             StoreErrorClass::Resource,
             "pack_index_size",
@@ -674,7 +694,7 @@ fn decode_footer_parts(
             "pack footer index checksum does not match",
         ));
     }
-    let mut entries = Vec::with_capacity(entry_count);
+    let mut entries = pack_vec(entry_count)?;
     let mut previous = None;
     let mut expected_offset = HEADER_BYTES as u64;
     for ordinal in 0..entry_count {
@@ -778,7 +798,8 @@ impl PackBuilder {
                 "one object identity is bound to different staged bytes",
             )),
             None => {
-                self.objects.insert(key, bytes.to_vec());
+                self.objects
+                    .insert(key, super::object::copy_object_bytes(bytes)?);
                 Ok(())
             }
         }
@@ -789,12 +810,16 @@ impl PackBuilder {
     }
 
     pub fn seal(self) -> Result<SealedPack, StoreError> {
-        seal_entries(self.objects.into_iter().collect(), PackEncoding::Raw)
+        let mut entries = pack_vec(self.objects.len())?;
+        entries.extend(self.objects);
+        seal_entries(entries, PackEncoding::Raw)
     }
 
     #[cfg(test)]
     pub fn seal_compressed(self) -> Result<SealedPack, StoreError> {
-        seal_entries(self.objects.into_iter().collect(), PackEncoding::Deflate)
+        let mut entries = pack_vec(self.objects.len())?;
+        entries.extend(self.objects);
+        seal_entries(entries, PackEncoding::Deflate)
     }
 
     pub fn seal_targeted(self, target_bytes: usize) -> Result<Vec<SealedPack>, StoreError> {
@@ -833,23 +858,26 @@ impl PackBuilder {
         let mut current = Vec::new();
         let mut payload_bytes = 0_usize;
         for (key, bytes) in self.objects {
-            let next_count = current.len() + 1;
+            let next_count = current
+                .len()
+                .checked_add(1)
+                .ok_or_else(|| corrupt("pack_entry_count", "pack entry count overflows"))?;
             let next_payload = payload_bytes
                 .checked_add(bytes.len())
                 .ok_or_else(|| corrupt("pack_size_overflow", "pack payload size overflows"))?;
             let next_size = encoded_pack_size(next_count, next_payload)?;
             if !current.is_empty() && next_size > target_bytes {
-                packs.push(seal_entries(current, encoding)?);
+                pack_push(&mut packs, seal_entries(current, encoding)?)?;
                 current = Vec::new();
                 payload_bytes = 0;
             }
             payload_bytes = payload_bytes
                 .checked_add(bytes.len())
                 .ok_or_else(|| corrupt("pack_size_overflow", "pack payload size overflows"))?;
-            current.push((key, bytes));
+            pack_push(&mut current, (key, bytes))?;
         }
         if !current.is_empty() {
-            packs.push(seal_entries(current, encoding)?);
+            pack_push(&mut packs, seal_entries(current, encoding)?)?;
         }
         Ok(packs)
     }
@@ -866,37 +894,22 @@ fn seal_entries(
             "an empty immutable pack is not valid",
         ));
     }
-    if entries.len() > contract::MAXIMUM_PACK_ENTRIES {
-        return Err(pack_error(
-            StoreErrorClass::Resource,
-            "pack_entry_count",
-            "pack entry count exceeds the hostile decoder bound",
-        ));
+    let mut encoded_entries = pack_vec(entries.len())?;
+    for (key, bytes) in entries {
+        key.verify(&bytes)?;
+        let uncompressed_length = bytes.len() as u64;
+        let bytes = encoding.encode(bytes)?;
+        encoding.validate_lengths(key.domain, bytes.len() as u64, uncompressed_length)?;
+        encoded_entries.push((key, bytes, uncompressed_length));
     }
-    let entries = entries
-        .into_iter()
-        .map(|(key, bytes)| {
-            key.verify(&bytes)?;
-            let uncompressed_length = bytes.len() as u64;
-            let bytes = encoding.encode(bytes)?;
-            encoding.validate_lengths(key.domain, bytes.len() as u64, uncompressed_length)?;
-            Ok((key, bytes, uncompressed_length))
-        })
-        .collect::<Result<Vec<_>, StoreError>>()?;
+    let entries = encoded_entries;
     let payload_bytes = entries.iter().try_fold(0_usize, |total, (_, bytes, _)| {
         total
             .checked_add(bytes.len())
             .ok_or_else(|| corrupt("pack_size_overflow", "pack payload size overflows"))
     })?;
     let capacity = encoded_pack_size(entries.len(), payload_bytes)?;
-    if capacity > contract::MAXIMUM_PACK_BYTES {
-        return Err(pack_error(
-            StoreErrorClass::Resource,
-            "pack_size",
-            "sealed pack would exceed the hostile decoder bound",
-        ));
-    }
-    let mut index_entries = Vec::with_capacity(entries.len());
+    let mut index_entries = pack_vec(entries.len())?;
     let mut offset = HEADER_BYTES as u64;
     for (key, bytes, uncompressed_length) in &entries {
         let length = bytes.len() as u64;
@@ -912,7 +925,7 @@ fn seal_entries(
             .ok_or_else(|| corrupt("pack_offset_overflow", "pack payload offset overflows"))?;
     }
     let nonce = nonce_for_entries(&index_entries);
-    let mut bytes = Vec::with_capacity(capacity);
+    let mut bytes = pack_vec(capacity)?;
     bytes.extend_from_slice(&contract::PACK_MAGIC);
     bytes.extend_from_slice(&contract::PACK_CONTRACT_VERSION.to_be_bytes());
     bytes.extend_from_slice(&encoding.flags().to_be_bytes());
@@ -920,7 +933,11 @@ fn seal_entries(
     for (_, value, _) in &entries {
         bytes.extend_from_slice(value);
     }
-    let mut index = Vec::with_capacity(entries.len() * INDEX_ENTRY_BYTES);
+    let index_bytes = entries
+        .len()
+        .checked_mul(INDEX_ENTRY_BYTES)
+        .ok_or_else(|| corrupt("pack_index_overflow", "pack index size overflows"))?;
+    let mut index = pack_vec(index_bytes)?;
     for entry in &index_entries {
         index.push(entry.key.domain.tag());
         index.extend_from_slice(&entry.key.digest.bytes());
@@ -970,6 +987,36 @@ fn nonce_for_entries(entries: &[PackIndexEntry]) -> [u8; 16] {
     let mut nonce = [0_u8; 16];
     nonce.copy_from_slice(&hasher.finalize().as_bytes()[..16]);
     nonce
+}
+
+fn pack_push<T>(values: &mut Vec<T>, value: T) -> Result<(), StoreError> {
+    values.try_reserve(1).map_err(|_| {
+        pack_error(
+            StoreErrorClass::Resource,
+            "pack_allocation",
+            "pack allocation exceeds available capacity",
+        )
+    })?;
+    values.push(value);
+    Ok(())
+}
+
+fn pack_vec<T>(capacity: usize) -> Result<Vec<T>, StoreError> {
+    let mut values = Vec::new();
+    values.try_reserve_exact(capacity).map_err(|_| {
+        pack_error(
+            StoreErrorClass::Resource,
+            "pack_allocation",
+            "pack allocation exceeds available capacity",
+        )
+    })?;
+    Ok(values)
+}
+
+fn zeroed_pack_bytes(length: usize) -> Result<Vec<u8>, StoreError> {
+    let mut bytes = pack_vec(length)?;
+    bytes.resize(length, 0);
+    Ok(bytes)
 }
 
 fn encoded_pack_size(entries: usize, payload_bytes: usize) -> Result<usize, StoreError> {

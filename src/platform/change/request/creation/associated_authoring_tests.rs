@@ -372,13 +372,22 @@ fn associated_lowering_rejects_duplicate_erasure_and_admits_cumulative_work_befo
             },
         },
     ];
-    for maximum in [11, 12] {
+    for maximum in [None, Some(0), Some(11), Some(12), Some(u64::MAX)] {
         let mut budget = ChangeBudget::default();
-        budget.validation.maximum_expression_steps = Some(maximum);
+        budget.validation.maximum_expression_steps = maximum;
         let mut lowerer = lowerer(&base, &witness, budget);
-        lowerer
-            .owned_contract_value(&self_type(&base), &[], &[], &members)
-            .unwrap();
+        let contract_result = lowerer.owned_contract_value(&self_type(&base), &[], &[], &members);
+        if maximum == Some(0) {
+            assert_eq!(
+                contract_result.unwrap_err().code,
+                "change_budget_validation_expression_steps"
+            );
+            assert_eq!(lowerer.work.associated_inventory_steps, 0);
+            assert!(!lowerer.work.associated_inventory_saturated);
+            assert_eq!(lowerer.types.len(), 0);
+            continue;
+        }
+        contract_result.unwrap();
         let result = lowerer.owned_implementation_value(
             &contract,
             &[],
@@ -388,16 +397,18 @@ fn associated_lowering_rejects_duplicate_erasure_and_admits_cumulative_work_befo
             &[],
             &bindings,
         );
-        if maximum == 11 {
+        if maximum == Some(11) {
             assert_eq!(
                 result.unwrap_err().code,
                 "change_budget_validation_expression_steps"
             );
             assert_eq!(lowerer.types.len(), 0);
+            assert_eq!(lowerer.work.associated_inventory_steps, 6);
         } else {
             assert_eq!(result.unwrap().associated_types.len(), 2);
+            assert_eq!(lowerer.work.associated_inventory_steps, 12);
         }
-        assert_eq!(lowerer.work.associated_inventory_steps, 12);
+        assert!(!lowerer.work.associated_inventory_saturated);
     }
     let mut duplicate = bindings.clone();
     duplicate[1].member = duplicate[0].member;

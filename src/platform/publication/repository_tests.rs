@@ -45,7 +45,7 @@ mod durability_closure_tests;
 mod owned_contract_parameter_deletion_tests;
 
 fn memory_repository(snapshot: &KernelSnapshot) -> Result<CreatedRepository, Diagnostic> {
-    let memory = MemProjectStore::new(128 * 1_048_576)?;
+    let memory = MemProjectStore::new(None)?;
     GraphRepository::create_memory(&memory, snapshot, None)
 }
 
@@ -53,7 +53,7 @@ fn memory_witness_fixture() -> (KernelSnapshot, CreatedRepository) {
     static BASE: std::sync::OnceLock<(MemProjectStore, KernelSnapshot, CreatedRepository)> =
         std::sync::OnceLock::new();
     let (base, snapshot, created) = BASE.get_or_init(|| {
-        let memory = MemProjectStore::new(128 * 1_048_576).expect("witness fixture capacity");
+        let memory = MemProjectStore::new(None).expect("witness fixture capacity");
         let snapshot = crate::platform::kernel::tests::witness_snapshot();
         let created = GraphRepository::create_memory(&memory, &snapshot, None)
             .expect("accepted witness fixture");
@@ -1657,11 +1657,7 @@ fn revision_view_reads_exact_canonical_and_witness_records_with_local_work() {
         .copied()
         .collect::<Vec<_>>();
     let incoming = view
-        .incoming_relations(
-            incoming_target,
-            Some(incoming_kind),
-            None,
-        )
+        .incoming_relations(incoming_target, Some(incoming_kind), None)
         .expect("bounded incoming relations");
     assert_eq!(incoming.value.edges, expected_incoming);
     assert!(!incoming.value.truncated);
@@ -1675,10 +1671,14 @@ fn revision_view_reads_exact_canonical_and_witness_records_with_local_work() {
     let zero = view.outgoing_relations(source, None, Some(0)).unwrap();
     assert!(zero.value.edges.is_empty());
     assert!(zero.value.truncated);
-    let exact = view.outgoing_relations(source, None, Some(expected.len())).unwrap();
+    let exact = view
+        .outgoing_relations(source, None, Some(expected.len()))
+        .unwrap();
     assert_eq!(exact.value.edges, expected);
     assert!(!exact.value.truncated);
-    let above_old_limit = view.outgoing_relations(source, None, Some(MAXIMUM_RELATION_READ_ITEMS + 1)).unwrap();
+    let above_old_limit = view
+        .outgoing_relations(source, None, Some(MAXIMUM_RELATION_READ_ITEMS + 1))
+        .unwrap();
     assert_eq!(above_old_limit.value.edges, expected);
 
     let test = owner_named(&created.initial.snapshot, "caller_test");
@@ -4702,8 +4702,11 @@ fn reviewed_change_plan_owned_body_closure_matches_complete_before_after_oracle(
         "change_plan_file_digest"
     );
     let trailing = format!(
-        "{canonical}logical-plan product=lkjscript version={}\n",
-        crate::PRODUCT_VERSION
+        "{canonical}{}\n",
+        canonical
+            .lines()
+            .next()
+            .expect("canonical logical plan header")
     );
     assert_eq!(
         logical_plan_decode_error(trailing.as_bytes()),
@@ -4771,7 +4774,10 @@ fn reviewed_function_extraction_matches_disjoint_oracle_and_preserves_moved_iden
         .prepare_authored_change(&exhausted_request, PublicationOptions::default())
         .expect_err("exhausted extraction must reject before publication");
     assert_eq!(exhausted[0].class, DiagnosticClass::Resource);
-    assert_eq!(exhausted[0].code, "change_extract_call_graph_work");
+    assert_eq!(
+        exhausted[0].code,
+        "change_budget_validation_expression_steps"
+    );
     assert_eq!(
         created.repository.current().unwrap().head,
         created.current.head
@@ -5300,7 +5306,7 @@ fn semantic_preconditions_reject_derived_entries_that_disagree_with_meaning() {
 }
 
 #[test]
-fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
+fn authored_budget_rejects_exhausted_work_before_publication() {
     let (_logical, created) = memory_witness_fixture();
     let base = created.current.head.revision;
     let callee = owner_named(&created.initial.snapshot, "callee");
@@ -5309,21 +5315,21 @@ fn authored_budget_rejects_invalid_and_exhausted_work_before_publication() {
         name: Name::new("budgeted_callee").unwrap(),
     };
 
-    let mut invalid_budget = ChangeBudget::default();
-    invalid_budget.authored.maximum_operations = Some(0);
-    let invalid = AuthoredChangeSet {
+    let mut zero_budget = ChangeBudget::default();
+    zero_budget.authored.maximum_operations = Some(0);
+    let exhausted_zero = AuthoredChangeSet {
         base,
         preconditions: Vec::new(),
-        budget: invalid_budget,
+        budget: zero_budget,
         changes: vec![rename()],
     };
     assert_eq!(
         created
             .repository
-            .prepare_authored_change(&invalid, PublicationOptions::default())
+            .prepare_authored_change(&exhausted_zero, PublicationOptions::default())
             .expect_err("zero operation budget must reject")[0]
             .code,
-        "change_budget_invalid_operations"
+        "change_budget_operations"
     );
 
     let mut operation_budget = ChangeBudget::default();

@@ -2,9 +2,7 @@
 //! Process behavior and release candidates always retain the executable boundary.
 
 use super::copy_executable;
-use lkjscript::platform::contract::{
-    diagnostic_class_name, exit_status_for,
-};
+use lkjscript::platform::contract::{diagnostic_class_name, exit_status_for};
 use lkjscript::platform::control::{CompactResponseLimits, CompactResponseWriter};
 use lkjscript::platform::{self, Diagnostic};
 use std::path::{Path, PathBuf};
@@ -286,8 +284,8 @@ pub fn failure(command: &str, diagnostics: &[Diagnostic]) -> Response {
 }
 
 fn failure_bytes(command: &str, diagnostics: &[Diagnostic]) -> Result<Vec<u8>, ()> {
-    let mut output = CompactResponseWriter::new(CompactResponseLimits::default())
-    .map_err(|_| ())?;
+    let mut output =
+        CompactResponseWriter::new(CompactResponseLimits::default()).map_err(|_| ())?;
     output
         .append_record("result", &[("status", "failure"), ("command", command)])
         .map_err(|_| ())?;

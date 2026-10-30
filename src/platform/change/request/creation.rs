@@ -29,9 +29,9 @@ mod effect_admission_tests {
             };
             4
         ];
-        for maximum in [12, 13] {
+        for maximum in [None, Some(0), Some(12), Some(13), Some(u64::MAX)] {
             let mut budget = ChangeBudget::default();
-            budget.validation.maximum_expression_steps = Some(maximum);
+            budget.validation.maximum_expression_steps = maximum;
             let mut lowerer = AuthoredLowerer::new(
                 &base,
                 &witness,
@@ -47,17 +47,19 @@ mod effect_admission_tests {
             )
             .unwrap();
             let result = lowerer.lower_effect_row_parts(&atoms, &[]);
-            if maximum == 12 {
+            if matches!(maximum, Some(0 | 12)) {
                 assert_eq!(
                     result.unwrap_err().code,
                     "change_budget_validation_expression_steps"
                 );
+                assert_eq!(lowerer.work.effect_normalization_steps, 0);
             } else {
                 let row = result.unwrap();
                 assert_eq!(row.requirements.len(), 1);
                 row.validate().unwrap();
+                assert_eq!(lowerer.work.effect_normalization_steps, 13);
             }
-            assert_eq!(lowerer.work.effect_normalization_steps, 13);
+            assert!(!lowerer.work.effect_normalization_saturated);
             assert!(lowerer.owner_edits.is_empty() && lowerer.type_additions.is_empty());
         }
     }
@@ -1583,10 +1585,16 @@ impl<'a, B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLow
         let mut steps = super::BudgetCounter::product(count, factor);
         steps.observe(super::BudgetCounter::exact(1));
         let mut total = self.work.validation_observation();
-        total.charge(steps, self.budget.validation.maximum_expression_steps,
-            "effect row normalization before allocation", "validation_expression_steps")?;
-        let mut observed = super::BudgetCounter { consumed: self.work.effect_normalization_steps,
-            saturated: self.work.effect_normalization_saturated };
+        total.charge(
+            steps,
+            self.budget.validation.maximum_expression_steps,
+            "effect row normalization before allocation",
+            "validation_expression_steps",
+        )?;
+        let mut observed = super::BudgetCounter {
+            consumed: self.work.effect_normalization_steps,
+            saturated: self.work.effect_normalization_saturated,
+        };
         observed.observe(steps);
         self.work.effect_normalization_steps = observed.consumed;
         self.work.effect_normalization_saturated = observed.saturated;

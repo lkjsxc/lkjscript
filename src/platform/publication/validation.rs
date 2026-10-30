@@ -192,10 +192,17 @@ fn recheck(
             && !store.derived.contains_key(&key)
         {
             admission.admit_catalog_lookup().map_err(read_error)?;
-            work.add(crate::platform::storage::object::StoreWork { catalog_lookups: 1, ..crate::platform::storage::object::StoreWork::default() });
+            work.add(crate::platform::storage::object::StoreWork {
+                catalog_lookups: 1,
+                ..crate::platform::storage::object::StoreWork::default()
+            });
             let value = memory.objects.get(&key).ok_or_else(missing_object)?;
             let length = value.as_slice().len();
-            if length > key.domain.maximum_bytes() {
+            if key
+                .domain
+                .maximum_bytes()
+                .is_some_and(|maximum| length > maximum)
+            {
                 return Err(Diagnostic::new(
                     DiagnosticClass::Resource,
                     "publication_validation_object_size",
@@ -210,11 +217,20 @@ fn recheck(
                 .as_ref()
                 .is_some_and(|old| old.as_ptr() == Arc::as_ptr(value))
             {
-                work.add(crate::platform::storage::object::StoreWork { objects_reused: 1, ..crate::platform::storage::object::StoreWork::default() });
+                work.add(crate::platform::storage::object::StoreWork {
+                    objects_reused: 1,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
             } else {
                 key.verify(value.as_slice()).map_err(read_error)?;
-                work.add(crate::platform::storage::object::StoreWork { objects_read: 1, ..crate::platform::storage::object::StoreWork::default() });
-                work.add(crate::platform::storage::object::StoreWork { bytes_read: length as u64, ..crate::platform::storage::object::StoreWork::default() });
+                work.add(crate::platform::storage::object::StoreWork {
+                    objects_read: 1,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
+                work.add(crate::platform::storage::object::StoreWork {
+                    bytes_read: length as u64,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
             }
             continue;
         }
@@ -591,7 +607,7 @@ impl ImmutableObjectStore for ViewStore {
     fn read(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         self.read_admitted(
@@ -605,7 +621,7 @@ impl ImmutableObjectStore for ViewStore {
     fn read_admitted(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         admission: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
@@ -657,7 +673,7 @@ impl ViewStore {
     fn read_joint(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         admission: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
@@ -672,7 +688,9 @@ impl ViewStore {
         if let Some(bytes) = self.derived.get(&key) {
             admission.admit_catalog_lookup()?;
             admission.admit_object(bytes.len())?;
-            if bytes.len() > maximum_bytes {
+            if let Some(maximum_bytes) = maximum_bytes
+                && bytes.len() > maximum_bytes
+            {
                 return Err(StoreError::new(
                     StoreErrorClass::Resource,
                     "publication_validation_object_size",
@@ -680,9 +698,18 @@ impl ViewStore {
                 ));
             }
             key.verify(bytes)?;
-            work.add(crate::platform::storage::object::StoreWork { catalog_lookups: 1, ..crate::platform::storage::object::StoreWork::default() });
-            work.add(crate::platform::storage::object::StoreWork { objects_read: 1, ..crate::platform::storage::object::StoreWork::default() });
-            work.add(crate::platform::storage::object::StoreWork { bytes_read: bytes.len() as u64, ..crate::platform::storage::object::StoreWork::default() });
+            work.add(crate::platform::storage::object::StoreWork {
+                catalog_lookups: 1,
+                ..crate::platform::storage::object::StoreWork::default()
+            });
+            work.add(crate::platform::storage::object::StoreWork {
+                objects_read: 1,
+                ..crate::platform::storage::object::StoreWork::default()
+            });
+            work.add(crate::platform::storage::object::StoreWork {
+                bytes_read: bytes.len() as u64,
+                ..crate::platform::storage::object::StoreWork::default()
+            });
             Ok(Some(bytes.clone()))
         } else {
             Ok(None)

@@ -310,16 +310,13 @@ impl Renderer<'_> {
     }
 
     fn admit_pool(&mut self, bytes: usize) -> Result<(), Diagnostic> {
-        self.pool_bytes = self
-            .pool_bytes
-            .checked_add(bytes)
-            .ok_or_else(|| {
-                Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "change_draft_capacity",
-                    "draft alias length exceeds the host address space",
-                )
-            })?;
+        self.pool_bytes = self.pool_bytes.checked_add(bytes).ok_or_else(|| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "change_draft_capacity",
+                "draft alias length exceeds the host address space",
+            )
+        })?;
         Ok(())
     }
 
@@ -1154,11 +1151,11 @@ impl Renderer<'_> {
                         self.reference("port", format!("{}/{}", p.package, p.port))?
                     ));
                 }
-                for edge in self.reader.reader.incoming(
-                    owner,
-                    k::RelationKind::HttpRouteTarget,
-                    None,
-                )? {
+                for edge in
+                    self.reader
+                        .reader
+                        .incoming(owner, k::RelationKind::HttpRouteTarget, None)?
+                {
                     let k::RelationEndpoint::Owner(source) = edge.source else {
                         return Err(error("route ownership has no source"));
                     };

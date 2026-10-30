@@ -88,21 +88,58 @@ impl RunPolicy {
 }
 
 /// Precharge a cumulative quota, or observe work without imposing a lifetime limit.
-/// Unbounded observations saturate: a value of u64::MAX is a lower bound, never
-/// an exact count. Storage-size arithmetic must be checked separately before growth.
+/// Exact `u64::MAX` remains distinct from an overflowing lower-bound observation.
+/// Storage-size arithmetic must be checked separately before growth.
 pub(crate) fn cumulative_charge(
     current: u64,
     additional: u64,
     maximum: Option<u64>,
     code: &'static str,
     message: &'static str,
+    saturated: &mut bool,
 ) -> Result<u64, ExecutionError> {
     match maximum {
-        Some(maximum) => current
-            .checked_add(additional)
-            .filter(|next| *next <= maximum)
-            .ok_or_else(|| ExecutionError::resource(code, message)),
-        None => Ok(current.saturating_add(additional)),
+        Some(_) if *saturated => Err(ExecutionError::resource(code, message)),
+        Some(maximum) => finite_charge(current, additional, maximum, code, message),
+        None => match current.checked_add(additional) {
+            Some(next) => Ok(next),
+            None => {
+                *saturated = true;
+                Ok(u64::MAX)
+            }
+        },
+    }
+}
+
+/// Reserve exact finite capacity without using passive observations as permission.
+pub(crate) fn finite_charge(
+    current: u64,
+    additional: u64,
+    maximum: u64,
+    code: &'static str,
+    message: &'static str,
+) -> Result<u64, ExecutionError> {
+    current
+        .checked_add(additional)
+        .filter(|next| *next <= maximum)
+        .ok_or_else(|| ExecutionError::resource(code, message))
+}
+
+/// Combine passive observations without turning an overflow into a runtime quota.
+/// Inherited saturation is retained even when the represented sum itself fits.
+pub(crate) fn cumulative_observe(
+    current: &mut u64,
+    saturated: &mut bool,
+    additional: u64,
+    additional_saturated: bool,
+) {
+    *saturated |= additional_saturated;
+    match current.checked_add(additional) {
+        Some(next) => *current = next,
+        None => {
+            *current = u64::MAX;
+            *saturated = true;
+        }
     }
 }
 
@@ -376,38 +413,95 @@ mod tests {
             (policy.maximum_capability_calls, 100_000),
         ] {
             assert_eq!(selected, None);
+            let mut saturated = false;
             assert_eq!(
-                cumulative_charge(former, 1, selected, "quota", "exhausted").unwrap(),
+                cumulative_charge(former, 1, selected, "quota", "exhausted", &mut saturated)
+                    .unwrap(),
                 former + 1
             );
+            assert!(!saturated);
             assert_eq!(
-                cumulative_charge(u64::MAX, 1, selected, "quota", "exhausted").unwrap(),
+                cumulative_charge(u64::MAX, 1, selected, "quota", "exhausted", &mut saturated)
+                    .unwrap(),
                 u64::MAX
             );
-            let explicit =
-                cumulative_charge(former, 1, Some(former), "quota", "exhausted").unwrap_err();
+            assert!(saturated);
+            let mut finite_saturated = false;
+            let explicit = cumulative_charge(
+                former,
+                1,
+                Some(former),
+                "quota",
+                "exhausted",
+                &mut finite_saturated,
+            )
+            .unwrap_err();
             assert_eq!(explicit.class, ExecutionFailureClass::Resource);
             assert_eq!(explicit.code, "quota");
+            assert!(!finite_saturated);
         }
     }
 
     #[test]
     fn cumulative_quota_overflow_and_unbounded_telemetry_are_distinct() {
-        for maximum in [None, Some(u64::MAX)] {
+        for (current, additional, maximum, before, expected, after) in [
+            (0, 0, Some(0), false, Some(0), false),
+            (0, 1, Some(0), false, None, false),
+            (0, 5, Some(4), false, None, false),
+            (0, 5, Some(5), false, Some(5), false),
+            (4, 1, Some(5), false, Some(5), false),
+            (5, 1, Some(5), false, None, false),
+            (u64::MAX - 1, 1, None, false, Some(u64::MAX), false),
+            (
+                u64::MAX - 1,
+                1,
+                Some(u64::MAX),
+                false,
+                Some(u64::MAX),
+                false,
+            ),
+            (u64::MAX, 0, Some(u64::MAX), false, Some(u64::MAX), false),
+            (u64::MAX, 1, Some(u64::MAX), false, None, false),
+            (u64::MAX, 1, None, false, Some(u64::MAX), true),
+            (u64::MAX, 1, None, true, Some(u64::MAX), true),
+            (u64::MAX, 0, Some(u64::MAX), true, None, true),
+        ] {
+            let mut saturated = before;
             assert_eq!(
-                cumulative_charge(u64::MAX - 1, 1, maximum, "quota", "exhausted").ok(),
-                Some(u64::MAX)
+                cumulative_charge(
+                    current,
+                    additional,
+                    maximum,
+                    "quota",
+                    "exhausted",
+                    &mut saturated,
+                )
+                .ok(),
+                expected,
+                "current={current} additional={additional} maximum={maximum:?} saturated={before}"
             );
+            assert_eq!(saturated, after);
         }
-        assert_eq!(
-            cumulative_charge(u64::MAX, 1, None, "quota", "exhausted").ok(),
-            Some(u64::MAX)
-        );
-        assert!(cumulative_charge(u64::MAX, 1, Some(u64::MAX), "quota", "exhausted").is_err());
-        assert_eq!(
-            cumulative_charge(4, 1, Some(5), "quota", "exhausted").ok(),
-            Some(5)
-        );
-        assert!(cumulative_charge(5, 1, Some(5), "quota", "exhausted").is_err());
+    }
+
+    #[test]
+    fn cumulative_observation_merges_preserve_exact_maximum_and_inherited_saturation() {
+        let mut count = u64::MAX - 1;
+        let mut saturated = false;
+        cumulative_observe(&mut count, &mut saturated, 1, false);
+        assert_eq!(count, u64::MAX);
+        assert!(!saturated);
+        cumulative_observe(&mut count, &mut saturated, 1, false);
+        assert_eq!(count, u64::MAX);
+        assert!(saturated);
+
+        let mut merged = 0;
+        let mut merged_saturated = false;
+        cumulative_observe(&mut merged, &mut merged_saturated, count, saturated);
+        assert_eq!(merged, u64::MAX);
+        assert!(merged_saturated);
+        cumulative_observe(&mut merged, &mut merged_saturated, 0, false);
+        assert_eq!(merged, u64::MAX);
+        assert!(merged_saturated);
     }
 }

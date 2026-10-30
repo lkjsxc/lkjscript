@@ -622,7 +622,7 @@ fn read_manifest_with_work(
 ) -> Result<CompilationManifest, Diagnostic> {
     let key = ObjectKey::from_digest(ObjectDomain::CompilationManifest, digest.bytes());
     let bytes = store
-        .read(key, MAXIMUM_COMPILATION_MANIFEST_BYTES, work)
+        .read(key, Some(MAXIMUM_COMPILATION_MANIFEST_BYTES), work)
         .map_err(store_diagnostic)?
         .ok_or_else(|| {
             cache_error(

@@ -55,10 +55,10 @@ use super::super::kernel::contract::{
 use super::super::kernel::{NamespaceClass, OwnerKind, RelationKind};
 use super::super::normalized_query::{
     ContextDirection, DEFAULT_QUERY_ITEMS, DEFAULT_QUERY_OUTPUT_BYTES,
-    MAXIMUM_QUERY_CONTINUATION_BYTES, MINIMUM_CONTEXT_DEPTH,
-    QUERY_CONTINUATION_INTEGRITY_DOMAIN, QUERY_CONTINUATION_MAGIC_TEXT,
-    QUERY_CONTRACT_IDENTITY, QUERY_CONTRACT_VERSION, QUERY_OPERATION_DESCRIPTORS,
-    QUERY_RESPONSE_FIELDS, QUERY_SELECTOR_DIGEST_DOMAIN, QUERY_SELECTOR_FIELDS, QueryDirection,
+    MAXIMUM_QUERY_CONTINUATION_BYTES, MINIMUM_CONTEXT_DEPTH, QUERY_CONTINUATION_INTEGRITY_DOMAIN,
+    QUERY_CONTINUATION_MAGIC_TEXT, QUERY_CONTRACT_IDENTITY, QUERY_CONTRACT_VERSION,
+    QUERY_OPERATION_DESCRIPTORS, QUERY_RESPONSE_FIELDS, QUERY_SELECTOR_DIGEST_DOMAIN,
+    QUERY_SELECTOR_FIELDS, QueryDirection,
 };
 use super::super::object::OBJECT_ADAPTER_CONTRACT_VERSION;
 use super::super::package::RunnerKind;
@@ -353,6 +353,7 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("projection", "fact-records"),
     ("projection", "structural-edges"),
     ("projection", "reference-edges"),
+    ("projection", "saturated"),
     ("projection", "fact-reads"),
     ("projection", "maximum-depth"),
     ("projection", "logical-bytes"),
@@ -464,6 +465,8 @@ pub(crate) const FUNCTION_DEFINITION_RESPONSE_FIELDS: &[(&str, &str)] = &[
     ("definition.expression", "label"),
     ("definition.expression", "depth"),
     ("definition.expression", "form"),
+    ("definition.expression", "type"),
+    ("definition.expression", "capability"),
     ("definition.expression", "declaration"),
     ("definition.expression", "read-scope"),
     ("definition.expression", "source"),
@@ -998,7 +1001,7 @@ pub fn contract_descriptors() -> &'static [ContractDescriptor] {
             stability: CURRENT,
             authority: ContractAuthority::AcceptedHistory,
             predecessor_policy: REJECT,
-            magic_values: &["LKJRECPT"],
+            magic_values: &["LKJRECP2"],
             digest_domains: &[
                 RECEIPT_ENVELOPE_DOMAIN,
                 storage_contract::RECEIPT_OBJECT_DIGEST_DOMAIN,
@@ -1719,7 +1722,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         query_operation(
             "Enumerate live owners, resolve one exact namespace, inspect one relation prefix, or traverse one bounded local context at the current normalized revision.",
-            "query owners [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN] | query find CLASS NAME [--parent OWNER] | query relations OWNER|package --direction incoming|outgoing [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN] | query context OWNER --direction incoming|outgoing|both --depth N [--limit N] [--bytes N] [--continuation TOKEN]",
+            "query owners [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN] | query find CLASS NAME [--parent OWNER] [--bytes N] | query relations OWNER|package --direction incoming|outgoing [--kind KIND] [--limit N] [--bytes N] [--continuation TOKEN] | query context OWNER --direction incoming|outgoing|both --depth N [--limit N] [--bytes N] [--continuation TOKEN]",
         ),
         operation(
             PublicOperation::Change,
@@ -2117,13 +2120,6 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             DEFAULT_QUERY_ITEMS as usize,
             LimitClass::DefaultPagination,
             LimitUnit::Items,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "query_default_bytes",
-            DEFAULT_QUERY_OUTPUT_BYTES,
-            LimitClass::DefaultPagination,
-            LimitUnit::Bytes,
             OverridePolicy::Fixed,
         ),
         limit(
@@ -3047,8 +3043,62 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "change_unit_order",
             DiagnosticClass::Source,
-            "An edited ordered contract changes existing child order implicitly.",
-            "Retain existing order and append explicit new children.",
+            "An edited type, effect, or requirement parameter inventory changes retained order or inserts new children.",
+            "Preserve those retained orders and append new children; complete value-parameter edits explicitly select their final order.",
+        ),
+        diagnostic(
+            "change_parameter_order_parent",
+            DiagnosticClass::Semantic,
+            "The selected parameter-order parent is not a function, external declaration, or interface operation.",
+            "Select the exact callable or operation that owns the value parameters.",
+        ),
+        diagnostic(
+            "change_parameter_order_duplicate_parent",
+            DiagnosticClass::Semantic,
+            "One candidate specifies value-parameter order more than once for the same resolved parent.",
+            "Supply one complete final order for each parent.",
+        ),
+        diagnostic(
+            "change_parameter_order_membership",
+            DiagnosticClass::Semantic,
+            "The supplied parameter order is not a bijection of the parent's final surviving value-parameter inventory.",
+            "Include each retained or newly added parameter exactly once and express removals as explicit deletions.",
+        ),
+        diagnostic(
+            "change_parameter_order_kind",
+            DiagnosticClass::Semantic,
+            "An ordered member resolves to an owner other than a value parameter.",
+            "Use exact parameter identities or request-local parameter symbols.",
+        ),
+        diagnostic(
+            "change_parameter_order_duplicate",
+            DiagnosticClass::Semantic,
+            "The complete value-parameter order repeats a resolved identity.",
+            "List each surviving parameter once.",
+        ),
+        diagnostic(
+            "change_parameter_order_foreign_parent",
+            DiagnosticClass::Semantic,
+            "An ordered parameter belongs to a different callable or operation.",
+            "Select only parameters owned by the exact parent being edited.",
+        ),
+        diagnostic(
+            "change_parameter_order_cache",
+            DiagnosticClass::Corrupt,
+            "A resolved order parent or parameter has no matching canonical candidate record.",
+            "Inspect the exact repository and candidate evidence before attempting another publication.",
+        ),
+        diagnostic(
+            "change_parameter_order_count",
+            DiagnosticClass::Resource,
+            "The actual parameter inventory cannot be represented by a canonical u64 count.",
+            "Use a host-representable inventory; no partial publication occurred.",
+        ),
+        diagnostic(
+            "change_parameter_order_allocation",
+            DiagnosticClass::Resource,
+            "The host could not allocate the complete parameter-order inventory.",
+            "Retry when physical memory is available; no partial publication occurred.",
         ),
         diagnostic(
             "change_unit_capacity",
@@ -6438,7 +6488,25 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "query_output_envelope_too_large",
             DiagnosticClass::Resource,
             "The selected output bound cannot hold the fixed revision-pinned response envelope.",
-            "Increase --bytes within the advertised query bounds.",
+            "Increase the explicit --bytes allowance or omit it for unmetered output.",
+        ),
+        diagnostic(
+            "query_output_items",
+            DiagnosticClass::Corrupt,
+            "A nonempty query page lost its final logical record during exact output fitting.",
+            "Preserve the repository, request, and executable for renderer inspection.",
+        ),
+        diagnostic(
+            "query_output_resume_key",
+            DiagnosticClass::Corrupt,
+            "A retained query record has no valid logical continuation key.",
+            "Preserve the repository, request, and executable for pagination inspection.",
+        ),
+        diagnostic(
+            "query_output_item_bytes",
+            DiagnosticClass::Corrupt,
+            "Removing a query suffix record underflowed exact rendered-record byte accounting.",
+            "Preserve the repository, request, and executable for renderer inspection.",
         ),
         diagnostic(
             "query_output_byte_overflow",
@@ -7190,15 +7258,12 @@ pub(crate) fn transaction_records() -> Result<Vec<String>, String> {
         (
             "tx.request",
             vec![
-                ("form", "(tx (base @head|REVISION) UNIT...)".to_owned()),
                 (
-                    "maximum-input-bytes",
-                    "unbounded".to_owned(),
+                    "form",
+                    "(tx (base @head|REVISION) UNIT-OR-DELETION...)".to_owned(),
                 ),
-                (
-                    "maximum-syntax-nodes",
-                    "unbounded".to_owned(),
-                ),
+                ("maximum-input-bytes", "unbounded".to_owned()),
+                ("maximum-syntax-nodes", "unbounded".to_owned()),
             ],
         ),
         (
@@ -7209,6 +7274,30 @@ pub(crate) fn transaction_records() -> Result<Vec<String>, String> {
                 ("scope", "native-nesting".to_owned()),
                 ("identity", "preserve-matching-name-and-kind".to_owned()),
                 ("children", "complete-native-ordered-signatures".to_owned()),
+            ],
+        ),
+        (
+            "tx.delete",
+            vec![
+                (
+                    "form",
+                    "(delete KIND PATH (policy reject|owned-closure))".to_owned(),
+                ),
+                (
+                    "kinds",
+                    "module-or-module-scoped-declaration-family-or-value-parameter".to_owned(),
+                ),
+                (
+                    "parameter-path",
+                    "MODULE::CALLABLE::PARAMETER|MODULE::INTERFACE::OPERATION::PARAMETER"
+                        .to_owned(),
+                ),
+                ("selection", "exact-kind-and-path-at-bound-base".to_owned()),
+                ("normalization", "ordinary-delete.owner".to_owned()),
+                (
+                    "publication",
+                    "atomic-with-upserts-and-retirements".to_owned(),
+                ),
             ],
         ),
         (
@@ -7263,11 +7352,8 @@ pub(crate) fn transaction_records() -> Result<Vec<String>, String> {
             vec![
                 ("encoding", "single-line-json".to_owned()),
                 ("status", "accepted|unchanged".to_owned()),
-                (
-                    "maximum-bytes",
-                    crate::platform::control::MAXIMUM_TRANSACTION_RESULT_BYTES.to_string(),
-                ),
-                ("failure", "ordinary-bounded-diagnostics".to_owned()),
+                ("maximum-bytes", "unbounded".to_owned()),
+                ("failure", "ordinary-complete-diagnostics".to_owned()),
             ],
         ),
     ]
@@ -7389,9 +7475,10 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("validation", "saturated"),
                 ("validation", "preparation-work-saturated"),
             ] {
-                records.push(compact_record("change.response-field", &[
-                    ("record", record.to_owned()), ("name", field.to_owned()),
-                ])?);
+                records.push(compact_record(
+                    "change.response-field",
+                    &[("record", record.to_owned()), ("name", field.to_owned())],
+                )?);
             }
             structural_expression_records(&mut records)?;
             native_declaration_records(&mut records)?;
@@ -7671,21 +7758,14 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             for (name, value, unit) in [
                 ("default-items", DEFAULT_QUERY_ITEMS.to_string(), "items"),
                 ("maximum-items", u64::MAX.to_string(), "items"),
-                (
-                    "minimum-output-bytes",
-                    0_usize.to_string(),
-                    "bytes",
-                ),
+                ("minimum-output-bytes", 0_usize.to_string(), "bytes"),
                 (
                     "default-output-bytes",
-                    DEFAULT_QUERY_OUTPUT_BYTES.to_string(),
+                    DEFAULT_QUERY_OUTPUT_BYTES
+                        .map_or_else(|| "unbounded".to_owned(), |maximum| maximum.to_string()),
                     "bytes",
                 ),
-                (
-                    "maximum-output-bytes",
-                    usize::MAX.to_string(),
-                    "bytes",
-                ),
+                ("maximum-output-bytes", usize::MAX.to_string(), "bytes"),
                 (
                     "maximum-continuation-bytes",
                     MAXIMUM_QUERY_CONTINUATION_BYTES.to_string(),
@@ -7696,36 +7776,16 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     MINIMUM_CONTEXT_DEPTH.to_string(),
                     "depth",
                 ),
-                (
-                    "maximum-context-depth",
-                    u64::MAX.to_string(),
-                    "depth",
-                ),
-                (
-                    "maximum-context-owners",
-                    "unbounded".to_owned(),
-                    "items",
-                ),
-                (
-                    "maximum-context-relations",
-                    "unbounded".to_owned(),
-                    "items",
-                ),
+                ("maximum-context-depth", u64::MAX.to_string(), "depth"),
+                ("maximum-context-owners", "unbounded".to_owned(), "items"),
+                ("maximum-context-relations", "unbounded".to_owned(), "items"),
                 (
                     "maximum-context-relation-witnesses",
                     "unbounded".to_owned(),
                     "records",
                 ),
-                (
-                    "maximum-context-map-pages",
-                    "unbounded".to_owned(),
-                    "pages",
-                ),
-                (
-                    "maximum-context-map-bytes",
-                    "unbounded".to_owned(),
-                    "bytes",
-                ),
+                ("maximum-context-map-pages", "unbounded".to_owned(), "pages"),
+                ("maximum-context-map-bytes", "unbounded".to_owned(), "bytes"),
                 (
                     "maximum-context-map-entries",
                     "unbounded".to_owned(),
@@ -8259,10 +8319,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             records.push(compact_record(
                 "execution.foreground-limits",
                 &[
-                    (
-                        "single-allocation-bytes",
-                        "unbounded".to_owned(),
-                    ),
+                    ("single-allocation-bytes", "unbounded".to_owned()),
                     (
                         "raw-admission-items",
                         super::super::execution::normalized::MAXIMUM_ADMISSION_ITEMS.to_string(),
@@ -8375,14 +8432,17 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("execution-mode", "production"),
                 ("verification", "not-performed"),
                 ("execution-profile", "trusted-foreground|bounded"),
-                ("instruction-limit", "positive-integer|absent"),
-                ("allocation-limit", "positive-integer|absent"),
-                ("collection-limit", "positive-integer|absent"),
-                ("capability-call-limit", "positive-integer|absent"),
+                ("instruction-limit", "nonnegative-integer|absent"),
+                ("allocation-limit", "nonnegative-integer|absent"),
+                ("collection-limit", "nonnegative-integer|absent"),
+                ("capability-call-limit", "nonnegative-integer|absent"),
                 ("call-depth-limit", "positive-integer"),
                 ("value-stack-limit", "positive-integer"),
                 ("deadline-milliseconds", "positive-integer|absent"),
-                ("counter-semantics", "saturated-u64-is-lower-bound"),
+                (
+                    "counter-semantics",
+                    "per-counter-saturation-flag-true-means-lower-bound",
+                ),
                 ("preparation-nanoseconds", "nonnegative-integer"),
                 ("invocation-nanoseconds", "nonnegative-integer"),
                 ("result-encoding-nanoseconds", "nonnegative-integer"),
@@ -8404,6 +8464,79 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                         ("record", "execution".to_owned()),
                         ("field", field.to_owned()),
                         ("scalar", scalar.to_owned()),
+                    ],
+                )?);
+            }
+            records.push(compact_record(
+                "execution.cumulative-counters",
+                &[
+                    ("scope", "one-invocation".to_owned()),
+                    (
+                        "production",
+                        "instructions,allocated_bytes,collection_items,capability_calls".to_owned(),
+                    ),
+                    (
+                        "reference",
+                        "expressions,allocated_bytes,collection_items,capability_calls".to_owned(),
+                    ),
+                    (
+                        "saturation-field",
+                        "counter-name-followed-by-_saturated".to_owned(),
+                    ),
+                    ("false", "exact-including-u64-max".to_owned()),
+                    ("true", "saturated-lower-bound".to_owned()),
+                    ("permission", "none".to_owned()),
+                ],
+            )?);
+            for (record, field, unit) in [
+                ("execution", "production-instructions", None),
+                ("execution", "reference-expressions", None),
+                (
+                    "execution",
+                    "production-allocated-bytes",
+                    Some("cumulative-byte"),
+                ),
+                (
+                    "execution",
+                    "reference-allocated-bytes",
+                    Some("cumulative-byte"),
+                ),
+                (
+                    "execution",
+                    "production-collection-items",
+                    Some("cumulative-item"),
+                ),
+                (
+                    "execution",
+                    "reference-collection-items",
+                    Some("cumulative-item"),
+                ),
+                ("execution", "production-capability-calls", None),
+                ("execution", "reference-capability-calls", None),
+                ("tests", "production-instructions", None),
+                ("tests", "reference-expressions", None),
+            ] {
+                let saturation = format!("{field}-saturated");
+                let mut observation = vec![
+                    ("record", record.to_owned()),
+                    ("field", field.to_owned()),
+                    ("scalar", "nonnegative-integer".to_owned()),
+                    ("maximum", u64::MAX.to_string()),
+                    ("saturation-field", saturation.clone()),
+                ];
+                if let Some(unit) = unit {
+                    observation.push(("unit", unit.to_owned()));
+                }
+                observation.push(("permission", "none".to_owned()));
+                records.push(compact_record("execution.observation", &observation)?);
+                records.push(compact_record(
+                    "execution.observation",
+                    &[
+                        ("record", record.to_owned()),
+                        ("field", saturation),
+                        ("scalar", "boolean".to_owned()),
+                        ("semantics", "false-exact-true-lower-bound".to_owned()),
+                        ("permission", "none".to_owned()),
                     ],
                 )?);
             }
@@ -8764,7 +8897,6 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("constructor-child-visits", "checked-immediate-child"),
                     ("guard-descendants", "internal-affinity-descendant"),
                     ("classification-decisions", "internal-root-classification"),
-                    ("allocated-bytes", "cumulative-byte"),
                     ("allocation-charges", "successful-nonzero-byte-charge"),
                     (
                         "type-derivation-steps",
@@ -8774,7 +8906,6 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                         "type-metadata-bytes",
                         "preparation-type-layout-property-byte",
                     ),
-                    ("collection-items", "cumulative-item"),
                     ("map-node-visits", "physical-map-node-visits"),
                     ("map-nodes-allocated", "physical-map-nodes-allocated"),
                     (
@@ -8863,12 +8994,14 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             ])?);
             records.push(compact_record("deployment.cumulative-quotas", &[
                 ("fields", "instruction_fuel,maximum_allocated_bytes,maximum_collection_items,maximum_capability_calls".to_owned()),
-                ("numeric", "positive-u64".to_owned()),
+                ("numeric", "nonnegative-u64".to_owned()),
+                ("zero", "exact-finite-zero".to_owned()),
+                ("u64-max", "exact-finite-maximum-not-unbounded".to_owned()),
                 ("null", "no-cumulative-quota-for-that-field".to_owned()),
                 ("fuel-omitted", "reject".to_owned()),
                 ("optional-field-omitted", "no-cumulative-quota-for-that-field".to_owned()),
                 ("counter-scope", "one-invocation".to_owned()),
-                ("counter-overflow", "saturated-u64-is-lower-bound".to_owned()),
+                ("counter-overflow", "per-counter-saturation-flag-true-means-lower-bound".to_owned()),
                 ("new-http-recipe", "four-explicit-nulls".to_owned()),
                 ("live-controls", "deadlines-cancellation-depth-stack-concurrency-codecs-grants-streams-retained".to_owned()),
                 ("memory", "cumulative-accounting-not-rss-or-live-heap-limit".to_owned()),
@@ -9197,7 +9330,7 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
         (
             "draft",
             "change draft (--owner MODULE_OR_DECLARATION_OR_TARGET | --module NAME | --declaration MODULE::NAME | --target NAME)... --output ABSENT_PATH [--bytes N]",
-            "Read-only canonical reconstruction at one base. Up to 10000 mixed selectors resolve exact local namespaces and recheck canonical owners under shared read admission. Names select only the draft; output binds exact identities. Module selection expands actual ownership only. External definitions remain exact references. Output is complete, bounded, deterministic and atomically created without overwrite.",
+            "Read-only canonical reconstruction at one base. Mixed selectors resolve exact local namespaces and recheck canonical owners under shared read admission without a default selector quota. Names select only the draft; output binds exact identities. Module selection expands actual ownership only. External definitions remain exact references. Output is complete, deterministic and atomically created without overwrite; --bytes selects an exact finite output allowance.",
         ),
         (
             "editing",
@@ -9219,13 +9352,22 @@ fn native_declaration_records(records: &mut Vec<String>) -> Result<(), String> {
 
 fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String> {
     for (name, maximum) in crate::platform::change::ChangeBudget::default().policy_limits() {
-        records.push(compact_record("change.policy", &[
-            ("name", name.to_owned()),
-            ("default", maximum.map_or_else(|| "unbounded".to_owned(), |value| value.to_string())),
-            ("syntax", "change.policy name=NAME limit=unbounded|U64".to_owned()),
-            ("tx-syntax", "(policy NAME unbounded|U64)".to_owned()),
-            ("finite", "exact-including-zero-and-u64-max".to_owned()),
-        ])?);
+        records.push(compact_record(
+            "change.policy",
+            &[
+                ("name", name.to_owned()),
+                (
+                    "default",
+                    maximum.map_or_else(|| "unbounded".to_owned(), |value| value.to_string()),
+                ),
+                (
+                    "syntax",
+                    "change.policy name=NAME limit=unbounded|U64".to_owned(),
+                ),
+                ("tx-syntax", "(policy NAME unbounded|U64)".to_owned()),
+                ("finite", "exact-including-zero-and-u64-max".to_owned()),
+            ],
+        )?);
     }
     records.push(compact_record(
         "change.expression-block",
@@ -9248,21 +9390,9 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
         )?);
     }
     for (name, value, unit) in [
-        (
-            "maximum-input-bytes",
-            None,
-            "bytes",
-        ),
-        (
-            "maximum-structural-tokens",
-            None,
-            "tokens",
-        ),
-        (
-            "maximum-structural-syntax-nodes",
-            None,
-            "nodes",
-        ),
+        ("maximum-input-bytes", None, "bytes"),
+        ("maximum-structural-tokens", None, "tokens"),
+        ("maximum-structural-syntax-nodes", None, "nodes"),
         (
             "default-authored-identities",
             crate::platform::change::ChangeBudget::default()
@@ -9270,11 +9400,7 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
                 .maximum_allocated_identities,
             "identities",
         ),
-        (
-            "maximum-expanded-type-nodes",
-            None,
-            "nodes",
-        ),
+        ("maximum-expanded-type-nodes", None, "nodes"),
         (
             "maximum-combined-expression-depth",
             Some(crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH as u64),
@@ -9290,7 +9416,10 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
             "change.expression-limit",
             &[
                 ("name", name.to_owned()),
-                ("value", value.map_or_else(|| "unbounded".to_owned(), |value| value.to_string())),
+                (
+                    "value",
+                    value.map_or_else(|| "unbounded".to_owned(), |value| value.to_string()),
+                ),
                 ("unit", unit.to_owned()),
                 ("scope", "whole-request".to_owned()),
             ],
@@ -9823,6 +9952,8 @@ fn validate_compact_change_inventory(
             ("add.type-parameter", "constraint"),
             ("add.case", "payload"),
             ("set.case-payload", "payload"),
+            ("set.parameter-order", "function"),
+            ("set.parameter-order", "operation"),
             ("add.parameter", "function"),
             ("add.parameter", "operation"),
             ("add.parameter", "use"),
@@ -9851,6 +9982,8 @@ fn validate_compact_change_inventory(
         ("set.function-contract", "result-scope"),
         ("add.case", "payload"),
         ("set.case-payload", "payload"),
+        ("set.parameter-order", "function"),
+        ("set.parameter-order", "operation"),
         ("add.parameter", "function"),
         ("add.parameter", "operation"),
         ("add.parameter", "use"),
@@ -10223,8 +10356,10 @@ mod tests {
 
     #[test]
     fn ordinary_cli_responses_are_unbounded_and_explicit_writer_failures_are_advertised() {
-        assert!(limit_descriptors().iter().all(|descriptor|
-            !matches!(descriptor.name, "cli_response_bytes" | "cli_response_records")));
+        assert!(limit_descriptors().iter().all(|descriptor| !matches!(
+            descriptor.name,
+            "cli_response_bytes" | "cli_response_records"
+        )));
         let limits = crate::platform::control::CompactResponseLimits::default();
         assert_eq!(limits.maximum_bytes, None);
         assert_eq!(limits.maximum_records, None);

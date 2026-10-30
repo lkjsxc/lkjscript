@@ -2,8 +2,8 @@
 
 use super::relation_view::CandidateRelations;
 use super::{
-    BoundOwnerSummary, BudgetCounter, BudgetDimension, CanonicalBaseRead, DerivedDelta, ImpactAdmission, KernelOverlay, WorkSaturation,
-    WitnessBaseRead, WitnessReadWork,
+    BoundOwnerSummary, BudgetCounter, BudgetDimension, CanonicalBaseRead, DerivedDelta,
+    ImpactAdmission, KernelOverlay, WitnessBaseRead, WitnessReadWork, WorkSaturation,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{OwnerKey, PackageId, RelationEdge};
@@ -137,7 +137,9 @@ pub(crate) fn derive_summary_delta_for_with_relation_limit<
         relation_edges_read: view.relation_edges_read().consumed,
         saturation: {
             let mut saturation = WorkSaturation::default();
-            if view.relation_edges_read().saturated { saturation.mark(BudgetDimension::RelationEdges); }
+            if view.relation_edges_read().saturated {
+                saturation.mark(BudgetDimension::RelationEdges);
+            }
             saturation
         },
     })

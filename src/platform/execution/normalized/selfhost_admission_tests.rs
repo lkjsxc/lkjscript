@@ -2,8 +2,12 @@
 use super::*;
 use input::ValueType;
 
-const fn owned(identity: u64) -> ValueType { ValueType::owned(identity) }
-const fn borrowed() -> ValueType { ValueType::borrowed_buffer() }
+const fn owned(identity: u64) -> ValueType {
+    ValueType::owned(identity)
+}
+const fn borrowed() -> ValueType {
+    ValueType::borrowed_buffer()
+}
 
 fn node(tag: u64, a: u64, b: u64, initialized: &[u8], stack: &[input::ValueType]) -> input::Node {
     input::Node {
@@ -21,7 +25,7 @@ fn selfhost_admission_checks_derived_hash_signatures_and_unknown_codes() {
     let functions = vec![
         input::Function {
             result: 1,
-            nodes: vec![node(1, 0, 0, &[],&[]), node(11, 0, 0, &[],&[owned(1)])],
+            nodes: vec![node(1, 0, 0, &[], &[]), node(11, 0, 0, &[], &[owned(1)])],
             ..input::Function::default()
         },
         input::Function {
@@ -56,13 +60,13 @@ fn selfhost_admission_checks_derived_hash_signatures_and_unknown_codes() {
 
 fn buffer_program() -> Vec<input::Function> {
     let mut nodes = vec![
-        node(9, 1, 0, &[0],&[]),
-        node(5, 0, 0, &[0],&[owned(6)]),
-        node(16, 0, 0, &[1],&[]),
-        node(9, 2, 1, &[0],&[owned(6)]),
-        node(6, 0, 0, &[0],&[owned(5)]),
-        node(1, 0, 0, &[0],&[]),
-        node(11, 0, 0, &[0],&[owned(1)]),
+        node(9, 1, 0, &[0], &[]),
+        node(5, 0, 0, &[0], &[owned(6)]),
+        node(16, 0, 0, &[1], &[]),
+        node(9, 2, 1, &[0], &[owned(6)]),
+        node(6, 0, 0, &[0], &[owned(5)]),
+        node(1, 0, 0, &[0], &[]),
+        node(11, 0, 0, &[0], &[owned(1)]),
     ];
     nodes[5].immediate = 42;
     vec![
@@ -107,10 +111,17 @@ fn forgotten_buffer_program() -> Vec<input::Function> {
                     .collect::<Vec<_>>()
             };
             node(
-                row[0].as_u64().unwrap() as u64,
-                row[1].as_u64().unwrap() as u64,
-                row[2].as_u64().unwrap() as u64,
-                &values(3),&row[4].as_array().unwrap().iter().map(|x| owned(x.as_u64().unwrap())).collect::<Vec<_>>())
+                row[0].as_u64().unwrap(),
+                row[1].as_u64().unwrap(),
+                row[2].as_u64().unwrap(),
+                &values(3),
+                &row[4]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|x| owned(x.as_u64().unwrap()))
+                    .collect::<Vec<_>>(),
+            )
         })
         .collect();
     functions
@@ -137,33 +148,33 @@ fn selfhost_admission_rejects_buffer_aliases_loans_and_forgotten_custody() {
     cases.push(("move-retains-owner", changed, 8));
     // A borrow cannot satisfy a consuming parameter.
     let mut changed = valid.clone();
-    changed[0].nodes[2] = node(4, 0, 1, &[1],&[]);
-    changed[0].nodes[3] = node(9, 2, 1, &[1],&[borrowed()]);
+    changed[0].nodes[2] = node(4, 0, 1, &[1], &[]);
+    changed[0].nodes[3] = node(9, 2, 1, &[1], &[borrowed()]);
     cases.push(("consume-borrow", changed, 8));
     // A live loan cannot coexist with a subsequent move.
     let mut changed = valid.clone();
     changed[0].nodes = vec![
-        node(9, 1, 0, &[0],&[]),
-        node(5, 0, 0, &[0],&[owned(6)]),
-        node(4, 0, 1, &[1],&[]),
-        node(16, 0, 0, &[1],&[borrowed()]),
-        node(6, 0, 0, &[0],&[borrowed(), owned(6)]),
-        node(6, 0, 0, &[0],&[borrowed()]),
-        node(1, 0, 0, &[0],&[]),
-        node(11, 0, 0, &[0],&[owned(1)]),
+        node(9, 1, 0, &[0], &[]),
+        node(5, 0, 0, &[0], &[owned(6)]),
+        node(4, 0, 1, &[1], &[]),
+        node(16, 0, 0, &[1], &[borrowed()]),
+        node(6, 0, 0, &[0], &[borrowed(), owned(6)]),
+        node(6, 0, 0, &[0], &[borrowed()]),
+        node(1, 0, 0, &[0], &[]),
+        node(11, 0, 0, &[0], &[owned(1)]),
     ];
     cases.push(("move-with-loan", changed, 8));
     // Explicit lexical cleanup must also respect a live loan.
     let mut changed = valid.clone();
     changed[0].nodes = vec![
-        node(9, 1, 0, &[0],&[]),
-        node(5, 0, 0, &[0],&[owned(6)]),
-        node(4, 0, 1, &[1],&[]),
-        node(3, 0, 0, &[1],&[borrowed()]),
-        node(5, 0, 0, &[1],&[borrowed(), owned(3)]),
-        node(6, 0, 0, &[0],&[borrowed()]),
-        node(1, 0, 0, &[0],&[]),
-        node(11, 0, 0, &[0],&[owned(1)]),
+        node(9, 1, 0, &[0], &[]),
+        node(5, 0, 0, &[0], &[owned(6)]),
+        node(4, 0, 1, &[1], &[]),
+        node(3, 0, 0, &[1], &[borrowed()]),
+        node(5, 0, 0, &[1], &[borrowed(), owned(3)]),
+        node(6, 0, 0, &[0], &[borrowed()]),
+        node(1, 0, 0, &[0], &[]),
+        node(11, 0, 0, &[0], &[owned(1)]),
     ];
     cases.push(("cleanup-with-loan", changed, 8));
     // An ordinary edge cannot silently forget a live owner.
@@ -173,10 +184,10 @@ fn selfhost_admission_rejects_buffer_aliases_loans_and_forgotten_custody() {
     // A result cannot abandon a still-owned local, even with honest flags.
     let mut changed = valid.clone();
     changed[0].nodes = vec![
-        node(9, 1, 0, &[0],&[]),
-        node(5, 0, 0, &[0],&[owned(6)]),
-        node(1, 0, 0, &[1],&[]),
-        node(11, 0, 0, &[1],&[owned(1)]),
+        node(9, 1, 0, &[0], &[]),
+        node(5, 0, 0, &[0], &[owned(6)]),
+        node(1, 0, 0, &[1], &[]),
+        node(11, 0, 0, &[1], &[owned(1)]),
     ];
     cases.push(("return-abandons-owner", changed, 8));
     // Borrow storage outside parameters and undeclared result identities fail admission.
@@ -194,12 +205,12 @@ fn selfhost_admission_rejects_buffer_aliases_loans_and_forgotten_custody() {
     // Explicit Unit cleanup is a supported owner release, not a silent forgotten flag.
     let mut cleared = valid;
     cleared[0].nodes = vec![
-        node(9, 1, 0, &[0],&[]),
-        node(5, 0, 0, &[0],&[owned(6)]),
-        node(3, 0, 0, &[1],&[]),
-        node(5, 0, 0, &[1],&[owned(3)]),
-        node(1, 0, 0, &[0],&[]),
-        node(11, 0, 0, &[0],&[owned(1)]),
+        node(9, 1, 0, &[0], &[]),
+        node(5, 0, 0, &[0], &[owned(6)]),
+        node(3, 0, 0, &[1], &[]),
+        node(5, 0, 0, &[1], &[owned(3)]),
+        node(1, 0, 0, &[0], &[]),
+        node(11, 0, 0, &[0], &[owned(1)]),
     ];
     cleared[0].nodes[4].immediate = 42;
     let (code, image) = compile(&input::encode(&cleared, 0).unwrap());
@@ -209,11 +220,11 @@ fn selfhost_admission_rejects_buffer_aliases_loans_and_forgotten_custody() {
 
 fn record_program() -> (Vec<input::Function>, Vec<input::Record>) {
     let mut nodes = vec![
-        node(1, 0, 0, &[],&[]),
-        node(1, 0, 0, &[],&[owned(1)]),
-        node(14, 8, 2, &[],&[owned(1), owned(1)]),
-        node(15, 8, 0, &[],&[owned(8)]),
-        node(11, 0, 0, &[],&[owned(1)]),
+        node(1, 0, 0, &[], &[]),
+        node(1, 0, 0, &[], &[owned(1)]),
+        node(14, 8, 2, &[], &[owned(1), owned(1)]),
+        node(15, 8, 0, &[], &[owned(8)]),
+        node(11, 0, 0, &[], &[owned(1)]),
     ];
     nodes[0].immediate = 17;
     nodes[1].immediate = 42;
@@ -279,16 +290,16 @@ fn selfhost_admission_rejects_cyclic_affine_or_noncanonical_record_metadata() {
 #[test]
 fn selfhost_admission_checks_text_utf8_before_native_emission() {
     let text_program = |data: &[u8]| {
-        let mut text = node(12, 0, data.len() as u64, &[],&[]);
+        let mut text = node(12, 0, data.len() as u64, &[], &[]);
         text.data = data.to_vec();
         input::encode(
             &[input::Function {
                 result: 1,
                 nodes: vec![
                     text,
-                    node(6, 0, 0, &[],&[owned(4)]),
-                    node(1, 0, 0, &[],&[]),
-                    node(11, 0, 0, &[],&[owned(1)]),
+                    node(6, 0, 0, &[], &[owned(4)]),
+                    node(1, 0, 0, &[], &[]),
+                    node(11, 0, 0, &[], &[owned(1)]),
                 ],
                 ..input::Function::default()
             }],
@@ -320,20 +331,20 @@ fn selfhost_admission_accepts_empty_and_records_above_former_stack_and_field_wid
     for count in [0, 129, 257] {
         let mut nodes = Vec::new();
         for value in 0..count {
-            let mut literal = node(1, 0, 0, &[],&vec![owned(1); value]);
+            let mut literal = node(1, 0, 0, &[], &vec![owned(1); value]);
             literal.immediate = value as i64;
             nodes.push(literal);
         }
-        let mut record = node(14, 8, count as u64, &[],&vec![owned(1); count]);
+        let mut record = node(14, 8, count as u64, &[], &vec![owned(1); count]);
         record.data = (0..count).flat_map(|i| (i as u64).to_le_bytes()).collect();
         nodes.push(record);
         if count == 0 {
-            nodes.push(node(6, 0, 0, &[],&[owned(8)]));
-            nodes.push(node(1, 0, 0, &[],&[]));
+            nodes.push(node(6, 0, 0, &[], &[owned(8)]));
+            nodes.push(node(1, 0, 0, &[], &[]));
         } else {
-            nodes.push(node(15, 8, (count - 1) as u64, &[],&[owned(8)]));
+            nodes.push(node(15, 8, (count - 1) as u64, &[], &[owned(8)]));
         }
-        nodes.push(node(11, 0, 0, &[],&[owned(1)]));
+        nodes.push(node(11, 0, 0, &[], &[owned(1)]));
         let payload = input::encode_records(
             &[input::Function {
                 result: 1,
@@ -355,7 +366,12 @@ fn selfhost_admission_accepts_empty_and_records_above_former_stack_and_field_wid
         assert!(output.stderr.is_empty());
         assert_eq!(
             output.stdout,
-            if count == 0 { "0".to_owned() } else { (count - 1).to_string() }.as_bytes()
+            if count == 0 {
+                "0".to_owned()
+            } else {
+                (count - 1).to_string()
+            }
+            .as_bytes()
         );
     }
 }
@@ -369,7 +385,9 @@ fn selfhost_admission_separates_wide_descriptor_identity_from_buffer_borrows() {
     let mut value_type = 1;
     for index in 0..RECORDS {
         let identity = 8 + index as u64;
-        records.push(input::Record { fields: vec![("item".into(), value_type)] });
+        records.push(input::Record {
+            fields: vec![("item".into(), value_type)],
+        });
         let mut construct = node(14, identity, 1, &[], &[owned(value_type)]);
         construct.data = 0u64.to_le_bytes().to_vec();
         nodes.push(construct);
@@ -379,7 +397,11 @@ fn selfhost_admission_separates_wide_descriptor_identity_from_buffer_borrows() {
         nodes.push(node(15, identity, 0, &[], &[owned(identity)]));
     }
     nodes.push(node(11, 0, 0, &[], &[owned(1)]));
-    let functions = vec![input::Function { result: 1, nodes, ..input::Function::default() }];
+    let functions = vec![input::Function {
+        result: 1,
+        nodes,
+        ..input::Function::default()
+    }];
     let bytes = input::encode_records(&functions, &records, 0).unwrap();
     assert_eq!(wide_at(&bytes, 80), 7 + RECORDS as u64);
     assert_eq!(wide_at(&bytes, 88), (160 + (7 + RECORDS) * 32) as u64);
@@ -393,15 +415,27 @@ fn selfhost_admission_separates_wide_descriptor_identity_from_buffer_borrows() {
     // Identity 134 is admitted as an ordinary record. Setting its separate
     // qualifier to borrowed is rejected; only ByteBuffer may carry that qualifier.
     let mut invalid_borrow = functions.clone();
-    let state = invalid_borrow[0].nodes.iter_mut()
-        .flat_map(|node| node.stack.iter_mut()).find(|ty| ty.identity == 134).unwrap();
+    let state = invalid_borrow[0]
+        .nodes
+        .iter_mut()
+        .flat_map(|node| node.stack.iter_mut())
+        .find(|ty| ty.identity == 134)
+        .unwrap();
     state.borrowed = true;
-    assert_eq!(compile(&input::encode_records(&invalid_borrow, &records, 0).unwrap()), (5, vec![]));
+    assert_eq!(
+        compile(&input::encode_records(&invalid_borrow, &records, 0).unwrap()),
+        (5, vec![])
+    );
 
     // Every descriptor is checked, including a never-used trailing record.
     let mut unused_cycle = records;
-    unused_cycle.push(input::Record { fields: vec![("cycle".into(), 8 + RECORDS as u64)] });
-    assert_eq!(compile(&input::encode_records(&functions, &unused_cycle, 0).unwrap()), (5, vec![]));
+    unused_cycle.push(input::Record {
+        fields: vec![("cycle".into(), 8 + RECORDS as u64)],
+    });
+    assert_eq!(
+        compile(&input::encode_records(&functions, &unused_cycle, 0).unwrap()),
+        (5, vec![])
+    );
 }
 
 #[test]
@@ -410,17 +444,30 @@ fn selfhost_admission_accepts_native_input_above_historical_eight_mebibytes() {
     text.data = vec![b'x'; text.b as usize];
     let mut answer = node(1, 0, 0, &[], &[]);
     answer.immediate = 42;
-    let bytes = input::encode(&[input::Function {
-        result: 1,
-        nodes: vec![text, node(6, 0, 0, &[], &[owned(4)]), answer,
-            node(11, 0, 0, &[], &[owned(1)])],
-        ..input::Function::default()
-    }], 0).unwrap();
+    let bytes = input::encode(
+        &[input::Function {
+            result: 1,
+            nodes: vec![
+                text,
+                node(6, 0, 0, &[], &[owned(4)]),
+                answer,
+                node(11, 0, 0, &[], &[owned(1)]),
+            ],
+            ..input::Function::default()
+        }],
+        0,
+    )
+    .unwrap();
     assert!(bytes.len() > 8 * 1024 * 1024);
     assert_eq!(wide_at(&bytes, 32), 0);
     let (source, program) = compiler();
-    let entry = program.function(declaration_named(source, "compile-elf")).unwrap().0 as usize;
-    let compiler = crate::platform::compiler::elf_x86_64::compile_function(program, entry).unwrap().0;
+    let entry = program
+        .function(declaration_named(source, "compile-elf"))
+        .unwrap()
+        .0 as usize;
+    let compiler = crate::platform::compiler::elf_x86_64::compile_function(program, entry)
+        .unwrap()
+        .0;
     // Large-pool admission runs only natively; the independent expected result
     // avoids repeated multi-megabyte VM/reference compiler execution.
     let compiled = native_filter_tests::execute_filter(&compiler, &bytes, &[], 4093);
@@ -435,11 +482,14 @@ fn selfhost_admission_accepts_native_input_above_historical_eight_mebibytes() {
 
 #[test]
 fn selfhost_admission_checks_every_function_above_historical_1024_rows() {
-    let mut functions = vec![input::Function {
-        result: 1,
-        nodes: vec![node(1, 0, 0, &[], &[]), node(11, 0, 0, &[], &[owned(1)])],
-        ..input::Function::default()
-    }; 1025];
+    let mut functions = vec![
+        input::Function {
+            result: 1,
+            nodes: vec![node(1, 0, 0, &[], &[]), node(11, 0, 0, &[], &[owned(1)])],
+            ..input::Function::default()
+        };
+        1025
+    ];
     functions[0].nodes[0].immediate = 42;
     let bytes = input::encode(&functions, 0).unwrap();
     assert_eq!(wide_at(&bytes, 96), 1025);

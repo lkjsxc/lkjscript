@@ -42,9 +42,9 @@ impl Native {
         }
         .expect("supported memory fixture template")
         .get_or_init(|| {
-            // Each template and all its live forks share this aggregate capacity.
-            // Exhaustion fails the fixture; it never opens an unbounded arena or disk fallback.
-            let store = lkjscript::platform::MemProjectStore::new(256 * 1_048_576).unwrap();
+            // Ordinary semantic fixtures share immutable retained bytes without a quota.
+            // Explicit capacity controls select finite admission separately.
+            let store = lkjscript::platform::MemProjectStore::new(None).unwrap();
             lkjscript::platform::create_memory_project(&store, "native", template).unwrap();
             lkjscript::platform::execute_in_memory(&store, vec!["check".to_owned()]).unwrap();
             store
@@ -70,7 +70,7 @@ impl Native {
         static ARENA: std::sync::OnceLock<lkjscript::platform::MemProjectStore> =
             std::sync::OnceLock::new();
         let memory = ARENA
-            .get_or_init(|| lkjscript::platform::MemProjectStore::new(256 * 1_048_576).unwrap())
+            .get_or_init(|| lkjscript::platform::MemProjectStore::new(None).unwrap())
             .fork()
             .expect("bounded independent native memory project");
         lkjscript::platform::create_memory_project(&memory, "native", template).unwrap();
@@ -1203,7 +1203,7 @@ declarations.end
 }
 
 #[test]
-fn native_input_admission_has_an_exact_boundary_without_publication() {
+fn native_input_admission_crosses_former_byte_boundary_without_publication() {
     let public = Native::memory();
     let before = public.revision();
     let mut source =
@@ -1214,14 +1214,22 @@ fn native_input_admission_has_an_exact_boundary_without_publication() {
         4 * 1_048_576 - source.len() - ending.len(),
     ));
     source.push_str(ending);
-    let exact = public.input("exact-input.lkjc", &source);
-    public.plan(&exact, true);
+    let exact = public.input("former-boundary-input.lkjc", &source);
+    let exact_plan = public.plan(&exact, true);
     source.push('\n');
-    let oversized = public.input("oversized-input.lkjc", &source);
-    let rejected = public.plan(&oversized, false);
+    let larger = public.input("larger-input.lkjc", &source);
+    let larger_plan = public.plan(&larger, true);
+    assert_eq!(
+        compact_field(compact_record(&exact_plan, "plan"), "token"),
+        compact_field(compact_record(&larger_plan, "plan"), "token")
+    );
+
+    source.push_str("unknown.operation\n");
+    let malformed = public.input("malformed-larger-input.lkjc", &source);
+    let rejected = public.plan(&malformed, false);
     assert_eq!(
         compact_field(compact_record(&rejected, "diagnostic"), "code"),
-        "read_limit"
+        "change_operation_unknown"
     );
     assert_eq!(public.revision(), before);
 }

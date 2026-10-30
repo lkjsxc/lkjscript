@@ -1,8 +1,7 @@
 //! Stable-owner semantic diffs for Graph 10 accepted history.
 
 use super::contract::{
-    MAXIMUM_INLINE_HISTORY_EDITS, MAXIMUM_SEMANTIC_DIFF_BYTES, SEMANTIC_DIFF_CONTRACT_VERSION,
-    SEMANTIC_DIFF_ENVELOPE_DOMAIN, SEMANTIC_DIFF_MAGIC,
+    SEMANTIC_DIFF_CONTRACT_VERSION, SEMANTIC_DIFF_ENVELOPE_DOMAIN, SEMANTIC_DIFF_MAGIC,
 };
 use super::digest::SemanticDiffDigest;
 use super::transaction::DigestEdit;
@@ -72,7 +71,7 @@ pub enum OwnerChangeClass {
     SemanticPayloadChanged,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct OwnerDiffEntry {
     pub owner: OwnerKey,
@@ -95,7 +94,7 @@ pub struct RetirementDiffEntry {
     pub objects: DigestEdit<RetirementObjectDigest>,
 }
 
-#[derive(Clone, Debug, Decode, Deserialize, Encode, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Encode, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum SemanticDiffBody {
     Bootstrap {
@@ -125,14 +124,57 @@ pub struct SemanticDiff {
     pub body: SemanticDiffBody,
 }
 
+impl<Context> Decode<Context> for OwnerDiffEntry {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        Ok(Self {
+            owner: Decode::decode(decoder)?,
+            objects: Decode::decode(decoder)?,
+            classes: crate::platform::packed::linear::decode_vec(decoder)?,
+            dimensions: Decode::decode(decoder)?,
+        })
+    }
+}
+bincode::impl_borrow_decode!(OwnerDiffEntry);
+impl<Context> Decode<Context> for SemanticDiffBody {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        use crate::platform::packed::linear::decode_vec;
+        match u32::decode(decoder)? {
+            0 => Ok(Self::Bootstrap {
+                result_root: Decode::decode(decoder)?,
+                owners: Decode::decode(decoder)?,
+                dependencies: Decode::decode(decoder)?,
+                retirements: Decode::decode(decoder)?,
+            }),
+            1 => Ok(Self::Change {
+                base: Decode::decode(decoder)?,
+                base_root: Decode::decode(decoder)?,
+                result_root: Decode::decode(decoder)?,
+                owners: decode_vec(decoder)?,
+                supplied_types: decode_vec(decoder)?,
+                dependencies: decode_vec(decoder)?,
+                retirements: decode_vec(decoder)?,
+            }),
+            _ => Err(bincode::error::DecodeError::Other(
+                "unknown semantic diff body",
+            )),
+        }
+    }
+}
+bincode::impl_borrow_decode!(SemanticDiffBody);
+impl crate::platform::packed::linear::LinearDecode for SemanticDiff {}
+
 impl SemanticDiff {
     pub fn encode(&self) -> Result<(SemanticDiffDigest, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let bytes = crate::platform::packed::encode_canonical(
+        let bytes = crate::platform::packed::linear::encode(
             SEMANTIC_DIFF_MAGIC,
             SEMANTIC_DIFF_ENVELOPE_DOMAIN,
             self,
-            MAXIMUM_SEMANTIC_DIFF_BYTES,
+            None,
         )?;
         Ok((SemanticDiffDigest::of(&bytes), bytes))
     }
@@ -145,20 +187,13 @@ impl SemanticDiff {
                 "semantic diff bytes disagree with their object digest",
             ));
         }
-        let value: Self = crate::platform::packed::decode_canonical(
+        let value: Self = crate::platform::packed::linear::decode_canonical(
             bytes,
             SEMANTIC_DIFF_MAGIC,
             SEMANTIC_DIFF_ENVELOPE_DOMAIN,
-            MAXIMUM_SEMANTIC_DIFF_BYTES,
+            None,
         )?;
         value.validate()?;
-        if value.encode()?.1 != bytes {
-            return Err(diff_error(
-                DiagnosticClass::Corrupt,
-                "publication_diff_canonical",
-                "semantic diff object is not canonically encoded",
-            ));
-        }
         Ok(value)
     }
 
@@ -212,13 +247,11 @@ impl SemanticDiff {
                     "semantic diff entry count overflows this platform",
                 )
             })?;
-        if entries == 0 || entries > MAXIMUM_INLINE_HISTORY_EDITS {
+        if entries == 0 {
             return Err(diff_error(
                 DiagnosticClass::Resource,
                 "publication_diff_entry_count",
-                format!(
-                    "inline semantic diff contains {entries} entries; current bound is {MAXIMUM_INLINE_HISTORY_EDITS}"
-                ),
+                "inline semantic diff contains no entries",
             ));
         }
         validate_sorted(owners, |entry| entry.owner, "owner")?;

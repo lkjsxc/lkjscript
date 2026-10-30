@@ -54,9 +54,10 @@ pub use receipt::{
 };
 pub(crate) use repository::GarbageCollectionReceipt;
 pub use repository::{
-    CreatedRepository, CurrentPublication, GraphRepository, InitialPackageTransport, RepublicationReceipt,
+    CreatedRepository, CurrentPublication, GraphRepository, InitialPackageTransport,
     MAXIMUM_REFRESH_ANCESTOR_REVISIONS, PackageTransportStageReceipt, PublicationOutcome,
     PublicationPoint, ReconciliationResult, ReconciliationStatus, ReconciliationWork,
+    RepublicationReceipt,
 };
 pub use revision::{
     AcceptedBinding, HeadRecord, ParentRevision, PublicationBinding, RevisionCore, RevisionRecord,
@@ -67,6 +68,8 @@ pub use transaction::{
     RetirementTransactionEdit, TransactionBody,
 };
 
+#[cfg(test)]
+mod capacity_tests;
 #[cfg(test)]
 mod current_validation_tests;
 #[cfg(test)]

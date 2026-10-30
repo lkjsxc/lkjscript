@@ -1,7 +1,7 @@
 //! One request-local admission for affine expression visits and metadata reads.
 use super::*;
-use crate::platform::kernel::work::ValidationWork;
 use crate::platform::kernel::TypeObject;
+use crate::platform::kernel::work::ValidationWork;
 use std::cell::Cell;
 
 pub(super) struct Meter<'a> {

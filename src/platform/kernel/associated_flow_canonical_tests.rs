@@ -1167,15 +1167,16 @@ fn canonical_associated_flow_capacity_cancellation_and_healthy_retry_keep_distin
             Ok(())
         };
         let mut work = 0;
-        let expected = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
-            &[&fixture.source],
-            &count,
-            &mut work,
-            Some(contract::MAXIMUM_VALIDATION_WORK),
-            64 * 1_048_576,
-            eager,
-        )
-        .unwrap();
+        let expected =
+            crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
+                &[&fixture.source],
+                &count,
+                &mut work,
+                Some(contract::MAXIMUM_VALIDATION_WORK),
+                64 * 1_048_576,
+                eager,
+            )
+            .unwrap();
         let complete_work = work;
         let complete_checkpoints = checkpoints.get();
         assert!(complete_work > 1 && expected.metadata_bytes > 1 && complete_checkpoints > 1);
@@ -1183,15 +1184,16 @@ fn canonical_associated_flow_capacity_cancellation_and_healthy_retry_keep_distin
             (complete_work - 1, expected.metadata_bytes),
             (complete_work, expected.metadata_bytes - 1),
         ] {
-            let failure = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
-                &[&fixture.source],
-                &|| Ok(()),
-                &mut 0,
-                Some(maximum_work),
-                maximum_metadata_bytes,
-                eager,
-            )
-            .unwrap_err();
+            let failure =
+                crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
+                    &[&fixture.source],
+                    &|| Ok(()),
+                    &mut 0,
+                    Some(maximum_work),
+                    maximum_metadata_bytes,
+                    eager,
+                )
+                .unwrap_err();
             assert_eq!(failure.class, DiagnosticClass::Resource);
         }
         checkpoints.set(0);
@@ -1208,27 +1210,29 @@ fn canonical_associated_flow_capacity_cancellation_and_healthy_retry_keep_distin
                 Ok(())
             }
         };
-        let failure = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
-            &[&fixture.source],
-            &cancel,
-            &mut 0,
-            Some(complete_work),
-            expected.metadata_bytes,
-            eager,
-        )
-        .unwrap_err();
+        let failure =
+            crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
+                &[&fixture.source],
+                &cancel,
+                &mut 0,
+                Some(complete_work),
+                expected.metadata_bytes,
+                eager,
+            )
+            .unwrap_err();
         assert_eq!(failure.class, DiagnosticClass::Cancelled);
         assert_eq!(failure.code, "canonical_flow_cancelled");
         let mut retry_work = 0;
-        let retry = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
-            &[&fixture.source],
-            &|| Ok(()),
-            &mut retry_work,
-            Some(complete_work),
-            expected.metadata_bytes,
-            eager,
-        )
-        .unwrap();
+        let retry =
+            crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
+                &[&fixture.source],
+                &|| Ok(()),
+                &mut retry_work,
+                Some(complete_work),
+                expected.metadata_bytes,
+                eager,
+            )
+            .unwrap();
         assert_eq!(retry_work, complete_work);
         assert_eq!(
             (

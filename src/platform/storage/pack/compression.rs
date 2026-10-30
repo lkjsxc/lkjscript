@@ -34,7 +34,10 @@ impl PackEncoding {
         encoded: u64,
         raw: u64,
     ) -> Result<(), StoreError> {
-        if raw > domain.maximum_bytes() as u64 || raw > contract::MAXIMUM_PACK_ENTRY_BYTES as u64 {
+        if domain
+            .maximum_bytes()
+            .is_some_and(|maximum| raw > maximum as u64)
+        {
             return Err(pack_error(
                 StoreErrorClass::Resource,
                 "pack_entry_size",
@@ -89,32 +92,56 @@ impl PackEncoding {
     pub(super) fn decode(self, bytes: &[u8], raw: u64) -> Result<Vec<u8>, StoreError> {
         let length = usize_from_u64(raw, "pack_decoding_length")?;
         if self == Self::Raw || bytes.len() == length {
-            return Ok(bytes.to_vec());
+            return super::super::object::copy_object_bytes(bytes);
         }
-        // One extra byte distinguishes an expanding stream from exact declared output.
-        let capacity = length
-            .checked_add(1)
-            .ok_or_else(|| corrupt("pack_decoding_length", "decoded size overflowed"))?;
-        let mut output = buffer(capacity)?;
+        // Grow from actual decoded output; an untrusted declared length never reserves
+        // the whole logical object before the stream proves those bytes exist.
+        let mut output = Vec::new();
+        let mut chunk = [0_u8; 64 * 1024];
         let mut decoder = Decompress::new(true);
-        let status = decoder
-            .decompress(bytes, &mut output, FlushDecompress::Finish)
-            .map_err(|error| {
-                corrupt(
-                    "pack_decompression",
-                    format!("invalid compressed object: {error}"),
+        loop {
+            let input_start = usize_from_u64(decoder.total_in(), "pack_decoding_input")?;
+            let before_out = decoder.total_out();
+            let status = decoder
+                .decompress(&bytes[input_start..], &mut chunk, FlushDecompress::None)
+                .map_err(|error| {
+                    corrupt(
+                        "pack_decompression",
+                        format!("invalid compressed object: {error}"),
+                    )
+                })?;
+            let produced =
+                usize_from_u64(decoder.total_out() - before_out, "pack_decoding_output")?;
+            if decoder.total_out() > raw {
+                return Err(corrupt(
+                    "pack_decompression_length",
+                    "compressed object exceeds its declared decoded size",
+                ));
+            }
+            output.try_reserve(produced).map_err(|_| {
+                pack_error(
+                    StoreErrorClass::Resource,
+                    "pack_codec_allocation",
+                    "pack codec allocation exceeds available capacity",
                 )
             })?;
-        if status != Status::StreamEnd
-            || decoder.total_in() != bytes.len() as u64
-            || decoder.total_out() != raw
-        {
-            return Err(corrupt(
-                "pack_decompression_length",
-                "compressed object is truncated, trailing, or differs from its declared decoded size",
-            ));
+            output.extend_from_slice(&chunk[..produced]);
+            if status == Status::StreamEnd {
+                if decoder.total_in() != bytes.len() as u64 || decoder.total_out() != raw {
+                    return Err(corrupt(
+                        "pack_decompression_length",
+                        "compressed object has trailing bytes or differs from its declared decoded size",
+                    ));
+                }
+                break;
+            }
+            if decoder.total_in() == input_start as u64 && produced == 0 {
+                return Err(corrupt(
+                    "pack_decompression_length",
+                    "compressed object is truncated or makes no progress",
+                ));
+            }
         }
-        output.truncate(length);
         Ok(output)
     }
 }

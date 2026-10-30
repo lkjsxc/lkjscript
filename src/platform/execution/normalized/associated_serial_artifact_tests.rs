@@ -114,7 +114,7 @@ pub(in crate::platform) fn fixture() -> Arc<SerialArtifactFixture> {
 
 fn build_fixture(standard: &BuiltinStandard) -> SerialArtifactFixture {
     FIXTURE_BUILDS.fetch_add(1, Ordering::Relaxed);
-    let arena = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+    let arena = crate::platform::MemProjectStore::new(None).unwrap();
     let create = |seed: &[u8]| {
         GraphRepository::create_memory(
             &arena.fork().unwrap(),

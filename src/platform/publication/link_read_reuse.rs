@@ -27,23 +27,12 @@ struct RetainedTransport {
     owner_copy_work: BTreeMap<OwnerKey, u64>,
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub(super) struct LinkTransportReuse {
     entries: BTreeMap<PackageRevisionDigest, Arc<RetainedTransport>>,
     retained_bytes: u64,
     remaining_work: Option<usize>,
     observation: LinkReadReuseObservation,
-}
-
-impl Default for LinkTransportReuse {
-    fn default() -> Self {
-        Self {
-            entries: BTreeMap::new(),
-            retained_bytes: 0,
-            remaining_work: None,
-            observation: LinkReadReuseObservation::default(),
-        }
-    }
 }
 
 fn link_work_error() -> Diagnostic {
@@ -61,9 +50,15 @@ impl LinkTransportReuse {
         }
         let amount = match u64::try_from(count) {
             Ok(value) => BudgetCounter::exact(value),
-            Err(_) => BudgetCounter { consumed: u64::MAX, saturated: true },
+            Err(_) => BudgetCounter {
+                consumed: u64::MAX,
+                saturated: true,
+            },
         };
-        let mut observed = BudgetCounter { consumed: self.observation.work_steps, saturated: self.observation.saturated };
+        let mut observed = BudgetCounter {
+            consumed: self.observation.work_steps,
+            saturated: self.observation.saturated,
+        };
         observed.observe(amount);
         self.observation.work_steps = observed.consumed;
         self.observation.saturated |= observed.saturated;
@@ -74,12 +69,17 @@ impl LinkTransportReuse {
 fn observe_reuse_counter(value: &mut u64, amount: u64, saturated: &mut bool) {
     match value.checked_add(amount) {
         Some(next) => *value = next,
-        None => { *value = u64::MAX; *saturated = true; }
+        None => {
+            *value = u64::MAX;
+            *saturated = true;
+        }
     }
 }
 
 fn consume_final_work(reuse: &mut Option<LinkTransportReuse>) -> Result<(), Diagnostic> {
-    if let Some(reuse) = reuse.as_mut() { reuse.charge_work(1)?; }
+    if let Some(reuse) = reuse.as_mut() {
+        reuse.charge_work(1)?;
+    }
     Ok(())
 }
 
@@ -124,11 +124,15 @@ impl RepositoryView {
         let value = result?;
         let mut work = RepositoryReadWork::default();
         let mut admission = StoreReadAdmission::new(StoreReadLimits {
-            maximum_catalog_lookups:
-                Some(crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS),
-            maximum_objects: Some(crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS),
-            maximum_bytes:
-                Some(crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES),
+            maximum_catalog_lookups: Some(
+                crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS,
+            ),
+            maximum_objects: Some(
+                crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS,
+            ),
+            maximum_bytes: Some(
+                crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES,
+            ),
         });
         for key in objects {
             self.validation_checkpoint()?;
@@ -151,7 +155,11 @@ impl RepositoryView {
                 })?;
             key.verify(&bytes).map_err(store_diagnostic)?;
             if let Some(reuse) = reuse.as_mut() {
-                observe_reuse_counter(&mut reuse.observation.rechecked_objects, 1, &mut reuse.observation.saturated);
+                observe_reuse_counter(
+                    &mut reuse.observation.rechecked_objects,
+                    1,
+                    &mut reuse.observation.saturated,
+                );
             }
         }
         if reuse
@@ -169,9 +177,14 @@ impl RepositoryView {
                     // Charge the shared allowance before processing each retained selection.
                     // Split fields below so the immutable entry borrow stays independent.
                     if let Some(remaining) = reuse.remaining_work {
-                        reuse.remaining_work = Some(remaining.checked_sub(1).ok_or_else(link_work_error)?);
+                        reuse.remaining_work =
+                            Some(remaining.checked_sub(1).ok_or_else(link_work_error)?);
                     }
-                    observe_reuse_counter(&mut reuse.observation.work_steps, 1, &mut reuse.observation.saturated);
+                    observe_reuse_counter(
+                        &mut reuse.observation.work_steps,
+                        1,
+                        &mut reuse.observation.saturated,
+                    );
                     if ready.bindings.get(&selection.package_revision) != Some(&selection.transport)
                     {
                         return Err(read_error(
@@ -182,7 +195,10 @@ impl RepositoryView {
                     }
                     let (entries, overflow) = work.map.entries_visited.overflowing_add(1);
                     work.map.entries_visited = if overflow { u64::MAX } else { entries };
-                    if overflow { work.map.mark_counter_saturated(MapWorkCounter::EntriesVisited); }
+                    if overflow {
+                        work.map
+                            .mark_counter_saturated(MapWorkCounter::EntriesVisited);
+                    }
                 }
             }
         }
@@ -217,7 +233,11 @@ impl RepositoryView {
         // canonical-record allowance. Variable nested-copy weight is charged
         // above to the cumulative reuse ledger, not reported as N decoded records.
         if let Some(reuse) = self.link_transport_reuse.borrow_mut().as_mut() {
-            observe_reuse_counter(&mut reuse.observation.copy_work, count, &mut reuse.observation.saturated);
+            observe_reuse_counter(
+                &mut reuse.observation.copy_work,
+                count,
+                &mut reuse.observation.saturated,
+            );
         }
         admission.admit_canonical_records(1)?;
         work.observe_canonical_records(BudgetCounter::exact(1));
@@ -230,17 +250,25 @@ impl RepositoryView {
         work: &mut RepositoryReadWork,
     ) -> Result<(), Diagnostic> {
         self.link_reuse_step(1)?;
-        admission.map.maximum_entries_visited = admission.map.maximum_entries_visited
-            .map(|remaining| remaining.checked_sub(1).ok_or_else(|| {
-                read_error(
-                    DiagnosticClass::Resource,
-                    "publication_link_read_map_entries",
-                    "link read reuse exhausted canonical map-entry admission",
-                )
-            })).transpose()?;
+        admission.map.maximum_entries_visited = admission
+            .map
+            .maximum_entries_visited
+            .map(|remaining| {
+                remaining.checked_sub(1).ok_or_else(|| {
+                    read_error(
+                        DiagnosticClass::Resource,
+                        "publication_link_read_map_entries",
+                        "link read reuse exhausted canonical map-entry admission",
+                    )
+                })
+            })
+            .transpose()?;
         let (entries, overflow) = work.map.entries_visited.overflowing_add(1);
-                    work.map.entries_visited = if overflow { u64::MAX } else { entries };
-                    if overflow { work.map.mark_counter_saturated(MapWorkCounter::EntriesVisited); }
+        work.map.entries_visited = if overflow { u64::MAX } else { entries };
+        if overflow {
+            work.map
+                .mark_counter_saturated(MapWorkCounter::EntriesVisited);
+        }
         Ok(())
     }
 
@@ -298,14 +326,22 @@ impl RepositoryView {
             let mut work = RepositoryReadWork::default();
             self.admit_link_lookup(admission, &mut work)?;
             if let Some(reuse) = self.link_transport_reuse.borrow_mut().as_mut() {
-                observe_reuse_counter(&mut reuse.observation.transport_hits, 1, &mut reuse.observation.saturated);
+                observe_reuse_counter(
+                    &mut reuse.observation.transport_hits,
+                    1,
+                    &mut reuse.observation.saturated,
+                );
             }
             let value = select(&closure.closure, admission, &mut work, true)?;
             self.validation_checkpoint()?;
             return Ok(self.read(value, work));
         }
         if let Some(reuse) = self.link_transport_reuse.borrow_mut().as_mut() {
-            observe_reuse_counter(&mut reuse.observation.transport_misses, 1, &mut reuse.observation.saturated);
+            observe_reuse_counter(
+                &mut reuse.observation.transport_misses,
+                1,
+                &mut reuse.observation.saturated,
+            );
         }
         let resolved = self.resolve_package_transport_admitted(revision, admission)?;
         let mut work = resolved.work;
@@ -353,7 +389,11 @@ impl RepositoryView {
                     reuse.observation.maximum_entry_modeled_bytes =
                         reuse.observation.maximum_entry_modeled_bytes.max(estimate);
                 } else {
-                    observe_reuse_counter(&mut reuse.observation.estimate_overflows, 1, &mut reuse.observation.saturated);
+                    observe_reuse_counter(
+                        &mut reuse.observation.estimate_overflows,
+                        1,
+                        &mut reuse.observation.saturated,
+                    );
                 }
                 estimate
                     .and_then(|n| reuse.retained_bytes.checked_add(n))
@@ -423,7 +463,11 @@ impl RepositoryView {
                 let reuse = cache.as_mut().ok_or_else(link_work_error)?;
                 // The prepaid256-byte per-record model includes cost-map nodes;
                 // the closure becomes reusable only after all costs succeed.
-                observe_reuse_counter(&mut reuse.observation.retained_closures, 1, &mut reuse.observation.saturated);
+                observe_reuse_counter(
+                    &mut reuse.observation.retained_closures,
+                    1,
+                    &mut reuse.observation.saturated,
+                );
                 reuse.entries.insert(
                     revision,
                     Arc::new(RetainedTransport {
@@ -434,7 +478,11 @@ impl RepositoryView {
             } else {
                 let mut cache = self.link_transport_reuse.borrow_mut();
                 let reuse = cache.as_mut().ok_or_else(link_work_error)?;
-                observe_reuse_counter(&mut reuse.observation.capacity_skips, 1, &mut reuse.observation.saturated);
+                observe_reuse_counter(
+                    &mut reuse.observation.capacity_skips,
+                    1,
+                    &mut reuse.observation.saturated,
+                );
             }
         }
         if let Some(reuse) = self.link_transport_reuse.borrow_mut().as_mut() {

@@ -35,7 +35,10 @@ pub(crate) use full::{
     rebuild_full_witness_from_source_validation,
 };
 pub use full::{FullWitness, WitnessBuildReport, WitnessEntries, rebuild_full_witness};
-pub(crate) use full::{rebuild_full_witness_checked, rebuild_full_witness_with_limit};
+pub(crate) use full::{
+    WitnessRebuildAdmission, rebuild_full_witness_checked,
+    rebuild_full_witness_checked_with_admission, rebuild_full_witness_with_limit,
+};
 pub(crate) use ownership::{ownership_contributions, ownership_contributions_with_bindings};
 pub use summary::{OwnerSummary, SummaryBinding, ValidationWitnessManifest, WitnessRoots};
 pub(crate) use summary_build::{

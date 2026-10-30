@@ -8,32 +8,13 @@ impl Machine<'_> {
         charge: super::super::map::Charge,
     ) -> Result<(), ExecutionError> {
         self.control.check()?;
-        let items = crate::platform::execution::cumulative_charge(
-            self.observation.collection_items,
-            charge.slots,
-            self.policy.maximum_collection_items,
-            "normalized_collection_items",
-            "persistent map storage exceeds collection items",
-        )?;
-        let bytes = crate::platform::execution::cumulative_charge(
-            self.observation.allocated_bytes,
+        reserve_execution_storage(
+            self.policy,
+            self.shared_budget.as_deref(),
+            &mut self.observation,
             charge.bytes,
-            self.policy.maximum_allocated_bytes,
-            "normalized_allocation",
-            "persistent map storage exceeds allocated bytes",
-        )?;
-        // A refused reservation changes neither ledger. Earlier successful work is
-        // cumulative even when a later path node or final cancellation check fails.
-        if let Some(budget) = &self.shared_budget {
-            budget.reserve(charge.bytes, charge.slots)?;
-        }
-        self.observation.collection_items = items;
-        self.observation.allocated_bytes = bytes;
-        if charge.bytes != 0 {
-            self.observation.allocation_charges =
-                self.observation.allocation_charges.saturating_add(1);
-        }
-        Ok(())
+            charge.slots,
+        )
     }
 
     pub(super) fn checked_map_key(
@@ -65,18 +46,13 @@ impl Machine<'_> {
 
     fn charge_list(&mut self, charge: super::super::list::Charge) -> Result<(), ExecutionError> {
         self.control.check()?;
-        let next = crate::platform::execution::cumulative_charge(
-            self.observation.collection_items,
+        reserve_execution_storage(
+            self.policy,
+            self.shared_budget.as_deref(),
+            &mut self.observation,
+            charge.bytes,
             charge.slots,
-            self.policy.maximum_collection_items,
-            "normalized_collection_items",
-            "persistent list storage exceeds collection items",
-        )?;
-        if let Some(budget) = &self.shared_budget {
-            budget.reserve(0, charge.slots)?;
-        }
-        self.observation.collection_items = next;
-        self.charge_allocation(charge.bytes)
+        )
     }
 
     pub(super) fn construct_list(
@@ -122,11 +98,14 @@ impl Machine<'_> {
             control: self.control,
             policy: self.policy,
             admission_bytes: 0,
+            admission_bytes_saturated: false,
             admission_items: 0,
             work: &mut self.observation.value_work,
             allocated: &mut self.observation.allocated_bytes,
+            allocated_saturated: &mut self.observation.allocated_bytes_saturated,
             allocation_charges: &mut self.observation.allocation_charges,
             items: &mut self.observation.collection_items,
+            items_saturated: &mut self.observation.collection_items_saturated,
         }
         .value(raw, ty, authority, input)
     }
@@ -173,11 +152,14 @@ impl Machine<'_> {
                     control: self.control,
                     policy: self.policy,
                     admission_bytes: 0,
+                    admission_bytes_saturated: false,
                     admission_items: 0,
                     work: &mut self.observation.value_work,
                     allocated: &mut self.observation.allocated_bytes,
+                    allocated_saturated: &mut self.observation.allocated_bytes_saturated,
                     allocation_charges: &mut self.observation.allocation_charges,
                     items: &mut self.observation.collection_items,
+                    items_saturated: &mut self.observation.collection_items_saturated,
                 }
                 .require_capture_type(
                     *ty,

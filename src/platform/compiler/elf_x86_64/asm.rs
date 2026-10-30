@@ -57,10 +57,12 @@ impl Asm {
                 "cannot allocate native code or relocation storage",
             )),
             Some(Failure::Label) => Err(error(
-                "native_elf_label", "native label is absent or has multiple definitions",
+                "native_elf_label",
+                "native label is absent or has multiple definitions",
             )),
             Some(Failure::Encoding) => Err(error(
-                "native_elf_encoding", "invalid native encoding or reserved-register use",
+                "native_elf_encoding",
+                "invalid native encoding or reserved-register use",
             )),
         }
     }
@@ -143,7 +145,10 @@ impl Asm {
             0 => 0x01,
             5 => 0x29,
             7 => 0x39,
-            _ => { self.fail(Failure::Encoding); return; }
+            _ => {
+                self.fail(Failure::Encoding);
+                return;
+            }
         };
         if dst == R::R11 {
             self.fail(Failure::Encoding);
@@ -173,12 +178,14 @@ impl Asm {
     }
     fn indexed_address(&mut self, dst: R, base: R, index: R) {
         self.bytes(&[
-            0x48 | (((dst as u8) >> 3) << 2)
-                | (((index as u8) >> 3) << 1) | ((base as u8) >> 3),
+            0x48 | (((dst as u8) >> 3) << 2) | (((index as u8) >> 3) << 1) | ((base as u8) >> 3),
             0x8d,
             0x84 | ((dst as u8 & 7) << 3),
             ((index as u8 & 7) << 3) | (base as u8 & 7),
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
         ]);
     }
     fn memory_offset(&mut self, opcode: u8, reg: R, base: R, offset: i64) {
@@ -328,23 +335,33 @@ impl Asm {
     pub fn finish(mut self) -> Result<Vec<u8>> {
         self.check()?;
         for (offset, label) in self.absolute {
-            let target = self.labels.get(label).copied().flatten().ok_or_else(|| {
-                error("native_elf_label", "native label has no definition")
-            })?;
+            let target = self
+                .labels
+                .get(label)
+                .copied()
+                .flatten()
+                .ok_or_else(|| error("native_elf_label", "native label has no definition"))?;
             let address = absolute_address(target)?;
-            let end = offset.checked_add(8).ok_or_else(|| {
-                error("native_elf_layout", "native relocation extent overflowed")
-            })?;
-            self.bytes.get_mut(offset..end).ok_or_else(|| {
-                error("native_elf_layout", "native relocation is outside the image")
-            })?.copy_from_slice(&address.to_le_bytes());
+            let end = offset
+                .checked_add(8)
+                .ok_or_else(|| error("native_elf_layout", "native relocation extent overflowed"))?;
+            self.bytes
+                .get_mut(offset..end)
+                .ok_or_else(|| {
+                    error(
+                        "native_elf_layout",
+                        "native relocation is outside the image",
+                    )
+                })?
+                .copy_from_slice(&address.to_le_bytes());
         }
         Ok(self.bytes)
     }
 }
 
 pub(super) fn absolute_address(offset: usize) -> Result<u64> {
-    u64::try_from(offset).ok()
+    u64::try_from(offset)
+        .ok()
         .and_then(|offset| super::TEXT_ADDRESS.checked_add(offset))
         .ok_or_else(|| error("native_elf_layout", "native absolute address overflowed"))
 }

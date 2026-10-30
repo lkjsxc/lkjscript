@@ -69,7 +69,7 @@ use std::collections::{BTreeMap, BTreeSet};
 fn memory_repository(
     snapshot: &crate::platform::kernel::KernelSnapshot,
 ) -> Result<crate::platform::publication::CreatedRepository, crate::platform::Diagnostic> {
-    let memory = crate::platform::MemProjectStore::new(128 * 1_048_576)?;
+    let memory = crate::platform::MemProjectStore::new(None)?;
     GraphRepository::create_memory(&memory, snapshot, None)
 }
 

@@ -1,11 +1,11 @@
 //! Invocation-wide cumulative admission shared by structured children.
 //! Local observations remain local; successful reservations are never refunded.
 use super::vm::NormalizedRunPolicy;
-use crate::platform::execution::{ExecutionError, cumulative_charge};
+use crate::platform::execution::{ExecutionError, finite_charge};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct StorageUsage {
     bytes: u64,
     items: u64,
@@ -27,7 +27,18 @@ impl SharedBudget {
     ) -> Self {
         Self {
             remaining_steps: remaining_steps.map(AtomicU64::new),
-            storage: Mutex::new(StorageUsage { bytes, items }),
+            storage: Mutex::new(StorageUsage {
+                bytes: if policy.maximum_allocated_bytes.is_some() {
+                    bytes
+                } else {
+                    0
+                },
+                items: if policy.maximum_collection_items.is_some() {
+                    items
+                } else {
+                    0
+                },
+            }),
             maximum_bytes: policy.maximum_allocated_bytes,
             maximum_items: policy.maximum_collection_items,
         }
@@ -57,20 +68,28 @@ impl SharedBudget {
             .storage
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let next_items = cumulative_charge(
-            usage.items,
-            items,
-            self.maximum_items,
-            "normalized_collection_items",
-            "structured invocation exhausted its aggregate collection quota",
-        )?;
-        let next_bytes = cumulative_charge(
-            usage.bytes,
-            bytes,
-            self.maximum_bytes,
-            "normalized_allocation",
-            "structured invocation exhausted its aggregate allocation quota",
-        )?;
+        // Only finite dimensions belong in this permission ledger. Unbounded
+        // dimensions retain their independently flagged evaluator observations.
+        let next_items = match self.maximum_items {
+            Some(maximum) => finite_charge(
+                usage.items,
+                items,
+                maximum,
+                "normalized_collection_items",
+                "structured invocation exhausted its aggregate collection quota",
+            )?,
+            None => 0,
+        };
+        let next_bytes = match self.maximum_bytes {
+            Some(maximum) => finite_charge(
+                usage.bytes,
+                bytes,
+                maximum,
+                "normalized_allocation",
+                "structured invocation exhausted its aggregate allocation quota",
+            )?,
+            None => 0,
+        };
         *usage = StorageUsage {
             bytes: next_bytes,
             items: next_items,
@@ -113,5 +132,63 @@ mod tests {
         assert!(budget.step("work").is_ok());
         assert!(budget.step("work").is_ok());
         assert!(budget.step("work").is_err());
+    }
+
+    #[test]
+    fn shared_storage_preserves_zero_exact_maximum_and_mixed_unbounded_dimensions() {
+        for bytes_dimension in [false, true] {
+            for maximum in [None, Some(0), Some(4), Some(5), Some(u64::MAX)] {
+                let mut policy = NormalizedRunPolicy::foreground();
+                if bytes_dimension {
+                    policy.maximum_allocated_bytes = maximum;
+                } else {
+                    policy.maximum_collection_items = maximum;
+                }
+                let budget = SharedBudget::new(policy, None, 0, 0);
+                assert!(budget.reserve(0, 0).is_ok());
+                let required = if maximum == Some(u64::MAX) {
+                    u64::MAX
+                } else {
+                    5
+                };
+                let (bytes, items) = if bytes_dimension {
+                    (required, 0)
+                } else {
+                    (0, required)
+                };
+                let before = *budget.storage.lock().unwrap();
+                assert_eq!(
+                    budget.reserve(bytes, items).is_ok(),
+                    maximum.is_none_or(|n| n >= required)
+                );
+                if maximum.is_some_and(|n| n < required) {
+                    assert_eq!(*budget.storage.lock().unwrap(), before);
+                }
+                if maximum == Some(required) {
+                    let before = *budget.storage.lock().unwrap();
+                    assert!(
+                        budget
+                            .reserve(u64::from(bytes_dimension), u64::from(!bytes_dimension))
+                            .is_err()
+                    );
+                    assert_eq!(*budget.storage.lock().unwrap(), before);
+                    assert!(budget.reserve(0, 0).is_ok());
+                }
+            }
+        }
+        let budget = SharedBudget::new(
+            NormalizedRunPolicy {
+                maximum_allocated_bytes: Some(0),
+                ..NormalizedRunPolicy::foreground()
+            },
+            None,
+            0,
+            u64::MAX,
+        );
+        assert!(budget.reserve(0, u64::MAX).is_ok());
+        assert!(budget.reserve(0, 1).is_ok());
+        let before = *budget.storage.lock().unwrap();
+        assert!(budget.reserve(1, u64::MAX).is_err());
+        assert_eq!(*budget.storage.lock().unwrap(), before);
     }
 }

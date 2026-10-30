@@ -123,6 +123,8 @@ impl Fixture {
         let mut allocated = 0;
         let mut charges = 0;
         let mut items = 0;
+        let mut allocated_saturated = false;
+        let mut items_saturated = false;
         let resources = NormalizedResourceScope::new().unwrap();
         let bindings = BTreeMap::new();
         let control = ExecutionControl::uncancelled();
@@ -135,9 +137,12 @@ impl Fixture {
             policy: super::super::super::NormalizedRunPolicy::foreground(),
             work: &mut work,
             allocated: &mut allocated,
+            allocated_saturated: &mut allocated_saturated,
             allocation_charges: &mut charges,
             items: &mut items,
+            items_saturated: &mut items_saturated,
             admission_bytes: 0,
+            admission_bytes_saturated: false,
             admission_items: 0,
         }
         .value(raw, self.payload, None, true)

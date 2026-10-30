@@ -241,8 +241,16 @@ impl WorkSaturation {
         self.bits |= dimension.bit();
     }
 
-    pub(crate) fn observe(&mut self, value: &mut u64, dimension: BudgetDimension, amount: BudgetCounter) {
-        let mut counter = BudgetCounter { consumed: *value, saturated: self.contains(dimension) };
+    pub(crate) fn observe(
+        &mut self,
+        value: &mut u64,
+        dimension: BudgetDimension,
+        amount: BudgetCounter,
+    ) {
+        let mut counter = BudgetCounter {
+            consumed: *value,
+            saturated: self.contains(dimension),
+        };
         counter.observe(amount);
         *value = counter.consumed;
         if counter.saturated {
@@ -251,16 +259,26 @@ impl WorkSaturation {
     }
 
     pub(crate) const fn counter(self, dimension: BudgetDimension, consumed: u64) -> BudgetCounter {
-        BudgetCounter { consumed, saturated: self.contains(dimension) }
+        BudgetCounter {
+            consumed,
+            saturated: self.contains(dimension),
+        }
     }
 
-    pub(crate) fn charge(&mut self, value: &mut u64, dimension: BudgetDimension,
-        amount: BudgetCounter, maximum: Option<u64>, phase: &str) -> Result<(), Diagnostic>
-    {
+    pub(crate) fn charge(
+        &mut self,
+        value: &mut u64,
+        dimension: BudgetDimension,
+        amount: BudgetCounter,
+        maximum: Option<u64>,
+        phase: &str,
+    ) -> Result<(), Diagnostic> {
         let mut counter = self.counter(dimension, *value);
         counter.charge(amount, maximum, phase, dimension.name())?;
         *value = counter.consumed;
-        if counter.saturated { self.mark(dimension); }
+        if counter.saturated {
+            self.mark(dimension);
+        }
         Ok(())
     }
 
@@ -278,7 +296,10 @@ pub(crate) struct BudgetCounter {
 
 impl BudgetCounter {
     pub(crate) const fn exact(consumed: u64) -> Self {
-        Self { consumed, saturated: false }
+        Self {
+            consumed,
+            saturated: false,
+        }
     }
 
     pub(crate) fn observe(&mut self, amount: Self) {
@@ -292,17 +313,26 @@ impl BudgetCounter {
         }
     }
 
-    pub(crate) fn charge(&mut self, amount: Self, maximum: Option<u64>, phase: &str, dimension: &'static str) -> Result<(), Diagnostic> {
+    pub(crate) fn charge(
+        &mut self,
+        amount: Self,
+        maximum: Option<u64>,
+        phase: &str,
+        dimension: &'static str,
+    ) -> Result<(), Diagnostic> {
         if let Some(maximum) = maximum {
             let next = if self.saturated || amount.saturated {
                 None
             } else {
-                self.consumed.checked_add(amount.consumed).filter(|next| *next <= maximum)
+                self.consumed
+                    .checked_add(amount.consumed)
+                    .filter(|next| *next <= maximum)
             };
             let Some(next) = next else {
-                return Err(budget_error(budget_code(dimension), format!(
-                    "{phase} exceeds the declared maximum {maximum} {dimension}"
-                )));
+                return Err(budget_error(
+                    budget_code(dimension),
+                    format!("{phase} exceeds the declared maximum {maximum} {dimension}"),
+                ));
             };
             self.consumed = next;
         } else {
@@ -311,12 +341,20 @@ impl BudgetCounter {
         Ok(())
     }
 
-    pub(crate) fn remaining(self, maximum: Option<u64>, phase: &str, dimension: &'static str) -> Result<Option<u64>, Diagnostic> {
-        let Some(maximum) = maximum else { return Ok(None); };
+    pub(crate) fn remaining(
+        self,
+        maximum: Option<u64>,
+        phase: &str,
+        dimension: &'static str,
+    ) -> Result<Option<u64>, Diagnostic> {
+        let Some(maximum) = maximum else {
+            return Ok(None);
+        };
         if self.saturated {
-            return Err(budget_error(budget_code(dimension), format!(
-                "{phase} has already exceeded the finite {dimension} representation"
-            )));
+            return Err(budget_error(
+                budget_code(dimension),
+                format!("{phase} has already exceeded the finite {dimension} representation"),
+            ));
         }
         maximum.checked_sub(self.consumed).map(Some).ok_or_else(|| {
             budget_error(budget_code(dimension), format!(
@@ -328,12 +366,15 @@ impl BudgetCounter {
     pub(crate) fn product(count: u64, width: u64) -> Self {
         match count.checked_mul(width) {
             Some(consumed) => Self::exact(consumed),
-            None => Self { consumed: u64::MAX, saturated: true },
+            None => Self {
+                consumed: u64::MAX,
+                saturated: true,
+            },
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct AuthoredChangeAdmission {
     /// Authored operations in the normalized request.
     pub maximum_operations: Option<u64>,
@@ -345,18 +386,7 @@ pub struct AuthoredChangeAdmission {
     pub maximum_type_nodes: Option<u64>,
 }
 
-impl Default for AuthoredChangeAdmission {
-    fn default() -> Self {
-        Self {
-            maximum_operations: None,
-            maximum_preconditions: None,
-            maximum_allocated_identities: None,
-            maximum_type_nodes: None,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct CanonicalEditAdmission {
     /// Distinct accepted-owner bindings created, replaced, or removed.
     pub maximum_owner_edits: Option<u64>,
@@ -368,18 +398,7 @@ pub struct CanonicalEditAdmission {
     pub maximum_retirement_edits: Option<u64>,
 }
 
-impl Default for CanonicalEditAdmission {
-    fn default() -> Self {
-        Self {
-            maximum_owner_edits: None,
-            maximum_type_edits: None,
-            maximum_dependency_edits: None,
-            maximum_retirement_edits: None,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct CanonicalReadAdmission {
     /// Logical point-read requests issued to accepted semantic authority.
     pub maximum_point_reads: Option<u64>,
@@ -395,20 +414,6 @@ pub struct CanonicalReadAdmission {
     pub maximum_bytes: Option<u64>,
     /// Canonical semantic records decoded from returned payloads.
     pub maximum_decoded_records: Option<u64>,
-}
-
-impl Default for CanonicalReadAdmission {
-    fn default() -> Self {
-        Self {
-            maximum_point_reads: None,
-            maximum_map_pages: None,
-            maximum_map_entries: None,
-            maximum_catalog_lookups: None,
-            maximum_objects: None,
-            maximum_bytes: None,
-            maximum_decoded_records: None,
-        }
-    }
 }
 
 impl CanonicalReadAdmission {
@@ -482,7 +487,7 @@ impl CanonicalReadAdmission {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct CanonicalMapUpdateAdmission {
     /// Candidate persistent-map page encodings produced across semantic authority maps.
     pub maximum_pages_encoded: Option<u64>,
@@ -490,16 +495,7 @@ pub struct CanonicalMapUpdateAdmission {
     pub maximum_bytes_encoded: Option<u64>,
 }
 
-impl Default for CanonicalMapUpdateAdmission {
-    fn default() -> Self {
-        Self {
-            maximum_pages_encoded: None,
-            maximum_bytes_encoded: None,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct WitnessReadAdmission {
     /// Logical point-read requests issued to accepted validation evidence.
     pub maximum_point_reads: Option<u64>,
@@ -515,20 +511,6 @@ pub struct WitnessReadAdmission {
     pub maximum_bytes: Option<u64>,
     /// Witness records decoded from returned payloads.
     pub maximum_decoded_records: Option<u64>,
-}
-
-impl Default for WitnessReadAdmission {
-    fn default() -> Self {
-        Self {
-            maximum_point_reads: None,
-            maximum_map_pages: None,
-            maximum_map_entries: None,
-            maximum_catalog_lookups: None,
-            maximum_objects: None,
-            maximum_bytes: None,
-            maximum_decoded_records: None,
-        }
-    }
 }
 
 impl WitnessReadAdmission {
@@ -602,7 +584,7 @@ impl WitnessReadAdmission {
     }
 }
 
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct ImpactAdmission {
     /// Distinct owners in the combined direct and transitive validation frontier.
     pub maximum_affected_owners: Option<u64>,
@@ -620,21 +602,7 @@ pub struct ImpactAdmission {
     pub maximum_relation_fanout: Option<u64>,
 }
 
-impl Default for ImpactAdmission {
-    fn default() -> Self {
-        Self {
-            maximum_affected_owners: None,
-            maximum_summary_owners: None,
-            maximum_summary_edits: None,
-            maximum_ownership_steps: None,
-            maximum_behavior_owners: None,
-            maximum_relation_edges: None,
-            maximum_relation_fanout: None,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct ValidationAdmission {
     /// Owner records checked by structural or semantic validation.
     pub maximum_owner_records: Option<u64>,
@@ -648,19 +616,7 @@ pub struct ValidationAdmission {
     pub maximum_diagnostics: Option<u64>,
 }
 
-impl Default for ValidationAdmission {
-    fn default() -> Self {
-        Self {
-            maximum_owner_records: None,
-            maximum_ownership_entries: None,
-            maximum_type_objects: None,
-            maximum_expression_steps: None,
-            maximum_diagnostics: None,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct TestAdmission {
     /// Graph-owned tests selected by the impact frontier.
     pub maximum_selected: Option<u64>,
@@ -672,18 +628,7 @@ pub struct TestAdmission {
     pub maximum_owners_visited: Option<u64>,
 }
 
-impl Default for TestAdmission {
-    fn default() -> Self {
-        Self {
-            maximum_selected: None,
-            maximum_dependencies_per_test: None,
-            maximum_ownership_steps: None,
-            maximum_owners_visited: None,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct WitnessUpdateAdmission {
     /// Logical witness-map entries inserted, replaced, removed, or confirmed unchanged.
     pub maximum_edits: Option<u64>,
@@ -693,17 +638,7 @@ pub struct WitnessUpdateAdmission {
     pub maximum_bytes_encoded: Option<u64>,
 }
 
-impl Default for WitnessUpdateAdmission {
-    fn default() -> Self {
-        Self {
-            maximum_edits: None,
-            maximum_pages_encoded: None,
-            maximum_bytes_encoded: None,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct StagingAdmission {
     /// Newly isolated immutable objects retained for this preparation.
     pub maximum_objects: Option<u64>,
@@ -711,16 +646,6 @@ pub struct StagingAdmission {
     pub maximum_bytes: Option<u64>,
     /// Newly isolated persistent-map page objects retained for this preparation.
     pub maximum_pages: Option<u64>,
-}
-
-impl Default for StagingAdmission {
-    fn default() -> Self {
-        Self {
-            maximum_objects: None,
-            maximum_bytes: None,
-            maximum_pages: None,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Decode, Default, Encode, Eq, PartialEq)]
@@ -739,57 +664,108 @@ pub struct ChangeBudget {
 
 impl ChangeBudget {
     pub fn policy_limits(self) -> impl Iterator<Item = (&'static str, Option<u64>)> {
-        BudgetDimension::ALL.into_iter().map(move |dimension| (dimension.policy_name(), self.maximum(dimension)))
+        BudgetDimension::ALL
+            .into_iter()
+            .map(move |dimension| (dimension.policy_name(), self.maximum(dimension)))
     }
 
     /// Assign one canonical resource policy field; omitted fields retain their existing state.
     pub fn set_policy_limit(&mut self, name: &str, maximum: Option<u64>) -> Result<(), Diagnostic> {
-        let dimension = BudgetDimension::ALL.into_iter().find(|dimension| dimension.policy_name() == name)
-            .ok_or_else(|| budget_error("change_budget_unknown_dimension", format!("unknown change resource policy {name}")))?;
+        let dimension = BudgetDimension::ALL
+            .into_iter()
+            .find(|dimension| dimension.policy_name() == name)
+            .ok_or_else(|| {
+                budget_error(
+                    "change_budget_unknown_dimension",
+                    format!("unknown change resource policy {name}"),
+                )
+            })?;
         match dimension {
             BudgetDimension::Operations => self.authored.maximum_operations = maximum,
             BudgetDimension::Preconditions => self.authored.maximum_preconditions = maximum,
-            BudgetDimension::AllocatedIdentities => self.authored.maximum_allocated_identities = maximum,
+            BudgetDimension::AllocatedIdentities => {
+                self.authored.maximum_allocated_identities = maximum
+            }
             BudgetDimension::AuthoredTypeNodes => self.authored.maximum_type_nodes = maximum,
-            BudgetDimension::CanonicalOwnerEdits => self.canonical_edits.maximum_owner_edits = maximum,
-            BudgetDimension::CanonicalTypeEdits => self.canonical_edits.maximum_type_edits = maximum,
-            BudgetDimension::CanonicalDependencyEdits => self.canonical_edits.maximum_dependency_edits = maximum,
-            BudgetDimension::CanonicalRetirementEdits => self.canonical_edits.maximum_retirement_edits = maximum,
-            BudgetDimension::CanonicalPointReads => self.canonical_reads.maximum_point_reads = maximum,
+            BudgetDimension::CanonicalOwnerEdits => {
+                self.canonical_edits.maximum_owner_edits = maximum
+            }
+            BudgetDimension::CanonicalTypeEdits => {
+                self.canonical_edits.maximum_type_edits = maximum
+            }
+            BudgetDimension::CanonicalDependencyEdits => {
+                self.canonical_edits.maximum_dependency_edits = maximum
+            }
+            BudgetDimension::CanonicalRetirementEdits => {
+                self.canonical_edits.maximum_retirement_edits = maximum
+            }
+            BudgetDimension::CanonicalPointReads => {
+                self.canonical_reads.maximum_point_reads = maximum
+            }
             BudgetDimension::CanonicalMapPages => self.canonical_reads.maximum_map_pages = maximum,
-            BudgetDimension::CanonicalMapEntries => self.canonical_reads.maximum_map_entries = maximum,
-            BudgetDimension::CanonicalCatalogLookups => self.canonical_reads.maximum_catalog_lookups = maximum,
+            BudgetDimension::CanonicalMapEntries => {
+                self.canonical_reads.maximum_map_entries = maximum
+            }
+            BudgetDimension::CanonicalCatalogLookups => {
+                self.canonical_reads.maximum_catalog_lookups = maximum
+            }
             BudgetDimension::CanonicalObjects => self.canonical_reads.maximum_objects = maximum,
             BudgetDimension::CanonicalBytes => self.canonical_reads.maximum_bytes = maximum,
-            BudgetDimension::CanonicalDecodedRecords => self.canonical_reads.maximum_decoded_records = maximum,
-            BudgetDimension::CanonicalMapPagesEncoded => self.canonical_map_update.maximum_pages_encoded = maximum,
-            BudgetDimension::CanonicalMapBytesEncoded => self.canonical_map_update.maximum_bytes_encoded = maximum,
+            BudgetDimension::CanonicalDecodedRecords => {
+                self.canonical_reads.maximum_decoded_records = maximum
+            }
+            BudgetDimension::CanonicalMapPagesEncoded => {
+                self.canonical_map_update.maximum_pages_encoded = maximum
+            }
+            BudgetDimension::CanonicalMapBytesEncoded => {
+                self.canonical_map_update.maximum_bytes_encoded = maximum
+            }
             BudgetDimension::WitnessPointReads => self.witness_reads.maximum_point_reads = maximum,
             BudgetDimension::WitnessMapPages => self.witness_reads.maximum_map_pages = maximum,
             BudgetDimension::WitnessMapEntries => self.witness_reads.maximum_map_entries = maximum,
-            BudgetDimension::WitnessCatalogLookups => self.witness_reads.maximum_catalog_lookups = maximum,
+            BudgetDimension::WitnessCatalogLookups => {
+                self.witness_reads.maximum_catalog_lookups = maximum
+            }
             BudgetDimension::WitnessObjects => self.witness_reads.maximum_objects = maximum,
             BudgetDimension::WitnessBytes => self.witness_reads.maximum_bytes = maximum,
-            BudgetDimension::WitnessDecodedRecords => self.witness_reads.maximum_decoded_records = maximum,
-            BudgetDimension::AffectedFrontierOwners => self.impact.maximum_affected_owners = maximum,
+            BudgetDimension::WitnessDecodedRecords => {
+                self.witness_reads.maximum_decoded_records = maximum
+            }
+            BudgetDimension::AffectedFrontierOwners => {
+                self.impact.maximum_affected_owners = maximum
+            }
             BudgetDimension::ImpactSummaryOwners => self.impact.maximum_summary_owners = maximum,
             BudgetDimension::ImpactSummaryEdits => self.impact.maximum_summary_edits = maximum,
             BudgetDimension::ImpactOwnershipSteps => self.impact.maximum_ownership_steps = maximum,
             BudgetDimension::ImpactBehaviorOwners => self.impact.maximum_behavior_owners = maximum,
             BudgetDimension::RelationEdges => self.impact.maximum_relation_edges = maximum,
             BudgetDimension::RelationFanout => self.impact.maximum_relation_fanout = maximum,
-            BudgetDimension::ValidationOwnerRecords => self.validation.maximum_owner_records = maximum,
-            BudgetDimension::ValidationOwnershipEntries => self.validation.maximum_ownership_entries = maximum,
-            BudgetDimension::ValidationTypeObjects => self.validation.maximum_type_objects = maximum,
-            BudgetDimension::ValidationExpressionSteps => self.validation.maximum_expression_steps = maximum,
+            BudgetDimension::ValidationOwnerRecords => {
+                self.validation.maximum_owner_records = maximum
+            }
+            BudgetDimension::ValidationOwnershipEntries => {
+                self.validation.maximum_ownership_entries = maximum
+            }
+            BudgetDimension::ValidationTypeObjects => {
+                self.validation.maximum_type_objects = maximum
+            }
+            BudgetDimension::ValidationExpressionSteps => {
+                self.validation.maximum_expression_steps = maximum
+            }
             BudgetDimension::ValidationDiagnostics => self.validation.maximum_diagnostics = maximum,
             BudgetDimension::TestsSelected => self.tests.maximum_selected = maximum,
-            BudgetDimension::TestDependenciesPerTest => self.tests.maximum_dependencies_per_test = maximum,
+            BudgetDimension::TestDependenciesPerTest => {
+                self.tests.maximum_dependencies_per_test = maximum
+            }
             BudgetDimension::TestOwnershipSteps => self.tests.maximum_ownership_steps = maximum,
             BudgetDimension::TestOwnersVisited => self.tests.maximum_owners_visited = maximum,
             BudgetDimension::WitnessEdits => self.witness_update.maximum_edits = maximum,
-            BudgetDimension::WitnessMapPagesEncoded => self.witness_update.maximum_pages_encoded = maximum,
-            BudgetDimension::WitnessMapBytesEncoded => self.witness_update.maximum_bytes_encoded = maximum,
+            BudgetDimension::WitnessMapPagesEncoded => {
+                self.witness_update.maximum_pages_encoded = maximum
+            }
+            BudgetDimension::WitnessMapBytesEncoded => {
+                self.witness_update.maximum_bytes_encoded = maximum
+            }
             BudgetDimension::StagedObjects => self.staging.maximum_objects = maximum,
             BudgetDimension::StagedBytes => self.staging.maximum_bytes = maximum,
             BudgetDimension::StagedPages => self.staging.maximum_pages = maximum,
@@ -805,17 +781,29 @@ impl ChangeBudget {
             BudgetDimension::AuthoredTypeNodes => self.authored.maximum_type_nodes,
             BudgetDimension::CanonicalOwnerEdits => self.canonical_edits.maximum_owner_edits,
             BudgetDimension::CanonicalTypeEdits => self.canonical_edits.maximum_type_edits,
-            BudgetDimension::CanonicalDependencyEdits => self.canonical_edits.maximum_dependency_edits,
-            BudgetDimension::CanonicalRetirementEdits => self.canonical_edits.maximum_retirement_edits,
+            BudgetDimension::CanonicalDependencyEdits => {
+                self.canonical_edits.maximum_dependency_edits
+            }
+            BudgetDimension::CanonicalRetirementEdits => {
+                self.canonical_edits.maximum_retirement_edits
+            }
             BudgetDimension::CanonicalPointReads => self.canonical_reads.maximum_point_reads,
             BudgetDimension::CanonicalMapPages => self.canonical_reads.maximum_map_pages,
             BudgetDimension::CanonicalMapEntries => self.canonical_reads.maximum_map_entries,
-            BudgetDimension::CanonicalCatalogLookups => self.canonical_reads.maximum_catalog_lookups,
+            BudgetDimension::CanonicalCatalogLookups => {
+                self.canonical_reads.maximum_catalog_lookups
+            }
             BudgetDimension::CanonicalObjects => self.canonical_reads.maximum_objects,
             BudgetDimension::CanonicalBytes => self.canonical_reads.maximum_bytes,
-            BudgetDimension::CanonicalDecodedRecords => self.canonical_reads.maximum_decoded_records,
-            BudgetDimension::CanonicalMapPagesEncoded => self.canonical_map_update.maximum_pages_encoded,
-            BudgetDimension::CanonicalMapBytesEncoded => self.canonical_map_update.maximum_bytes_encoded,
+            BudgetDimension::CanonicalDecodedRecords => {
+                self.canonical_reads.maximum_decoded_records
+            }
+            BudgetDimension::CanonicalMapPagesEncoded => {
+                self.canonical_map_update.maximum_pages_encoded
+            }
+            BudgetDimension::CanonicalMapBytesEncoded => {
+                self.canonical_map_update.maximum_bytes_encoded
+            }
             BudgetDimension::WitnessPointReads => self.witness_reads.maximum_point_reads,
             BudgetDimension::WitnessMapPages => self.witness_reads.maximum_map_pages,
             BudgetDimension::WitnessMapEntries => self.witness_reads.maximum_map_entries,
@@ -831,7 +819,9 @@ impl ChangeBudget {
             BudgetDimension::RelationEdges => self.impact.maximum_relation_edges,
             BudgetDimension::RelationFanout => self.impact.maximum_relation_fanout,
             BudgetDimension::ValidationOwnerRecords => self.validation.maximum_owner_records,
-            BudgetDimension::ValidationOwnershipEntries => self.validation.maximum_ownership_entries,
+            BudgetDimension::ValidationOwnershipEntries => {
+                self.validation.maximum_ownership_entries
+            }
             BudgetDimension::ValidationTypeObjects => self.validation.maximum_type_objects,
             BudgetDimension::ValidationExpressionSteps => self.validation.maximum_expression_steps,
             BudgetDimension::ValidationDiagnostics => self.validation.maximum_diagnostics,
@@ -1074,12 +1064,13 @@ impl ChangeBudgetWork {
 
     pub fn observation_flags_valid(self) -> bool {
         let saturation = self.observation_saturation();
-        saturation.valid() && BudgetDimension::ALL.into_iter().all(|dimension| {
-            match self.observation(dimension) {
-                Some(counter) => !counter.saturated || counter.consumed == u64::MAX,
-                None => !saturation.contains(dimension),
-            }
-        })
+        saturation.valid()
+            && BudgetDimension::ALL
+                .into_iter()
+                .all(|dimension| match self.observation(dimension) {
+                    Some(counter) => !counter.saturated || counter.consumed == u64::MAX,
+                    None => !saturation.contains(dimension),
+                })
     }
 
     pub(crate) fn observation(self, dimension: BudgetDimension) -> Option<BudgetCounter> {
@@ -1098,7 +1089,9 @@ impl ChangeBudgetWork {
             BudgetDimension::CanonicalCatalogLookups => self.canonical_reads.catalog_lookups,
             BudgetDimension::CanonicalObjects => self.canonical_reads.objects_read,
             BudgetDimension::CanonicalBytes => self.canonical_reads.bytes_read,
-            BudgetDimension::CanonicalDecodedRecords => self.canonical_reads.canonical_records_decoded,
+            BudgetDimension::CanonicalDecodedRecords => {
+                self.canonical_reads.canonical_records_decoded
+            }
             BudgetDimension::CanonicalMapPagesEncoded => self.canonical_map_update.pages_encoded,
             BudgetDimension::CanonicalMapBytesEncoded => self.canonical_map_update.bytes_encoded,
             BudgetDimension::WitnessPointReads => self.witness_reads.point_reads,
@@ -1128,14 +1121,28 @@ impl ChangeBudgetWork {
             BudgetDimension::StagedObjects => self.staging.objects,
             BudgetDimension::StagedBytes => self.staging.bytes,
             BudgetDimension::StagedPages => self.staging.pages,
-            BudgetDimension::RelationFanout | BudgetDimension::TestDependenciesPerTest => return None,
+            BudgetDimension::RelationFanout | BudgetDimension::TestDependenciesPerTest => {
+                return None;
+            }
         };
-        Some(BudgetCounter { consumed, saturated: self.observation_saturation().contains(dimension) })
+        Some(BudgetCounter {
+            consumed,
+            saturated: self.observation_saturation().contains(dimension),
+        })
     }
 
-    pub(crate) fn charge(&mut self, dimension: BudgetDimension, amount: BudgetCounter, maximum: Option<u64>, phase: &str) -> Result<(), Diagnostic> {
+    pub(crate) fn charge(
+        &mut self,
+        dimension: BudgetDimension,
+        amount: BudgetCounter,
+        maximum: Option<u64>,
+        phase: &str,
+    ) -> Result<(), Diagnostic> {
         let Some(mut observed) = self.observation(dimension) else {
-            return Err(budget_error("change_budget_observation_dimension", "per-value policy has no cumulative work counter"));
+            return Err(budget_error(
+                "change_budget_observation_dimension",
+                "per-value policy has no cumulative work counter",
+            ));
         };
         observed.charge(amount, maximum, phase, dimension.name())?;
         match dimension {
@@ -1143,54 +1150,129 @@ impl ChangeBudgetWork {
             BudgetDimension::Preconditions => self.preconditions_checked = observed.consumed,
             BudgetDimension::AllocatedIdentities => self.allocated_identities = observed.consumed,
             BudgetDimension::AuthoredTypeNodes => self.authored_type_nodes = observed.consumed,
-            BudgetDimension::CanonicalOwnerEdits => self.canonical_edits.owner_edits = observed.consumed,
-            BudgetDimension::CanonicalTypeEdits => self.canonical_edits.type_edits = observed.consumed,
-            BudgetDimension::CanonicalDependencyEdits => self.canonical_edits.dependency_edits = observed.consumed,
-            BudgetDimension::CanonicalRetirementEdits => self.canonical_edits.retirement_edits = observed.consumed,
-            BudgetDimension::CanonicalPointReads => self.canonical_reads.point_reads = observed.consumed,
-            BudgetDimension::CanonicalMapPages => self.canonical_reads.map_pages_read = observed.consumed,
-            BudgetDimension::CanonicalMapEntries => self.canonical_reads.map_entries_visited = observed.consumed,
-            BudgetDimension::CanonicalCatalogLookups => self.canonical_reads.catalog_lookups = observed.consumed,
-            BudgetDimension::CanonicalObjects => self.canonical_reads.objects_read = observed.consumed,
+            BudgetDimension::CanonicalOwnerEdits => {
+                self.canonical_edits.owner_edits = observed.consumed
+            }
+            BudgetDimension::CanonicalTypeEdits => {
+                self.canonical_edits.type_edits = observed.consumed
+            }
+            BudgetDimension::CanonicalDependencyEdits => {
+                self.canonical_edits.dependency_edits = observed.consumed
+            }
+            BudgetDimension::CanonicalRetirementEdits => {
+                self.canonical_edits.retirement_edits = observed.consumed
+            }
+            BudgetDimension::CanonicalPointReads => {
+                self.canonical_reads.point_reads = observed.consumed
+            }
+            BudgetDimension::CanonicalMapPages => {
+                self.canonical_reads.map_pages_read = observed.consumed
+            }
+            BudgetDimension::CanonicalMapEntries => {
+                self.canonical_reads.map_entries_visited = observed.consumed
+            }
+            BudgetDimension::CanonicalCatalogLookups => {
+                self.canonical_reads.catalog_lookups = observed.consumed
+            }
+            BudgetDimension::CanonicalObjects => {
+                self.canonical_reads.objects_read = observed.consumed
+            }
             BudgetDimension::CanonicalBytes => self.canonical_reads.bytes_read = observed.consumed,
-            BudgetDimension::CanonicalDecodedRecords => self.canonical_reads.canonical_records_decoded = observed.consumed,
-            BudgetDimension::CanonicalMapPagesEncoded => self.canonical_map_update.pages_encoded = observed.consumed,
-            BudgetDimension::CanonicalMapBytesEncoded => self.canonical_map_update.bytes_encoded = observed.consumed,
-            BudgetDimension::WitnessPointReads => self.witness_reads.point_reads = observed.consumed,
-            BudgetDimension::WitnessMapPages => self.witness_reads.map_pages_read = observed.consumed,
-            BudgetDimension::WitnessMapEntries => self.witness_reads.map_entries_visited = observed.consumed,
-            BudgetDimension::WitnessCatalogLookups => self.witness_reads.catalog_lookups = observed.consumed,
+            BudgetDimension::CanonicalDecodedRecords => {
+                self.canonical_reads.canonical_records_decoded = observed.consumed
+            }
+            BudgetDimension::CanonicalMapPagesEncoded => {
+                self.canonical_map_update.pages_encoded = observed.consumed
+            }
+            BudgetDimension::CanonicalMapBytesEncoded => {
+                self.canonical_map_update.bytes_encoded = observed.consumed
+            }
+            BudgetDimension::WitnessPointReads => {
+                self.witness_reads.point_reads = observed.consumed
+            }
+            BudgetDimension::WitnessMapPages => {
+                self.witness_reads.map_pages_read = observed.consumed
+            }
+            BudgetDimension::WitnessMapEntries => {
+                self.witness_reads.map_entries_visited = observed.consumed
+            }
+            BudgetDimension::WitnessCatalogLookups => {
+                self.witness_reads.catalog_lookups = observed.consumed
+            }
             BudgetDimension::WitnessObjects => self.witness_reads.objects_read = observed.consumed,
             BudgetDimension::WitnessBytes => self.witness_reads.bytes_read = observed.consumed,
-            BudgetDimension::WitnessDecodedRecords => self.witness_reads.witness_records_decoded = observed.consumed,
-            BudgetDimension::AffectedFrontierOwners => self.affected_frontier_owners = observed.consumed,
+            BudgetDimension::WitnessDecodedRecords => {
+                self.witness_reads.witness_records_decoded = observed.consumed
+            }
+            BudgetDimension::AffectedFrontierOwners => {
+                self.affected_frontier_owners = observed.consumed
+            }
             BudgetDimension::ImpactSummaryOwners => self.impact_summary_owners = observed.consumed,
             BudgetDimension::ImpactSummaryEdits => self.impact_summary_edits = observed.consumed,
-            BudgetDimension::ImpactOwnershipSteps => self.impact_ownership_steps = observed.consumed,
-            BudgetDimension::ImpactBehaviorOwners => self.impact_behavior_owners = observed.consumed,
+            BudgetDimension::ImpactOwnershipSteps => {
+                self.impact_ownership_steps = observed.consumed
+            }
+            BudgetDimension::ImpactBehaviorOwners => {
+                self.impact_behavior_owners = observed.consumed
+            }
             BudgetDimension::RelationEdges => self.relation_edges = observed.consumed,
-            BudgetDimension::ValidationOwnerRecords => self.validation.owner_records = observed.consumed,
-            BudgetDimension::ValidationOwnershipEntries => self.validation.ownership_entries = observed.consumed,
-            BudgetDimension::ValidationTypeObjects => self.validation.type_objects = observed.consumed,
-            BudgetDimension::ValidationExpressionSteps => self.validation.expression_steps = observed.consumed,
-            BudgetDimension::ValidationDiagnostics => self.validation.diagnostics = observed.consumed,
+            BudgetDimension::ValidationOwnerRecords => {
+                self.validation.owner_records = observed.consumed
+            }
+            BudgetDimension::ValidationOwnershipEntries => {
+                self.validation.ownership_entries = observed.consumed
+            }
+            BudgetDimension::ValidationTypeObjects => {
+                self.validation.type_objects = observed.consumed
+            }
+            BudgetDimension::ValidationExpressionSteps => {
+                self.validation.expression_steps = observed.consumed
+            }
+            BudgetDimension::ValidationDiagnostics => {
+                self.validation.diagnostics = observed.consumed
+            }
             BudgetDimension::TestsSelected => self.tests.selected = observed.consumed,
             BudgetDimension::TestOwnershipSteps => self.tests.ownership_steps = observed.consumed,
             BudgetDimension::TestOwnersVisited => self.tests.owners_visited = observed.consumed,
             BudgetDimension::WitnessEdits => self.witness_update.edits = observed.consumed,
-            BudgetDimension::WitnessMapPagesEncoded => self.witness_update.pages_encoded = observed.consumed,
-            BudgetDimension::WitnessMapBytesEncoded => self.witness_update.bytes_encoded = observed.consumed,
+            BudgetDimension::WitnessMapPagesEncoded => {
+                self.witness_update.pages_encoded = observed.consumed
+            }
+            BudgetDimension::WitnessMapBytesEncoded => {
+                self.witness_update.bytes_encoded = observed.consumed
+            }
             BudgetDimension::StagedObjects => self.staging.objects = observed.consumed,
             BudgetDimension::StagedBytes => self.staging.bytes = observed.consumed,
             BudgetDimension::StagedPages => self.staging.pages = observed.consumed,
-            BudgetDimension::RelationFanout | BudgetDimension::TestDependenciesPerTest => return Err(budget_error("change_budget_observation_dimension", "per-value policy has no cumulative work counter")),
+            BudgetDimension::RelationFanout | BudgetDimension::TestDependenciesPerTest => {
+                return Err(budget_error(
+                    "change_budget_observation_dimension",
+                    "per-value policy has no cumulative work counter",
+                ));
+            }
         }
         if observed.saturated {
             self.saturation.mark(dimension);
             match dimension {
-                BudgetDimension::CanonicalPointReads | BudgetDimension::CanonicalMapPages | BudgetDimension::CanonicalMapEntries | BudgetDimension::CanonicalCatalogLookups | BudgetDimension::CanonicalObjects | BudgetDimension::CanonicalBytes | BudgetDimension::CanonicalDecodedRecords => self.canonical_reads.saturation.mark(dimension),
-                BudgetDimension::WitnessPointReads | BudgetDimension::WitnessMapPages | BudgetDimension::WitnessMapEntries | BudgetDimension::WitnessCatalogLookups | BudgetDimension::WitnessObjects | BudgetDimension::WitnessBytes | BudgetDimension::WitnessDecodedRecords => self.witness_reads.saturation.mark(dimension),
-                _ => {},
+                BudgetDimension::CanonicalPointReads
+                | BudgetDimension::CanonicalMapPages
+                | BudgetDimension::CanonicalMapEntries
+                | BudgetDimension::CanonicalCatalogLookups
+                | BudgetDimension::CanonicalObjects
+                | BudgetDimension::CanonicalBytes
+                | BudgetDimension::CanonicalDecodedRecords => {
+                    self.canonical_reads.saturation.mark(dimension)
+                }
+                BudgetDimension::WitnessPointReads
+                | BudgetDimension::WitnessMapPages
+                | BudgetDimension::WitnessMapEntries
+                | BudgetDimension::WitnessCatalogLookups
+                | BudgetDimension::WitnessObjects
+                | BudgetDimension::WitnessBytes
+                | BudgetDimension::WitnessDecodedRecords => {
+                    self.witness_reads.saturation.mark(dimension)
+                }
+                _ => {}
             }
         }
         Ok(())
@@ -1203,8 +1285,14 @@ pub(crate) struct ChangeBudgetMeter {
 }
 
 impl ChangeBudgetMeter {
-    fn charge(&mut self, dimension: BudgetDimension, amount: BudgetCounter, phase: &str) -> Result<(), Diagnostic> {
-        self.work.charge(dimension, amount, self.budget.maximum(dimension), phase)
+    fn charge(
+        &mut self,
+        dimension: BudgetDimension,
+        amount: BudgetCounter,
+        phase: &str,
+    ) -> Result<(), Diagnostic> {
+        self.work
+            .charge(dimension, amount, self.budget.maximum(dimension), phase)
     }
 
     pub(crate) fn new(budget: ChangeBudget, initial: ChangeBudgetWork) -> Result<Self, Diagnostic> {
@@ -1231,8 +1319,20 @@ impl ChangeBudgetMeter {
 
     pub(crate) fn observe_derived(&mut self, derived: &DerivedDelta) -> Result<(), Diagnostic> {
         self.add_witness_reads(derived.read_work)?;
-        self.charge(BudgetDimension::ImpactOwnershipSteps, BudgetCounter { consumed: derived.ownership_steps, saturated: derived.saturation.contains(BudgetDimension::ImpactOwnershipSteps) }, "derived witness delta")?;
-        self.add_relations(BudgetCounter { consumed: derived.relation_edges_examined, saturated: derived.saturation.contains(BudgetDimension::RelationEdges) })?;
+        self.charge(
+            BudgetDimension::ImpactOwnershipSteps,
+            BudgetCounter {
+                consumed: derived.ownership_steps,
+                saturated: derived
+                    .saturation
+                    .contains(BudgetDimension::ImpactOwnershipSteps),
+            },
+            "derived witness delta",
+        )?;
+        self.add_relations(BudgetCounter {
+            consumed: derived.relation_edges_examined,
+            saturated: derived.saturation.contains(BudgetDimension::RelationEdges),
+        })?;
         self.check("derived witness delta")
     }
 
@@ -1245,37 +1345,80 @@ impl ChangeBudgetMeter {
     }
 
     pub(crate) fn observe_impact(&mut self, impact: &ImpactPlan) -> Result<(), Diagnostic> {
-        let affected = impact.structurally_checked.iter()
-            .chain(&impact.semantically_checked).chain(&impact.summary_owners)
-            .chain(&impact.compiler_units).chain(&impact.tests).copied().collect::<BTreeSet<_>>().len();
-        self.work.affected_frontier_owners = self.work.affected_frontier_owners.max(count(affected));
+        let affected = impact
+            .structurally_checked
+            .iter()
+            .chain(&impact.semantically_checked)
+            .chain(&impact.summary_owners)
+            .chain(&impact.compiler_units)
+            .chain(&impact.tests)
+            .copied()
+            .collect::<BTreeSet<_>>()
+            .len();
+        self.work.affected_frontier_owners =
+            self.work.affected_frontier_owners.max(count(affected));
         self.work.tests.selected = self.work.tests.selected.max(count(impact.tests.len()));
         for (dimension, consumed) in [
-            (BudgetDimension::ImpactSummaryOwners, impact.work.summary_owners_examined),
-            (BudgetDimension::ImpactSummaryEdits, impact.work.summary_edits_examined),
-            (BudgetDimension::ImpactOwnershipSteps, impact.work.ownership_steps),
-            (BudgetDimension::ImpactBehaviorOwners, impact.work.behavior_owners_visited),
-            (BudgetDimension::RelationEdges, impact.work.reverse_edges_visited),
+            (
+                BudgetDimension::ImpactSummaryOwners,
+                impact.work.summary_owners_examined,
+            ),
+            (
+                BudgetDimension::ImpactSummaryEdits,
+                impact.work.summary_edits_examined,
+            ),
+            (
+                BudgetDimension::ImpactOwnershipSteps,
+                impact.work.ownership_steps,
+            ),
+            (
+                BudgetDimension::ImpactBehaviorOwners,
+                impact.work.behavior_owners_visited,
+            ),
+            (
+                BudgetDimension::RelationEdges,
+                impact.work.reverse_edges_visited,
+            ),
         ] {
-            self.charge(dimension, BudgetCounter { consumed, saturated: impact.work.saturation.contains(dimension) }, "impact planning")?;
+            self.charge(
+                dimension,
+                BudgetCounter {
+                    consumed,
+                    saturated: impact.work.saturation.contains(dimension),
+                },
+                "impact planning",
+            )?;
         }
         self.add_witness_reads(impact.work.witness_reads)?;
         self.check("impact planning")
     }
 
-    pub(crate) fn observe_summaries(&mut self, summaries: &PlannedSummaries) -> Result<(), Diagnostic> {
+    pub(crate) fn observe_summaries(
+        &mut self,
+        summaries: &PlannedSummaries,
+    ) -> Result<(), Diagnostic> {
         self.add_witness_reads(summaries.initial.read_work)?;
         self.add_witness_reads(summaries.final_delta.read_work)?;
         for summary in [&summaries.initial, &summaries.final_delta] {
-            self.add_relations(BudgetCounter { consumed: summary.relation_edges_read, saturated: summary.saturation.contains(BudgetDimension::RelationEdges) })?;
+            self.add_relations(BudgetCounter {
+                consumed: summary.relation_edges_read,
+                saturated: summary.saturation.contains(BudgetDimension::RelationEdges),
+            })?;
         }
         self.check("owner-summary rebuilding")
     }
 
-    pub(crate) fn validation_admission(&self, phase: &str) -> Result<ValidationAdmission, Diagnostic> {
+    pub(crate) fn validation_admission(
+        &self,
+        phase: &str,
+    ) -> Result<ValidationAdmission, Diagnostic> {
         let remaining = |dimension: BudgetDimension| {
-            let observed = self.work.observation(dimension).ok_or_else(|| budget_error(
-                "change_budget_observation_dimension", "validation requires a cumulative work dimension"))?;
+            let observed = self.work.observation(dimension).ok_or_else(|| {
+                budget_error(
+                    "change_budget_observation_dimension",
+                    "validation requires a cumulative work dimension",
+                )
+            })?;
             observed.remaining(self.budget.maximum(dimension), phase, dimension.name())
         };
         Ok(ValidationAdmission {
@@ -1287,50 +1430,124 @@ impl ChangeBudgetMeter {
         })
     }
 
-    pub(crate) fn observe_completed_validation(&mut self, work: IncrementalValidationWork) -> Result<(), Diagnostic> {
+    pub(crate) fn observe_completed_validation(
+        &mut self,
+        work: IncrementalValidationWork,
+    ) -> Result<(), Diagnostic> {
         self.add_validation(work, 0)?;
-        self.observe_expression_validation(work.saturation.counter(
-            BudgetDimension::ValidationExpressionSteps, work.expression_work), 0)
+        self.observe_expression_validation(
+            work.saturation.counter(
+                BudgetDimension::ValidationExpressionSteps,
+                work.expression_work,
+            ),
+            0,
+        )
     }
 
-    pub(crate) fn observe_expression_validation(&mut self, expression_steps: BudgetCounter, diagnostics: u64) -> Result<(), Diagnostic> {
-        self.charge(BudgetDimension::ValidationExpressionSteps, expression_steps, "semantic validation")?;
-        self.charge(BudgetDimension::ValidationDiagnostics, BudgetCounter::exact(diagnostics), "semantic validation")?;
+    pub(crate) fn observe_expression_validation(
+        &mut self,
+        expression_steps: BudgetCounter,
+        diagnostics: u64,
+    ) -> Result<(), Diagnostic> {
+        self.charge(
+            BudgetDimension::ValidationExpressionSteps,
+            expression_steps,
+            "semantic validation",
+        )?;
+        self.charge(
+            BudgetDimension::ValidationDiagnostics,
+            BudgetCounter::exact(diagnostics),
+            "semantic validation",
+        )?;
         self.check("semantic validation")
     }
 
     pub(crate) fn observe_tests(&mut self, tests: &TestDependencyDelta) -> Result<(), Diagnostic> {
-        self.work.tests.selected = self.work.tests.selected.max(count(tests.affected_tests.len()));
+        self.work.tests.selected = self
+            .work
+            .tests
+            .selected
+            .max(count(tests.affected_tests.len()));
         self.work.tests.ownership_steps = tests.work.ownership_steps;
         self.work.tests.owners_visited = tests.work.owners_visited;
-        for dimension in [BudgetDimension::TestOwnershipSteps, BudgetDimension::TestOwnersVisited] {
-            if tests.work.saturation.contains(dimension) { self.work.saturation.mark(dimension); }
+        for dimension in [
+            BudgetDimension::TestOwnershipSteps,
+            BudgetDimension::TestOwnersVisited,
+        ] {
+            if tests.work.saturation.contains(dimension) {
+                self.work.saturation.mark(dimension);
+            }
         }
-        self.add_relations(BudgetCounter { consumed: tests.work.relation_edges_visited, saturated: tests.work.saturation.contains(BudgetDimension::RelationEdges) })?;
+        self.add_relations(BudgetCounter {
+            consumed: tests.work.relation_edges_visited,
+            saturated: tests
+                .work
+                .saturation
+                .contains(BudgetDimension::RelationEdges),
+        })?;
         self.add_witness_reads(tests.work.witness_reads)?;
         self.check("test dependency planning")
     }
 
-    pub(crate) fn preflight_witness_edits(&self, derived: &DerivedDelta, summaries: &super::SummaryDelta, tests: &TestDependencyDelta) -> Result<(), Diagnostic> {
+    pub(crate) fn preflight_witness_edits(
+        &self,
+        derived: &DerivedDelta,
+        summaries: &super::SummaryDelta,
+        tests: &TestDependencyDelta,
+    ) -> Result<(), Diagnostic> {
         let mut edits = BudgetCounter::exact(count(summaries.edits.len()));
-        for size in [derived.namespaces.len(), derived.ownership.len()] { edits.observe(BudgetCounter::exact(count(size))); }
-        for size in [derived.relations.removed.len(), derived.relations.added.len(), tests.removed.len(), tests.added.len()] {
+        for size in [derived.namespaces.len(), derived.ownership.len()] {
+            edits.observe(BudgetCounter::exact(count(size)));
+        }
+        for size in [
+            derived.relations.removed.len(),
+            derived.relations.added.len(),
+            tests.removed.len(),
+            tests.added.len(),
+        ] {
             edits.observe(BudgetCounter::product(count(size), 2));
         }
-        edits.remaining(self.budget.witness_update.maximum_edits, "witness map update", "witness_edits")?;
+        edits.remaining(
+            self.budget.witness_update.maximum_edits,
+            "witness map update",
+            "witness_edits",
+        )?;
         Ok(())
     }
 
     pub(crate) fn observe_witness(&mut self, witness: &WitnessMapUpdate) -> Result<(), Diagnostic> {
         let mut edits = BudgetCounter::default();
-        for value in [witness.edits.inserted, witness.edits.replaced, witness.edits.removed, witness.edits.unchanged] { edits.observe(BudgetCounter::exact(value)); }
+        for value in [
+            witness.edits.inserted,
+            witness.edits.replaced,
+            witness.edits.removed,
+            witness.edits.unchanged,
+        ] {
+            edits.observe(BudgetCounter::exact(value));
+        }
         edits.saturated |= witness.edits.saturated;
         self.work.witness_update.edits = edits.consumed;
-        if edits.saturated { self.work.saturation.mark(BudgetDimension::WitnessEdits); }
+        if edits.saturated {
+            self.work.saturation.mark(BudgetDimension::WitnessEdits);
+        }
         self.work.witness_update.pages_encoded = witness.work.pages_encoded;
         self.work.witness_update.bytes_encoded = witness.work.bytes_encoded;
-        if witness.work.counter_saturated(crate::platform::persistent_map::MapWorkCounter::PagesEncoded) { self.work.saturation.mark(BudgetDimension::WitnessMapPagesEncoded); }
-        if witness.work.counter_saturated(crate::platform::persistent_map::MapWorkCounter::BytesEncoded) { self.work.saturation.mark(BudgetDimension::WitnessMapBytesEncoded); }
+        if witness
+            .work
+            .counter_saturated(crate::platform::persistent_map::MapWorkCounter::PagesEncoded)
+        {
+            self.work
+                .saturation
+                .mark(BudgetDimension::WitnessMapPagesEncoded);
+        }
+        if witness
+            .work
+            .counter_saturated(crate::platform::persistent_map::MapWorkCounter::BytesEncoded)
+        {
+            self.work
+                .saturation
+                .mark(BudgetDimension::WitnessMapBytesEncoded);
+        }
         self.add_witness_reads(witness.read_work)?;
         self.check("witness map update")
     }
@@ -1390,25 +1607,50 @@ impl ChangeBudgetMeter {
         })
     }
 
-    pub(crate) fn observe_canonical_reads(&mut self, reads: CanonicalReadWork) -> Result<(), Diagnostic> {
+    pub(crate) fn observe_canonical_reads(
+        &mut self,
+        reads: CanonicalReadWork,
+    ) -> Result<(), Diagnostic> {
         for (dimension, consumed) in [
             (BudgetDimension::CanonicalPointReads, reads.point_reads),
             (BudgetDimension::CanonicalMapPages, reads.map_pages_read),
-            (BudgetDimension::CanonicalMapEntries, reads.map_entries_visited),
-            (BudgetDimension::CanonicalCatalogLookups, reads.catalog_lookups),
+            (
+                BudgetDimension::CanonicalMapEntries,
+                reads.map_entries_visited,
+            ),
+            (
+                BudgetDimension::CanonicalCatalogLookups,
+                reads.catalog_lookups,
+            ),
             (BudgetDimension::CanonicalObjects, reads.objects_read),
             (BudgetDimension::CanonicalBytes, reads.bytes_read),
-            (BudgetDimension::CanonicalDecodedRecords, reads.canonical_records_decoded),
-        ] { self.charge(dimension, reads.observation(dimension, consumed), "candidate canonical reads")?; }
+            (
+                BudgetDimension::CanonicalDecodedRecords,
+                reads.canonical_records_decoded,
+            ),
+        ] {
+            self.charge(
+                dimension,
+                reads.observation(dimension, consumed),
+                "candidate canonical reads",
+            )?;
+        }
         self.check("candidate canonical reads")
     }
 
     pub(crate) fn remaining_relation_edges(&self, phase: &str) -> Result<Option<u64>, Diagnostic> {
-        self.budget
-            .remaining_relation_edges(self.work.observation_saturation().counter(BudgetDimension::RelationEdges, self.work.relation_edges), phase)
+        self.budget.remaining_relation_edges(
+            self.work
+                .observation_saturation()
+                .counter(BudgetDimension::RelationEdges, self.work.relation_edges),
+            phase,
+        )
     }
 
-    pub(crate) fn remaining_impact_ownership_steps(&self, phase: &str) -> Result<Option<u64>, Diagnostic> {
+    pub(crate) fn remaining_impact_ownership_steps(
+        &self,
+        phase: &str,
+    ) -> Result<Option<u64>, Diagnostic> {
         remaining_dimension(
             phase,
             "impact_ownership_steps",
@@ -1426,24 +1668,68 @@ impl ChangeBudgetMeter {
         )
     }
 
-    pub(crate) fn remaining_test_dependency_changes(&self, derived: &DerivedDelta, summaries: &super::SummaryDelta, phase: &str) -> Result<Option<u64>, Diagnostic> {
+    pub(crate) fn remaining_test_dependency_changes(
+        &self,
+        derived: &DerivedDelta,
+        summaries: &super::SummaryDelta,
+        phase: &str,
+    ) -> Result<Option<u64>, Diagnostic> {
         let mut fixed = BudgetCounter::exact(count(summaries.edits.len()));
-        for size in [derived.namespaces.len(), derived.ownership.len()] { fixed.observe(BudgetCounter::exact(count(size))); }
-        for size in [derived.relations.removed.len(), derived.relations.added.len()] { fixed.observe(BudgetCounter::product(count(size), 2)); }
-        fixed.remaining(self.budget.witness_update.maximum_edits, phase, "witness_edits").map(|remaining| remaining.map(|n| n / 2))
+        for size in [derived.namespaces.len(), derived.ownership.len()] {
+            fixed.observe(BudgetCounter::exact(count(size)));
+        }
+        for size in [
+            derived.relations.removed.len(),
+            derived.relations.added.len(),
+        ] {
+            fixed.observe(BudgetCounter::product(count(size), 2));
+        }
+        fixed
+            .remaining(
+                self.budget.witness_update.maximum_edits,
+                phase,
+                "witness_edits",
+            )
+            .map(|remaining| remaining.map(|n| n / 2))
     }
 
     pub(crate) const fn finish(self) -> ChangeBudgetWork {
         self.work
     }
 
-    fn add_validation(&mut self, work: IncrementalValidationWork, diagnostics: u64) -> Result<(), Diagnostic> {
+    fn add_validation(
+        &mut self,
+        work: IncrementalValidationWork,
+        diagnostics: u64,
+    ) -> Result<(), Diagnostic> {
         for (dimension, consumed) in [
-            (BudgetDimension::ValidationOwnerRecords, work.owner_records_checked),
-            (BudgetDimension::ValidationOwnershipEntries, work.ownership_entries_checked),
-            (BudgetDimension::ValidationTypeObjects, work.type_objects_checked),
-        ] { self.charge(dimension, BudgetCounter { consumed, saturated: work.saturation.contains(dimension) }, "validation accounting")?; }
-        self.charge(BudgetDimension::ValidationDiagnostics, BudgetCounter::exact(diagnostics), "validation accounting")?;
+            (
+                BudgetDimension::ValidationOwnerRecords,
+                work.owner_records_checked,
+            ),
+            (
+                BudgetDimension::ValidationOwnershipEntries,
+                work.ownership_entries_checked,
+            ),
+            (
+                BudgetDimension::ValidationTypeObjects,
+                work.type_objects_checked,
+            ),
+        ] {
+            self.charge(
+                dimension,
+                BudgetCounter {
+                    consumed,
+                    saturated: work.saturation.contains(dimension),
+                },
+                "validation accounting",
+            )?;
+        }
+        self.charge(
+            BudgetDimension::ValidationDiagnostics,
+            BudgetCounter::exact(diagnostics),
+            "validation accounting",
+        )?;
         self.add_witness_reads(work.witness_reads)
     }
 
@@ -1451,12 +1737,27 @@ impl ChangeBudgetMeter {
         for (dimension, consumed) in [
             (BudgetDimension::WitnessPointReads, reads.point_reads),
             (BudgetDimension::WitnessMapPages, reads.map_pages_read),
-            (BudgetDimension::WitnessMapEntries, reads.map_entries_visited),
-            (BudgetDimension::WitnessCatalogLookups, reads.catalog_lookups),
+            (
+                BudgetDimension::WitnessMapEntries,
+                reads.map_entries_visited,
+            ),
+            (
+                BudgetDimension::WitnessCatalogLookups,
+                reads.catalog_lookups,
+            ),
             (BudgetDimension::WitnessObjects, reads.objects_read),
             (BudgetDimension::WitnessBytes, reads.bytes_read),
-            (BudgetDimension::WitnessDecodedRecords, reads.witness_records_decoded),
-        ] { self.charge(dimension, reads.observation(dimension, consumed), "witness read accounting")?; }
+            (
+                BudgetDimension::WitnessDecodedRecords,
+                reads.witness_records_decoded,
+            ),
+        ] {
+            self.charge(
+                dimension,
+                reads.observation(dimension, consumed),
+                "witness read accounting",
+            )?;
+        }
         Ok(())
     }
 
@@ -1466,7 +1767,10 @@ impl ChangeBudgetMeter {
 
     fn check(&self, phase: &str) -> Result<(), Diagnostic> {
         if !self.work.observation_flags_valid() {
-            return Err(budget_error("change_budget_observation_flags", "change work has invalid saturation flags"));
+            return Err(budget_error(
+                "change_budget_observation_flags",
+                "change work has invalid saturation flags",
+            ));
         }
         for dimension in BudgetDimension::ALL {
             if let Some(observed) = self.work.observation(dimension) {
@@ -1477,32 +1781,98 @@ impl ChangeBudgetMeter {
     }
 }
 
-fn check_canonical_reads(phase: &str, work: CanonicalReadWork, budget: CanonicalReadAdmission) -> Result<(), Diagnostic> {
+fn check_canonical_reads(
+    phase: &str,
+    work: CanonicalReadWork,
+    budget: CanonicalReadAdmission,
+) -> Result<(), Diagnostic> {
     for (dimension, consumed, maximum) in [
-        (BudgetDimension::CanonicalPointReads, work.point_reads, budget.maximum_point_reads),
-        (BudgetDimension::CanonicalMapPages, work.map_pages_read, budget.maximum_map_pages),
-        (BudgetDimension::CanonicalMapEntries, work.map_entries_visited, budget.maximum_map_entries),
-        (BudgetDimension::CanonicalCatalogLookups, work.catalog_lookups, budget.maximum_catalog_lookups),
-        (BudgetDimension::CanonicalObjects, work.objects_read, budget.maximum_objects),
-        (BudgetDimension::CanonicalBytes, work.bytes_read, budget.maximum_bytes),
-        (BudgetDimension::CanonicalDecodedRecords, work.canonical_records_decoded, budget.maximum_decoded_records),
+        (
+            BudgetDimension::CanonicalPointReads,
+            work.point_reads,
+            budget.maximum_point_reads,
+        ),
+        (
+            BudgetDimension::CanonicalMapPages,
+            work.map_pages_read,
+            budget.maximum_map_pages,
+        ),
+        (
+            BudgetDimension::CanonicalMapEntries,
+            work.map_entries_visited,
+            budget.maximum_map_entries,
+        ),
+        (
+            BudgetDimension::CanonicalCatalogLookups,
+            work.catalog_lookups,
+            budget.maximum_catalog_lookups,
+        ),
+        (
+            BudgetDimension::CanonicalObjects,
+            work.objects_read,
+            budget.maximum_objects,
+        ),
+        (
+            BudgetDimension::CanonicalBytes,
+            work.bytes_read,
+            budget.maximum_bytes,
+        ),
+        (
+            BudgetDimension::CanonicalDecodedRecords,
+            work.canonical_records_decoded,
+            budget.maximum_decoded_records,
+        ),
     ] {
-        work.observation(dimension, consumed).remaining(maximum, phase, dimension.name())?;
+        work.observation(dimension, consumed)
+            .remaining(maximum, phase, dimension.name())?;
     }
     Ok(())
 }
 
-fn check_witness_reads(phase: &str, work: WitnessReadWork, budget: WitnessReadAdmission) -> Result<(), Diagnostic> {
+fn check_witness_reads(
+    phase: &str,
+    work: WitnessReadWork,
+    budget: WitnessReadAdmission,
+) -> Result<(), Diagnostic> {
     for (dimension, consumed, maximum) in [
-        (BudgetDimension::WitnessPointReads, work.point_reads, budget.maximum_point_reads),
-        (BudgetDimension::WitnessMapPages, work.map_pages_read, budget.maximum_map_pages),
-        (BudgetDimension::WitnessMapEntries, work.map_entries_visited, budget.maximum_map_entries),
-        (BudgetDimension::WitnessCatalogLookups, work.catalog_lookups, budget.maximum_catalog_lookups),
-        (BudgetDimension::WitnessObjects, work.objects_read, budget.maximum_objects),
-        (BudgetDimension::WitnessBytes, work.bytes_read, budget.maximum_bytes),
-        (BudgetDimension::WitnessDecodedRecords, work.witness_records_decoded, budget.maximum_decoded_records),
+        (
+            BudgetDimension::WitnessPointReads,
+            work.point_reads,
+            budget.maximum_point_reads,
+        ),
+        (
+            BudgetDimension::WitnessMapPages,
+            work.map_pages_read,
+            budget.maximum_map_pages,
+        ),
+        (
+            BudgetDimension::WitnessMapEntries,
+            work.map_entries_visited,
+            budget.maximum_map_entries,
+        ),
+        (
+            BudgetDimension::WitnessCatalogLookups,
+            work.catalog_lookups,
+            budget.maximum_catalog_lookups,
+        ),
+        (
+            BudgetDimension::WitnessObjects,
+            work.objects_read,
+            budget.maximum_objects,
+        ),
+        (
+            BudgetDimension::WitnessBytes,
+            work.bytes_read,
+            budget.maximum_bytes,
+        ),
+        (
+            BudgetDimension::WitnessDecodedRecords,
+            work.witness_records_decoded,
+            budget.maximum_decoded_records,
+        ),
     ] {
-        work.observation(dimension, consumed).remaining(maximum, phase, dimension.name())?;
+        work.observation(dimension, consumed)
+            .remaining(maximum, phase, dimension.name())?;
     }
     Ok(())
 }
@@ -1513,20 +1883,18 @@ pub(crate) fn check_dimension(
     observed: u64,
     maximum: Option<u64>,
 ) -> Result<(), Diagnostic> {
-    if let Some(maximum) = maximum {
-        if observed > maximum {
-            return Err(budget_error(
-                budget_code(dimension),
-                format!(
-                    "{phase} requires {observed} {dimension}, exceeding the declared maximum {maximum}"
-                ),
-            ));
-        }
+    if let Some(maximum) = maximum
+        && observed > maximum
+    {
+        return Err(budget_error(
+            budget_code(dimension),
+            format!(
+                "{phase} requires {observed} {dimension}, exceeding the declared maximum {maximum}"
+            ),
+        ));
     }
     Ok(())
 }
-
-
 
 pub(crate) fn remaining_dimension(
     phase: &str,
@@ -1555,10 +1923,20 @@ pub(crate) fn minimum_limit<T: Ord>(left: Option<T>, right: Option<T>) -> Option
     }
 }
 
-pub(crate) fn optional_usize(maximum: Option<u64>, dimension: &'static str) -> Result<Option<usize>, Diagnostic> {
-    maximum.map(|maximum| usize::try_from(maximum).map_err(|_| budget_error(
-        budget_code(dimension), "explicit policy exceeds the host index representation"
-    ))).transpose()
+pub(crate) fn optional_usize(
+    maximum: Option<u64>,
+    dimension: &'static str,
+) -> Result<Option<usize>, Diagnostic> {
+    maximum
+        .map(|maximum| {
+            usize::try_from(maximum).map_err(|_| {
+                budget_error(
+                    budget_code(dimension),
+                    "explicit policy exceeds the host index representation",
+                )
+            })
+        })
+        .transpose()
 }
 
 fn budget_code(dimension: &str) -> &'static str {
@@ -1955,20 +2333,35 @@ mod tests {
     fn every_policy_dimension_preserves_unbounded_zero_finite_and_maximum() {
         let ordinary = ChangeBudget::default();
         assert_eq!(ordinary.policy_limits().count(), 46);
-        assert!(ordinary.policy_limits().all(|(_, maximum)| maximum.is_none()));
+        assert!(
+            ordinary
+                .policy_limits()
+                .all(|(_, maximum)| maximum.is_none())
+        );
         for dimension in BudgetDimension::ALL {
             for maximum in [None, Some(0), Some(1), Some(10_000_001), Some(u64::MAX)] {
                 let mut budget = ordinary;
-                budget.set_policy_limit(dimension.policy_name(), maximum).unwrap();
+                budget
+                    .set_policy_limit(dimension.policy_name(), maximum)
+                    .unwrap();
                 assert_eq!(budget.maximum(dimension), maximum);
                 assert_eq!(budget.validate().unwrap(), budget);
-                assert_eq!(budget.policy_limits().find(|(name, _)| *name == dimension.policy_name()),
-                    Some((dimension.policy_name(), maximum)));
+                assert_eq!(
+                    budget
+                        .policy_limits()
+                        .find(|(name, _)| *name == dimension.policy_name()),
+                    Some((dimension.policy_name(), maximum))
+                );
             }
         }
         let mut budget = ordinary;
-        assert_eq!(budget.set_policy_limit("not-a-resource", Some(0)).unwrap_err().code,
-            "change_budget_unknown_dimension");
+        assert_eq!(
+            budget
+                .set_policy_limit("not-a-resource", Some(0))
+                .unwrap_err()
+                .code,
+            "change_budget_unknown_dimension"
+        );
         assert_eq!(budget, ordinary);
     }
 
@@ -1982,14 +2375,27 @@ mod tests {
             checked += 1;
             for maximum in [0, 1, 10_000_001, u64::MAX] {
                 let mut budget = ChangeBudget::default();
-                budget.set_policy_limit(dimension.policy_name(), Some(maximum)).unwrap();
-                let mut meter = ChangeBudgetMeter::new(budget, ChangeBudgetWork::default()).unwrap();
-                meter.charge(dimension, BudgetCounter::exact(maximum), "exact-fit test").unwrap();
-                assert_eq!(meter.work.observation(dimension), Some(BudgetCounter::exact(maximum)));
+                budget
+                    .set_policy_limit(dimension.policy_name(), Some(maximum))
+                    .unwrap();
+                let mut meter =
+                    ChangeBudgetMeter::new(budget, ChangeBudgetWork::default()).unwrap();
+                meter
+                    .charge(dimension, BudgetCounter::exact(maximum), "exact-fit test")
+                    .unwrap();
+                assert_eq!(
+                    meter.work.observation(dimension),
+                    Some(BudgetCounter::exact(maximum))
+                );
                 assert!(!meter.work.observation_saturation().any());
                 let before = meter.work;
-                assert_eq!(meter.charge(dimension, BudgetCounter::exact(1), "one-over test")
-                    .unwrap_err().code, budget_code(dimension.name()));
+                assert_eq!(
+                    meter
+                        .charge(dimension, BudgetCounter::exact(1), "one-over test")
+                        .unwrap_err()
+                        .code,
+                    budget_code(dimension.name())
+                );
                 assert_eq!(meter.work, before, "failed finite charge must be atomic");
             }
         }
@@ -1999,25 +2405,51 @@ mod tests {
     #[test]
     fn unbounded_observation_saturates_honestly_without_affecting_another_policy() {
         let mut work = ChangeBudgetWork::default();
-        work.charge(BudgetDimension::CanonicalBytes, BudgetCounter::exact(u64::MAX), None,
-            "passive observation").unwrap();
-        assert_eq!(work.observation(BudgetDimension::CanonicalBytes),
-            Some(BudgetCounter::exact(u64::MAX)));
-        work.charge(BudgetDimension::CanonicalBytes, BudgetCounter::exact(1), None,
-            "passive observation").unwrap();
-        assert_eq!(work.observation(BudgetDimension::CanonicalBytes),
-            Some(BudgetCounter { consumed: u64::MAX, saturated: true }));
+        work.charge(
+            BudgetDimension::CanonicalBytes,
+            BudgetCounter::exact(u64::MAX),
+            None,
+            "passive observation",
+        )
+        .unwrap();
+        assert_eq!(
+            work.observation(BudgetDimension::CanonicalBytes),
+            Some(BudgetCounter::exact(u64::MAX))
+        );
+        work.charge(
+            BudgetDimension::CanonicalBytes,
+            BudgetCounter::exact(1),
+            None,
+            "passive observation",
+        )
+        .unwrap();
+        assert_eq!(
+            work.observation(BudgetDimension::CanonicalBytes),
+            Some(BudgetCounter {
+                consumed: u64::MAX,
+                saturated: true
+            })
+        );
         assert!(work.observation_flags_valid());
         let mut budget = ChangeBudget::default();
         budget.canonical_reads.maximum_objects = Some(0);
-        budget.check_observed(work, "unrelated finite policy").unwrap();
-        let remaining = budget.canonical_reads.remaining_after(work.canonical_reads,
-            "nested policy").unwrap();
+        budget
+            .check_observed(work, "unrelated finite policy")
+            .unwrap();
+        let remaining = budget
+            .canonical_reads
+            .remaining_after(work.canonical_reads, "nested policy")
+            .unwrap();
         assert_eq!(remaining.maximum_bytes, None);
         assert_eq!(remaining.maximum_objects, Some(0));
         budget.canonical_reads.maximum_bytes = Some(u64::MAX);
-        assert_eq!(budget.check_observed(work, "finite policy after saturation").unwrap_err().code,
-            "change_budget_canonical_bytes");
+        assert_eq!(
+            budget
+                .check_observed(work, "finite policy after saturation")
+                .unwrap_err()
+                .code,
+            "change_budget_canonical_bytes"
+        );
     }
 
     #[test]
@@ -2036,16 +2468,37 @@ mod tests {
         assert_eq!(remaining.maximum_point_reads, Some(0));
         assert_eq!(remaining.maximum_bytes, Some(u64::MAX - 9));
         assert_eq!(remaining.maximum_objects, None);
-        assert_eq!(admission.check_work(CanonicalReadWork { point_reads: 4, ..work },
-            "one read over").unwrap_err().code, "change_budget_canonical_point_reads");
-        let witness = WitnessReadAdmission { maximum_decoded_records: Some(0),
-            ..WitnessReadAdmission::default() };
-        assert_eq!(witness.remaining_after(WitnessReadWork::default(), "zero witness policy")
-            .unwrap().maximum_decoded_records, Some(0));
+        assert_eq!(
+            admission
+                .check_work(
+                    CanonicalReadWork {
+                        point_reads: 4,
+                        ..work
+                    },
+                    "one read over"
+                )
+                .unwrap_err()
+                .code,
+            "change_budget_canonical_point_reads"
+        );
+        let witness = WitnessReadAdmission {
+            maximum_decoded_records: Some(0),
+            ..WitnessReadAdmission::default()
+        };
+        assert_eq!(
+            witness
+                .remaining_after(WitnessReadWork::default(), "zero witness policy")
+                .unwrap()
+                .maximum_decoded_records,
+            Some(0)
+        );
         assert_eq!(optional_usize(None, "operations").unwrap(), None);
         assert_eq!(optional_usize(Some(0), "operations").unwrap(), Some(0));
         // The maintained bootstrap and native targets use a 64-bit usize domain.
-        assert_eq!(optional_usize(Some(u64::MAX), "operations").unwrap(), Some(usize::MAX));
+        assert_eq!(
+            optional_usize(Some(u64::MAX), "operations").unwrap(),
+            Some(usize::MAX)
+        );
     }
 
     #[test]
@@ -2067,28 +2520,58 @@ mod tests {
             (BudgetDimension::ValidationOwnerRecords, 3, 1),
             (BudgetDimension::ValidationOwnershipEntries, 4, 2),
             (BudgetDimension::ValidationTypeObjects, 5, 3),
-            (BudgetDimension::ValidationExpressionSteps, u64::MAX, u64::MAX - 1),
+            (
+                BudgetDimension::ValidationExpressionSteps,
+                u64::MAX,
+                u64::MAX - 1,
+            ),
             (BudgetDimension::ValidationDiagnostics, 0, 0),
         ] {
-            budget.set_policy_limit(dimension.policy_name(), Some(maximum)).unwrap();
-            initial.charge(dimension, BudgetCounter::exact(consumed), None, "prior phase").unwrap();
+            budget
+                .set_policy_limit(dimension.policy_name(), Some(maximum))
+                .unwrap();
+            initial
+                .charge(
+                    dimension,
+                    BudgetCounter::exact(consumed),
+                    None,
+                    "prior phase",
+                )
+                .unwrap();
         }
         let meter = ChangeBudgetMeter::new(budget, initial).unwrap();
-        assert_eq!(meter.validation_admission("next validation phase").unwrap(), ValidationAdmission {
-            maximum_owner_records: Some(2),
-            maximum_ownership_entries: Some(2),
-            maximum_type_objects: Some(2),
-            maximum_expression_steps: Some(1),
-            maximum_diagnostics: Some(0),
-        });
+        assert_eq!(
+            meter.validation_admission("next validation phase").unwrap(),
+            ValidationAdmission {
+                maximum_owner_records: Some(2),
+                maximum_ownership_entries: Some(2),
+                maximum_type_objects: Some(2),
+                maximum_expression_steps: Some(1),
+                maximum_diagnostics: Some(0),
+            }
+        );
         let mut unbounded = ChangeBudgetWork::default();
-        unbounded.charge(BudgetDimension::ValidationExpressionSteps,
-            BudgetCounter::exact(u64::MAX), None, "passive work").unwrap();
-        unbounded.charge(BudgetDimension::ValidationExpressionSteps,
-            BudgetCounter::exact(1), None, "passive work").unwrap();
+        unbounded
+            .charge(
+                BudgetDimension::ValidationExpressionSteps,
+                BudgetCounter::exact(u64::MAX),
+                None,
+                "passive work",
+            )
+            .unwrap();
+        unbounded
+            .charge(
+                BudgetDimension::ValidationExpressionSteps,
+                BudgetCounter::exact(1),
+                None,
+                "passive work",
+            )
+            .unwrap();
         assert!(unbounded.observation_saturation().any());
         let meter = ChangeBudgetMeter::new(ChangeBudget::default(), unbounded).unwrap();
-        assert_eq!(meter.validation_admission("unbounded next phase").unwrap(), ValidationAdmission::default());
+        assert_eq!(
+            meter.validation_admission("unbounded next phase").unwrap(),
+            ValidationAdmission::default()
+        );
     }
-
 }

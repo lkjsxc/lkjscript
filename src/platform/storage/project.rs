@@ -1,17 +1,17 @@
-//! Bounded, forkable project authority without filesystem handles or temporary paths.
+//! Forkable project authority with optional exact capacity and no filesystem handles.
 
 use super::object::{ObjectKey, StoreError, StoreErrorClass};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
-/// One capacity shared by a project, its forks, and all retained revision views.
+/// One optional capacity shared by a project, its forks, and retained revision views.
 #[derive(Clone, Debug)]
 pub(crate) struct MemoryArena(Arc<ArenaInner>);
 
 #[derive(Debug)]
 struct ArenaInner {
-    maximum: usize,
+    maximum: Option<usize>,
     used: AtomicUsize,
 }
 
@@ -22,7 +22,7 @@ struct Reservation {
 }
 
 impl MemoryArena {
-    fn new(maximum: usize) -> Self {
+    fn new(maximum: Option<usize>) -> Self {
         Self(Arc::new(ArenaInner {
             maximum,
             used: AtomicUsize::new(0),
@@ -30,10 +30,23 @@ impl MemoryArena {
     }
 
     fn reserve(&self, bytes: usize) -> Result<Reservation, StoreError> {
-        self.0.used.fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
-            used.checked_add(bytes).filter(|next| *next <= self.0.maximum)
-        }).map_err(|_| memory_error(StoreErrorClass::Resource, "memory_project_capacity",
-            "project arena capacity exhausted; release retained views or use a larger arena"))?;
+        self.0
+            .used
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+                used.checked_add(bytes)
+                    .filter(|next| self.0.maximum.is_none_or(|maximum| *next <= maximum))
+            })
+            .map_err(|used| {
+                if used.checked_add(bytes).is_none() {
+                    capacity_overflow()
+                } else {
+                    memory_error(
+                        StoreErrorClass::Resource,
+                        "memory_project_capacity",
+                        "explicit project arena capacity exhausted",
+                    )
+                }
+            })?;
         Ok(Reservation {
             arena: self.clone(),
             bytes,
@@ -43,8 +56,12 @@ impl MemoryArena {
 
 impl Reservation {
     fn grow(&mut self, bytes: usize) -> Result<(), StoreError> {
+        let total = self
+            .bytes
+            .checked_add(bytes)
+            .ok_or_else(capacity_overflow)?;
         let mut added = self.arena.reserve(bytes)?;
-        self.bytes += added.bytes;
+        self.bytes = total;
         added.bytes = 0;
         Ok(())
     }
@@ -77,7 +94,7 @@ impl MemoryBytes {
         let size = bytes.len().checked_add(128).ok_or_else(capacity_overflow)?;
         let reservation = arena.reserve(size)?;
         Ok(Arc::new(Self {
-            bytes: bytes.to_vec(),
+            bytes: super::object::copy_object_bytes(bytes)?,
             verified: OnceLock::new(),
             _reservation: reservation,
         }))
@@ -135,7 +152,7 @@ impl<K: Ord + Clone> MemoryMap<K> {
     pub(crate) fn retain(&mut self, keep: impl Fn(&K) -> bool) -> Result<(), StoreError> {
         let count = self.index.values.keys().filter(|key| keep(key)).count();
         let bytes = count
-            .checked_mul(std::mem::size_of::<K>().saturating_mul(2) + 192)
+            .checked_mul(index_entry_bytes::<K>()?)
             .and_then(|bytes| bytes.checked_add(256))
             .ok_or_else(capacity_overflow)?;
         let reservation = self.index.reservation.arena.reserve(bytes)?;
@@ -160,11 +177,27 @@ impl<K: Ord + Clone> MemoryMap<K> {
         let arena = self.index.reservation.arena.clone();
         let value = MemoryBytes::copy(&arena, bytes)?;
         if Arc::get_mut(&mut self.index).is_none() {
-            let reservation = arena.reserve(self.index.reservation.bytes)?;
+            let growth = if self.index.values.contains_key(&key) {
+                0
+            } else {
+                index_entry_bytes::<K>()?
+            };
+            let index_bytes = self
+                .index
+                .reservation
+                .bytes
+                .checked_add(growth)
+                .ok_or_else(capacity_overflow)?;
+            // Admit the complete copied index before publishing it. A finite refusal
+            // must not retain a private index or consume capacity in this fork.
+            let reservation = arena.reserve(index_bytes)?;
+            let mut values = self.index.values.clone();
+            values.insert(key, value);
             self.index = Arc::new(MemoryIndex {
-                values: self.index.values.clone(),
+                values,
                 reservation,
             });
+            return Ok(());
         }
         let index = Arc::get_mut(&mut self.index).ok_or_else(|| {
             memory_error(
@@ -175,9 +208,7 @@ impl<K: Ord + Clone> MemoryMap<K> {
         })?;
         if !index.values.contains_key(&key) {
             // Conservatively includes the B-tree node, key, pointer, and allocator overhead.
-            index
-                .reservation
-                .grow(std::mem::size_of::<K>().saturating_mul(2) + 192)?;
+            index.reservation.grow(index_entry_bytes::<K>()?)?;
         }
         index.values.insert(key, value);
         Ok(())
@@ -231,7 +262,9 @@ pub(crate) struct MemoryProjectInventory {
 }
 
 impl MemProjectStore {
-    pub fn new(maximum_bytes: usize) -> Result<Self, crate::platform::diagnostic::Diagnostic> {
+    pub fn new(
+        maximum_bytes: Option<usize>,
+    ) -> Result<Self, crate::platform::diagnostic::Diagnostic> {
         let arena = MemoryArena::new(maximum_bytes);
         let create = || -> Result<Self, StoreError> {
             let reservation = Arc::new(arena.reserve(512)?);
@@ -276,7 +309,7 @@ impl MemProjectStore {
         self.arena.0.used.load(Ordering::Acquire)
     }
 
-    pub fn maximum_bytes(&self) -> usize {
+    pub fn maximum_bytes(&self) -> Option<usize> {
         self.arena.0.maximum
     }
 
@@ -331,6 +364,13 @@ pub(crate) fn lock<T>(
     })
 }
 
+fn index_entry_bytes<K>() -> Result<usize, StoreError> {
+    std::mem::size_of::<K>()
+        .checked_mul(2)
+        .and_then(|bytes| bytes.checked_add(192))
+        .ok_or_else(capacity_overflow)
+}
+
 fn capacity_overflow() -> StoreError {
     memory_error(
         StoreErrorClass::Resource,
@@ -372,7 +412,7 @@ mod tests {
 
     #[test]
     fn immutable_payload_proofs_bind_the_key_and_release_their_arena() {
-        let arena = MemoryArena::new(1024);
+        let arena = MemoryArena::new(Some(1024));
         let bytes = b"exact immutable input";
         let key = ObjectKey::for_bytes(ObjectDomain::Blob, bytes);
         let value = MemoryBytes::copy(&arena, bytes).unwrap();
@@ -389,5 +429,172 @@ mod tests {
         drop(value);
         drop(replaced);
         assert_eq!(arena.0.used.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn optional_arena_policy_is_exact_and_reservation_growth_is_atomic() {
+        for maximum in [None, Some(0), Some(7), Some(8), Some(usize::MAX)] {
+            let arena = MemoryArena::new(maximum);
+            let result = arena.reserve(8);
+            if maximum.is_some_and(|maximum| maximum < 8) {
+                assert_eq!(result.unwrap_err().code, "memory_project_capacity");
+                assert_eq!(arena.0.used.load(Ordering::Acquire), 0);
+            } else {
+                let mut reservation = result.unwrap();
+                assert_eq!(arena.0.used.load(Ordering::Acquire), 8);
+                if maximum == Some(8) {
+                    assert!(reservation.grow(1).is_err());
+                    assert_eq!(reservation.bytes, 8);
+                    assert_eq!(arena.0.used.load(Ordering::Acquire), 8);
+                } else {
+                    reservation.grow(1).unwrap();
+                    assert_eq!(reservation.bytes, 9);
+                    assert_eq!(arena.0.used.load(Ordering::Acquire), 9);
+                }
+                drop(reservation);
+                assert_eq!(arena.0.used.load(Ordering::Acquire), 0);
+            }
+            let zero = arena.reserve(0).unwrap();
+            assert_eq!(arena.0.used.load(Ordering::Acquire), 0);
+            drop(zero);
+        }
+        for maximum in [None, Some(usize::MAX)] {
+            let arena = MemoryArena::new(maximum);
+            let mut reservation = arena.reserve(usize::MAX).unwrap();
+            assert!(reservation.grow(1).is_err());
+            assert_eq!(reservation.bytes, usize::MAX);
+            assert_eq!(arena.0.used.load(Ordering::Acquire), usize::MAX);
+            drop(reservation);
+            assert_eq!(arena.0.used.load(Ordering::Acquire), 0);
+        }
+    }
+
+    #[test]
+    fn optional_project_capacity_preserves_exact_constructor_and_fork_allowances() {
+        let probe = MemProjectStore::new(None).unwrap();
+        let initial = probe.used_bytes();
+        let fork = probe.fork().unwrap();
+        let forked = probe.used_bytes();
+        drop(fork);
+        assert_eq!(probe.used_bytes(), initial);
+        drop(probe);
+        for maximum in [
+            None,
+            Some(0),
+            Some(initial - 1),
+            Some(initial),
+            Some(usize::MAX),
+        ] {
+            let created = MemProjectStore::new(maximum);
+            if maximum.is_some_and(|maximum| maximum < initial) {
+                assert!(created.is_err());
+            } else {
+                let project = created.unwrap();
+                assert_eq!(project.maximum_bytes(), maximum);
+                assert_eq!(project.used_bytes(), initial);
+            }
+        }
+        for maximum in [None, Some(forked - 1), Some(forked), Some(usize::MAX)] {
+            let project = MemProjectStore::new(maximum).unwrap();
+            let fork = project.fork();
+            if maximum.is_some_and(|maximum| maximum < forked) {
+                assert!(fork.is_err());
+                assert_eq!(project.used_bytes(), initial);
+            } else {
+                let fork = fork.unwrap();
+                assert_eq!(fork.maximum_bytes(), maximum);
+                assert_eq!(project.used_bytes(), forked);
+                drop(fork);
+                assert_eq!(project.used_bytes(), initial);
+            }
+        }
+    }
+
+    #[test]
+    fn project_forks_and_retained_views_share_payload_capacity_until_last_release() {
+        for maximum in [None, Some(4096), Some(usize::MAX)] {
+            let project = MemProjectStore::new(maximum).unwrap();
+            let arena = project.arena.clone();
+            let bytes = b"one shared payload";
+            let key = ObjectKey::for_bytes(ObjectDomain::Blob, bytes);
+            lock(&project.graph)
+                .unwrap()
+                .store
+                .objects
+                .insert(key, bytes)
+                .unwrap();
+            let before_fork = project.used_bytes();
+            let fork = project.fork().unwrap();
+            let fork_cost = project.used_bytes() - before_fork;
+            assert!(fork_cost > 0);
+            let retained = lock(&project.graph).unwrap().clone();
+            let first = lock(&project.graph)
+                .unwrap()
+                .store
+                .objects
+                .get(&key)
+                .unwrap()
+                .clone();
+            let second = lock(&fork.graph)
+                .unwrap()
+                .store
+                .objects
+                .get(&key)
+                .unwrap()
+                .clone();
+            assert!(Arc::ptr_eq(&first, &second));
+            assert_eq!(first.as_slice(), bytes);
+            drop(first);
+            drop(second);
+            drop(project);
+            assert_eq!(fork.used_bytes(), before_fork);
+            drop(fork);
+            assert!(arena.0.used.load(Ordering::Acquire) > bytes.len());
+            assert_eq!(retained.store.objects.get(&key).unwrap().as_slice(), bytes);
+            drop(retained);
+            assert_eq!(arena.0.used.load(Ordering::Acquire), 0);
+        }
+    }
+
+    #[test]
+    fn refused_shared_index_growth_preserves_the_original_index_and_capacity() {
+        let probe_arena = MemoryArena::new(None);
+        let mut probe = MemoryMap::<u8>::new(&probe_arena).unwrap();
+        probe.insert(1, b"a").unwrap();
+        let initial = probe_arena.0.used.load(Ordering::Acquire);
+        let copied_index = probe.index.reservation.bytes;
+        let value = MemoryBytes::copy(&probe_arena, b"b").unwrap();
+        let payload = probe_arena.0.used.load(Ordering::Acquire) - initial;
+        drop(value);
+        drop(probe);
+        assert_eq!(probe_arena.0.used.load(Ordering::Acquire), 0);
+        let before_growth = initial + copied_index + payload;
+        let exact = before_growth + index_entry_bytes::<u8>().unwrap();
+        for maximum in [None, Some(before_growth), Some(exact - 1), Some(exact)] {
+            let arena = MemoryArena::new(maximum);
+            let mut changed = MemoryMap::<u8>::new(&arena).unwrap();
+            changed.insert(1, b"a").unwrap();
+            let retained = changed.clone();
+            assert_eq!(arena.0.used.load(Ordering::Acquire), initial);
+            let result = changed.insert(2, b"b");
+            if maximum.is_some_and(|maximum| maximum < exact) {
+                assert_eq!(result.unwrap_err().code, "memory_project_capacity");
+                assert!(Arc::ptr_eq(&changed.index, &retained.index));
+                assert!(changed.get(&2).is_none());
+                assert_eq!(arena.0.used.load(Ordering::Acquire), initial);
+            } else {
+                result.unwrap();
+                assert!(!Arc::ptr_eq(&changed.index, &retained.index));
+                assert_eq!(changed.get(&2).unwrap().as_slice(), b"b");
+                assert_eq!(arena.0.used.load(Ordering::Acquire), exact);
+            }
+            assert_eq!(changed.get(&1).unwrap().as_slice(), b"a");
+            assert_eq!(retained.get(&1).unwrap().as_slice(), b"a");
+            assert!(retained.get(&2).is_none());
+            drop(changed);
+            assert_eq!(arena.0.used.load(Ordering::Acquire), initial);
+            drop(retained);
+            assert_eq!(arena.0.used.load(Ordering::Acquire), 0);
+        }
     }
 }

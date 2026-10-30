@@ -67,14 +67,23 @@ fn refusal_projection_preserves_large_diagnostics_and_empty_refusal_is_infrastru
     let diagnostic = Diagnostic::new(DiagnosticClass::Semantic, "large_test_diagnostic", &message);
     let output = semantic_cli::failure("change", &[diagnostic]);
     assert!(!output.success);
-    assert_eq!(output.code, Some(i32::from(exit_status_for(DiagnosticClass::Semantic))));
+    assert_eq!(
+        output.code,
+        Some(i32::from(exit_status_for(DiagnosticClass::Semantic)))
+    );
     assert!(output.stderr.is_empty());
     let records = parse_records("large refusal", &output.stdout).unwrap();
-    assert_eq!(compact_field(compact_record(&records, "diagnostic"), "message"), Some(message.as_str()));
+    assert_eq!(
+        compact_field(compact_record(&records, "diagnostic"), "message"),
+        message.as_str()
+    );
 
     let empty = semantic_cli::failure("change", &[]);
     assert!(!empty.success);
-    assert_eq!(empty.code, Some(i32::from(exit_status_for(DiagnosticClass::Infrastructure))));
+    assert_eq!(
+        empty.code,
+        Some(i32::from(exit_status_for(DiagnosticClass::Infrastructure)))
+    );
     assert!(empty.stdout.is_empty());
     assert!(empty.stderr.is_empty());
 }

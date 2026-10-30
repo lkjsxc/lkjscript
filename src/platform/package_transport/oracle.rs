@@ -219,7 +219,7 @@ impl ImmutableObjectStore for Reader<'_> {
     fn read(
         &self,
         key: ObjectKey,
-        maximum: usize,
+        maximum: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         self.charge(1).map_err(|error| {

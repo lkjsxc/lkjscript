@@ -366,19 +366,10 @@ pub struct StructuralTypeField {
 
 /// Request-local structural type interner. Equal canonical values reuse one digest, and child
 /// availability is checked by exact digest lookup rather than a global scan.
-#[derive(Clone, Debug)]
+#[derive(Default, Clone, Debug)]
 pub struct TypeObjectInterner {
     objects: BTreeMap<TypeObjectDigest, TypeObject>,
     maximum_objects: Option<u64>,
-}
-
-impl Default for TypeObjectInterner {
-    fn default() -> Self {
-        Self {
-            objects: BTreeMap::new(),
-            maximum_objects: None,
-        }
-    }
 }
 
 impl TypeObjectInterner {
@@ -440,7 +431,9 @@ impl TypeObjectInterner {
         if self.objects.contains_key(&digest) {
             return Ok(());
         }
-        if let Some(maximum) = self.maximum_objects && self.objects.len() as u64 >= maximum {
+        if let Some(maximum) = self.maximum_objects
+            && self.objects.len() as u64 >= maximum
+        {
             return Err(Diagnostic::new(
                 DiagnosticClass::Resource,
                 "kernel_type_interner_exhausted",

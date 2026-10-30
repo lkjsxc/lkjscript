@@ -284,14 +284,19 @@ fn selfhost_source_type_dag_has_exact_structural_depth_boundary() {
 fn selfhost_source_type_scope_preserves_resource_and_unsupported_boundaries() {
     let source = fixture();
     let graph = graph::packet(&source);
-    for budget in [0_u32, u32::MAX] {
+    for budget in [0_u32, 1] {
         let mut input = budget.to_le_bytes().to_vec();
         input.extend_from_slice(&graph);
         assert_eq!(result("read-type-scope-budget", &input), (6, vec![]));
         emitted_result("read-type-scope-budget", &input, 6);
     }
-    let mut malformed = u32::MAX.to_le_bytes().to_vec();
-    malformed.extend_from_slice(&graph);
+    let large = [u32::MAX.to_le_bytes().as_slice(), graph.as_slice()].concat();
+    assert_eq!(
+        result("read-type-scope-budget", &large),
+        (0, graph[48..80].to_vec())
+    );
+    emitted_result("read-type-scope-budget", &large, 0);
+    let mut malformed = large;
     malformed[4] ^= 1;
     assert_eq!(result("read-type-scope-budget", &malformed), (12, vec![]));
     emitted_result("read-type-scope-budget", &malformed, 12);

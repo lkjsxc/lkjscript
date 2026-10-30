@@ -324,7 +324,7 @@ fn dependency_source_priority_never_hides_covered_descendant_source_or_readiness
         fn read(
             &self,
             key: ObjectKey,
-            maximum: usize,
+            maximum: Option<usize>,
             work: &mut StoreWork,
         ) -> Result<Option<Vec<u8>>, StoreError> {
             self.read_admitted(key, maximum, &mut StoreReadAdmission::unbounded(), work)
@@ -332,7 +332,7 @@ fn dependency_source_priority_never_hides_covered_descendant_source_or_readiness
         fn read_admitted(
             &self,
             key: ObjectKey,
-            maximum: usize,
+            maximum: Option<usize>,
             admission: &mut StoreReadAdmission,
             work: &mut StoreWork,
         ) -> Result<Option<Vec<u8>>, StoreError> {

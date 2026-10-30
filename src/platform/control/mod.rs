@@ -16,7 +16,6 @@ pub(crate) use change::{
     COMPACT_FUNCTION_EFFECTS, COMPACT_NAMESPACE_CLASSES, COMPACT_READ_SCOPE_FORM_FIELDS,
     COMPACT_READ_SCOPE_FORMS, COMPACT_REFERENCE_NAMESPACES, COMPACT_TYPE_FORM_FIELDS,
     COMPACT_TYPE_FORMS, ChangeRequestCommitment, CompactChangeFieldForm, CompactChangeOperation,
-    MAXIMUM_TRANSACTION_RESULT_BYTES,
     NativeDraftSelection, NormalizedChangeRequest, compact_change_operation_descriptor,
     compact_change_origin, decode_compact_change_in_repository, decode_compact_change_in_view,
     decode_transaction, normalize_change_request, render_native_draft,

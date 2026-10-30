@@ -179,7 +179,7 @@ fn history_shares_preconsumption_admission_and_honors_cancellation() {
         fn read(
             &self,
             _: ObjectKey,
-            _: usize,
+            _: Option<usize>,
             _: &mut StoreWork,
         ) -> Result<Option<Vec<u8>>, StoreError> {
             panic!("history must use admitted reads")
@@ -187,7 +187,7 @@ fn history_shares_preconsumption_admission_and_honors_cancellation() {
         fn read_admitted(
             &self,
             key: ObjectKey,
-            maximum: usize,
+            maximum: Option<usize>,
             admission: &mut StoreReadAdmission,
             work: &mut StoreWork,
         ) -> Result<Option<Vec<u8>>, StoreError> {

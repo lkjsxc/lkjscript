@@ -1,5 +1,8 @@
 //! Focused normalized artifact-preparation and dense-execution tests.
 
+#[path = "cumulative_policy_tests.rs"]
+mod cumulative_policy_tests;
+
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 #[path = "native_derive_tests.rs"]
 mod native_derive_tests;
@@ -241,8 +244,8 @@ fn declaration_named(
 }
 
 fn prepare_snapshot(snapshot: &crate::platform::kernel::KernelSnapshot) -> NormalizedProgram {
-    let memory = crate::platform::MemProjectStore::new(128 * 1_048_576)
-        .expect("bounded runtime fixture arena");
+    let memory =
+        crate::platform::MemProjectStore::new(None).expect("bounded runtime fixture arena");
     let created = GraphRepository::create_memory(&memory, snapshot, None)
         .expect("accepted memory runtime fixture");
     prepare_from_repository(&created.repository)
@@ -3570,6 +3573,7 @@ async fn normalized_http_dispatch_uses_exact_body_resources_and_resident_admissi
         Some(HttpRouteId::migrate(b"normalized-http-runner", 0))
     );
     assert!(observation.instructions > 0);
+    assert!(!observation.instructions_saturated);
     assert_eq!(application.resident().deployment().live_streams(), 0);
 
     assert_eq!(
@@ -3613,6 +3617,7 @@ async fn normalized_http_dispatch_uses_exact_body_resources_and_resident_admissi
         assert_eq!(observation.route, None, "{method} {path}");
         assert_eq!(observation.task_id, None, "{method} {path}");
         assert_eq!(observation.instructions, 0, "{method} {path}");
+        assert!(!observation.instructions_saturated, "{method} {path}");
     }
     assert_eq!(application.resident().observe().admitted, 1);
     assert_eq!(application.resident().deployment().live_streams(), 0);
@@ -5344,10 +5349,20 @@ fn both_graph9_execution_tiers_commit_and_rollback_exact_transactions() {
 
 #[test]
 fn foreground_storage_overflow_remains_distinct_from_saturated_work() {
+    let mut saturated = false;
     assert_eq!(
-        crate::platform::execution::cumulative_charge(u64::MAX, 1, None, "quota", "quota").unwrap(),
+        crate::platform::execution::cumulative_charge(
+            u64::MAX,
+            1,
+            None,
+            "quota",
+            "quota",
+            &mut saturated
+        )
+        .unwrap(),
         u64::MAX
     );
+    assert!(saturated);
     assert_eq!(
         super::value::collection_storage_bytes(32, 64, "storage").unwrap(),
         2048

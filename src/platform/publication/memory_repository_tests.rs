@@ -3,7 +3,7 @@ use crate::platform::change::{AuthoredChange, ChangeBudget, OwnerSelector};
 use crate::platform::kernel::{Name, OwnerRecord};
 
 fn fixture(maximum: usize) -> (MemProjectStore, CreatedRepository) {
-    let memory = MemProjectStore::new(maximum).unwrap();
+    let memory = MemProjectStore::new(Some(maximum)).unwrap();
     let snapshot = crate::platform::kernel::tests::witness_snapshot();
     let created = GraphRepository::create_memory(&memory, &snapshot, None).unwrap();
     (memory, created)
@@ -193,7 +193,7 @@ fn memory_concurrent_publications_compare_and_swap_one_accepted_head() {
 
 #[test]
 fn memory_quota_and_missing_closure_reject_without_partial_authority_or_leaked_bytes() {
-    let tiny = MemProjectStore::new(4_096).unwrap();
+    let tiny = MemProjectStore::new(Some(4_096)).unwrap();
     let empty_bytes = tiny.used_bytes();
     assert_eq!(
         GraphRepository::create_memory(
@@ -301,7 +301,7 @@ fn memory_package_readiness_is_atomic_and_forked_with_complete_sources() {
         crate::platform::semantic_id::RepositoryId::migrate(b"memory-consumer", 0);
     target_snapshot.root.package_id =
         crate::platform::kernel::PackageId::migrate(b"memory-consumer", 0);
-    let memory = MemProjectStore::new(32 * 1_048_576).unwrap();
+    let memory = MemProjectStore::new(None).unwrap();
     let target = GraphRepository::create_memory_with_package_transports(
         &memory,
         &target_snapshot,
@@ -373,7 +373,7 @@ fn memory_reads_enforce_admission_before_copying_objects() {
     assert_eq!(work.bytes_read, 0);
     assert_eq!(
         store
-            .read(*key, bytes.len(), &mut StoreWork::default())
+            .read(*key, Some(bytes.len()), &mut StoreWork::default())
             .unwrap()
             .as_ref(),
         Some(bytes)

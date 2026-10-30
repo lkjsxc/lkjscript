@@ -1,0 +1,2800 @@
+{
+  "schema": "lkjscript.selfhost.capacity-cutover-evidence.v1",
+  "scope": "Observed public source adoption and focused Tier 1 reproduction; no staged-tree acceptance",
+  "source": {
+    "branch": "checkpoint/20261025-capacity-unbounding",
+    "checkpoint": "dad67f97c6b9b008300d59d83e3e4e7540acfa4f",
+    "accepted_base": "47e33ae90ec77b176597e45d7917694749526aba",
+    "repository": "tools/selfhost/project"
+  },
+  "publication": {
+    "revision": "rev_e5fa56ece633987cb2f62a3e7cdda4aec58fa74aa9cc7008f71682ca289b2f51",
+    "head_sha256": "f5436f724c2a88123f5db0ade85ec23af808a9dc70635beb490198c688027507",
+    "semantic_state": "semantic_state_66d01c7280e302fa390e1449e148893c23b0aea46b1fb7c7dc9033cc81a318ec",
+    "transaction_sha256": "21a1f0d967222e85aa1f4a0ef312a5d84c5ddf4fbde5ce11d436b4ca6d687b3e",
+    "submission_binary_sha256": "c13d5c9bbc62f40d6021dc9520aabcbc94e7b62bfee99072294bcb2280585d9b",
+    "submission_binary_reverified": false,
+    "driver_sha256": "db4f42af44ea9cb663d18b8e575b20a4d3fd24acfa681ef1f17e4f0af7c782ba",
+    "preparation_sha256": "3d7d504e0c86d6fb15fc999b45cf9b47f29402e1014361927095991903212783",
+    "created_owners": 13654,
+    "updated_owners": 239,
+    "selected_project_tests": 0
+  },
+  "readback": {
+    "schema": "lkjscript.proposal-adoption-inventory.v3",
+    "status": "revision-inventory-and-signatures-verified",
+    "started_at": "2026-10-28T08:47:04.531Z",
+    "completed_at": "2026-10-28T08:48:25.740Z",
+    "receipt_sha256": "1aaa3d3ef1e5fe5906f75a0fd27d253bd0d7b80a8614cd5b3fc0164a1c50c428",
+    "verification_binary_sha256": "25ac8c3491ba74a89666716f4bae3140536bdc8acc78bfe8673b4fb9a8928eaf",
+    "helper_sha256": "cfe2ca19e6e8bdd64a1a37c4f1cfb76669757406719beb0edac0078c0558d115",
+    "owner_pages": 9,
+    "owners": 35952,
+    "expected_namespace_entries": 2832,
+    "accepted_namespace_entries": 2832,
+    "missing": [],
+    "extra": [],
+    "work_saturated": false,
+    "deletions": [
+      {
+        "kind": "function",
+        "name": "flow::init-edge",
+        "file": "tools/selfhost/flow.lkjc",
+        "policy": "owned-closure",
+        "absent": true
+      },
+      {
+        "kind": "parameter",
+        "name": "source-scalar-pack::prefix::entry",
+        "file": "tools/selfhost/source-scalar-pack.lkjc",
+        "policy": "owned-closure",
+        "absent": true
+      },
+      {
+        "kind": "parameter",
+        "name": "source-scalar-pack::prefix::fuel",
+        "file": "tools/selfhost/source-scalar-pack.lkjc",
+        "policy": "owned-closure",
+        "absent": true
+      },
+      {
+        "kind": "parameter",
+        "name": "source-scalar-pack::assemble::fuel",
+        "file": "tools/selfhost/source-scalar-pack.lkjc",
+        "policy": "owned-closure",
+        "absent": true
+      },
+      {
+        "kind": "function",
+        "name": "types::zeros",
+        "file": "tools/selfhost/types.lkjc",
+        "policy": "owned-closure",
+        "absent": true
+      }
+    ],
+    "signatures": [
+      {
+        "callable": "aggregate::sequence",
+        "id": "decl_277b955f70f8e978cf2b5d96ccd53e36",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_ab1d36bc37dc9ff70cb2f03809d267ba",
+            "parent": "decl_277b955f70f8e978cf2b5d96ccd53e36",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_a8afb95c96990f83f780a0e2ef3c0ea0",
+            "parent": "decl_277b955f70f8e978cf2b5d96ccd53e36",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_02d9dd94c15d528a1d205906aebe3e06",
+            "parent": "decl_277b955f70f8e978cf2b5d96ccd53e36",
+            "index": "2",
+            "name": "at",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_aaddee4fd78eb6f5adf7942a1df73f95",
+            "parent": "decl_277b955f70f8e978cf2b5d96ccd53e36",
+            "index": "3",
+            "name": "record",
+            "type": "type_object_117ff3f5c20970df63c3f52cd92987e55b411ea0f47d41a9823b195338f5fbf7",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_8f09bb7ed5cf9e01d2d093c20df526d5",
+            "parent": "decl_277b955f70f8e978cf2b5d96ccd53e36",
+            "index": "4",
+            "name": "out",
+            "type": "type_object_1f4d666857cd072163301d36be6cd714a7bf43daf648705fded75a5a7ce0953f",
+            "use": "consume",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "aggregate::instruction",
+        "id": "decl_cc3a491803fb6092865b6dc250ff3cde",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_75579e967e65731238a546319cdeaedf",
+            "parent": "decl_cc3a491803fb6092865b6dc250ff3cde",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_ced5ed704aa4f1f000fc1a3664177fb8",
+            "parent": "decl_cc3a491803fb6092865b6dc250ff3cde",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_072b8d06897b87be59fb2a9ad3c0de4e",
+            "parent": "decl_cc3a491803fb6092865b6dc250ff3cde",
+            "index": "2",
+            "name": "at",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_b8e552f687b8b2ee3260ae511cd750b7",
+            "parent": "decl_cc3a491803fb6092865b6dc250ff3cde",
+            "index": "3",
+            "name": "out",
+            "type": "type_object_1f4d666857cd072163301d36be6cd714a7bf43daf648705fded75a5a7ce0953f",
+            "use": "consume",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "elf::runtime-closure",
+        "id": "decl_d0918e1e74da896606efdc7fcd05d5fb",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_0bffdf19d5f80109950f834f74b58294",
+            "parent": "decl_d0918e1e74da896606efdc7fcd05d5fb",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_44798495f69c8f5c569359c7c8971dd3",
+            "parent": "decl_d0918e1e74da896606efdc7fcd05d5fb",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_f610e73a163bb1c01be047697cef2b0d",
+            "parent": "decl_d0918e1e74da896606efdc7fcd05d5fb",
+            "index": "2",
+            "name": "out",
+            "type": "type_object_1f4d666857cd072163301d36be6cd714a7bf43daf648705fded75a5a7ce0953f",
+            "use": "consume",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "flow::declaration",
+        "id": "decl_31adc5828a367474fd7f8b9ab0252143",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_d12f5746fbaeee729a7989a49c5490a1",
+            "parent": "decl_31adc5828a367474fd7f8b9ab0252143",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_bf15c2227b34f133d13dfb6c75e224d0",
+            "parent": "decl_31adc5828a367474fd7f8b9ab0252143",
+            "index": "1",
+            "name": "i",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "flow::edge",
+        "id": "decl_dbd40f18f2455b1455b2d91c4b181e42",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_edff168c8b5b21163d3321ff95ddf26c",
+            "parent": "decl_dbd40f18f2455b1455b2d91c4b181e42",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_1df705642f51759a232eb97b7bfc7343",
+            "parent": "decl_dbd40f18f2455b1455b2d91c4b181e42",
+            "index": "1",
+            "name": "f",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_e597430fa19a76374f2c084e75240267",
+            "parent": "decl_dbd40f18f2455b1455b2d91c4b181e42",
+            "index": "2",
+            "name": "at",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_f216e6ad86d42d6b9cefe75aa9f0f2dc",
+            "parent": "decl_dbd40f18f2455b1455b2d91c4b181e42",
+            "index": "3",
+            "name": "target",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_710044e16445445b755d8e7d4c1d4029",
+            "parent": "decl_dbd40f18f2455b1455b2d91c4b181e42",
+            "index": "4",
+            "name": "prefix",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_01433fae77b69c0949456f336f8df13a",
+            "parent": "decl_dbd40f18f2455b1455b2d91c4b181e42",
+            "index": "5",
+            "name": "pushed",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_bee4334b931473d594b5b592a75ed892",
+            "parent": "decl_dbd40f18f2455b1455b2d91c4b181e42",
+            "index": "6",
+            "name": "borrow",
+            "type": "type_object_117ff3f5c20970df63c3f52cd92987e55b411ea0f47d41a9823b195338f5fbf7",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_eaff880f9c59e33ad5a7bbe2f2410002",
+            "parent": "decl_dbd40f18f2455b1455b2d91c4b181e42",
+            "index": "7",
+            "name": "store",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "flow::regular",
+        "id": "decl_c3afb49a634c48e343de58478862018b",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_8b0d66095a945fe6e12a38c43c4ccb3f",
+            "parent": "decl_c3afb49a634c48e343de58478862018b",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_c66e1d42ce442e23180b31eb50e85fd8",
+            "parent": "decl_c3afb49a634c48e343de58478862018b",
+            "index": "1",
+            "name": "f",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_2b566e23babdd727c5f2c6b42d015773",
+            "parent": "decl_c3afb49a634c48e343de58478862018b",
+            "index": "2",
+            "name": "at",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_7e897669739ce5f7375d896ebcd90283",
+            "parent": "decl_c3afb49a634c48e343de58478862018b",
+            "index": "3",
+            "name": "i",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_93fd19cb5cddbd2ebb91aa64a963a3a7",
+            "parent": "decl_c3afb49a634c48e343de58478862018b",
+            "index": "4",
+            "name": "pop",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_e34e70db0a86d7977a86ca618b1f076e",
+            "parent": "decl_c3afb49a634c48e343de58478862018b",
+            "index": "5",
+            "name": "pushed",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_22b614a5749561be25469c264c374a2b",
+            "parent": "decl_c3afb49a634c48e343de58478862018b",
+            "index": "6",
+            "name": "borrow",
+            "type": "type_object_117ff3f5c20970df63c3f52cd92987e55b411ea0f47d41a9823b195338f5fbf7",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_2a7f30a042d927e9710b72ca61469690",
+            "parent": "decl_c3afb49a634c48e343de58478862018b",
+            "index": "7",
+            "name": "store",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "machine::address",
+        "id": "decl_928300e6ea8e165f174e692357be5ded",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_9ddf1b21a54730cb31a76701aa5cc1c2",
+            "parent": "decl_928300e6ea8e165f174e692357be5ded",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_9c09ce0449c5e61c7387cd249b5b673f",
+            "parent": "decl_928300e6ea8e165f174e692357be5ded",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_d1db9acbe9eadef9489c6bf0fdc8407c",
+            "parent": "decl_928300e6ea8e165f174e692357be5ded",
+            "index": "2",
+            "name": "f",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "machine::data-address",
+        "id": "decl_02e3fe5eda8e4c8445665de1262f05f1",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_5ce19f787d1aef1a9525040220411c2a",
+            "parent": "decl_02e3fe5eda8e4c8445665de1262f05f1",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_03efa2a8632c2fa039ada0ec97cd2f18",
+            "parent": "decl_02e3fe5eda8e4c8445665de1262f05f1",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_077dba660bf1e59c39becf504a9673cf",
+            "parent": "decl_02e3fe5eda8e4c8445665de1262f05f1",
+            "index": "2",
+            "name": "offset",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "machine::data-start",
+        "id": "decl_037f3345b404b28c7fc9e8b677bf342a",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_1221e5a11474339d00906a6824ffd545",
+            "parent": "decl_037f3345b404b28c7fc9e8b677bf342a",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_6c48e8ecaba93d90d662edf7617bb37e",
+            "parent": "decl_037f3345b404b28c7fc9e8b677bf342a",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "machine::instruction-address",
+        "id": "decl_96eb7df3c35cc4e1c1d14a97692d9d95",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_d722f0fd2e4afe3d08136e6a5199cdc6",
+            "parent": "decl_96eb7df3c35cc4e1c1d14a97692d9d95",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_f864dd63e280cc57ae06904675fed4fb",
+            "parent": "decl_96eb7df3c35cc4e1c1d14a97692d9d95",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_c6e826982ac044367981293ab2fc24d5",
+            "parent": "decl_96eb7df3c35cc4e1c1d14a97692d9d95",
+            "index": "2",
+            "name": "f",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_18063b953cce125b28c2080b481c1259",
+            "parent": "decl_96eb7df3c35cc4e1c1d14a97692d9d95",
+            "index": "3",
+            "name": "i",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "machine::invoke",
+        "id": "decl_955954033515b28f6a5c551f6ea87a0d",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_9304a0d8680150935cc1ded1b9d68c93",
+            "parent": "decl_955954033515b28f6a5c551f6ea87a0d",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_a72cfbab9e7a7086f08f33665af0b179",
+            "parent": "decl_955954033515b28f6a5c551f6ea87a0d",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_bfad66a75e7502f2a5f6052d636e7be1",
+            "parent": "decl_955954033515b28f6a5c551f6ea87a0d",
+            "index": "2",
+            "name": "f",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_6c5a90631dfd7838e380f92e558d98f3",
+            "parent": "decl_955954033515b28f6a5c551f6ea87a0d",
+            "index": "3",
+            "name": "at",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_0b7f2e0bfe933b55252dccc0bdd1e400",
+            "parent": "decl_955954033515b28f6a5c551f6ea87a0d",
+            "index": "4",
+            "name": "tail",
+            "type": "type_object_117ff3f5c20970df63c3f52cd92987e55b411ea0f47d41a9823b195338f5fbf7",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_87d9baa0e2515eedf0580e01d67341a3",
+            "parent": "decl_955954033515b28f6a5c551f6ea87a0d",
+            "index": "5",
+            "name": "out",
+            "type": "type_object_1f4d666857cd072163301d36be6cd714a7bf43daf648705fded75a5a7ce0953f",
+            "use": "consume",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "machine::scalar-instruction",
+        "id": "decl_e8c0ff0867b72da24065064aed1eb66b",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_883ca4d25cc16efa3412906d0308e818",
+            "parent": "decl_e8c0ff0867b72da24065064aed1eb66b",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_1fda89664899f1afee1182e66eedb307",
+            "parent": "decl_e8c0ff0867b72da24065064aed1eb66b",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_ab8b11fe6d93bbaec945034df31750b6",
+            "parent": "decl_e8c0ff0867b72da24065064aed1eb66b",
+            "index": "2",
+            "name": "f",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_ff78d5406b5a7f0f13857abf92902e7f",
+            "parent": "decl_e8c0ff0867b72da24065064aed1eb66b",
+            "index": "3",
+            "name": "i",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_a55f42208281825739671d850f69988f",
+            "parent": "decl_e8c0ff0867b72da24065064aed1eb66b",
+            "index": "4",
+            "name": "out",
+            "type": "type_object_1f4d666857cd072163301d36be6cd714a7bf43daf648705fded75a5a7ce0953f",
+            "use": "consume",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "machine::instruction",
+        "id": "decl_0fa54f061ac7ca444ffa25d30f4a13af",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_1ed10852c8a67bae1c3ff2014c71ae72",
+            "parent": "decl_0fa54f061ac7ca444ffa25d30f4a13af",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_203359a52b03292e73e7a46e15ddcf27",
+            "parent": "decl_0fa54f061ac7ca444ffa25d30f4a13af",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_fb0413ddfb32b699763b8ba27c8d8281",
+            "parent": "decl_0fa54f061ac7ca444ffa25d30f4a13af",
+            "index": "2",
+            "name": "f",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_2c0c253f395f4f1f5e7fadf4b4c90f13",
+            "parent": "decl_0fa54f061ac7ca444ffa25d30f4a13af",
+            "index": "3",
+            "name": "i",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_4fd4998622b44537f16fff8ec4c209e5",
+            "parent": "decl_0fa54f061ac7ca444ffa25d30f4a13af",
+            "index": "4",
+            "name": "out",
+            "type": "type_object_1f4d666857cd072163301d36be6cd714a7bf43daf648705fded75a5a7ce0953f",
+            "use": "consume",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "machine::nodes",
+        "id": "decl_8d826b098bf08269ee1309ca68cf126a",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_639577bb2bed33e85705914b0e7e82d8",
+            "parent": "decl_8d826b098bf08269ee1309ca68cf126a",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_4e489bee2692877ca7a96593fb01db1b",
+            "parent": "decl_8d826b098bf08269ee1309ca68cf126a",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_627c8ee372f13e62a1c69f8fc85915e8",
+            "parent": "decl_8d826b098bf08269ee1309ca68cf126a",
+            "index": "2",
+            "name": "f",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_0387a28854d3887232bc7d69b828057c",
+            "parent": "decl_8d826b098bf08269ee1309ca68cf126a",
+            "index": "3",
+            "name": "i",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_368c187b809a0e3e25b62529d328a4c3",
+            "parent": "decl_8d826b098bf08269ee1309ca68cf126a",
+            "index": "4",
+            "name": "out",
+            "type": "type_object_1f4d666857cd072163301d36be6cd714a7bf43daf648705fded75a5a7ce0953f",
+            "use": "consume",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "machine::emit",
+        "id": "decl_662f8878a1c5e27fc209d16f6c9cdd4c",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_61b43f707080ba786408f0ce2e5e9f8c",
+            "parent": "decl_662f8878a1c5e27fc209d16f6c9cdd4c",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_1c8a69a21cdbc8b81eb70a4b5e29f5d5",
+            "parent": "decl_662f8878a1c5e27fc209d16f6c9cdd4c",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_0d7f5b424b364826095ffdeaf5c0de63",
+            "parent": "decl_662f8878a1c5e27fc209d16f6c9cdd4c",
+            "index": "2",
+            "name": "f",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_f0e1e84f17da3847c70a66da9114f7d8",
+            "parent": "decl_662f8878a1c5e27fc209d16f6c9cdd4c",
+            "index": "3",
+            "name": "out",
+            "type": "type_object_1f4d666857cd072163301d36be6cd714a7bf43daf648705fded75a5a7ce0953f",
+            "use": "consume",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "profile::parameters",
+        "id": "decl_cbbc825e248a977ab023b1aac6ccf4b4",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_ebffd850951d3e7a7b919a00fb06fe15",
+            "parent": "decl_cbbc825e248a977ab023b1aac6ccf4b4",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_2507e91b850fed124e7e2a721ae6eef7",
+            "parent": "decl_cbbc825e248a977ab023b1aac6ccf4b4",
+            "index": "1",
+            "name": "at",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_194c2f16590459d1fe3726c852b3054a",
+            "parent": "decl_cbbc825e248a977ab023b1aac6ccf4b4",
+            "index": "2",
+            "name": "sig",
+            "type": "type_object_bb65c4d4971c696508cc030b5613f3b151bbeb77f591b0433e770b82fb7edeeb",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_18e9c774e15470134022d651351c5c0f",
+            "parent": "decl_cbbc825e248a977ab023b1aac6ccf4b4",
+            "index": "3",
+            "name": "i",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_8808ac0461224d16be52ee9d34c84939",
+            "parent": "decl_cbbc825e248a977ab023b1aac6ccf4b4",
+            "index": "4",
+            "name": "code",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "runtime::emit",
+        "id": "decl_18773d00f9e2ad7b21c1c4593eb1d0dd",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_066f4f1da070b8436d084d3938249785",
+            "parent": "decl_18773d00f9e2ad7b21c1c4593eb1d0dd",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_1c8b40bf6f79374329b312a544d50275",
+            "parent": "decl_18773d00f9e2ad7b21c1c4593eb1d0dd",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_35027837e68408853bc5368d33741650",
+            "parent": "decl_18773d00f9e2ad7b21c1c4593eb1d0dd",
+            "index": "2",
+            "name": "out",
+            "type": "type_object_1f4d666857cd072163301d36be6cd714a7bf43daf648705fded75a5a7ce0953f",
+            "use": "consume",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "source-scalar-pack::prefix",
+        "id": "decl_c00cc008a16212bf6d17c233b5de5831",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_6ebdf4866972514cb9b16255d24a4470",
+            "parent": "decl_c00cc008a16212bf6d17c233b5de5831",
+            "index": "0",
+            "name": "length",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_45f8a8750261feeb310dcc11d659a0d2",
+            "parent": "decl_c00cc008a16212bf6d17c233b5de5831",
+            "index": "1",
+            "name": "function-count",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "source-scalar-pack::body",
+        "id": "decl_1aea0d39faffdf24ff66427441e7952d",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_0798291552cc801eb4f1f7f9795b3480",
+            "parent": "decl_1aea0d39faffdf24ff66427441e7952d",
+            "index": "0",
+            "name": "functions",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_21c209c19c3efcba6e2ce0d7ac7340b0",
+            "parent": "decl_1aea0d39faffdf24ff66427441e7952d",
+            "index": "1",
+            "name": "nodes",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_e3e18b25a57dc9e2ce2cee6b9e5821dd",
+            "parent": "decl_1aea0d39faffdf24ff66427441e7952d",
+            "index": "2",
+            "name": "blob",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_e208782ebe63057680081eb964d647ec",
+            "parent": "decl_1aea0d39faffdf24ff66427441e7952d",
+            "index": "3",
+            "name": "function-count",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_f2df5047edf3a4773db2cbcfb8d654d2",
+            "parent": "decl_1aea0d39faffdf24ff66427441e7952d",
+            "index": "4",
+            "name": "node-count",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_5ba006662f648545265300bb7407234f",
+            "parent": "decl_1aea0d39faffdf24ff66427441e7952d",
+            "index": "5",
+            "name": "node-offset",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_6fa39aff432feaee959e3f261fc40bbb",
+            "parent": "decl_1aea0d39faffdf24ff66427441e7952d",
+            "index": "6",
+            "name": "blob-offset",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_5ea4d9720d5143a33e066111033e9a6a",
+            "parent": "decl_1aea0d39faffdf24ff66427441e7952d",
+            "index": "7",
+            "name": "entry",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "source-scalar-pack::assemble",
+        "id": "decl_a6b7cb6208e89f2836a5ea3c5c577c6d",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_4cf3dfaa2179872b1885f8a7d3b53d36",
+            "parent": "decl_a6b7cb6208e89f2836a5ea3c5c577c6d",
+            "index": "0",
+            "name": "functions",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_c12af3fc87a700399b16c1369e170a68",
+            "parent": "decl_a6b7cb6208e89f2836a5ea3c5c577c6d",
+            "index": "1",
+            "name": "nodes",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_7acbb2e173a4342e4a15ff93a2a6d9f3",
+            "parent": "decl_a6b7cb6208e89f2836a5ea3c5c577c6d",
+            "index": "2",
+            "name": "blob",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_075529a88ae1e2aa4e5ea64f31a64c61",
+            "parent": "decl_a6b7cb6208e89f2836a5ea3c5c577c6d",
+            "index": "3",
+            "name": "function-count",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_87eff0b3510725416e1eaf8cdac91286",
+            "parent": "decl_a6b7cb6208e89f2836a5ea3c5c577c6d",
+            "index": "4",
+            "name": "node-count",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_60e9f6e1d12f22efe039d2afd8ef7bf6",
+            "parent": "decl_a6b7cb6208e89f2836a5ea3c5c577c6d",
+            "index": "5",
+            "name": "entry",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_727541c0ca84d190aa2af2a3421d506e",
+            "parent": "decl_a6b7cb6208e89f2836a5ea3c5c577c6d",
+            "index": "6",
+            "name": "node-offset",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_5a067a6cc4d287d297c71a154caadc55",
+            "parent": "decl_a6b7cb6208e89f2836a5ea3c5c577c6d",
+            "index": "7",
+            "name": "blob-offset",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_5713dc3173a1a67772854be0729131b4",
+            "parent": "decl_a6b7cb6208e89f2836a5ea3c5c577c6d",
+            "index": "8",
+            "name": "length",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "stream::invoke",
+        "id": "decl_eb75d68fdb4597f65c2f0cdaa64da76d",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_d34e665698c4965b3d61341abb017a74",
+            "parent": "decl_eb75d68fdb4597f65c2f0cdaa64da76d",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_87e39a97f2b116915b07dc878c99648d",
+            "parent": "decl_eb75d68fdb4597f65c2f0cdaa64da76d",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_b1ddc155646c864831efb8d5f966153e",
+            "parent": "decl_eb75d68fdb4597f65c2f0cdaa64da76d",
+            "index": "2",
+            "name": "out",
+            "type": "type_object_1f4d666857cd072163301d36be6cd714a7bf43daf648705fded75a5a7ce0953f",
+            "use": "consume",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "stream::emit",
+        "id": "decl_3b4121e2563466ed93ae555c5fa73121",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_a5ee75d5e071714c472228151b11d9af",
+            "parent": "decl_3b4121e2563466ed93ae555c5fa73121",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_00dc3b5f63b2d591003d545405c98cee",
+            "parent": "decl_3b4121e2563466ed93ae555c5fa73121",
+            "index": "1",
+            "name": "layout",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_3ab5588cb440113d818179477ffd44b7",
+            "parent": "decl_3b4121e2563466ed93ae555c5fa73121",
+            "index": "2",
+            "name": "out",
+            "type": "type_object_1f4d666857cd072163301d36be6cd714a7bf43daf648705fded75a5a7ce0953f",
+            "use": "consume",
+            "requirement": "none"
+          }
+        ]
+      },
+      {
+        "callable": "types::row",
+        "id": "decl_387ac2f262c6e89dcd7115dd02a3bfd8",
+        "status": "verified",
+        "contract_records_complete": true,
+        "parameters": [
+          {
+            "id": "param_c00acf555c8d7b7f0b2711f04929074c",
+            "parent": "decl_387ac2f262c6e89dcd7115dd02a3bfd8",
+            "index": "0",
+            "name": "data",
+            "type": "type_object_80378416e7e843b4be3ebfe301e514417aa3a0e6df7338caacd88f95f15dc334",
+            "use": "unrestricted",
+            "requirement": "none"
+          },
+          {
+            "id": "param_95120a0dadac117e6f51ab2d2d7a4eeb",
+            "parent": "decl_387ac2f262c6e89dcd7115dd02a3bfd8",
+            "index": "1",
+            "name": "ty",
+            "type": "type_object_be7769c6623cef309a91494061017525b0beb968e4024ecb8ba7647cd0607d21",
+            "use": "unrestricted",
+            "requirement": "none"
+          }
+        ]
+      }
+    ]
+  },
+  "inventory": {
+    "owners": 35952,
+    "types": 41,
+    "retirements": 24864,
+    "semantic_state": "semantic_state_66d01c7280e302fa390e1449e148893c23b0aea46b1fb7c7dc9033cc81a318ec"
+  },
+  "focused_tests": {
+    "log_sha256": "e32d446d28693bd6bf8bcf2dd7aa78a0acb5812e296f7d5dcf7fe4b4d2c39987",
+    "library_passed": 7,
+    "library_failed": 1,
+    "library_ignored": 0,
+    "wall_time_seconds": 1335.91,
+    "maintained_proposal_replay": {
+      "status": "passed",
+      "canonical_units": 641,
+      "native_backend_closure_equal": true
+    },
+    "unrepaired_fixture": {
+      "test": "selfhost_source_graph_native_admits_carriers_above_former_entity_quota",
+      "stage": "negative fixture construction before native admission",
+      "diagnostic": "kernel_state_retirement_key",
+      "prepared_correction_executed": false
+    }
+  },
+  "native_measurement": {
+    "receipt_sha256": "e97491880214ae5e586996230d46f6b4b7f7cff5fe8455951a2cafb0a9ce1478",
+    "scope": "Tier 1 maintained closure; Rust normalized inputs and C1 bootstrap",
+    "compiler_C1": {
+      "bytes": 431620,
+      "sha256": "1affb7cfd32a04a1757746c21a425b17bad27a0f40f22a530a730c938e58b68d"
+    },
+    "compiler_C2": {
+      "bytes": 1246043,
+      "sha256": "342ec8bcf60d548225d5818c3d51677d08f5fe987d59c601307c17be82202ed6"
+    },
+    "compiler_C3": {
+      "bytes": 1246043,
+      "sha256": "342ec8bcf60d548225d5818c3d51677d08f5fe987d59c601307c17be82202ed6"
+    },
+    "artifact_C1": {
+      "bytes": 10292518,
+      "sha256": "a441d5740bf81e9b292e0963ae9cae9917cc61473ac12b52eed3f768e74d598c"
+    },
+    "artifact_C2": {
+      "bytes": 10292518,
+      "sha256": "a441d5740bf81e9b292e0963ae9cae9917cc61473ac12b52eed3f768e74d598c"
+    },
+    "artifact_C3": {
+      "bytes": 10292518,
+      "sha256": "a441d5740bf81e9b292e0963ae9cae9917cc61473ac12b52eed3f768e74d598c"
+    },
+    "emitted_canonical_units": 641,
+    "mode0": {
+      "functions": 286,
+      "input": {
+        "bytes": 2016467,
+        "sha256": "31aeb1797bc0cb1539056ff51f313615a6fa0ea152283a141a78fa48c39269a0"
+      },
+      "nodes": 18201,
+      "profile": 6,
+      "types": 17
+    },
+    "mode1": {
+      "allowance": 0,
+      "input": {
+        "bytes": 9734389,
+        "sha256": "77237b4e5165c3bbc1945d9a1ea103973bbccc580c3d25773346e60e5061abe1"
+      },
+      "profile": 5,
+      "source_objects": 37914,
+      "units": 641
+    },
+    "complete_source_carrier": {
+      "bytes": 11276159,
+      "sha256": "c8c888b920cb2aa2b19156c0bbc1131bc79dd58b8771d47b838b3cccaf3f932f"
+    },
+    "direct_local_full_kernel_work": 3535803,
+    "execution_context": {
+      "architecture": "x86_64",
+      "child_deadline_seconds": 10,
+      "harness_output_limit_bytes": 33554432,
+      "input_chunk_bytes": 4093,
+      "native_environment": "empty",
+      "os": "linux",
+      "pointer_bits": 64,
+      "timing_scope": "publication, process creation, transport, execution, wait and cleanup"
+    },
+    "not_measured": [
+      "reachable historical storage bytes",
+      "native requested allocation bytes",
+      "native live retained storage",
+      "native mapped arena capacity",
+      "native resident memory",
+      "maintained-compiler source-driven fixed points"
+    ]
+  },
+  "pending": [
+    "Freeze and bootstrap the exact staged tree with expected source/tree",
+    "Run literal bash tools/selfhost/verify.sh and remaining raw-source/native controls",
+    "Explicitly run the ignored maintained-native-closure measurement and whole-owner/type inventory on the frozen tree",
+    "Run all 29 fresh full gates with zero reuse",
+    "Run release target",
+    "Commit and integrate only after exact-tree acceptance"
+  ],
+  "unproven": [
+    "Tier 2 maintained compiler raw-source self-hosting",
+    "Tier 3 platform sovereignty",
+    "Native phase reclamation",
+    "Bounded same-process resident memory"
+  ],
+  "transport_export": {
+    "container_sha256": "cce8632f8a18faa2da549a3df134a3b679966f0fba5cfb903fa440f3e7166981",
+    "log_sha256": "4eb4f1a157cb47eacffef1cd56dda649b278a5110e3b634668d758ef59270887",
+    "head_unchanged": true,
+    "output": "result status=success command=package.current.export\npackage id=pkg_3be630861275811679d4b4ee4926199b revision=rev_e5fa56ece633987cb2f62a3e7cdda4aec58fa74aa9cc7008f71682ca289b2f51 package-revision=package_revision_30664d1c1e70b940f29e4351357651af6c3ebb763b5cd6fca0e6526c9875d183 transport=package_transport_7697847fe61e986a2b378c500fda8823e35737729078af2e2b54df31253ed8c7 owners=1000 types=22\noutput kind=transport path=/home/coder/workspace/lkjscript/.artifacts/capacity-unbounding/atomic-source-adoption-v2/adopted-source.lkjp bytes=14173324 digest=package_transport_7697847fe61e986a2b378c500fda8823e35737729078af2e2b54df31253ed8c7 visibility=created durability=synchronized stage-cleanup=removed\n"
+  },
+  "integration": {
+    "as_of_local_date": "2026-10-29",
+    "time_zone": "Asia/Tokyo",
+    "source_corrections": "applied; corrected retirement/replay/definition controls and complete followup library/public CLI selections passed",
+    "applied_patch_sha256": "7fe723350431e2439b847515cda117ec1d7426dc5643f3399baeba0f3ed52c8a",
+    "patch_result_hashes_verified": 10,
+    "changes": [
+      "Retirement-binding negative fixture with actual-row commitments and independent state/binding controls",
+      "Complete maintained-source replay through one public transaction in unmetered memory storage",
+      "Region-expression definition type and capability descriptors"
+    ],
+    "fresh_staged_tree_acceptance": "pending",
+    "clippy": {
+      "status": "passed",
+      "wall_time_seconds": 17.49
+    },
+    "corrected_focused_run": {
+      "log_sha256": "9bb64aed64a8f4639f90e3b5af37cd4374ea325015894d9bd6eb58e6bf91cfcc",
+      "release_build_duration": "8m19s",
+      "library_passed": 5,
+      "library_failed": 2,
+      "wall_time_seconds": 332.88,
+      "passed": [
+        "function_definition_contract_has_one_owner_and_derived_physical_admissions",
+        "selfhost_maintained_proposals_match_authoritative_function_bodies",
+        "selfhost_source_profile_inventories_every_owner_and_type",
+        "selfhost_source_measure_maintained_native_closure",
+        "selfhost_source_graph_native_admits_carriers_above_former_entity_quota"
+      ],
+      "failures": [
+        {
+          "test": "selfhost_compiler_is_deterministic_and_source_mutation_changes_emitted_behavior",
+          "cause": "Interim reconstruction stubs did not construct nested structural-record results"
+        },
+        {
+          "test": "selfhost_wide_address_encodings_preserve_signed_boundaries_and_flags",
+          "cause": "Unscoped assemble selection resolved a compiler function instead of the fixture entry"
+        }
+      ],
+      "maintained_canonical_units": 641,
+      "native_backend_input_equal": true,
+      "compiler_C2_C3_sha256": "342ec8bcf60d548225d5818c3d51677d08f5fe987d59c601307c17be82202ed6",
+      "artifact_C1_C2_C3_sha256": "a441d5740bf81e9b292e0963ae9cae9917cc61473ac12b52eed3f768e74d598c",
+      "retirement_control": {
+        "rows": 100001,
+        "positive": {
+          "bytes": 19500337,
+          "sha256": "4771532162eecf63f570fc1cb67ca196be322dc589729dfa41d990f82f2f265e",
+          "status": "passed"
+        },
+        "negative": {
+          "bytes": 19500337,
+          "sha256": "3b08495e1bf99679bc47fe9aa7b94d92e9f94bba36c528566cf0a7452f15aecb",
+          "semantic_state": "semantic_state_23e9d0ea5afc99134e6882f8d43790c6c08fc3ce725aeb73afdd0b2cedda1892",
+          "independent_state_commitment": "passed",
+          "matching_key_binding": 0,
+          "changed_key_binding": 12,
+          "read_carrier": 12,
+          "read_graph": 12
+        }
+      }
+    },
+    "followup_patch": {
+      "sha256": "e707561785ae1886df454f5d4c33f8146de830fae37f793756e3d537c250f37f",
+      "result_hashes_verified": 5,
+      "status": "applied; focused library and public CLI controls passed",
+      "changes": [
+        "Explicit heap worklist for nested structural-record reconstruction stubs",
+        "Module-scoped wide-address probe entry selection",
+        "GC preparation propagation of inherited StoreWork saturation and local observation overflow",
+        "Separate retained canonical-byte saturation flag"
+      ],
+      "reconstruction_inventory": {
+        "proposal_files": 73,
+        "functions": 613,
+        "record_shapes": 29,
+        "functions_with_nested_record_results": 18,
+        "observed_maximum_record_depth": 2,
+        "leaf_types": [
+          "Bytes",
+          "I64",
+          "Bool"
+        ],
+        "counts_are_limits": false
+      },
+      "gc_preparation": {
+        "saturation_field": "preparation.saturated",
+        "retained_canonical_bytes_saturation_field": "canonical_bytes_retained_saturated",
+        "references_visited_semantics": "unique deduplicated queued bindings",
+        "admission_changed": false
+      },
+      "pending_storage_boundaries": [
+        "storage/directory/gc.rs physical-byte checked_add can return gc_pack_bytes",
+        "MAXIMUM_CATALOG_PACKS",
+        "MAXIMUM_CATALOG_LEFTOVERS"
+      ],
+      "clippy": {
+        "status": "passed",
+        "wall_time_seconds": 39.43,
+        "scope": "workspace, all targets, all features",
+        "warnings": "denied"
+      },
+      "execution_progress": {
+        "gc_tests_passed": 12,
+        "scoped_wide_address_probe": "passed",
+        "deterministic_source_mutation": "passed",
+        "aggregate_run": "passed",
+        "public_parameter_type": "passed",
+        "public_maintained_project_gc": "passed for all six repositories",
+        "baseline_native_output": "equivalent",
+        "baseline_malformed_input_diagnostic": 8,
+        "mutant_reconstruction": "passed"
+      },
+      "reconstruction_attempt_inventory": {
+        "scope": "Static fixture inventory; attempt counts do not establish execution or publication outcomes",
+        "variants": [
+          "baseline",
+          "mutant"
+        ],
+        "initial_ci_graph": "constructed separately for each variant",
+        "per_variant": {
+          "header_and_target_attempts": 74,
+          "body_group_attempts": 181,
+          "total_transaction_attempts": 255
+        },
+        "both_variants_transaction_attempts": 510,
+        "maintained_definition_replay_transactions": 1
+      },
+      "focused_execution": {
+        "exit_code": 0,
+        "log_sha256": "f12545ff7c565318773b64384728cfe689ce20a4398adcf580b9c617f40ec1d3",
+        "release_build_duration": "8m16s",
+        "library": {
+          "passed": 14,
+          "failed": 0,
+          "wall_time_seconds": 600.12,
+          "repaired_selfhost_tests": 2,
+          "gc_tests": 12
+        },
+        "public_cli_parameter_type": {
+          "passed": 6,
+          "failed": 0,
+          "wall_time_seconds": 36.54
+        },
+        "product_binary_sha256": "d287ba4e4e95da5e4f31340657e31838af57089bb883afe93c9b4dbda6a304be"
+      }
+    },
+    "repository_comparison": {
+      "origin_main": "47e33ae90ec77b176597e45d7917694749526aba",
+      "checkpoint": "dad67f97c6b9b008300d59d83e3e4e7540acfa4f",
+      "checkpoint_ahead": 1,
+      "checkpoint_behind": 0,
+      "candidate_commit": "pending staged-tree acceptance"
+    },
+    "public_gc": {
+      "receipt_sha256": "915238fdee4c3f12ad0bd64acce6c9f465a9cd8e991b482d8333d2b9fa0c24b7",
+      "receipt_bytes": 20482,
+      "status": "passed",
+      "started_at": "2026-10-28T22:41:22.864Z",
+      "completed_at": "2026-10-28T22:41:42.594Z",
+      "product_binary_sha256": "d287ba4e4e95da5e4f31340657e31838af57089bb883afe93c9b4dbda6a304be",
+      "all_heads_and_complete_source_transports_unchanged": true,
+      "all_preparation_saturated": false,
+      "all_canonical_bytes_retained_saturated": false,
+      "physical_pack_totals": {
+        "before": {
+          "files": "662",
+          "bytes": "499175240"
+        },
+        "after": {
+          "files": "8",
+          "bytes": "79757990"
+        },
+        "reclaimed_bytes": "419417250"
+      },
+      "scope": "Physical pack storage observations; not native memory or RSS evidence",
+      "projects": [
+        {
+          "project": "packages/standard",
+          "status": "verified",
+          "head_sha256": "2db888e2435d5509232720b9c6111e106bdb4665b157c27ae9561a58ba6bc59d",
+          "source_transport": {
+            "sha256": "5ab39dfc50b8e8eb07b25f1243cda6d594cbe9cbe82f08d15a6bdad1bc61838f",
+            "bytes": "1064337",
+            "digest": "package_transport_a0646e9a61973a84b9b29bebf2d3f520a5cb981921b5637e3a38f3956b93bbc7",
+            "revision": "rev_2c307fbdefe23a178a2762148447fdac853f8e9b198b53294da8302f28270ced"
+          },
+          "packs_before": {
+            "pack_files": "20",
+            "pack_file_bytes": "4557797"
+          },
+          "packs_after": {
+            "pack_files": "1",
+            "pack_file_bytes": "4262399"
+          },
+          "preparation_saturated": false,
+          "canonical_bytes_retained_saturated": false,
+          "head_and_source_transport_unchanged": true
+        },
+        {
+          "project": "applications/lkjournal",
+          "status": "verified",
+          "head_sha256": "508bbeb09e0b115d16514eeff48e70f4ca558458165aa480606973aff9f303f1",
+          "source_transport": {
+            "sha256": "5d18bec5fbdabba28e3f36072563a5a4ad40140ab342010f76e31145cdbea209",
+            "bytes": "1320515",
+            "digest": "package_transport_19fd0a2d1e983b651d2dd24daa65272dac0d525491d20cb1d321d95c4ad644c2",
+            "revision": "rev_d9d75fb4c967b2e2a45cdea1d2656d04106bcadd8234b1ce4d27b881581c3fd1"
+          },
+          "packs_before": {
+            "pack_files": "18",
+            "pack_file_bytes": "3725047"
+          },
+          "packs_after": {
+            "pack_files": "1",
+            "pack_file_bytes": "3433782"
+          },
+          "preparation_saturated": false,
+          "canonical_bytes_retained_saturated": false,
+          "head_and_source_transport_unchanged": true
+        },
+        {
+          "project": "tools/native-guides/project",
+          "status": "verified",
+          "head_sha256": "922f06aacf9c1c4026e3fe5514c6e475e27f43b26a41832c9b28ab8010ff2c97",
+          "source_transport": {
+            "sha256": "755db37aa7894326f95d4c188d2f9c2885c074aa273acc8881084f652ad9d380",
+            "bytes": "805468",
+            "digest": "package_transport_bf21a152af68f6b78d8afc955ed0d2ff8be42711929187a7d5e9da17568c34e4",
+            "revision": "rev_d6be8b693b73a27fcb23ba3b64a4a92214ea2502f8944dcf2b6239172ada3198"
+          },
+          "packs_before": {
+            "pack_files": "11",
+            "pack_file_bytes": "2017446"
+          },
+          "packs_after": {
+            "pack_files": "1",
+            "pack_file_bytes": "1892336"
+          },
+          "preparation_saturated": false,
+          "canonical_bytes_retained_saturated": false,
+          "head_and_source_transport_unchanged": true
+        },
+        {
+          "project": "tools/native-package-plan/project",
+          "status": "verified",
+          "head_sha256": "6d7819c1d877fc2d70d95a4036fb05da35cc95fb490104b3c9d4070213319d62",
+          "source_transport": {
+            "sha256": "3336c9204b54797bec7ef24dbb663b54a687943ed91603f8ed3498f680cf4a16",
+            "bytes": "2806242",
+            "digest": "package_transport_c88c5cb5a445d58a47b1db7eaab0bf43dbaeb532331166c00342423466778851",
+            "revision": "rev_a51e3265ff184450ebc91753289a6f2b1742b9edd5cff322416aa400eb166a6e"
+          },
+          "packs_before": {
+            "pack_files": "21",
+            "pack_file_bytes": "4055974"
+          },
+          "packs_after": {
+            "pack_files": "1",
+            "pack_file_bytes": "3950554"
+          },
+          "preparation_saturated": false,
+          "canonical_bytes_retained_saturated": false,
+          "head_and_source_transport_unchanged": true
+        },
+        {
+          "project": "tools/native-policy/project",
+          "status": "verified",
+          "head_sha256": "b64aa3179f3924ac1e32119923dc08dd08cc9758167236ab651e60116f24da39",
+          "source_transport": {
+            "sha256": "9e26f1c92de55086f5d9312b9ee0c701e17169217e34b95c60bd558082e6a875",
+            "bytes": "575738",
+            "digest": "package_transport_3a195b2dee450d2edc0bcf6c1cb7171c4be300bb4627d0a3cf377cd7098c2be3",
+            "revision": "rev_82eb9ed8f5f0e6c55449d416ba73850d6ba54780fbd468c70774313ac6576c7b"
+          },
+          "packs_before": {
+            "pack_files": "8",
+            "pack_file_bytes": "987076"
+          },
+          "packs_after": {
+            "pack_files": "1",
+            "pack_file_bytes": "951257"
+          },
+          "preparation_saturated": false,
+          "canonical_bytes_retained_saturated": false,
+          "head_and_source_transport_unchanged": true
+        },
+        {
+          "project": "tools/selfhost/project",
+          "status": "verified",
+          "head_sha256": "f5436f724c2a88123f5db0ade85ec23af808a9dc70635beb490198c688027507",
+          "source_transport": {
+            "sha256": "cce8632f8a18faa2da549a3df134a3b679966f0fba5cfb903fa440f3e7166981",
+            "bytes": "14173324",
+            "digest": "package_transport_7697847fe61e986a2b378c500fda8823e35737729078af2e2b54df31253ed8c7",
+            "revision": "rev_e5fa56ece633987cb2f62a3e7cdda4aec58fa74aa9cc7008f71682ca289b2f51"
+          },
+          "packs_before": {
+            "pack_files": "584",
+            "pack_file_bytes": "483831900"
+          },
+          "packs_after": {
+            "pack_files": "3",
+            "pack_file_bytes": "65267662"
+          },
+          "preparation_saturated": false,
+          "canonical_bytes_retained_saturated": false,
+          "head_and_source_transport_unchanged": true
+        }
+      ]
+    },
+    "maintained_assets": {
+      "receipt_sha256": "2e11c863ec3f76f71795464daf3ae9935312b59ae05e102d6601f24a7c13608f",
+      "receipt_bytes": 33228,
+      "status": "all-match",
+      "started_at": "2026-10-28T22:41:42.623Z",
+      "completed_at": "2026-10-28T22:42:37.957Z",
+      "product_binary_sha256": "d287ba4e4e95da5e4f31340657e31838af57089bb883afe93c9b4dbda6a304be",
+      "all_operation_exit_codes": 0,
+      "checked_heads_unchanged": 3,
+      "maintained_assets_unchanged": 4,
+      "asset_replacements": 0,
+      "public_package_checks": [
+        {
+          "project": "packages/standard",
+          "passed": 116,
+          "failed": 0,
+          "differential": "equal"
+        },
+        {
+          "project": "applications/lkjournal",
+          "passed": 44,
+          "failed": 0,
+          "differential": "equal"
+        },
+        {
+          "project": "tools/native-package-plan/project",
+          "passed": 176,
+          "failed": 0,
+          "differential": "equal"
+        }
+      ],
+      "comparisons": [
+        {
+          "name": "standard_artifact_compare",
+          "maintained_path": "packages/standard/generated/standard.lkja",
+          "bytes": "1278543",
+          "sha256": "080c468e683397e19ff7adb7b511be840d121031e4ba9d1bc48e86ab79aeb88f",
+          "same_bytes": true
+        },
+        {
+          "name": "builtin_package_compare",
+          "maintained_path": "packages/standard/generated/standard.lkja",
+          "bytes": "1278543",
+          "sha256": "080c468e683397e19ff7adb7b511be840d121031e4ba9d1bc48e86ab79aeb88f",
+          "same_bytes": true
+        },
+        {
+          "name": "builtin_transport_compare",
+          "maintained_path": "packages/standard/generated/standard.lkjp",
+          "bytes": "1064337",
+          "sha256": "5ab39dfc50b8e8eb07b25f1243cda6d594cbe9cbe82f08d15a6bdad1bc61838f",
+          "same_bytes": true
+        },
+        {
+          "name": "application_artifact_compare",
+          "maintained_path": "applications/lkjournal/generated/lkjournal.lkja",
+          "bytes": "1378045",
+          "sha256": "5ee475469c150fa063d57ed5d6ed4898c66f69cb219d7ed1aba2b4a3249858b4",
+          "same_bytes": true
+        },
+        {
+          "name": "native_package_plan_compare",
+          "maintained_path": "tools/native-package-plan/generated/package-plan.lkja",
+          "bytes": "3717601",
+          "sha256": "a9e8819aede84f381104448ef0fb3653bae587968da7acfcbae3a30be94bdde2",
+          "same_bytes": true
+        }
+      ]
+    },
+    "discovery": {
+      "status": "passed",
+      "generated_documents": 8,
+      "route": "public owner",
+      "product_binary_sha256": "1e02a3c983a448ca9ff54cabd6aee8edec4f691fb16cd1034f8f5cd3fc3d4420",
+      "capabilities_digest": "b007ea80efedbddc7994804207dc458d910bfe92879ac247903838d54b54fb38",
+      "generation_log_path": ".artifacts/capacity-unbounding/generated-public-20261029-round2.log",
+      "generation_stdout_sha256": "738bc61adf60aa6c5a26e9e5a1b88357bada990845013e88f15bbc15fb86c368",
+      "before_runtime_correction": {
+        "status": "passed",
+        "generated_documents": 8,
+        "route": "public owner",
+        "capabilities_digest": "19b49f284181ba6e41ef96ed7128f8995f94c0aaf66e4da85a09ea9534483aed",
+        "generation_stdout_sha256": "70717d5bf71a2de4006b4e66bb81b1b2135129dc936d763a59ea5755ba7f28fa"
+      }
+    },
+    "acceptance_binding": "Pending repaired-tree freeze; bind actual source/tree and gate receipts in terminal acceptance record and acceptance commit",
+    "acceptance_attempts": [
+      {
+        "source": "dad67f97c6b9b008300d59d83e3e4e7540acfa4f",
+        "tree": "6ae957fb647b194b763a6e6eec5ff214628438f1",
+        "stage": "bootstrap",
+        "phase": "receipt",
+        "status": "failed",
+        "exit_code": 1,
+        "elapsed_nanoseconds": "201634911689",
+        "staged_status_bytes": 68785,
+        "minimal_json_status_bytes": 69571,
+        "receipt_limit_bytes": 65536,
+        "failure_receipt_sha256": "8e508a522ba07742ac0a5d2adf4d5d16cdb9423f7ce3c276f8d5511d08fea7f6",
+        "source_drift": false,
+        "literal_selfhost_started": false,
+        "changed_check_started": false,
+        "full_gates_started": false
+      },
+      {
+        "source": "dad67f97c6b9b008300d59d83e3e4e7540acfa4f",
+        "tree": "a5f1cb9b45dd0fa5613b2d21e18cf6950a4a95f2",
+        "stage": "selfhost",
+        "status": "failed",
+        "script_exit_code": 101,
+        "driver_joined_exit_code": 1,
+        "checkpoint_path": ".artifacts/capacity-unbounding/seal-20261029-round2/checkpoint.json",
+        "checkpoint_sha256": "ded2211dd3c190817b6c62944fcfb00d5d901d93386047524239bec8af0abe23",
+        "bootstrap": {
+          "status": "passed",
+          "exit_code": 0,
+          "elapsed_nanoseconds": "201260609952",
+          "receipt_path": ".artifacts/capacity-unbounding/seal-20261029-round2/bootstrap/receipt.json",
+          "receipt_bytes": 71236,
+          "receipt_sha256": "ed039e8cca755230008ae693d8fef580c660e91eb2a07176ef23cd5b9eb4c7a0",
+          "verifier_sha256": "3d5b74bfaaec12f63a21e3318ef0280c4a2ca088154dcbfdb111ef2a734fb315",
+          "cargo_outputs_reused": 1,
+          "originals_retained": false
+        },
+        "literal_selfhost": {
+          "command": "bash tools/selfhost/verify.sh",
+          "test_threads": 2,
+          "passed": 137,
+          "failed": 1,
+          "ignored": 2,
+          "filtered_out": 2697,
+          "test_runtime_seconds": 6947.29,
+          "command_elapsed_nanoseconds": "6947534817471",
+          "failed_test": "selfhost_source_type_scope_preserves_resource_and_unsupported_boundaries",
+          "cause": "Stale fixture expected resource refusal for an ample explicitly finite u32::MAX prefix after removal of the old engine clamp",
+          "expected_diagnostic": 6,
+          "actual_diagnostic": 0,
+          "actual_image": "Semantic-state bytes",
+          "preserved_log_path": ".artifacts/capacity-unbounding/seal-20261029-round2/failed-selfhost-latest.log",
+          "preserved_log_bytes": 330183,
+          "preserved_log_sha256": "b1548e6a42a90a0c78eef957a65acf96c6d71d37c946a731d7d8cc72aaa24682"
+        },
+        "not_run": [
+          "native_elf_ filter",
+          "selfhost_source_measure_maintained_native_closure",
+          "selfhost_source_profile_inventories_every_owner_and_type separate run",
+          "changed check",
+          "fresh full check",
+          "release target"
+        ]
+      },
+      {
+        "source": "dad67f97c6b9b008300d59d83e3e4e7540acfa4f",
+        "tree": "82cc35da153202dca6e06d40e52c955c0a229bfa",
+        "stage": "changed",
+        "status": "failed",
+        "driver_joined_exit_code": 1,
+        "driver_join_request": "capacity-resume-1029-468",
+        "checkpoint": {
+          "path": ".artifacts/capacity-unbounding/seal-20261029-round3/checkpoint.json",
+          "bytes": 9348,
+          "sha256": "210f4d6ab04351edace177afb4c11b4980b7e54c1595926997785c54e76cebbf"
+        },
+        "failed_seal_observation": {
+          "path": ".artifacts/capacity-unbounding/seal-20261029-round3/failed-seal-observation.json",
+          "bytes": 8718,
+          "sha256": "f55c53c9645a7771301218b5169add3ff4e911b60790cdc7c845f67d8df6c349"
+        },
+        "bootstrap": {
+          "exit_code": 0,
+          "receipt_sha256": "61c9133aea4de1b5c4d2ec4e1f1321096b2de2d3cf3709f9158763e09ed8feb9",
+          "receipt_bytes": 71339,
+          "elapsed_nanoseconds": "9259626220",
+          "cargo_outputs_reused": 4,
+          "verifier_sha256": "3d5b74bfaaec12f63a21e3318ef0280c4a2ca088154dcbfdb111ef2a734fb315"
+        },
+        "literal_selfhost": {
+          "exit_code": 0,
+          "test_threads": 8,
+          "passed": 138,
+          "failed": 0,
+          "ignored": 2,
+          "filtered_out": 2697,
+          "test_runtime_seconds": 3368.31,
+          "native": {
+            "passed": 11,
+            "failed": 0,
+            "ignored": 0,
+            "filtered_out": 2826,
+            "test_runtime_seconds": 119.6
+          }
+        },
+        "separate_controls": [
+          {
+            "name": "selfhost_source_measure_maintained_native_closure",
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "filtered_out": 2836,
+            "test_runtime_seconds": 22.83
+          },
+          {
+            "name": "selfhost_source_profile_inventories_every_owner_and_type",
+            "passed": 1,
+            "failed": 0,
+            "ignored": 0,
+            "filtered_out": 2836,
+            "test_runtime_seconds": 13.09
+          }
+        ],
+        "changed": {
+          "selected_gates": 29,
+          "executed_gates": 29,
+          "maximum_workers": 4,
+          "terminal_status": "failed",
+          "fresh_passed": 27,
+          "reused_passed": 0,
+          "failed": 2,
+          "unrun": 0,
+          "failed_gates": [
+            "workspace_tests",
+            "pure_tail"
+          ],
+          "input_stable": true,
+          "receipt_path": ".artifacts/lkjscript-dev/latest-receipt.json",
+          "receipt_bytes": 26187,
+          "receipt_sha256": "70fc42b66fa4ada6e89bd0341a181d537c12d2ce32627e93aa42941498cf2a65",
+          "worktree_input_digest": "verification_aa24b2c6e4a21d4e674d40e71faabfe5168340a3a389590c93f5adf12c87c46f",
+          "final_worktree_input_digest": "verification_aa24b2c6e4a21d4e674d40e71faabfe5168340a3a389590c93f5adf12c87c46f"
+        },
+        "workspace_components": {
+          "public_cli": {
+            "passed": 343,
+            "failed": 7,
+            "ignored": 1,
+            "filtered_out": 1,
+            "test_runtime_seconds": 1872.1,
+            "preserved_stdout": {
+              "path": ".artifacts/capacity-unbounding/seal-20261029-round3/failed-public-cli.stdout",
+              "bytes": 253631,
+              "sha256": "365ec22f6a65dfb8346cf68fc0f52245359da89d8fa8f676ca5f97dab020ac74"
+            },
+            "preserved_stderr": {
+              "path": ".artifacts/capacity-unbounding/seal-20261029-round3/failed-public-cli.stderr",
+              "bytes": 163969,
+              "sha256": "85008a2007b2cd3a031598b5e75680658410a38d9075a1e1aeecb20771b193d2"
+            }
+          },
+          "dev_library": {
+            "passed": 338,
+            "failed": 0,
+            "ignored": 16,
+            "test_runtime_seconds": 15.1
+          },
+          "product_library": {
+            "terminal": true,
+            "passed": 2829,
+            "failed": 1,
+            "ignored": 7,
+            "filtered_out": 0,
+            "test_runtime_seconds": 3272.73,
+            "count_source": "Exact terminal result in compact-receipt stderr excerpt; not inferred from missing transient files"
+          }
+        },
+        "failed_tests": [
+          "platform::control::change::references::tests::named_reference_decoding_rejects_cycles_collisions_wrong_classes_and_raw_exhaustion",
+          "capabilities_discovery_is_compact_focused_and_exportable",
+          "copied_binary_rediscovers_normalized_names_and_relations_without_query_writes",
+          "native_declarations::native_input_admission_has_an_exact_boundary_without_publication",
+          "native_declarations::native_named_drafts::named_drafts_keep_module_target_and_declaration_namespaces_distinct",
+          "structural_cli::copied_binary_charges_expanded_type_and_effect_copies_before_allocation",
+          "structural_cli::copied_binary_admits_useful_depth_and_rejects_combined_depth_and_cumulative_growth_without_crashing",
+          "native_elf::native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter"
+        ],
+        "native_fixture_failure": {
+          "stale_profile": 4,
+          "exit_code": 65,
+          "stderr": "compiler_rejected:2\n",
+          "bad_magic_expected_diagnostic": 1,
+          "bad_magic_control_preserved": true
+        },
+        "production_discovery_failure": {
+          "status": "Observed in round 3; production correction and scoped verification recorded in acceptance_repairs.execution_observation_discovery",
+          "kind": "production discovery bug, not stale test expectation",
+          "duplicates": [
+            "production-allocated-bytes",
+            "reference-allocated-bytes",
+            "production-collection-items",
+            "reference-collection-items"
+          ],
+          "record": "execution.observation",
+          "cause": "Existing scalar unit records were emitted again by cumulative saturation metadata additions",
+          "gate": "pure_tail",
+          "message": "corrupt: discovery omitted or duplicated a bounded value-work observation",
+          "planned_repair": "One record per (record,field), retaining units and exactness metadata; preserve strict consumer uniqueness assertion",
+          "static_baseline": {
+            "records": 74,
+            "distinct_record_field_keys": 70,
+            "duplicate_keys": 4
+          }
+        },
+        "not_run": [
+          "fresh full check",
+          "release target"
+        ],
+        "driver_sha256": "79c6ee8060c402807285fb8a9efdf787fc18d78aeac0091456b4657cd26531b5"
+      }
+    ],
+    "acceptance_repairs": {
+      "status": "Bootstrap, runtime, type-scope, public policy/protocol and observation-discovery repairs applied; scoped controls passed; source-bound full acceptance required",
+      "bootstrap_receipts": {
+        "status": "applied; full shell-owner fixture passed",
+        "patch_sha256": "bec184b896b7cd184d88d96576de6fa1e18db71adb4aba92e9c33cbc2ffc858b",
+        "verified_before_after_file_hashes": 3,
+        "changes": [
+          "Remove final 65536-byte receipt ceiling",
+          "Capture complete porcelain status through an evidence file and jq --rawfile while preserving prior trailing-LF semantics",
+          "Preserve schema and complete source/context/binary bindings"
+        ],
+        "shell_owner_fixture": {
+          "command": "bash tools/bootstrap-verifier.test.sh",
+          "scope": "Actual bootstrap shell owner in an owned fixture with a mock toolchain",
+          "exit_code": 0,
+          "wall_time_seconds": 14.053,
+          "user_time_seconds": 9.037,
+          "system_time_seconds": 5.351,
+          "log_path": ".artifacts/capacity-unbounding/bootstrap-receipt-controls-20261029.log",
+          "log_sha256": "efc2b6ba9d52f9e2b0d83a051951869daff240a342ae3c282e85f97cdebb060f",
+          "controls": [
+            "Complete staged status and receipt above 128 KiB",
+            "Default evidence cleanup",
+            "Explicit archive retention",
+            "Wrong-tree refusal before Cargo",
+            "Late source drift beyond the first 131072 status characters"
+          ]
+        },
+        "new_frozen_candidate_bootstrap": "Passed for round-3 tree 82cc35da153202dca6e06d40e52c955c0a229bfa; source-bound bootstrap remains required for the repaired integration tree",
+        "full_gates": "pending"
+      },
+      "runtime_zero_policies": "Applied exact-zero cumulative policy and per-counter saturation repair; focused execution passed",
+      "observed_runtime_defect": "validate_policy rejects Some(0) in all four cumulative fields before execution, including pure computation with zero capability allowance",
+      "runtime_zero_red_control": {
+        "receipt_path": ".artifacts/capacity-unbounding/runtime-zero-20261029/receipt.json",
+        "receipt_sha256": "4caf4de19cd74d87cd6a3c24de4de9816c0148103b80cb7f359d3fddeb813f6e",
+        "product_binary_sha256": "d287ba4e4e95da5e4f31340657e31838af57089bb883afe93c9b4dbda6a304be",
+        "fixture": "Fresh command project; defaults run hello",
+        "default_capability_calls": 0,
+        "changed_descriptor_field": {
+          "maximum_capability_calls": 0
+        },
+        "observed_exit_code": 2,
+        "observed_diagnostic": "deployment_execution_limit",
+        "observed_reason": "Specified cumulative quotas must be positive",
+        "maintained_graph_changes": false,
+        "scope": "Observed red control before the runtime correction; not repair verification"
+      },
+      "runtime_implementation": {
+        "status": "applied; focused execution passed",
+        "patch_sha256": "24abb05504b51dbdcb9838f5a32dcdec1261d173c2aaae2bf9be04b6677b46e6",
+        "verified_before_after_file_hashes": 24,
+        "guarded_manifest_sha256": "97bb8731929f2dc90eaa9ec78d6ff6560ae60070d885a863af2eca5574d47f9b",
+        "implementation": {
+          "zero_policy": "All four optional cumulative limits admit Some(0); positive structural call-depth/value-stack validation retained.",
+          "saturation": "Companion booleans distinguish exact MAX from overflow, propagate through disjoint evaluator charging, raw admission, child merges and aggregate test receipts.",
+          "atomicity": "Allocation/item counts, flags and shared exact reservations commit together; grant counters and per-value item ceilings remain finite exact.",
+          "record_field_name_bytes": "Checked per-record physical size sum replaces a saturated charge delta."
+        },
+        "public_fields": {
+          "production_json": [
+            "instructions_saturated",
+            "allocated_bytes_saturated",
+            "collection_items_saturated",
+            "capability_calls_saturated"
+          ],
+          "reference_json": [
+            "expressions_saturated",
+            "allocated_bytes_saturated",
+            "collection_items_saturated",
+            "capability_calls_saturated"
+          ],
+          "compact_run": [
+            "production-instructions-saturated",
+            "reference-expressions-saturated",
+            "production-allocated-bytes-saturated",
+            "reference-allocated-bytes-saturated",
+            "production-collection-items-saturated",
+            "reference-collection-items-saturated",
+            "production-capability-calls",
+            "reference-capability-calls",
+            "production-capability-calls-saturated",
+            "reference-capability-calls-saturated"
+          ],
+          "compact_check": [
+            "production-instructions-saturated",
+            "reference-expressions-saturated"
+          ],
+          "counter_semantics": "per-counter-saturation-flag-true-means-lower-bound"
+        },
+        "diagnostics": {
+          "preserved_finite": [
+            "normalized_instruction_steps",
+            "normalized_allocation",
+            "normalized_collection_items",
+            "normalized_capability_calls",
+            "normalized_reference_expression_steps",
+            "normalized_reference_allocation",
+            "normalized_reference_collection_items",
+            "normalized_reference_capability_calls"
+          ],
+          "structural_only_validation": [
+            "deployment_execution_limit",
+            "normalized_run_policy",
+            "normalized_reference_policy"
+          ],
+          "note": "Zero is no longer rejected as invalid policy. Structural policy messages identify positive call depth/value stack. Compound storage failures use evaluator-specific dimension diagnostics with common allocation/collection exhaustion messages."
+        },
+        "root_integration_paths": [
+          "src/platform/contract/registry.rs",
+          "tests/public_cli/resident_policy.rs",
+          "src/platform/http.rs",
+          "src/platform/execution/normalized/http.rs"
+        ],
+        "remaining_scope": [
+          "Other general ValueWork counters",
+          "Positive structural call-depth and value-stack limits"
+        ],
+        "validation": {
+          "local_static_review": "completed",
+          "formatting": "passed",
+          "clippy": {
+            "status": "passed",
+            "scope": "release workspace, all targets, all features",
+            "warnings": "denied",
+            "wall_time_seconds": 39.4
+          },
+          "focused_tests": "passed",
+          "regenerated_discovery": "passed",
+          "new_frozen_candidate_acceptance": "pending",
+          "retry": {
+            "attempt": 3,
+            "status": "passed",
+            "exit_code": 0,
+            "log_path": ".artifacts/capacity-unbounding/capacity-policy-controls-20261029-round3.log",
+            "log_sha256": "a015f9a11beb4ad251bebe36524cf5c26a19a6883981a084957250e5a163e6e4",
+            "release_build_duration": "8m15s",
+            "library": {
+              "passed": 82,
+              "failed": 0,
+              "wall_time_seconds": 1.42
+            },
+            "public_cli": {
+              "passed": 3,
+              "failed": 0,
+              "wall_time_seconds": 2.43
+            },
+            "dev_owner_build_duration": "3m20s",
+            "bootstrap_owner": {
+              "test": "shared_bootstrap_admits_only_source_bound_cold_artifacts",
+              "passed": 1,
+              "failed": 0,
+              "wall_time_seconds": 14.01
+            },
+            "product_binary_sha256": "1e02a3c983a448ca9ff54cabd6aee8edec4f691fb16cd1034f8f5cd3fc3d4420",
+            "coverage": [
+              "All 46 change-budget dimensions",
+              "Store/map/kernel admission policies",
+              "VM/reference zero/exact/maximum policies",
+              "Shared finite reservations and child saturation flags",
+              "Atomic refusal of count/flag updates",
+              "Parallel execution controls",
+              "Public execution policy reporting and invalid configuration"
+            ]
+          }
+        },
+        "integration_attempts": [
+          {
+            "operation": "Combined formatting and Clippy",
+            "exit_code": 101,
+            "diagnostic": "E0063",
+            "diagnostic_count": 2,
+            "cause": "Complete root VM and reference observation initializers each omitted four new false saturation flags",
+            "library_tests_started": false,
+            "public_cli_tests_started": false,
+            "log_path": ".artifacts/capacity-unbounding/capacity-policy-controls-20261029.log",
+            "log_sha256": "b5587a6057a044c73653db06d0045263bdcfafd23e7d2ad773ae969e74d5d401"
+          },
+          {
+            "operation": "Second combined formatting and Clippy attempt",
+            "exit_code": 101,
+            "diagnostic": "clippy::bool_assert_comparison",
+            "diagnostic_count": 24,
+            "affected_test_files": 2,
+            "diagnostics_per_file": 12,
+            "additional_compile_or_semantic_diagnostics_observed": false,
+            "library_tests_started": false,
+            "public_cli_tests_started": false,
+            "log_path": ".artifacts/capacity-unbounding/capacity-policy-controls-20261029-round2.log",
+            "log_sha256": "749c67263e4e0c0d3d0bb5d19c50c6a9d4b9a1f59e045fa4806c7753852ef6a1"
+          }
+        ],
+        "initializer_correction": {
+          "status": "applied",
+          "files": 2,
+          "false_flag_initializers_added": 8,
+          "guarded_manifest_path": ".artifacts/capacity-unbounding/runtime-observation-initializers-20261029.json",
+          "guarded_manifest_sha256": "ef61becf9527df60df17eb119c4e3f8b92ee9c0c23baa7c0a47ace4e43a34bc7"
+        },
+        "boolean_assertion_correction": {
+          "status": "applied",
+          "files": 2,
+          "assertions_changed": 24,
+          "change": "Boolean assert_eq! calls replaced with assert! or negated assert!; substantive checks preserved",
+          "guarded_manifest_path": ".artifacts/capacity-unbounding/runtime-boolean-assertions-20261029.json",
+          "guarded_manifest_sha256": "74697af59cad6b5daaab7396a63773ca5c344478fd890913e7dc8c332a141686"
+        }
+      },
+      "runtime_contract": {
+        "cumulative_fields": [
+          "instruction_fuel",
+          "maximum_allocated_bytes",
+          "maximum_collection_items",
+          "maximum_capability_calls"
+        ],
+        "zero": "Exact finite allowance; permits zero consumption and rejects the first positive charge with the dimension resource diagnostic",
+        "null": "Unbounded",
+        "largest_u64": "Exact finite allowance, distinct from unbounded",
+        "required_positive_structural_fields": [
+          "maximum_call_depth",
+          "maximum_value_stack"
+        ],
+        "supplied_execution_object_requires_instruction_fuel": true,
+        "omitted_other_cumulative_fields": "None",
+        "passive_saturation": "Applied independent per-counter flags; exact MAX remains exact, overflow observations are lower bounds and do not change finite admission",
+        "implementation_and_execution": "Implementation applied; focused library/public CLI execution and historical zero-budget replay passed; frozen-tree acceptance pending"
+      },
+      "runtime_zero_green_control": {
+        "receipt_path": ".artifacts/capacity-unbounding/runtime-zero-green-20261029/receipt.json",
+        "receipt_sha256": "c729f8c607d455fc84a7133dae53ddef7f4665e0a432e7036573b34982c87b16",
+        "exit_code": 0,
+        "product_binary_sha256": "1e02a3c983a448ca9ff54cabd6aee8edec4f691fb16cd1034f8f5cd3fc3d4420",
+        "historical_zero_descriptor_sha256": "765c06b594ef7803f205b9432d2326c40d3c2eb1b2a9d310d860021c6d9c55cb",
+        "project_head_sha256": "003ec04e639cad0ecbf1530a6f10c8f7a83ee292a2cc9366c17f1a093ea0bdfe",
+        "descriptor_and_head_unchanged": true,
+        "maintained_graph_changes": false,
+        "runs": [
+          {
+            "policy": "default",
+            "elapsed_nanoseconds": "81130102",
+            "stdout_sha256": "c7dc77d825e41cbe4a9980cecfd5120cb7fe7ea1666c4d8b6b70a9cbcdb16865"
+          },
+          {
+            "policy": "maximum_capability_calls=0",
+            "elapsed_nanoseconds": "72852359",
+            "stdout_sha256": "ca27990341811e07c2e619bbd0083264481b98695e848e110cc672da50df5904"
+          }
+        ],
+        "observed_in_each_run": {
+          "result": "hello",
+          "instructions": 3,
+          "allocated_bytes": 1279697,
+          "collection_items": 0,
+          "capability_calls": 0,
+          "instructions_saturated": false,
+          "allocated_bytes_saturated": false,
+          "collection_items_saturated": false,
+          "capability_calls_saturated": false
+        },
+        "scope": "Same descriptor and project as historical red control; not frozen-tree acceptance"
+      },
+      "source_type_scope_fixture": {
+        "status": "applied; both focused policy controls passed",
+        "source_path": "src/platform/execution/normalized/selfhost_source_type_scope_tests.rs",
+        "before_sha256": "e39b9da08d4d4383eb64e268716c91dc12db66b4afe12cf208646ee0151d6d90",
+        "after_sha256": "5667f968ab8726670c486c18fbaeef8c20a50379aade2a43152665dbaf0387d4",
+        "finite_prefix_bits": 32,
+        "insufficient_finite_allowances": [
+          0,
+          1
+        ],
+        "ample_finite_allowance": 4294967295,
+        "maximum_is_unmetered": false,
+        "success_requires_semantic_state_bytes": true,
+        "malformed_diagnostic": 12,
+        "unsupported_type_diagnostic": 13,
+        "production_policy_changes": false,
+        "maintained_graph_changes": false,
+        "focused_run": {
+          "joined_exit_code": 0,
+          "tests": [
+            "selfhost_source_type_scope_preserves_resource_and_unsupported_boundaries",
+            "selfhost_source_type_scope_respects_exact_composed_allowance"
+          ],
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0,
+          "filtered_out": 2835,
+          "test_runtime_seconds": 354.23,
+          "release_build_duration": "6m06s",
+          "cargo_command_elapsed_nanoseconds": "720608089478",
+          "exact_composed_allowance": 3108,
+          "refused_allowance": 3107,
+          "accepted_allowances": [
+            3108,
+            3109
+          ],
+          "paths": [
+            "ordinary",
+            "self-produced"
+          ],
+          "log_path": ".artifacts/capacity-unbounding/type-scope-fixture-controls-20261029.log",
+          "log_bytes": 3825,
+          "log_sha256": "d82b5b6553ec3ecb93cf1b89e247f21be6649ce564c5c07c323a6bbac9fe5bae",
+          "scope": "Focused fixture/policy evidence; no repaired-tree acceptance"
+        }
+      },
+      "selfhost_test_scheduling": {
+        "status": "Applied; syntax and invalid-selection controls passed; eight-thread literal round-3 verification passed; integration still requires source-bound full gates",
+        "source_path": "tools/selfhost/verify.sh",
+        "before_sha256": "4ee6e8d1f64ea1205a834347189bb8169a830dea732b00b42d0f28c1d9cba80f",
+        "after_sha256": "ec6853054bf3c4de1d51f41526f81a4444bd5906e2f6cac82239e3427fbdc46c",
+        "environment_variable": "RUST_TEST_THREADS",
+        "unset_default": 2,
+        "empty_value_is_rejected": true,
+        "selection_contract": "Positive decimal integer, passed unchanged to both existing test-thread arguments; no clamping",
+        "preserved": [
+          "Both complete test filters",
+          "Filter ordering",
+          "Canonical target lease",
+          "Complete input hashing and final hash verification"
+        ],
+        "selection_recorded_in": "Script stderr and sealing checkpoint environment",
+        "observed_controls": {
+          "shell_syntax": {
+            "exit_code": 0,
+            "elapsed_nanoseconds": "1534597"
+          },
+          "workspace_format": {
+            "exit_code": 0,
+            "elapsed_nanoseconds": "4547996390"
+          },
+          "invalid_selections": [
+            "",
+            "0",
+            "-1",
+            "invalid"
+          ],
+          "invalid_selection_exit_code": 2,
+          "invalid_selection_diagnostic": "RUST_TEST_THREADS must be a positive decimal integer",
+          "invalid_selections_rejected_before_work": true
+        },
+        "unproven": [
+          "Eight-thread throughput improvement",
+          "Peak memory bound",
+          "Repaired-tree acceptance"
+        ],
+        "round3_seal_selection": 8,
+        "round3_seal_driver_sha256": "79c6ee8060c402807285fb8a9efdf787fc18d78aeac0091456b4657cd26531b5",
+        "next_seal": {
+          "selection": 8,
+          "driver_sha256": "5d7edad40956f414804999f2acb10627fdc15435171e1f40d83dd87dec3e0a84",
+          "operation_count": 6,
+          "operations": [
+            "bootstrap",
+            "selfhost",
+            "selfhost_source_measure_maintained_native_closure",
+            "selfhost_source_profile_inventories_every_owner_and_type",
+            "full",
+            "release-target"
+          ],
+          "optional_changed_check_omitted": true,
+          "fresh_full_requirement": "All 29 gates fresh with zero reuse; no reduced closure",
+          "reason": "Round-3 changed selection covered all 29 gates; a second changed selection would duplicate the required full check"
+        }
+      },
+      "public_policy_and_native_fixtures": {
+        "status": "Applied and formatted; all eight repaired cases have observed passes across separate focused selections",
+        "bundle_path": ".artifacts/capacity-unbounding/round4-guarded-repairs-v2.json",
+        "bundle_sha256": "19cb55d69b5c4c15eab16955fed98432821c20b00a9ef57e2bd64931792aeed8",
+        "application_receipt_sha256": "0b95b2e962415b34be2f9392df2c31a467ee20196f31b33b27231d5deef728e0",
+        "application_joined_exit_code": 0,
+        "application": {
+          "schema": "lkjscript.capacity-unbounding.repair-application.v1",
+          "status": "applied-and-formatted",
+          "started_at": "2026-10-29T05:24:34.277Z",
+          "changes": [
+            {
+              "path": "src/platform/control/change/references/tests.rs",
+              "before_sha256": "c7c3df6048eb66fac2b4ab830cb908f00bd4c90eaa6a19f124baf2329846d47e",
+              "proposed_sha256": "2d54504a9894c921bb427d41c156a5a461798f184bafd525da72e87e2643f7fd",
+              "formatted_sha256": "2d54504a9894c921bb427d41c156a5a461798f184bafd525da72e87e2643f7fd"
+            },
+            {
+              "path": "tests/public_cli.rs",
+              "before_sha256": "4f2a1183127f7c121f81fe40a5d4106bc3805c16b978971a39ba74872fe0ca00",
+              "proposed_sha256": "80277deb291ea980a6a8fd6d6bcf85979aac8f71a8c0e18392132a3456989432",
+              "formatted_sha256": "028d43de912d18a20658e0b31f8fe4314176168c272784024d864b27c71d9e5c"
+            },
+            {
+              "path": "tests/structural_cli.rs",
+              "before_sha256": "48c04c9e6f07d640d3b76424def291096f5dc208e360f11934718de2f351d733",
+              "proposed_sha256": "d587237e46d6626cfc08aeaf31d6fec7b2c843cf057ac318343a6942173e4a45",
+              "formatted_sha256": "d587237e46d6626cfc08aeaf31d6fec7b2c843cf057ac318343a6942173e4a45"
+            },
+            {
+              "path": "tests/public_cli/native_declarations.rs",
+              "before_sha256": "313cb7d2f84775e6fab1d69abaf7df52c2c05482772aa6044eecdc6d26515a4f",
+              "proposed_sha256": "29430e6ff3ae5e4070a43a4a051ab829310cdeaf161ea15cfda40445a8f75c15",
+              "formatted_sha256": "29430e6ff3ae5e4070a43a4a051ab829310cdeaf161ea15cfda40445a8f75c15"
+            },
+            {
+              "path": "tests/public_cli/native_named_drafts.rs",
+              "before_sha256": "b9ff9848de0ec712cfe21e52d76d76307843c33b22db29ce1796587039220314",
+              "proposed_sha256": "9fec72d4e3f6414c54c5c416f029c6a5215cbfb0788230553d6d55eb493f42e7",
+              "formatted_sha256": "9fec72d4e3f6414c54c5c416f029c6a5215cbfb0788230553d6d55eb493f42e7"
+            },
+            {
+              "path": "src/platform/contract/registry.rs",
+              "before_sha256": "89d8f32907b80a3f3efefadfd96fbfe4ae0562c78d3b9abaf0bd0579b006f18b",
+              "proposed_sha256": "c6996b6d7c07b7395774574ed8e4154571d96e7ea874f53fc0c599ab31c507ed",
+              "formatted_sha256": "c6996b6d7c07b7395774574ed8e4154571d96e7ea874f53fc0c599ab31c507ed"
+            },
+            {
+              "path": "tests/public_cli/native_elf.rs",
+              "before_sha256": "c99bda57c73a7d221fcaee0157b19de0c954948ff249e24e2456233648f59ee8",
+              "proposed_sha256": "eb914c26a1ee77709c404afffebff541a59e137cbe781ba06dda34b3363ad809",
+              "formatted_sha256": "eb914c26a1ee77709c404afffebff541a59e137cbe781ba06dda34b3363ad809"
+            }
+          ],
+          "prior_seal_sha256": "210f4d6ab04351edace177afb4c11b4980b7e54c1595926997785c54e76cebbf",
+          "head": "dad67f97c6b9b008300d59d83e3e4e7540acfa4f",
+          "prior_tree": "82cc35da153202dca6e06d40e52c955c0a229bfa",
+          "bundle_sha256": "19cb55d69b5c4c15eab16955fed98432821c20b00a9ef57e2bd64931792aeed8",
+          "raw_indexed_files": 2192,
+          "fmt": {
+            "exit_code": 0,
+            "signal": null
+          },
+          "completed_at": "2026-10-29T05:24:38.952Z"
+        },
+        "controls": [
+          "None, explicit unbounded, finite 0, exact minus one, exact and u64::MAX raw-reference operation policies",
+          "All 46 current public policy names and their default/syntax/finite records",
+          "Exact query byte refusal remains Resource exit 4",
+          "Requests beyond 4 MiB and 10,000 selectors preserve nonpublication and malformed-input checks",
+          "Unmetered cumulative identities versus explicit finite 100,000 allowance",
+          "Checked expanded-type extent overflow and foreign-effect reference integrity",
+          "Complete public compiler publication and independent 896-byte profile-6 packet; emitted result 42, bad-magic diagnostic 1 and unchanged plan/build HEAD assertions",
+          "Current set.parameter-order operation, 187 operation fields, 37 field forms and two optional function/operation selectors"
+        ],
+        "policy_domain": "Authored-type-nodes remains distinct canonical types interned while lowering; no decoder-copy ceiling was introduced",
+        "maintained_graph_changes": false,
+        "single_publication_setup_probe": {
+          "scope": "Complete compiler public publication and native build only; not detached packet proof",
+          "receipt_path": ".artifacts/capacity-unbounding/compiler-single-publication-probe-20261029/receipt.json",
+          "receipt_sha256": "deb66f381d9514e7101d612a74242eb8798bfad6d99909ba873aa72ebf949590",
+          "joined_exit_code": 0,
+          "source_files": 73,
+          "request_bytes": 962626,
+          "plan_nanoseconds": "10371992126",
+          "apply_nanoseconds": "16155444085",
+          "native_build_nanoseconds": "29810377200",
+          "native_C1_bytes": 431620,
+          "native_C1_sha256": "c68646c5486588a60362824f0d58c3cccc98bfdd4234ba1ece19782782602e95",
+          "plan_and_build_head_unchanged": true,
+          "temporary_graph_and_ELF_removed": true
+        },
+        "validation": {
+          "scope": "Eight repaired cases passed across focused iteration 2 (one library plus six CLI cases) and iteration 3 (one CLI case); no single eight-pass run or frozen-tree acceptance is claimed",
+          "focused_iterations": [
+            {
+              "iteration": 1,
+              "stage": "compile",
+              "status": "failed",
+              "receipt": ".artifacts/capacity-unbounding/round4-repairs-20261029/verification-receipt.json",
+              "receipt_bytes": 1902,
+              "receipt_sha256": "b7773c5695e24230367a80a019eff6f78118b282e6e3c7164c8387de97c55b0c",
+              "log": ".artifacts/capacity-unbounding/round4-repairs-20261029/focused-tests.log",
+              "log_bytes": 834,
+              "log_sha256": "ddc4adabc1e8b5b5852bdd7f3000b36bcf6c2f60fe890c235912873ba5d1dfe6",
+              "command_exit_code": 101,
+              "driver_joined_exit_code": 1,
+              "driver_join_request": "capacity-resume-1029-498",
+              "elapsed_nanoseconds": "482115972051",
+              "diagnostic": "E0603",
+              "tests_executed": 0
+            },
+            {
+              "iteration": 2,
+              "stage": "tests",
+              "status": "failed",
+              "receipt": ".artifacts/capacity-unbounding/round4-repairs-20261029/verification-receipt-round2.json",
+              "receipt_bytes": 2015,
+              "receipt_sha256": "f6cb270bc9fb9a17ebfa644a968a2b1e7995117ed3456bed452d1432836d982b",
+              "log": ".artifacts/capacity-unbounding/round4-repairs-20261029/focused-tests-round2.log",
+              "log_bytes": 3668,
+              "log_sha256": "6ac951fa1db2fb5e50e27d47f6cb11d31266030ff4e4563238529eef269299b8",
+              "driver_joined_exit_code": 1,
+              "driver_join_request": "capacity-resume-1029-503",
+              "elapsed_nanoseconds": "77689074014",
+              "summaries": [
+                "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2836 filtered out; finished in 0.63s",
+                "test result: FAILED. 6 passed; 1 failed; 0 ignored; 0 measured; 345 filtered out; finished in 52.40s"
+              ],
+              "passed_tests": [
+                "platform::control::change::references::tests::named_reference_decoding_rejects_cycles_collisions_wrong_classes_and_raw_exhaustion",
+                "native_declarations::native_input_admission_crosses_former_byte_boundary_without_publication",
+                "copied_binary_rediscovers_normalized_names_and_relations_without_query_writes",
+                "structural_cli::copied_binary_checks_expanded_type_extent_and_effect_reference_integrity",
+                "native_declarations::native_named_drafts::named_drafts_keep_module_target_and_declaration_namespaces_distinct",
+                "structural_cli::copied_binary_admits_depth_and_unmetered_growth_and_enforces_explicit_identity_policy",
+                "native_elf::native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter"
+              ],
+              "failed_tests": [
+                "capabilities_discovery_is_compact_focused_and_exportable"
+              ],
+              "library": {
+                "passed": 1,
+                "failed": 0,
+                "ignored": 0,
+                "filtered_out": 2836,
+                "test_runtime_seconds": 0.63
+              },
+              "public_cli": {
+                "passed": 6,
+                "failed": 1,
+                "ignored": 0,
+                "filtered_out": 345,
+                "test_runtime_seconds": 52.4
+              },
+              "failure_reason": "Capabilities assertion still expected the earlier operation inventory"
+            },
+            {
+              "iteration": 3,
+              "stage": "remaining capability test",
+              "status": "passed",
+              "tests": [
+                "capabilities_discovery_is_compact_focused_and_exportable"
+              ],
+              "summaries": [
+                "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 351 filtered out; finished in 0.09s"
+              ],
+              "passed": 1,
+              "failed": 0,
+              "ignored": 0,
+              "filtered_out": 351,
+              "test_runtime_seconds": 0.09,
+              "command_elapsed_nanoseconds": "24712760982",
+              "log": ".artifacts/capacity-unbounding/round4-repairs-20261029/focused-tests-round3.log",
+              "log_bytes": 394,
+              "log_sha256": "7b1722a2e8eb049d0f18ece94c958d51c8df2c4bec66eb49b35c8136261a78ed"
+            }
+          ],
+          "completed_verification": {
+            "path": ".artifacts/capacity-unbounding/round4-repairs-20261029/verification-receipt-round3.json",
+            "bytes": 7881,
+            "sha256": "781c060d2465944d4301039f7e86b4ac4a9acd177ece9d7434fbdc698a3766eb",
+            "status": "passed",
+            "driver_joined_exit_code": 0,
+            "driver_join_request": "capacity-resume-1029-517",
+            "helper_sha256": "0e0fb1c878b419934a0d055c1004645a7b4352cc9ffbb1ff1f2454f38cb4327f",
+            "product_binary_sha256": "40ac2639720ff6aafeb7a216acb13b81f73582dc960026367dc4175f19f72b72",
+            "operations": [
+              {
+                "name": "focused-tests",
+                "executable": "cargo",
+                "argv": [
+                  "test",
+                  "--release",
+                  "--locked",
+                  "--test",
+                  "public_cli",
+                  "--",
+                  "--exact",
+                  "--test-threads=4",
+                  "capabilities_discovery_is_compact_focused_and_exportable"
+                ],
+                "log": ".artifacts/capacity-unbounding/round4-repairs-20261029/focused-tests-round3.log",
+                "status": "passed",
+                "exit_code": 0,
+                "signal": null,
+                "elapsed_nanoseconds": "24712760982",
+                "log_sha256": "7b1722a2e8eb049d0f18ece94c958d51c8df2c4bec66eb49b35c8136261a78ed",
+                "log_bytes": 394
+              },
+              {
+                "name": "clippy",
+                "executable": "cargo",
+                "argv": [
+                  "clippy",
+                  "--release",
+                  "--locked",
+                  "--workspace",
+                  "--all-targets",
+                  "--all-features",
+                  "--",
+                  "-D",
+                  "warnings"
+                ],
+                "log": ".artifacts/capacity-unbounding/round4-repairs-20261029/clippy-round3.log",
+                "status": "passed",
+                "exit_code": 0,
+                "signal": null,
+                "elapsed_nanoseconds": "38477898328",
+                "log_sha256": "2a5508e454d40ceeab2b206736aa3da6178b834d1af96c838509df9e927872d2",
+                "log_bytes": 216
+              },
+              {
+                "name": "verifier-build",
+                "executable": "cargo",
+                "argv": [
+                  "build",
+                  "--release",
+                  "--locked",
+                  "-p",
+                  "lkjscript-dev",
+                  "--bin",
+                  "lkjscript-dev"
+                ],
+                "log": ".artifacts/capacity-unbounding/round4-repairs-20261029/verifier-build-round3.log",
+                "status": "passed",
+                "exit_code": 0,
+                "signal": null,
+                "elapsed_nanoseconds": "189970776717",
+                "log_sha256": "76c241b5eb4d3f6da6eb236be80fafd75d73f355ccc4ce3f8b79184d2df69018",
+                "log_bytes": 216
+              },
+              {
+                "name": "pure-tail",
+                "executable": "/home/coder/workspace/lkjscript/target/release/lkjscript-dev",
+                "argv": [
+                  "pure-tail",
+                  "--evidence-root",
+                  "/home/coder/workspace/lkjscript/.artifacts/capacity-unbounding/round4-repairs-20261029/pure-tail",
+                  "--machine"
+                ],
+                "log": ".artifacts/capacity-unbounding/round4-repairs-20261029/pure-tail-round3.log",
+                "status": "passed",
+                "exit_code": 0,
+                "signal": null,
+                "elapsed_nanoseconds": "48700706647",
+                "log_sha256": "da88bbab14758cce30d7f3a1c2a0718fc15256136a4d7d896abf412a5431bece",
+                "log_bytes": 278
+              },
+              {
+                "name": "generate-discovery",
+                "executable": "/home/coder/workspace/lkjscript/target/release/lkjscript",
+                "argv": [
+                  "capabilities",
+                  "--generate-docs",
+                  "docs/generated"
+                ],
+                "log": ".artifacts/capacity-unbounding/round4-repairs-20261029/generate-discovery-round3.log",
+                "status": "passed",
+                "exit_code": 0,
+                "signal": null,
+                "elapsed_nanoseconds": "941449012",
+                "log_sha256": "67f741e4deb41cf4c584d97412a35555453690f6ce471407b36eaf6dfccea5ad",
+                "log_bytes": 1492
+              },
+              {
+                "name": "verify-discovery",
+                "executable": "/home/coder/workspace/lkjscript/target/release/lkjscript",
+                "argv": [
+                  "capabilities",
+                  "--verify-generated",
+                  "docs/generated"
+                ],
+                "log": ".artifacts/capacity-unbounding/round4-repairs-20261029/verify-discovery-round3.log",
+                "status": "passed",
+                "exit_code": 0,
+                "signal": null,
+                "elapsed_nanoseconds": "851853919",
+                "log_sha256": "fa6712b234c47a36ba025dfe17558bf6fe3519a75d4e613cc8e27a04288fe2e9",
+                "log_bytes": 1479
+              }
+            ],
+            "scope": "Focused controls, Clippy, verifier build, separately invoked pure-tail semantics and public discovery generation/verification; not the source-bound full gate run"
+          }
+        },
+        "final_source_sha256": {
+          "src/platform/control/change/references/tests.rs": "2d54504a9894c921bb427d41c156a5a461798f184bafd525da72e87e2643f7fd",
+          "tests/public_cli.rs": "1dba21126e6b6cf842cd57889caf4cd8c1a49d2a2718dbbd08bb6353c0b23140",
+          "tests/structural_cli.rs": "d587237e46d6626cfc08aeaf31d6fec7b2c843cf057ac318343a6942173e4a45",
+          "tests/public_cli/native_declarations.rs": "29430e6ff3ae5e4070a43a4a051ab829310cdeaf161ea15cfda40445a8f75c15",
+          "tests/public_cli/native_named_drafts.rs": "9fec72d4e3f6414c54c5c416f029c6a5215cbfb0788230553d6d55eb493f42e7",
+          "src/platform/contract/registry.rs": "48d805f08bfcaa418baa2012bafbd3198a73a8429ec78888fb69213ce81b83db",
+          "tests/public_cli/native_elf.rs": "eb914c26a1ee77709c404afffebff541a59e137cbe781ba06dda34b3363ad809"
+        },
+        "test_only_followups": [
+          {
+            "reason": "Replace private ChangeBudget type access with the literal 46-name public contract; no production API widening",
+            "receipt": ".artifacts/capacity-unbounding/round4-repairs-20261029/public-policy-repair-receipt.json",
+            "receipt_sha256": "549e2df694a57366fffd61f83e3ce8709b41747c3dddf0e2de58a79805859026",
+            "bundle_sha256": "075f3af03a1df13f13724e91c6ad4de237e83c0b51aed676cdc01ee7a45ea5e3",
+            "changes": [
+              {
+                "path": "tests/public_cli.rs",
+                "before_sha256": "1ede746d697a84084b164c3872542fea874363d3ef8e7c9603a51c81affe1f3f",
+                "proposed_sha256": "54d08232e2f39340eedef5d3e352e5c3d009bf7180a919231a48346244e21216",
+                "formatted_sha256": "54d08232e2f39340eedef5d3e352e5c3d009bf7180a919231a48346244e21216"
+              }
+            ],
+            "joined_exit_code": 0,
+            "joined_request": "capacity-resume-1029-500"
+          },
+          {
+            "reason": "Correct the four stale operation/field/form inventory expectations against actual public discovery",
+            "receipt": ".artifacts/capacity-unbounding/round4-repairs-20261029/operation-inventory-repair-receipt.json",
+            "receipt_sha256": "6b2664b53071d0ded659c07daceb5337acaa21bd00aa37f616763d02e1cf2c6a",
+            "bundle_sha256": "867fc590fba72700fd90bc91ba212df5023afcc91b92b310f2cdf9cd686aeb66",
+            "changes": [
+              {
+                "path": "tests/public_cli.rs",
+                "before_sha256": "54d08232e2f39340eedef5d3e352e5c3d009bf7180a919231a48346244e21216",
+                "proposed_sha256": "1dba21126e6b6cf842cd57889caf4cd8c1a49d2a2718dbbd08bb6353c0b23140",
+                "formatted_sha256": "1dba21126e6b6cf842cd57889caf4cd8c1a49d2a2718dbbd08bb6353c0b23140"
+              }
+            ],
+            "joined_exit_code": 0,
+            "joined_request": "capacity-resume-1029-510"
+          }
+        ]
+      },
+      "execution_observation_discovery": {
+        "status": "Production correction applied and formatted; public uniqueness/metadata regression, runtime inventory and separately invoked pure-tail semantics passed",
+        "defect": "Duplicate scalar allocated-byte and collection-item observations after saturation metadata additions; a production defect correctly rejected by the strict pure-tail consumer",
+        "baseline_inventory": {
+          "records": 74,
+          "distinct_record_field_keys": 70,
+          "duplicate_keys": 4,
+          "scope": "Captured pre-repair discovery"
+        },
+        "correction": "Retain units and exactness in one observation per (record, field); preserve 70 distinct keys and the strict pure-tail consumer assertion",
+        "receipt": {
+          "receipt": ".artifacts/capacity-unbounding/round4-repairs-20261029/discovery-repair-receipt.json",
+          "receipt_sha256": "7d77a0a74ae0c5877e927e4f2fb91c55f7b80c8809dad7c664f62737cefb282e",
+          "report": {
+            "schema": "lkjscript.capacity-unbounding.discovery-repair.v1",
+            "status": "applied-and-formatted",
+            "started_at": "2026-10-29T05:29:07.302Z",
+            "prior_application_sha256": "0b95b2e962415b34be2f9392df2c31a467ee20196f31b33b27231d5deef728e0",
+            "bundle_sha256": "70d179fa7ee828477a3d4a88b9417275561350a8b5afa1df2ad1898625544d10",
+            "changes": [
+              {
+                "path": "src/platform/contract/registry.rs",
+                "before_sha256": "c6996b6d7c07b7395774574ed8e4154571d96e7ea874f53fc0c599ab31c507ed",
+                "proposed_sha256": "48d805f08bfcaa418baa2012bafbd3198a73a8429ec78888fb69213ce81b83db",
+                "formatted_sha256": "48d805f08bfcaa418baa2012bafbd3198a73a8429ec78888fb69213ce81b83db"
+              },
+              {
+                "path": "tests/public_cli.rs",
+                "before_sha256": "028d43de912d18a20658e0b31f8fe4314176168c272784024d864b27c71d9e5c",
+                "proposed_sha256": "1ede746d697a84084b164c3872542fea874363d3ef8e7c9603a51c81affe1f3f",
+                "formatted_sha256": "1ede746d697a84084b164c3872542fea874363d3ef8e7c9603a51c81affe1f3f"
+              }
+            ],
+            "completed_at": "2026-10-29T05:29:11.881Z"
+          },
+          "joined_exit_code": 0,
+          "joined_request": "capacity-resume-1029-484"
+        },
+        "regression": "Existing public capability discovery test enforces uniqueness and metadata",
+        "actual_repaired_runtime_inventory": {
+          "path": ".artifacts/capacity-unbounding/round4-repairs-20261029/observation-inventory.json",
+          "bytes": 2530,
+          "sha256": "f7d231bfc9e7290432cfb067491e58d35ff2781fa702ee65cd07d2d6304eb8fb",
+          "schema": "lkjscript.capacity-unbounding.observation-inventory.v1",
+          "status": "passed",
+          "observed_at": "2026-10-29T05:49:52.507Z",
+          "source_registry_sha256": "48d805f08bfcaa418baa2012bafbd3198a73a8429ec78888fb69213ce81b83db",
+          "product_sha256": "40ac2639720ff6aafeb7a216acb13b81f73582dc960026367dc4175f19f72b72",
+          "stdout_bytes": 25660,
+          "stdout_sha256": "16d094b3cd11039feec00698e905e4d16035b45564cf19c1b804f7ff6b0c50b5",
+          "observations": 70,
+          "distinct_keys": 70,
+          "duplicates": 0,
+          "cumulative": [
+            {
+              "field": "production-allocated-bytes",
+              "unit": "cumulative-byte",
+              "scalar": "execution.observation record=execution field=production-allocated-bytes scalar=nonnegative-integer maximum=18446744073709551615 saturation-field=production-allocated-bytes-saturated unit=cumulative-byte permission=none",
+              "exactness": "execution.observation record=execution field=production-allocated-bytes-saturated scalar=boolean semantics=false-exact-true-lower-bound permission=none"
+            },
+            {
+              "field": "production-collection-items",
+              "unit": "cumulative-item",
+              "scalar": "execution.observation record=execution field=production-collection-items scalar=nonnegative-integer maximum=18446744073709551615 saturation-field=production-collection-items-saturated unit=cumulative-item permission=none",
+              "exactness": "execution.observation record=execution field=production-collection-items-saturated scalar=boolean semantics=false-exact-true-lower-bound permission=none"
+            },
+            {
+              "field": "reference-allocated-bytes",
+              "unit": "cumulative-byte",
+              "scalar": "execution.observation record=execution field=reference-allocated-bytes scalar=nonnegative-integer maximum=18446744073709551615 saturation-field=reference-allocated-bytes-saturated unit=cumulative-byte permission=none",
+              "exactness": "execution.observation record=execution field=reference-allocated-bytes-saturated scalar=boolean semantics=false-exact-true-lower-bound permission=none"
+            },
+            {
+              "field": "reference-collection-items",
+              "unit": "cumulative-item",
+              "scalar": "execution.observation record=execution field=reference-collection-items scalar=nonnegative-integer maximum=18446744073709551615 saturation-field=reference-collection-items-saturated unit=cumulative-item permission=none",
+              "exactness": "execution.observation record=execution field=reference-collection-items-saturated scalar=boolean semantics=false-exact-true-lower-bound permission=none"
+            }
+          ]
+        },
+        "pure_tail": {
+          "path": ".artifacts/capacity-unbounding/round4-repairs-20261029/pure-tail/receipt.json",
+          "bytes": 10366172,
+          "sha256": "ff9c0e9aa46211f01d9ea74b73f4548c195811e59a01ae7d7bbac1d52478581c",
+          "status": "fresh passed",
+          "verifier_sha256": "ce1530f6d3370aed0bfbc02f9ed43845dc832087a9828187bf75408a11a60019",
+          "command_elapsed_nanoseconds": "48700706647",
+          "semantic_elapsed_nanoseconds": 48229136030,
+          "commands": 82,
+          "files": 195,
+          "source_batch_result_rows": 111,
+          "checked_value_discovery": {
+            "classification": "fresh passed",
+            "observation_fields": 36
+          },
+          "source_authority_unchanged": true,
+          "source_authority_before": {
+            "files": 14,
+            "bytes": 2396262,
+            "head_sha256": "7bb7b2ee01dac03bbfbf4f9129af1ab93d56ed0a5c18c5ebdcbaa74f44c5988f",
+            "inventory_sha256": "09cffde5f48fcbdf8ded67c380b173a3df978e0b430c595f458041e82b20fb4f"
+          },
+          "source_authority_after": {
+            "files": 14,
+            "bytes": 2396262,
+            "head_sha256": "7bb7b2ee01dac03bbfbf4f9129af1ab93d56ed0a5c18c5ebdcbaa74f44c5988f",
+            "inventory_sha256": "09cffde5f48fcbdf8ded67c380b173a3df978e0b430c595f458041e82b20fb4f"
+          },
+          "source_batch_result_bytes": 1199956,
+          "source_batch_result_sha256": "5c0591e9e3069cf0be02894fe15deb0566b6bd79adae562c58f679b1154d7c4a",
+          "cleanup_complete": true,
+          "isolated_root": "/tmp/lkjscript-pure-tail-nRKZvD",
+          "isolated_root_exists": false,
+          "scope": "Separately invoked pure-tail semantic check; full fresh gate acceptance remains required"
+        },
+        "generated_documentation": {
+          "status": "Published and verified",
+          "route": "public owner",
+          "generated_documents": 8,
+          "product_binary_sha256": "40ac2639720ff6aafeb7a216acb13b81f73582dc960026367dc4175f19f72b72",
+          "capabilities_digest": "8f83c580617ae792d2781460722bfa0d3c3a2a8c480ab62719ae5984a232a85c",
+          "files": [
+            {
+              "path": "docs/generated/builtin-standard.md",
+              "bytes": 267322,
+              "sha256": "6c955be48e01748ee823d0fe262ddd553553c0ae1b062338d266fcfd4a42c180"
+            },
+            {
+              "path": "docs/generated/change-grammar.md",
+              "bytes": 161975,
+              "sha256": "0cc4a9780e5e3cec3a35bcc6ac53a5bafacea9d0e4c5c1d91b7b7d7e851037b6"
+            },
+            {
+              "path": "docs/generated/deployment.md",
+              "bytes": 21640,
+              "sha256": "7d83df6397b950693240f331f1cc7101c10c5856b4a111eca6b7e0595860e304"
+            },
+            {
+              "path": "docs/generated/diagnostics.md",
+              "bytes": 227331,
+              "sha256": "7424ea4a97f48b70e075b8a7969c2f50e9b2b71efdcb59fff42828c4e0833807"
+            },
+            {
+              "path": "docs/generated/function-definition.md",
+              "bytes": 27223,
+              "sha256": "76775cc78d09044df3c512a2f0160ce2068a4ff5acdf048a7e80148165780185"
+            },
+            {
+              "path": "docs/generated/nostr-relay-info-authoring.md",
+              "bytes": 3575,
+              "sha256": "f0f07d51886aba95a467f0406b0b05c32a95035ebe870dd034cab0162371a6f3"
+            },
+            {
+              "path": "docs/generated/operations.md",
+              "bytes": 33706,
+              "sha256": "c4b9d60d6b675d268616ceda83af91843e00085b565cd1d4ba62b7d97f031f5f"
+            },
+            {
+              "path": "docs/generated/stateful-http-authoring.md",
+              "bytes": 5384,
+              "sha256": "25ecd457d27391373f9ee5dff412ca97738d77485d5bff556d27feada2efb232"
+            }
+          ],
+          "generation_command_elapsed_nanoseconds": "941449012",
+          "verification_command_elapsed_nanoseconds": "851853919",
+          "operation_logs": "acceptance_repairs.public_policy_and_native_fixtures.validation.completed_verification.operations"
+        }
+      }
+    }
+  }
+}

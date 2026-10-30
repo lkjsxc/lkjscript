@@ -326,7 +326,7 @@ fn native_plan_reuse_cancellation_reaches_canonical_reread_and_recovers() {
         fn read(
             &self,
             key: ObjectKey,
-            maximum: usize,
+            maximum: Option<usize>,
             work: &mut StoreWork,
         ) -> Result<Option<Vec<u8>>, StoreError> {
             self.read_admitted(key, maximum, &mut StoreReadAdmission::unbounded(), work)
@@ -334,7 +334,7 @@ fn native_plan_reuse_cancellation_reaches_canonical_reread_and_recovers() {
         fn read_admitted(
             &self,
             key: ObjectKey,
-            maximum: usize,
+            maximum: Option<usize>,
             admission: &mut StoreReadAdmission,
             work: &mut StoreWork,
         ) -> Result<Option<Vec<u8>>, StoreError> {

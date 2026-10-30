@@ -200,11 +200,14 @@ declarations.end"#)).unwrap();
         let count = wide_at(&payload, 96) as usize;
         let declarations = wide_at(&payload, 88) as usize;
         let nodes = wide_at(&payload, 104) as usize;
-        let probe = (0..count).find(|&f| {
-            let at = declarations + f * input::FUNCTION_BYTES;
-            let first = wide_at(&payload, at + 32) as usize;
-            wide_at(&payload, at + 40) == 2 && wide_at(&payload, nodes + first * input::NODE_BYTES) == 1
-        }).unwrap();
+        let probe = (0..count)
+            .find(|&f| {
+                let at = declarations + f * input::FUNCTION_BYTES;
+                let first = wide_at(&payload, at + 32) as usize;
+                wide_at(&payload, at + 40) == 2
+                    && wide_at(&payload, nodes + first * input::NODE_BYTES) == 1
+            })
+            .unwrap();
         // Read the source compiler's measured layout through an independently
         // admitted probe, rather than reconstructing its code-selection sizes.
         let layout = measured_layout(&payload);
@@ -217,7 +220,6 @@ declarations.end"#)).unwrap();
         assert_eq!(result.stdout, b"8", "depth {depth}");
     }
 }
-
 
 #[test]
 fn selfhost_closure_rejects_unsupported_untaken_syntax_and_unregistered_intrinsics() {
@@ -245,10 +247,16 @@ pub(super) fn wide_parameter_source() -> String {
     use std::fmt::Write;
     let mut text = String::from("declarations.begin\n(units (module create wide-frame ");
     text.push_str("(function create select (visibility public) (effect pure) ");
-    for parameter in 0..256 { write!(text, "(parameter create p{parameter} (type I64)) ").unwrap(); }
-    text.push_str("(returns I64) (body (let (binding held (type I64) (local p255)) (in (local held))))) ");
+    for parameter in 0..256 {
+        write!(text, "(parameter create p{parameter} (type I64)) ").unwrap();
+    }
+    text.push_str(
+        "(returns I64) (body (let (binding held (type I64) (local p255)) (in (local held))))) ",
+    );
     text.push_str("(function create entry (visibility public) (effect pure) (returns I64) (body (call select ");
-    for argument in 0..256 { write!(text, "(i64 {argument}) ").unwrap(); }
+    for argument in 0..256 {
+        write!(text, "(i64 {argument}) ").unwrap();
+    }
     text.push_str("))) (component create app (visibility public) (port create run (type (function () I64)) (function entry)))) ");
     text.push_str("(target create wide-main (component wide-frame::app) (runner command) (port wide-frame::app::run)))\ndeclarations.end\n");
     text
@@ -263,10 +271,19 @@ fn selfhost_closure_executes_more_than_128_parameters_locals_and_stack_cells() {
     let bytes = input::export(&program, index).unwrap();
     let functions = wide_at(&bytes, 96) as usize;
     let declarations = wide_at(&bytes, 88) as usize;
-    assert!((0..functions).any(|f| wide_at(&bytes, declarations + f * input::FUNCTION_BYTES + 16) == 256));
-    assert!((0..functions).any(|f| wide_at(&bytes, declarations + f * input::FUNCTION_BYTES + 24) > 256));
+    assert!(
+        (0..functions)
+            .any(|f| wide_at(&bytes, declarations + f * input::FUNCTION_BYTES + 16) == 256)
+    );
+    assert!(
+        (0..functions)
+            .any(|f| wide_at(&bytes, declarations + f * input::FUNCTION_BYTES + 24) > 256)
+    );
     let nodes = wide_at(&bytes, 104) as usize;
-    assert!((0..wide_at(&bytes, 120) as usize).any(|i| wide_at(&bytes, nodes + i * input::NODE_BYTES + 56) >= 256));
+    assert!(
+        (0..wide_at(&bytes, 120) as usize)
+            .any(|i| wide_at(&bytes, nodes + i * input::NODE_BYTES + 56) >= 256)
+    );
     let (code, image) = compile(&bytes);
     assert_eq!(code, 0);
     let output = execute(&image, &[]);
@@ -275,19 +292,54 @@ fn selfhost_closure_executes_more_than_128_parameters_locals_and_stack_cells() {
     assert!(output.stderr.is_empty());
     let control = ExecutionControl::uncancelled();
     let policy = NormalizedRunPolicy::foreground();
-    let vm = NormalizedVm::for_test(&program, policy).invoke(declaration, vec![], None, &control).unwrap();
+    let vm = NormalizedVm::for_test(&program, policy)
+        .invoke(declaration, vec![], None, &control)
+        .unwrap();
     let reference = NormalizedReferenceInterpreter::new(&source, &program, policy)
-        .invoke(declaration, vec![], None, &control).unwrap();
+        .invoke(declaration, vec![], None, &control)
+        .unwrap();
     assert_eq!(vm.0, NormalizedValue::I64(255));
     assert_eq!(reference.0, vm.0);
 }
 
 #[test]
 fn selfhost_wide_address_encodings_preserve_signed_boundaries_and_flags() {
-    let source = apply_proposals(&compiler().0, proposals::replay(include_str!(
-        "../../../../tests/fixtures/selfhost-wide-encoding-probes.lkjc")));
+    let source = apply_proposals(
+        &compiler().0,
+        proposals::replay(include_str!(
+            "../../../../tests/fixtures/selfhost-wide-encoding-probes.lkjc"
+        )),
+    );
     let program = prepare_snapshot(&source);
-    let declaration = declaration_named(&source, "assemble");
+    // The maintained compiler also declares assemble; resolve this fixture's module.
+    let module = source
+        .owners
+        .iter()
+        .find_map(|(key, record)| match (key, record) {
+            (OwnerKey::Module(id), OwnerRecord::Module(record))
+                if record.name.as_str() == "wide-encoding-probe" =>
+            {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .unwrap();
+    let declaration = source
+        .owners
+        .iter()
+        .find_map(|(key, record)| match (key, record) {
+            (OwnerKey::Declaration(id), OwnerRecord::Declaration(record))
+                if record.module == module && record.name.as_str() == "assemble" =>
+            {
+                Some(*id)
+            }
+            _ => None,
+        })
+        .unwrap();
+    let declaration = DeclarationReference {
+        package: source.root.package_id,
+        declaration,
+    };
     let index = program.function(declaration).unwrap().0 as usize;
     let payload = input::export(&program, index).unwrap();
     let (code, image) = compile(&payload);
@@ -298,8 +350,9 @@ fn selfhost_wide_address_encodings_preserve_signed_boundaries_and_flags() {
 
     // Independent x86-64 instruction bytes: movabs R11, LEA with an R11 index,
     // then load/store. LEA preserves arithmetic flags; no ADD synthesizes addresses.
-    let mut expected = vec![0x48, 0x8b, 0x85, 0xff, 0xff, 0xff, 0x7f,
-        0x48, 0x8b, 0x85, 0x00, 0x00, 0x00, 0x80];
+    let mut expected = vec![
+        0x48, 0x8b, 0x85, 0xff, 0xff, 0xff, 0x7f, 0x48, 0x8b, 0x85, 0x00, 0x00, 0x00, 0x80,
+    ];
     for (displacement, opcode) in [(2_147_483_648i64, 0x8b), (-2_147_483_649, 0x89)] {
         expected.extend_from_slice(&[0x49, 0xbb]);
         expected.extend_from_slice(&displacement.to_le_bytes());
@@ -311,7 +364,9 @@ fn selfhost_wide_address_encodings_preserve_signed_boundaries_and_flags() {
     expected.extend_from_slice(&[0x4c, 0x01, 0xdc]); // ADD RSP,R11
     let absolute = 4_194_304u64 + 4_294_967_296;
     for conditional in [false, true] {
-        if conditional { expected.extend_from_slice(&[0x75, 13]); } // inverted JE
+        if conditional {
+            expected.extend_from_slice(&[0x75, 13]);
+        } // inverted JE
         expected.extend_from_slice(&[0x49, 0xbb]);
         expected.extend_from_slice(&absolute.to_le_bytes());
         expected.extend_from_slice(&[0x41, 0xff, 0xe3]);
@@ -320,10 +375,16 @@ fn selfhost_wide_address_encodings_preserve_signed_boundaries_and_flags() {
     let control = ExecutionControl::uncancelled();
     let policy = NormalizedRunPolicy::foreground();
     let arguments = vec![NormalizedValue::bytes(&b""[..])];
-    let vm = NormalizedVm::for_test(&program, policy).invoke(declaration, arguments.clone(), None, &control).unwrap();
+    let vm = NormalizedVm::for_test(&program, policy)
+        .invoke(declaration, arguments.clone(), None, &control)
+        .unwrap();
     let reference = NormalizedReferenceInterpreter::new(&source, &program, policy)
-        .invoke(declaration, arguments, None, &control).unwrap();
+        .invoke(declaration, arguments, None, &control)
+        .unwrap();
     assert_eq!(vm.0, reference.0);
-    let NormalizedValue::Record(NormalizedRecord::Structural { fields }) = vm.0 else { panic!("assembly output"); };
-    assert!(fields.iter().any(|(name, value)| name.as_str() == "image" && value == &NormalizedValue::bytes(expected.as_slice())));
+    let NormalizedValue::Record(NormalizedRecord::Structural { fields }) = vm.0 else {
+        panic!("assembly output");
+    };
+    assert!(fields.iter().any(|(name, value)| name.as_str() == "image"
+        && value == &NormalizedValue::bytes(expected.as_slice())));
 }

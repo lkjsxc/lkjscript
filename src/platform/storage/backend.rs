@@ -136,7 +136,7 @@ impl ImmutableObjectStore for StorageBackend {
     fn read(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         self.read_admitted(
@@ -150,7 +150,7 @@ impl ImmutableObjectStore for StorageBackend {
     fn read_admitted(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         admission: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
@@ -158,12 +158,15 @@ impl ImmutableObjectStore for StorageBackend {
             Self::Disk(store) => store.read_admitted(key, maximum_bytes, admission, work),
             Self::Memory(store) => {
                 admission.admit_catalog_lookup()?;
-                work.add(crate::platform::storage::object::StoreWork { catalog_lookups: 1, ..crate::platform::storage::object::StoreWork::default() });
+                work.add(crate::platform::storage::object::StoreWork {
+                    catalog_lookups: 1,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
                 let Some(value) = store.objects.get(&key) else {
                     return Ok(None);
                 };
                 let bytes = value.as_slice();
-                if bytes.len() > maximum_bytes {
+                if maximum_bytes.is_some_and(|maximum| bytes.len() > maximum) {
                     return Err(memory_error(
                         StoreErrorClass::Resource,
                         "memory_read_limit",
@@ -172,9 +175,15 @@ impl ImmutableObjectStore for StorageBackend {
                 }
                 admission.admit_object(bytes.len())?;
                 value.verify(key)?;
-                work.add(crate::platform::storage::object::StoreWork { objects_read: 1, ..crate::platform::storage::object::StoreWork::default() });
-                work.add(crate::platform::storage::object::StoreWork { bytes_read: bytes.len() as u64, ..crate::platform::storage::object::StoreWork::default() });
-                Ok(Some(bytes.to_vec()))
+                work.add(crate::platform::storage::object::StoreWork {
+                    objects_read: 1,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
+                work.add(crate::platform::storage::object::StoreWork {
+                    bytes_read: bytes.len() as u64,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
+                Ok(Some(super::object::copy_object_bytes(bytes)?))
             }
         }
     }
@@ -193,7 +202,10 @@ impl ImmutableObjectStore for StorageBackend {
             Self::Disk(store) => store.contains_admitted(key, admission, work),
             Self::Memory(store) => {
                 admission.admit_catalog_lookup()?;
-                work.add(crate::platform::storage::object::StoreWork { catalog_lookups: 1, ..crate::platform::storage::object::StoreWork::default() });
+                work.add(crate::platform::storage::object::StoreWork {
+                    catalog_lookups: 1,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
                 Ok(store.objects.get(&key).is_some())
             }
         }
@@ -220,11 +232,17 @@ impl ImmutableObjectStore for StorageBackend {
             Self::Memory(store) => {
                 key.verify(bytes)?;
                 admission.admit_catalog_lookup()?;
-                work.add(crate::platform::storage::object::StoreWork { catalog_lookups: 1, ..crate::platform::storage::object::StoreWork::default() });
+                work.add(crate::platform::storage::object::StoreWork {
+                    catalog_lookups: 1,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
                 if let Some(existing) = store.objects.get(&key) {
                     admission.admit_object(existing.as_slice().len())?;
                     existing.verify(key)?;
-                    work.add(crate::platform::storage::object::StoreWork { objects_read: 1, ..crate::platform::storage::object::StoreWork::default() });
+                    work.add(crate::platform::storage::object::StoreWork {
+                        objects_read: 1,
+                        ..crate::platform::storage::object::StoreWork::default()
+                    });
                     work.bytes_read = work
                         .bytes_read
                         .saturating_add(existing.as_slice().len() as u64);
@@ -235,13 +253,22 @@ impl ImmutableObjectStore for StorageBackend {
                             "existing immutable object has foreign bytes",
                         ));
                     }
-                    work.add(crate::platform::storage::object::StoreWork { objects_reused: 1, ..crate::platform::storage::object::StoreWork::default() });
+                    work.add(crate::platform::storage::object::StoreWork {
+                        objects_reused: 1,
+                        ..crate::platform::storage::object::StoreWork::default()
+                    });
                     return Ok(StageOutcome::Reused);
                 }
                 store.objects.insert(key, bytes)?;
                 store.staged += 1;
-                work.add(crate::platform::storage::object::StoreWork { objects_staged: 1, ..crate::platform::storage::object::StoreWork::default() });
-                work.add(crate::platform::storage::object::StoreWork { bytes_staged: bytes.len() as u64, ..crate::platform::storage::object::StoreWork::default() });
+                work.add(crate::platform::storage::object::StoreWork {
+                    objects_staged: 1,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
+                work.add(crate::platform::storage::object::StoreWork {
+                    bytes_staged: bytes.len() as u64,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
                 Ok(StageOutcome::Inserted)
             }
         }

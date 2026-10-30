@@ -1,6 +1,9 @@
 # Current-format policy receipts through public source republication
 
-Status: implementation under verification; no maintained project has been republished yet.
+Updated 2026-10-29 (Asia/Tokyo).
+Status: all six maintained projects publicly republished and independently re-exported on
+2026-10-27. Compiler proposals were subsequently adopted through public authoring;
+their changed meaning and full staged-tree acceptance remain separate from the receipt-only cut.
 
 ## Problem and authority
 
@@ -96,3 +99,79 @@ keyed retry rejection, malformed/truncated and foreign source transport refusal,
 previsibility storage/HEAD failures, post-rename recovery, and two concurrent republications of
 the same pinned head. Normal repository durability, source transport, authoring, selfhost and
 release gates remain required before sealing the cut.
+
+## Observed maintained-project cutover
+
+The [machine-readable evidence](20261027-policy-publication-evidence.json) records all six
+input/output HEAD hashes, transport/container identities, semantic-state commitments, complete
+source inventories, bootstrap hashes and public-operation outcomes. Every saved export still
+matched both its recorded immutable container and the live pre-cut HEAD. Export reconstruction
+was unnecessary, and no transitional receipt reader was introduced.
+
+All six republications and current-only reopening exports succeeded. Each stale pinned
+republication rejected with `publication_republish_stale` and left the new HEAD unchanged.
+For each complete transport closure, every Owner, Type, Blob, Dependency and Retirement object
+key, byte length and independent SHA-256 matched before and after. These complete-container
+counts include transitive suppliers; the receipt separately records local inventories.
+
+Five projects were already semantic genesis revisions and retained their semantic revision IDs
+while their receipt-bearing HEAD records changed. The selfhost revision became
+`rev_016c676fe85bfdc2a476b222ba26a3c6017863ef0a8b1fa8aeb0d46c183967f1`; its semantic state remains
+`semantic_state_50c336e1c41ed4515a9ccb5c9db482c48f84513296d0dd22189e8dbc1e4b8cd5`.
+Prepared publication compares the complete expected `HeadRecord`, including its record digest;
+semantic revision equality alone is not permission to reuse a pre-cut prepared change.
+
+## Subsequent compiler source adoption
+
+After republication, one public transaction adopted 243 changed/new declarations across 44 modules,
+including complete final parameter orders and explicit deletion of three obsolete parameters and
+two obsolete functions. It accepted revision
+`rev_e5fa56ece633987cb2f62a3e7cdda4aec58fa74aa9cc7008f71682ca289b2f51`, with HEAD hash
+`f5436f724c2a88123f5db0ade85ec23af808a9dc70635beb490198c688027507`.
+This was an ordinary semantic publication: its 13,654 created owners and 239 updates are not
+part of the identity-preserving receipt republication. The pre-adoption hashes and inventories
+above remain historical cutover evidence. The transaction selected no project tests.
+
+Subsequent public readback verified nine owner pages containing 35,952 live owners, all 2,832
+expected namespace entries and all 23 changed parameter orders. V3 completed at
+2026-10-28T08:48:25.740Z with status `revision-inventory-and-signatures-verified`; its receipt
+SHA-256 is `1aaa3d3ef1e5fe5906f75a0fd27d253bd0d7b80a8614cd5b3fc0164a1c50c428`.
+The reader executable is bound separately from the publication executable. Readback and public
+transport export left the accepted HEAD unchanged; the exported source container SHA-256 is
+`cce8632f8a18faa2da549a3df134a3b679966f0fba5cfb903fa440f3e7166981`.
+
+The new semantic state is
+`semantic_state_66d01c7280e302fa390e1449e148893c23b0aea46b1fb7c7dc9033cc81a318ec`,
+with 35,952 owners, 41 types and 24,864 retirements. This changed semantic inventory belongs to
+source adoption, not the receipt-only republication. Maintained proposal replay subsequently
+matched all 641 canonical units and the native backend closure. The focused Tier 1 measurement
+observed Mode0 profile6 C2 = C3 and Mode1 profile5 artifact C1 = C2 = C3; exact image hashes,
+measurement scope and remaining fixture/gate obligations are recorded in the
+[capacity ledger](20261025-capacity-unbounding.md). These observations do not establish raw-source
+Tier 2 self-compilation or final staged-tree acceptance.
+
+The [source adoption evidence](20261028-selfhost-adoption-evidence.json) retains the accepted
+revision, publication and reader executable hashes, changed parameter identities, transport
+digest and focused native outputs separately from the receipt republication evidence.
+
+The retirement-binding negative fixture, atomic memory replay and remaining definition-field
+descriptor corrections passed their focused controls, including all 641 canonical units and
+native diagnostic 12 for the hash-consistent final retirement mismatch. Applied followup
+corrections cover nested-record reconstruction stubs, the scoped wide-address probe and GC
+preparation exactness. The followup passed all 14 library and six real public CLI parameter/type
+tests. Subsequent public GC passed for all six repositories, preserving every HEAD and complete
+source transport SHA-256, digest and revision. Physical packs decreased from 662 files /
+499,175,240 bytes to eight files / 79,757,990 bytes; both reported saturation flags were false
+for every repository. The GC receipt SHA-256 is
+`915238fdee4c3f12ad0bd64acce6c9f465a9cd8e991b482d8333d2b9fa0c24b7`.
+
+All five maintained-asset comparisons matched exact bytes, and the public package checks
+passed 116 standard, 44 application and 176 package-plan tests with zero failures and equal
+differential results. The asset receipt SHA-256 is
+`2e11c863ec3f76f71795464daf3ae9935312b59ae05e102d6601f24a7c13608f`.
+Discovery regenerated all eight documents. These post-adoption maintenance observations are
+recorded separately in the integration evidence; the historical republication identities
+and evidence above remain unchanged. Physical GC/catalog capacity removal remains a separate
+storage obligation. Exact-tree bootstrap, literal selfhost verification, explicit ignored
+native measurement, changed checks, 29 fresh full gates with zero reuse, release target and
+acceptance remain pending.

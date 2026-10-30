@@ -74,7 +74,10 @@ pub(super) fn encode_budget(budget: ChangeBudget) -> Result<Vec<u8>, Diagnostic>
     for (_, maximum) in budget.policy_limits() {
         match maximum {
             None => writer.tag(0)?,
-            Some(maximum) => { writer.tag(1)?; writer.u64(maximum)?; }
+            Some(maximum) => {
+                writer.tag(1)?;
+                writer.u64(maximum)?;
+            }
         }
     }
     Ok(writer.finish())
@@ -104,16 +107,20 @@ impl Writer {
                 "authored request byte length overflowed",
             )
         })?;
-        if let Some(maximum) = self.maximum && required > maximum {
+        if let Some(maximum) = self.maximum
+            && required > maximum
+        {
             return Err(codec_error(
                 "change_authored_bytes",
-                format!(
-                    "authored request requires more than the {maximum}-byte encoding budget"
-                ),
+                format!("authored request requires more than the {maximum}-byte encoding budget"),
             ));
         }
-        self.bytes.try_reserve(bytes.len()).map_err(|_| codec_error(
-            "change_authored_allocation", "authored request encoding allocation failed"))?;
+        self.bytes.try_reserve(bytes.len()).map_err(|_| {
+            codec_error(
+                "change_authored_allocation",
+                "authored request encoding allocation failed",
+            )
+        })?;
         self.bytes.extend_from_slice(bytes);
         Ok(())
     }
@@ -855,6 +862,13 @@ impl Writer {
                 self.tag(17)?;
                 self.parameter_parent_selector(parent, definitions)?;
                 self.parameter(parameter, definitions)
+            }
+            AuthoredChange::SetParameterOrder { parent, parameters } => {
+                self.tag(106)?;
+                self.parameter_parent_selector(parent, definitions)?;
+                self.list(parameters, |writer, parameter| {
+                    writer.owner_selector(parameter, definitions)
+                })
             }
             AuthoredChange::AddRequirement {
                 component,
@@ -3025,6 +3039,59 @@ mod tests {
     }
 
     #[test]
+    fn parameter_order_intent_has_an_explicit_ordered_inventory_and_alpha_stable_symbols() {
+        let declaration = DeclarationId::migrate(b"parameter-order-codec", 1);
+        let first = ParameterId::migrate(b"parameter-order-codec", 2);
+        let second = ParameterId::migrate(b"parameter-order-codec", 3);
+        let change = |parameters| AuthoredChange::SetParameterOrder {
+            parent: ParameterParentSelector::Declaration {
+                declaration: DeclarationSelector::Id { declaration },
+            },
+            parameters,
+        };
+        let exact = |parameter| OwnerSelector::Exact {
+            owner: OwnerKey::Parameter(parameter),
+        };
+        let encode = |change| {
+            let mut writer = Writer::new(None);
+            writer.change(&change, &BTreeMap::new()).unwrap();
+            writer.finish()
+        };
+        let bytes = encode(change(vec![exact(second), exact(first)]));
+        let mut expected = vec![106, 1, 1];
+        expected.extend_from_slice(&declaration.bytes());
+        expected.extend_from_slice(&2_u64.to_be_bytes());
+        for parameter in [second, first] {
+            expected.extend_from_slice(&[1, OwnerKey::Parameter(parameter).identity_kind().tag()]);
+            expected.extend_from_slice(&parameter.bytes());
+        }
+        assert_eq!(bytes, expected);
+        assert_ne!(bytes, encode(change(vec![exact(first), exact(second)])));
+        assert_ne!(bytes, encode(change(Vec::new())));
+
+        let request = |module: &str, function: &str, parameter: &str, body: &str| {
+            let mut request = connected_request(module, function, parameter, body);
+            request.changes.push(AuthoredChange::SetParameterOrder {
+                parent: ParameterParentSelector::Declaration {
+                    declaration: DeclarationSelector::Symbol {
+                        symbol: function.to_owned(),
+                    },
+                },
+                parameters: vec![OwnerSelector::Symbol {
+                    symbol: parameter.to_owned(),
+                }],
+            });
+            request
+        };
+        let first = request("$module", "$function", "$parameter", "$body");
+        let renamed = request("$m", "$f", "$p", "$expression");
+        assert_eq!(
+            canonical_authored_intent_bytes(&first).unwrap(),
+            canonical_authored_intent_bytes(&renamed).unwrap()
+        );
+    }
+
+    #[test]
     fn current_budget_wire_encodes_all_optional_states_without_sentinels() {
         let unbounded = encode_budget(ChangeBudget::default()).unwrap();
         assert_eq!(&unbounded[..10], b"LKJABDG2\x02\x00");
@@ -3034,12 +3101,14 @@ mod tests {
         for maximum in [0, 10_000_001, u64::MAX] {
             let mut budget = ChangeBudget::default();
             for dimension in crate::platform::change::budget::BudgetDimension::ALL {
-                budget.set_policy_limit(dimension.policy_name(), Some(maximum)).unwrap();
+                budget
+                    .set_policy_limit(dimension.policy_name(), Some(maximum))
+                    .unwrap();
             }
             let encoded = encode_budget(budget).unwrap();
             assert_eq!(&encoded[..10], b"LKJABDG2\x02\x00");
             assert_eq!(encoded.len(), MAXIMUM_BUDGET_BYTES);
-            for field in encoded[10..].chunks_exact(9) {
+            for field in encoded[10..].as_chunks::<9>().0 {
                 assert_eq!(field[0], 1);
                 assert_eq!(&field[1..], &maximum.to_be_bytes());
             }

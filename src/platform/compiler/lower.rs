@@ -14,6 +14,7 @@ use crate::platform::change::{
     CanonicalBaseRead, CanonicalRead, CanonicalReadWork, WitnessBaseRead, WitnessReadWork,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::kernel::ValidationWork;
 use crate::platform::kernel::{
     BindingKind, BindingRecord, CallableResult, CaseReference, DeclarationPayload,
     DeclarationRecord, DeclarationReference, ExactOwnerKey, ExpressionOperation, ExpressionRead,
@@ -252,21 +253,90 @@ struct UnitBuilder<'a, B: ?Sized> {
     work: CompilationWork,
 }
 
+/// Optional exact admission for logical compiler work, independent of canonical I/O telemetry.
+pub(super) struct CompilerWorkAdmission {
+    maximum: Option<usize>,
+    work: Cell<ValidationWork>,
+}
+
+impl Default for CompilerWorkAdmission {
+    fn default() -> Self {
+        Self::with_limit(None)
+    }
+}
+
+impl CompilerWorkAdmission {
+    pub(super) fn with_limit(maximum: Option<usize>) -> Self {
+        Self {
+            maximum,
+            work: Cell::new(ValidationWork::default()),
+        }
+    }
+
+    pub(super) fn observation(&self) -> ValidationWork {
+        self.work.get()
+    }
+
+    pub(super) fn reserve(
+        &self,
+        count: usize,
+        code: &'static str,
+        phase: &str,
+    ) -> Result<(), Diagnostic> {
+        self.reserve_observation(ValidationWork::exact(count), code, phase)
+    }
+
+    fn reserve_observation(
+        &self,
+        amount: ValidationWork,
+        code: &'static str,
+        phase: &str,
+    ) -> Result<(), Diagnostic> {
+        let mut work = self.work.get();
+        charge_compiler_work(&mut work, amount, self.maximum, code, phase)?;
+        self.work.set(work);
+        Ok(())
+    }
+}
+
+fn charge_compiler_work(
+    work: &mut ValidationWork,
+    amount: ValidationWork,
+    maximum: Option<usize>,
+    code: &'static str,
+    phase: &str,
+) -> Result<(), Diagnostic> {
+    if amount.saturated {
+        if maximum.is_none() {
+            work.consumed = usize::MAX;
+            work.saturated = true;
+            return Ok(());
+        }
+    } else if work.charge(amount.consumed, maximum) {
+        return Ok(());
+    }
+    Err(compiler_error(
+        DiagnosticClass::Resource,
+        code,
+        format!("{phase} exceeds its declared allowance {maximum:?}"),
+    ))
+}
+
 struct DerivedTypeAdmission {
-    bytes: usize,
-    maximum_bytes: usize,
+    bytes: ValidationWork,
+    maximum_bytes: Option<usize>,
     // Shared across every child in this unit, including unused witness metadata.
     parallel: crate::platform::kernel::owned_associated::OwnedAssociatedAdmission,
-    parallel_steps: Cell<usize>,
+    parallel_steps: CompilerWorkAdmission,
 }
 
 impl Default for DerivedTypeAdmission {
     fn default() -> Self {
         Self {
-            bytes: 0,
-            maximum_bytes: 64 * 1_048_576,
+            bytes: ValidationWork::default(),
+            maximum_bytes: None,
             parallel: crate::platform::kernel::owned_associated::OwnedAssociatedAdmission::new(),
-            parallel_steps: Cell::new(0),
+            parallel_steps: CompilerWorkAdmission::default(),
         }
     }
 }
@@ -419,7 +489,7 @@ struct CodeExpressionRead<'a, B: ?Sized> {
     derived: &'a BTreeMap<ObjectKey, Vec<u8>>,
     work: RefCell<CanonicalReadWork>,
     owners: Cell<u64>,
-    parallel_steps: Option<&'a Cell<usize>>,
+    parallel_steps: Option<&'a CompilerWorkAdmission>,
 }
 
 impl<B: CodeRead + ?Sized> crate::platform::kernel::ExpressionRead for CodeExpressionRead<'_, B> {
@@ -512,7 +582,7 @@ pub(super) fn canonical_code<B: CodeRead + ?Sized>(
 pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
     read: &B,
     unit: &CompilationUnit,
-    remaining: &mut usize,
+    admission: &CompilerWorkAdmission,
 ) -> Result<(BTreeMap<ObjectKey, Vec<u8>>, CanonicalReadWork), Diagnostic> {
     if unit.source.package != read.package_id() {
         return Err(compiler_corrupt(
@@ -520,213 +590,207 @@ pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
             "cached unit belongs to a different canonical package",
         ));
     }
-    let allowance = Cell::new(*remaining);
-    let result = (|| {
-        let read = parallel_lower::ReconstructionRead {
-            source: read,
-            remaining: &allowance,
+    let read = parallel_lower::ReconstructionRead {
+        source: read,
+        admission,
+    };
+    // Reserve every copied table entry before constructing the indexed tables.
+    // Instruction/owner/type walks then debit the same borrowed allowance.
+    for count in [
+        unit.tables.declarations.len(),
+        unit.tables.fields.len(),
+        unit.tables.cases.len(),
+        unit.tables.requirements.len(),
+        unit.tables.operations.len(),
+        unit.tables.ports.len(),
+        unit.tables.types.len(),
+        unit.tables.structural_names.len(),
+        unit.tables.read_view_fields.len(),
+        unit.tables.texts.len(),
+    ] {
+        read.reserve(count)?;
+    }
+    let mut builder = UnitBuilder {
+        canonical: &read,
+        package: unit.source.package,
+        scope: match unit.source.owner {
+            OwnerKey::Declaration(declaration) => Some(declaration),
+            _ => None,
+        },
+        tables: TablesBuilder::from_tables(&unit.tables),
+        derived_type_objects: BTreeMap::new(),
+        derived_type_admission: DerivedTypeAdmission::default(),
+        work: CompilationWork::default(),
+    };
+    // Re-lower exact canonical roots, not cached instruction declarations. This
+    // recovers both child expressions, their own headers, the wrapper header,
+    // all witness operands and the original lexical owner without fabricated
+    // generations. compile_code does not enter this reconstruction path.
+    let record =
+        builder.required_owner(unit.source.owner, "cached unit canonical source is absent")?;
+    let mut check =
+        |root, parameters: &[ParameterId], actual: &CompiledCode| -> Result<(), Diagnostic> {
+            read.reserve(parameters.len())?;
+            let expected = builder.compile_code(root, parameters)?;
+            if expected != *actual {
+                return Err(compiler_corrupt(
+                    "compiler_parallel_control_meaning",
+                    "cached code differs from its exact canonical source applications",
+                ));
+            }
+            Ok(())
         };
-        // Reserve every copied table entry before constructing the indexed tables.
-        // Instruction/owner/type walks then debit the same borrowed allowance.
-        for count in [
-            unit.tables.declarations.len(),
-            unit.tables.fields.len(),
-            unit.tables.cases.len(),
-            unit.tables.requirements.len(),
-            unit.tables.operations.len(),
-            unit.tables.ports.len(),
-            unit.tables.types.len(),
-            unit.tables.structural_names.len(),
-            unit.tables.read_view_fields.len(),
-            unit.tables.texts.len(),
-        ] {
-            read.reserve(count)?;
-        }
-        let mut builder = UnitBuilder {
-            canonical: &read,
-            package: unit.source.package,
-            scope: match unit.source.owner {
-                OwnerKey::Declaration(declaration) => Some(declaration),
-                _ => None,
-            },
-            tables: TablesBuilder::from_tables(&unit.tables),
-            derived_type_objects: BTreeMap::new(),
-            derived_type_admission: DerivedTypeAdmission::default(),
-            work: CompilationWork::default(),
-        };
-        // Re-lower exact canonical roots, not cached instruction declarations. This
-        // recovers both child expressions, their own headers, the wrapper header,
-        // all witness operands and the original lexical owner without fabricated
-        // generations. compile_code does not enter this reconstruction path.
-        let record =
-            builder.required_owner(unit.source.owner, "cached unit canonical source is absent")?;
-        let mut check =
-            |root, parameters: &[ParameterId], actual: &CompiledCode| -> Result<(), Diagnostic> {
-                read.reserve(parameters.len())?;
-                let expected = builder.compile_code(root, parameters)?;
-                if expected != *actual {
-                    return Err(compiler_corrupt(
-                        "compiler_parallel_control_meaning",
-                        "cached code differs from its exact canonical source applications",
-                    ));
-                }
-                Ok(())
+    match (&unit.payload, record) {
+        (CompilationPayload::Function { code, .. }, OwnerRecord::Declaration(record)) => {
+            let DeclarationPayload::Function(function) = record.payload else {
+                return Err(reconstruction_source());
             };
-        match (&unit.payload, record) {
-            (CompilationPayload::Function { code, .. }, OwnerRecord::Declaration(record)) => {
-                let DeclarationPayload::Function(function) = record.payload else {
-                    return Err(reconstruction_source());
-                };
-                check(function.body, &function.parameters, code)?;
+            check(function.body, &function.parameters, code)?;
+        }
+        (CompilationPayload::Constant { code, .. }, OwnerRecord::Declaration(record)) => {
+            let DeclarationPayload::Constant { value, .. } = record.payload else {
+                return Err(reconstruction_source());
+            };
+            check(value, &[], code)?;
+        }
+        (
+            CompilationPayload::Test {
+                actual, expected, ..
+            },
+            OwnerRecord::Declaration(record),
+        ) => {
+            let DeclarationPayload::Test {
+                actual: root,
+                expected: expected_root,
+                ..
+            } = record.payload
+            else {
+                return Err(reconstruction_source());
+            };
+            check(root, &[], actual)?;
+            check(expected_root, &[], expected)?;
+        }
+        (CompilationPayload::Component { ports, .. }, OwnerRecord::Declaration(record)) => {
+            if !matches!(record.payload, DeclarationPayload::Component { .. }) {
+                return Err(reconstruction_source());
             }
-            (CompilationPayload::Constant { code, .. }, OwnerRecord::Declaration(record)) => {
-                let DeclarationPayload::Constant { value, .. } = record.payload else {
-                    return Err(reconstruction_source());
+            // Release the closure borrow for exact canonical port reads.
+            for port in ports {
+                let CompiledPortImplementation::Expression(actual) = &port.implementation else {
+                    continue;
                 };
-                check(value, &[], code)?;
-            }
-            (
-                CompilationPayload::Test {
-                    actual, expected, ..
-                },
-                OwnerRecord::Declaration(record),
-            ) => {
-                let DeclarationPayload::Test {
-                    actual: root,
-                    expected: expected_root,
-                    ..
-                } = record.payload
+                let reference = unit
+                    .tables
+                    .ports
+                    .get(port.port as usize)
+                    .ok_or_else(reconstruction_source)?;
+                if reference.package != unit.source.package {
+                    return Err(reconstruction_source());
+                }
+                let Some(OwnerRecord::Port(record)) =
+                    read.code_owner(OwnerKey::Port(reference.port))?.value
                 else {
                     return Err(reconstruction_source());
                 };
-                check(root, &[], actual)?;
-                check(expected_root, &[], expected)?;
-            }
-            (CompilationPayload::Component { ports, .. }, OwnerRecord::Declaration(record)) => {
-                if !matches!(record.payload, DeclarationPayload::Component { .. }) {
+                let PortImplementation::Expression(root) = record.implementation else {
                     return Err(reconstruction_source());
-                }
-                // Release the closure borrow for exact canonical port reads.
-                for port in ports {
-                    let CompiledPortImplementation::Expression(actual) = &port.implementation
-                    else {
-                        continue;
-                    };
-                    let reference = unit
-                        .tables
-                        .ports
-                        .get(port.port as usize)
-                        .ok_or_else(reconstruction_source)?;
-                    if reference.package != unit.source.package {
-                        return Err(reconstruction_source());
-                    }
-                    let Some(OwnerRecord::Port(record)) =
-                        read.code_owner(OwnerKey::Port(reference.port))?.value
-                    else {
-                        return Err(reconstruction_source());
-                    };
-                    let PortImplementation::Expression(root) = record.implementation else {
-                        return Err(reconstruction_source());
-                    };
-                    check(root, &[], actual)?;
-                }
+                };
+                check(root, &[], actual)?;
             }
-            (
-                CompilationPayload::Function { .. }
-                | CompilationPayload::Constant { .. }
-                | CompilationPayload::Test { .. }
-                | CompilationPayload::Component { .. },
-                _,
-            ) => return Err(reconstruction_source()),
-            _ => {}
         }
-        // A nominal can occur only inside a table root's syntactic children.
-        // Recreate all reachable nominal fields before the strict cached-table
-        // walk, whose reverse order may encounter a derived field first. Parallel
-        // roots have already been recovered by canonical re-lowering above.
-        read.reserve(unit.tables.types.len())?;
+        (
+            CompilationPayload::Function { .. }
+            | CompilationPayload::Constant { .. }
+            | CompilationPayload::Test { .. }
+            | CompilationPayload::Component { .. },
+            _,
+        ) => return Err(reconstruction_source()),
+        _ => {}
+    }
+    // A nominal can occur only inside a table root's syntactic children.
+    // Recreate all reachable nominal fields before the strict cached-table
+    // walk, whose reverse order may encounter a derived field first. Parallel
+    // roots have already been recovered by canonical re-lowering above.
+    read.reserve(unit.tables.types.len())?;
+    builder
+        .derived_type_admission
+        .parallel
+        .reserve::<TypeObjectDigest>(unit.tables.types.len())?;
+    let mut pending = unit.tables.types.clone();
+    let mut seen = BTreeSet::new();
+    while let Some(ty) = pending.pop() {
+        // Charge duplicate and missing attempts too. A missing root is never
+        // marked seen: a later reachable layout can derive and requeue it.
+        read.reserve(1)?;
+        if seen.contains(&ty) {
+            continue;
+        }
+        let Some(object) = builder.with_expression_read(|read| read.type_object(ty))? else {
+            continue;
+        };
+        if seen.len() >= MAXIMUM_COMPILER_UNIT_ITEMS {
+            return Err(compiler_error(
+                DiagnosticClass::Resource,
+                "compiler_owned_record_type_limit",
+                "owned record type closure exceeds the compiler-unit bound",
+            ));
+        }
+        read.reserve(1)?;
         builder
             .derived_type_admission
             .parallel
-            .reserve::<TypeObjectDigest>(unit.tables.types.len())?;
-        let mut pending = unit.tables.types.clone();
-        let mut seen = BTreeSet::new();
-        while let Some(ty) = pending.pop() {
-            // Charge duplicate and missing attempts too. A missing root is never
-            // marked seen: a later reachable layout can derive and requeue it.
-            read.reserve(1)?;
-            if seen.contains(&ty) {
-                continue;
-            }
-            let Some(object) = builder.with_expression_read(|read| read.type_object(ty))? else {
-                continue;
-            };
-            if seen.len() >= MAXIMUM_COMPILER_UNIT_ITEMS {
-                return Err(compiler_error(
-                    DiagnosticClass::Resource,
-                    "compiler_owned_record_type_limit",
-                    "owned record type closure exceeds the compiler-unit bound",
-                ));
-            }
-            read.reserve(1)?;
+            .reserve::<TypeObjectDigest>(1)?;
+        seen.insert(ty);
+        let children = object.child_type_count();
+        read.reserve(children)?;
+        // Reserve both the transient child vector and the pending entries
+        // before child_types allocates or the worklist grows.
+        builder
+            .derived_type_admission
+            .parallel
+            .reserve::<TypeObjectDigest>(children)?;
+        builder
+            .derived_type_admission
+            .parallel
+            .reserve::<TypeObjectDigest>(children)?;
+        pending.extend(object.child_types());
+        if matches!(&object.form, TypeForm::ReadViewApplied { .. }) {
+            let fields = builder
+                .read_view_layout(
+                    ty,
+                    crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
+                    false,
+                )?
+                .fields;
+            read.reserve(fields.len())?;
             builder
                 .derived_type_admission
                 .parallel
-                .reserve::<TypeObjectDigest>(1)?;
-            seen.insert(ty);
-            let children = object.child_type_count();
-            read.reserve(children)?;
-            // Reserve both the transient child vector and the pending entries
-            // before child_types allocates or the worklist grows.
-            builder
-                .derived_type_admission
-                .parallel
-                .reserve::<TypeObjectDigest>(children)?;
-            builder
-                .derived_type_admission
-                .parallel
-                .reserve::<TypeObjectDigest>(children)?;
-            pending.extend(object.child_types());
-            if matches!(&object.form, TypeForm::ReadViewApplied { .. }) {
-                let fields = builder
-                    .read_view_layout(
-                        ty,
-                        crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION,
-                        false,
-                    )?
-                    .fields;
+                .reserve::<TypeObjectDigest>(fields.len())?;
+            pending.extend(fields.into_iter().map(|field| field.ty));
+        }
+        if matches!(
+            object.form,
+            TypeForm::Named { .. } | TypeForm::Applied { .. }
+        ) {
+            let package = builder.package;
+            if builder.with_expression_read(|read| {
+                crate::platform::kernel::owned_record::is_owned(read, package, ty)
+            })? {
+                let fields = builder.owned_record_fields(ty, false)?;
                 read.reserve(fields.len())?;
                 builder
                     .derived_type_admission
                     .parallel
                     .reserve::<TypeObjectDigest>(fields.len())?;
-                pending.extend(fields.into_iter().map(|field| field.ty));
-            }
-            if matches!(
-                object.form,
-                TypeForm::Named { .. } | TypeForm::Applied { .. }
-            ) {
-                let package = builder.package;
-                if builder.with_expression_read(|read| {
-                    crate::platform::kernel::owned_record::is_owned(read, package, ty)
-                })? {
-                    let fields = builder.owned_record_fields(ty, false)?;
-                    read.reserve(fields.len())?;
-                    builder
-                        .derived_type_admission
-                        .parallel
-                        .reserve::<TypeObjectDigest>(fields.len())?;
-                    pending.extend(fields.into_iter().map(|(_, ty)| ty));
-                }
+                pending.extend(fields.into_iter().map(|(_, ty)| ty));
             }
         }
-        // The seed pass defers absent derived entries, never admits them. Every
-        // cached table root must now resolve through the complete strict closure.
-        builder.complete_owned_record_type_closure()?;
-        Ok((builder.derived_type_objects, builder.work.canonical))
-    })();
-    *remaining = allowance.get();
-    result
+    }
+    // The seed pass defers absent derived entries, never admits them. Every
+    // cached table root must now resolve through the complete strict closure.
+    builder.complete_owned_record_type_closure()?;
+    Ok((builder.derived_type_objects, builder.work.canonical))
 }
 
 fn reconstruction_source() -> Diagnostic {
@@ -1454,25 +1518,21 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
                     std::mem::size_of::<(ObjectKey, Vec<u8>)>() + 4 * std::mem::size_of::<usize>(),
                 )
             })
-            .ok_or_else(|| {
-                compiler_error(
-                    DiagnosticClass::Resource,
-                    "compiler_derived_type_storage",
-                    "derived type metadata size overflow",
-                )
-            })?;
-        self.derived_type_admission.bytes = self
-            .derived_type_admission
-            .bytes
-            .checked_add(reserve)
-            .filter(|bytes| *bytes <= self.derived_type_admission.maximum_bytes)
-            .ok_or_else(|| {
-                compiler_error(
-                    DiagnosticClass::Resource,
-                    "compiler_derived_type_storage",
-                    "cumulative derived type metadata exceeds its storage admission",
-                )
-            })?;
+            .map_or(
+                ValidationWork {
+                    consumed: usize::MAX,
+                    saturated: true,
+                },
+                ValidationWork::exact,
+            );
+        let previous_bytes = self.derived_type_admission.bytes;
+        charge_compiler_work(
+            &mut self.derived_type_admission.bytes,
+            reserve,
+            self.derived_type_admission.maximum_bytes,
+            "compiler_derived_type_storage",
+            "cumulative derived type metadata",
+        )?;
         let (digest, bytes) = encode_type_object(object)?;
         if expected.is_some_and(|expected| expected != digest) {
             return Err(compiler_corrupt(
@@ -1486,7 +1546,7 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         );
         match self.derived_type_objects.entry(key) {
             std::collections::btree_map::Entry::Occupied(_) => {
-                self.derived_type_admission.bytes -= reserve;
+                self.derived_type_admission.bytes = previous_bytes;
             }
             std::collections::btree_map::Entry::Vacant(entry) => {
                 entry.insert(bytes);

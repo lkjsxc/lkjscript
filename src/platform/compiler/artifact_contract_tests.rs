@@ -126,31 +126,62 @@ fn representation_scope_follows_exact_selected_branch_and_admits_work_before_gro
     );
     let admitted = work.consumed;
     let mut exact_work = crate::platform::kernel::ValidationWork::default();
-    artifact_representation_scope(&root.dependencies, &revisions, &mut exact_work, Some(admitted))
-        .unwrap();
+    artifact_representation_scope(
+        &root.dependencies,
+        &revisions,
+        &mut exact_work,
+        Some(admitted),
+    )
+    .unwrap();
     assert_eq!(exact_work.consumed, admitted);
-    let error = artifact_representation_scope(&root.dependencies, &revisions, &mut crate::platform::kernel::ValidationWork::default(), Some(admitted - 1))
-        .unwrap_err();
+    let error = artifact_representation_scope(
+        &root.dependencies,
+        &revisions,
+        &mut crate::platform::kernel::ValidationWork::default(),
+        Some(admitted - 1),
+    )
+    .unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Resource);
     assert_eq!(error.code, "artifact_representation_work");
     assert!(
-        artifact_representation_scope(&independent.dependencies, &revisions, &mut crate::platform::kernel::ValidationWork::default(), Some(admitted))
-            .unwrap()
-            .is_empty()
+        artifact_representation_scope(
+            &independent.dependencies,
+            &revisions,
+            &mut crate::platform::kernel::ValidationWork::default(),
+            Some(admitted)
+        )
+        .unwrap()
+        .is_empty()
     );
     assert_eq!(
-        artifact_representation_scope(&supplier.dependencies, &revisions, &mut crate::platform::kernel::ValidationWork::default(), Some(admitted))
-            .unwrap(),
+        artifact_representation_scope(
+            &supplier.dependencies,
+            &revisions,
+            &mut crate::platform::kernel::ValidationWork::default(),
+            Some(admitted)
+        )
+        .unwrap(),
         BTreeSet::from([leaf.package])
     );
     let mut forged = dependency(&independent);
     forged.package_revision = dependency(&leaf).package_revision;
-    let error = artifact_representation_scope(&[forged], &revisions, &mut crate::platform::kernel::ValidationWork::default(), Some(admitted)).unwrap_err();
+    let error = artifact_representation_scope(
+        &[forged],
+        &revisions,
+        &mut crate::platform::kernel::ValidationWork::default(),
+        Some(admitted),
+    )
+    .unwrap_err();
     assert_eq!(error.code, "package_revision_dependency_binding");
     let mut missing = revisions;
     missing.remove(&dependency(&leaf).package_revision);
-    let error = artifact_representation_scope(&supplier.dependencies, &missing, &mut crate::platform::kernel::ValidationWork::default(), Some(admitted))
-        .unwrap_err();
+    let error = artifact_representation_scope(
+        &supplier.dependencies,
+        &missing,
+        &mut crate::platform::kernel::ValidationWork::default(),
+        Some(admitted),
+    )
+    .unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Corrupt);
     assert_eq!(error.code, "artifact_representation_binding");
 }

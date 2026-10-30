@@ -187,8 +187,8 @@ fn republish(
         control,
     )?;
     store_work.add(installed.work);
-    let prepared = prepare_initial_publication(logical, &store, Some(intent))
-        .map_err(collapse_diagnostics)?;
+    let prepared =
+        prepare_initial_publication(logical, &store, Some(intent)).map_err(collapse_diagnostics)?;
     let publication = &prepared.publication;
     if prepared.snapshot.owners != logical.owners
         || prepared.snapshot.types != logical.types
@@ -210,7 +210,12 @@ fn republish(
         ));
     }
     validate_prepared_repository(publication)?;
-    validate_history_base(None, publication.receipt.status, &publication.transaction, &publication.semantic_diff)?;
+    validate_history_base(
+        None,
+        publication.receipt.status,
+        &publication.transaction,
+        &publication.semantic_diff,
+    )?;
     validate_prepared_dependency_sources(&store, publication)?;
     validate_candidate_idempotency_transition(
         &store,
@@ -222,7 +227,9 @@ fn republish(
     inject(fault, PublicationPoint::BeforeObjectStage)?;
     for (index, (key, bytes)) in publication.objects.iter().enumerate() {
         control.check().map_err(execution_diagnostic)?;
-        store.stage(*key, bytes, &mut store_work).map_err(store_diagnostic)?;
+        store
+            .stage(*key, bytes, &mut store_work)
+            .map_err(store_diagnostic)?;
         if index == 0 {
             inject(fault, PublicationPoint::AfterFirstObjectStage)?;
         }

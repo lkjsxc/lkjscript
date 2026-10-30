@@ -203,7 +203,6 @@ fn selfhost_source_index_windows_reject_invalid_ranges_without_arithmetic_traps(
     }
 }
 
-
 #[test]
 fn selfhost_source_index_retrieves_rows_above_historical_count_quota() {
     let rows = (0_u64..100_001)

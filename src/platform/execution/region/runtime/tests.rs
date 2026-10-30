@@ -178,7 +178,6 @@ fn refused_open_and_cancelled_mutations_leave_existing_custody_usable() {
     );
 }
 
-
 #[test]
 fn region_arena_has_no_former_live_slot_ceiling() {
     let arena = Arena::new().unwrap();
@@ -189,7 +188,9 @@ fn region_arena_has_no_former_live_slot_ceiling() {
         scopes.push(cap.identity());
     }
     assert_eq!(arena.read_state().live, scopes.len());
-    for identity in scopes { arena.close(identity).unwrap(); }
+    for identity in scopes {
+        arena.close(identity).unwrap();
+    }
     assert!(arena.is_empty());
 }
 

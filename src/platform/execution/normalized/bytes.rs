@@ -289,15 +289,20 @@ mod adoption_tests {
     }
 }
 
-
 #[cfg(test)]
 mod aggregation_tests {
     use super::*;
 
     #[test]
     fn byte_work_merge_preserves_child_saturation_and_records_sum_overflow() {
-        let mut parent = Work { concatenations: u64::MAX - 1, ..Work::default() };
-        let child = Work { concatenations: 1, ..Work::default() };
+        let mut parent = Work {
+            concatenations: u64::MAX - 1,
+            ..Work::default()
+        };
+        let child = Work {
+            concatenations: 1,
+            ..Work::default()
+        };
         parent.include(&child);
         assert_eq!(parent.concatenations, u64::MAX);
         assert!(!parent.saturated);
@@ -305,7 +310,10 @@ mod aggregation_tests {
         assert_eq!(parent.concatenations, u64::MAX);
         assert!(parent.saturated);
         let mut parent = Work::default();
-        parent.include(&Work { saturated: true, ..Work::default() });
+        parent.include(&Work {
+            saturated: true,
+            ..Work::default()
+        });
         assert!(parent.saturated);
         parent.include(&Work::default());
         assert!(parent.saturated);

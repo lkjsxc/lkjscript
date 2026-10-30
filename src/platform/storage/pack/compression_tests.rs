@@ -55,14 +55,14 @@ fn compressed_packs_are_deterministic_and_both_footer_readers_admit_exact_object
         assert_eq!(
             sealed
                 .metadata
-                .read(&sealed.bytes, key, value.len())
+                .read(&sealed.bytes, key, Some(value.len()))
                 .unwrap(),
             Some(value.clone())
         );
         assert_eq!(
             sealed
                 .metadata
-                .read_from(&mut Cursor::new(&sealed.bytes), key, value.len())
+                .read_from(&mut Cursor::new(&sealed.bytes), key, Some(value.len()))
                 .unwrap(),
             Some(value)
         );
@@ -95,7 +95,7 @@ fn disk_and_memory_catalogs_charge_decoded_bytes_for_compressed_and_raw_entries(
             });
             assert_eq!(
                 store
-                    .read_admitted(key, value.len(), &mut admission, &mut work)
+                    .read_admitted(key, Some(value.len()), &mut admission, &mut work)
                     .unwrap(),
                 Some(value.clone())
             );
@@ -110,7 +110,7 @@ fn disk_and_memory_catalogs_charge_decoded_bytes_for_compressed_and_raw_entries(
                 let mut work = StoreWork::default();
                 assert_eq!(
                     store
-                        .read_admitted(key, value.len(), &mut admission, &mut work)
+                        .read_admitted(key, Some(value.len()), &mut admission, &mut work)
                         .unwrap_err()
                         .class,
                     StoreErrorClass::Resource
@@ -144,7 +144,7 @@ fn mixed_small_and_incompressible_entries_never_expand_compacted_payloads() {
         assert_eq!(
             sealed
                 .metadata
-                .read(&sealed.bytes, key, value.len())
+                .read(&sealed.bytes, key, Some(value.len()))
                 .unwrap()
                 .as_ref(),
             Some(value)
@@ -189,7 +189,7 @@ fn decoded_caller_limit_is_checked_before_payload_io() {
     assert!(sealed.metadata.entries[0].encoded_length < 100);
     let error = sealed
         .metadata
-        .read_from(&mut NoPayload, key, value.len() - 1)
+        .read_from(&mut NoPayload, key, Some(value.len() - 1))
         .unwrap_err();
     assert_eq!(error.code, "pack_read_limit");
 }
@@ -261,7 +261,7 @@ fn coherently_hashed_truncation_trailing_streams_and_expansion_are_rejected() {
                 .metadata
         );
         let error = metadata
-            .read(&bytes, entry.key, length as usize)
+            .read(&bytes, entry.key, Some(length as usize))
             .unwrap_err();
         assert!(error.code.starts_with("pack_decompression"), "{error:?}");
         assert!(metadata.verify_all(&bytes).is_err());
@@ -269,7 +269,7 @@ fn coherently_hashed_truncation_trailing_streams_and_expansion_are_rejected() {
     let excessive = replace_payload(
         &sealed,
         encoded,
-        contract::MAXIMUM_PACK_ENTRY_BYTES as u64 + 1,
+        ObjectDomain::Blob.maximum_bytes().unwrap() as u64 + 1,
     );
     assert_eq!(
         PackMetadata::decode(&excessive, true).unwrap_err().class,
@@ -339,7 +339,7 @@ fn compressed_targeted_packs_preserve_exact_raw_partitions_and_oversized_singlet
                 assert!(entry.encoded_length <= entry.uncompressed_length);
                 let value = sealed
                     .metadata
-                    .read(&sealed.bytes, entry.key, 4096)
+                    .read(&sealed.bytes, entry.key, Some(4096))
                     .unwrap()
                     .unwrap();
                 assert!(observed.insert(entry.key, value).is_none());
@@ -367,4 +367,40 @@ fn compressed_targeted_packs_preserve_exact_raw_partitions_and_oversized_singlet
             .code,
         "pack_empty"
     );
+}
+
+#[test]
+fn unbounded_history_compression_preserves_exact_reads_and_rejects_forged_expansion() {
+    let value = vec![0x5a; 4 * 1024 * 1024 + 17];
+    let key = ObjectKey::for_bytes(ObjectDomain::Transaction, &value);
+    let mut builder = PackBuilder::default();
+    builder.insert(key, &value).unwrap();
+    let sealed = builder.seal_compressed().unwrap();
+    assert_eq!(
+        sealed.metadata.read(&sealed.bytes, key, None).unwrap(),
+        Some(value.clone())
+    );
+    assert_eq!(
+        sealed
+            .metadata
+            .read_from(&mut Cursor::new(&sealed.bytes), key, Some(value.len()))
+            .unwrap(),
+        Some(value)
+    );
+    assert_eq!(
+        sealed
+            .metadata
+            .read_from(&mut NoPayload, key, Some(0))
+            .unwrap_err()
+            .code,
+        "pack_read_limit"
+    );
+
+    let entry = &sealed.metadata.entries[0];
+    let encoded =
+        &sealed.bytes[entry.offset as usize..(entry.offset + entry.encoded_length) as usize];
+    let forged = replace_payload(&sealed, encoded, u64::MAX);
+    let metadata = PackMetadata::decode(&forged, true).unwrap();
+    let error = metadata.read(&forged, key, None).unwrap_err();
+    assert_eq!(error.code, "pack_decompression_length");
 }

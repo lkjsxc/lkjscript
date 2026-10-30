@@ -44,6 +44,9 @@ pub struct ArtifactLinkWork {
     pub blob_objects: u64,
     pub runtime_owners: u64,
     pub implementation_inventory_steps: u64,
+    pub implementation_inventory_saturated: bool,
+    pub type_reconstruction_steps: usize,
+    pub type_reconstruction_saturated: bool,
     pub reference_owners: u64,
     pub reference_map: MapWork,
     pub closure_objects: u64,
@@ -235,7 +238,7 @@ pub(super) fn link_prepared(
     let mut types = BTreeSet::new();
     let mut blobs = BTreeMap::new();
     let mut local_units = BTreeMap::new();
-    let mut type_reconstruction_work = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
+    let type_reconstruction_work = super::lower::CompilerWorkAdmission::default();
     for (owner, binding) in bindings {
         let unit_bytes = store
             .read(
@@ -267,7 +270,7 @@ pub(super) fn link_prepared(
         let (inferred, read_work) = super::lower::reconstruct_parallel_result_types(
             view,
             &unit,
-            &mut type_reconstruction_work,
+            &type_reconstruction_work,
         )?;
         work.repository.add_canonical(read_work);
         for (key, bytes) in inferred {
@@ -304,6 +307,8 @@ pub(super) fn link_prepared(
     for ((package, owner), expectation) in runtime_owner_expectations(
         &local_units,
         &mut work.implementation_inventory_steps,
+        &mut work.implementation_inventory_saturated,
+        None,
         |ty| {
             let bytes = store
                 .read(
@@ -404,7 +409,7 @@ pub(super) fn link_prepared(
         &mut objects,
         &mut work,
         &mut types,
-        &mut type_reconstruction_work,
+        &type_reconstruction_work,
     )?;
 
     let mut resolved_types = BTreeSet::new();
@@ -488,6 +493,9 @@ pub(super) fn link_prepared(
     work.closure_objects = object_count;
     work.closure_bytes = object_bytes;
     work.output_bytes = artifact.bytes.len() as u64;
+    let reconstruction = type_reconstruction_work.observation();
+    work.type_reconstruction_steps = reconstruction.consumed;
+    work.type_reconstruction_saturated = reconstruction.saturated;
     Ok(ArtifactLinkReceipt { artifact, work })
 }
 
@@ -498,7 +506,7 @@ fn build_reference_owner_map(
     objects: &mut BTreeMap<ObjectKey, Vec<u8>>,
     work: &mut ArtifactLinkWork,
     types: &mut BTreeSet<TypeObjectDigest>,
-    type_reconstruction_work: &mut usize,
+    type_reconstruction_work: &super::lower::CompilerWorkAdmission,
 ) -> Result<crate::platform::persistent_map::MapRoot, Diagnostic> {
     let package = view.package_id();
     let mut pending = BTreeSet::new();
@@ -582,13 +590,11 @@ fn build_reference_owner_map(
                     // Canonical local annotations can be absent from unchanged unit tables.
                     // Retain their exact objects for the standalone category/flow proofs.
                     view.validation_checkpoint()?;
-                    *type_reconstruction_work = type_reconstruction_work
-                        .checked_sub(1)
-                        .ok_or_else(|| link_error(
-                            DiagnosticClass::Resource,
-                            "artifact_link_reference_type_work",
-                            "canonical binding type roots exceed the existing reconstruction allowance",
-                        ))?;
+                    type_reconstruction_work.reserve(
+                        1,
+                        "artifact_link_reference_type_work",
+                        "canonical binding type roots",
+                    )?;
                     types.insert(ty);
                 }
                 pending.extend(

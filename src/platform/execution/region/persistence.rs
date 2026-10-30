@@ -139,9 +139,12 @@ pub fn save(
         return Err(capacity_error());
     }
     let digest = digest(read.image, control)?;
-    reserve(u64::try_from(read.image.len()).ok()
-        .and_then(|bytes| bytes.checked_add(std::mem::size_of::<Vec<u8>>() as u64))
-        .ok_or_else(capacity_error)?)?;
+    reserve(
+        u64::try_from(read.image.len())
+            .ok()
+            .and_then(|bytes| bytes.checked_add(std::mem::size_of::<Vec<u8>>() as u64))
+            .ok_or_else(capacity_error)?,
+    )?;
     control.check()?;
     let mut bytes = Vec::new();
     bytes

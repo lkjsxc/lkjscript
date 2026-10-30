@@ -1677,24 +1677,18 @@ fn oracle_infer_expression_type(
     effect: &FunctionEffect,
 ) -> Result<TypeObjectDigest, Diagnostic> {
     let mut work = crate::platform::kernel::ValidationWork::default();
-    infer_function_expression_type(
-        snapshot,
-        function,
-        expression,
-        effect,
-        &mut work,
-        None,
+    infer_function_expression_type(snapshot, function, expression, effect, &mut work, None).map_err(
+        |diagnostic| {
+            oracle_error(
+                diagnostic.class,
+                "contributor_extraction_type",
+                format!(
+                    "independent extraction type inference failed: {}",
+                    diagnostic.message
+                ),
+            )
+        },
     )
-    .map_err(|diagnostic| {
-        oracle_error(
-            diagnostic.class,
-            "contributor_extraction_type",
-            format!(
-                "independent extraction type inference failed: {}",
-                diagnostic.message
-            ),
-        )
-    })
 }
 
 fn extraction_local_owner(value: LocalValueReference) -> OwnerKey {

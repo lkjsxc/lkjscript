@@ -28,6 +28,9 @@ pub fn grouped<'a>(sources: impl IntoIterator<Item = &'a str>) -> String {
     output.push_str(SUFFIX);
     // The ordinary public request decoder still enforces its unchanged complete
     // request, operation, record, identity and validation-work admissions.
-    assert!(output.len() < lkjscript::platform::control::MAXIMUM_COMPACT_INPUT_BYTES);
+    assert!(
+        lkjscript::platform::control::MAXIMUM_COMPACT_INPUT_BYTES
+            .is_none_or(|maximum| output.len() <= maximum)
+    );
     output
 }

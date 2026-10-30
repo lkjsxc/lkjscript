@@ -426,7 +426,10 @@ fn test_relation_rebind_updates_only_the_affected_test_dependency_entries() {
             budget.impact.maximum_relation_edges,
             budget.impact.maximum_relation_fanout,
             budget.witness_reads.maximum_decoded_records,
-            budget.witness_update.maximum_edits.map(|maximum| maximum / 2),
+            budget
+                .witness_update
+                .maximum_edits
+                .map(|maximum| maximum / 2),
         ),
     )
     .expect_err("zero per-test dependency admission must reject before collection");
@@ -1305,31 +1308,47 @@ fn retirement_for(
     }
 }
 
-
 #[test]
 fn completed_http_validation_is_accounted_once_across_shared_phase_limits() {
     let base = crate::platform::execution::normalized::tests::normalized_http_snapshot();
     let base_witness = rebuild_full_witness(&base).expect("valid HTTP fixture");
-    let (owner, mut replacement) = base.owners.iter().find_map(|(owner, record)| {
-        matches!(record, OwnerRecord::HttpRoute(route) if route.method == "POST")
-            .then(|| (*owner, record.clone()))
-    }).expect("POST route");
-    let OwnerRecord::HttpRoute(route) = &mut replacement else { panic!("HTTP route"); };
+    let (owner, mut replacement) = base
+        .owners
+        .iter()
+        .find_map(|(owner, record)| {
+            matches!(record, OwnerRecord::HttpRoute(route) if route.method == "POST")
+                .then(|| (*owner, record.clone()))
+        })
+        .expect("POST route");
+    let OwnerRecord::HttpRoute(route) = &mut replacement else {
+        panic!("HTTP route");
+    };
     route.selector = crate::platform::kernel::HttpRouteSelector::exact("/changed").unwrap();
     let delta = replace_owner_delta(&base, owner, replacement);
     let overlay = KernelOverlay::new(&base, &delta);
     let derived = derive_local_delta(&overlay, &delta, &base_witness).unwrap();
-    let structural = super::validate::validate_structural_frontier(&overlay, &delta, &derived, &base_witness).unwrap();
+    let structural =
+        super::validate::validate_structural_frontier(&overlay, &delta, &derived, &base_witness)
+            .unwrap();
     let prepared = prepare_change_analysis(&base, &base_witness, delta.clone()).unwrap();
     assert_eq!(prepared.validation.http_routes.len(), 3);
     assert!(prepared.validation.work.owner_records_checked > structural.work.owner_records_checked);
-    assert!(prepared.validation.work.witness_reads.point_reads > structural.work.witness_reads.point_reads);
-    assert_eq!(prepared.budget_work.validation.owner_records,
-        prepared.validation.work.owner_records_checked);
-    assert_eq!(prepared.budget_work.validation.ownership_entries,
-        prepared.validation.work.ownership_entries_checked);
-    assert_eq!(prepared.budget_work.validation.type_objects,
-        prepared.validation.work.type_objects_checked);
+    assert!(
+        prepared.validation.work.witness_reads.point_reads
+            > structural.work.witness_reads.point_reads
+    );
+    assert_eq!(
+        prepared.budget_work.validation.owner_records,
+        prepared.validation.work.owner_records_checked
+    );
+    assert_eq!(
+        prepared.budget_work.validation.ownership_entries,
+        prepared.validation.work.ownership_entries_checked
+    );
+    assert_eq!(
+        prepared.budget_work.validation.type_objects,
+        prepared.validation.work.type_objects_checked
+    );
     let mut all_reads = WitnessReadWork::default();
     for reads in [
         prepared.derived.read_work,
@@ -1348,23 +1367,45 @@ fn completed_http_validation_is_accounted_once_across_shared_phase_limits() {
     let mut exact = ChangeBudget::default();
     exact.validation.maximum_owner_records = Some(prepared.budget_work.validation.owner_records);
     exact.witness_reads.maximum_point_reads = Some(all_reads.point_reads);
-    let admitted = prepare_change_analysis_with_budget(&base, &base_witness, delta.clone(),
-        exact, ChangeBudgetWork::default()).unwrap();
+    let admitted = prepare_change_analysis_with_budget(
+        &base,
+        &base_witness,
+        delta.clone(),
+        exact,
+        ChangeBudgetWork::default(),
+    )
+    .unwrap();
     assert_eq!(admitted.validation.work, prepared.validation.work);
     assert_eq!(admitted.budget_work.witness_reads, all_reads);
     type SetLimit = fn(&mut ChangeBudget, u64);
     let cases: [(SetLimit, u64, &str); 2] = [
-        (|budget: &mut ChangeBudget, value| budget.validation.maximum_owner_records = Some(value),
-            prepared.budget_work.validation.owner_records, "change_budget_validation_owner_records"),
-        (|budget: &mut ChangeBudget, value| budget.witness_reads.maximum_point_reads = Some(value),
-            all_reads.point_reads, "change_budget_witness_point_reads"),
+        (
+            |budget: &mut ChangeBudget, value| {
+                budget.validation.maximum_owner_records = Some(value)
+            },
+            prepared.budget_work.validation.owner_records,
+            "change_budget_validation_owner_records",
+        ),
+        (
+            |budget: &mut ChangeBudget, value| {
+                budget.witness_reads.maximum_point_reads = Some(value)
+            },
+            all_reads.point_reads,
+            "change_budget_witness_point_reads",
+        ),
     ];
     for (set_limit, observed, code) in cases {
         assert!(observed > 0);
         let mut exhausted = exact;
         set_limit(&mut exhausted, observed - 1);
-        let diagnostics = prepare_change_analysis_with_budget(&base, &base_witness, delta.clone(),
-            exhausted, ChangeBudgetWork::default()).unwrap_err();
+        let diagnostics = prepare_change_analysis_with_budget(
+            &base,
+            &base_witness,
+            delta.clone(),
+            exhausted,
+            ChangeBudgetWork::default(),
+        )
+        .unwrap_err();
         assert_eq!(diagnostics[0].code, code);
     }
 }

@@ -1,4 +1,4 @@
-//! Bounded symbolic transactions lower into the ordinary typed change engine.
+//! Symbolic transactions lower into the ordinary typed change engine.
 
 use super::input::{Block, ChangeInput, Syntax, SyntaxKind};
 use super::*;
@@ -6,8 +6,6 @@ use crate::platform::execution::ExecutionControl;
 use crate::platform::kernel::NamespaceClass;
 use crate::platform::publication::RepositoryView;
 use crate::platform::witness::NamespaceKey;
-
-pub(crate) const MAXIMUM_TRANSACTION_RESULT_BYTES: usize = 65_536;
 
 pub(crate) fn decode(
     path: &str,
@@ -31,7 +29,7 @@ fn decode_inner(
         return Err(block.error(
             root,
             "transaction_form",
-            "expected (tx (base @head) UNITS...)",
+            "expected (tx (base @head) UNITS-OR-DELETIONS...)",
         ));
     }
     let mut reader = canonical::Reader::for_intent(view, control.clone());
@@ -43,6 +41,7 @@ fn decode_inner(
     let mut units = Vec::new();
     let mut base = None;
     let mut policies = Vec::new();
+    let mut deletion_forms = Vec::new();
     for id in &parts[1..] {
         if block.head(*id) == Some("base") {
             let fields = block.list(*id)?;
@@ -70,13 +69,31 @@ fn decode_inner(
         } else if block.head(*id) == Some("policy") {
             let fields = block.list(*id)?;
             if fields.len() != 3 {
-                return Err(block.error(*id, "transaction_policy", "policy requires one dimension and unbounded or an exact u64 allowance"));
+                return Err(block.error(
+                    *id,
+                    "transaction_policy",
+                    "policy requires one dimension and unbounded or an exact u64 allowance",
+                ));
             }
             let location = block.syntax[*id].location.clone();
-            policies.push(CompactRecord { operation: "change.policy".into(), fields: vec![
-                CompactField { name: "name".into(), value: block.atom(fields[1])?.to_owned(), location: location.clone() },
-                CompactField { name: "limit".into(), value: block.atom(fields[2])?.to_owned(), location: location.clone() },
-            ], location });
+            policies.push(CompactRecord {
+                operation: "change.policy".into(),
+                fields: vec![
+                    CompactField {
+                        name: "name".into(),
+                        value: block.atom(fields[1])?.to_owned(),
+                        location: location.clone(),
+                    },
+                    CompactField {
+                        name: "limit".into(),
+                        value: block.atom(fields[2])?.to_owned(),
+                        location: location.clone(),
+                    },
+                ],
+                location,
+            });
+        } else if block.head(*id) == Some("delete") {
+            deletion_forms.push(*id);
         } else {
             units.push(*id);
         }
@@ -88,13 +105,17 @@ fn decode_inner(
             "transaction requires one base selector",
         )
     })?;
-    if units.is_empty() {
+    if units.is_empty() && deletion_forms.is_empty() {
         return Err(block.error(
             root,
             "transaction_empty",
-            "transaction requires at least one declaration unit",
+            "transaction requires at least one declaration unit or explicit deletion",
         ));
     }
+    let deletions = deletion_forms
+        .into_iter()
+        .map(|id| deletion_record(&block, id, &mut reader))
+        .collect::<Result<Vec<_>, _>>()?;
     // The native lowerer owns scope, contracts, ordered children and every body/type rule.
     // This pass supplies only create/edit identity selections from one immutable base.
     let mut pending = units
@@ -303,6 +324,7 @@ fn decode_inner(
             )?,
         );
     }
+    let has_units = !units.is_empty();
     let units_head = atom(&mut block, root, "units")?;
     units.insert(0, units_head);
     block.syntax[root].kind = SyntaxKind::List(units);
@@ -318,19 +340,20 @@ fn decode_inner(
         }
     }
     let mut records = vec![CompactRecord {
-            operation: "request".into(),
-            fields: vec![CompactField {
-                name: "base".into(),
-                value: base.to_string(),
-                location: location.clone(),
-            }],
-            location,
-        }];
+        operation: "request".into(),
+        fields: vec![CompactField {
+            name: "base".into(),
+            value: base.to_string(),
+            location: location.clone(),
+        }],
+        location,
+    }];
     records.extend(policies);
+    records.extend(deletions);
     let parsed = ChangeInput {
         records,
         blocks: BTreeMap::new(),
-        units: vec![block],
+        units: if has_units { vec![block] } else { Vec::new() },
         public_labels,
     };
     decode_parsed_change(parsed, Some(&mut reader)).map_err(|errors| {
@@ -338,6 +361,128 @@ fn decode_inner(
             .into_iter()
             .next()
             .unwrap_or_else(|| canonical::error("transaction normalization failed"))
+    })
+}
+
+fn deletion_record(
+    block: &Block,
+    id: usize,
+    reader: &mut canonical::Reader<'_>,
+) -> Result<CompactRecord, Diagnostic> {
+    let fields = block.list(id)?;
+    if fields.len() != 4 {
+        return Err(block.error(
+            id,
+            "transaction_delete",
+            "delete requires KIND PATH (policy reject|owned-closure)",
+        ));
+    }
+    let kind = block.atom(fields[1])?;
+    let path = block.atom(fields[2])?;
+    let names = path.split("::").collect::<Vec<_>>();
+    let class = declarations::namespace(kind)
+        .and_then(|name| NamespaceClass::parse(&name.replace('-', "_")).ok());
+    let classes = match class {
+        Some(NamespaceClass::Module) => &[NamespaceClass::Module][..],
+        Some(NamespaceClass::Declaration) => {
+            &[NamespaceClass::Module, NamespaceClass::Declaration][..]
+        }
+        Some(NamespaceClass::Parameter) => match names.len() {
+            3 => &[
+                NamespaceClass::Module,
+                NamespaceClass::Declaration,
+                NamespaceClass::Parameter,
+            ][..],
+            4 => &[
+                NamespaceClass::Module,
+                NamespaceClass::Declaration,
+                NamespaceClass::Operation,
+                NamespaceClass::Parameter,
+            ][..],
+            _ => {
+                return Err(block.error(
+                    fields[2],
+                    "transaction_delete_path",
+                    "parameter deletion requires MODULE::CALLABLE::PARAMETER or MODULE::INTERFACE::OPERATION::PARAMETER",
+                ));
+            }
+        },
+        _ => {
+            return Err(block.error(
+                fields[1],
+                "transaction_delete_kind",
+                "delete requires a module, module-scoped declaration family, or callable parameter",
+            ));
+        }
+    };
+    let policy = block.list(fields[3])?;
+    if block.head(fields[3]) != Some("policy") || policy.len() != 2 {
+        return Err(block.error(
+            fields[3],
+            "transaction_delete_policy",
+            "delete requires one explicit policy: reject or owned-closure",
+        ));
+    }
+    let policy = block.atom(policy[1])?;
+    if !COMPACT_DELETE_POLICIES.contains(&policy) {
+        return Err(block.error(
+            fields[3],
+            "transaction_delete_policy",
+            "deletion policy must be reject or owned-closure",
+        ));
+    }
+    if names.len() != classes.len() || names.iter().any(|name| name.is_empty()) {
+        return Err(block.error(
+            fields[2],
+            "transaction_delete_path",
+            "deletion path has the wrong number of namespace scopes",
+        ));
+    }
+    let mut selected = None;
+    for (name, class) in names.iter().zip(classes) {
+        selected = reader.namespace(&NamespaceKey {
+            parent: selected,
+            class: *class,
+            name: Name::new(*name)?,
+        })?;
+        if selected.is_none() {
+            return Err(block.error(
+                fields[2],
+                "transaction_delete_missing",
+                "deletion path is absent at the bound HEAD",
+            ));
+        }
+    }
+    let owner = selected.ok_or_else(|| {
+        block.error(
+            fields[2],
+            "transaction_delete_missing",
+            "deletion path is absent at the bound HEAD",
+        )
+    })?;
+    if declarations::owner_family(&reader.owner(owner)?) != kind {
+        return Err(block.error(
+            fields[1],
+            "transaction_delete_kind",
+            "deletion path names a different declaration family",
+        ));
+    }
+    let location = block.syntax[id].location.clone();
+    Ok(CompactRecord {
+        operation: "delete.owner".into(),
+        fields: vec![
+            CompactField {
+                name: "owner".into(),
+                value: owner.to_string(),
+                location: block.syntax[fields[2]].location.clone(),
+            },
+            CompactField {
+                name: "policy".into(),
+                value: policy.to_owned(),
+                location: block.syntax[fields[3]].location.clone(),
+            },
+        ],
+        location,
     })
 }
 
@@ -445,7 +590,6 @@ fn atom(block: &mut Block, at: usize, value: &str) -> Result<usize, Diagnostic> 
 }
 
 fn node(block: &mut Block, at: usize, kind: SyntaxKind) -> Result<usize, Diagnostic> {
-
     block.syntax.try_reserve(1).map_err(|_| {
         Diagnostic::new(
             DiagnosticClass::Resource,

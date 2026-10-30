@@ -915,7 +915,7 @@ pub(crate) fn validate_package_interface_metered<S: ImmutableObjectStore + ?Size
         let digest = decode_package_interface_binding(&binding_bytes)?;
         let key = ObjectKey::from_digest(ObjectDomain::PackageInterface, digest.bytes());
         let bytes = store
-            .read(key, MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES, work)
+            .read(key, Some(MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES), work)
             .map_err(store_diagnostic)?
             .ok_or_else(|| {
                 interface_error(
@@ -3141,7 +3141,7 @@ impl ImmutableObjectStore for EmptyObjectStore {
     fn read(
         &self,
         _key: ObjectKey,
-        _maximum_bytes: usize,
+        _maximum_bytes: Option<usize>,
         _work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         Ok(None)

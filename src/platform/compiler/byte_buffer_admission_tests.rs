@@ -3,7 +3,8 @@ use super::*;
 use crate::platform::DiagnosticClass;
 use crate::platform::kernel::{
     DeclarationPayload, EncodedOwnerKey, ExpressionValidationLimits, KernelSnapshot, ParameterUse,
-    decode_owner_binding, encode_owner_binding, };
+    decode_owner_binding, encode_owner_binding,
+};
 
 // Both owners are authored and accepted through the native change surface. The true arm is
 // ordinary Unit; the two distinct buffer owners are consumed only in the untaken arm.
@@ -427,10 +428,77 @@ fn reject_source(snapshot: KernelSnapshot, name: &str, carrier: TypeForm, callee
             ((unit.source.package, unit.source.owner), unit)
         })
         .collect();
-    let mut exhausted = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK as u64;
+    assert!(!loaded.work.implementation_inventory_saturated);
+    assert!(!linked.work.implementation_inventory_saturated);
+    assert!(!loaded.work.reference_type_inventory_saturated);
+    assert!(!loaded.work.nominal_inventory_saturated);
+    assert!(!loaded.work.interface_source_saturated);
+    let run_inventory = |steps: &mut u64, saturated: &mut bool, maximum| {
+        super::super::artifact::runtime_owner_expectations(
+            &units,
+            steps,
+            saturated,
+            maximum,
+            |ty| {
+                let key = ObjectKey::from_digest(ObjectDomain::Type, ty.bytes());
+                crate::platform::kernel::decode_type_object(&loaded.objects[&key], ty)
+            },
+            |declaration| {
+                Ok(matches!(
+                    units[&(
+                        declaration.package,
+                        OwnerKey::Declaration(declaration.declaration)
+                    )]
+                        .payload,
+                    CompilationPayload::OwnedRecord { .. }
+                ))
+            },
+            || Ok(()),
+        )
+    };
+    let exact = loaded.work.implementation_inventory_steps;
+    assert!(exact > 0);
+    let mut baseline_steps = 0;
+    let mut baseline_saturated = false;
+    let baseline = run_inventory(&mut baseline_steps, &mut baseline_saturated, None).unwrap();
+    assert_eq!(baseline_steps, exact);
+    assert!(!baseline_saturated);
+    for maximum in [None, Some(0), Some(exact - 1), Some(exact), Some(u64::MAX)] {
+        let mut steps = 0;
+        let mut saturated = false;
+        let result = run_inventory(&mut steps, &mut saturated, maximum);
+        if maximum.is_some_and(|maximum| maximum < exact) {
+            assert_eq!(result.unwrap_err().code, "artifact_owned_contract_work");
+            assert_eq!(Some(steps), maximum);
+        } else {
+            assert_eq!(result.unwrap(), baseline);
+            assert_eq!(steps, exact);
+        }
+        assert!(!saturated);
+    }
+    let mut maximum_steps = u64::MAX - exact;
+    let mut maximum_saturated = false;
+    assert_eq!(
+        run_inventory(&mut maximum_steps, &mut maximum_saturated, Some(u64::MAX)).unwrap(),
+        baseline
+    );
+    assert_eq!(maximum_steps, u64::MAX);
+    assert!(!maximum_saturated);
+    assert!(run_inventory(&mut maximum_steps, &mut maximum_saturated, Some(u64::MAX)).is_err());
+    assert!(!maximum_saturated);
+    assert_eq!(
+        run_inventory(&mut maximum_steps, &mut maximum_saturated, None).unwrap(),
+        baseline
+    );
+    assert!(maximum_saturated);
+    assert_eq!(maximum_steps, u64::MAX);
+    let mut exhausted = 0;
+    let mut exhausted_saturated = false;
     let failure = super::super::artifact::runtime_owner_expectations(
         &units,
         &mut exhausted,
+        &mut exhausted_saturated,
+        Some(0),
         |_| panic!("work exhaustion must precede type reads"),
         |_| panic!("work exhaustion must precede nominal reads"),
         || Ok(()),
@@ -439,9 +507,12 @@ fn reject_source(snapshot: KernelSnapshot, name: &str, carrier: TypeForm, callee
     assert_eq!(failure.class, DiagnosticClass::Resource);
     assert_eq!(failure.code, "artifact_owned_contract_work");
     let mut cancelled = 0;
+    let mut cancelled_saturated = false;
     let failure = super::super::artifact::runtime_owner_expectations(
         &units,
         &mut cancelled,
+        &mut cancelled_saturated,
+        None,
         |_| panic!("cancellation must precede type reads"),
         |_| panic!("cancellation must precede nominal reads"),
         || {
@@ -455,6 +526,57 @@ fn reject_source(snapshot: KernelSnapshot, name: &str, carrier: TypeForm, callee
     .unwrap_err();
     assert_eq!(failure.code, "owned_inventory_cancelled");
     assert_eq!(cancelled, 0);
+    assert!(!cancelled_saturated);
+
+    // Direct constructor-inventory admission uses exact canonical owner bytes. A
+    // cyclic expression must terminate at this layer even with unmetered policy.
+    let package = snapshot.root.package_id;
+    let local_units = units
+        .iter()
+        .filter(|((unit_package, _), _)| *unit_package == package)
+        .map(|(key, unit)| (*key, unit.clone()))
+        .collect();
+    let mut canonical: std::collections::BTreeMap<_, _> = snapshot
+        .owners
+        .iter()
+        .map(|(owner, record)| ((package, *owner), record.clone()))
+        .collect();
+    super::super::artifact::validate_nominal_instruction_inventory(
+        &local_units,
+        &canonical,
+        &canonical,
+        &mut 0,
+        &mut false,
+        None,
+    )
+    .unwrap();
+    let cyclic_owner = OwnerKey::Expression(locals[1]);
+    let mut cyclic = snapshot.owners[&cyclic_owner].clone();
+    let OwnerRecord::Expression(record) = &mut cyclic else {
+        unreachable!();
+    };
+    record.operation = ExpressionOperation::Sequence {
+        items: vec![locals[1]],
+    };
+    let (digest, bytes) = encode_owner(&cyclic).unwrap();
+    let cyclic = crate::platform::kernel::decode_owner(
+        &bytes,
+        cyclic_owner,
+        crate::platform::kernel::OwnerKind::Expression,
+        digest,
+    )
+    .unwrap();
+    canonical.insert((package, cyclic_owner), cyclic);
+    let failure = super::super::artifact::validate_nominal_instruction_inventory(
+        &local_units,
+        &canonical,
+        &canonical,
+        &mut 0,
+        &mut false,
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(failure.code, "artifact_nominal_instruction_cycle");
     let (old_unit, mut unit) = loaded
         .objects
         .iter()
@@ -488,13 +610,26 @@ fn reject_source(snapshot: KernelSnapshot, name: &str, carrier: TypeForm, callee
         maximum_diagnostics: Some(1),
     };
     let mut diagnostics = Vec::new();
-    crate::platform::kernel::test_work::validate_expression_roots_with_limits(&forged, [owner], &mut diagnostics, &mut 0, limits)
-        .unwrap();
+    crate::platform::kernel::test_work::validate_expression_roots_with_limits(
+        &forged,
+        [owner],
+        &mut diagnostics,
+        &mut 0,
+        limits,
+    )
+    .unwrap();
     assert!(
         diagnostics.is_empty(),
         "type-valid forgery: {diagnostics:?}"
     );
-    crate::platform::kernel::test_work::validate_affine_roots_with_limits(&forged, [owner], &mut diagnostics, &mut 0, limits).unwrap();
+    crate::platform::kernel::test_work::validate_affine_roots_with_limits(
+        &forged,
+        [owner],
+        &mut diagnostics,
+        &mut 0,
+        limits,
+    )
+    .unwrap();
     assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
     assert_eq!(diagnostics[0].code, "kernel_buffer_ownership");
 

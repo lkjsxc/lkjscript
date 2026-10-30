@@ -48,6 +48,9 @@ env | LC_ALL=C sort > .artifacts/child-environment
 printf 'original stderr\n' >&2
 if [[ "$mode" == fail-cargo ]]; then printf '{"reason":"compiler-diagnostic"}\n'; exit 7; fi
 if [[ "$mode" == source-change ]]; then printf 'changed\n' >> source.txt; fi
+if [[ "$mode" == large-source-change ]]; then
+  printf 'changed\n' >> "$(cat .artifacts/large-source-path)"
+fi
 if [[ "$mode" == index-change ]]; then printf 'changed\n' >> source.txt; git add source.txt; fi
 if [[ "$mode" == head-change ]]; then
   git -c user.name=Fixture -c user.email=fixture@example.invalid -c commit.gpgsign=false \
@@ -120,7 +123,6 @@ jq -e --arg target "$fixture/target" '.status == "passed" and .target == $target
   and .originals_retained == false and (.binaries | length) == 1
   and .binaries[0].output.path == ($target + "/bootstrap/lkjscript-dev")
   and (.binaries[0].output.sha256 | length) == 64' "$root/receipt.json" > /dev/null
-test "$(wc -c < "$root/receipt.json")" -lt 65536
 case_name=archive
 run --retain-archive
 root="$fixture/.artifacts/$case_name"
@@ -306,6 +308,57 @@ jq -e --arg source "$expected_source" --arg tree "$staged_tree" --arg head_tree 
   '.status == "passed" and .source.source == $source and .source.tree == $tree
     and .source.head_tree == $head_tree and .source.mode == "staged-tree"
     and .source.status != ""' ".artifacts/$case_name/receipt.json" > /dev/null
+# Complete staged status must exceed both the former receipt cap and a Linux
+# single-argument limit without truncating source evidence or weakening admission.
+printf -v large_component '%0192d' 0
+large_directory=large-status
+for (( depth=0; depth<8; depth++ )); do large_directory+="/$large_component"; done
+mkdir -p "$large_directory"
+for (( index=0; index<96; index++ )); do
+  printf -v large_name '%03d.txt' "$index"
+  printf 'large staged receipt fixture %s\n' "$index" > "$large_directory/$large_name"
+done
+printf '%s\n' "$large_directory/095.txt" > .artifacts/large-source-path
+git add -- large-status
+large_tree=$(git write-tree)
+git status --porcelain=v1 --untracked-files=all > .artifacts/large-source-status
+test "$(wc -c < .artifacts/large-source-status)" -gt 131072
+case_name=staged-large
+run --expected-tree "$large_tree"
+root="$fixture/.artifacts/$case_name"
+jq -e --arg source "$expected_source" --arg tree "$large_tree" --arg head_tree "$head_tree" \
+  --rawfile status .artifacts/large-source-status \
+  '.schema == "lkjscript.bootstrap.v1" and .status == "passed"
+    and .source.source == $source and .source.tree == $tree and .source.head_tree == $head_tree
+    and .source.mode == "staged-tree" and .source.status == ($status | sub("\n+$"; ""))
+    and (.source.status | length) > 131072 and .originals_retained == false' \
+  "$root/receipt.json" > /dev/null
+test "$(wc -c < "$root/receipt.json")" -gt 131072
+test ! -e "$root/evidence"
+case_name=staged-large-archive
+run --expected-tree "$large_tree" --retain-archive
+root="$fixture/.artifacts/$case_name"
+jq -e '.status == "passed" and (.source.status | length) > 131072
+  and .originals_retained == true' "$root/receipt.json" > /dev/null
+cmp "$root/evidence/bootstrap-source-before.json" "$root/evidence/bootstrap-source-after.json"
+case_name=staged-large-wrong-tree
+staged_refuse_before_cargo
+jq -e '.status == "failed" and .phase == "preparation"' ".artifacts/$case_name/receipt.json" > /dev/null
+case_name=staged-large-source-change
+printf 'large-source-change\n' > .artifacts/mode
+refuse --expected-tree "$large_tree" --retain-archive
+root="$fixture/.artifacts/$case_name"
+jq -e '.status == "failed" and .phase == "admission" and .originals_retained == true' \
+  "$root/receipt.json" > /dev/null
+jq -e -s '.[0].source == .[1].source and .[0].tree == .[1].tree
+  and .[0].status != .[1].status and .[0].status[:131072] == .[1].status[:131072]' \
+  "$root/evidence/bootstrap-source-before.json" "$root/evidence/bootstrap-source-after.json" > /dev/null
+! rg -Fx "$fixture/target/bootstrap" ".artifacts/$case_name.stdout"
+git restore --worktree -- "$large_directory/095.txt"
+git rm --quiet -r --cached -- large-status
+rm -r -- large-status
+test "$(git write-tree)" = "$staged_tree"
+printf 'valid\n' > .artifacts/mode
 case_name=staged-reused
 printf 'fresh\n' > .artifacts/mode
 run --expected-tree "$staged_tree"

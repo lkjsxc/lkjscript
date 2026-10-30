@@ -114,7 +114,7 @@ fn same_epoch_persisted_witness_requires_a_current_process_proof() {
 
 #[test]
 fn cold_and_reused_process_proofs_produce_identical_candidate_receipts() {
-    let memory = crate::platform::MemProjectStore::new(16 * 1_048_576).unwrap();
+    let memory = crate::platform::MemProjectStore::new(None).unwrap();
     let mut snapshot = crate::platform::kernel::tests::witness_snapshot();
     snapshot.root.repository_id =
         crate::platform::semantic_id::RepositoryId::migrate(b"cold-warm-candidate-receipt", 0);

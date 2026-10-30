@@ -40,7 +40,7 @@ fn read_all(store: &PackDirectoryStore, keep: &BTreeMap<ObjectKey, Vec<u8>>) {
     for (key, bytes) in keep {
         assert_eq!(
             store
-                .read(*key, bytes.len(), &mut StoreWork::default())
+                .read(*key, Some(bytes.len()), &mut StoreWork::default())
                 .unwrap()
                 .as_ref(),
             Some(bytes)
@@ -86,7 +86,7 @@ fn retained_reader_excludes_gc_without_invalidating_its_catalog() {
     let gone = ObjectKey::for_bytes(ObjectDomain::Blob, &vec![2; 32_768]);
     assert!(
         reopened
-            .read(gone, 32_768, &mut StoreWork::default())
+            .read(gone, Some(32_768), &mut StoreWork::default())
             .unwrap()
             .is_none()
     );

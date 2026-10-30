@@ -944,40 +944,43 @@ fn assert_limits_cancel_retry(family: &Family) {
             Ok(())
         };
         let mut work = 0;
-        let measured = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
-            &[&family.common.source],
-            &checkpoint,
-            &mut work,
-            Some(contract::MAXIMUM_VALIDATION_WORK),
-            64 * 1_048_576,
-            eager,
-        )
-        .unwrap();
+        let measured =
+            crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
+                &[&family.common.source],
+                &checkpoint,
+                &mut work,
+                Some(contract::MAXIMUM_VALIDATION_WORK),
+                64 * 1_048_576,
+                eager,
+            )
+            .unwrap();
         let complete_checks = checks.get();
         assert!(work > 1 && measured.metadata_bytes > 1 && complete_checks > 1);
-        let exact = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
-            &[&family.common.source],
-            &|| Ok(()),
-            &mut 0,
-            Some(work),
-            measured.metadata_bytes,
-            eager,
-        )
-        .unwrap();
+        let exact =
+            crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
+                &[&family.common.source],
+                &|| Ok(()),
+                &mut 0,
+                Some(work),
+                measured.metadata_bytes,
+                eager,
+            )
+            .unwrap();
         assert_eq!(exact, measured);
         for (maximum_work, maximum_bytes) in [
             (work - 1, measured.metadata_bytes),
             (work, measured.metadata_bytes - 1),
         ] {
-            let error = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
-                &[&family.common.source],
-                &|| Ok(()),
-                &mut 0,
-                Some(maximum_work),
-                maximum_bytes,
-                eager,
-            )
-            .unwrap_err();
+            let error =
+                crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
+                    &[&family.common.source],
+                    &|| Ok(()),
+                    &mut 0,
+                    Some(maximum_work),
+                    maximum_bytes,
+                    eager,
+                )
+                .unwrap_err();
             assert_eq!(error.class, DiagnosticClass::Resource);
         }
         checks.set(0);
@@ -994,27 +997,29 @@ fn assert_limits_cancel_retry(family: &Family) {
                 Ok(())
             }
         };
-        let error = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
-            &[&family.common.source],
-            &cancel,
-            &mut 0,
-            Some(work),
-            measured.metadata_bytes,
-            eager,
-        )
-        .unwrap_err();
+        let error =
+            crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
+                &[&family.common.source],
+                &cancel,
+                &mut 0,
+                Some(work),
+                measured.metadata_bytes,
+                eager,
+            )
+            .unwrap_err();
         assert_eq!(error.class, DiagnosticClass::Cancelled);
         assert_eq!(error.code, "canonical_family_cancelled");
         let mut retry_work = 0;
-        let retry = crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
-            &[&family.common.source],
-            &|| Ok(()),
-            &mut retry_work,
-            Some(work),
-            measured.metadata_bytes,
-            eager,
-        )
-        .unwrap();
+        let retry =
+            crate::platform::kernel::test_work::validate_snapshot_callable_closure_with_limits(
+                &[&family.common.source],
+                &|| Ok(()),
+                &mut retry_work,
+                Some(work),
+                measured.metadata_bytes,
+                eager,
+            )
+            .unwrap();
         assert_eq!((retry, retry_work), (measured, work));
     }
 }

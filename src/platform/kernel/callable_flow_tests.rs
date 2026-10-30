@@ -322,7 +322,12 @@ impl Read {
         read
     }
     fn admit(&self, maximum: usize) -> Result<CallableFlowWork, Diagnostic> {
-        crate::platform::kernel::test_work::validate_callable_flow(self, self.owners.keys().copied(), &mut 0, maximum)
+        crate::platform::kernel::test_work::validate_callable_flow(
+            self,
+            self.owners.keys().copied(),
+            &mut 0,
+            maximum,
+        )
     }
 }
 
@@ -404,8 +409,13 @@ fn finite_callable_scc_ladder_records_separate_analysis_cost() {
         let read = Read::new(&schema, false);
         let mut work = 0;
         let start = std::time::Instant::now();
-        let observed =
-            crate::platform::kernel::test_work::validate_callable_flow(&read, read.owners.keys().copied(), &mut work, 100_000).unwrap();
+        let observed = crate::platform::kernel::test_work::validate_callable_flow(
+            &read,
+            read.owners.keys().copied(),
+            &mut work,
+            100_000,
+        )
+        .unwrap();
         let elapsed = start.elapsed().as_nanos();
         assert_eq!(observed.functions, count);
         assert_eq!(observed.applications, count);

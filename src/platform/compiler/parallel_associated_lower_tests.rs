@@ -845,8 +845,8 @@ fn associated_parallel_task_kind_and_borrowed_result_are_not_erased_by_empty_row
 fn associated_parallel_cached_relower_matches_fresh_and_rejects_same_output_witness_substitution() {
     let f = fixture(true);
     let (unit, expected) = raw_compile(&f.source, f.joined).unwrap();
-    let mut remaining = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
-    let (actual, _) = reconstruct_parallel_result_types(&f.source, &unit, &mut remaining).unwrap();
+    let admission = CompilerWorkAdmission::default();
+    let (actual, _) = reconstruct_parallel_result_types(&f.source, &unit, &admission).unwrap();
     assert_eq!(actual, expected);
     let mut changed = unit.clone();
     let instruction = code_mut(&mut changed)
@@ -863,8 +863,8 @@ fn associated_parallel_cached_relower_matches_fresh_and_rejects_same_output_witn
         unreachable!()
     };
     *left_implementations = right_implementations.clone();
-    let mut remaining = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
-    let error = reconstruct_parallel_result_types(&f.source, &changed, &mut remaining).unwrap_err();
+    let admission = CompilerWorkAdmission::default();
+    let error = reconstruct_parallel_result_types(&f.source, &changed, &admission).unwrap_err();
     assert_eq!(error.code, "compiler_parallel_control_meaning", "{error:?}");
     assert_eq!(error.class, DiagnosticClass::Corrupt);
 }
@@ -896,9 +896,9 @@ fn ordinary_parallel_literal_bytes_and_cached_fresh_unit_bytes_remain_identical(
     );
     let (fresh, expected) = raw_compile(&source, joined).unwrap();
     assert_eq!(fresh.encode().unwrap().1, receipt.bytes);
-    let mut remaining = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
+    let admission = CompilerWorkAdmission::default();
     let (recreated, _) =
-        reconstruct_parallel_result_types(&source, &receipt.unit, &mut remaining).unwrap();
+        reconstruct_parallel_result_types(&source, &receipt.unit, &admission).unwrap();
     assert_eq!(recreated, expected);
     assert_eq!(receipt.unit.encode().unwrap().1, receipt.bytes);
     // Two real same-signature Task targets: a valid table index still does not
@@ -914,8 +914,8 @@ fn ordinary_parallel_literal_bytes_and_cached_fresh_unit_bytes_remain_identical(
     };
     assert_ne!(*left, *right);
     *left = *right;
-    let mut remaining = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
-    let error = reconstruct_parallel_result_types(&source, &changed, &mut remaining).unwrap_err();
+    let admission = CompilerWorkAdmission::default();
+    let error = reconstruct_parallel_result_types(&source, &changed, &admission).unwrap_err();
     assert_eq!(error.code, "compiler_parallel_control_meaning", "{error:?}");
     assert_eq!(error.class, DiagnosticClass::Corrupt);
 }
@@ -958,9 +958,9 @@ fn ordinary_parallel_reconstruction_seeds_nested_nominal_fields_before_strict_ta
             ty.bytes(),
         )));
     }
-    let mut remaining = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
+    let admission = CompilerWorkAdmission::default();
     let (recreated, _) =
-        reconstruct_parallel_result_types(&source, &receipt.unit, &mut remaining).unwrap();
+        reconstruct_parallel_result_types(&source, &receipt.unit, &admission).unwrap();
     assert_eq!(recreated, expected);
     assert_eq!(receipt.unit.encode().unwrap().1, receipt.bytes);
     // An unrelated nonexistent cached root is still rejected after seeding.
@@ -969,8 +969,8 @@ fn ordinary_parallel_reconstruction_seeds_nested_nominal_fields_before_strict_ta
         .tables
         .types
         .push(TypeObjectDigest::from_bytes([0xe7; 32]));
-    let mut remaining = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
-    let error = reconstruct_parallel_result_types(&source, &corrupt, &mut remaining).unwrap_err();
+    let admission = CompilerWorkAdmission::default();
+    let error = reconstruct_parallel_result_types(&source, &corrupt, &admission).unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Corrupt, "{error:?}");
     assert_eq!(error.code, "compiler_owned_record_type");
 }
@@ -1048,33 +1048,32 @@ declarations.end
         inner_sequence.bytes(),
     );
     assert_eq!(expected[&key], inner_sequence_bytes);
-    let maximum = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
-    let mut remaining = maximum;
+    let admission = CompilerWorkAdmission::default();
     let (recreated, _) =
-        reconstruct_parallel_result_types(&source, &receipt.unit, &mut remaining).unwrap();
+        reconstruct_parallel_result_types(&source, &receipt.unit, &admission).unwrap();
     assert_eq!(recreated, expected);
     assert_eq!(receipt.unit.encode().unwrap().1, receipt.bytes);
-    let measured = maximum - remaining;
+    let measured = admission.observation().consumed;
     assert!(measured > receipt.unit.tables.types.len());
-    let mut exact = measured;
+    let exact = CompilerWorkAdmission::with_limit(Some(measured));
     assert_eq!(
-        reconstruct_parallel_result_types(&source, &receipt.unit, &mut exact)
+        reconstruct_parallel_result_types(&source, &receipt.unit, &exact)
             .unwrap()
             .0,
         expected
     );
-    assert_eq!(exact, 0);
-    let mut below = measured - 1;
-    let error = reconstruct_parallel_result_types(&source, &receipt.unit, &mut below).unwrap_err();
+    assert_eq!(exact.observation(), ValidationWork::exact(measured));
+    let below = CompilerWorkAdmission::with_limit(Some(measured - 1));
+    let error = reconstruct_parallel_result_types(&source, &receipt.unit, &below).unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Resource, "{error:?}");
     let healthy = Controlled {
         source: &source,
         control: ExecutionControl::uncancelled(),
         checks: Cell::new(0),
     };
-    let mut remaining = maximum;
+    let admission = CompilerWorkAdmission::default();
     assert_eq!(
-        reconstruct_parallel_result_types(&healthy, &receipt.unit, &mut remaining)
+        reconstruct_parallel_result_types(&healthy, &receipt.unit, &admission)
             .unwrap()
             .0,
         expected
@@ -1087,18 +1086,18 @@ declarations.end
             control: ExecutionControl::cancel_after_checks(cutoff),
             checks: Cell::new(0),
         };
-        let mut remaining = maximum;
-        let error = reconstruct_parallel_result_types(&controlled, &receipt.unit, &mut remaining)
-            .unwrap_err();
+        let admission = CompilerWorkAdmission::default();
+        let error =
+            reconstruct_parallel_result_types(&controlled, &receipt.unit, &admission).unwrap_err();
         assert_eq!(
             error.class,
             DiagnosticClass::Cancelled,
             "cutoff {cutoff}: {error:?}"
         );
     }
-    let mut remaining = maximum;
+    let admission = CompilerWorkAdmission::default();
     assert_eq!(
-        reconstruct_parallel_result_types(&source, &receipt.unit, &mut remaining)
+        reconstruct_parallel_result_types(&source, &receipt.unit, &admission)
             .unwrap()
             .0,
         expected
@@ -1108,8 +1107,8 @@ declarations.end
         .tables
         .types
         .push(TypeObjectDigest::from_bytes([0xe8; 32]));
-    let mut remaining = maximum;
-    let error = reconstruct_parallel_result_types(&source, &corrupt, &mut remaining).unwrap_err();
+    let admission = CompilerWorkAdmission::default();
+    let error = reconstruct_parallel_result_types(&source, &corrupt, &admission).unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Corrupt, "{error:?}");
     assert_eq!(error.code, "compiler_owned_record_type");
 }
@@ -1184,30 +1183,29 @@ impl CanonicalBaseRead for Controlled<'_> {
 fn associated_parallel_reconstruction_exact_work_bound_cancellation_and_retry_are_real_walks() {
     let f = fixture(false);
     let (unit, expected) = raw_compile(&f.source, f.joined).unwrap();
-    let maximum = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
-    let mut remaining = maximum;
-    reconstruct_parallel_result_types(&f.source, &unit, &mut remaining).unwrap();
-    let measured = maximum - remaining;
+    let admission = CompilerWorkAdmission::default();
+    reconstruct_parallel_result_types(&f.source, &unit, &admission).unwrap();
+    let measured = admission.observation().consumed;
     assert!(measured > unit.tables.types.len());
-    let mut exact = measured;
+    let exact = CompilerWorkAdmission::with_limit(Some(measured));
     assert_eq!(
-        reconstruct_parallel_result_types(&f.source, &unit, &mut exact)
+        reconstruct_parallel_result_types(&f.source, &unit, &exact)
             .unwrap()
             .0,
         expected
     );
-    assert_eq!(exact, 0);
-    let mut below = measured - 1;
-    let error = reconstruct_parallel_result_types(&f.source, &unit, &mut below).unwrap_err();
+    assert_eq!(exact.observation(), ValidationWork::exact(measured));
+    let below = CompilerWorkAdmission::with_limit(Some(measured - 1));
+    let error = reconstruct_parallel_result_types(&f.source, &unit, &below).unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Resource, "{error:?}");
     let healthy = Controlled {
         source: &f.source,
         control: ExecutionControl::uncancelled(),
         checks: Cell::new(0),
     };
-    let mut remaining = maximum;
+    let admission = CompilerWorkAdmission::default();
     assert_eq!(
-        reconstruct_parallel_result_types(&healthy, &unit, &mut remaining)
+        reconstruct_parallel_result_types(&healthy, &unit, &admission)
             .unwrap()
             .0,
         expected
@@ -1220,17 +1218,17 @@ fn associated_parallel_reconstruction_exact_work_bound_cancellation_and_retry_ar
             control: ExecutionControl::cancel_after_checks(cutoff),
             checks: Cell::new(0),
         };
-        let mut remaining = maximum;
-        let error = reconstruct_parallel_result_types(&source, &unit, &mut remaining).unwrap_err();
+        let admission = CompilerWorkAdmission::default();
+        let error = reconstruct_parallel_result_types(&source, &unit, &admission).unwrap_err();
         assert_eq!(
             error.class,
             DiagnosticClass::Cancelled,
             "cutoff {cutoff}: {error:?}"
         );
     }
-    let mut remaining = maximum;
+    let admission = CompilerWorkAdmission::default();
     assert_eq!(
-        reconstruct_parallel_result_types(&f.source, &unit, &mut remaining)
+        reconstruct_parallel_result_types(&f.source, &unit, &admission)
             .unwrap()
             .0,
         expected
@@ -1267,41 +1265,108 @@ fn associated_parallel_both_children_share_exact_producer_work_and_metadata_boun
     let f = fixture(false);
     let mut healthy = builder(&f);
     children(&mut healthy, &f).unwrap();
-    let steps = healthy.derived_type_admission.parallel_steps.get();
+    let steps = healthy
+        .derived_type_admission
+        .parallel_steps
+        .observation()
+        .consumed;
     let bytes = healthy.derived_type_admission.parallel.work().1;
     assert!(steps > 2);
     assert!(bytes > 0);
-    let maximum = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
-    let mut exact = builder(&f);
-    exact
-        .derived_type_admission
-        .parallel_steps
-        .set(maximum - steps);
-    children(&mut exact, &f).unwrap();
-    assert_eq!(exact.derived_type_admission.parallel_steps.get(), maximum);
-    let mut below = builder(&f);
-    below
-        .derived_type_admission
-        .parallel_steps
-        .set(maximum - steps + 1);
-    let error = children(&mut below, &f).unwrap_err();
-    assert_eq!(error.class, DiagnosticClass::Resource, "{error:?}");
-    assert_eq!(error.code, "compiler_parallel_proof_work");
-    for (limit, success) in [(bytes, true), (bytes - 1, false)] {
+    for maximum in [
+        None,
+        Some(0),
+        Some(steps - 1),
+        Some(steps),
+        Some(usize::MAX),
+    ] {
+        let mut bounded = builder(&f);
+        bounded.derived_type_admission.parallel_steps = CompilerWorkAdmission::with_limit(maximum);
+        let result = children(&mut bounded, &f);
+        if maximum.is_some_and(|maximum| maximum < steps) {
+            let error = result.unwrap_err();
+            assert_eq!(error.class, DiagnosticClass::Resource, "{error:?}");
+            assert_eq!(error.code, "compiler_parallel_proof_work");
+        } else {
+            result.unwrap();
+            assert_eq!(
+                bounded.derived_type_admission.parallel_steps.observation(),
+                ValidationWork::exact(steps)
+            );
+        }
+    }
+    for maximum in [
+        None,
+        Some(0),
+        Some(bytes - 1),
+        Some(bytes),
+        Some(usize::MAX),
+    ] {
         let mut bounded = builder(&f);
         bounded.derived_type_admission.parallel =
             crate::platform::kernel::owned_associated::OwnedAssociatedAdmission::with_limits(
                 crate::platform::kernel::owned_associated::AssociatedAdmissionLimits {
-                    maximum_metadata_bytes: Some(limit),
+                    maximum_metadata_bytes: maximum,
                     ..Default::default()
                 },
             );
         match children(&mut bounded, &f) {
-            Ok(()) => assert!(success),
+            Ok(()) => assert!(maximum.is_none_or(|maximum| maximum >= bytes)),
             Err(error) => {
-                assert!(!success, "{error:?}");
+                assert!(maximum.is_some_and(|maximum| maximum < bytes), "{error:?}");
                 assert_eq!(error.class, DiagnosticClass::Resource, "{error:?}");
             }
         }
     }
+}
+
+#[test]
+fn ordinary_reconstruction_crosses_former_work_ceiling_and_saturates_passively() {
+    let source = author(ORDINARY);
+    let joined = named(&source, "joined");
+    let (unit, expected) = raw_compile(&source, joined).unwrap();
+    let measured = CompilerWorkAdmission::default();
+    reconstruct_parallel_result_types(&source, &unit, &measured).unwrap();
+    let cost = measured.observation().consumed;
+    assert!(cost > 0);
+    for maximum in [None, Some(0), Some(cost - 1), Some(cost), Some(usize::MAX)] {
+        let admission = CompilerWorkAdmission::with_limit(maximum);
+        let result = reconstruct_parallel_result_types(&source, &unit, &admission);
+        if maximum.is_some_and(|maximum| maximum < cost) {
+            assert_eq!(
+                result.unwrap_err().code,
+                "compiler_parallel_result_type_limit"
+            );
+        } else {
+            assert_eq!(result.unwrap().0, expected);
+            assert_eq!(admission.observation(), ValidationWork::exact(cost));
+        }
+    }
+    for prior in [10_000_000, usize::MAX] {
+        let admission = CompilerWorkAdmission::default();
+        admission.work.set(ValidationWork::exact(prior));
+        assert_eq!(
+            reconstruct_parallel_result_types(&source, &unit, &admission)
+                .unwrap()
+                .0,
+            expected
+        );
+        let observed = admission.observation();
+        if prior == usize::MAX {
+            assert_eq!(observed.consumed, usize::MAX);
+            assert!(observed.saturated);
+        } else {
+            assert_eq!(observed, ValidationWork::exact(prior + cost));
+        }
+    }
+    let finite = CompilerWorkAdmission::with_limit(Some(usize::MAX));
+    finite.work.set(ValidationWork::exact(usize::MAX));
+    let before = finite.observation();
+    assert_eq!(
+        reconstruct_parallel_result_types(&source, &unit, &finite)
+            .unwrap_err()
+            .code,
+        "compiler_parallel_result_type_limit"
+    );
+    assert_eq!(finite.observation(), before);
 }

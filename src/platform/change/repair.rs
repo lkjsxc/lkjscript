@@ -5,7 +5,9 @@ use super::derived::derive_local_delta_with_admission;
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{KernelSnapshot, OwnerKey, OwnerKind};
-use crate::platform::witness::{CanonicalWitnessFacts, rebuild_full_witness_checked};
+use crate::platform::witness::{
+    CanonicalWitnessFacts, WitnessRebuildAdmission, rebuild_full_witness_checked_with_admission,
+};
 use std::collections::BTreeSet;
 
 pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?Sized>(
@@ -41,9 +43,17 @@ pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?
     });
     // Type/blob objects are immutable storage content, but only live owner roots belong to
     // the logical candidate. Removing a body does not delete its historical stored objects.
-    let maximum_work = initial_work.observation_saturation()
-        .counter(BudgetDimension::ValidationExpressionSteps, initial_work.validation.expression_steps)
-        .remaining(budget.validation.maximum_expression_steps, "complete repair", "validation_expression_steps")
+    let maximum_work = initial_work
+        .observation_saturation()
+        .counter(
+            BudgetDimension::ValidationExpressionSteps,
+            initial_work.validation.expression_steps,
+        )
+        .remaining(
+            budget.validation.maximum_expression_steps,
+            "complete repair",
+            "validation_expression_steps",
+        )
         .map_err(single)?;
     let mut pruning_work = BudgetCounter::default();
     let mut pending_types: BTreeSet<_> = candidate
@@ -54,8 +64,14 @@ pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?
     let mut live_types = BTreeSet::new();
     while let Some(ty) = pending_types.pop_first() {
         witness_base.validation_checkpoint().map_err(single)?;
-        pruning_work.charge(BudgetCounter::exact(1), maximum_work,
-            "complete repair type-root reconstruction", "validation_expression_steps").map_err(single)?;
+        pruning_work
+            .charge(
+                BudgetCounter::exact(1),
+                maximum_work,
+                "complete repair type-root reconstruction",
+                "validation_expression_steps",
+            )
+            .map_err(single)?;
         if live_types.insert(ty)
             && let Some(object) = candidate.types.get(&ty)
         {
@@ -72,10 +88,29 @@ pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?
     candidate
         .blobs
         .retain(|digest, _| live_blobs.contains(digest));
-    let remaining = pruning_work.remaining(maximum_work, "complete repair", "validation_expression_steps").map_err(single)?;
-    let maximum_full_work = optional_usize(remaining, "validation_expression_steps").map_err(single)?;
-    let full = rebuild_full_witness_checked(&candidate, maximum_full_work, &|| {
-        witness_base.validation_checkpoint()
+    let remaining = pruning_work
+        .remaining(
+            maximum_work,
+            "complete repair",
+            "validation_expression_steps",
+        )
+        .map_err(single)?;
+    let maximum_full_work =
+        optional_usize(remaining, "validation_expression_steps").map_err(single)?;
+    let full = rebuild_full_witness_checked_with_admission(
+        &candidate,
+        maximum_full_work,
+        WitnessRebuildAdmission {
+            maximum_owner_fanout: budget.impact.maximum_relation_fanout,
+            maximum_dependencies_per_test: budget.tests.maximum_dependencies_per_test,
+        },
+        &|| witness_base.validation_checkpoint(),
+    )
+    .map_err(|errors| {
+        errors
+            .into_iter()
+            .map(rebuild_budget_diagnostic)
+            .collect::<Vec<_>>()
     })?;
     let report = full.report.full_validation.clone();
     let selected: BTreeSet<_> = facts
@@ -137,7 +172,9 @@ pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?
         witness_reads: WitnessReadWork::default(),
         saturation: {
             let mut flags = WorkSaturation::default();
-            if report.work_saturated { flags.mark(BudgetDimension::ValidationExpressionSteps); }
+            if report.work_saturated {
+                flags.mark(BudgetDimension::ValidationExpressionSteps);
+            }
             flags
         },
     };
@@ -157,7 +194,10 @@ pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?
         })
         .map_err(single)?;
     let mut expression_work = pruning_work;
-    expression_work.observe(BudgetCounter { consumed: report.work_consumed, saturated: report.work_saturated });
+    expression_work.observe(BudgetCounter {
+        consumed: report.work_consumed,
+        saturated: report.work_saturated,
+    });
     meter
         .observe_expression_validation(expression_work, 0)
         .map_err(single)?;
@@ -188,11 +228,19 @@ pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?
         read_work: WitnessReadWork::default(),
         edits: {
             let mut inserted = BudgetCounter::exact(full.report.namespace_entries);
-            for count in [full.report.ownership_entries, full.report.owners_summarized, full.report.test_dependency_entries] {
+            for count in [
+                full.report.ownership_entries,
+                full.report.owners_summarized,
+                full.report.test_dependency_entries,
+            ] {
                 inserted.observe(BudgetCounter::exact(count));
             }
             inserted.observe(BudgetCounter::product(full.report.relation_edges, 2));
-            WitnessEditCounts { inserted: inserted.consumed, saturated: inserted.saturated, ..WitnessEditCounts::default() }
+            WitnessEditCounts {
+                inserted: inserted.consumed,
+                saturated: inserted.saturated,
+                ..WitnessEditCounts::default()
+            }
         },
     };
     meter.observe_witness(&witness).map_err(single)?;
@@ -222,4 +270,101 @@ pub(crate) fn prepare_repair_analysis<W: WitnessBaseRead + CanonicalBaseRead + ?
         budget,
         full_candidate: Some(report),
     })
+}
+
+fn rebuild_budget_diagnostic(diagnostic: Diagnostic) -> Diagnostic {
+    let code = if diagnostic.code == "kernel_relation_fanout_budget" {
+        "change_budget_relation_fanout"
+    } else if diagnostic.code == "witness_test_dependency_budget" {
+        "change_budget_test_dependencies_per_test"
+    } else {
+        return diagnostic;
+    };
+    Diagnostic::new(diagnostic.class, code, diagnostic.message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::platform::kernel::RelationEndpoint;
+    use crate::platform::publication::GraphRepository;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn full_repair_preserves_optional_owner_fanout_and_per_test_policies() {
+        let snapshot = crate::platform::kernel::tests::witness_snapshot();
+        let memory =
+            crate::platform::MemProjectStore::new(None).expect("repair test storage policy");
+        let created = GraphRepository::create_memory(&memory, &snapshot, None)
+            .expect("publicly create the repair fixture");
+        let view = created
+            .repository
+            .view_current()
+            .expect("accepted repair read view");
+        let facts =
+            crate::platform::witness::rebuild_canonical_facts(&snapshot).expect("exact base facts");
+        let mut fanout = BTreeMap::new();
+        for edge in &facts.entries.relations {
+            if let RelationEndpoint::Owner(source) = edge.source {
+                *fanout.entry(source).or_insert(0_u64) += 1;
+            }
+        }
+        let maximum_fanout = fanout
+            .values()
+            .copied()
+            .max()
+            .expect("nonempty relation fixture");
+        let maximum_dependencies = facts
+            .entries
+            .test_dependencies_by_test
+            .values()
+            .map(|dependencies| dependencies.len() as u64)
+            .max()
+            .expect("nonempty test dependency fixture");
+        for (dimension, exact) in [
+            (BudgetDimension::RelationFanout, maximum_fanout),
+            (
+                BudgetDimension::TestDependenciesPerTest,
+                maximum_dependencies,
+            ),
+        ] {
+            assert!(exact > 0);
+            for maximum in [None, Some(0), Some(exact - 1), Some(exact), Some(u64::MAX)] {
+                let mut budget = ChangeBudget::default();
+                budget
+                    .set_policy_limit(dimension.policy_name(), maximum)
+                    .unwrap();
+                let canonical = CanonicalDelta::normalize(&snapshot, Vec::new())
+                    .expect("empty canonical repair delta");
+                let result = prepare_repair_analysis(
+                    &snapshot,
+                    &facts,
+                    &view,
+                    canonical,
+                    budget,
+                    ChangeBudgetWork::default(),
+                );
+                if maximum.is_some_and(|maximum| maximum < exact) {
+                    let errors =
+                        result.expect_err("finite per-value policy must reject full repair");
+                    assert_eq!(errors[0].class, DiagnosticClass::Resource);
+                    assert_eq!(
+                        errors[0].code,
+                        match dimension {
+                            BudgetDimension::RelationFanout => "change_budget_relation_fanout",
+                            _ => "change_budget_test_dependencies_per_test",
+                        }
+                    );
+                } else {
+                    let prepared =
+                        result.expect("exact, unbounded and maximum policies admit full repair");
+                    assert_eq!(prepared.witness.roots, facts.roots);
+                }
+                assert_eq!(
+                    created.repository.current().unwrap().head,
+                    created.current.head
+                );
+            }
+        }
+    }
 }

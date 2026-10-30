@@ -1,5 +1,7 @@
 //! Canonical integrity envelope for packed semantic objects.
 
+pub(crate) mod linear;
+
 use super::canonical_schema::SCHEMA_EPOCH;
 use super::diagnostic::{Diagnostic, DiagnosticClass};
 pub const MAXIMUM_PACKED_PAYLOAD_BYTES: usize = 128 * 1_048_576;
@@ -88,71 +90,12 @@ pub fn decode<T: bincode::Decode<()> + bincode::Encode>(
             "packed object maximum exceeds the global decoder bound",
         ));
     }
-    let minimum = HEADER_BYTES + CHECKSUM_BYTES;
-    if bytes.len() < minimum {
-        return Err(packed_error(
-            DiagnosticClass::Corrupt,
-            "packed_truncated",
-            "packed object is truncated",
-        ));
-    }
-    if bytes[..8] != expected_magic {
-        return Err(packed_error(
-            DiagnosticClass::Source,
-            "packed_contract",
-            "packed object has an unknown contract identity",
-        ));
-    }
-    if bytes[8..10] != SCHEMA_EPOCH.to_le_bytes() {
-        return Err(packed_error(
-            DiagnosticClass::Source,
-            "packed_schema",
-            "packed object does not use the current canonical schema",
-        ));
-    }
-    let mut length_bytes = [0_u8; 8];
-    length_bytes.copy_from_slice(&bytes[10..18]);
-    let payload_length = usize::try_from(u64::from_le_bytes(length_bytes)).map_err(|_| {
-        packed_error(
-            DiagnosticClass::Resource,
-            "packed_payload_length",
-            "packed payload length cannot be represented",
-        )
-    })?;
-    if payload_length > maximum_payload_bytes {
-        return Err(packed_error(
-            DiagnosticClass::Resource,
-            "packed_payload_limit",
-            format!("packed object payload exceeds {maximum_payload_bytes} bytes"),
-        ));
-    }
-    let expected_length = HEADER_BYTES
-        .checked_add(payload_length)
-        .and_then(|value| value.checked_add(CHECKSUM_BYTES))
-        .ok_or_else(|| {
-            packed_error(
-                DiagnosticClass::Resource,
-                "packed_object_length",
-                "packed object length overflowed",
-            )
-        })?;
-    if bytes.len() != expected_length {
-        return Err(packed_error(
-            DiagnosticClass::Corrupt,
-            "packed_length_mismatch",
-            "packed object length does not match its canonical header",
-        ));
-    }
-    let checksum_start = HEADER_BYTES + payload_length;
-    let actual = digest(digest_domain, &bytes[..checksum_start]);
-    if bytes[checksum_start..] != actual {
-        return Err(packed_error(
-            DiagnosticClass::Corrupt,
-            "packed_checksum",
-            "packed object checksum does not match its domain-separated content",
-        ));
-    }
-    let payload = &bytes[HEADER_BYTES..checksum_start];
+    let payload = admit_payload(
+        bytes,
+        expected_magic,
+        digest_domain,
+        Some(maximum_payload_bytes),
+    )?;
     let configuration = bincode::config::standard()
         .with_little_endian()
         .with_variable_int_encoding()
@@ -192,6 +135,81 @@ pub fn decode<T: bincode::Decode<()> + bincode::Encode>(
         )
     })?;
     Ok(value)
+}
+
+fn admit_payload<'a>(
+    bytes: &'a [u8],
+    expected_magic: [u8; 8],
+    digest_domain: &str,
+    maximum_payload_bytes: Option<usize>,
+) -> Result<&'a [u8], Diagnostic> {
+    let minimum = HEADER_BYTES + CHECKSUM_BYTES;
+    if bytes.len() < minimum {
+        return Err(packed_error(
+            DiagnosticClass::Corrupt,
+            "packed_truncated",
+            "packed object is truncated",
+        ));
+    }
+    if bytes[..8] != expected_magic {
+        return Err(packed_error(
+            DiagnosticClass::Source,
+            "packed_contract",
+            "packed object has an unknown contract identity",
+        ));
+    }
+    if bytes[8..10] != SCHEMA_EPOCH.to_le_bytes() {
+        return Err(packed_error(
+            DiagnosticClass::Source,
+            "packed_schema",
+            "packed object does not use the current canonical schema",
+        ));
+    }
+    let mut length_bytes = [0_u8; 8];
+    length_bytes.copy_from_slice(&bytes[10..18]);
+    let payload_length = usize::try_from(u64::from_le_bytes(length_bytes)).map_err(|_| {
+        packed_error(
+            DiagnosticClass::Resource,
+            "packed_payload_length",
+            "packed payload length cannot be represented",
+        )
+    })?;
+    if let Some(maximum_payload_bytes) = maximum_payload_bytes
+        && payload_length > maximum_payload_bytes
+    {
+        return Err(packed_error(
+            DiagnosticClass::Resource,
+            "packed_payload_limit",
+            format!("packed object payload exceeds {maximum_payload_bytes} bytes"),
+        ));
+    }
+    let expected_length = HEADER_BYTES
+        .checked_add(payload_length)
+        .and_then(|value| value.checked_add(CHECKSUM_BYTES))
+        .ok_or_else(|| {
+            packed_error(
+                DiagnosticClass::Resource,
+                "packed_object_length",
+                "packed object length overflowed",
+            )
+        })?;
+    if bytes.len() != expected_length {
+        return Err(packed_error(
+            DiagnosticClass::Corrupt,
+            "packed_length_mismatch",
+            "packed object length does not match its canonical header",
+        ));
+    }
+    let checksum_start = HEADER_BYTES + payload_length;
+    let actual = digest(digest_domain, &bytes[..checksum_start]);
+    if bytes[checksum_start..] != actual {
+        return Err(packed_error(
+            DiagnosticClass::Corrupt,
+            "packed_checksum",
+            "packed object checksum does not match its domain-separated content",
+        ));
+    }
+    Ok(&bytes[HEADER_BYTES..checksum_start])
 }
 
 // Compare directly with the admitted payload instead of allocating and filling

@@ -16,7 +16,7 @@ use std::sync::OnceLock;
 fn fixture() -> (MemProjectStore, CreatedRepository) {
     static BASE: OnceLock<(MemProjectStore, CreatedRepository)> = OnceLock::new();
     let (base, created) = BASE.get_or_init(|| {
-        let memory = MemProjectStore::new(128 * 1_048_576).unwrap();
+        let memory = MemProjectStore::new(None).unwrap();
         let snapshot = crate::platform::kernel::tests::witness_snapshot();
         let created = GraphRepository::create_memory(&memory, &snapshot, None).unwrap();
         (memory, created)
@@ -355,7 +355,14 @@ fn refresh_rejects_truncated_negative_range_and_new_referrers_without_partial_pu
         .unwrap();
     let mut incomplete = AuthoredReadFootprint::default();
     let error = incomplete
-        .record_relations(unused, Some(RelationKind::FunctionCall), true, Some(1), &[], true)
+        .record_relations(
+            unused,
+            Some(RelationKind::FunctionCall),
+            true,
+            Some(1),
+            &[],
+            true,
+        )
         .unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Resource);
     assert_eq!(error.code, "change_refresh_incomplete_footprint");

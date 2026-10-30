@@ -254,9 +254,7 @@ impl List {
         let mut slots = 0_u64;
         self.append(value, MAXIMUM_LENGTH as u64, &mut |charge| {
             control.check()?;
-            bytes = bytes
-                .checked_add(charge.bytes)
-                .ok_or_else(failure)?;
+            bytes = bytes.checked_add(charge.bytes).ok_or_else(failure)?;
             slots = slots
                 .checked_add(charge.slots)
                 .filter(|n| *n <= 1_000_000)

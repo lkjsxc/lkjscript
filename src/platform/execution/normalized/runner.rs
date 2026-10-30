@@ -54,7 +54,9 @@ pub struct NormalizedTestReceipt {
     pub passed: u64,
     pub failed: u64,
     pub production_instructions: u64,
+    pub production_instructions_saturated: bool,
     pub reference_expressions: u64,
+    pub reference_expressions_saturated: bool,
     pub differential: &'static str,
 }
 
@@ -596,7 +598,9 @@ fn run_graph_tests_inner(
         passed: 0,
         failed: 0,
         production_instructions: 0,
+        production_instructions_saturated: false,
         reference_expressions: 0,
+        reference_expressions_saturated: false,
         differential: "equal",
     };
     for (declaration, comparison) in &schema.tests {
@@ -609,14 +613,22 @@ fn run_graph_tests_inner(
         let oracle = reference
             .invoke_test(*declaration, capabilities, control)
             .map_err(execution_diagnostic)?;
-        receipt.production_instructions = receipt
-            .production_instructions
-            .saturating_add(production.0.1.instructions)
-            .saturating_add(production.1.1.instructions);
-        receipt.reference_expressions = receipt
-            .reference_expressions
-            .saturating_add(oracle.0.1.expressions)
-            .saturating_add(oracle.1.1.expressions);
+        for work in [&production.0.1, &production.1.1] {
+            crate::platform::execution::cumulative_observe(
+                &mut receipt.production_instructions,
+                &mut receipt.production_instructions_saturated,
+                work.instructions,
+                work.instructions_saturated,
+            );
+        }
+        for work in [&oracle.0.1, &oracle.1.1] {
+            crate::platform::execution::cumulative_observe(
+                &mut receipt.reference_expressions,
+                &mut receipt.reference_expressions_saturated,
+                work.expressions,
+                work.expressions_saturated,
+            );
+        }
         if production.0.0 != oracle.0.0 || production.1.0 != oracle.1.0 {
             return Err(runner_error(
                 DiagnosticClass::Infrastructure,

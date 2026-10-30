@@ -7,7 +7,7 @@ pub(crate) fn author(extra: &str) -> Result<crate::platform::kernel::KernelSnaps
 }
 pub(crate) fn author_only(input: &str) -> Result<crate::platform::kernel::KernelSnapshot, String> {
     let empty = empty_normalized_snapshot(b"owned-byte-buffer");
-    let memory = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+    let memory = crate::platform::MemProjectStore::new(None).unwrap();
     let repo = GraphRepository::create_memory(&memory, &empty, None)
         .unwrap()
         .repository;

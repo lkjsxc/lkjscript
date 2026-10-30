@@ -34,12 +34,13 @@ mod region_parser_tests;
 mod regions;
 mod structural;
 mod tx;
-pub(crate) use tx::{MAXIMUM_TRANSACTION_RESULT_BYTES, decode as decode_transaction};
+pub(crate) use tx::decode as decode_transaction;
 #[cfg(test)]
 mod structural_tests;
 use references::ReferenceLookup;
 
 use super::{CompactField, CompactRecord, parse_records};
+use crate::platform::change::BudgetCounter;
 use crate::platform::change::{
     AuthoredAssociatedTypeBinding, AuthoredAssociatedTypeBindingValue,
     AuthoredAssociatedTypeMember, AuthoredBindingDefinition, AuthoredCallableResult, AuthoredCase,
@@ -61,7 +62,6 @@ use crate::platform::change::{
     ParameterParentSelector,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass, SourceLocation};
-use crate::platform::change::BudgetCounter;
 use crate::platform::kernel::{
     AssociatedTypeBound, DeclarationVisibility, ExternalVisibility, HttpRouteSelector, Idempotency,
     ImplementationName, Name, NamespaceClass, OwnerKey, PackageId, PackageRevisionDigest,
@@ -178,6 +178,7 @@ pub(crate) enum CompactChangeOperation {
     SetCasePayload,
     SetParameterUse,
     SetParameterType,
+    SetParameterOrder,
     AddParameter,
     AddRequirement,
     AddPort,
@@ -196,7 +197,7 @@ pub(crate) enum CompactChangeOperation {
 }
 
 impl CompactChangeOperation {
-    pub(crate) const ALL: [Self; 45] = [
+    pub(crate) const ALL: [Self; 46] = [
         Self::ReferencePackage,
         Self::ReferenceOwner,
         Self::CreateModule,
@@ -227,6 +228,7 @@ impl CompactChangeOperation {
         Self::SetCasePayload,
         Self::SetParameterUse,
         Self::SetParameterType,
+        Self::SetParameterOrder,
         Self::AddParameter,
         Self::AddRequirement,
         Self::AddPort,
@@ -256,6 +258,7 @@ pub(crate) enum CompactChangeFieldForm {
     ModuleSelector,
     DeclarationSelector,
     OwnerSelector,
+    OwnerSelectorList,
     ExactOwner,
     Name,
     DeclarationVisibility,
@@ -286,7 +289,7 @@ pub(crate) enum CompactChangeFieldForm {
 }
 
 impl CompactChangeFieldForm {
-    pub(crate) const ALL: [Self; 36] = [
+    pub(crate) const ALL: [Self; 37] = [
         Self::ReferenceAlias,
         Self::ExactDeclaration,
         Self::ExistingOwnerReference,
@@ -296,6 +299,7 @@ impl CompactChangeFieldForm {
         Self::ModuleSelector,
         Self::DeclarationSelector,
         Self::OwnerSelector,
+        Self::OwnerSelectorList,
         Self::ExactOwner,
         Self::Name,
         Self::DeclarationVisibility,
@@ -335,6 +339,7 @@ impl CompactChangeFieldForm {
             Self::ModuleSelector => "module_selector",
             Self::DeclarationSelector => "declaration_selector",
             Self::OwnerSelector => "owner_selector",
+            Self::OwnerSelectorList => "owner_selector_list",
             Self::ExistingOwnerReference => "existing_owner_reference",
             Self::ExactOwner => "exact_owner",
             Self::Name => "name",
@@ -376,6 +381,9 @@ impl CompactChangeFieldForm {
             Self::ModuleSelector => "$NAME|mod_HEX|MODULE_NAME",
             Self::DeclarationSelector => "$NAME|decl_HEX|MODULE/NAME",
             Self::OwnerSelector => "$NAME|DOMAIN_HEX",
+            Self::OwnerSelectorList => {
+                "space-separated $NAME|DOMAIN_HEX; empty means no parameters"
+            }
             Self::ExistingOwnerReference => "$REFERENCE_ALIAS|DOMAIN_HEX",
             Self::ExactOwner => "DOMAIN_HEX",
             Self::Name => "[A-Za-z_][A-Za-z0-9_-]{0,127}",
@@ -1272,6 +1280,28 @@ pub(crate) const COMPACT_CHANGE_OPERATION_DESCRIPTORS: &[CompactChangeOperationD
                 name: "type",
                 required: true,
                 form: FieldForm::TypeReference,
+            },
+        ],
+        direct: None,
+    },
+    CompactChangeOperationDescriptor {
+        operation: CompactChangeOperation::SetParameterOrder,
+        name: "set.parameter-order",
+        fields: &[
+            CompactChangeOperationField {
+                name: "function",
+                required: false,
+                form: FieldForm::DeclarationSelector,
+            },
+            CompactChangeOperationField {
+                name: "operation",
+                required: false,
+                form: FieldForm::OperationSelector,
+            },
+            CompactChangeOperationField {
+                name: "parameters",
+                required: true,
+                form: FieldForm::OwnerSelectorList,
             },
         ],
         direct: None,
@@ -5162,8 +5192,11 @@ impl Decoder {
                     check_fields(&record, &["name", "limit"])?;
                     let name = required(&record, "name")?;
                     if !policy_names.insert(name.to_owned()) {
-                        return Err(record_error(&record, "change_policy_duplicate",
-                            format!("change policy '{name}' is supplied more than once")));
+                        return Err(record_error(
+                            &record,
+                            "change_policy_duplicate",
+                            format!("change policy '{name}' is supplied more than once"),
+                        ));
                     }
                     let value = required(&record, "limit")?;
                     let maximum = if value == "unbounded" {
@@ -5173,15 +5206,20 @@ impl Decoder {
                             &record, "change_policy_limit",
                             "change policy requires unbounded or a canonical u64 decimal allowance"))?;
                         if parsed.to_string() != value {
-                            return Err(record_error(&record, "change_policy_limit",
-                                "finite change policy allowances use canonical decimal notation"));
+                            return Err(record_error(
+                                &record,
+                                "change_policy_limit",
+                                "finite change policy allowances use canonical decimal notation",
+                            ));
                         }
                         Some(parsed)
                     };
-                    budget.set_policy_limit(name, maximum).map_err(|mut error| {
-                        error.location = Some(record.location.clone());
-                        error
-                    })?;
+                    budget
+                        .set_policy_limit(name, maximum)
+                        .map_err(|mut error| {
+                            error.location = Some(record.location.clone());
+                            error
+                        })?;
                 }
                 "request" => {
                     if request.is_some() {
@@ -5776,7 +5814,8 @@ impl Decoder {
             diagnostic.location = Some(record.location.clone());
             return Err(diagnostic);
         }
-        self.expanded_implementation_work.observe(BudgetCounter::exact(1));
+        self.expanded_implementation_work
+            .observe(BudgetCounter::exact(1));
         let parts = text.split('@').collect::<Vec<_>>();
         let (reference, parameter, application) = match parts.as_slice() {
             [reference] => (*reference, None, None),
@@ -6213,6 +6252,46 @@ impl Decoder {
                 parameter: self.parse_owner_selector(record, "parameter")?,
                 ty: self.decode_type(required(record, "type")?)?,
             }),
+            CompactChangeOperation::SetParameterOrder => {
+                let parent = match (optional(record, "function"), optional(record, "operation")) {
+                    (Some(_), None) => ParameterParentSelector::Declaration {
+                        declaration: self.parse_declaration_selector(record, "function")?,
+                    },
+                    (None, Some(_)) => ParameterParentSelector::Operation {
+                        operation: self.parse_owner_selector(record, "operation")?,
+                    },
+                    _ => {
+                        return Err(record_error(
+                            record,
+                            "change_parameter_parent",
+                            "set.parameter-order requires exactly one of function or operation",
+                        ));
+                    }
+                };
+                let location = field(record, "parameters")
+                    .map_or_else(|| record.location.clone(), |field| field.location.clone());
+                let mut parameters = Vec::new();
+                for value in required(record, "parameters")?.split_ascii_whitespace() {
+                    parameters.try_reserve(1).map_err(|error| {
+                        Diagnostic::new(
+                            DiagnosticClass::Resource,
+                            "change_parameter_order_allocation",
+                            format!("cannot allocate complete parameter order: {error}"),
+                        )
+                    })?;
+                    let item = CompactRecord {
+                        operation: record.operation.clone(),
+                        fields: vec![CompactField {
+                            name: "parameter".into(),
+                            value: value.to_owned(),
+                            location: location.clone(),
+                        }],
+                        location: record.location.clone(),
+                    };
+                    parameters.push(self.parse_owner_selector(&item, "parameter")?);
+                }
+                Ok(AuthoredChange::SetParameterOrder { parent, parameters })
+            }
             CompactChangeOperation::AddParameter => {
                 let parent = match (optional(record, "function"), optional(record, "operation")) {
                     (Some(_), None) => ParameterParentSelector::Declaration {
@@ -6515,7 +6594,8 @@ impl Decoder {
     }
 
     fn admit_expanded_input(&mut self, size: usize) -> Result<(), Diagnostic> {
-        self.expanded_type_work.observe(BudgetCounter::exact(size as u64));
+        self.expanded_type_work
+            .observe(BudgetCounter::exact(size as u64));
         Ok(())
     }
 
@@ -9439,6 +9519,69 @@ mod tests {
         let error = decode_compact_change("change.lk", input.as_bytes()).unwrap_err();
         assert_eq!(error[0].code, "change_field_unknown");
         assert_eq!(error[0].location.as_ref().unwrap().line, 2);
+    }
+
+    #[test]
+    fn complete_parameter_order_decodes_exact_symbols_and_empty_inventories() {
+        let function = DeclarationId::migrate(b"compact-parameter-order", 0);
+        let first = ParameterId::migrate(b"compact-parameter-order", 1);
+        let second = ParameterId::migrate(b"compact-parameter-order", 2);
+        let input = format!(
+            "request base={}\nadd.parameter as=$new function={function} name=middle type=i64\nset.parameter-order function={function} parameters=\"{second} $new {first}\"\n",
+            revision()
+        );
+        let decoded = decode_compact_change("parameter-order.lkjc", input.as_bytes()).unwrap();
+        assert_eq!(decoded.semantic.changes.len(), 2);
+        assert_eq!(
+            decoded.semantic.changes[1..],
+            vec![AuthoredChange::SetParameterOrder {
+                parent: ParameterParentSelector::Declaration {
+                    declaration: DeclarationSelector::Id {
+                        declaration: function
+                    },
+                },
+                parameters: vec![
+                    OwnerSelector::Exact {
+                        owner: OwnerKey::Parameter(second)
+                    },
+                    OwnerSelector::Symbol {
+                        symbol: "$new".into()
+                    },
+                    OwnerSelector::Exact {
+                        owner: OwnerKey::Parameter(first)
+                    },
+                ],
+            }]
+        );
+        let operation = OperationId::migrate(b"compact-parameter-order", 3);
+        let empty = format!(
+            "request base={}\nset.parameter-order operation={operation} parameters=\"\"\n",
+            revision()
+        );
+        let decoded = decode_compact_change("empty-order.lkjc", empty.as_bytes()).unwrap();
+        assert_eq!(
+            decoded.semantic.changes,
+            vec![AuthoredChange::SetParameterOrder {
+                parent: ParameterParentSelector::Operation {
+                    operation: OwnerSelector::Exact {
+                        owner: OwnerKey::Operation(operation)
+                    },
+                },
+                parameters: vec![],
+            }]
+        );
+        for fields in [
+            "parameters=\"\"".to_owned(),
+            format!("function={function} operation={operation} parameters=\"\""),
+        ] {
+            let input = format!(
+                "request base={}\nset.parameter-order {fields}\n",
+                revision()
+            );
+            let error = decode_compact_change("invalid-order.lkjc", input.as_bytes()).unwrap_err();
+            assert_eq!(error[0].code, "change_parameter_parent");
+            assert_eq!(error[0].location.as_ref().unwrap().line, 2);
+        }
     }
 
     #[test]

@@ -22,6 +22,7 @@ pub(super) struct Lowered {
     edits: BTreeMap<String, OwnerKey>,
     // Native edit units own a complete ordered signature, including newly authored children.
     read_view_type_parameters: BTreeMap<String, Vec<AuthoredTypeParameterReference>>,
+    parameter_orders: Vec<(ParameterParentSelector, Vec<OwnerSelector>)>,
 }
 
 struct Lowering<'a> {
@@ -226,6 +227,64 @@ pub(super) fn lower(
             }
         }
         lowering.check_contracts(&input.records)?;
+        let deleted: BTreeSet<_> = input
+            .records
+            .iter()
+            .filter(|record| record.operation == "delete.owner")
+            .filter_map(|record| {
+                optional(record, "owner").and_then(|owner| owner.parse::<OwnerKey>().ok())
+            })
+            .collect();
+        for unit in lowering.units.iter().filter(|unit| {
+            matches!(unit.kind.as_str(), "function" | "external" | "operation")
+                && unit.existing.is_some()
+        }) {
+            let Some(owner) = unit.existing else { continue };
+            let parent = match owner {
+                OwnerKey::Declaration(declaration) => ParameterParentSelector::Declaration {
+                    declaration: DeclarationSelector::Id { declaration },
+                },
+                OwnerKey::Operation(_) => ParameterParentSelector::Operation {
+                    operation: OwnerSelector::Exact { owner },
+                },
+                _ => {
+                    return Err(lowering.error(
+                        unit.syntax,
+                        "complete parameter order requires a callable declaration or operation",
+                    ));
+                }
+            };
+            let parent_owner = owner.to_string();
+            let parameters = lowering
+                .units
+                .iter()
+                .filter(|child| child.parent == parent_owner && child.kind == "parameter")
+                .map(|child| match child.existing {
+                    Some(owner @ OwnerKey::Parameter(_)) => Ok(OwnerSelector::Exact { owner }),
+                    None => Ok(OwnerSelector::Symbol {
+                        symbol: child.label.clone(),
+                    }),
+                    _ => Err(lowering.error(
+                        child.syntax,
+                        "complete parameter order requires exact value-parameter identities",
+                    )),
+                })
+                .collect::<Result<Vec<_>, Diagnostic>>()?;
+            let mut ordinary_order: Vec<_> = contract_children(&lowering.existing[&owner])
+                .into_iter()
+                .filter(|owner| matches!(owner, OwnerKey::Parameter(_)) && !deleted.contains(owner))
+                .map(|owner| OwnerSelector::Exact { owner })
+                .collect();
+            ordinary_order.extend(
+                parameters
+                    .iter()
+                    .filter(|parameter| matches!(parameter, OwnerSelector::Symbol { .. }))
+                    .cloned(),
+            );
+            if parameters != ordinary_order {
+                lowered.parameter_orders.push((parent, parameters));
+            }
+        }
         for unit in lowering
             .units
             .iter()
@@ -286,9 +345,13 @@ pub(super) fn lower(
         let Lowering {
             records, bodies, ..
         } = lowering;
-        input.records.try_reserve(records.len()).map_err(|_| block.error(
-            block.root, "change_unit_capacity", "lowered declaration record allocation failed",
-        ))?;
+        input.records.try_reserve(records.len()).map_err(|_| {
+            block.error(
+                block.root,
+                "change_unit_capacity",
+                "lowered declaration record allocation failed",
+            )
+        })?;
         input.records.extend(records);
         input.blocks.extend(bodies);
     }
@@ -2505,10 +2568,11 @@ impl Lowering<'_> {
             if supplied != expected.difference(&deleted).copied().collect() {
                 return Err(self.block.error(unit.syntax, "change_unit_children", "complete edit signature must retain every exact contract child, or account for it with explicit delete.owner"));
             }
-            // Existing ordered contracts cannot be silently reordered, nor may an append-only
-            // addition be displayed as an insertion. The precise owner operations remain available.
+            // Value-parameter insertions/reorders carry an explicit SetParameterOrder intent.
+            // Its engine checks the final surviving membership after additions and deletions;
+            // unchanged, append-only and deletion-only signatures use their existing operations.
+            // Other ordered contracts still have only append operations and retain their guards.
             for kind in [
-                "parameter",
                 "type-parameter",
                 "effect-parameter",
                 "requirement-parameter",
@@ -3101,6 +3165,9 @@ pub(super) fn finish(
                 ));
             }
         }
+    }
+    for (parent, parameters) in lowered.parameter_orders {
+        changes.push(AuthoredChange::SetParameterOrder { parent, parameters });
     }
     request.semantic.changes = changes;
     normalize_change_request(request.semantic, request.options)

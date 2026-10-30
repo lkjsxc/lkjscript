@@ -632,7 +632,7 @@ impl PackDirectoryStore {
         &self,
         key: ObjectKey,
         location: CatalogLocation,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
     ) -> Result<Arc<PackMetadata>, StoreError> {
         let descriptor = self.catalog.pack(location.pack).cloned().ok_or_else(|| {
             corrupt(
@@ -751,7 +751,10 @@ impl PackDirectoryStore {
                 pack,
                 checkpoint,
             )?;
-            work.add(crate::platform::storage::object::StoreWork { packs_sealed: 1, ..crate::platform::storage::object::StoreWork::default() });
+            work.add(crate::platform::storage::object::StoreWork {
+                packs_sealed: 1,
+                ..crate::platform::storage::object::StoreWork::default()
+            });
         }
         sync_directory(&self.packs_directory, "pack_directory_sync")?;
         checkpoint(SealCheckpoint::PackDirectorySynced)?;
@@ -854,7 +857,7 @@ impl ImmutableObjectStore for PackDirectoryStore {
     fn read(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         let mut admission = StoreReadAdmission::unbounded();
@@ -864,14 +867,17 @@ impl ImmutableObjectStore for PackDirectoryStore {
     fn read_admitted(
         &self,
         key: ObjectKey,
-        maximum_bytes: usize,
+        maximum_bytes: Option<usize>,
         admission: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
         admission.admit_catalog_lookup()?;
-        work.add(crate::platform::storage::object::StoreWork { catalog_lookups: 1, ..crate::platform::storage::object::StoreWork::default() });
+        work.add(crate::platform::storage::object::StoreWork {
+            catalog_lookups: 1,
+            ..crate::platform::storage::object::StoreWork::default()
+        });
         if let Some(bytes) = self.staged.get(&key) {
-            if bytes.len() > maximum_bytes {
+            if maximum_bytes.is_some_and(|maximum| bytes.len() > maximum) {
                 return Err(resource(
                     "pack_read_limit",
                     "staged object exceeds the caller read bound",
@@ -879,9 +885,15 @@ impl ImmutableObjectStore for PackDirectoryStore {
             }
             admission.admit_object(bytes.len())?;
             key.verify(bytes)?;
-            work.add(crate::platform::storage::object::StoreWork { objects_read: 1, ..crate::platform::storage::object::StoreWork::default() });
-            work.add(crate::platform::storage::object::StoreWork { bytes_read: bytes.len() as u64, ..crate::platform::storage::object::StoreWork::default() });
-            return Ok(Some(bytes.clone()));
+            work.add(crate::platform::storage::object::StoreWork {
+                objects_read: 1,
+                ..crate::platform::storage::object::StoreWork::default()
+            });
+            work.add(crate::platform::storage::object::StoreWork {
+                bytes_read: bytes.len() as u64,
+                ..crate::platform::storage::object::StoreWork::default()
+            });
+            return Ok(Some(super::object::copy_object_bytes(bytes)?));
         }
         let Some(location) = self.lookup_location(key)? else {
             return Ok(None);
@@ -903,11 +915,20 @@ impl ImmutableObjectStore for PackDirectoryStore {
                 "pack length changed after catalog construction",
             ));
         }
-        work.add(crate::platform::storage::object::StoreWork { packs_opened: 1, ..crate::platform::storage::object::StoreWork::default() });
+        work.add(crate::platform::storage::object::StoreWork {
+            packs_opened: 1,
+            ..crate::platform::storage::object::StoreWork::default()
+        });
         let value = metadata.read_from(&mut file, key, maximum_bytes)?;
         if let Some(value) = &value {
-            work.add(crate::platform::storage::object::StoreWork { objects_read: 1, ..crate::platform::storage::object::StoreWork::default() });
-            work.add(crate::platform::storage::object::StoreWork { bytes_read: value.len() as u64, ..crate::platform::storage::object::StoreWork::default() });
+            work.add(crate::platform::storage::object::StoreWork {
+                objects_read: 1,
+                ..crate::platform::storage::object::StoreWork::default()
+            });
+            work.add(crate::platform::storage::object::StoreWork {
+                bytes_read: value.len() as u64,
+                ..crate::platform::storage::object::StoreWork::default()
+            });
         }
         Ok(value)
     }
@@ -924,7 +945,10 @@ impl ImmutableObjectStore for PackDirectoryStore {
         work: &mut StoreWork,
     ) -> Result<bool, StoreError> {
         admission.admit_catalog_lookup()?;
-        work.add(crate::platform::storage::object::StoreWork { catalog_lookups: 1, ..crate::platform::storage::object::StoreWork::default() });
+        work.add(crate::platform::storage::object::StoreWork {
+            catalog_lookups: 1,
+            ..crate::platform::storage::object::StoreWork::default()
+        });
         if self.staged.contains_key(&key) {
             return Ok(true);
         }
@@ -957,7 +981,10 @@ impl ImmutableObjectStore for PackDirectoryStore {
             self.read_admitted(key, key.domain.maximum_bytes(), admission, work)?
         {
             if existing == bytes {
-                work.add(crate::platform::storage::object::StoreWork { objects_reused: 1, ..crate::platform::storage::object::StoreWork::default() });
+                work.add(crate::platform::storage::object::StoreWork {
+                    objects_reused: 1,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
                 return Ok(StageOutcome::Reused);
             }
             return Err(corrupt(
@@ -968,11 +995,20 @@ impl ImmutableObjectStore for PackDirectoryStore {
         let outcome = stage_into_map(&mut self.staged, key, bytes)?;
         match outcome {
             StageOutcome::Inserted => {
-                work.add(crate::platform::storage::object::StoreWork { objects_staged: 1, ..crate::platform::storage::object::StoreWork::default() });
-                work.add(crate::platform::storage::object::StoreWork { bytes_staged: bytes.len() as u64, ..crate::platform::storage::object::StoreWork::default() });
+                work.add(crate::platform::storage::object::StoreWork {
+                    objects_staged: 1,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
+                work.add(crate::platform::storage::object::StoreWork {
+                    bytes_staged: bytes.len() as u64,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
             }
             StageOutcome::Reused => {
-                work.add(crate::platform::storage::object::StoreWork { objects_reused: 1, ..crate::platform::storage::object::StoreWork::default() });
+                work.add(crate::platform::storage::object::StoreWork {
+                    objects_reused: 1,
+                    ..crate::platform::storage::object::StoreWork::default()
+                });
             }
         }
         Ok(outcome)
@@ -1010,8 +1046,11 @@ fn scan_pack_metadata_with_limit<R: Read + Seek>(
     for name in names {
         let pack = PackId::parse_file_name(&name)?;
         let (mut reader, length) = open(&name)?;
-        let read =
-            PackMetadata::read_footer_with_entry_allowance(&mut reader, length, remaining_entries)?;
+        let read = PackMetadata::read_footer_with_entry_allowance(
+            &mut reader,
+            length,
+            Some(remaining_entries),
+        )?;
         // Duplicates also consume physical footer storage before catalog reconstruction.
         remaining_entries = remaining_entries
             .checked_sub(read.metadata.entries.len())

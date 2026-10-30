@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Focused two-level backend verification; not a Tier 2 semantic self-hosting claim.
 set -euo pipefail
+selfhost_test_threads=${RUST_TEST_THREADS-2}
+if [[ ! $selfhost_test_threads =~ ^[0-9]+$ || ! $selfhost_test_threads =~ [1-9] ]]; then
+  printf '%s\n' 'RUST_TEST_THREADS must be a positive decimal integer' >&2
+  exit 2
+fi
+printf 'selfhost test threads=%s\n' "$selfhost_test_threads" >&2
 [[ $(git rev-parse --show-toplevel) == "$PWD" ]]
 export CARGO_TARGET_DIR="$PWD/target"
 mkdir -p "$CARGO_TARGET_DIR"
@@ -76,8 +82,8 @@ rg --files tools/selfhost src/platform/compiler/elf_x86_64 \
 while IFS= read -r selfhost_input; do
   sha256sum "$selfhost_input" >> .artifacts/selfhost/inputs.sha256
 done < .artifacts/selfhost/paths
-cargo test --release --locked --lib selfhost_ -- --test-threads=2 --nocapture \
+cargo test --release --locked --lib selfhost_ -- --test-threads="$selfhost_test_threads" --nocapture \
   2>&1 | tee .artifacts/selfhost/latest.log
-cargo test --release --locked --lib native_elf_ -- --test-threads=2 \
+cargo test --release --locked --lib native_elf_ -- --test-threads="$selfhost_test_threads" \
   2>&1 | tee .artifacts/selfhost/native.log
 sha256sum --check .artifacts/selfhost/inputs.sha256

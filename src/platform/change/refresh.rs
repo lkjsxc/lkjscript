@@ -3,40 +3,40 @@
 /// Shape ceilings describe one semantic candidate; processing and retained-storage allowances
 /// cover original proof, guards and renewed proof cumulatively.
 const REFRESH_WORK_DIMENSIONS: &[BudgetDimension] = &[
-        BudgetDimension::CanonicalPointReads,
-        BudgetDimension::CanonicalMapPages,
-        BudgetDimension::CanonicalMapEntries,
-        BudgetDimension::CanonicalCatalogLookups,
-        BudgetDimension::CanonicalObjects,
-        BudgetDimension::CanonicalBytes,
-        BudgetDimension::CanonicalDecodedRecords,
-        BudgetDimension::CanonicalMapPagesEncoded,
-        BudgetDimension::CanonicalMapBytesEncoded,
-        BudgetDimension::WitnessPointReads,
-        BudgetDimension::WitnessMapPages,
-        BudgetDimension::WitnessMapEntries,
-        BudgetDimension::WitnessCatalogLookups,
-        BudgetDimension::WitnessObjects,
-        BudgetDimension::WitnessBytes,
-        BudgetDimension::WitnessDecodedRecords,
-        BudgetDimension::ImpactSummaryOwners,
-        BudgetDimension::ImpactSummaryEdits,
-        BudgetDimension::ImpactOwnershipSteps,
-        BudgetDimension::ImpactBehaviorOwners,
-        BudgetDimension::RelationEdges,
-        BudgetDimension::ValidationOwnerRecords,
-        BudgetDimension::ValidationOwnershipEntries,
-        BudgetDimension::ValidationTypeObjects,
-        BudgetDimension::ValidationExpressionSteps,
-        BudgetDimension::ValidationDiagnostics,
-        BudgetDimension::TestOwnershipSteps,
-        BudgetDimension::TestOwnersVisited,
-        BudgetDimension::WitnessEdits,
-        BudgetDimension::WitnessMapPagesEncoded,
-        BudgetDimension::WitnessMapBytesEncoded,
-        BudgetDimension::StagedObjects,
-        BudgetDimension::StagedBytes,
-        BudgetDimension::StagedPages,
+    BudgetDimension::CanonicalPointReads,
+    BudgetDimension::CanonicalMapPages,
+    BudgetDimension::CanonicalMapEntries,
+    BudgetDimension::CanonicalCatalogLookups,
+    BudgetDimension::CanonicalObjects,
+    BudgetDimension::CanonicalBytes,
+    BudgetDimension::CanonicalDecodedRecords,
+    BudgetDimension::CanonicalMapPagesEncoded,
+    BudgetDimension::CanonicalMapBytesEncoded,
+    BudgetDimension::WitnessPointReads,
+    BudgetDimension::WitnessMapPages,
+    BudgetDimension::WitnessMapEntries,
+    BudgetDimension::WitnessCatalogLookups,
+    BudgetDimension::WitnessObjects,
+    BudgetDimension::WitnessBytes,
+    BudgetDimension::WitnessDecodedRecords,
+    BudgetDimension::ImpactSummaryOwners,
+    BudgetDimension::ImpactSummaryEdits,
+    BudgetDimension::ImpactOwnershipSteps,
+    BudgetDimension::ImpactBehaviorOwners,
+    BudgetDimension::RelationEdges,
+    BudgetDimension::ValidationOwnerRecords,
+    BudgetDimension::ValidationOwnershipEntries,
+    BudgetDimension::ValidationTypeObjects,
+    BudgetDimension::ValidationExpressionSteps,
+    BudgetDimension::ValidationDiagnostics,
+    BudgetDimension::TestOwnershipSteps,
+    BudgetDimension::TestOwnersVisited,
+    BudgetDimension::WitnessEdits,
+    BudgetDimension::WitnessMapPagesEncoded,
+    BudgetDimension::WitnessMapBytesEncoded,
+    BudgetDimension::StagedObjects,
+    BudgetDimension::StagedBytes,
+    BudgetDimension::StagedPages,
 ];
 
 pub(crate) fn remaining_refresh_budget(
@@ -46,8 +46,11 @@ pub(crate) fn remaining_refresh_budget(
     budget.check_observed(prior, "reviewed refresh prior preparation")?;
     for dimension in REFRESH_WORK_DIMENSIONS {
         if let Some(observed) = prior.observation(*dimension) {
-            let remaining = observed.remaining(budget.maximum(*dimension),
-                "reviewed refresh prior preparation", dimension.name())?;
+            let remaining = observed.remaining(
+                budget.maximum(*dimension),
+                "reviewed refresh prior preparation",
+                dimension.name(),
+            )?;
             budget.set_policy_limit(dimension.policy_name(), remaining)?;
         }
     }

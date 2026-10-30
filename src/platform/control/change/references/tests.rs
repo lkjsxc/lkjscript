@@ -305,12 +305,55 @@ fn named_reference_decoding_rejects_cycles_collisions_wrong_classes_and_raw_exha
     let rows = (0..1_000)
         .map(|i| format!("reference.owner as=$m{i} package=local class=module name=first\n"))
         .collect::<String>();
-    let error = decode_compact_change(
-        "over-budget.lkjc",
-        format!("request base={base}\n{rows}create.module as=$fresh name=new\n").as_bytes(),
-    )
-    .unwrap_err();
-    assert_eq!(error[0].code, "change_budget_operations");
+    let decode = |policy: &str| {
+        decode_compact_change(
+            "raw-budget.lkjc",
+            format!("request base={base}\n{policy}{rows}create.module as=$fresh name=new\n")
+                .as_bytes(),
+        )
+    };
+    let unmetered = decode("").unwrap();
+    assert_eq!(unmetered.semantic.budget.authored.maximum_operations, None);
+    assert_eq!(unmetered.semantic.changes.len(), 2);
+    assert!(matches!(
+        &unmetered.semantic.changes[0],
+        AuthoredChange::ReferenceBindings { bindings }
+            if bindings.raw_records == 1_000
+                && bindings.origins.len() == 1_000
+                && bindings.owners.len() == 1
+    ));
+    let intent =
+        crate::platform::change::canonical_authored_intent_bytes(&unmetered.semantic).unwrap();
+    // All 1,000 raw aliases count before selector deduplication, plus the module edit.
+    for (limit, maximum, accepted) in [
+        ("unbounded".to_owned(), None, true),
+        ("0".to_owned(), Some(0), false),
+        ("1000".to_owned(), Some(1_000), false),
+        ("1001".to_owned(), Some(1_001), true),
+        (u64::MAX.to_string(), Some(u64::MAX), true),
+    ] {
+        let result = decode(&format!("change.policy name=operations limit={limit}\n"));
+        if accepted {
+            let request = result.unwrap();
+            assert_eq!(request.semantic.budget.authored.maximum_operations, maximum);
+            assert_eq!(
+                crate::platform::change::canonical_authored_intent_bytes(&request.semantic)
+                    .unwrap(),
+                intent,
+                "policy {limit}"
+            );
+            if maximum.is_none() {
+                assert_eq!(request.request_commitment, unmetered.request_commitment);
+            } else {
+                assert_ne!(request.request_commitment, unmetered.request_commitment);
+            }
+        } else {
+            let error = result.unwrap_err();
+            assert_eq!(error.len(), 1, "policy {limit}: {error:?}");
+            assert_eq!(error[0].class, DiagnosticClass::Resource);
+            assert_eq!(error[0].code, "change_budget_operations");
+        }
+    }
     assert!(
         decode_compact_change(
             "bindings-only.lkjc",

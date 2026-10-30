@@ -308,7 +308,13 @@ impl Slab {
             .cells
             .checked_add(1)
             .ok_or_else(capacity_error)?;
-        if end > self.header.payload.checked_add(self.header.capacity).ok_or_else(capacity_error)? {
+        if end
+            > self
+                .header
+                .payload
+                .checked_add(self.header.capacity)
+                .ok_or_else(capacity_error)?
+        {
             return Err(capacity_error());
         }
         // All bounds and fallible admission finish before the first mutation.
@@ -530,7 +536,8 @@ fn pointer<'region, T>(offset: u64) -> RelPtr<'region, T> {
 
 fn storage_extent(capacity: u64) -> Result<(u64, usize), ExecutionError> {
     let payload = payload_start(capacity)?;
-    let allocation = payload.checked_add(capacity)
+    let allocation = payload
+        .checked_add(capacity)
         .and_then(|total| total.checked_add(ALIGNMENT - 1))
         .and_then(|total| usize::try_from(total).ok())
         .ok_or_else(capacity_error)?;
@@ -613,8 +620,10 @@ fn admit_image(
     {
         return Err(image_error());
     }
-    let bitmap_end = HEADER_BYTES.checked_add(header.capacity.div_ceil(64))
-        .and_then(|end| usize::try_from(end).ok()).ok_or_else(image_error)?;
+    let bitmap_end = HEADER_BYTES
+        .checked_add(header.capacity.div_ceil(64))
+        .and_then(|end| usize::try_from(end).ok())
+        .ok_or_else(image_error)?;
     if image
         .get(bitmap_end..usize::try_from(header.payload).map_err(|_| image_error())?)
         .ok_or_else(image_error)?
@@ -637,14 +646,20 @@ fn admit_image(
             if markers & (1 << bit) == 0 {
                 continue;
             }
-            let offset = u64::try_from(index).ok()
+            let offset = u64::try_from(index)
+                .ok()
                 .and_then(|index| index.checked_mul(8))
                 .and_then(|index| index.checked_add(bit))
                 .and_then(|slot| slot.checked_mul(8))
                 .and_then(|offset| header.payload.checked_add(offset))
                 .ok_or_else(image_error)?;
-            if offset < header.payload.checked_add(CELL_BYTES).ok_or_else(image_error)?
-                || offset >= header.used {
+            if offset
+                < header
+                    .payload
+                    .checked_add(CELL_BYTES)
+                    .ok_or_else(image_error)?
+                || offset >= header.used
+            {
                 return Err(image_error());
             }
             let cell = (offset - CELL_BYTES) as usize;

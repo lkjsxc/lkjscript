@@ -89,10 +89,16 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> AuthoredLowerer
         }
         let count = count as u64;
         let steps = crate::platform::change::BudgetCounter::product(
-            count, u64::from(count.checked_ilog2().unwrap_or(0)) + 2);
+            count,
+            u64::from(count.checked_ilog2().unwrap_or(0)) + 2,
+        );
         let mut total = self.work.validation_observation();
-        total.charge(steps, self.budget.validation.maximum_expression_steps,
-            "associated inventory before allocation", "validation_expression_steps")?;
+        total.charge(
+            steps,
+            self.budget.validation.maximum_expression_steps,
+            "associated inventory before allocation",
+            "validation_expression_steps",
+        )?;
         let mut observed = crate::platform::change::BudgetCounter {
             consumed: self.work.associated_inventory_steps,
             saturated: self.work.associated_inventory_saturated,

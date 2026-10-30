@@ -141,9 +141,18 @@ fn native_wide_field_offsets_preserve_flags_without_large_allocations() {
 
 #[test]
 fn native_layout_and_absolute_relocation_cross_u32_without_allocating() {
-    assert_eq!(layout_extent(u32::MAX as usize, 8, 32).unwrap(), 34_359_738_392);
-    assert_eq!(layout_offset(u32::MAX as usize, 8, 16).unwrap(), 34_359_738_376);
-    assert_eq!(absolute_address(u32::MAX as usize + 1).unwrap(), 4_299_165_696);
+    assert_eq!(
+        layout_extent(u32::MAX as usize, 8, 32).unwrap(),
+        34_359_738_392
+    );
+    assert_eq!(
+        layout_offset(u32::MAX as usize, 8, 16).unwrap(),
+        34_359_738_376
+    );
+    assert_eq!(
+        absolute_address(u32::MAX as usize + 1).unwrap(),
+        4_299_165_696
+    );
     assert!(layout_extent(usize::MAX, 8, 32).is_err());
     assert!(layout_offset(usize::MAX, 8, 16).is_err());
     assert!(absolute_address(usize::MAX).is_err());

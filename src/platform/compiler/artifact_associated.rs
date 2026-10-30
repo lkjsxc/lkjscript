@@ -9,7 +9,10 @@ use crate::platform::kernel::{
 };
 use std::collections::BTreeMap;
 
-pub(super) fn admit_work(work: &mut crate::platform::kernel::ValidationWork, maximum: Option<usize>) -> Result<(), Diagnostic> {
+pub(super) fn admit_work(
+    work: &mut crate::platform::kernel::ValidationWork,
+    maximum: Option<usize>,
+) -> Result<(), Diagnostic> {
     if !work.charge(1, maximum) {
         return Err(artifact_error(
             DiagnosticClass::Resource,

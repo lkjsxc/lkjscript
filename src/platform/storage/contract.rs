@@ -55,9 +55,6 @@ pub const MAP_PAGE_DIGEST_DOMAIN: &str =
 pub const TARGET_PACK_BYTES: usize = 256 * 1024;
 // Physical output target; a larger admitted object remains an indivisible singleton.
 pub const COMPACTION_TARGET_PACK_BYTES: usize = 32 * 1024 * 1024;
-pub const MAXIMUM_PACK_BYTES: usize = 1_073_741_824;
-pub const MAXIMUM_PACK_ENTRY_BYTES: usize = 64 * 1024 * 1024;
-pub const MAXIMUM_PACK_ENTRIES: usize = 2_000_000;
 pub const CATALOG_BLOCK_ENTRIES: usize = 64;
 pub const CATALOG_BLOCK_FILTER_BYTES: usize = 128;
 pub const MAXIMUM_CATALOG_ENTRIES: usize = 8_000_000;

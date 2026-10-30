@@ -280,7 +280,7 @@ fn shared_builtin_source_never_substitutes_another_exact_transport() {
 fn shared_builtin_source_cold_and_warm_publications_keep_identical_canonical_receipts() {
     use crate::platform::publication::{GraphRepository, PublicationOutcome};
     let standard = BuiltinStandard::load().unwrap();
-    let memory = crate::platform::MemProjectStore::new(256 * 1_048_576).unwrap();
+    let memory = crate::platform::MemProjectStore::new(None).unwrap();
     crate::platform::create_memory_project(&memory, "shared-proof", "minimal").unwrap();
     let repository = GraphRepository::open_memory(&memory).unwrap();
     repository

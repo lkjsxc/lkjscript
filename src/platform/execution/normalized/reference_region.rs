@@ -1,8 +1,8 @@
 //! Canonical expression execution for lexical regions. No bytecode instruction
 //! or prepared classification supplies the reference evaluator's type decisions.
 use super::super::region_value::{self, Layout};
-use super::*;
 use super::super::value::RawValue;
+use super::*;
 use crate::platform::kernel::{BindingKind, RegionExpression as E, RegionMode};
 
 impl ReferenceState<'_> {
@@ -90,7 +90,9 @@ impl ReferenceState<'_> {
                 };
                 CheckedValue::primitive(
                     &self.schema,
-                    NormalizedValue::I64(i64::try_from(pointer.offset()).map_err(|_| region_value::error())?),
+                    NormalizedValue::I64(
+                        i64::try_from(pointer.offset()).map_err(|_| region_value::error())?,
+                    ),
                 )
             }
             E::Freeze {
@@ -148,11 +150,17 @@ impl ReferenceState<'_> {
                 let mut inputs = operation.expressions().into_iter().flatten();
                 let first = inputs
                     .next()
-                    .map(|id| self.evaluate(*id, locals).map(|value| RawValue::new(value.release())))
+                    .map(|id| {
+                        self.evaluate(*id, locals)
+                            .map(|value| RawValue::new(value.release()))
+                    })
                     .transpose()?;
                 let second = inputs
                     .next()
-                    .map(|id| self.evaluate(*id, locals).map(|value| RawValue::new(value.release())))
+                    .map(|id| {
+                        self.evaluate(*id, locals)
+                            .map(|value| RawValue::new(value.release()))
+                    })
                     .transpose()?;
                 let capability = operation.capability().ok_or_else(region_value::error)?;
                 let source = locals.get(capability).ok_or_else(region_value::error)?;

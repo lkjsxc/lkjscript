@@ -764,8 +764,12 @@ fn normalized_prototype_passes_full_oracle() {
     assert!(required > 0);
     for limit in [0, 1, required - 1] {
         let mut consumed = 0;
-        let diagnostics = crate::platform::kernel::test_work::validate_full_observed(&snapshot, limit, &mut consumed)
-            .expect_err("a smaller proof budget cannot complete the same candidate");
+        let diagnostics = crate::platform::kernel::test_work::validate_full_observed(
+            &snapshot,
+            limit,
+            &mut consumed,
+        )
+        .expect_err("a smaller proof budget cannot complete the same candidate");
         assert!(
             diagnostics
                 .iter()

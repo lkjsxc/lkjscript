@@ -783,7 +783,9 @@ fn public_context_oracle(
     let mut relations = BTreeSet::new();
     let mut frontier = BTreeSet::from([root.to_owned()]);
     for depth in 0..maximum_depth {
-        if frontier.is_empty() { break; }
+        if frontier.is_empty() {
+            break;
+        }
         let mut next = BTreeSet::new();
         for owner in &frontier {
             assert!(matches!(direction, "incoming" | "outgoing" | "both"));
@@ -1019,6 +1021,58 @@ fn runtime_selection_uses_opaque_exact_tags_without_prefix_or_range_fallback() {
 
 #[test]
 fn capabilities_discovery_is_compact_focused_and_exportable() {
+    let runner_observation_records = compact_success(&["capabilities", "--section", "runners"]);
+    let mut runner_observations = std::collections::BTreeMap::new();
+    for record in runner_observation_records
+        .iter()
+        .filter(|record| record.operation == "execution.observation")
+    {
+        let record_name = compact_field(record, "record").expect("observation record");
+        let field_name = compact_field(record, "field").expect("observation field");
+        assert!(
+            runner_observations
+                .insert((record_name, field_name), record)
+                .is_none(),
+            "duplicate observation for {record_name}.{field_name}"
+        );
+    }
+    let maximum_observation = u64::MAX.to_string();
+    for tier in ["production", "reference"] {
+        for (suffix, unit) in [
+            ("allocated-bytes", "cumulative-byte"),
+            ("collection-items", "cumulative-item"),
+        ] {
+            let name = format!("{tier}-{suffix}");
+            let observation = runner_observations
+                .get(&("execution", name.as_str()))
+                .expect("unique cumulative observation");
+            assert_eq!(
+                compact_field(observation, "scalar"),
+                Some("nonnegative-integer")
+            );
+            assert_eq!(
+                compact_field(observation, "maximum"),
+                Some(maximum_observation.as_str())
+            );
+            assert_eq!(compact_field(observation, "unit"), Some(unit));
+            assert_eq!(compact_field(observation, "permission"), Some("none"));
+            let saturation = format!("{name}-saturated");
+            assert_eq!(
+                compact_field(observation, "saturation-field"),
+                Some(saturation.as_str())
+            );
+            let exactness = runner_observations
+                .get(&("execution", saturation.as_str()))
+                .expect("unique saturation observation");
+            assert_eq!(compact_field(exactness, "scalar"), Some("boolean"));
+            assert_eq!(
+                compact_field(exactness, "semantics"),
+                Some("false-exact-true-lower-bound")
+            );
+            assert_eq!(compact_field(exactness, "permission"), Some("none"));
+        }
+    }
+
     use lkjscript::platform::contract::{
         CLI_CONTRACT_VERSION, ContractKey, FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION,
         REGISTRY_CONTRACT_VERSION, contract_descriptors,
@@ -1463,11 +1517,11 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         }));
     }
     for (name, value, unit) in [
-        ("maximum-input-bytes", "4194304", "bytes"),
-        ("maximum-structural-tokens", "2560000", "tokens"),
-        ("maximum-structural-syntax-nodes", "1000000", "nodes"),
-        ("default-authored-identities", "100000", "identities"),
-        ("maximum-expanded-type-nodes", "1000000", "nodes"),
+        ("maximum-input-bytes", "unbounded", "bytes"),
+        ("maximum-structural-tokens", "unbounded", "tokens"),
+        ("maximum-structural-syntax-nodes", "unbounded", "nodes"),
+        ("default-authored-identities", "unbounded", "identities"),
+        ("maximum-expanded-type-nodes", "unbounded", "nodes"),
         ("maximum-combined-expression-depth", "1024", "depth"),
         ("maximum-type-depth", "256", "depth"),
     ] {
@@ -1645,6 +1699,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "set.case-payload",
             "set.parameter-use",
             "set.parameter-type",
+            "set.parameter-order",
             "add.parameter",
             "add.requirement",
             "add.port",
@@ -1668,7 +1723,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .collect::<Vec<_>>();
     // Two view declaration operations add ten fields; the unified result relation
     // replaces each former source-only field with kind/source/scope.
-    assert_eq!(operation_fields.len(), 184);
+    assert_eq!(operation_fields.len(), 187);
     assert_eq!(
         operation_fields
             .iter()
@@ -1717,6 +1772,8 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             ("add.case", "payload"),
             ("add.type-parameter", "constraint"),
             ("set.case-payload", "payload"),
+            ("set.parameter-order", "function"),
+            ("set.parameter-order", "operation"),
             ("add.parameter", "function"),
             ("add.parameter", "operation"),
             ("add.parameter", "use"),
@@ -1737,7 +1794,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         .filter(|record| record.operation == "change.field-form")
         .filter_map(|record| compact_field(record, "name"))
         .collect::<Vec<_>>();
-    assert_eq!(field_forms.len(), 36);
+    assert_eq!(field_forms.len(), 37);
     for (name, syntax) in [
         (
             "type_parameter_constraint",
@@ -1906,7 +1963,7 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         ("default-items", "50".to_owned()),
         ("maximum-items", u64::MAX.to_string()),
         ("minimum-output-bytes", "0".to_owned()),
-        ("default-output-bytes", "65536".to_owned()),
+        ("default-output-bytes", "unbounded".to_owned()),
         ("maximum-output-bytes", usize::MAX.to_string()),
         ("maximum-continuation-bytes", "320".to_owned()),
         ("minimum-context-depth", "0".to_owned()),
@@ -2147,27 +2204,76 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "change apply extract.function --base REVISION --as SYMBOL --function FUNCTION --expression EXPRESSION --name NAME [--idempotency KEY] [--intent TEXT] --plan PLAN"
         )
     );
-    assert_eq!(
-        change_section
+    assert!(
+        !change_section
             .iter()
-            .filter(|record| record.operation == "change.extraction-limit")
-            .count(),
-        7
+            .any(|record| record.operation == "change.extraction-limit")
     );
-    for (name, value) in [
-        ("maximum-extraction-moved-owners", "4096"),
-        ("maximum-extraction-captures", "4096"),
-        ("maximum-extraction-capture-uses", "4096"),
-        ("maximum-extraction-requirements", "4096"),
-        ("maximum-extraction-preserved-owners", "4096"),
-        ("maximum-extraction-changed-owners", "4097"),
-        ("maximum-extraction-generated-owners", "8194"),
-    ] {
-        assert!(change_section.iter().any(|record| {
-            record.operation == "change.extraction-limit"
-                && compact_field(record, "name") == Some(name)
-                && compact_field(record, "value") == Some(value)
-        }));
+    let policy_names = [
+        "operations",
+        "preconditions",
+        "allocated-identities",
+        "authored-type-nodes",
+        "canonical-owner-edits",
+        "canonical-type-edits",
+        "canonical-dependency-edits",
+        "canonical-retirement-edits",
+        "canonical-point-reads",
+        "canonical-map-pages",
+        "canonical-map-entries",
+        "canonical-catalog-lookups",
+        "canonical-objects",
+        "canonical-bytes",
+        "canonical-decoded-records",
+        "canonical-map-pages-encoded",
+        "canonical-map-bytes-encoded",
+        "witness-point-reads",
+        "witness-map-pages",
+        "witness-map-entries",
+        "witness-catalog-lookups",
+        "witness-objects",
+        "witness-bytes",
+        "witness-decoded-records",
+        "affected-frontier-owners",
+        "impact-summary-owners",
+        "impact-summary-edits",
+        "impact-ownership-steps",
+        "impact-behavior-owners",
+        "relation-edges",
+        "relation-fanout",
+        "validation-owner-records",
+        "validation-ownership-entries",
+        "validation-type-objects",
+        "validation-expression-steps",
+        "validation-diagnostics",
+        "tests-selected",
+        "test-dependencies-per-test",
+        "test-ownership-steps",
+        "test-owners-visited",
+        "witness-edits",
+        "witness-map-pages-encoded",
+        "witness-map-bytes-encoded",
+        "staged-objects",
+        "staged-bytes",
+        "staged-pages",
+    ];
+    let policy_records = change_section
+        .iter()
+        .filter(|record| record.operation == "change.policy")
+        .collect::<Vec<_>>();
+    assert_eq!(policy_records.len(), 46);
+    assert_eq!(policy_records.len(), policy_names.len());
+    for (name, record) in policy_names.into_iter().zip(policy_records) {
+        assert_eq!(
+            compact_record_values(record),
+            vec![
+                ("name", name),
+                ("default", "unbounded"),
+                ("syntax", "change.policy name=NAME limit=unbounded|U64"),
+                ("tx-syntax", "(policy NAME unbounded|U64)"),
+                ("finite", "exact-including-zero-and-u64-max"),
+            ]
+        );
     }
     assert!(change_section.iter().any(|record| {
         record.operation == "change.operation-field"
@@ -3077,9 +3183,11 @@ fn copied_binary_rediscovers_normalized_names_and_relations_without_query_writes
         compact_field(compact_record(&predecessor_token, "diagnostic"), "code"),
         Some("predecessor_contract")
     );
-    for (arguments, expected_code) in [
-        (
-            vec![
+    let finite_output_refusal = compact_failure_output_with_status(
+        command_at(
+            &copied_binary,
+            temporary.path(),
+            &[
                 "--project",
                 path(&project),
                 "query",
@@ -3087,8 +3195,19 @@ fn copied_binary_rediscovers_normalized_names_and_relations_without_query_writes
                 "--bytes",
                 "1",
             ],
-            "query_output_envelope_too_large",
         ),
+        4,
+    );
+    let finite_output_diagnostic = compact_record(&finite_output_refusal, "diagnostic");
+    assert_eq!(
+        compact_field(finite_output_diagnostic, "class"),
+        Some("resource")
+    );
+    assert_eq!(
+        compact_field(finite_output_diagnostic, "code"),
+        Some("query_output_envelope_too_large")
+    );
+    for (arguments, expected_code) in [
         (
             vec![
                 "--project",

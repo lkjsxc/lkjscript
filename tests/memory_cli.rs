@@ -34,7 +34,7 @@ fn revision(project: &MemProjectStore) -> String {
 fn shared_command() -> MemProjectStore {
     static BASE: OnceLock<MemProjectStore> = OnceLock::new();
     BASE.get_or_init(|| {
-        let project = MemProjectStore::new(512 * 1_048_576).unwrap();
+        let project = MemProjectStore::new(None).unwrap();
         create_memory_project(&project, "memory-fixture", "command").unwrap();
         command(&project, &["check"]);
         project
@@ -64,7 +64,7 @@ fn shared_command_forks_reuse_accepted_standard_and_run_both_evaluators() {
 
 #[test]
 fn inline_publication_crosses_change_worker_without_leaking_between_forks() {
-    let project = MemProjectStore::new(32 * 1_048_576).unwrap();
+    let project = MemProjectStore::new(None).unwrap();
     create_memory_project(&project, "memory", "minimal").unwrap();
     let fork = project.fork().unwrap();
     let same_authority = project.clone();
@@ -122,7 +122,7 @@ fn explicit_memory_authority_rejects_disk_selection_and_concurrent_scopes_stay_i
     let mut workers = Vec::new();
     for index in 0..4 {
         workers.push(std::thread::spawn(move || {
-            let project = MemProjectStore::new(8 * 1_048_576).unwrap();
+            let project = MemProjectStore::new(None).unwrap();
             create_memory_project(&project, &format!("project-{index}"), "minimal").unwrap();
             let before = revision(&project);
             for _ in 0..3 {

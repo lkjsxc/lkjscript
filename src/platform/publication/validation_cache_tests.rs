@@ -46,8 +46,8 @@ fn proof(repository: &GraphRepository) -> (ViewStore, Arc<CachedValidation>) {
 
 #[test]
 fn interleaved_projects_reuse_distinct_complete_proofs() {
-    let first_memory = MemProjectStore::new(16 * 1_048_576).unwrap();
-    let second_memory = MemProjectStore::new(16 * 1_048_576).unwrap();
+    let first_memory = MemProjectStore::new(None).unwrap();
+    let second_memory = MemProjectStore::new(None).unwrap();
     let first = create(&first_memory, 1);
     let second = create(&second_memory, 2);
     let (first_store, first_proof) = proof(&first.repository);
@@ -86,7 +86,7 @@ fn weighted(proof: &CachedValidation, ordinal: u8, bytes: u64) -> Arc<CachedVali
 
 #[test]
 fn proof_cache_evicts_lru_at_both_limits_and_rejects_oversized_contexts() {
-    let memory = MemProjectStore::new(16 * 1_048_576).unwrap();
+    let memory = MemProjectStore::new(None).unwrap();
     let created = create(&memory, 3);
     let (store, proof) = proof(&created.repository);
     let mut cache = ValidationCache::default();
@@ -126,7 +126,7 @@ fn proof_cache_evicts_lru_at_both_limits_and_rejects_oversized_contexts() {
 
 #[test]
 fn retained_proof_releases_all_dropped_project_arena_bytes() {
-    let monitor = MemProjectStore::new(16 * 1_048_576).unwrap();
+    let monitor = MemProjectStore::new(None).unwrap();
     let baseline = monitor.used_bytes();
     let mut cache = ValidationCache::default();
     let key;
@@ -152,7 +152,7 @@ fn retained_proof_releases_all_dropped_project_arena_bytes() {
 
 #[test]
 fn immutable_identity_reuse_keeps_limits_and_rechecks_replaced_bytes() {
-    let memory = MemProjectStore::new(16 * 1_048_576).unwrap();
+    let memory = MemProjectStore::new(None).unwrap();
     let created = create(&memory, 5);
     let (store, proof) = proof(&created.repository);
     let work = recheck(&proof, &store, &|| Ok(()), REBUILD_LIMITS).unwrap();
@@ -197,7 +197,7 @@ fn immutable_identity_reuse_keeps_limits_and_rechecks_replaced_bytes() {
     assert_eq!(checks.get(), 1);
 
     // Independent memory allocations with equal content need a fresh content check, not a miss.
-    let second_memory = MemProjectStore::new(16 * 1_048_576).unwrap();
+    let second_memory = MemProjectStore::new(None).unwrap();
     let second = create(&second_memory, 5);
     let second_store = ViewStore::new(second.repository.object_store().unwrap());
     let work = recheck(&proof, &second_store, &|| Ok(()), REBUILD_LIMITS).unwrap();
@@ -224,7 +224,7 @@ fn immutable_identity_reuse_keeps_limits_and_rechecks_replaced_bytes() {
     // The earlier pinned view still holds the unchanged allocations.
     assert!(recheck(&proof, &second_store, &|| Ok(()), REBUILD_LIMITS).is_ok());
     let missing = ViewStore::new(StorageBackend::Memory(
-        MemProjectStore::new(16 * 1_048_576)
+        MemProjectStore::new(None)
             .unwrap()
             .graph
             .lock()
@@ -325,10 +325,10 @@ fn changed_used_readiness_selection_forces_full_admission_with_old_objects_prese
     use crate::platform::kernel::{PackageRevisionDigest, PackageTransportDigest};
     use crate::platform::publication::PublicationOptions;
 
-    let supplier_memory = MemProjectStore::new(16 * 1_048_576).unwrap();
+    let supplier_memory = MemProjectStore::new(None).unwrap();
     let supplier = empty_project(&supplier_memory, 1);
     let exported = supplier.repository.export_package_transport().unwrap();
-    let memory = MemProjectStore::new(16 * 1_048_576).unwrap();
+    let memory = MemProjectStore::new(None).unwrap();
     let consumer = empty_project(&memory, 2);
     consumer
         .repository

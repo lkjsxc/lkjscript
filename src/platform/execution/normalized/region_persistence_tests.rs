@@ -14,7 +14,7 @@ fn source(fixture: &str) -> crate::platform::kernel::KernelSnapshot {
     .reconstruct_full_oracle()
     .unwrap()
     .value;
-    let memory = crate::platform::MemProjectStore::new(128 * 1_048_576).unwrap();
+    let memory = crate::platform::MemProjectStore::new(None).unwrap();
     let repository = GraphRepository::create_memory(&memory, &standard, None)
         .unwrap()
         .repository;
@@ -131,7 +131,7 @@ fn round_trip(fixture: &str, expected: i64) {
     let program = prepare_snapshot(&source);
     let mut images = Vec::new();
     for reference in [false, true] {
-        let memory = crate::platform::MemProjectStore::new(16 * 1_048_576).unwrap();
+        let memory = crate::platform::MemProjectStore::new(None).unwrap();
         let store =
             DataStore::open_memory(&memory, "regions".into(), DataLimits::default()).unwrap();
         let capabilities = capabilities(&program, store.clone());

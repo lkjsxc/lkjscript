@@ -171,6 +171,7 @@ declarations.end
         ),
     );
     public.apply(&input, &public.plan(&input, true), true);
+    let before = public.revision();
     let module = find(&public, "module", "main", None);
     let target = find(&public, "target", "main", None);
     let other = find(&public, "module", "other", None);
@@ -192,17 +193,15 @@ declarations.end
             )
         );
     }
-    let output = public.root.path().join("too-many.lkjc");
+    let expected = draft(&public, "single-selection.lkjc", &["--module", "main"]);
+    let output = public.root.path().join("many-selections.lkjc");
     let mut args = vec!["change", "draft", "--output", path(&output)];
     for _ in 0..10_001 {
         args.extend(["--module", "main"]);
     }
-    let result = public.cli(&args, false);
-    assert_eq!(
-        compact_field(compact_record(&result, "diagnostic"), "code"),
-        "change_draft_capacity"
-    );
-    assert!(!output.exists());
+    public.cli(&args, true);
+    assert_eq!(std::fs::read_to_string(output).unwrap(), expected);
+    assert_eq!(public.revision(), before);
 }
 
 #[test]
