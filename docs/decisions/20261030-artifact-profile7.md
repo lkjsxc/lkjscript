@@ -1,20 +1,21 @@
 # Mode-1 Profile 7: wide projection and generated pools
 
 Date: 2026-10-30 UTC.
-Status: Rust producer controls passed; the coordinated language changes are
-publicly adopted and namespace readback completed. The focused artifact selection,
-four-way probe comparisons, complete proposal replay and public GC passed.
-Native compiler and artifact reproduction passed within the first frozen-tree
-run, whose owner joined with exit 1 after one stale fixture failed. The selector
-fixture and two ownership-charge callers are now corrected; all 20 focused tests,
-formatting and strict Clippy passed. Final staged-tree acceptance remains pending.
+Status: accepted and integrated on main at
+`5e7e8d37831b33a9e44c3e50a0b733cfd049b64d`, tree
+`06ad6feaa9df96a12f1e1ecab039855bff6072e1`.
+The corrected staged-tree run completed all six operations, including all 29
+fresh full gates, at 2026-10-30T11:42:23.112Z. Its owning process joined with exit
+zero; the recovered exact-tree audit and normal fast-forward completed on
+2026-10-31 (Asia/Tokyo). This documentation follow-up records that earlier tested
+tree and is not itself the original seal.
 
-This slice follows the accepted list milestone on main commit
+This slice follows the accepted list milestone at
 `932f197ebcd9c17e2702372300ab73996bb20754`, tree
-`6717d8249c1db319169b2b32be0e088ef09dea21`. That preceding tree passed all 29 full
-gates fresh, with zero reuse, and was integrated by ordinary fast-forward. Its
-acceptance does not transfer to this changed compiler. The working branch is
-`capacity/20261030-artifact-profile7`.
+`6717d8249c1db319169b2b32be0e088ef09dea21`. The implementation was developed on
+`capacity/20261030-artifact-profile7`. Historical focused and failed-run records
+below keep their original scope; the completed repaired-tree acceptance has its
+own section and receipts.
 
 ## Implemented source changes and public graph adoption
 
@@ -307,23 +308,65 @@ repairs, not acceptance of a new staged tree. Native compiler/artifact identitie
 remain evidence of first tree `13b09cc3e4be24802a6fcbd0433b8a96d45eb33d` until
 reaffirmed on the final repaired tree.
 
-## Pending integration and verification
+## Completed full acceptance and integration
 
-1. Finish affected maintained-output and source/documentation checks after the
-   applied corrections and their passing focused tests. Discovery generation/
-   verification previously passed without generated changes. Preserve
-   source/graph/physical storage identities separately for each tested tree.
-2. Freeze the repaired staged tree and bootstrap its independent verifier against
-   that exact source/tree. Run literal `bash tools/selfhost/verify.sh` and both
-   named complete compiler measurement/inventory controls. Reaffirm Mode-0
-   profile-6 C2 = C3 and Mode-1 profile-7 artifact C1 = C2 = C3 on the adopted
-   compiler, binding actual profiles, policy tags, source identities and supplied
-   observation exactness. These commands must preserve the frozen tree.
-3. Run all 29 full gates fresh with zero reuse and `release target` on the same
-   tree, join every owning process, audit compact receipts and cleanup, then
-   integrate normally. Individual reproduction tests within the first run,
-   focused artifact/replay success and public GC cannot substitute for acceptance
-   of the repaired tree.
+The repaired tree `06ad6feaa9df96a12f1e1ecab039855bff6072e1` was sealed from
+base HEAD `932f197ebcd9c17e2702372300ab73996bb20754` between
+2026-10-30T09:35:24.303Z and 11:42:23.112Z. Every operation recorded the same
+2,194 indexed files / 150,450,246 bytes before and after execution. The original
+owner `capacity-resume-1030-267` was recovered and joined with exit zero through
+`lkjscript-join-profile7-owner-20261030-09`.
+
+| Operation | Result | Duration |
+| --- | --- | --- |
+| Exact staged-tree bootstrap | Passed; one Cargo artifact reused | 197.031s |
+| Literal selfhost tests | 149 passed, 0 failed, 2 ignored, 2,705 filtered | 3,414.29s test execution |
+| Native ELF tests | 11 passed, 0 failed, 0 ignored, 2,845 filtered | 117.66s test execution |
+| Combined literal script and input readback | Exit 0 | 3,532.520s |
+| Maintained native closure | 1 passed, 0 failed, 0 ignored | 23.30s test execution |
+| Complete owner/type inventory | 1 passed, 0 failed, 0 ignored | 13.03s test execution |
+| Full registry | 29 fresh passes, 0 reused, 0 unrun; input stable | 3,849.927s |
+| Release target policy | Passed | 0.006s |
+
+| Terminal record | SHA-256 |
+| --- | --- |
+| Full compact receipt | `36ec247b40817f8bbc6f835fb516677ebcff2f1d67c23303600c8ccd2bbe4400` |
+| Bootstrap receipt | `ec0b1604523b0fcc7d1b3ab9bf14883167e875ab4d8cd9f6b8e11cbd6675fd92` |
+| Verifier executable | `2c798059ce30fdb6e4e42d63061d8ddb4a81efb1bd6eaf3e1c7f924c97929747` |
+| Completed checkpoint | `34865dff49d1f2294090100e105bb327da0ed6a09faa4d10c6c3284ab4d24988` |
+| Committed-tree recovery observation | `28c228537514a1c1b12242e69c58877ee56c9e1017aa5d61b111aaab1dee8481` |
+| Independent structural audit | `c1674b0e3368f74c75d190d3560270bec2b5db4d7cfa759b7e71070c4b4227eb` |
+
+The final named measurement reaffirmed Mode-0 profile-6 C2 = C3 at
+1,249,170 bytes / `c613d7c604322d42f4cec6bd65d83520828d901fa7f620c792707aeb1caeedb7`.
+Its Mode-1 profile-7, tag-zero input is 10,806,949 bytes /
+`c50451cd991e04fe64e38f5a7bae5a4d34497cbfd54e614ad2c9c137bde19791`.
+C1, C2 and C3 emit the same strictly loaded 10,338,816-byte artifact /
+`41dd8141cb12a9501e69c8092e0b8e5d7c020765967511ec051c50bacac18f23`.
+The current full source inventory is 36,080 owners / 41 types / 73 modules /
+646 callables, including 24 externals, with semantic state
+`semantic_state_49aa7a1d317922df1dfce5d9aac02c6d3bd0c28fa6c9084d2280f658d76ddc9e`.
+These remain Tier 1 projected-input equalities, not source-driven Tier 2 evidence.
+
+Commit `5e7e8d37831b33a9e44c3e50a0b733cfd049b64d` was created after the
+completed run with exactly that tested tree and parent. Recovery did not rewrite
+historical receipts: it separately checked the current commit, parent, committed
+and staged trees, every raw indexed file, clean inventory, unchanged verifier,
+all command stream hashes, and retained-artifact ownership. The collector and
+independent audit each joined with exit zero. Only the three identified historical
+ELF files remain under `.artifacts`; the checker transient stages and bootstrap
+evidence are absent. No OS-wide temporary-file census is claimed.
+
+A later public build used for the next pinned performance workload created three
+derived compiler packs and an ignored cache head/catalog. Those task-created
+outputs were preserved separately; the original tracked packs and authoritative
+HEAD remained byte-identical. Public source readback still produced the exact
+15,330,787-byte transport /
+`8774b278e0859f0c092af119248fff73ad57d5ca27607a802d1e18e8a3cfc7a1`.
+The clean committed-tree recovery followed that check. Normal fast-forward then
+advanced local and remote main to `5e7e8d37831b33a9e44c3e50a0b733cfd049b64d`;
+remote ancestry and current branch rules were independently observed. No release
+archive or deployment was published.
 
 Historical Profile-5 input/artifact sizes and fixed-point hashes remain attached
 to their original tested compiler. They must not be rewritten with the new profile
