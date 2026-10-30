@@ -1,20 +1,20 @@
-//! Bounded negative guards for ordinary value boundaries. These checks mint no
+//! Depth-checked negative guards for ordinary value boundaries. These checks mint no
 //! value/category/provenance certificate and never acquire a read-view lease.
 
 use super::super::value_schema::NormalizedValueSchema;
-use super::{MAXIMUM_ADMISSION_ITEMS, NormalizedRecord, NormalizedValue};
+use super::{NormalizedRecord, NormalizedValue};
 use crate::platform::execution::{ExecutionControl, ExecutionError};
 use crate::platform::kernel::{TypeForm, TypeObjectDigest};
 
 struct Guard<'a> {
     control: &'a ExecutionControl,
-    visits: u64,
     ancestors: [Option<TypeObjectDigest>; 257],
 }
 
 impl Guard<'_> {
     // Traversal borrows existing storage and allocates no worklist or child buffer.
-    // The existing raw-value depth/item bounds also bound the host recursion here.
+    // The existing nesting bound limits host recursion. Width follows finite
+    // child iteration rather than an admission-work counter.
     fn enter(&mut self, depth: u16) -> Result<(), ExecutionError> {
         self.control.check()?;
         if depth > 256 {
@@ -23,16 +23,6 @@ impl Guard<'_> {
                 "view escape inspection exceeds finite value depth 256",
             ));
         }
-        self.visits = self
-            .visits
-            .checked_add(1)
-            .filter(|visits| *visits <= MAXIMUM_ADMISSION_ITEMS + 1)
-            .ok_or_else(|| {
-                ExecutionError::resource(
-                    "normalized_collection_items",
-                    "view escape inspection exceeds finite admission items",
-                )
-            })?;
         Ok(())
     }
 
@@ -221,7 +211,6 @@ pub(super) fn reject_read_view_value_escape(
 ) -> Result<(), ExecutionError> {
     Guard {
         control,
-        visits: 0,
         ancestors: [None; 257],
     }
     .value(value, 0)
@@ -234,7 +223,6 @@ pub(in super::super) fn reject_read_view_type_escape<S: NormalizedValueSchema + 
 ) -> Result<(), ExecutionError> {
     Guard {
         control,
-        visits: 0,
         ancestors: [None; 257],
     }
     .ty(schema, ty, 0)

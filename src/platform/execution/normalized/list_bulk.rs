@@ -1,10 +1,18 @@
 //! Assemble only final immutable nodes; no published prefix needs path copying.
 use super::super::value::{NormalizedValue, RawArguments};
 use super::{
-    Charge, FANOUT, List, MAXIMUM_LENGTH, Node, branch, element, failure, invalid, leaf, node,
+    Branches, Charge, FANOUT, INDEX_LEVELS, List, Node, admit_length, branch, element, failure,
+    invalid, leaf, node,
 };
 use crate::platform::execution::ExecutionError;
 use std::sync::Arc;
+
+struct PrefixFrame {
+    children: Branches,
+    height: usize,
+    remaining: usize,
+    next: usize,
+}
 
 fn build_leaf(
     pending: &mut RawArguments,
@@ -28,41 +36,66 @@ fn build_prefix(
     leaves: usize,
     reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
 ) -> Result<Arc<Node>, ExecutionError> {
-    // Recursion is bounded by the existing checked storage height, not input
-    // nesting. Partial branches keep the requested height for append/indexing.
     if leaves == 0 || leaves > List::capacity(height)? {
         return Err(invalid());
     }
     if height == 0 {
         return build_leaf(pending, FANOUT, reserve);
     }
-    let span = List::capacity(height - 1)?;
-    let mut children = branch(None, reserve)?;
-    let mut remaining = leaves;
-    for child in &mut children {
-        if remaining == 0 {
-            break;
+    // Prefix construction settles each branch after its children. Each frame
+    // consumes one radix level, so the index-width worklist covers every list
+    // extent without adding a heap scratch allocation or a logical depth policy.
+    let mut frames: [Option<PrefixFrame>; INDEX_LEVELS] = std::array::from_fn(|_| None);
+    frames[0] = Some(PrefixFrame {
+        children: branch(None, reserve)?,
+        height,
+        remaining: leaves,
+        next: 0,
+    });
+    let mut depth = 1;
+    loop {
+        let frame = frames[depth - 1].as_mut().ok_or_else(invalid)?;
+        if frame.remaining == 0 {
+            let frame = frames[depth - 1].take().ok_or_else(invalid)?;
+            depth -= 1;
+            let completed = node(Node::Branch(frame.children));
+            if depth == 0 {
+                return Ok(completed);
+            }
+            let parent = frames[depth - 1].as_mut().ok_or_else(invalid)?;
+            let slot = parent.next.checked_sub(1).ok_or_else(invalid)?;
+            *parent.children.get_mut(slot).ok_or_else(invalid)? = Some(completed);
+            continue;
         }
-        let count = remaining.min(span);
-        *child = Some(build_prefix(pending, height - 1, count, reserve)?);
-        remaining -= count;
+        let child_height = frame.height.checked_sub(1).ok_or_else(invalid)?;
+        let span = List::capacity(child_height)?;
+        let count = frame.remaining.min(span);
+        let slot = frame.next;
+        frame.children.get(slot).ok_or_else(invalid)?;
+        frame.next += 1;
+        frame.remaining -= count;
+        if child_height == 0 {
+            frame.children[slot] = Some(build_leaf(pending, FANOUT, reserve)?);
+        } else {
+            *frames.get_mut(depth).ok_or_else(invalid)? = Some(PrefixFrame {
+                children: branch(None, reserve)?,
+                height: child_height,
+                remaining: count,
+                next: 0,
+            });
+            depth += 1;
+        }
     }
-    if remaining != 0 {
-        return Err(invalid());
-    }
-    Ok(node(Node::Branch(children)))
 }
 
 pub(super) fn from_items(
     items: Vec<NormalizedValue>,
-    maximum_length: u64,
+    maximum_length: Option<u64>,
     reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
 ) -> Result<List, ExecutionError> {
     let mut pending = RawArguments::new(items);
     let length = pending.len();
-    if length > MAXIMUM_LENGTH || length as u64 > maximum_length {
-        return Err(failure());
-    }
+    admit_length(length, maximum_length)?;
     let prefix_leaves = length.saturating_sub(1) / FANOUT;
     let mut result = List {
         length,

@@ -10,8 +10,12 @@ use std::cell::Cell;
 use std::sync::Arc;
 
 pub(super) const FANOUT: usize = 32;
-pub(super) const MAXIMUM_LENGTH: usize = 1_000_000;
-const MAXIMUM_HEIGHT: usize = 3;
+// Each radix level consumes five index bits. These inline worklists cover every
+// usize index, including the partially used top level; they are not admission
+// policies. The leaf consumes one level, so a reachable root has at most
+// INDEX_LEVELS - 1 branch layers. Its leaf capacity still fits usize even when
+// the corresponding complete value capacity would not.
+const INDEX_LEVELS: usize = usize::BITS.div_ceil(FANOUT.ilog2()) as usize;
 type Leaves = [Option<Arc<Element>>; FANOUT];
 type Branches = [Option<Arc<Node>>; FANOUT];
 
@@ -40,6 +44,8 @@ pub(crate) struct Work {
     pub nodes_allocated: u64,
     pub full_materializations: u64,
     pub materialized_elements: u64,
+    /// True marks loss of exactness; counters remain passive lower bounds.
+    pub saturated: bool,
 }
 
 thread_local! {
@@ -67,7 +73,8 @@ impl Work {
     pub(super) fn include_joined(child: Self) {
         WORK.with(|slot| {
             let mut value = slot.get();
-            macro_rules! add { ($($field:ident),* $(,)?) => { $(value.$field = value.$field.saturating_add(child.$field);)* }; }
+            value.saturated |= child.saturated;
+            macro_rules! add { ($($field:ident),* $(,)?) => { $(add_observed(&mut value.$field, child.$field, &mut value.saturated);)* }; }
             add!(node_visits, element_handle_copies, element_handle_allocations, element_slots_reserved, branch_slot_copies, branch_slots_reserved, nodes_allocated, full_materializations, materialized_elements);
             slot.set(value);
         });
@@ -82,12 +89,14 @@ impl Work {
         nodes_allocated: 0,
         full_materializations: 0,
         materialized_elements: 0,
+        saturated: false,
     };
 
     pub(super) fn current() -> Self {
         WORK.get()
     }
 
+    /// Difference within the same observation scope; loss of exactness is sticky.
     pub(super) fn since(self) -> Self {
         let end = Self::current();
         Self {
@@ -114,6 +123,17 @@ impl Work {
             materialized_elements: end
                 .materialized_elements
                 .saturating_sub(self.materialized_elements),
+            saturated: self.saturated || end.saturated,
+        }
+    }
+}
+
+fn add_observed(counter: &mut u64, amount: u64, saturated: &mut bool) {
+    match counter.checked_add(amount) {
+        Some(next) => *counter = next,
+        None => {
+            *counter = u64::MAX;
+            *saturated = true;
         }
     }
 }
@@ -125,14 +145,22 @@ fn observe(update: impl FnOnce(&mut Work)) {
 }
 
 fn visit() {
-    observe(|work| work.node_visits = work.node_visits.saturating_add(1));
+    observe(|work| add_observed(&mut work.node_visits, 1, &mut work.saturated));
 }
 
 /// Explicit external-buffer conversion; ordinary runtime list operations never call this.
 pub(super) fn materialized(elements: usize) {
     observe(|work| {
-        work.full_materializations = work.full_materializations.saturating_add(1);
-        work.materialized_elements = work.materialized_elements.saturating_add(elements as u64);
+        add_observed(&mut work.full_materializations, 1, &mut work.saturated);
+        let elements = u64::try_from(elements).unwrap_or_else(|_| {
+            work.saturated = true;
+            u64::MAX
+        });
+        add_observed(
+            &mut work.materialized_elements,
+            elements,
+            &mut work.saturated,
+        );
     });
 }
 
@@ -140,8 +168,18 @@ fn failure() -> ExecutionError {
     ExecutionError::new(
         ExecutionFailureClass::Resource,
         "normalized_list_storage",
-        "immutable list exceeds its checked length, height, or storage bound",
+        "immutable list exceeds its explicit length policy or representable storage extent",
     )
+}
+
+/// Exact caller policy, separate from physical node reservations and observations.
+pub(super) fn admit_length(length: usize, maximum: Option<u64>) -> Result<(), ExecutionError> {
+    let length = u64::try_from(length).map_err(|_| failure())?;
+    if maximum.is_some_and(|maximum| length > maximum) {
+        Err(failure())
+    } else {
+        Ok(())
+    }
 }
 
 fn invalid() -> ExecutionError {
@@ -174,7 +212,7 @@ fn element(
     let value = Element(value);
     reserve(element_charge())?;
     observe(|work| {
-        work.element_handle_allocations = work.element_handle_allocations.saturating_add(1);
+        add_observed(&mut work.element_handle_allocations, 1, &mut work.saturated);
     });
     Ok(Arc::new(value))
 }
@@ -185,7 +223,11 @@ fn leaf(
 ) -> Result<Leaves, ExecutionError> {
     reserve(node_charge())?;
     observe(|work| {
-        work.element_slots_reserved = work.element_slots_reserved.saturating_add(FANOUT as u64)
+        add_observed(
+            &mut work.element_slots_reserved,
+            FANOUT as u64,
+            &mut work.saturated,
+        );
     });
     let mut slots = std::array::from_fn(|_| None);
     if let Some(source) = source {
@@ -197,7 +239,7 @@ fn leaf(
             if let Some(item) = item {
                 *target = Some(Arc::clone(item));
                 observe(|work| {
-                    work.element_handle_copies = work.element_handle_copies.saturating_add(1)
+                    add_observed(&mut work.element_handle_copies, 1, &mut work.saturated);
                 });
             }
         }
@@ -211,7 +253,11 @@ fn branch(
 ) -> Result<Branches, ExecutionError> {
     reserve(node_charge())?;
     observe(|work| {
-        work.branch_slots_reserved = work.branch_slots_reserved.saturating_add(FANOUT as u64)
+        add_observed(
+            &mut work.branch_slots_reserved,
+            FANOUT as u64,
+            &mut work.saturated,
+        );
     });
     let mut slots = std::array::from_fn(|_| None);
     if let Some(source) = source {
@@ -222,7 +268,9 @@ fn branch(
         for (target, child) in slots.iter_mut().zip(children) {
             if let Some(child) = child {
                 *target = Some(Arc::clone(child));
-                observe(|work| work.branch_slot_copies = work.branch_slot_copies.saturating_add(1));
+                observe(|work| {
+                    add_observed(&mut work.branch_slot_copies, 1, &mut work.saturated);
+                });
             }
         }
     }
@@ -230,7 +278,7 @@ fn branch(
 }
 
 fn node(value: Node) -> Arc<Node> {
-    observe(|work| work.nodes_allocated = work.nodes_allocated.saturating_add(1));
+    observe(|work| add_observed(&mut work.nodes_allocated, 1, &mut work.saturated));
     Arc::new(value)
 }
 
@@ -250,17 +298,7 @@ impl List {
         value: NormalizedValue,
         control: &crate::platform::execution::ExecutionControl,
     ) -> Result<Self, ExecutionError> {
-        let mut bytes = 0_u64;
-        let mut slots = 0_u64;
-        self.append(value, MAXIMUM_LENGTH as u64, &mut |charge| {
-            control.check()?;
-            bytes = bytes.checked_add(charge.bytes).ok_or_else(failure)?;
-            slots = slots
-                .checked_add(charge.slots)
-                .filter(|n| *n <= 1_000_000)
-                .ok_or_else(failure)?;
-            Ok(())
-        })
+        self.append(value, None, &mut |_| control.check())
     }
 
     pub(super) fn len(&self) -> usize {
@@ -271,11 +309,11 @@ impl List {
         self.length.saturating_sub(1) / FANOUT * FANOUT
     }
 
+    /// Completed-leaf capacity, which fits usize for every reachable branch height.
     fn capacity(height: usize) -> Result<usize, ExecutionError> {
-        if height > MAXIMUM_HEIGHT {
-            return Err(failure());
-        }
-        FANOUT.checked_pow(height as u32).ok_or_else(failure)
+        FANOUT
+            .checked_pow(u32::try_from(height).map_err(|_| failure())?)
+            .ok_or_else(failure)
     }
 
     /// Copy the path to one new completed leaf. Heights count branch layers, not values.
@@ -286,20 +324,40 @@ impl List {
         added: Arc<Node>,
         reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
     ) -> Result<Arc<Node>, ExecutionError> {
-        if height == 0 {
-            return if root.is_none() && index == 0 {
-                Ok(added)
-            } else {
-                Err(invalid())
+        let mut path: [Option<(Branches, usize)>; INDEX_LEVELS] = std::array::from_fn(|_| None);
+        let mut depth = 0;
+        let mut source = root;
+        let mut remaining = height;
+        let mut index = index;
+        while remaining != 0 {
+            let span = Self::capacity(remaining - 1)?;
+            let slot = index / span;
+            let children = branch(source, reserve)?;
+            children.get(slot).ok_or_else(invalid)?;
+            // Follow the borrowed original tree. The copied path may move between
+            // frames, so it must not supply references to later frames.
+            let next = match source {
+                Some(Node::Branch(children)) => children.get(slot).ok_or_else(invalid)?.as_deref(),
+                Some(Node::Leaf(_)) => return Err(invalid()),
+                None => None,
             };
+            *path.get_mut(depth).ok_or_else(invalid)? = Some((children, slot));
+            depth += 1;
+            source = next;
+            index %= span;
+            remaining -= 1;
         }
-        let span = Self::capacity(height - 1)?;
-        let slot = index / span;
-        let mut children = branch(root, reserve)?;
-        let target = children.get_mut(slot).ok_or_else(invalid)?;
-        let child = Self::insert_leaf(target.as_deref(), height - 1, index % span, added, reserve)?;
-        *target = Some(child);
-        Ok(node(Node::Branch(children)))
+        if source.is_some() || index != 0 {
+            return Err(invalid());
+        }
+        let mut child = added;
+        while depth != 0 {
+            depth -= 1;
+            let (mut children, slot) = path[depth].take().ok_or_else(invalid)?;
+            *children.get_mut(slot).ok_or_else(invalid)? = Some(child);
+            child = node(Node::Branch(children));
+        }
+        Ok(child)
     }
 
     fn promote(
@@ -313,14 +371,13 @@ impl List {
             return Ok(());
         };
         if leaves == Self::capacity(self.height)? {
-            let height = self
-                .height
-                .checked_add(1)
-                .filter(|h| *h <= MAXIMUM_HEIGHT)
-                .ok_or_else(failure)?;
+            let height = self.height.checked_add(1).ok_or_else(failure)?;
+            Self::capacity(height)?;
             let mut children = branch(None, reserve)?;
             children[0] = Some(Arc::clone(root));
-            observe(|work| work.branch_slot_copies = work.branch_slot_copies.saturating_add(1));
+            observe(|work| {
+                add_observed(&mut work.branch_slot_copies, 1, &mut work.saturated);
+            });
             children[1] = Some(Self::insert_leaf(None, self.height, 0, tail, reserve)?);
             self.root = Some(node(Node::Branch(children)));
             self.height = height;
@@ -339,15 +396,12 @@ impl List {
     pub(super) fn append(
         &self,
         value: NormalizedValue,
-        maximum_length: u64,
+        maximum_length: Option<u64>,
         reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         let value = Element(value);
-        let length = self
-            .length
-            .checked_add(1)
-            .filter(|n| *n <= MAXIMUM_LENGTH && (*n as u64) <= maximum_length)
-            .ok_or_else(failure)?;
+        let length = self.length.checked_add(1).ok_or_else(failure)?;
+        admit_length(length, maximum_length)?;
         let mut result = self.clone();
         let tail_length = self.length - self.tail_start();
         let mut items = if tail_length == FANOUT {
@@ -364,7 +418,7 @@ impl List {
         };
         reserve(element_charge())?;
         observe(|work| {
-            work.element_handle_allocations = work.element_handle_allocations.saturating_add(1)
+            add_observed(&mut work.element_handle_allocations, 1, &mut work.saturated);
         });
         items[slot] = Some(Arc::new(value));
         result.tail = Some(node(Node::Leaf(items)));
@@ -373,10 +427,10 @@ impl List {
         Ok(result)
     }
 
-    /// Private bounded bulk ingress. Raw items move into each final node once.
+    /// Private bulk ingress. Raw items move into each final node once.
     pub(super) fn from_items(
         items: Vec<NormalizedValue>,
-        maximum_length: u64,
+        maximum_length: Option<u64>,
         reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         bulk::from_items(items, maximum_length, reserve)
@@ -395,7 +449,7 @@ impl List {
                 let Node::Branch(children) = current else {
                     return None;
                 };
-                let span = FANOUT.checked_pow(height as u32)?;
+                let span = Self::capacity(height).ok()?;
                 current = children.get(index / span % FANOUT)?.as_deref()?;
             }
             current
@@ -437,7 +491,7 @@ impl List {
     pub(super) fn drain_unique(&mut self, values: &mut RawValueWork) {
         // Each branch level adds at most FANOUT-1 pending siblings, in addition
         // to the two roots. Shared or scalar retired list payloads need no heap.
-        let mut pending: [Option<Arc<Node>>; (FANOUT - 1) * MAXIMUM_HEIGHT + 2] =
+        let mut pending: [Option<Arc<Node>>; (FANOUT - 1) * (INDEX_LEVELS - 1) + 2] =
             std::array::from_fn(|_| None);
         let mut depth = 0;
         for root in [self.root.take(), self.tail.take()].into_iter().flatten() {
@@ -445,6 +499,7 @@ impl List {
             depth += 1;
         }
         self.length = 0;
+        self.height = 0;
         while depth != 0 {
             depth -= 1;
             if let Some(node) = pending[depth].take().and_then(Arc::into_inner) {
@@ -499,7 +554,7 @@ impl PartialEq for List {
 impl Eq for List {}
 
 struct Cursor<'a> {
-    stack: [Option<(&'a Node, usize)>; MAXIMUM_HEIGHT + 1],
+    stack: [Option<(&'a Node, usize)>; INDEX_LEVELS],
     depth: usize,
     first: Option<&'a Node>,
     second: Option<&'a Node>,
@@ -509,7 +564,7 @@ struct Cursor<'a> {
 impl<'a> Cursor<'a> {
     fn new(first: Option<&'a Node>, second: Option<&'a Node>, reverse: bool) -> Self {
         Self {
-            stack: [None; MAXIMUM_HEIGHT + 1],
+            stack: [None; INDEX_LEVELS],
             depth: 0,
             first,
             second,

@@ -958,6 +958,7 @@ impl ReferenceState<'_> {
     }
 
     pub(super) fn list_value(&mut self, items: Vec<Value>) -> Result<Value, ExecutionError> {
+        super::super::list::admit_length(items.len(), self.policy.maximum_collection_items)?;
         self.ordinary_children(&items)?;
         self.charge_allocation(
             items
@@ -972,9 +973,7 @@ impl ReferenceState<'_> {
         )?;
         let list = super::super::list::List::from_items(
             items.into_iter().map(Value::release).collect(),
-            self.policy
-                .maximum_collection_items
-                .unwrap_or(super::super::list::MAXIMUM_LENGTH as u64),
+            self.policy.maximum_collection_items,
             &mut |charge| self.reserve_list(charge),
         )?;
         Ok(Value {
@@ -1208,9 +1207,7 @@ impl ReferenceState<'_> {
         };
         let output = items.append(
             child.release(),
-            self.policy
-                .maximum_collection_items
-                .unwrap_or(super::super::list::MAXIMUM_LENGTH as u64),
+            self.policy.maximum_collection_items,
             &mut |charge| self.reserve_list(charge),
         )?;
         Ok(Value {
@@ -1339,7 +1336,6 @@ impl ReferenceState<'_> {
         let mut ownership = None;
         // The raw-admission subtotal is passive, with independent exactness.
         let mut admission_bytes = (0_u64, false);
-        let mut admission_items = 0_u64;
         let mut capture_types = BTreeSet::new();
         while let Some((node, mut expected, depth, owner_position, bindings, captured)) =
             visits.pop()
@@ -1435,7 +1431,6 @@ impl ReferenceState<'_> {
                             let definition = schema.records.get(layout.0 as usize).filter(|record| !record.owned && exact == Some(layout.0 as usize) && layout.1 == schema.value_origin && record.declaration == *declaration && record.fields.len() == fields.len())
                             .ok_or_else(|| reject("raw record has a foreign nominal identity or shape; decode against the selected program"))?;
                             self.charge_admission_children(
-                                &mut admission_items,
                                 &mut admission_bytes,
                                 fields.len(),
                                 std::mem::size_of::<NormalizedValue>(),
@@ -1464,7 +1459,6 @@ impl ReferenceState<'_> {
                                 (None, None) => {}
                                 (Some(ty), Some(payload)) => {
                                     self.charge_admission_children(
-                                        &mut admission_items,
                                         &mut admission_bytes,
                                         1,
                                         std::mem::size_of::<NormalizedValue>(),
@@ -1518,7 +1512,6 @@ impl ReferenceState<'_> {
                         ));
                     }
                     self.charge_admission_children(
-                        &mut admission_items,
                         &mut admission_bytes,
                         fields.len(),
                         std::mem::size_of::<(Name, NormalizedValue)>(),
@@ -1550,7 +1543,6 @@ impl ReferenceState<'_> {
                         ));
                     };
                     self.charge_admission_children(
-                        &mut admission_items,
                         &mut admission_bytes,
                         items.len(),
                         std::mem::size_of::<NormalizedValue>(),
@@ -1576,7 +1568,6 @@ impl ReferenceState<'_> {
                     };
                     if let Some(child) = child.as_deref() {
                         self.charge_admission_children(
-                            &mut admission_items,
                             &mut admission_bytes,
                             1,
                             std::mem::size_of::<NormalizedValue>(),
@@ -1598,7 +1589,6 @@ impl ReferenceState<'_> {
                         ));
                     };
                     self.charge_admission_children(
-                        &mut admission_items,
                         &mut admission_bytes,
                         1,
                         std::mem::size_of::<NormalizedValue>(),
@@ -1620,7 +1610,6 @@ impl ReferenceState<'_> {
                         return Err(reject("raw map type received another value; supply a map"));
                     };
                     self.charge_admission_children(
-                        &mut admission_items,
                         &mut admission_bytes,
                         entries.len(),
                         std::mem::size_of::<(NormalizedMapKey, NormalizedValue)>(),
@@ -1835,7 +1824,6 @@ impl ReferenceState<'_> {
                     }
                     if let Some(prefix) = bound_arguments {
                         self.charge_admission_children(
-                            &mut admission_items,
                             &mut admission_bytes,
                             prefix.len(),
                             std::mem::size_of::<NormalizedValue>(),
@@ -1909,18 +1897,10 @@ impl ReferenceState<'_> {
 
     fn charge_admission_children(
         &mut self,
-        admission_items: &mut u64,
         admission_bytes: &mut (u64, bool),
         count: usize,
         payload_bytes: usize,
     ) -> Result<(), ExecutionError> {
-        let next_items = crate::platform::execution::finite_charge(
-            *admission_items,
-            count as u64,
-            super::super::value::MAXIMUM_ADMISSION_ITEMS,
-            "normalized_reference_collection_items",
-            "single raw admission exceeds finite collection items",
-        )?;
         let bytes = payload_bytes
             .checked_add(std::mem::size_of::<ReferenceVisit<'_>>())
             .and_then(|unit| count.checked_mul(unit))
@@ -1943,7 +1923,6 @@ impl ReferenceState<'_> {
             count,
             payload_bytes + std::mem::size_of::<ReferenceVisit<'_>>(),
         )?;
-        *admission_items = next_items;
         *admission_bytes = (next_bytes, saturated);
         Ok(())
     }

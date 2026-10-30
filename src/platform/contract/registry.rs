@@ -8631,7 +8631,10 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                         "constant-per-local-and-argument".to_owned(),
                     ),
                     ("depth", "256".to_owned()),
-                    ("aggregate-items", "1000000".to_owned()),
+                    (
+                        "aggregate-items",
+                        "unbounded-or-exact-caller-policy".to_owned(),
+                    ),
                     ("cancellation", "each-admission-node".to_owned()),
                     (
                         "authority",
@@ -8865,9 +8868,17 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                         "carrier",
                         "immutable-32-way-index-trie-with-tail".to_owned(),
                     ),
-                    ("maximum-logical-length", "1000000".to_owned()),
+                    ("maximum-logical-length", "unbounded".to_owned()),
                     ("tail-slots", "32".to_owned()),
-                    ("maximum-branch-height", "3".to_owned()),
+                    (
+                        "branch-height",
+                        "derived-from-checked-usize-length-and-32-way-radix".to_owned(),
+                    ),
+                    (
+                        "length-policy",
+                        "none-or-exact-u64-before-reservation".to_owned(),
+                    ),
+                    ("traversal", "explicit-radix-worklists".to_owned()),
                     (
                         "collection-charge",
                         "32-slots-per-new-leaf-or-branch-including-unused-capacity".to_owned(),
@@ -8945,18 +8956,34 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                         "physical-materialized-elements",
                     ),
                 ] {
-                    records.push(compact_record(
-                        "execution.observation",
-                        &[
-                            ("record", "execution".to_owned()),
-                            ("field", format!("{tier}-{field}")),
-                            ("scalar", "nonnegative-integer".to_owned()),
-                            ("maximum", u64::MAX.to_string()),
-                            ("unit", unit.to_owned()),
-                            ("permission", "none".to_owned()),
-                        ],
-                    )?);
+                    let mut observation = vec![
+                        ("record", "execution".to_owned()),
+                        ("field", format!("{tier}-{field}")),
+                        ("scalar", "nonnegative-integer".to_owned()),
+                        ("maximum", u64::MAX.to_string()),
+                        ("unit", unit.to_owned()),
+                        ("permission", "none".to_owned()),
+                    ];
+                    if field.starts_with("list-") {
+                        observation.push(("saturation-field", format!("{tier}-list-saturated")));
+                    }
+                    records.push(compact_record("execution.observation", &observation)?);
                 }
+                records.push(compact_record(
+                    "execution.observation",
+                    &[
+                        ("record", "execution".to_owned()),
+                        ("field", format!("{tier}-list-saturated")),
+                        ("scalar", "boolean".to_owned()),
+                        ("unit", "saturation-flag".to_owned()),
+                        (
+                            "semantics",
+                            "false-all-list-counters-exact-true-list-counters-are-lower-bounds"
+                                .to_owned(),
+                        ),
+                        ("permission", "none".to_owned()),
+                    ],
+                )?);
             }
         }
         RegistrySection::Deployment => {

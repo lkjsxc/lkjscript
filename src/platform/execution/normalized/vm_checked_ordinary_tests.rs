@@ -45,7 +45,6 @@ fn with_admission<T>(
         items_saturated: &mut items_saturated,
         admission_bytes: 0,
         admission_bytes_saturated: false,
-        admission_items: 0,
     });
     assert_eq!(resources.live_resources(), 0);
     Outcome {
@@ -106,7 +105,6 @@ fn raw_admission_pair_refusal_preserves_subtotals_counts_and_saturation() {
             assert!(admission.reserve_storage(1, 1).is_err());
             assert_eq!(admission.admission_bytes, u64::MAX);
             assert!(!admission.admission_bytes_saturated);
-            assert_eq!(admission.admission_items, 0);
             assert_eq!(*admission.items, u64::MAX);
             assert!(!*admission.items_saturated);
             assert_eq!(*admission.allocated, 0);
@@ -220,7 +218,7 @@ fn ordinary_evidence_is_invalidated_by_untyped_list_map_and_callable_transforms(
             &f.program,
             Value::scalar(&f.program, NormalizedValue::Bool(false)).unwrap(),
             &mut ValueWork::default(),
-            100,
+            None,
             &mut |_| Ok(()),
         )
         .unwrap();

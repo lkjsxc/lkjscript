@@ -185,7 +185,6 @@ impl Machine<'_> {
             policy: self.policy,
             admission_bytes: 0,
             admission_bytes_saturated: false,
-            admission_items: 0,
             work: &mut self.observation.value_work,
             allocated: &mut self.observation.allocated_bytes,
             allocated_saturated: &mut self.observation.allocated_bytes_saturated,

@@ -632,8 +632,7 @@ fn deep_raw(depth: usize, payload: &Arc<[u8]>) -> NormalizedValue {
         value = match n % 5 {
             0 => NormalizedValue::Option(Some(Box::new(value))),
             1 => NormalizedValue::List(
-                super::super::list::List::from_items(vec![value], TEST_LIMIT, &mut |_| Ok(()))
-                    .unwrap(),
+                super::super::list::List::from_items(vec![value], None, &mut |_| Ok(())).unwrap(),
             ),
             2 => NormalizedValue::Map(
                 Map::from_items(

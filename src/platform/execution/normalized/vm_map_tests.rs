@@ -704,7 +704,7 @@ fn checked_map_updates_charge_only_reserved_paths_with_exact_fit_and_refusal() {
 }
 
 #[test]
-fn map_admission_keeps_depth_and_aggregate_item_bounds_in_foreground() {
+fn map_admission_keeps_depth_and_exact_aggregate_policies_in_foreground() {
     std::thread::Builder::new()
         .stack_size(2 * 1024 * 1024)
         .spawn(|| {
@@ -760,31 +760,69 @@ fn map_admission_keeps_depth_and_aggregate_item_bounds_in_foreground() {
                         );
                     }
                 }
-                // Physical aliases do not discount logical raw admission occurrences:
-                // 1000 outer entries + 1000 * 999 list entries is exactly 1,000,000.
-                for (children, success) in [(999, true), (1000, false)] {
+                // Physical aliases do not discount logical collection occurrences.
+                // The former one-million subtotal is not a foreground policy.
+                for children in [999, 1000] {
                     let child =
                         NormalizedValue::list(vec![NormalizedValue::I64(7); children]).unwrap();
                     let raw = map((0..1000).map(|n| (NormalizedMapKey::I64(n), child.clone())));
-                    let result = invoke(
+                    let baseline = invoke(
                         &program,
                         &reader,
                         reference,
                         "core.map.length",
                         &[integer, list_integer],
-                        vec![raw],
+                        vec![raw.clone()],
                         NormalizedRunPolicy::foreground(),
                         &control,
                         None,
                     );
-                    assert_eq!(
-                        result.value.is_ok(),
-                        success,
-                        "{reference}/{children}: finite ingress is independent of cumulative quotas; result={:?}",
-                        result.value
-                    );
-                    if success {
-                        assert_eq!(result.value.unwrap(), NormalizedValue::I64(1000));
+                    assert_eq!(baseline.value.unwrap(), NormalizedValue::I64(1000));
+                    let logical_items = 1000 + 1000 * children as u64;
+                    assert!(baseline.items >= logical_items);
+                    // Generic invocation storage is counted independently by each
+                    // evaluator. Its complete unmetered charge selects an exact
+                    // finite policy; one less must refuse without exceeding it.
+                    for maximum in [0, baseline.items - 1, baseline.items, u64::MAX] {
+                        let result = invoke(
+                            &program,
+                            &reader,
+                            reference,
+                            "core.map.length",
+                            &[integer, list_integer],
+                            vec![raw.clone()],
+                            NormalizedRunPolicy {
+                                maximum_collection_items: Some(maximum),
+                                ..NormalizedRunPolicy::foreground()
+                            },
+                            &control,
+                            None,
+                        );
+                        if maximum >= baseline.items {
+                            assert_eq!(result.value.unwrap(), NormalizedValue::I64(1000));
+                            assert_eq!(result.items, baseline.items);
+                            assert_eq!(result.bytes, baseline.bytes);
+                        } else {
+                            let error = result.value.unwrap_err();
+                            assert_eq!(
+                                error.class,
+                                crate::platform::execution::ExecutionFailureClass::Resource
+                            );
+                            assert_eq!(
+                                error.code,
+                                if reference {
+                                    "normalized_reference_collection_items"
+                                } else {
+                                    "normalized_collection_items"
+                                }
+                            );
+                            assert!(result.items <= maximum);
+                            assert!(result.bytes <= baseline.bytes);
+                        }
+                        eprintln!(
+                            "map_aggregate_policy reference={reference} children={children} logical_items={logical_items} exact={} maximum={maximum} consumed={}",
+                            baseline.items, result.items
+                        );
                     }
                 }
                 let cancelled = invoke(

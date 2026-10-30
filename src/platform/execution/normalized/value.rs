@@ -17,7 +17,7 @@ pub(super) use view_admission::reject_read_view_type_escape;
 #[path = "map_key_sharing_tests.rs"]
 mod map_key_sharing_tests;
 
-// Raw item admission remains separate from invocation-lifetime quotas.
+// Remaining map, schema, owned-storage, and view admission paths use this bound.
 pub(crate) const MAXIMUM_ADMISSION_ITEMS: u64 = 1_000_000;
 
 /// Actual storage arithmetic is checked even when cumulative allocation has no quota.
@@ -259,21 +259,10 @@ impl NormalizedValue {
         .map(Self::Map)
     }
 
-    /// Bounded raw boundary construction. Evaluators separately admit all logical
+    /// Raw boundary construction. Evaluators separately admit all logical
     /// occurrences and metadata; this constructor confers no semantic eligibility.
     pub fn list(items: Vec<Self>) -> Result<Self, crate::platform::execution::ExecutionError> {
-        let mut bytes = 0_u64;
-        super::list::List::from_items(items, super::list::MAXIMUM_LENGTH as u64, &mut |charge| {
-            bytes = bytes.checked_add(charge.bytes).ok_or_else(|| {
-                crate::platform::execution::ExecutionError::new(
-                    crate::platform::execution::ExecutionFailureClass::Resource,
-                    "normalized_list_storage",
-                    "raw list construction storage accounting overflowed",
-                )
-            })?;
-            Ok(())
-        })
-        .map(Self::List)
+        super::list::List::from_items(items, None, &mut |_| Ok(())).map(Self::List)
     }
 
     pub fn text(value: impl Into<Arc<str>>) -> Self {

@@ -143,7 +143,6 @@ impl Fixture {
             items_saturated: &mut items_saturated,
             admission_bytes: 0,
             admission_bytes_saturated: false,
-            admission_items: 0,
         }
         .value(raw, self.payload, None, true)
     }

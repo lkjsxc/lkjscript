@@ -61,10 +61,7 @@ impl Machine<'_> {
     ) -> Result<CheckedValue, ExecutionError> {
         let mut work = std::mem::take(&mut self.observation.value_work);
         let program = self.program;
-        let maximum = self
-            .policy
-            .maximum_collection_items
-            .unwrap_or(super::super::list::MAXIMUM_LENGTH as u64);
+        let maximum = self.policy.maximum_collection_items;
         let result = CheckedValue::list(program, items, &mut work, maximum, &mut |charge| {
             self.charge_list(charge)
         });
@@ -99,7 +96,6 @@ impl Machine<'_> {
             policy: self.policy,
             admission_bytes: 0,
             admission_bytes_saturated: false,
-            admission_items: 0,
             work: &mut self.observation.value_work,
             allocated: &mut self.observation.allocated_bytes,
             allocated_saturated: &mut self.observation.allocated_bytes_saturated,
@@ -153,7 +149,6 @@ impl Machine<'_> {
                     policy: self.policy,
                     admission_bytes: 0,
                     admission_bytes_saturated: false,
-                    admission_items: 0,
                     work: &mut self.observation.value_work,
                     allocated: &mut self.observation.allocated_bytes,
                     allocated_saturated: &mut self.observation.allocated_bytes_saturated,
@@ -549,10 +544,7 @@ impl Machine<'_> {
                 )?;
                 let mut work = std::mem::take(&mut self.observation.value_work);
                 let program = self.program;
-                let maximum = self
-                    .policy
-                    .maximum_collection_items
-                    .unwrap_or(super::super::list::MAXIMUM_LENGTH as u64);
+                let maximum = self.policy.maximum_collection_items;
                 let result = list.append(program, child, &mut work, maximum, &mut |charge| {
                     self.charge_list(charge)
                 });

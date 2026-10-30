@@ -53,12 +53,12 @@ fn bulk_allocates_only_final_nodes_without_copying_existing_handles() {
     let _scope = WorkScope::enter();
     for length in [
         0, 1, 31, 32, 33, 63, 64, 65, 1023, 1024, 1025, 1055, 1056, 1057, 32767, 32768, 32769,
-        32799, 32800, 32801, 262145, 1_000_000,
+        32799, 32800, 32801, 262145,
     ] {
         let (leaves, branches, expected) = model(length);
         let mut charged = Charge::default();
         let before = Work::current();
-        let list = List::from_items(items(length), MAXIMUM_LENGTH as u64, &mut |charge| {
+        let list = List::from_items(items(length), None, &mut |charge| {
             charged.slots += charge.slots;
             charged.bytes += charge.bytes;
             Ok(())
@@ -91,10 +91,10 @@ fn bulk_allocates_only_final_nodes_without_copying_existing_handles() {
 #[test]
 fn bulk_work_report_checks_complete_values_without_assuming_implementation_cost() {
     let _scope = WorkScope::enter();
-    for length in [0, 32, 1024, 4096, 32768, 262144, 1_000_000] {
+    for length in [0, 32, 1024, 4096, 32768, 262144] {
         let mut charge = Charge::default();
         let before = Work::current();
-        let list = List::from_items(items(length), MAXIMUM_LENGTH as u64, &mut |added| {
+        let list = List::from_items(items(length), None, &mut |added| {
             charge.slots += added.slots;
             charge.bytes += added.bytes;
             Ok(())
@@ -118,23 +118,19 @@ fn bulk_roots_remain_append_compatible_and_share_retained_payloads() {
     for length in [
         0, 31, 32, 33, 63, 64, 65, 1023, 1024, 1055, 1056, 1057, 32767, 32768, 32799, 32800, 32801,
     ] {
-        let root = List::from_items(items(length), MAXIMUM_LENGTH as u64, &mut |_| Ok(())).unwrap();
+        let root = List::from_items(items(length), None, &mut |_| Ok(())).unwrap();
         let mut successor = root.clone();
         for next_length in length..length + 67 {
             successor = successor
                 .append(
                     NormalizedValue::I64(next_length as i64 * 17 - 9),
-                    MAXIMUM_LENGTH as u64,
+                    None,
                     &mut |_| Ok(()),
                 )
                 .unwrap();
         }
         let sibling = root
-            .append(
-                NormalizedValue::Bool(true),
-                MAXIMUM_LENGTH as u64,
-                &mut |_| Ok(()),
-            )
+            .append(NormalizedValue::Bool(true), None, &mut |_| Ok(()))
             .unwrap();
         verify(&root, length);
         verify(&successor, length + 67);
@@ -165,7 +161,7 @@ fn bulk_exact_storage_limits_accept_and_one_less_refuses() {
             (required.slots, required.bytes - 1, false),
         ] {
             let mut used = Charge::default();
-            let result = List::from_items(items(length), length as u64, &mut |charge| {
+            let result = List::from_items(items(length), Some(length as u64), &mut |charge| {
                 let next = Charge {
                     slots: used.slots + charge.slots,
                     bytes: used.bytes + charge.bytes,
@@ -187,4 +183,121 @@ fn bulk_exact_storage_limits_accept_and_one_less_refuses() {
             }
         }
     }
+}
+
+#[test]
+fn lists_cross_former_length_and_height_limits_without_losing_order_or_aliases() {
+    let _scope = WorkScope::enter();
+    // A full height-three prefix and full tail: the next append must add a
+    // fourth branch level. This also exceeds the former one-million-item cap.
+    let initial_length = 32_usize.pow(4) + 32;
+    let final_length = initial_length + 67;
+    let root = List::from_items(items(initial_length), None, &mut |_| Ok(())).unwrap();
+    assert_eq!(root.height, 3);
+    let alias = root.clone();
+    let mut successor = root.clone();
+    for index in initial_length..final_length {
+        successor = successor
+            .append(
+                NormalizedValue::I64(index as i64 * 17 - 9),
+                None,
+                &mut |_| Ok(()),
+            )
+            .unwrap();
+    }
+    assert_eq!(successor.height, 4);
+    let sibling = root
+        .append(NormalizedValue::Bool(true), Some(u64::MAX), &mut |_| Ok(()))
+        .unwrap();
+    assert_eq!(sibling.len(), initial_length + 1);
+    assert_eq!(
+        sibling.get(initial_length),
+        Some(&NormalizedValue::Bool(true))
+    );
+    for index in [
+        0,
+        31,
+        32,
+        1023,
+        1024,
+        32767,
+        32768,
+        999_999,
+        1_000_000,
+        1_048_575,
+        1_048_576,
+        initial_length - 1,
+    ] {
+        assert_eq!(
+            root.get(index),
+            Some(&NormalizedValue::I64(index as i64 * 17 - 9))
+        );
+        assert!(std::ptr::eq(
+            root.get(index).unwrap(),
+            successor.get(index).unwrap()
+        ));
+        assert!(std::ptr::eq(
+            root.get(index).unwrap(),
+            sibling.get(index).unwrap()
+        ));
+    }
+    verify(&alias, initial_length);
+    verify(&successor, final_length);
+    let mut mixed = successor.iter();
+    let mut front = 0;
+    let mut back = final_length;
+    assert_eq!(mixed.size_hint(), (final_length, Some(final_length)));
+    while front < back {
+        assert_eq!(
+            mixed.next(),
+            Some(&NormalizedValue::I64(front as i64 * 17 - 9))
+        );
+        front += 1;
+        if front < back {
+            back -= 1;
+            assert_eq!(
+                mixed.next_back(),
+                Some(&NormalizedValue::I64(back as i64 * 17 - 9))
+            );
+        }
+    }
+    assert_eq!(mixed.size_hint(), (0, Some(0)));
+    assert!(mixed.next().is_none() && mixed.next_back().is_none());
+    drop(root);
+    drop(alias);
+    drop(sibling);
+    assert_eq!(
+        successor.get(initial_length),
+        Some(&NormalizedValue::I64(initial_length as i64 * 17 - 9))
+    );
+    drop(successor);
+
+    // Exercise the independent bulk construction path at the same new depth
+    // after releasing every earlier root; do not keep another million-item model.
+    let (leaves, branches, expected) = model(final_length);
+    let before = Work::current();
+    let mut charged = Charge::default();
+    let bulk = List::from_items(
+        items(final_length),
+        Some(final_length as u64),
+        &mut |charge| {
+            charged.slots += charge.slots;
+            charged.bytes += charge.bytes;
+            Ok(())
+        },
+    )
+    .unwrap();
+    assert_eq!(charged, expected);
+    assert_eq!(
+        before.since(),
+        Work {
+            element_handle_allocations: final_length as u64,
+            element_slots_reserved: leaves * 32,
+            branch_slots_reserved: branches * 32,
+            nodes_allocated: leaves + branches,
+            ..Work::ZERO
+        }
+    );
+    assert_eq!(bulk.height, 4);
+    verify(&bulk, final_length);
 }

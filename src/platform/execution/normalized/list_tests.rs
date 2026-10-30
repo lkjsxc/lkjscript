@@ -4,12 +4,8 @@
 use super::*;
 
 fn append(list: &List, value: i64) -> List {
-    list.append(
-        NormalizedValue::I64(value),
-        MAXIMUM_LENGTH as u64,
-        &mut |_| Ok(()),
-    )
-    .unwrap()
+    list.append(NormalizedValue::I64(value), None, &mut |_| Ok(()))
+        .unwrap()
 }
 
 #[test]
@@ -21,6 +17,7 @@ fn reused_worker_list_scope_restores_saturated_totals_after_nested_unwind() {
         let saved = Work {
             nodes_allocated: u64::MAX,
             element_handle_allocations: u64::MAX,
+            saturated: true,
             ..Work::ZERO
         };
         WORK.set(saved);
@@ -55,6 +52,7 @@ fn reused_worker_list_scope_restores_saturated_totals_after_nested_unwind() {
         assert_eq!(first, second);
         assert_eq!(first.1.nodes_allocated, 1);
         assert_eq!(first.1.element_handle_allocations, 1);
+        assert!(!first.1.saturated);
         assert_eq!(executor.shutdown().unwrap().joined_workers, workers as u64);
     }
 }
@@ -154,7 +152,7 @@ fn retained_roots_match_flat_oracle_across_tail_and_root_growth() {
             retained.push((list.clone(), expected.clone()));
             let bulk = List::from_items(
                 expected.iter().copied().map(NormalizedValue::I64).collect(),
-                MAXIMUM_LENGTH as u64,
+                None,
                 &mut |_| Ok(()),
             )
             .unwrap();
@@ -215,15 +213,11 @@ fn aliased_append_obeys_independent_cost_schedule_and_payload_sharing() {
         let before = Work::current();
         let mut charged = Charge::default();
         let next = list
-            .append(
-                NormalizedValue::I64(length as i64),
-                MAXIMUM_LENGTH as u64,
-                &mut |charge| {
-                    charged.slots += charge.slots;
-                    charged.bytes += charge.bytes;
-                    Ok(())
-                },
-            )
+            .append(NormalizedValue::I64(length as i64), None, &mut |charge| {
+                charged.slots += charge.slots;
+                charged.bytes += charge.bytes;
+                Ok(())
+            })
             .unwrap();
         let work = before.since();
         assert_eq!(
@@ -271,27 +265,23 @@ fn physical_slot_byte_length_failure_and_partial_path_preserve_aliases() {
         (slots, bytes - 1, false),
     ] {
         let mut used = Charge::default();
-        let result = list.append(
-            NormalizedValue::I64(1056),
-            MAXIMUM_LENGTH as u64,
-            &mut |charge| {
-                let next = Charge {
-                    slots: used.slots + charge.slots,
-                    bytes: used.bytes + charge.bytes,
-                };
-                if next.slots > slot_limit || next.bytes > byte_limit {
-                    return Err(failure());
-                }
-                used = next;
-                Ok(())
-            },
-        );
+        let result = list.append(NormalizedValue::I64(1056), None, &mut |charge| {
+            let next = Charge {
+                slots: used.slots + charge.slots,
+                bytes: used.bytes + charge.bytes,
+            };
+            if next.slots > slot_limit || next.bytes > byte_limit {
+                return Err(failure());
+            }
+            used = next;
+            Ok(())
+        });
         assert_eq!(result.is_ok(), success);
         verify(&list, &expected).unwrap();
     }
     let mut progressed = 0;
     assert!(
-        list.append(NormalizedValue::I64(-1), MAXIMUM_LENGTH as u64, &mut |_| {
+        list.append(NormalizedValue::I64(-1), None, &mut |_| {
             progressed += 1;
             if progressed == 3 {
                 Err(failure())
@@ -302,12 +292,29 @@ fn physical_slot_byte_length_failure_and_partial_path_preserve_aliases() {
         .is_err()
     );
     assert_eq!(progressed, 3);
+    for cancelled in 1..=(slots / 32 + 2) {
+        let control = crate::platform::execution::ExecutionControl::uncancelled();
+        let mut visited = 0;
+        let error = list
+            .append(NormalizedValue::I64(1056), None, &mut |_| {
+                visited += 1;
+                if visited == cancelled {
+                    control.cancel();
+                }
+                control.check()
+            })
+            .unwrap_err();
+        assert_eq!(visited, cancelled);
+        assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+        assert_eq!(error.code, "execution_cancelled");
+        verify(&list, &expected).unwrap();
+    }
     assert!(
-        list.append(NormalizedValue::Unit, 1056, &mut |_| Ok(()))
+        list.append(NormalizedValue::Unit, Some(1056), &mut |_| Ok(()))
             .is_err()
     );
     assert!(
-        list.append(NormalizedValue::Unit, 1057, &mut |_| Ok(()))
+        list.append(NormalizedValue::Unit, Some(1057), &mut |_| Ok(()))
             .is_ok()
     );
     verify(&list, &expected).unwrap();
@@ -323,17 +330,12 @@ fn nested_shared_payloads_are_not_cloned_and_deep_rejection_disposes_iteratively
             for _ in 0..20_000 {
                 value = NormalizedValue::Option(Some(Box::new(value)));
                 value = NormalizedValue::List(
-                    List::from_items(vec![value], MAXIMUM_LENGTH as u64, &mut |_| Ok(())).unwrap(),
+                    List::from_items(vec![value], None, &mut |_| Ok(())).unwrap(),
                 );
             }
-            let list =
-                List::from_items(vec![value], MAXIMUM_LENGTH as u64, &mut |_| Ok(())).unwrap();
+            let list = List::from_items(vec![value], None, &mut |_| Ok(())).unwrap();
             let other = list
-                .append(
-                    NormalizedValue::Bool(true),
-                    MAXIMUM_LENGTH as u64,
-                    &mut |_| Ok(()),
-                )
+                .append(NormalizedValue::Bool(true), None, &mut |_| Ok(()))
                 .unwrap();
             assert!(std::ptr::eq(list.get(0).unwrap(), other.get(0).unwrap()));
             drop(list);
@@ -368,27 +370,21 @@ fn flat_oracle_preserves_nested_nominal_and_transient_callable_elements() {
             bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(5)])),
         },
     ];
-    let bulk = List::from_items(model.clone(), MAXIMUM_LENGTH as u64, &mut |_| Ok(())).unwrap();
+    let bulk = List::from_items(model.clone(), None, &mut |_| Ok(())).unwrap();
     let mut appended = List::default();
     for value in &model {
         appended = appended
-            .append(value.clone(), MAXIMUM_LENGTH as u64, &mut |_| Ok(()))
+            .append(value.clone(), None, &mut |_| Ok(()))
             .unwrap();
     }
     // The carrier grants no equality/capture/durable permission: this compares raw test
     // structures only. Independent evaluator admission tests own those decisions.
     for root in [bulk, appended] {
         let left = root
-            .append(
-                NormalizedValue::Bool(true),
-                MAXIMUM_LENGTH as u64,
-                &mut |_| Ok(()),
-            )
+            .append(NormalizedValue::Bool(true), None, &mut |_| Ok(()))
             .unwrap();
         let right = root
-            .append(NormalizedValue::I64(-1), MAXIMUM_LENGTH as u64, &mut |_| {
-                Ok(())
-            })
+            .append(NormalizedValue::I64(-1), None, &mut |_| Ok(()))
             .unwrap();
         for (i, expected) in model.iter().enumerate() {
             assert_eq!(root.get(i), Some(expected));
@@ -403,22 +399,223 @@ fn flat_oracle_preserves_nested_nominal_and_transient_callable_elements() {
 }
 
 #[test]
-fn maximum_logical_length_rejects_before_new_storage() {
+fn optional_append_length_policy_is_exact_before_new_storage() {
+    let _scope = WorkScope::enter();
     let list = List::from_items(
-        vec![NormalizedValue::Unit; 1_000_000],
-        MAXIMUM_LENGTH as u64,
+        (0..32).map(NormalizedValue::I64).collect(),
+        None,
         &mut |_| Ok(()),
     )
     .unwrap();
-    let before = Work::current();
-    assert!(
-        list.append(NormalizedValue::Unit, u64::MAX, &mut |_| panic!(
-            "length must reject before storage reservation"
-        ))
-        .is_err()
+    for (maximum, accepted) in [
+        (None, true),
+        (Some(0), false),
+        (Some(32), false),
+        (Some(33), true),
+        (Some(u64::MAX), true),
+    ] {
+        let before = Work::current();
+        let mut reservations = 0;
+        let result = list.append(NormalizedValue::I64(32), maximum, &mut |_| {
+            reservations += 1;
+            assert!(accepted, "finite length refusal must precede storage");
+            Ok(())
+        });
+        assert_eq!(result.is_ok(), accepted, "maximum={maximum:?}");
+        if let Ok(next) = result {
+            assert!(reservations > 0);
+            verify(&next, &(0..33).collect::<Vec<_>>()).unwrap();
+        } else {
+            assert_eq!(reservations, 0);
+            assert_eq!(before.since(), Work::ZERO);
+        }
+        verify(&list, &(0..32).collect::<Vec<_>>()).unwrap();
+    }
+}
+
+#[test]
+fn radix_capacity_is_bounded_by_index_representation_only() {
+    // One radix digit carries five index bits. Compute the representable
+    // frontier independently of the implementation's worklist sizing.
+    let highest = ((usize::BITS - 1) / 5) as usize;
+    assert_eq!(List::capacity(highest).unwrap(), 1_usize << (highest * 5));
+    for height in [highest + 1, usize::MAX] {
+        let error = List::capacity(height).unwrap_err();
+        assert_eq!(error.class, ExecutionFailureClass::Resource);
+        assert_eq!(error.code, "normalized_list_storage");
+    }
+}
+
+#[test]
+#[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
+fn shared_radix_nodes_exercise_the_highest_representable_branch_depth() {
+    let _scope = WorkScope::enter();
+    // A private structural fixture shares complete immutable subtrees. Its
+    // logical extent exercises word-sized routing without allocating that many
+    // values; this proves neither materialized capacity nor raw-value admission.
+    let height = ((usize::BITS - 1) / 5) as usize;
+    let prefix_length = 1_usize << (usize::BITS - 1);
+    let top_children = 1_usize << ((usize::BITS - 1) as usize - height * 5);
+    assert!((2..32).contains(&top_children));
+    let mut complete = Arc::new(Node::Leaf(std::array::from_fn(|index| {
+        Some(Arc::new(Element(NormalizedValue::I64(index as i64))))
+    })));
+    for _ in 1..height {
+        complete = Arc::new(Node::Branch(std::array::from_fn(|_| {
+            Some(Arc::clone(&complete))
+        })));
+    }
+    let root = Arc::new(Node::Branch(std::array::from_fn(|index| {
+        (index < top_children).then(|| Arc::clone(&complete))
+    })));
+    drop(complete);
+    let list = List {
+        length: prefix_length + 1,
+        height,
+        root: Some(root),
+        tail: Some(Arc::new(Node::Leaf(std::array::from_fn(|index| {
+            (index == 0).then(|| Arc::new(Element(NormalizedValue::I64(-1))))
+        })))),
+    };
+    for index in [0, 31, 32, prefix_length / 2, prefix_length - 1] {
+        assert_eq!(
+            list.get(index),
+            Some(&NormalizedValue::I64((index % 32) as i64))
+        );
+    }
+    assert_eq!(list.get(prefix_length), Some(&NormalizedValue::I64(-1)));
+    assert_eq!(list.get(prefix_length + 1), None);
+    let mut cursor = list.iter();
+    assert_eq!(cursor.next_back(), Some(&NormalizedValue::I64(-1)));
+    for index in 0..64 {
+        assert_eq!(
+            cursor.next(),
+            Some(&NormalizedValue::I64((index % 32) as i64))
+        );
+        assert_eq!(
+            cursor.next_back(),
+            Some(&NormalizedValue::I64(
+                ((prefix_length - index - 1) % 32) as i64
+            ))
+        );
+    }
+    assert_eq!(cursor.len(), prefix_length - 128);
+}
+
+#[test]
+fn unrepresentable_length_rejects_before_reading_or_allocating_storage() {
+    let _scope = WorkScope::enter();
+    // This length-only fixture is deliberately not a materialized valid list.
+    // It isolates checked length arithmetic without requesting impossible storage.
+    let list = List {
+        length: usize::MAX,
+        height: 0,
+        root: None,
+        tail: None,
+    };
+    for maximum in [None, Some(0), Some(u64::MAX)] {
+        let before = Work::current();
+        let error = list
+            .append(NormalizedValue::Unit, maximum, &mut |_| {
+                panic!("unrepresentable length must reject before storage")
+            })
+            .unwrap_err();
+        assert_eq!(error.class, ExecutionFailureClass::Resource);
+        assert_eq!(error.code, "normalized_list_storage");
+        assert_eq!(before.since(), Work::ZERO);
+        assert_eq!(list.length, usize::MAX);
+    }
+}
+
+#[test]
+fn saturated_list_observations_remain_lower_bounds_and_grant_no_capacity() {
+    let _scope = WorkScope::enter();
+    let exact_maximum = Work {
+        node_visits: u64::MAX,
+        element_handle_copies: u64::MAX,
+        element_handle_allocations: u64::MAX,
+        element_slots_reserved: u64::MAX,
+        branch_slot_copies: u64::MAX,
+        branch_slots_reserved: u64::MAX,
+        nodes_allocated: u64::MAX,
+        full_materializations: u64::MAX,
+        materialized_elements: u64::MAX,
+        saturated: false,
+    };
+    WORK.set(exact_maximum);
+    Work::include_joined(Work {
+        node_visits: 1,
+        element_handle_copies: 1,
+        element_handle_allocations: 1,
+        element_slots_reserved: 1,
+        branch_slot_copies: 1,
+        branch_slots_reserved: 1,
+        nodes_allocated: 1,
+        full_materializations: 1,
+        materialized_elements: 1,
+        saturated: false,
+    });
+    assert_eq!(
+        Work::current(),
+        Work {
+            saturated: true,
+            ..exact_maximum
+        }
     );
-    assert_eq!(before.since(), Work::default());
-    assert_eq!(list.len(), 1_000_000);
-    assert_eq!(list.get(999_999), Some(&NormalizedValue::Unit));
-    assert_eq!(list.get(1_000_000), None);
+    assert_eq!(
+        exact_maximum.since(),
+        Work {
+            saturated: true,
+            ..Work::ZERO
+        }
+    );
+
+    WORK.set(exact_maximum);
+    let list = append(&List::default(), 19);
+    assert!(Work::current().saturated);
+    assert_eq!(list.get(0), Some(&NormalizedValue::I64(19)));
+    drop(list);
+    WORK.set(Work {
+        full_materializations: u64::MAX,
+        materialized_elements: u64::MAX,
+        ..Work::ZERO
+    });
+    materialized(1);
+    assert!(Work::current().saturated);
+
+    for maximum in [None, Some(1), Some(u64::MAX)] {
+        let list = List::default()
+            .append(NormalizedValue::I64(17), maximum, &mut |_| Ok(()))
+            .unwrap();
+        assert_eq!(list.get(0), Some(&NormalizedValue::I64(17)));
+        assert!(Work::current().saturated);
+    }
+    let before = Work::current();
+    let length_error = List::default()
+        .append(NormalizedValue::Unit, Some(0), &mut |_| {
+            panic!("saturation cannot grant finite length capacity")
+        })
+        .unwrap_err();
+    assert_eq!(length_error.class, ExecutionFailureClass::Resource);
+    assert_eq!(Work::current(), before);
+    let storage_error = List::default()
+        .append(NormalizedValue::Unit, None, &mut |charge| {
+            if charge.bytes != 0 || charge.slots != 0 {
+                Err(failure())
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap_err();
+    assert_eq!(storage_error.class, ExecutionFailureClass::Resource);
+    assert_eq!(Work::current(), before);
+
+    WORK.set(Work::ZERO);
+    Work::include_joined(Work {
+        nodes_allocated: 3,
+        saturated: true,
+        ..Work::ZERO
+    });
+    assert_eq!(Work::current().nodes_allocated, 3);
+    assert!(Work::current().saturated);
 }

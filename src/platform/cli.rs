@@ -1380,6 +1380,10 @@ fn source_run_receipt_output(
                 .to_string(),
         ),
         (
+            "production-list-saturated",
+            run.production.value_work.lists.saturated.to_string(),
+        ),
+        (
             "production-allocated-bytes",
             run.production.allocated_bytes.to_string(),
         ),
@@ -1550,6 +1554,10 @@ fn source_run_receipt_output(
                 .lists
                 .materialized_elements
                 .to_string(),
+        ),
+        (
+            "reference-list-saturated",
+            run.reference.value_work.lists.saturated.to_string(),
         ),
         (
             "reference-allocated-bytes",

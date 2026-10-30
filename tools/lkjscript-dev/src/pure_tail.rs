@@ -47,6 +47,7 @@ struct MapWork {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ListWork {
+    saturated: bool,
     node_visits: u64,
     element_handle_copies: u64,
     element_handle_allocations: u64,
@@ -56,6 +57,23 @@ struct ListWork {
     nodes_allocated: u64,
     full_materializations: u64,
     materialized_elements: u64,
+}
+
+impl ListWork {
+    fn require_exact(&self) -> Result<(), DevError> {
+        require(
+            !self.saturated,
+            "saturated list observations cannot establish exact work bounds",
+        )
+    }
+}
+
+// Receipt bounds require complete typed observations as well as their exactness.
+// This is an evidence check; it never supplies a runtime admission policy.
+fn exact_list_work(value: &serde_json::Value) -> Result<ListWork, DevError> {
+    let work: ListWork = serde_json::from_value(value.clone())?;
+    work.require_exact()?;
+    Ok(work)
 }
 
 // Independent fixed-fanout model; do not call the runtime carrier's charge producer.
@@ -157,6 +175,13 @@ fn preparation_work(records: &[CompactRecord]) -> Result<PreparationWork, DevErr
 }
 
 fn value_work(records: &[CompactRecord], tier: &str) -> Result<ValueWork, DevError> {
+    let saturated = field(records, "execution", &format!("{tier}-list-saturated"))?
+        .parse::<bool>()
+        .map_err(|_| DevError::corrupt("list observation saturation is not a boolean"))?;
+    require(
+        !saturated,
+        "saturated list observations cannot establish exact work bounds",
+    )?;
     Ok(ValueWork {
         maps: MapWork {
             node_visits: integer_field(records, &format!("{tier}-map-node-visits"))?,
@@ -172,6 +197,7 @@ fn value_work(records: &[CompactRecord], tier: &str) -> Result<ValueWork, DevErr
             key_bytes_copied: integer_field(records, &format!("{tier}-map-key-bytes-copied"))?,
         },
         lists: ListWork {
+            saturated,
             node_visits: integer_field(records, &format!("{tier}-list-node-visits"))?,
             element_handle_copies: integer_field(
                 records,
@@ -229,6 +255,10 @@ fn verify_matrix(matrix: &[MatrixCell]) -> Result<(), DevError> {
         matrix.len() == 9,
         "forwarding matrix must contain all nine pairs",
     )?;
+    for cell in matrix {
+        cell.production.lists.require_exact()?;
+        cell.reference.lists.require_exact()?;
+    }
     let preparation = &matrix[0].preparation;
     require(
         preparation.production_steps > 0
@@ -807,6 +837,13 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
                 == "constant-per-local-and-argument",
         "discovery omitted the checked-value guarantee",
     )?;
+    require(
+        field(&discovery, "execution.list", "maximum-logical-length")? == "unbounded"
+            && field(&discovery, "execution.list", "tail-slots")? == "32"
+            && field(&discovery, "execution.list", "branch-height")?
+                == "derived-from-checked-usize-length-and-32-way-radix",
+        "discovery omitted the unbounded logical list and physical radix distinction",
+    )?;
     let mut discovered = 0;
     for tier in ["production", "reference"] {
         for suffix in [
@@ -828,6 +865,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
             "list-nodes-allocated",
             "list-full-materializations",
             "list-materialized-elements",
+            "list-saturated",
         ] {
             let name = format!("{tier}-{suffix}");
             let records = discovery
@@ -1621,6 +1659,7 @@ fn standalone_http(
     });
     let cancellation: serde_json::Value =
         serde_json::from_slice(&process::read_bounded(&response, MAXIMUM_OUTPUT)?)?;
+    let cancellation_work = exact_list_work(&cancellation["observation"]["value_work"]["lists"])?;
     require(
         cancellation["classification"] == "fresh passed"
             && cancellation["failure"]["code"] == "execution_cancelled"
@@ -1633,9 +1672,8 @@ fn standalone_http(
             && cancellation["observation"]["tail_transfers"]
                 .as_u64()
                 .is_some_and(|n| n > 0)
-            && cancellation["observation"]["value_work"]["lists"]["element_handle_allocations"]
-                .as_u64()
-                .is_some_and(|n| n > 1 && n < 8192),
+            && cancellation_work.element_handle_allocations > 1
+            && cancellation_work.element_handle_allocations < 8192,
         "transaction cancellation or healthy recovery evidence missing",
     )?;
     let store = DataStore::open(&data_root, "tail", DataLimits::default())
@@ -2348,7 +2386,7 @@ fn read_source_receipt(path: &Path, verifier: &Path) -> Result<Receipt, DevError
         .get("checked-value-discovery")
         .ok_or_else(|| DevError::corrupt("checked-value discovery evidence missing"))?;
     require(
-        discovery["observation_fields"] == 36 && discovery["classification"] == "fresh passed",
+        discovery["observation_fields"] == 38 && discovery["classification"] == "fresh passed",
         "checked-value discovery evidence missing",
     )?;
     let mapping = receipt
@@ -2399,6 +2437,7 @@ fn read_source_receipt(path: &Path, verifier: &Path) -> Result<Receipt, DevError
             for tier in ["production", "reference"] {
                 let work: ValueWork =
                     serde_json::from_value(outcome[format!("{tier}_value_work")].clone())?;
+                work.lists.require_exact()?;
                 verify_mapping_collection_items(outcome, tier, n)?;
                 require(
                     work.internal_guard_descendant_visits == 0
@@ -2464,12 +2503,14 @@ fn read_source_receipt(path: &Path, verifier: &Path) -> Result<Receipt, DevError
         let case = found
             .next()
             .ok_or_else(|| DevError::corrupt("list boundary conversion evidence missing"))?;
+        let input_work = exact_list_work(&case["input_work"])?;
+        let output_work = exact_list_work(&case["output_work"])?;
         require(
             found.next().is_none()
-                && case["input_work"]["element_handle_allocations"] == n
-                && case["input_work"]["element_handle_copies"] == 0
-                && case["output_work"]["full_materializations"] == 1
-                && case["output_work"]["materialized_elements"] == n
+                && input_work.element_handle_allocations == n
+                && input_work.element_handle_copies == 0
+                && output_work.full_materializations == 1
+                && output_work.materialized_elements == n
                 && case["sum"] == n * (n - 1) / 2,
             "list boundary construction/output work or independent sum changed",
         )?;
@@ -2495,9 +2536,12 @@ fn read_source_receipt(path: &Path, verifier: &Path) -> Result<Receipt, DevError
                                     .enumerate()
                                     .all(|(index, item)| item.as_i64() == Some(index as i64))
                         })
-                        && case["observation"]["value_work"]["lists"]["element_handle_allocations"]
-                            .as_u64()
-                            .is_some_and(|n| n > 0 && n < 1057)
+                        && exact_list_work(&case["observation"]["value_work"]["lists"]).is_ok_and(
+                            |work| {
+                                work.element_handle_allocations > 0
+                                    && work.element_handle_allocations < 1057
+                            },
+                        )
                 })
                 && cases
                     .iter()
@@ -2753,14 +2797,19 @@ fn read_source_receipt(path: &Path, verifier: &Path) -> Result<Receipt, DevError
             && http["committed"]["items"][0]["value"] == serde_json::json!(expected),
         "nominal typed layout or complete stored payload differs from fixed independent bytes",
     )?;
+    let cancellation_work =
+        exact_list_work(&cancellation["execution"]["observation"]["value_work"]["lists"])?;
     require(
         cancellation["execution"]["failure"]["code"] == "execution_cancelled"
             && cancellation["execution"]["failure"]["class"] == "cancelled"
             && cancellation["execution"]["cleanup_complete"] == true
             && cancellation["execution"]["observation"]["external_calls"] == 37
             && cancellation["execution"]["observation"]["capability_calls"] == 2
-            && cancellation["execution"]["observation"]["tail_transfers"].as_u64().is_some_and(|n| n > 0)
-            && cancellation["execution"]["observation"]["value_work"]["lists"]["element_handle_allocations"].as_u64().is_some_and(|n| n > 1 && n < 8192)
+            && cancellation["execution"]["observation"]["tail_transfers"]
+                .as_u64()
+                .is_some_and(|n| n > 0)
+            && cancellation_work.element_handle_allocations > 1
+            && cancellation_work.element_handle_allocations < 8192
             && cancellation["execution"]["observation"]["maximum_live_transactions"] == 1
             && cancellation["cancelled_key_absent"] == true
             && cancellation["committed_changes"] == 4
@@ -2847,6 +2896,34 @@ mod checked_value_tests {
     use super::*;
 
     #[test]
+    fn serialized_list_work_rejects_saturated_or_missing_exactness() -> Result<(), DevError> {
+        let exact = ListWork {
+            node_visits: 17,
+            element_handle_allocations: 37,
+            full_materializations: 1,
+            materialized_elements: 37,
+            ..ListWork::default()
+        };
+        let healthy = serde_json::to_value(exact)?;
+        assert!(exact_list_work(&healthy).is_ok());
+        // Change only the exactness flag: the same finite counts no longer
+        // establish equalities or upper bounds in any stored receipt proof.
+        let mut saturated = healthy.clone();
+        saturated["saturated"] = serde_json::json!(true);
+        assert!(exact_list_work(&saturated).is_err());
+        let mut malformed = healthy.clone();
+        malformed["saturated"] = serde_json::json!("false");
+        assert!(exact_list_work(&malformed).is_err());
+        let mut missing = healthy;
+        missing
+            .as_object_mut()
+            .ok_or_else(|| DevError::corrupt("serialized list work is not an object"))?
+            .remove("saturated");
+        assert!(exact_list_work(&missing).is_err());
+        Ok(())
+    }
+
+    #[test]
     fn mapping_ledger_requires_each_tiers_exact_list_capture_and_scope_slots() {
         // Literal independent fixed-fanout and graph-arity boundaries. In
         // particular, the first branch reservation occurs at append 65.
@@ -2917,6 +2994,14 @@ mod checked_value_tests {
         }
         assert!(verify_matrix(&matrix).is_ok());
         for reference in [false, true] {
+            let mut saturated = matrix.clone();
+            let work = if reference {
+                &mut saturated[0].reference
+            } else {
+                &mut saturated[0].production
+            };
+            work.lists.saturated = true;
+            assert!(verify_matrix(&saturated).is_err());
             for replacement in [false, true] {
                 let mut corrupted = matrix.clone();
                 for entry in &mut corrupted {

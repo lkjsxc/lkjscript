@@ -102,7 +102,7 @@ that contains it, even when the unsupported declaration is not invoked. Existing
 exact suppliers are not implicitly upgraded. These general representation operations
 do not introduce form parsing, HTTP effects, browser code or storage authority.
 
-Runtime lists are immutable flat logical sequences. Their private carrier is a bounded 32-way
+Runtime lists are immutable flat logical sequences. Their private carrier is a 32-way
 index trie with a tail of at most 32 elements. Length and handle sharing are O(1); indexing is
 O(log_32(N+1)); ordered traversal is O(N). Append copies the changed branch spine and a bounded
 tail of shallow immutable element handles. It never visits or copies a complete old prefix above
@@ -111,15 +111,22 @@ depth. Shape, capacity, pointers, and sharing never affect equality, type/layout
 semantic digests, artifacts, or typed-data bytes. The carrier confers no origin, affinity, capture,
 serialization, or retention permission.
 
-The logical length ceiling is 1,000,000 under the existing collection bound. Each newly reserved
-leaf or branch charges 32 collection slots, including unused capacity. Its allocation byte charge
+Logical length has no default quota. An absent list allowance is unmetered; an explicit allowance,
+including zero or the largest u64, is checked exactly before new storage. Lengths and offsets must
+remain representable in `usize` and u64. The trie grows as needed; its explicit construction,
+iteration and disposal worklists derive their capacity from `ceil(usize::BITS / 5)`, because each
+radix level consumes five index bits. This machine-width proof covers every representable list
+length and introduces no caller-independent logical height limit. Each newly reserved leaf or
+branch charges 32 collection slots, including unused capacity. Its allocation byte charge
 is the in-memory node size plus two `usize` reference-count words; each new element handle charges
 the value payload size plus two reference-count words. The inline list header is part of its value
 slot. Checked bulk construction also charges its temporary raw-value conversion buffer. Raw ingress
 still validates and charges every logical occurrence, including repeated shared children, and
 separately charges owned carrier metadata. Sharing does not waive admission. All reservations use
 checked arithmetic before allocation, are cumulative without refunds, and depend on no observed
-reference counts. Other collection costs and single-value admission limits remain unchanged.
+reference counts. Ordinary raw-value admission has no separate aggregate item ceiling; exact
+cumulative invocation policies still apply. Other collection costs and the separately documented
+map, owned-storage, schema, nesting and codec boundaries remain.
 
 For old length L, let P = floor((L-1)/32) for L > 0, otherwise zero, and let H be the least
 nonnegative height with P <= 32^H. Every append reserves one leaf and one new element handle.
@@ -133,8 +140,15 @@ result installation. Failure preserves old aliases and releases temporary execut
 Iterative raw disposal remains stack safe for over-depth rejected values with shared list leaves.
 JSON output explicitly creates a bounded contiguous JSON array; typed-data encoding traverses the
 carrier directly. Physical work observations distinguish node visits, reserved and copied slots,
-element handles, nodes, and full external-buffer materializations. Counters grant no fuel or
-admission and are separate from logical validation visits.
+element handles, nodes, and full external-buffer materializations. The list work record carries
+an aggregate `saturated` flag, propagated through child joins, scopes and observation intervals.
+A saturated record supplies lower bounds and cannot prove a work upper bound, grant admission,
+size storage or establish an index. Public `production-list-saturated` and
+`reference-list-saturated` fields identify the exactness of the associated numeric metrics.
+Proof consumers, including stored pure-tail matrix, mapping, boundary and cancellation records,
+require complete typed work records with a false saturation flag before establishing work bounds.
+Missing, malformed or true flags cannot establish exactness. These observations remain separate
+from logical validation visits and exact finite policy ledgers.
 
 Ordered maps use one neutral persistent AVL carrier with immutable shared entry handles.
 Insertion, replacement and removal copy only their search and rotation paths. Retained roots
@@ -152,9 +166,10 @@ second item charge. A key converted from Text/Bytes retains its immutable payloa
 range of a byte view, without a second payload allocation. Existing payloads move into
 new entries; shared payloads, keys and subtrees
 incur no fresh deep-copy charge. Even transient rotation nodes remain cumulatively charged.
-Absent removal allocates no tree storage. Finite value admission (depth 256 and
-1,000,000 aggregate items) and single-allocation bounds remain separate from cumulative
-work. Ordinary trusted execution omits cumulative quotas unless explicitly selected.
+Absent removal allocates no tree storage. The remaining map, owned-storage and schema limits,
+value depth 256 and checked single-allocation extents remain separate from cumulative work.
+Ordinary raw-value admission no longer imposes a 1,000,000-item aggregate ceiling, and ordinary
+trusted execution omits cumulative quotas unless explicitly selected.
 
 Map projection reserves owned option/result/variant boxes before cloning their spine and
 stops at shared aggregate handles. Ordered entries reserve their result buffer, each key's
@@ -327,13 +342,14 @@ The closed current type surface is:
 There are no implicit coercions. `I64` arithmetic traps on overflow and division edge cases.
 Indexing and collection growth are checked. Text is valid UTF-8; portable identifier rules avoid
 normalization-dependent identity. Maps permit bool, i64, bytes, or text keys and iterate by a
-specified total order. Runtime values are bounded to depth 256 and 1,000,000 aggregate collection
-items.
+specified total order. The current runtime nesting boundary remains depth 256. Ordinary raw-value
+admission has no default aggregate collection-item ceiling; map, owned-storage, schema and external
+codec limits remain separately enforced pending their coupled capacity cuts.
 
 Execution admits raw values before installing any local or operand. Admission checks exact
 types, nominal and prepared-program identities, resource provenance and containment with an
-iterative traversal, checking cancellation at every node. Depth remains 256 and aggregate
-collection admission remains 1,000,000 items. Allocation includes newly allocated checked
+iterative traversal, checking cancellation at every node. Depth remains 256. Aggregate collection
+admission follows the exact optional invocation policy. Allocation includes newly allocated checked
 metadata and remains cumulative; rejected admission installs no partial value.
 
 Each evaluator carries its own construction-controlled classification: affine-free, direct

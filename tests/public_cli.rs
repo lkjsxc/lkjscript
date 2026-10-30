@@ -1073,6 +1073,50 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         }
     }
 
+    let list_contract = compact_record(&runner_observation_records, "execution.list");
+    assert_eq!(
+        compact_field(list_contract, "maximum-logical-length"),
+        Some("unbounded")
+    );
+    assert_eq!(compact_field(list_contract, "tail-slots"), Some("32"));
+    assert_eq!(
+        compact_field(list_contract, "length-policy"),
+        Some("none-or-exact-u64-before-reservation")
+    );
+    for tier in ["production", "reference"] {
+        let saturation = format!("{tier}-list-saturated");
+        let exactness = runner_observations
+            .get(&("execution", saturation.as_str()))
+            .expect("unique aggregate list exactness observation");
+        assert_eq!(compact_field(exactness, "scalar"), Some("boolean"));
+        assert_eq!(compact_field(exactness, "permission"), Some("none"));
+        assert_eq!(
+            compact_field(exactness, "semantics"),
+            Some("false-all-list-counters-exact-true-list-counters-are-lower-bounds")
+        );
+        for suffix in [
+            "node-visits",
+            "element-handle-copies",
+            "element-handle-allocations",
+            "element-slots-reserved",
+            "branch-slot-copies",
+            "branch-slots-reserved",
+            "nodes-allocated",
+            "full-materializations",
+            "materialized-elements",
+        ] {
+            let name = format!("{tier}-list-{suffix}");
+            let observation = runner_observations
+                .get(&("execution", name.as_str()))
+                .expect("unique list work observation");
+            assert_eq!(compact_field(observation, "permission"), Some("none"));
+            assert_eq!(
+                compact_field(observation, "saturation-field"),
+                Some(saturation.as_str())
+            );
+        }
+    }
+
     use lkjscript::platform::contract::{
         CLI_CONTRACT_VERSION, ContractKey, FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION,
         REGISTRY_CONTRACT_VERSION, contract_descriptors,

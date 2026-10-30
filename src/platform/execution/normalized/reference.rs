@@ -5742,12 +5742,6 @@ impl ReferenceState<'_> {
     }
 
     fn charge_items(&mut self, items: usize, item_bytes: usize) -> Result<(), ExecutionError> {
-        if items as u64 > super::value::MAXIMUM_ADMISSION_ITEMS {
-            return Err(reference_resource(
-                "normalized_reference_collection_items",
-                "one container exceeds finite item admission",
-            ));
-        }
         let bytes = super::value::collection_storage_bytes(
             items as u64,
             item_bytes as u64,
@@ -5773,12 +5767,6 @@ impl ReferenceState<'_> {
 
     fn charge_value(&mut self, value: &NormalizedValue) -> Result<(), ExecutionError> {
         let (bytes, items) = reference_value_cost(value)?;
-        if items > super::value::MAXIMUM_ADMISSION_ITEMS {
-            return Err(reference_resource(
-                "normalized_reference_collection_items",
-                "one external value exceeds finite item admission",
-            ));
-        }
         charge_reference_storage(
             self.policy,
             &mut self.observation,
@@ -6728,16 +6716,12 @@ fn reference_map_intrinsic(
                 ("value", value.clone()),
             ])?);
         }
-        return super::list::List::from_items(
-            output,
-            super::value::MAXIMUM_ADMISSION_ITEMS,
-            &mut |charge| {
-                reserve(super::map::Charge {
-                    slots: charge.slots,
-                    bytes: charge.bytes,
-                })
-            },
-        )
+        return super::list::List::from_items(output, None, &mut |charge| {
+            reserve(super::map::Charge {
+                slots: charge.slots,
+                bytes: charge.bytes,
+            })
+        })
         .map(NormalizedValue::List);
     }
     let Some(key_value) = arguments.next() else {

@@ -789,9 +789,10 @@ impl Value {
         program: &NormalizedProgram,
         children: Vec<Self>,
         work: &mut ValueWork,
-        maximum_length: u64,
+        maximum_length: Option<u64>,
         reserve: &mut impl FnMut(super::super::list::Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
+        super::super::list::admit_length(children.len(), maximum_length)?;
         Self::free_children(program, &children, work)?;
         reserve(super::super::list::Charge {
             slots: 0,
@@ -1050,7 +1051,7 @@ impl Value {
         program: &NormalizedProgram,
         child: Self,
         work: &mut ValueWork,
-        maximum_length: u64,
+        maximum_length: Option<u64>,
         reserve: &mut impl FnMut(super::super::list::Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         Self::free_children(program, std::slice::from_ref(&self), work)?;
@@ -1167,7 +1168,6 @@ pub(super) struct Admission<'a> {
     pub items_saturated: &'a mut bool,
     pub admission_bytes: u64,
     pub admission_bytes_saturated: bool,
-    pub admission_items: u64,
 }
 
 struct Inspection {
@@ -2181,13 +2181,6 @@ impl Admission<'_> {
     }
 
     fn reserve_storage(&mut self, bytes: u64, items: u64) -> Result<(), ExecutionError> {
-        let next_admission_items = crate::platform::execution::finite_charge(
-            self.admission_items,
-            items,
-            super::super::value::MAXIMUM_ADMISSION_ITEMS,
-            "normalized_collection_items",
-            "single raw admission exceeds finite collection items",
-        )?;
         let mut admission_saturated = self.admission_bytes_saturated;
         let next_admission_bytes = crate::platform::execution::cumulative_charge(
             self.admission_bytes,
@@ -2218,7 +2211,6 @@ impl Admission<'_> {
         if let Some(budget) = self.shared_budget {
             budget.reserve(bytes, items)?;
         }
-        self.admission_items = next_admission_items;
         self.admission_bytes = next_admission_bytes;
         self.admission_bytes_saturated = admission_saturated;
         *self.items = next_items;

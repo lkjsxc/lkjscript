@@ -23,7 +23,7 @@ fn bulk_every_reservation_failure_releases_attached_and_pending_raw_owners() {
         for refused in 1..=calls {
             let raw = (0..length).map(|_| payload(origin, &sentinel)).collect();
             let mut visited = 0;
-            let result = List::from_items(raw, MAXIMUM_LENGTH as u64, &mut |_| {
+            let result = List::from_items(raw, None, &mut |_| {
                 visited += 1;
                 if visited == refused {
                     Err(failure())
@@ -39,7 +39,8 @@ fn bulk_every_reservation_failure_releases_attached_and_pending_raw_owners() {
                 "attached or pending payload leaked: length={length} refused={refused}"
             );
         }
-        let list = List::from_items(vec![payload(origin, &sentinel)], 1, &mut |_| Ok(())).unwrap();
+        let list =
+            List::from_items(vec![payload(origin, &sentinel)], Some(1), &mut |_| Ok(())).unwrap();
         assert_eq!(Arc::strong_count(&sentinel), 2);
         drop(list);
         assert_eq!(Arc::strong_count(&sentinel), 1);
@@ -58,7 +59,7 @@ fn bulk_cancel_at_every_reservation_including_empty_and_final_installation() {
             let mut visited = 0;
             let result = List::from_items(
                 (0..length).map(|_| payload(origin, &sentinel)).collect(),
-                MAXIMUM_LENGTH as u64,
+                None,
                 &mut |_| {
                     visited += 1;
                     if visited == cancelled {
@@ -76,15 +77,53 @@ fn bulk_cancel_at_every_reservation_including_empty_and_final_installation() {
 }
 
 #[test]
-fn bulk_length_refusal_precedes_storage_and_releases_raw_payloads() {
+fn bulk_optional_length_policy_is_exact_and_refusal_precedes_storage() {
+    let _scope = WorkScope::enter();
     let origin = ValueOrigin::fresh().unwrap();
     let sentinel = Arc::new(vec![NormalizedValue::Unit]);
-    for (length, maximum) in [(1, 0), (33, 32), (MAXIMUM_LENGTH + 1, u64::MAX)] {
+    for (length, maximum, accepted) in [
+        (0, None, true),
+        (0, Some(0), true),
+        (0, Some(u64::MAX), true),
+        (1, None, true),
+        (1, Some(0), false),
+        (1, Some(1), true),
+        (1, Some(u64::MAX), true),
+        (33, None, true),
+        (33, Some(0), false),
+        (33, Some(32), false),
+        (33, Some(33), true),
+        (33, Some(u64::MAX), true),
+    ] {
         let raw = (0..length).map(|_| payload(origin, &sentinel)).collect();
         let before = Work::current();
-        let result = List::from_items(raw, maximum, &mut |_| panic!("length admits no storage"));
-        assert!(result.is_err());
-        assert_eq!(before.since(), Work::ZERO);
+        let mut storage_requests = 0;
+        let result = List::from_items(raw, maximum, &mut |charge| {
+            assert!(accepted, "finite length refusal must precede storage");
+            if charge.bytes != 0 || charge.slots != 0 {
+                storage_requests += 1;
+            }
+            Ok(())
+        });
+        assert_eq!(
+            result.is_ok(),
+            accepted,
+            "length={length} maximum={maximum:?}"
+        );
+        match result {
+            Ok(list) => {
+                assert_eq!(list.len(), length);
+                assert_eq!(storage_requests != 0, length != 0);
+                assert_eq!(Arc::strong_count(&sentinel), length + 1);
+                drop(list);
+            }
+            Err(error) => {
+                assert_eq!(error.class, ExecutionFailureClass::Resource);
+                assert_eq!(error.code, "normalized_list_storage");
+                assert_eq!(storage_requests, 0);
+                assert_eq!(before.since(), Work::ZERO);
+            }
+        }
         assert_eq!(Arc::strong_count(&sentinel), 1);
     }
 }
@@ -108,7 +147,7 @@ fn bulk_deep_pending_and_attached_payloads_drop_on_a_bounded_stack() {
                     }
                     raw[position] = deep;
                     let mut visited = 0;
-                    let result = List::from_items(raw, length as u64, &mut |_| {
+                    let result = List::from_items(raw, Some(length as u64), &mut |_| {
                         visited += 1;
                         if visited == refused {
                             Err(failure())
@@ -151,7 +190,7 @@ fn bulk_refusal_classes_release_real_cells_without_touching_an_unrelated_owner()
                 assert_eq!(observed.live(), (length + 1, 0));
                 let control = ExecutionControl::uncancelled();
                 let mut visited = 0;
-                let error = List::from_items(raw, length as u64, &mut |_| {
+                let error = List::from_items(raw, Some(length as u64), &mut |_| {
                     visited += 1;
                     if visited == refused {
                         if cancel {

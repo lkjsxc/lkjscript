@@ -1630,7 +1630,6 @@ impl Machine<'_> {
                         policy: self.policy,
                         admission_bytes: 0,
                         admission_bytes_saturated: false,
-                        admission_items: 0,
                         work: &mut self.observation.value_work,
                         allocated: &mut self.observation.allocated_bytes,
                         allocated_saturated: &mut self.observation.allocated_bytes_saturated,
@@ -1663,7 +1662,6 @@ impl Machine<'_> {
                         policy: self.policy,
                         admission_bytes: 0,
                         admission_bytes_saturated: false,
-                        admission_items: 0,
                         work: &mut self.observation.value_work,
                         allocated: &mut self.observation.allocated_bytes,
                         allocated_saturated: &mut self.observation.allocated_bytes_saturated,
@@ -1686,7 +1684,6 @@ impl Machine<'_> {
                         policy: self.policy,
                         admission_bytes: 0,
                         admission_bytes_saturated: false,
-                        admission_items: 0,
                         work: &mut self.observation.value_work,
                         allocated: &mut self.observation.allocated_bytes,
                         allocated_saturated: &mut self.observation.allocated_bytes_saturated,
@@ -4372,12 +4369,6 @@ impl Machine<'_> {
     }
 
     fn charge_collection(&mut self, items: usize, item_bytes: usize) -> Result<(), ExecutionError> {
-        if items as u64 > super::value::MAXIMUM_ADMISSION_ITEMS {
-            return Err(resource_error(
-                "normalized_collection_items",
-                "one container exceeds finite item admission",
-            ));
-        }
         let bytes = super::value::collection_storage_bytes(
             items as u64,
             item_bytes as u64,
@@ -4403,12 +4394,6 @@ impl Machine<'_> {
 
     fn charge_external_value(&mut self, value: &NormalizedValue) -> Result<(), ExecutionError> {
         let (bytes, items) = value_cost(value)?;
-        if items > super::value::MAXIMUM_ADMISSION_ITEMS {
-            return Err(resource_error(
-                "normalized_collection_items",
-                "one external value exceeds finite item admission",
-            ));
-        }
         reserve_execution_storage(
             self.policy,
             self.shared_budget.as_deref(),
@@ -5692,16 +5677,12 @@ fn normalized_map_intrinsic(
                 ]),
             }));
         }
-        return super::list::List::from_items(
-            entries,
-            super::value::MAXIMUM_ADMISSION_ITEMS,
-            &mut |charge| {
-                reserve(super::map::Charge {
-                    slots: charge.slots,
-                    bytes: charge.bytes,
-                })
-            },
-        )
+        return super::list::List::from_items(entries, None, &mut |charge| {
+            reserve(super::map::Charge {
+                slots: charge.slots,
+                bytes: charge.bytes,
+            })
+        })
         .map(NormalizedValue::List);
     }
     let key_value = super::value::RawValue::new(

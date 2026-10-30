@@ -1284,7 +1284,7 @@ fn nested_payload(width: i64, length: i64) -> TestResult<NormalizedValue> {
             (0..length)
                 .map(|index| NormalizedValue::I64(key * 100 + index))
                 .collect(),
-            super::super::value::MAXIMUM_ADMISSION_ITEMS,
+            None,
             &mut |charge| {
                 reserve(super::super::map::Charge {
                     slots: charge.slots,

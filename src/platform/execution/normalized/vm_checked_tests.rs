@@ -100,7 +100,6 @@ fn raw_generic_structural_identity_reserves_scratch_before_cloning_or_encoding()
             items_saturated: &mut items_saturated,
             admission_bytes: 0,
             admission_bytes_saturated: false,
-            admission_items: 0,
         }
         .type_identity(template_id, &bindings);
         (result, allocated, charges)
@@ -783,7 +782,7 @@ fn checked_construction_and_slow_canonical_oracle_discriminate_affine_empty_case
         .map(|n| Value::scalar(&program, NormalizedValue::I64(n)).expect("scalar"))
         .collect();
     let list =
-        Value::list(&program, items, &mut work, 1_000_000, &mut |_| Ok(())).expect("checked list");
+        Value::list(&program, items, &mut work, None, &mut |_| Ok(())).expect("checked list");
     let option = Value::option(&program, Some(list), &mut work).expect("checked option");
     let map = Value::empty_map(&program)
         .edit_map(
@@ -894,7 +893,7 @@ fn checked_construction_and_slow_canonical_oracle_discriminate_affine_empty_case
     );
     assert!(Value::scalar(&program, owner.into_raw()).is_err());
     let owner = Value::variant(&program, layout, empty, None, &mut work).unwrap();
-    assert!(Value::list(&program, vec![owner], &mut work, 1_000_000, &mut |_| Ok(())).is_err());
+    assert!(Value::list(&program, vec![owner], &mut work, None, &mut |_| Ok(())).is_err());
 }
 
 #[derive(Default)]
@@ -1816,3 +1815,176 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
 
 #[path = "vm_map_tests.rs"]
 mod map_tests;
+
+#[test]
+fn raw_lists_cross_former_length_and_radix_limits_with_exact_vm_and_reference_policies() {
+    // A height-three prefix holds 32^4 values plus its separate 32-value tail.
+    // This input crosses both that structural boundary and the former 1M quota.
+    const COUNT: usize = 1_048_609;
+    let (program, snapshot) = fixture();
+    let (index, declaration) = program
+        .functions
+        .iter()
+        .enumerate()
+        .find(|(_, function)| {
+            function.type_parameters.len() == 1
+                && matches!(
+                    &function.body,
+                    super::super::super::prepare::NormalizedFunctionBody::External(name)
+                        if name.as_str() == "core.list.length"
+                )
+        })
+        .map(|(index, function)| {
+            (
+                FunctionIndex(u32::try_from(index).unwrap(), program.value_origin),
+                function.declaration,
+            )
+        })
+        .unwrap();
+    let integer = program
+        .types
+        .iter()
+        .find_map(|(digest, ty)| matches!(ty.form, TypeForm::I64).then_some(*digest))
+        .unwrap();
+    let control = ExecutionControl::uncancelled();
+    let raw = NormalizedValue::list(
+        (0..COUNT)
+            .map(|index| NormalizedValue::I64(i64::try_from(index).unwrap()))
+            .collect(),
+    )
+    .unwrap();
+    let invoke = |reference: bool, raw: NormalizedValue, maximum: Option<u64>| {
+        let policy = super::super::NormalizedRunPolicy {
+            maximum_collection_items: maximum,
+            ..super::super::NormalizedRunPolicy::foreground()
+        };
+        if reference {
+            let sink = std::sync::Mutex::new(None);
+            let result = NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
+                .observing(
+                    &sink,
+                    &super::super::super::reference::CoreNormalizedReferenceHost,
+                )
+                .invoke_instantiated(declaration, &[integer], vec![raw], &control)
+                .map(|(value, _)| value);
+            let observation = sink.into_inner().unwrap().unwrap();
+            assert_eq!(
+                observation.live_call_frames_after
+                    + observation.live_control_frames_after
+                    + observation.live_local_scopes_after
+                    + observation.live_type_scopes_after
+                    + observation.live_transactions_after
+                    + observation.live_handles_after,
+                0
+            );
+            (
+                result,
+                observation.value_work,
+                observation.collection_items,
+                observation.collection_items_saturated,
+                observation.allocated_bytes_saturated,
+            )
+        } else {
+            let sink = std::sync::Mutex::new(None);
+            let entry = super::super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
+                index,
+                Arc::from([integer]),
+            );
+            let result = super::super::NormalizedVm::for_test(&program, policy)
+                .observing(&sink, &super::super::CoreNormalizedHost)
+                .invoke_entry(entry, vec![raw], None, &control)
+                .map(|(value, _)| value);
+            let observation = sink.into_inner().unwrap().unwrap();
+            assert_eq!(
+                observation.live_call_frames_after
+                    + observation.live_locals_after
+                    + observation.live_type_bindings_after
+                    + observation.live_operands_after
+                    + observation.live_transactions_after
+                    + observation.live_handles_after,
+                0
+            );
+            (
+                result,
+                observation.value_work,
+                observation.collection_items,
+                observation.collection_items_saturated,
+                observation.allocated_bytes_saturated,
+            )
+        }
+    };
+    for reference in [false, true] {
+        for (maximum, admitted) in [
+            (None, true),
+            (Some(0), false),
+            (Some(COUNT as u64), true),
+            (Some(COUNT as u64 - 1), false),
+            (Some(u64::MAX), true),
+        ] {
+            let (result, work, items, items_saturated, bytes_saturated) =
+                invoke(reference, raw.clone(), maximum);
+            assert!(!items_saturated && !bytes_saturated && !work.lists.saturated);
+            if admitted {
+                assert_eq!(result.unwrap(), NormalizedValue::I64(COUNT as i64));
+                assert_eq!(work.input_admission_nodes, COUNT as u64 + 1);
+                assert_eq!(items, COUNT as u64);
+            } else {
+                let error = result.unwrap_err();
+                assert_eq!(
+                    error.code,
+                    if reference {
+                        "normalized_reference_collection_items"
+                    } else {
+                        "normalized_collection_items"
+                    }
+                );
+                assert_eq!(
+                    error.class,
+                    crate::platform::execution::ExecutionFailureClass::Resource
+                );
+                assert_eq!(items, 0);
+                assert_eq!(work.input_admission_nodes, 1);
+            }
+            println!(
+                "{}",
+                serde_json::json!({"case":"unbounded-list-admission", "reference":reference,
+                    "length":COUNT,"maximum_collection_items":maximum,"admitted":admitted,
+                    "input_admission_nodes":work.input_admission_nodes,"collection_items":items,
+                    "items_saturated":items_saturated,"bytes_saturated":bytes_saturated,
+                    "list_saturated":work.lists.saturated})
+            );
+        }
+        // The same accepted canonical list signature checks a wrong final child
+        // beyond both former boundaries. Shared backing grants no type evidence.
+        let NormalizedValue::List(values) = &raw else {
+            unreachable!();
+        };
+        let wrong = NormalizedValue::List(
+            values
+                .raw_append(NormalizedValue::Bool(true), &control)
+                .unwrap(),
+        );
+        let (result, work, _, saturated, _) = invoke(reference, wrong, None);
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.code,
+            if reference {
+                "normalized_reference_value_admission"
+            } else {
+                "normalized_value_admission"
+            }
+        );
+        assert_eq!(work.input_admission_nodes, COUNT as u64 + 2);
+        assert!(!saturated && !work.lists.saturated);
+        assert_eq!(values.len(), COUNT);
+        assert_eq!(
+            values.get(COUNT - 1),
+            Some(&NormalizedValue::I64(COUNT as i64 - 1))
+        );
+        println!(
+            "{}",
+            serde_json::json!({"case":"large-list-final-child-type-negative","reference":reference,
+                "length":COUNT+1,"diagnostic":error.code,"input_admission_nodes":work.input_admission_nodes})
+        );
+    }
+}
