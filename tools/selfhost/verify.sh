@@ -20,6 +20,8 @@ sha256sum src/platform/compiler/selfhost_input.rs \
   src/platform/execution/normalized/selfhost_bytes_tests.rs \
   src/platform/execution/normalized/selfhost_admission_tests.rs \
   src/platform/execution/normalized/selfhost_artifact_tests.rs \
+  src/platform/execution/normalized/selfhost_artifact_measure_tests.rs \
+  src/platform/execution/normalized/selfhost_artifact_order_tests.rs \
   src/platform/execution/normalized/selfhost_closure_tests.rs \
   src/platform/execution/normalized/selfhost_source_tests.rs \
   src/platform/execution/normalized/selfhost_source_scalar_tests.rs \

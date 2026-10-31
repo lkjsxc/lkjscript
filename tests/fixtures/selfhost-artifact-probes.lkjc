@@ -191,5 +191,43 @@ declarations.begin
                 (call unit-wire::integer (local data) (i64 8)))
               (i64 0)
               (i64 3)))
-          (field image (call ci::text-bytes (text ""))))))))
+          (field image (call ci::text-bytes (text ""))))))
+    (function create probe-sort-rows
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding out (type ByteBuffer) (call ci::empty))
+          (binding sorted
+            (type ByteBuffer)
+            (call artifact-order::sorted (local data) (i64 -1) (local out)))
+          (in
+            (record structural
+              (field diagnostic (i64 0))
+              (field image (call ci::freeze (local sorted))))))))
+    (function create probe-sort-selection
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding last (call unit-wire::integer (local data) (i64 0)))
+          (binding start (call ci::add (i64 16) (call ci::u64 (local data) (i64 8))))
+          (binding rows
+            (call ci::slice (local data) (local start) (call ci::length (local data))))
+          (binding out (type ByteBuffer) (call ci::empty))
+          (binding prefix
+            (type ByteBuffer)
+            (call wire::range (local data) (i64 16) (local start) (local out)))
+          (binding sorted
+            (type ByteBuffer)
+            (call artifact-order::sorted (local rows) (local last) (local prefix)))
+          (in
+            (record structural
+              (field diagnostic (i64 0))
+              (field image (call ci::freeze (local sorted))))))))
+))
 declarations.end

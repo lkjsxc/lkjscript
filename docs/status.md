@@ -12,7 +12,8 @@ The run used base HEAD `932f197ebcd9c17e2702372300ab73996bb20754`; this is the
 recorded precommit source identity, not a claim that its committed tree contains
 Profile 7. The owning process subsequently joined with exit zero. Recovery checks
 bind the unchanged raw indexed files and committed tree to the terminal receipts.
-This status update is a documentation follow-up, separate from that tested tree.
+The acceptance record was integrated in documentation-only commit
+`bcf455816c11f99ebb60e76f786a1c2baf1e41e7`, separate from that tested tree.
 
 The accepted implementation follows Phase 1 at `e7a44d289ddd90daf81125a9f37c66fa17cd3c21`
 and the list slice at `932f197ebcd9c17e2702372300ab73996bb20754`.
@@ -85,47 +86,70 @@ construction, strict loading, independent behavior and malformed controls pass.
 This cut removes projection-only ceilings; it does not remove the canonical unit
 codec's independent 8 MiB cap or the outer 4 MiB CompilerUnit storage allowance.
 
+## Current artifact-ordering candidate
+
+The stable index merge sort is publicly adopted and has passed focused checks,
+complete proposal replay and a pinned complete-compiler artifact comparison.
+Fresh full acceptance and mainline integration of this candidate are pending.
+The [sorting decision](decisions/20261031-artifact-index-sort.md) owns its algorithm,
+source bindings, measurements and evidence limits.
+
+On the identical 650-unit pinned input, VM instructions decreased from 826,835,225
+to 739,945,099 and canonical reference expressions from 438,158,052 to 387,022,989.
+Observed VM/reference times decreased from 103.671s / 526.016s to
+93.557s / 482.161s. These are single-run timings. Modeled cumulative allocations
+decreased by 8.26% / 8.30%; allocator traffic, copied bytes, peak live bytes, mapped
+capacity and RSS were not measured. All four evaluators emitted the identical
+10,338,849-byte artifact before and after; strict loading and 37,712 independent
+canonical object comparisons passed. This input is a projected artifact request,
+not the raw-source self-compilation required by Milestone A.
+
 ## Authoritative compiler closure
 
 The current graph revision is
-`rev_b14f1d9465fd9d67cad9cc5946607a7028d2a2d26a2a2883ad953422f23a1b05`.
+`rev_71fade8bd535b16925f51aa8c0e00260bf375288febad1654a602f7308f01d83`.
 Its public HEAD SHA-256 is
-`f66f443af7f9e46179c56fc9600113fa72dc65b2284ceb6e4450a83494eccc79`;
+`34b5ed697976321ad1c26b5554ee9fb82911a2389c5398c591c1ae7fb12048bc`;
 its semantic state is
-`semantic_state_49aa7a1d317922df1dfce5d9aac02c6d3bd0c28fa6c9084d2280f658d76ddc9e`.
+`semantic_state_4afafbe96907620b4e04d62319faa3c1253ce8c8ee56a012fd834a084883d7fc`.
 
-The live inventory contains 73 modules, 646 callables (622 pure and 24 external),
-36,080 owners, 41 types, 29 structural record types and 29,362 retirements. It
-covers 30,700 expression owners, 7,719 call expressions, 2,513 bindings, 16 generic
-application sites and all supplied/uncalled/untaken source. Parameter modes are
-1,961 unrestricted, 178 consume and one borrow. Complete proposal/body replay
-agrees with 650 canonical units. Public readback covered all owners in nine pages.
+The refreshed inventory contains 73 modules, 651 callables (627 pure and 24
+external), 36,295 owners, 41 types, 29 structural record types and 29,438
+retirements. It covers 30,873 expression owners, 7,768 call expressions,
+2,527 bindings, 16 generic application sites and all supplied/uncalled/untaken
+source. Parameter modes are 1,980 unrestricted, 182 consume and one borrow.
+Complete proposal/body replay agrees with 655 canonical units. Public readback
+covered all owners in nine pages. The sort uses existing semantic families and
+intrinsics.
 
-The complete source carrier is 12,259,370 bytes, SHA-256
-`abc0bd3936446dd205d110ef0713700d567a1bb25f867cce666c3a71befef3f5`.
-Physical storage is three packs / 81,763,516 bytes after public GC. Complete
-source transports before and after compaction were identical. These are physical
-storage observations, separate from Git and semantic identities.
+The complete source carrier is 12,312,663 bytes, SHA-256
+`0f8b486925e1482fbb482204c3952313448635d868dca42156d83682707cbc60`.
+Physical storage is four packs / 87,934,112 bytes after public GC. These are
+physical storage observations, separate from Git and semantic identities.
 
-| Reproduction established on the accepted tree | Bytes | SHA-256 |
+The following fixed points belong to the accepted Profile-7 graph before the
+sorting change; they are not fixed-point claims for the current candidate.
+
+| Reproduction on the accepted Profile-7 tree | Bytes | SHA-256 |
 | --- | ---: | --- |
 | Mode-0 profile-6 native compiler, C2 = C3 | 1,249,170 | `c613d7c604322d42f4cec6bd65d83520828d901fa7f620c792707aeb1caeedb7` |
 | Mode-1 profile-7 input, policy tag zero, 650 units | 10,806,949 | `c50451cd991e04fe64e38f5a7bae5a4d34497cbfd54e614ad2c9c137bde19791` |
 | Strictly loaded artifact, C1 = C2 = C3 | 10,338,816 | `41dd8141cb12a9501e69c8092e0b8e5d7c020765967511ec051c50bacac18f23` |
 
-The combined source-compiler backend closure exports 624 functions / 36,561 nodes
-in 3,984,067 normalized-input bytes. Both backend generations emit the same
-2,366,697-byte source-compiler executable and compile independent scalar requests.
-This remains Tier 1 reproduction of the source compiler, not raw-source
-self-compilation of the maintained compiler.
+That Profile-7 source-compiler backend closure exported 624 functions / 36,561
+nodes in 3,984,067 normalized-input bytes. Both backend generations emitted the
+same 2,366,697-byte source-compiler executable and compiled independent scalar
+requests. This establishes Tier 1 reproduction of the source compiler, not
+raw-source self-compilation of the maintained compiler.
 
 ## Next dependency batches and unproven claims
 
-First measure artifact ordering on a pinned complete compiler workload. Its
-current selection sort repeatedly scans all rows. Preserve canonical ObjectKey
-order, first-input duplicate representatives, exact policies and four-evaluator
-agreement when replacing that algorithm. Distinguish evaluator allocation charges
-from allocator traffic, data movement, live bytes, mapped capacity and RSS.
+Complete the artifact-ordering candidate's exact staged-tree acceptance, then
+integrate the verified tree. The next semantic batch admits and lowers the
+copyable compound source closure, including closed List<I64> substitutions,
+structural records, active copyable intrinsics and binary-filter targets.
+Its drafts are not accepted compiler capability. Affine ByteBuffer custody and
+source-derived canonical artifacts remain explicit dependent batches.
 
 Milestone A requires source-driven compound types and all active expressions,
 complete intrinsic and closed generic admission, affine ByteBuffer custody and
