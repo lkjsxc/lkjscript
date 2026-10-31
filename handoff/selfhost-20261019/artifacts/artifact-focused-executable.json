@@ -1,0 +1,6 @@
+{
+  "path": "target/release/deps/lkjscript-e2fdc52c2bd3596c",
+  "bytes": 194571504,
+  "sha256": "6c0b34c8e18214aee5d5ea02661ec78eea94c9b5525114856e83675436548e0a",
+  "scope": "Rust test harness built from artifact primitive implementation. Source graph loaded at runtime; unit tag correction is in current accepted graph. Embedded full-proposal replay is not selected by this direct unit rerun."
+}

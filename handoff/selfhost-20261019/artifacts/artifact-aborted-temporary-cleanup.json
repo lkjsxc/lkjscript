@@ -1,0 +1,9 @@
+{
+  "path": "/tmp/.tmpnBY0c8",
+  "bytes": 322727,
+  "sha256": "fe737a019262ab7721da23db79310e768114edf8d399403d20b7226c5e9a13ff",
+  "mtime": "2026-10-18T15:44:53.380Z",
+  "ownership": "Only compiler file; exact C1 hash and size logged by aborted v2 harness, timestamp within aborted run",
+  "action": "remove after writer process 4085074 and child harness joined",
+  "removed": true
+}

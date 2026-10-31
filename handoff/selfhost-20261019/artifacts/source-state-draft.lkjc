@@ -1,0 +1,126 @@
+declarations.begin
+(units
+  (module create source-state
+    (function create section
+      (visibility private)
+      (effect pure)
+      (parameter create tag (type I64))
+      (parameter create count (type I64))
+      (parameter create digest (type Bytes))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::push (local tag) (local out)))
+          (binding b (type ByteBuffer) (call wire::be (local count) (i64 8) (local a)))
+          (in (call ci::append (local digest) (i64 0) (local b))))))
+    (function create root
+      (visibility public)
+      (effect pure)
+      (parameter create package (type Bytes))
+      (parameter create name (type Bytes))
+      (parameter create owners (type Bytes))
+      (parameter create dependencies (type Bytes))
+      (parameter create retirements (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (if
+          (if
+            (call ci::eq (call ci::length (local package)) (i64 16))
+            (if
+              (if
+                (call artifact-check::zeros (local package) (i64 0) (i64 16))
+                (bool false)
+                (bool true))
+              (if
+                (call ci::lt (i64 0) (call ci::length (local name)))
+                (if
+                  (call ci::lt (call ci::length (local name)) (i64 129))
+                  (if
+                    (call source-read::name-scan
+                      (local name)
+                      (i64 0)
+                      (call ci::length (local name))
+                      (bool true))
+                    (bool true)
+                    (bool false))
+                  (bool false))
+                (bool false))
+              (bool false))
+            (bool false))
+          (let
+            (binding owner-root (call source-map::root (local owners) (i64 17) (i64 33)))
+            (in
+              (if
+                (call ci::eq (field (local owner-root) (name diagnostic)) (i64 0))
+                (let
+                  (binding dependency-root
+                    (call source-map::root (local dependencies) (i64 16) (i64 32)))
+                  (in
+                    (if
+                      (call ci::eq (field (local dependency-root) (name diagnostic)) (i64 0))
+                      (let
+                        (binding retirement-root
+                          (call source-map::root (local retirements) (i64 17) (i64 32)))
+                        (in
+                          (if
+                            (call ci::eq (field (local retirement-root) (name diagnostic)) (i64 0))
+                            (let
+                              (binding a (type ByteBuffer) (call ci::empty))
+                              (binding b
+                                (type ByteBuffer)
+                                (call wire::be (i64 1) (i64 2) (local a)))
+                              (binding c
+                                (type ByteBuffer)
+                                (call wire::be (i64 1) (i64 2) (local b)))
+                              (binding d
+                                (type ByteBuffer)
+                                (call ci::append (local package) (i64 0) (local c)))
+                              (binding e
+                                (type ByteBuffer)
+                                (call wire::be (call ci::length (local name)) (i64 8) (local d)))
+                              (binding f
+                                (type ByteBuffer)
+                                (call ci::append (local name) (i64 0) (local e)))
+                              (binding g
+                                (type ByteBuffer)
+                                (call section
+                                  (i64 1)
+                                  (call ci::div (call ci::length (local owners)) (i64 50))
+                                  (field (local owner-root) (name image))
+                                  (local f)))
+                              (binding h
+                                (type ByteBuffer)
+                                (call section
+                                  (i64 2)
+                                  (call ci::div (call ci::length (local dependencies)) (i64 48))
+                                  (field (local dependency-root) (name image))
+                                  (local g)))
+                              (binding i
+                                (type ByteBuffer)
+                                (call section
+                                  (i64 3)
+                                  (call ci::div (call ci::length (local retirements)) (i64 49))
+                                  (field (local retirement-root) (name image))
+                                  (local h)))
+                              (binding canonical (call ci::freeze (local i)))
+                              (in
+                                (record structural
+                                  (field diagnostic (i64 0))
+                                  (field image
+                                    (call ci::derive
+                                      (text "lkjscript.kernel.semantic-state.v1")
+                                      (local canonical))))))
+                            (record structural
+                              (field diagnostic (i64 12))
+                              (field image (call ci::text-bytes (text "")))))))
+                      (record structural
+                        (field diagnostic (i64 12))
+                        (field image (call ci::text-bytes (text "")))))))
+                (record structural
+                  (field diagnostic (i64 12))
+                  (field image (call ci::text-bytes (text "")))))))
+          (record structural
+            (field diagnostic (i64 12))
+            (field image (call ci::text-bytes (text "")))))))))
+declarations.end

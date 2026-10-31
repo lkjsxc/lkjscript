@@ -1,0 +1,111 @@
+declarations.begin
+(units
+  (module create source-record-probe
+    (function create read-owner
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (record structural
+          (field diagnostic (call source-owner::owner (local data)))
+          (field image (call ci::octets (list I64))))))
+    (function create records-loop
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create output (type ByteBuffer) (use consume))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (if
+          (call source-read::range (local data) (local at) (i64 0) (local end))
+          (if
+            (call ci::eq (local at) (local end))
+            (record structural
+              (field diagnostic (i64 0))
+              (field image (call ci::freeze (local output))))
+            (if
+              (call source-read::range (local data) (local at) (i64 5) (local end))
+              (let
+                (binding kind (call ci::get (local data) (local at)))
+                (binding length (call ci::u32 (local data) (call ci::add (local at) (i64 1))))
+                (binding start (call ci::add (local at) (i64 5)))
+                (in
+                  (if
+                    (if
+                      (call ci::lt (local kind) (i64 2))
+                      (if
+                        (call source-read::range
+                          (local data)
+                          (local start)
+                          (local length)
+                          (local end))
+                        (bool true)
+                        (bool false))
+                      (bool false))
+                    (let
+                      (binding next (call ci::add (local start) (local length)))
+                      (binding object (call ci::slice (local data) (local start) (local next)))
+                      (binding code
+                        (if
+                          (call ci::eq (local kind) (i64 0))
+                          (call source-shape::type (local object))
+                          (call source-owner::owner (local object))))
+                      (in
+                        (let
+                          (binding continued
+                            (type ByteBuffer)
+                            (call ci::le (local code) (i64 1) (local output)))
+                          (in
+                            (call records-loop
+                              (local data)
+                              (local next)
+                              (local end)
+                              (local continued))))))
+                    (let
+                      (binding discarded (call ci::freeze (local output)))
+                      (in
+                        (record structural
+                          (field diagnostic (i64 12))
+                          (field image (call ci::octets (list I64)))))))))
+              (let
+                (binding discarded (call ci::freeze (local output)))
+                (in
+                  (record structural
+                    (field diagnostic (i64 12))
+                    (field image (call ci::octets (list I64))))))))
+          (let
+            (binding discarded (call ci::freeze (local output)))
+            (in
+              (record structural
+                (field diagnostic (i64 12))
+                (field image (call ci::octets (list I64)))))))))
+    (function create read-records
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding initial (type ByteBuffer) (call ci::empty))
+          (in
+            (call records-loop (local data) (i64 0) (call ci::length (local data)) (local initial))))))
+    (component create probes
+      (visibility public)
+      (port create owner
+        (type (function (Bytes) (record (diagnostic I64) (image Bytes))))
+        (function read-owner))
+      (port create records
+        (type (function (Bytes) (record (diagnostic I64) (image Bytes))))
+        (function read-records))))
+  (target create source-records
+    (component source-record-probe::probes)
+    (runner command)
+    (port source-record-probe::probes::records))
+  (target create source-owner
+    (component source-record-probe::probes)
+    (runner command)
+    (port source-record-probe::probes::owner)))
+declarations.end

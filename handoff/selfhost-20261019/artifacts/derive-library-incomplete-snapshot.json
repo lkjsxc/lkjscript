@@ -1,0 +1,25 @@
+{
+  "scope": "Completed library harness; overall fresh full receipt remains required",
+  "source": "b2aaa22ef2529e531058e09898c1645468fbea9d",
+  "result": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2583 filtered out; finished in 0.10s",
+  "selfhost": [
+    "test platform::execution::normalized::tests::selfhost_tests::admission::selfhost_admission_checks_derived_hash_signatures_and_unknown_codes ... ok"
+  ],
+  "native": [
+    "test platform::compiler::elf_x86_64::stack_tests::native_elf_calls_align_stack_and_restore_every_argument_depth ... ok",
+    "test platform::execution::normalized::tests::native_derive_tests::native_elf_blake3_derivation_matches_independent_block_chunk_and_tree_vectors ... ok",
+    "test platform::execution::normalized::tests::native_elf_tests::native_egraph_plan_is_bounded_and_preserves_exact_vm_quota_boundaries ... ok",
+    "test platform::execution::normalized::tests::native_derive_tests::native_elf_blake3_derivation_preserves_context_bytes_and_tree_boundaries ... ok",
+    "test platform::execution::normalized::tests::native_elf_tests::native_elf_checked_traps_and_unsupported_code_never_become_build_time_results ... ok",
+    "test platform::execution::normalized::tests::native_filter_tests::native_elf_binary_filter_bounds_usage_raw_octets_and_traps ... ok",
+    "test platform::execution::normalized::tests::native_elf_tests::native_elf_executes_runtime_arguments_recursion_closures_and_structured_json ... ok",
+    "test platform::execution::normalized::tests::native_elf_tests::native_egraph_fuses_exact_standard_map_fold_only_after_trap_free_proof ... ok",
+    "test platform::execution::normalized::tests::native_filter_tests::native_elf_blake3_matches_independent_block_chunk_and_tree_vectors ... ok",
+    "test platform::execution::normalized::tests::native_elf_tests::native_elf_compiler_byte_operations_preserve_octets_text_ranges_and_traps ... ok"
+  ],
+  "ignored": [
+    "test platform::data::tests::cross_process_writer_helper ... ignored, invoked as a controlled subprocess by the cross-process writer proof"
+  ],
+  "stdout_bytes": 172989,
+  "stdout_sha256": "dbdbd231d3790ce7ad3eabc8db918c17917eaff9381f06f5360af4f2f94f4112"
+}

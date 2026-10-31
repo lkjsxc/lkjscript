@@ -1,0 +1,83 @@
+declarations.begin
+(units
+  (module create source-region-table
+    (function create fill
+      (visibility public)
+      (effect pure)
+      (type-parameter create R (constraint region))
+      (parameter create index (type I64))
+      (parameter create count (type I64))
+      (parameter create arena (type (region-cap R unique)) (use consume))
+      (returns (region-cap R unique))
+      (body
+        (if
+          (call ci::lt (local index) (local count))
+          (let
+            (binding pointer (region-alloc (type (rel-ptr R I64)) arena (local index)))
+            (in
+              (call fill (types R) (call ci::add (local index) (i64 1)) (local count) (local arena))))
+          (local arena))))
+    (function create sum
+      (visibility public)
+      (effect pure)
+      (type-parameter create R (constraint region))
+      (parameter create base (type I64))
+      (parameter create stride (type I64))
+      (parameter create index (type I64))
+      (parameter create total (type I64))
+      (parameter create arena (type (region-cap R unique)) (use consume))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local index) (i64 0))
+          (local total)
+          (let
+            (binding index-before (call ci::sub (local index) (i64 1)))
+            (binding pointer
+              (region-resolve
+                (type (rel-ptr R I64))
+                arena
+                (call ci::add (local base) (call ci::mul (local stride) (local index-before)))))
+            (binding value (region-read (type (rel-ptr R I64)) arena (local pointer)))
+            (in
+              (call sum
+                (types R)
+                (local base)
+                (local stride)
+                (local index-before)
+                (call ci::add (local total) (local value))
+                (local arena)))))))
+    (function create table
+      (visibility public)
+      (effect pure)
+      (type-parameter create R (constraint region))
+      (parameter create count (type I64))
+      (parameter create arena (type (region-cap R unique)) (use consume))
+      (returns I64)
+      (body
+        (let
+          (binding first (region-alloc (type (rel-ptr R I64)) arena (i64 0)))
+          (binding second (region-alloc (type (rel-ptr R I64)) arena (i64 1)))
+          (binding base (region-offset (local first)))
+          (binding stride (call ci::sub (region-offset (local second)) (local base)))
+          (binding filled
+            (type (region-cap R unique))
+            (call fill (types R) (i64 2) (local count) (local arena)))
+          (in (call sum (types R) (local base) (local stride) (local count) (i64 0) (local filled))))))
+    (function create observe
+      (visibility public)
+      (effect pure)
+      (parameter create count (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local count) (i64 0))
+          (i64 -1)
+          (if
+            (call ci::lt (i64 100000) (local count))
+            (i64 -1)
+            (region-with
+              (binding arena (as $table) (type (region-cap (region-brand observe $table) unique)))
+              (i64 8388608)
+              (in (call table (types (region-brand observe $table)) (local count) (local arena))))))))))
+declarations.end

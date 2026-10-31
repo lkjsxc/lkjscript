@@ -1,0 +1,141 @@
+{
+  "status": "Milestone D Tier1 complete native and artifact backend closure accepted and integrated as108906b5; E semantic source admission remains active.",
+  "next": [
+    "Complete private source-reader prototype execution checks, then move justified source decoding into authoritative S via public tx.",
+    "Update docs/status before next acceptance to mark108906b5 accepted and explicitly preserve Tier1/semantic boundaries.",
+    "Continue E/F until complete semantic source-graph compiler self-hosting."
+  ],
+  "facts": {
+    "canonical_code": "artifact_code::Read::check rebuilds canonical pre-tail code from exact owners; NormalizedProgram TailCall/MoveLocal are not wire CompiledInstruction",
+    "unit": "LKJCUNIT envelope, bincode standard payload; source summaries and tables are explicit semantic input facts. S must serialize payload and derive unit key, envelope and object identity.",
+    "unit_key": "derive-key(lkjscript.compiler-unit-key, epoch LE16 + payload-length BE64 + CompilationKeyCore bincode)",
+    "artifact": "LKJARTFC header 60, segment headers 40, footer 40. Manifest LKJAMNFT. Exact immutable source closure required.",
+    "pack": "Raw current packs require globally sorted unique object keys and gapless payload offsets. Artifact also enforces global order between segments.",
+    "closure": "derive-key(lkjscript.artifact-object-closure, count BE64 + total object bytes BE64 + each sorted domain u8/digest32/lengthBE64)",
+    "compilation_map": "Owner key sorted map -> kind u8/unit-key32/unit-object32. Canonical page/content Merkle hashes, not a flat digest.",
+    "tables": "Domain ordering allows merging host-sorted raw source objects with self-produced unit/page/manifest objects; do not accept prebuilt bundle templates.",
+    "region": "Consider lexical Region table only when object ordering/serialization workload requires mutation; no new region claim from fixed 32-byte hash stack key.",
+    "domain_order": "ObjectKey sorts by ObjectDomain enum rank, not wire tag: accepted artifact domains order tags 1,2,3,5,13,25,23,24.",
+    "map_leaf": "Compilation binding keys are EncodedOwnerKey 17 bytes; values are kind tag+unit key32+object digest32 (65). Current S has 156 functions, so a first single compilation-map leaf may fit; exact map content digest is canonical radix recursion even for a physical leaf. Reader MAXIMUM_PAGE_BYTES=65536, builder TARGET_LEAF_PAGE_BYTES=16384. Must test physical alternative via strict loader before adopting."
+  },
+  "inputs_boundary": "Host semantic admission and canonical unit IR projection allowed for Tier 1; all emission must run in S. Tier 2 must replace this boundary.",
+  "proposed_route": [
+    "Test-only exporter projects canonical CompilationUnit semantic fields/opcodes, excluding prebuilt key/envelope/serialized-unit bytes; source identities and accepted raw source objects remain explicit Tier 1 boundaries.",
+    "Do not serialize NormalizedProgram derived tail/move instructions as canonical code.",
+    "S serializes current unit payload/tables/signature, calculates unit key+checksums, constructs compilation binding map and manifest, merges sorted source/derived objects, builds raw packs, then artifact manifest/container.",
+    "Preserve strict load_artifact unchanged; execute emitted artifact on VM/reference and compare source mutations.",
+    "Initial artifact entry can select an explicit output target; complete compiler eventually needs one native entry with explicit output selector and closure containing both paths. Decide one current input-profile cut, no profile fallback."
+  ],
+  "drafts": [
+    {
+      "path": ".artifacts/selfhost/wire-draft.lkjc",
+      "status": "Syntax parsed only; not semantically admitted or tested",
+      "operations": [
+        "BE fixed integers",
+        "Bincode standard unsigned varints",
+        "Full I64 zigzag using safe 32-bit halves",
+        "Byte ranges",
+        "Length-prefixed domain hashing",
+        "Current packed envelope"
+      ]
+    },
+    {
+      "path": ".artifacts/selfhost/pack-draft.lkjc",
+      "status": "Syntax parsed only; not semantically admitted or tested",
+      "input": "Validated sorted 48-byte rows: domain u32, pool selector u32 (input=0/generated=1), pool offset u32, length u32, object digest32. Bounds/order/key validation belongs to artifact input admission before calling encode.",
+      "output": "Current raw pack bytes plus domain-derived pack identity. Requires wire-draft module."
+    }
+  ],
+  "authoritative_revision": "rev_785e128c7c5e53cc35510129cf1d34422597eebcac7260e03f4f55f4e15faccf",
+  "public_admission": "wire, pack, unit-map, unit-wire accepted; first inline-owned-argument proposal rejected without publication, revised to explicit local custody.",
+  "unit_projection": "Canonical semantic fields/opcodes projected without output units or keys. Current unit layout and raw-source hash/metadata checks are implemented in S. Rust semantic admission and source/IR correspondence remain Tier 1 boundaries.",
+  "container": {
+    "functions": 213,
+    "input_bytes": 3359127,
+    "artifact_bytes": 3542453,
+    "sha256": "66d39b1533e7f4ae52a0e516aaec9aec39f2723716535a9d651da9ad5c0eeec1",
+    "test": "2 passed, 182.65s; VM/reference/C0-native encoder output equality, strict load, compiler artifact executes same arithmetic backend on both evaluators"
+  },
+  "independent": [
+    {
+      "value": 42,
+      "artifact_bytes": 3415,
+      "sha256": "84b99a879d980d340cf3b675cd62e3adc2d63227e969ebf32a78544cb6d3115b"
+    },
+    {
+      "value": -91,
+      "artifact_bytes": 3415,
+      "sha256": "80324657062377725e162d002e2ea256c3f7fe71bc7be310d5108fd92ab4bc4e"
+    }
+  ],
+  "corrections": [
+    "Runtime-owner metadata is a subset and may be empty; optional unit entries must agree in kind.",
+    "Domain23 is package-interface-owner.v7, distinct from the logical package-interface.v1 identity derived through LKJPIFI1.",
+    "Bootstrap declaration headers split by module and bodies grouped four per public transaction; default limits unchanged.",
+    "Object and runtime-owner scans return recursive calls directly, retaining tail position. V3 asserts compiler call depth <=128 before reference execution."
+  ],
+  "current_stage": {
+    "source_revision": "rev_785e128c7c5e53cc35510129cf1d34422597eebcac7260e03f4f55f4e15faccf",
+    "normalized_functions": 244,
+    "normalized_instructions": 16111,
+    "normalized_bytes": 794236,
+    "C1_bytes": 322615,
+    "C1_sha256": "45524badcc95fb204a1672e41b09942b29669e76c4d96e7b0a8f91b8f679d0ee",
+    "C2_C3_bytes": 2519420,
+    "C2_C3_sha256": "b1c4371af385bf91421e66dee2a5a7a481c1a2747f34ce786a161354ba0623ce",
+    "artifact_functions": 245,
+    "canonical_units": 247,
+    "artifact_input_bytes": 4126413,
+    "artifact_input_sha256": "1a1d579c2e08e2a984da20b76bcf8baaf9603bdde2a296cf610a4bbd6d8dedae",
+    "A1_A2_A3_bytes": 4349511,
+    "A1_A2_A3_sha256": "e4dc2bd19a308bae2d44a3beda3b13ebda88fc972c17b4358a5014321b5d27e3",
+    "vm_steps": 296112311,
+    "vm_cumulative_allocation": 31909160503,
+    "ref_expressions": 153493373,
+    "ref_cumulative_allocation": 36294774728,
+    "vm_max_call_depth": 19,
+    "ref_max_call_depth": 20,
+    "normalized_sha256": "2d37678274cb7163eb4ba61ed2533fdf5df23c13f14a10131a6a9c206ee0be2b"
+  },
+  "active_sessions": {},
+  "completed_sessions": {
+    "profile4_v3": "11495 joined,32passed2failed,410.47sec",
+    "native_runtime": "60567 joined,10passed,2.94sec",
+    "public_cli": "76122 joined,3passed,197.29sec",
+    "clippy": "77480 joined,passed,release workspace all targets all features",
+    "disk_bootstrap_retry": "19212 joined,2 passed,655.44sec",
+    "gc": "61228 joined,198 packs ->1,authoritative revision unchanged",
+    "bootstrap_changed": "71962 joined,bootstrap passed,changed2/2fresh stable",
+    "official_full_release": "49564 joined,29/29 fresh stable,1125.96sec; release target passed",
+    "library_watcher": "22169 joined,2589pass5ignored,34selfhost10native,747.33sec",
+    "push": "33133 joined,normal push passed; independent fetch and ancestry verified"
+  },
+  "validation_evidence": {
+    ".artifacts/selfhost/artifact-public-cli-focused.log": {
+      "bytes": 731,
+      "sha256": "32a73c749b52403cdf037c8b142646b6814789e0ebdae529d3be251799452fff"
+    },
+    ".artifacts/selfhost/artifact-clippy.log": {
+      "bytes": 306,
+      "sha256": "3121323275184f2655c1d0f0c42375ab47145f8c17eccd9b651c0c881b2d8767"
+    },
+    ".artifacts/selfhost/artifact-native-runtime-focused.log": {
+      "bytes": 1526,
+      "sha256": "8d077aa17f5b48c6f92296fbe32785757ab8bd03b21da787e70301138dd8cb53"
+    }
+  },
+  "mutation": {
+    "normalized_sha256": "cc2467e82b32b78540c3e3fc4c4167f2ef7c325068f24d7ea52970cf0e340fc6",
+    "native_sha256": "d458ab4a4701259c592afcdc73f343d063a1337cc996df8d5ea9d68d8ffb2b27",
+    "native_bytes": 2519420,
+    "artifact_input_bytes": 4127846,
+    "artifact_input_sha256": "61b0b5f0a8836d471929a98c1e9cfdf23a4e8394f395a49680ee4e3a1db2e92e",
+    "artifact_bytes": 4351190,
+    "artifact_sha256": "f35a28bb8d3283efb12155886575cfe62c9ee20dd5f1f347e0bb3f6ed8bfc4dc",
+    "behavior": "C2/C3 compile changed source; resulting ELF and artifact compilers emit matching program with mutant_argument diagnostic, expected 42 result."
+  },
+  "candidate": {
+    "source": "108906b51259f00fae4c4fd1c53d16a05b3df1b5",
+    "tree": "5f9eb4c268c886aa6c60cf7b1d6842233ba57fc2"
+  }
+}

@@ -1,0 +1,146 @@
+declarations.begin
+(units
+  (module create source-object
+    (function create type
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create entry (type Bytes))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (call ci::length (local entry)) (i64 32))
+          (let
+            (binding code (call source-shape::type (local data)))
+            (in
+              (if
+                (call ci::eq (local code) (i64 0))
+                (if
+                  (call ci::same
+                    (call wire::digest (text "lkjscript.kernel.type-object.v10") (local data))
+                    (call ci::slice (local entry) (i64 0) (i64 32)))
+                  (i64 0)
+                  (i64 12))
+                (local code))))
+          (i64 12))))
+    (function create owner
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create entry (type Bytes))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (call ci::length (local entry)) (i64 50))
+          (let
+            (binding code (call source-owner::owner (local data)))
+            (in
+              (if
+                (call ci::eq (local code) (i64 0))
+                (if
+                  (if
+                    (call ci::eq
+                      (call ci::get (local entry) (i64 0))
+                      (if
+                        (call ci::eq (call ci::get (local data) (i64 18)) (i64 9))
+                        (i64 9)
+                        (call ci::add (call ci::get (local data) (i64 20)) (i64 1))))
+                    (if
+                      (call ci::same
+                        (call ci::slice (local entry) (i64 1) (i64 17))
+                        (if
+                          (call ci::eq (call ci::get (local data) (i64 18)) (i64 9))
+                          (call ci::slice (local data) (i64 21) (i64 37))
+                          (call ci::slice (local data) (i64 22) (i64 38))))
+                      (if
+                        (call ci::eq
+                          (call ci::get (local entry) (i64 17))
+                          (if
+                            (call ci::eq (call ci::get (local data) (i64 18)) (i64 9))
+                            (i64 17)
+                            (call ci::add (call ci::get (local data) (i64 38)) (i64 1))))
+                        (if
+                          (call ci::same
+                            (call wire::digest
+                              (text "lkjscript.kernel.owner-object.v14")
+                              (local data))
+                            (call ci::slice (local entry) (i64 18) (i64 50)))
+                          (bool true)
+                          (bool false))
+                        (bool false))
+                      (bool false))
+                    (bool false))
+                  (i64 0)
+                  (i64 12))
+                (local code))))
+          (i64 12))))
+    (function create dependency
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create entry (type Bytes))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (call ci::length (local entry)) (i64 48))
+          (let
+            (binding code (call source-history::dependency (local data)))
+            (in
+              (if
+                (call ci::eq (local code) (i64 0))
+                (if
+                  (if
+                    (call ci::same
+                      (call ci::slice (local entry) (i64 0) (i64 16))
+                      (call ci::slice (local data) (i64 20) (i64 36)))
+                    (if
+                      (call ci::same
+                        (call wire::digest
+                          (text "lkjscript.kernel.dependency-object.v14")
+                          (local data))
+                        (call ci::slice (local entry) (i64 16) (i64 48)))
+                      (bool true)
+                      (bool false))
+                    (bool false))
+                  (i64 0)
+                  (i64 12))
+                (local code))))
+          (i64 12))))
+    (function create retirement
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create entry (type Bytes))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (call ci::length (local entry)) (i64 49))
+          (let
+            (binding code (call source-history::retirement (local data)))
+            (in
+              (if
+                (call ci::eq (local code) (i64 0))
+                (if
+                  (if
+                    (call ci::eq
+                      (call ci::get (local entry) (i64 0))
+                      (call ci::add (call ci::get (local data) (i64 19)) (i64 1)))
+                    (if
+                      (call ci::same
+                        (call ci::slice (local entry) (i64 1) (i64 17))
+                        (call ci::slice (local data) (i64 21) (i64 37)))
+                      (if
+                        (call ci::same
+                          (call wire::digest
+                            (text "lkjscript.kernel.retirement-object.v14")
+                            (local data))
+                          (call ci::slice (local entry) (i64 17) (i64 49)))
+                        (bool true)
+                        (bool false))
+                      (bool false))
+                    (bool false))
+                  (i64 0)
+                  (i64 12))
+                (local code))))
+          (i64 12))))))
+declarations.end

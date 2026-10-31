@@ -1,0 +1,18 @@
+{
+  "status": "passed",
+  "scope": "Native integer decoder prototype; C0 public build from temporary public-tx graph. VM/reference scalar checks still required.",
+  "valid_signed": 16,
+  "valid_unsigned": 9,
+  "rejected_encodings": 115,
+  "subspan_cases": 25,
+  "executables": {
+    "signed": {
+      "bytes": 32692,
+      "sha256": "bd99adfbe61acd1af0ada8c28fff7e77cc2b08b6b031a5feeb3394505e6492fb"
+    },
+    "unsigned": {
+      "bytes": 31244,
+      "sha256": "fa316db8468298527f4d658b18f9ff6ce107a5e28d7df4426da67ebe13f435b8"
+    }
+  }
+}

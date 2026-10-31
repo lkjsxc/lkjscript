@@ -1,0 +1,5 @@
+const fs=require('fs');
+function parse(s){const t=s.replace(/^declarations\.(begin|end)\s*$/gm,'').match(/"(?:\\.|[^"\\])*"|[()]|[^\s()]+/g)||[];let i=0;function one(){const v=t[i++];if(v==='('){const a=[];while(t[i]!==')'){if(i>=t.length)throw Error('Unclosed');a.push(one());}i++;return a;}if(v===')')throw Error('Unexpected close');return v;}const out=[];while(i<t.length)out.push(one());return out;}
+const flat=v=>Array.isArray(v)?'('+v.map(flat).join(' ')+')':v;
+function pretty(v,indent){const s=flat(v);if(s.length+indent<=100||!Array.isArray(v))return s;let first=0;while(first<v.length&&!Array.isArray(v[first]))first++;const head='('+v.slice(0,first).join(' ');return head+'\n'+v.slice(first).map(x=>' '.repeat(indent+2)+pretty(x,indent+2)).join('\n')+')';}
+for(const path of process.argv.slice(2)){const forms=parse(fs.readFileSync(path,'utf8'));const output='declarations.begin\n'+forms.map(x=>pretty(x,0)).join('\n')+'\ndeclarations.end\n';if(JSON.stringify(parse(output))!==JSON.stringify(forms))throw Error('Syntax changed');fs.writeFileSync(path,output);}
