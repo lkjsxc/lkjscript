@@ -5,40 +5,54 @@ Production bytecode is checked against an independent canonical interpreter.
 
 ## Accepted implementation and evidence
 
-Profile 7 is accepted at commit `5e7e8d37831b33a9e44c3e50a0b733cfd049b64d`,
-Git tree `06ad6feaa9df96a12f1e1ecab039855bff6072e1`. Its complete staged-tree run
-finished on 2026-10-30 at 11:42:23 UTC, before that same tree was committed.
-The run used base HEAD `932f197ebcd9c17e2702372300ab73996bb20754`; this is the
-recorded precommit source identity, not a claim that its committed tree contains
-Profile 7. The owning process subsequently joined with exit zero. Recovery checks
-bind the unchanged raw indexed files and committed tree to the terminal receipts.
-The acceptance record was integrated in documentation-only commit
-`bcf455816c11f99ebb60e76f786a1c2baf1e41e7`, separate from that tested tree.
+The stable artifact index sort is accepted and integrated at commit
+`67132509f820b8e6b1f5e7ba55112e310e0da162`, Git tree
+`ba3b9359df57717a360d33fb3f6017679fdbc975`. Local main, origin/main and
+the read-only remote main ref agreed after fast-forward and push. Acceptance
+completed 2026-10-31 08:29:27 JST against precommit source HEAD
+`bcf455816c11f99ebb60e76f786a1c2baf1e41e7` and that exact staged tree.
+This documentation-only follow-up is separate from the tested implementation.
 
-The accepted implementation follows Phase 1 at `e7a44d289ddd90daf81125a9f37c66fa17cd3c21`
-and the list slice at `932f197ebcd9c17e2702372300ab73996bb20754`.
-The [capacity ledger](decisions/20261025-capacity-unbounding.md) owns the remaining
-boundary inventory. The [Profile-7 decision](decisions/20261030-artifact-profile7.md)
-records the format cut, public adoption, earlier focused controls and final seal.
+| Operation on the exact sort tree | Result | Time |
+| --- | --- | ---: |
+| Staged-tree verifier bootstrap | Passed; four Cargo units reused | 8.403s |
+| Literal selfhost selection | 152 passed / 0 failed / 3 ignored | 3,470.68s test time |
+| Native ELF selection | 11 passed / 0 failed / 0 ignored | 119.22s test time |
+| Combined literal selfhost script | Passed | 3,590.370s |
+| Named maintained native closure | 1 passed | 23.088s command time |
+| Named whole owner/type inventory | 1 passed | 13.210s command time |
+| Fresh full registry, four workers | 29 passed / 0 reused / 0 unrun | 3,942.735s checker time |
+| Release target | Passed | 0.006s |
 
-| Acceptance operation on the exact Profile-7 tree | Terminal result | Execution / command time |
-| --- | --- | --- |
-| Exact staged-tree verifier bootstrap | Passed; source and output digests bound | 197.031s |
-| Literal selfhost selection | 149 passed, 0 failed, 2 ignored, 2,705 filtered | 3,414.29s test execution |
-| Native ELF selection | 11 passed, 0 failed, 0 ignored, 2,845 filtered | 117.66s test execution |
-| Combined selfhost script with input-hash readback | Passed | 3,532.520s |
-| Maintained native closure measurement | 1 passed, 0 failed, 0 ignored, 2,855 filtered | 23.30s test execution |
-| Complete owner/type/profile inventory | 1 passed, 0 failed, 0 ignored, 2,855 filtered | 13.03s test execution |
-| Full gate registry, fresh, four checker workers | 29 passed fresh; 0 reused; 0 unrun | 3,849.927s checker execution |
-| Release target policy | Passed | 0.006s |
-
-Full receipt SHA-256: `36ec247b40817f8bbc6f835fb516677ebcff2f1d67c23303600c8ccd2bbe4400`.
-Bootstrap receipt: `ec0b1604523b0fcc7d1b3ab9bf14883167e875ab4d8cd9f6b8e11cbd6675fd92`.
-Terminal checkpoint: `34865dff49d1f2294090100e105bb327da0ed6a09faa4d10c6c3284ab4d24988`.
-The unchanged verifier executable is
+Full receipt SHA-256:
+`0b9ed248f5797176ae7eb0b8bb23bbe2dc18b7ac3bd842ec93cc604b08140f25`.
+Bootstrap receipt:
+`f8a7e5472d4abbc05e159ab4a4d74c84fa6074496cfb76cbfbcf6bbea18986cd`.
+Terminal checkpoint:
+`493017e05517612444b2fba36ddfde6a13baa58db501b8db225bfea962ed55c0`.
+Independent review:
+`b8ef93868e56477ef1ebcb1e3b032b554817f07a490bb7c9395fc3f55d553bf6`.
+The verifier SHA-256 remains
 `2c798059ce30fdb6e4e42d63061d8ddb4a81efb1bd6eaf3e1c7f924c97929747`.
-Bootstrap observed one reused Cargo artifact; that is distinct from the zero reused
-full-check gates. No release archive or deployment was published by this seal.
+No release archive or deployment was published.
+
+The accepted sort tree's Mode-0 native C2/C3 equality is 1,262,139 bytes,
+SHA-256 `0f52a49e0d4a79c0119f9b70e3ae7c44d901d03810e38962b2402f372ad5c24d`.
+Mode-1 C1/C2/C3 artifact equality is 10,400,001 bytes, SHA-256
+`af8231de18b4e20866bd37672d3efcda50617fd2d29cb1bcccd080153523b7a7`;
+the capacity artifact is 11,179,173 bytes, SHA-256
+`737f18a830ae343e1c7715e840a22edc13507856a8475e7eb68dec745be552b3`.
+Complete canonical object comparisons, strict loading, independent behavior and
+compiler-mutation controls passed. These are projected-input backend results.
+
+Profile 7 was previously accepted at
+`5e7e8d37831b33a9e44c3e50a0b733cfd049b64d`, tree
+`06ad6feaa9df96a12f1e1ecab039855bff6072e1`, with precommit source
+`932f197ebcd9c17e2702372300ab73996bb20754`. Its
+[decision](decisions/20261030-artifact-profile7.md) retains the historical seal.
+The [sorting decision](decisions/20261031-artifact-index-sort.md) owns the current
+implementation and measurements; the
+[capacity ledger](decisions/20261025-capacity-unbounding.md) owns remaining boundaries.
 
 ## Accepted capacity and policy capabilities
 
@@ -86,11 +100,10 @@ construction, strict loading, independent behavior and malformed controls pass.
 This cut removes projection-only ceilings; it does not remove the canonical unit
 codec's independent 8 MiB cap or the outer 4 MiB CompilerUnit storage allowance.
 
-## Current artifact-ordering candidate
+## Accepted artifact ordering
 
-The stable index merge sort is publicly adopted and has passed focused checks,
-complete proposal replay and a pinned complete-compiler artifact comparison.
-Fresh full acceptance and mainline integration of this candidate are pending.
+The stable index merge sort passed public adoption, complete proposal replay,
+a pinned complete-compiler artifact comparison and the fresh acceptance above.
 The [sorting decision](decisions/20261031-artifact-index-sort.md) owns its algorithm,
 source bindings, measurements and evidence limits.
 
@@ -128,7 +141,7 @@ Physical storage is four packs / 87,934,112 bytes after public GC. These are
 physical storage observations, separate from Git and semantic identities.
 
 The following fixed points belong to the accepted Profile-7 graph before the
-sorting change; they are not fixed-point claims for the current candidate.
+sorting change; the current accepted tree's fixed points are recorded above.
 
 | Reproduction on the accepted Profile-7 tree | Bytes | SHA-256 |
 | --- | ---: | --- |
@@ -144,12 +157,30 @@ raw-source self-compilation of the maintained compiler.
 
 ## Next dependency batches and unproven claims
 
-Complete the artifact-ordering candidate's exact staged-tree acceptance, then
-integrate the verified tree. The next semantic batch admits and lowers the
-copyable compound source closure, including closed List<I64> substitutions,
-structural records, active copyable intrinsics and binary-filter targets.
-Its drafts are not accepted compiler capability. Affine ByteBuffer custody and
-source-derived canonical artifacts remain explicit dependent batches.
+The next dependency-closed batch removes the aggregate default source-admission
+work/read ceilings that refused a larger complete compiler authoring workload,
+then integrates the drafted compound/custody source compiler and canonical
+artifact path. The current drafts contain 117 modules / 1,089 callables; these
+are proposal counts, not an accepted graph inventory.
+
+An isolated earlier compound/custody prototype consumed its own complete raw
+source and produced equal C2/C3 ELF bytes (2,891,380 bytes, SHA-256
+`d8037e1033f84076cfa2a9372ad148c4521a6308c170a2a82d937a491a3a8de3`).
+Each self-produced stage passed 13 behavioral/source-mutation and 19
+negative/baseline controls: 64 cases total. Receipt SHA-256:
+`f51f3fe9bfa30eb9879e80d1da146a6c9b3ff02682a13e1bd061c9fb5fc31fa4`.
+That prototype uses earlier private request profiles and is separate from the
+maintained graph and current-format acceptance.
+
+The new current-format source artifact draft produced a 135,359-byte fixture
+artifact equal byte-for-byte to a fresh C0 public build, SHA-256
+`5d62f0fff6b42a6fa1e30d7a84d6e0fa6a594f31bebd8d7fea80f0f52ca13d0b`.
+C0's writer strictly loaded those equal bytes before publication; the emitted
+scalar ELF executed with result 42. Receipt SHA-256:
+`39d7e52c1b56149f03817671611b2447ad300bf3604084212490dc37a0d7c40d`.
+The draft was evaluated by a local development interpreter. Its Rust harness,
+native whole-compiler artifact fixed point, public adoption and fresh gates
+remain pending.
 
 Milestone A requires source-driven compound types and all active expressions,
 complete intrinsic and closed generic admission, affine ByteBuffer custody and

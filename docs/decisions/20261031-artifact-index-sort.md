@@ -2,10 +2,11 @@
 
 Date: 2026-10-31 (Asia/Tokyo).
 
-State: publicly adopted implementation with focused verification and a measured
-complete-compiler comparison. Fresh full staged-tree acceptance and mainline
-integration are pending. The acceptance receipts, when complete, must bind the
-exact staged tree; no result below substitutes for that seal.
+State: accepted and integrated at
+`67132509f820b8e6b1f5e7ba55112e310e0da162`, tree
+`ba3b9359df57717a360d33fb3f6017679fdbc975`. The final seal below binds
+that implementation tree. This later documentation-only follow-up records its
+history without claiming that its own tree was tested by the earlier seal.
 
 ## Problem and chosen dependency path
 
@@ -57,7 +58,7 @@ Base main and candidate precommit HEAD:
 `bcf455816c11f99ebb60e76f786a1c2baf1e41e7`.
 The focused implementation index tree was
 `a9e9819ac81d509b8a180780e1f4a024f506fa3e`; documentation finalization produces a
-different candidate tree that still requires the full seal.
+different candidate tree; the final accepted tree is bound below.
 
 Public transaction:
 `transaction_53bde7febf56aceec3b48707947b5571c41c6950d5f885fad0d544dc33fd1d33`.
@@ -178,3 +179,71 @@ artifact. Preserved canonical objects and before/after equality do not establish
 `A_host = A1 = A2 = A3`. Raw-source semantic admission, ByteBuffer custody,
 source-derived canonical summaries/artifacts, full P_self families and native
 phase reclamation remain independent obligations.
+
+## Completed staged-tree acceptance
+
+The stable artifact index sort is accepted and integrated at commit
+`67132509f820b8e6b1f5e7ba55112e310e0da162`, Git tree
+`ba3b9359df57717a360d33fb3f6017679fdbc975`. Local main, origin/main and
+the read-only remote main ref agreed after fast-forward and push. Acceptance
+completed 2026-10-31 08:29:27 JST against precommit source HEAD
+`bcf455816c11f99ebb60e76f786a1c2baf1e41e7` and that exact staged tree.
+This documentation-only follow-up is separate from the tested implementation.
+
+| Operation on the exact sort tree | Result | Time |
+| --- | --- | ---: |
+| Staged-tree verifier bootstrap | Passed; four Cargo units reused | 8.403s |
+| Literal selfhost selection | 152 passed / 0 failed / 3 ignored | 3,470.68s test time |
+| Native ELF selection | 11 passed / 0 failed / 0 ignored | 119.22s test time |
+| Combined literal selfhost script | Passed | 3,590.370s |
+| Named maintained native closure | 1 passed | 23.088s command time |
+| Named whole owner/type inventory | 1 passed | 13.210s command time |
+| Fresh full registry, four workers | 29 passed / 0 reused / 0 unrun | 3,942.735s checker time |
+| Release target | Passed | 0.006s |
+
+Full receipt SHA-256:
+`0b9ed248f5797176ae7eb0b8bb23bbe2dc18b7ac3bd842ec93cc604b08140f25`.
+Bootstrap receipt:
+`f8a7e5472d4abbc05e159ab4a4d74c84fa6074496cfb76cbfbcf6bbea18986cd`.
+Terminal checkpoint:
+`493017e05517612444b2fba36ddfde6a13baa58db501b8db225bfea962ed55c0`.
+Independent review:
+`b8ef93868e56477ef1ebcb1e3b032b554817f07a490bb7c9395fc3f55d553bf6`.
+The verifier SHA-256 remains
+`2c798059ce30fdb6e4e42d63061d8ddb4a81efb1bd6eaf3e1c7f924c97929747`.
+No release archive or deployment was published.
+
+The accepted sort tree's Mode-0 native C2/C3 equality is 1,262,139 bytes,
+SHA-256 `0f52a49e0d4a79c0119f9b70e3ae7c44d901d03810e38962b2402f372ad5c24d`.
+Mode-1 C1/C2/C3 artifact equality is 10,400,001 bytes, SHA-256
+`af8231de18b4e20866bd37672d3efcda50617fd2d29cb1bcccd080153523b7a7`;
+the capacity artifact is 11,179,173 bytes, SHA-256
+`737f18a830ae343e1c7715e840a22edc13507856a8475e7eb68dec745be552b3`.
+Complete canonical object comparisons, strict loading, independent behavior and
+compiler-mutation controls passed. These are projected-input backend results.
+
+Evidence directory:
+`.artifacts/capacity-unbounding/seal-artifact-sort-20261031-round2`.
+
+The terminal runner bound all 2,198 indexed files / 156,645,779 bytes, modes,
+source HEAD, index tree and verifier digest before and after every operation.
+Independent review repeated raw indexed-byte/mode checks, verified every log
+digest, matched the current 29-gate registry and confirmed zero unstaged or
+nonignored untracked files before committing the exact tree.
+
+The commands were the staged-tree bootstrap with both expected identities,
+`RUST_TEST_THREADS=8 bash tools/selfhost/verify.sh`, the explicitly invoked
+`selfhost_source_measure_maintained_native_closure` and
+`selfhost_source_profile_inventories_every_owner_and_type` controls under the
+shared target lease, `check full --fresh --machine --jobs 4`, and
+`release target`.
+
+Full verification input remained
+`verification_871f711b672d859466fea35312da49d3de87d90e695f43cd6304ac91ec1bc63b`.
+Selfhost log SHA-256:
+`5d7887a2efb4332fa8d677d2f54e95fd46409583b4d00c2743c0f69000ecb37f`.
+Native log:
+`9c0dddd3af74e931635adca042e4eaf289e5052fce28699ffb0e6abffe7aacd6`.
+The three normal-selection ignores remain explicit; the named closure measurement
+ran separately. No full gate was reused. Raw-source Milestone A, full P_self and
+same-process phase reclamation remain separate obligations.
