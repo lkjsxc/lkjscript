@@ -12,19 +12,23 @@ The test establishes `C2 = C3` and `Ahost = A1 = A2 = A3`, with independent
 behavior, source mutations, complete-inventory negatives and strict loading.
 The original repository was byte-for-byte unchanged by the test.
 
-This is focused component evidence, not the fresh full staged-tree acceptance
-seal. The working branch is `compiler/20261031-source-active`, based on
-`71405a389a422a8fa51850ef70ba9f34040aca56` (tree
-`d1036ebca89238a914d221c7ba3d0d951b4f0f21`). That base is the last observed
-local/remote mainline commit; its tree does not contain this candidate.
-The [source self-compilation decision](decisions/20261101-active-source-self-compilation.md)
-records exact component identities, measurements and evidence boundaries.
-Terminal acceptance and integration must bind the finalized staged tree in the
-acceptance commit and external receipt, without editing sealed inputs.
+The implementation is accepted and integrated on main at commit
+`010ce014ae97e87df17d2f6acbea728f73bf14d1`, with tested Git tree
+`7c4b670f4cabb5f50284f81b141fe81517a94e9d`. Fresh full acceptance passed all
+29 gates without reuse or omissions, and release-target validation passed. The
+bootstrap source base was `71405a389a422a8fa51850ef70ba9f34040aca56`;
+that base commit is distinct from the verified staged candidate.
+
+This documentation-only follow-up records the terminal evidence for that exact
+implementation tree. It is not a new full seal for the follow-up commit. The
+[acceptance record](decisions/20261101-active-source-acceptance.json) binds the
+terminal receipts, verifier, graph and native fixed-point outputs; the
+[source self-compilation decision](decisions/20261101-active-source-self-compilation.md)
+owns the implementation rationale and focused measurements.
 
 Tier 2 remains incomplete: full `P_self` semantics (Milestone B) and repeated
 same-process native phase reclamation (Milestone C) are separate obligations.
-No release archive or deployment has been published for this candidate.
+No release archive or production deployment was published.
 
 ## Authoritative source and exact outputs
 
@@ -52,7 +56,7 @@ Public GC retained the exact HEAD and complete source transport while compacting
 observations, not native memory reclamation. The 21,795,545-byte source transport
 has SHA-256 `86e2aeda5ad71147deb5c1e4e5e2f88ffb13b92ad20c7aaa1ae2afd8d5d3cecc`.
 
-## Implemented candidate capabilities
+## Integrated capabilities
 
 Source compilation covers the active scalar/compound type closure, structural
 record inference, fields, lists, lexical control flow, direct recursion, closed
@@ -84,6 +88,33 @@ Bulk operations avoid per-octet boxed temporaries. Immutable native scalars -1
 through 255 and both Booleans reuse read-only objects; other I64 values retain
 checked allocation. Neither mechanism limits the semantic integer domain.
 
+## Fresh staged-tree acceptance
+
+All commands below ran against the exact implementation tree above. Times are
+whole command durations, not isolated compiler performance measurements.
+
+| Command phase | Terminal result | Elapsed |
+| --- | --- | ---: |
+| bootstrap | Passed | 9.368s |
+| selfhost | 195 passed / 7 ignored; 12 passed / 0 ignored; 12 passed / 0 ignored | 3976.531s |
+| maintained-native-closure | 1 passed / 0 failed / 0 ignored | 44.437s |
+| whole-owner-type-inventory | 1 passed / 0 failed / 0 ignored | 37.252s |
+| raw-source-fixed-point | 1 passed / 0 failed / 0 ignored | 501.821s |
+| full | 29 fresh passed; zero reused/unrun | 4190.479s |
+| release-target | Passed | 0.003s |
+
+Full receipt SHA-256:
+`ec1b43d63c3b373cebbcc88af74ab20080b138bed6eaa205484349e1e91fa2f4`.
+Terminal seal SHA-256:
+`6bce073f4b166158b379374e032963ba9cd8e407f1318e6c4c2a4f3fe4ad6d55`.
+Independent terminal review SHA-256:
+`6f48c9dbba218c00bec2f997b67098aa221646fe7d8d44b1f659f091df97110d`.
+The selfhost, source-framing and native selections respectively passed
+195, 12 and 12 tests; seven selfhost measurement/explicit controls were ignored
+in that ordinary selection. The named maintained-native-closure and raw-source
+fixed-point controls were executed explicitly and passed. These counts do not
+claim that every ignored measurement test ran.
+
 ## Focused evidence and measured cost
 
 The complete raw-source fixed-point test passed with 1 passed / 0 failed /
@@ -113,17 +144,9 @@ completed in 19.303s with sampled peak RSS 16,452,192 KiB. Actual allocation tra
 bytes copied and peak live language data were not measured. General native scratch
 allocations still remain until process exit.
 
-## Next acceptance and architectural work
+## Next architectural work
 
-Finalize and stage this dependency-closed candidate; bootstrap the exact staged
-tree; run the literal selfhost/native script, named maintained-native-closure and
-whole-owner/type controls, the explicit raw-source fixed point, all 29 fresh full
-gates and release target; commit only the tested tree and integrate normally.
-The named historical closure control now uses unsupported F64 rather than the
-newly supported Bytes type for its unused-descriptor negative; the corrected
-control passed in 45.48s test time (1 passed, zero failed/ignored).
-
-After integration, prioritize separate child phase allocation contexts and sound
+Prioritize separate child phase allocation contexts and sound
 survivor promotion, with repeated native invocations in one process, including
 failure and cancellation. Process exit, scalar interning and bulk-copy efficiency
 are not that proof. Then close remaining `P_self` nominal owned records/choices and
