@@ -31,6 +31,9 @@ mod stage_controls;
 
 #[path = "selfhost_source_bulk_tests.rs"]
 mod bulk;
+
+#[path = "native_phase_tests.rs"]
+mod phase;
 use artifact_support::{RepositoryCopy, run_filter, run_scalar};
 
 type Check<T> = Result<T, String>;
@@ -1470,6 +1473,25 @@ fn maintained_fixed_point(case: &InputCase) -> Check<()> {
         // unit/provenance inventory. Equality with another generation is not a seal.
         strict_artifact(label, bytes, case, &host)?;
     }
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        phase::verify_compiler(
+            "C1-Rust",
+            &c1,
+            &artifact_request,
+            &host.bytes,
+            &elf_request,
+            &c2,
+        )?;
+        phase::verify_compiler(
+            "C2-source",
+            &c2,
+            &artifact_request,
+            &host.bytes,
+            &elf_request,
+            &c3,
+        )?;
+    }
     cheap_compiler_diagnostic_oracles(case, &host, 12)?;
     stage_behavior_controls(&c2, &c3)?;
 
@@ -1531,7 +1553,7 @@ fn maintained_fixed_point(case: &InputCase) -> Check<()> {
         mutant_carrier_sha256={} mutant_elf_sha256={} mutant_artifact_sha256={} \
         independent_behavior=42,43 compiler_mutation_diagnostic=77 elapsed_ms={} \
         input_boundary=complete-raw-source request_profile=2 source_profile=3 environment=empty \
-        full_P_self=false same_process_reclamation=false",
+        full_P_self=false same_process_reclamation={}",
         sha256(&case.carrier),
         sha256(&elf_request),
         sha256(&artifact_request),
@@ -1545,13 +1567,14 @@ fn maintained_fixed_point(case: &InputCase) -> Check<()> {
         sha256(&mutant.carrier),
         sha256(&mutant2.elf),
         sha256(&mutant2.artifact),
-        start.elapsed().as_millis()
+        start.elapsed().as_millis(),
+        cfg!(all(target_os = "linux", target_arch = "x86_64"))
     );
     Ok(())
 }
 
 #[test]
-#[ignore = "explicit Milestone A acceptance: complete maintained S, raw C1/C2/C3, artifacts and behavior; run separately"]
+#[ignore = "explicit maintained compiler acceptance: raw C1/C2/C3, artifacts, behavior and native phases; run separately"]
 fn selfhost_source_artifact_whole_maintained_raw_source_fixed_point() -> Check<()> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/selfhost/project");
     // Public opens can repair a damaged lock/catalog. Capture the healthy,
@@ -1602,10 +1625,11 @@ fn selfhost_source_artifact_whole_maintained_raw_source_fixed_point() -> Check<(
             eprintln!(
                 "raw source maintained fixed_point_component_passed=true original_repository_unchanged=true \
                 exact_source_carrier_sha256={} original_core_sha256={} package_revision={} \
-                full_P_self=false same_process_reclamation=false",
+                full_P_self=false same_process_reclamation={}",
                 sha256(&original.carrier),
                 sha256(&original.canonical_core),
-                original.revision_digest
+                original.revision_digest,
+                cfg!(all(target_os = "linux", target_arch = "x86_64"))
             );
             Ok(())
         }

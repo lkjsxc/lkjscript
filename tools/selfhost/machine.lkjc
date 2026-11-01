@@ -132,7 +132,7 @@ declarations.begin
           (binding branch (call ci::size (local d)))
           (binding e
             (type ByteBuffer)
-            (call elf::condition (i64 132) (call ci::add (local branch) (i64 42)) (local d)))
+            (call elf::condition (i64 132) (call ci::add (local branch) (i64 76)) (local d)))
           (binding f
             (type ByteBuffer)
             (call elf::raw
@@ -152,6 +152,7 @@ declarations.begin
                 (i64 248))
               (local e)))
           (binding loop (call ci::size (local f)))
+          (binding polled (type ByteBuffer) (call machine::wide-call (i64 51712) (local f)))
           (binding g
             (type ByteBuffer)
             (call elf::raw
@@ -173,7 +174,7 @@ declarations.begin
                 (i64 72)
                 (i64 255)
                 (i64 201))
-              (local f)))
+              (local polled)))
           (in (call elf::condition (i64 133) (local loop) (local g))))))
     (function create divide
       (visibility private)
@@ -291,17 +292,19 @@ declarations.begin
       (returns ByteBuffer)
       (body
         (let
+          (binding checked (type ByteBuffer) (call machine::wide-call (i64 51712) (local out)))
           (binding a
             (type ByteBuffer)
             (if
               (call ci::eq (local count) (i64 0))
-              (local out)
+              (local checked)
               (let
-                (binding b (type ByteBuffer) (call asm::imm (i64 1) (local count) (local out)))
+                (binding b (type ByteBuffer) (call asm::imm (i64 1) (local count) (local checked)))
                 (binding c
                   (type ByteBuffer)
                   (call asm::lea (i64 7) (i64 5) (call ci::mul (local count) (i64 -8)) (local b)))
                 (binding loop (call ci::size (local c)))
+                (binding polled (type ByteBuffer) (call machine::wide-call (i64 51712) (local c)))
                 (binding d
                   (type ByteBuffer)
                   (call elf::raw
@@ -317,7 +320,7 @@ declarations.begin
                       (i64 72)
                       (i64 255)
                       (i64 201))
-                    (local c)))
+                    (local polled)))
                 (in (call elf::condition (i64 133) (local loop) (local d))))))
           (in (call elf::wide-jump (local target) (local a))))))
     (function create invoke
@@ -368,11 +371,14 @@ declarations.begin
                 (local i))))
           (binding tag (call flow::field (local data) (local at) (i64 0)))
           (binding operand (call flow::field (local data) (local at) (i64 8)))
+          (binding checked (type ByteBuffer)
+            (if (call ci::either (call ci::eq (local tag) (i64 7)) (call ci::eq (local tag) (i64 8)))
+              (call machine::wide-call (i64 51712) (local out)) (local out)))
           (in
             (if
               (call ci::lt (local tag) (i64 3))
               (let
-                (binding a (type ByteBuffer) (call elf::raw (list I64 (i64 72) (i64 184)) (local out)))
+                (binding a (type ByteBuffer) (call elf::raw (list I64 (i64 72) (i64 184)) (local checked)))
                 (binding b
                   (type ByteBuffer)
                   (call ci::append
@@ -385,7 +391,7 @@ declarations.begin
                 (in (call ci::push (i64 80) (local b))))
               (if
                 (call ci::eq (local tag) (i64 3))
-                (call elf::raw (list I64 (i64 49) (i64 192) (i64 80)) (local out))
+                (call elf::raw (list I64 (i64 49) (i64 192) (i64 80)) (local checked))
                 (if
                   (call ci::lt (local tag) (i64 6))
                   (if
@@ -393,26 +399,26 @@ declarations.begin
                     (let
                       (binding a
                         (type ByteBuffer)
-                        (call asm::load (i64 0) (i64 5) (call displacement (local operand)) (local out)))
+                        (call asm::load (i64 0) (i64 5) (call displacement (local operand)) (local checked)))
                       (in (call ci::push (i64 80) (local a))))
                     (let
-                      (binding a (type ByteBuffer) (call ci::push (i64 88) (local out)))
+                      (binding a (type ByteBuffer) (call ci::push (i64 88) (local checked)))
                       (in
                         (call asm::store (i64 5) (call displacement (local operand)) (i64 0) (local a)))))
                   (if
                     (call ci::eq (local tag) (i64 6))
-                    (call elf::raw (list I64 (i64 72) (i64 131) (i64 196) (i64 8)) (local out))
+                    (call elf::raw (list I64 (i64 72) (i64 131) (i64 196) (i64 8)) (local checked))
                     (if
                       (call ci::eq (local tag) (i64 7))
                       (call elf::wide-jump
                         (call instruction-address (local data) (local layout) (local f) (local operand))
-                        (local out))
+                        (local checked))
                       (if
                         (call ci::eq (local tag) (i64 8))
                         (let
                           (binding a
                             (type ByteBuffer)
-                            (call elf::raw (list I64 (i64 88) (i64 72) (i64 133) (i64 192)) (local out)))
+                            (call elf::raw (list I64 (i64 88) (i64 72) (i64 133) (i64 192)) (local checked)))
                           (in
                             (call elf::wide-condition
                               (i64 132)
@@ -430,9 +436,9 @@ declarations.begin
                             (local f)
                             (local at)
                             (call ci::eq (local tag) (i64 10))
-                            (local out))
+                            (local checked))
                           (let
-                            (binding a (type ByteBuffer) (call ci::push (i64 88) (local out)))
+                            (binding a (type ByteBuffer) (call ci::push (i64 88) (local checked)))
                             (in (call end (local a)))))))))))))))
     (function create instruction
       (visibility private)
@@ -568,13 +574,14 @@ declarations.begin
           (binding decl (call flow::declaration (local data) (local f)))
           (binding code (call flow::field (local data) (local decl) (i64 48)))
           (binding start (call ci::size (local out)))
+          (binding checked (type ByteBuffer) (call machine::wide-call (i64 51712) (local out)))
           (binding a
             (type ByteBuffer)
             (call prologue
               (local start)
               (call flow::field (local data) (local decl) (i64 16))
               (call flow::field (local data) (local decl) (i64 24))
-              (local out)))
+              (local checked)))
           (in
             (if
               (call ci::eq (local code) (i64 0))
@@ -701,10 +708,10 @@ declarations.begin
         (if
           (call ci::eq (local code) (i64 32))
           (let
-            (binding final (type ByteBuffer) (call ci::pad (i64 65536) (i64 0) (local out)))
+            (binding final (type ByteBuffer) (call ci::pad (i64 49152) (i64 0) (local out)))
             (in
               (if
-                (call ci::eq (call ci::size (local final)) (i64 65536))
+                (call ci::eq (call ci::size (local final)) (i64 49152))
                 (record structural (field code (i64 0)) (field bytes (call ci::freeze (local final))))
                 (call layout-failure (local final)))))
           (let

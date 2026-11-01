@@ -5,6 +5,7 @@ declarations.begin
       (visibility private)
       (effect pure)
       (parameter create n (type I64))
+      (parameter create binary (type Bool))
       (returns ByteBuffer)
       (body
         (let
@@ -39,7 +40,9 @@ declarations.begin
           (binding x (type ByteBuffer) (call ci::le (i64 6) (i64 4) (local w)))
           (binding y (type ByteBuffer) (call ci::pad (i64 168) (i64 0) (local x)))
           (binding z (type ByteBuffer) (call ci::le (i64 16) (i64 8) (local y)))
-          (in (call ci::pad (i64 4096) (i64 0) (local z))))))
+          (binding phase-header (type ByteBuffer)
+            (if (local binary) (call phase::header (local z)) (local z)))
+          (in (call ci::pad (i64 4096) (i64 0) (local phase-header))))))
     (function create raw
       (visibility public)
       (effect pure)
@@ -78,11 +81,12 @@ declarations.begin
       (returns ByteBuffer)
       (body
         (let
+          (binding recovery (type ByteBuffer) (call phase::trap (local message) (local out)))
           (binding a
             (type ByteBuffer)
             (call raw
               (list I64 (i64 191) (i64 2) (i64 0) (i64 0) (i64 0) (i64 72) (i64 141) (i64 53))
-              (local out)))
+              (local recovery)))
           (binding b (type ByteBuffer) (call ci::rel (local message) (local a)))
           (binding c (type ByteBuffer) (call ci::push (i64 186) (local b)))
           (binding d (type ByteBuffer) (call ci::le (local length) (i64 4) (local c)))
@@ -98,27 +102,7 @@ declarations.begin
       (returns ByteBuffer)
       (body
         (let
-          (binding a
-            (type ByteBuffer)
-            (call raw (list I64 (i64 72) (i64 131) (i64 60) (i64 36) (i64 1)) (local out)))
-          (binding b (type ByteBuffer) (call condition (i64 133) (i64 4288) (local a)))
-          (binding init
-            (type ByteBuffer)
-            (call raw (list I64 (i64 77) (i64 49) (i64 246) (i64 77) (i64 49) (i64 255)) (local b)))
-          (binding entry
-            (type ByteBuffer)
-            (if
-              (call ci::eq
-                (call flow::field
-                  (local data)
-                  (call flow::declaration (local data) (call ci::u64 (local data) (i64 144)))
-                  (i64 16))
-                (i64 1))
-              (call jump (i64 6144) (local init))
-              (call machine::wide-call
-                (call machine::address (local data) (local layout) (call ci::u64 (local data) (i64 144)))
-                (local init))))
-          (binding c (type ByteBuffer) (call jump (i64 4352) (local entry)))
+          (binding c (type ByteBuffer) (call jump (i64 49152) (local out)))
           (binding d (type ByteBuffer) (call ci::pad (i64 4160) (i64 144) (local c)))
           (binding e
             (type ByteBuffer)
@@ -372,7 +356,9 @@ declarations.begin
             (call ci::add
               (call machine::data-start (local data) (local layout))
               (call ci::u64 (local data) (i64 136))))
-          (binding a (type ByteBuffer) (call header (local n)))
+          (binding a (type ByteBuffer) (call header (local n)
+            (call ci::eq (call flow::field (local data)
+              (call flow::declaration (local data) (call ci::u64 (local data) (i64 144))) (i64 16)) (i64 1))))
           (binding b (type ByteBuffer) (call runtime-closure (local data) (local layout) (local a)))
           (binding runtime (call runtime::emit (local data) (local layout) (local b)))
           (in

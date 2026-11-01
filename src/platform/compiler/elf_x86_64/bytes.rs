@@ -127,19 +127,12 @@ impl Emitter<'_> {
     /// Copy Bx octets from R8 to R9, leaving both pointers at the end. Empty
     /// inputs perform no dereference, including an empty slice at length.
     fn bytes_copy_loop(&mut self) {
-        self.a.imm(Cx, 0);
-        let next = self.a.label();
-        let done = self.a.label();
-        self.a.bind(next);
-        self.a.bin(0x39, Cx, Bx);
-        self.a.when(AE, done);
-        self.a.load_byte(Dx, R8);
-        self.a.store_byte(R9, Dx);
-        self.a.group(0, R8, 1);
-        self.a.group(0, R9, 1);
-        self.a.group(0, Cx, 1);
-        self.a.jump(next);
-        self.a.bind(done);
+        self.a.mov(Si, R8);
+        self.a.mov(Di, R9);
+        self.a.mov(Cx, Bx);
+        self.runtime.copy_bytes(&mut self.a);
+        self.a.mov(R8, Si);
+        self.a.mov(R9, Di);
     }
 
     pub(super) fn bytes_owned_copy(&mut self) {
@@ -160,6 +153,7 @@ impl Emitter<'_> {
         let next = self.a.label();
         let done = self.a.label();
         self.a.bind(next);
+        self.runtime.checkpoint_interval(&mut self.a, Cx);
         self.a.bin(0x39, Cx, Bx);
         self.a.when(AE, done);
         self.a.load(Dx, R8, 0);
@@ -207,6 +201,7 @@ impl Emitter<'_> {
         self.a.load(R9, Cx, 16);
         self.a.imm(Cx, 0);
         self.a.bind(next);
+        self.runtime.checkpoint_interval(&mut self.a, Cx);
         self.a.bin(0x39, Cx, Bx);
         self.a.when(AE, equal);
         self.a.load_byte(Dx, R8);

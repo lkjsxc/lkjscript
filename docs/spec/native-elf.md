@@ -34,8 +34,9 @@ a successful probe is appended after growth. The reader keeps the
 only base pointer and a relative length, updates the base after every remap, and
 creates the immutable `Bytes` descriptor at EOF. The mapping then stays stable
 through execution and output, including outputs that alias or slice the input.
-No old growth mapping is retained. This input lifetime rule does not implement
-general heap or phase reclamation.
+No old growth mapping is retained. This input lifetime rule is separate from the
+[pure phase interface](native-phases.md), which receives caller-owned immutable
+input and materializes an independent output before reclaiming scratch.
 
 The length ABI remains a nonnegative I64. Capacities are positive powers of two
 from 64 KiB through 2^62; doubling is checked before the signed representation
@@ -58,7 +59,7 @@ integer code, with bounded chunk-tree recursion and independent block/chunk/tree
 test vectors. `core.bytes.blake3-derive-key(Text, Bytes) -> Bytes` hashes the exact
 UTF-8 context with DERIVE_KEY_CONTEXT, then hashes the material with the context
 key and DERIVE_KEY_MATERIAL. The intermediate key uses 32 bytes of lexical stack
-storage; both inputs retain the 256 MiB value bound. This neutral operation is
+storage; both inputs use checked nonnegative I64 byte extents. This neutral operation is
 required by current artifact and object identities.
 ByteBuffer empty/push/append-slice/append-i64-le/get/length/freeze/discard preserve
 admitted exclusive mutation and scoped read-only borrowing. Growth uses checked
@@ -72,9 +73,14 @@ complete source and normalized admission. Immutable native I64 values -1 through
 scalar objects; all other integers retain ordinary checked allocation. This
 physical lookup table does not restrict supported scalar values or change affine
 custody. It does not reclaim general scratch allocations.
-All dynamically allocated backing storage belongs to the
-process heap, including retired growth allocations and abandoned buffers; it is
-reclaimed at process exit, with no per-buffer RSS reclamation claim.
+Dynamically allocated backing storage, including retired growth allocations and
+abandoned buffers, belongs to the active native allocation context. Ordinary
+command execution retains its context until process exit. A pure binary filter
+also exports the current [LKJPH001 phase interface](native-phases.md): each call
+owns separate scratch and output slab chains, promotes the complete result and
+reclaims scratch before return. Releasing the caller's output handle unmaps its
+remaining slabs. This is invocation-level reclamation, not per-buffer collection
+or language-level Region support.
 The standard library's pure map and fold run as native calls.
 Ordinary entry parameters must be I64; results may be supported scalar values,
 lists and records. Binary filters use the separate exact signature above.
@@ -85,9 +91,14 @@ and other unsupported instructions produce
 
 The safe first-party emitter writes the ELF64 header, an RX `PT_LOAD` segment,
 a non-executable stack declaration, native x86_64 code and relocation/data bytes
-into a bounded `Vec<u8>`. The generated executable uses Linux `read` (0), `write` (1), `mmap`
-(9), `mremap` (25) and `exit` (60), with no loader, Rust VM, system assembler or external crate.
-Anonymous mappings contain writable values and remain live until process exit.
+into a fallibly grown `Vec<u8>` with checked contiguous representation extents.
+The generated executable uses Linux `read` (0), `write` (1), `mmap` (9),
+`munmap` (11), `mremap` (25) and `exit` (60), with no Rust VM, system assembler or
+external runtime helper. Anonymous mappings contain writable values; their owner
+is the command context or a phase handle. The phase API returns distinct
+completion, cancellation, allocation, runtime-trap, cleanup and invalid-handle
+statuses. It is exported only when the complete selected callable closure is
+pure; an empty task effect row does not qualify.
 Native execution does not implement the VM's configurable work/allocation quotas.
 Every direct and indirect call aligns the machine stack to 16 bytes. A saved
 argument-base pointer keeps language stack arguments independent of alignment

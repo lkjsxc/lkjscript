@@ -290,10 +290,13 @@ remaining structural execution policies retain their independent boundaries.
 
 I64, Bool and Unit are unboxed. Bytes/Text use a length and data pointer;
 ByteBuffer adds capacity. Lists and records use a count followed by scalar or
-pointer values. The process-owned native heap uses aligned bump allocation into
-RW mmap chunks, with a minimum chunk size of 65536 bytes. Buffer growth retains
-old backing storage until process exit; freeze and byte-producing operations make
-owned copies. Byte lengths use checked signed-I64 layout and allocation extents, without the former
+pointer values. The active native context uses aligned bump allocation into
+independently owned RW mmap slabs, with a minimum mapping size of 65536 bytes.
+Buffer growth retains old backing storage within that context; freeze and
+byte-producing operations make owned copies. Ordinary commands retain their
+context until process exit. The current [pure phase interface](native-phases.md)
+promotes the complete filter result into a separate output context and disposes
+scratch before returning; the caller releases retained output handles explicitly. Byte lengths use checked signed-I64 layout and allocation extents, without the former
 256 MiB policy ceiling. This runtime does not
 claim lexical region reclamation, bounded process RSS or whole-program zero-copy.
 
@@ -572,6 +575,14 @@ Process exit is not evidence of same-process reclamation. Promotion may not over
 live scratch or leave surviving pointers in a rewound or unmapped child extent.
 The full P_self contract and final proof below remain authoritative.
 
+The current native boundary is a complete pure binary-filter invocation, defined
+by [LKJPH001](native-phases.md). Rust and source-produced ELF images expose the
+same handle/result contract while keeping their private value representations.
+This boundary does not claim separate reclamation inside every E1/E2/E3 subpass.
+The maintained raw-source fixed-point control also exercises repeated invocation,
+failure and cancellation through both native backends with independent process
+mapping and retained-output checks.
+
 ## Tier 2 capability progress
 
 Track source recognition, independent source-driven execution and compiler-source
@@ -590,7 +601,7 @@ bootstrap exporter and both output paths to support the adopted construct.
 | Nominal owned records/choices, Match and general List<T> | VM/reference; native portions restricted | Nominal/match extension needed | Ordinary Record/Variant members decoded; owned forms and Match pending | Field/Case admission and nominal slot flow present; match binders pending | Pending | Pending | Pending | Optional |
 | First-class functions, binding and Invoke | VM/reference/host ELF | Selfhost closure/invoke parity pending | Decoded restricted forms | Current lexical checks | Signature/capture/effect pending | Pending | Pending; host/Tier 1 closure controls exist | Optional |
 | OwnedContract/OwnedImplementation, witnesses, associated types and read views | VM/reference | Witness resolution/read-view support needed | Broader forms unsupported | Contextual binders pending | Pending | Pending | Pending | Optional |
-| Lexical Region, capabilities, relative pointers/slices and slab persistence | VM/reference; native pending | Bootstrap/selfhost extension needed | Unsupported forms return 13 | Region/read-scope admission pending | Pending | Pending | Native and reclamation controls pending | Required before phase-local adoption |
+| Lexical Region, capabilities, relative pointers/slices and slab persistence | VM/reference; native pending | Bootstrap/selfhost extension needed | Unsupported forms return 13 | Region/read-scope admission pending | Pending | Pending | Native and reclamation controls pending | Required before adopting lexical Regions in compiler source |
 
 E1-final requires every declared family to satisfy its E1 obligations. Tier 2
 additionally requires all remaining columns, complete compiler-source fixed points,

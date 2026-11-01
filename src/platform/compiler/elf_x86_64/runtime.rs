@@ -3,6 +3,10 @@ use super::asm::{Asm, Label, R::*, *};
 
 pub(super) struct Runtime {
     pub alloc: Label,
+    pub poll: Label,
+    pub copy: Label,
+    pub abort: Label,
+    pub dispose: Label,
     pub integer: Label,
     pub boolean: Label,
     pub integer_text: Label,
@@ -53,6 +57,10 @@ impl Runtime {
     pub fn new(a: &mut Asm) -> Self {
         Self {
             alloc: a.label(),
+            poll: a.label(),
+            copy: a.label(),
+            abort: a.label(),
+            dispose: a.label(),
             integer: a.label(),
             boolean: a.label(),
             integer_text: a.label(),
@@ -76,44 +84,30 @@ impl Runtime {
         }
     }
 
+    pub(super) fn checkpoint(&self, a: &mut Asm) {
+        // The aligned call wrapper changes flags even when the poll leaf does not.
+        a.bytes(&[0x9c]);
+        a.call(self.poll);
+        a.bytes(&[0x9d]);
+    }
+
+    pub(super) fn copy_bytes(&self, a: &mut Asm) {
+        a.bytes(&[0x9c]);
+        a.call(self.copy);
+        a.bytes(&[0x9d]);
+    }
+
+    pub(super) fn checkpoint_interval(&self, a: &mut Asm, counter: R) {
+        let skip = a.label();
+        a.mov(R11, counter);
+        a.group(4, R11, 65535);
+        a.when(NE, skip);
+        self.checkpoint(a);
+        a.bind(skip);
+    }
+
     pub fn emit(&self, a: &mut Asm, pool: &mut Vec<(Label, Vec<u8>)>) {
-        // Bump allocation uses anonymous read/write mappings. Executable image pages
-        // remain read/execute. Every old mapping remains live until sys_exit.
-        a.bind(self.alloc);
-        a.group(0, Di, 7);
-        a.when(B, self.capacity);
-        a.group(4, Di, -8);
-        a.mov(Ax, R15);
-        a.bin(0x01, Ax, Di);
-        a.when(B, self.capacity);
-        a.bin(0x39, Ax, R14);
-        let available = a.label();
-        a.when(B, available);
-        a.push(Di);
-        a.mov(Si, Di);
-        a.group(7, Si, 65536);
-        let size = a.label();
-        a.when(AE, size);
-        a.imm(Si, 65536);
-        a.bind(size);
-        a.imm(Ax, 9);
-        a.imm(Di, 0);
-        a.imm(Dx, 3);
-        a.imm(R10, 0x22);
-        a.imm(R8, u64::MAX);
-        a.imm(R9, 0);
-        a.syscall();
-        a.group(7, Ax, -4095);
-        a.when(AE, self.capacity);
-        a.mov(R15, Ax);
-        a.mov(R14, Ax);
-        a.bin(0x01, R14, Si);
-        a.when(B, self.capacity);
-        a.pop(Di);
-        a.bind(available);
-        a.mov(Ax, R15);
-        a.bin(0x01, R15, Di);
-        a.ret();
+        super::phase::emit_runtime(a, self);
 
         // Scalars are immutable and have no observable address identity. Reuse
         // read-only objects for byte values, the common -1 sentinel and Booleans.
@@ -393,6 +387,19 @@ impl Runtime {
             let message = format!("{code}\n");
             let message_label = data(a, pool, message.as_bytes());
             a.bind(label);
+            super::phase::recover_trap(
+                a,
+                self,
+                if label == self.capacity
+                    || label == self.bytes_capacity
+                    || label == self.buffer_capacity
+                {
+                    2
+                } else {
+                    3
+                },
+                label as u64,
+            );
             a.imm(Di, 2);
             a.address(Si, message_label);
             a.imm(Dx, message.len() as u64);
@@ -402,6 +409,6 @@ impl Runtime {
             a.syscall();
             a.bytes(&[0x0f, 0x0b]);
         }
-        super::blake3::emit(a, self.blake3);
+        super::blake3::emit(a, self.blake3, self.poll);
     }
 }

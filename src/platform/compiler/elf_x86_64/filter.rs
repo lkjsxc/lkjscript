@@ -33,11 +33,11 @@ pub(super) fn signature(program: &NormalizedProgram, entry: usize) -> bool {
 
 impl Emitter<'_> {
     pub(super) fn start_filter(&mut self, entry: usize) -> Result<()> {
+        self.a.imm(R15, 0);
         self.a.load(Ax, Sp, 0);
         self.a.group(7, Ax, 1);
         self.a.when(NE, self.runtime.argument);
-        self.a.imm(R14, 0);
-        self.a.imm(R15, 0);
+        super::phase::process_context(&mut self.a);
         // Input storage is private to this reader until EOF. Growth may move its
         // mapping because no Bytes descriptor or view exists yet. The mapping
         // then stays live through the result write, which may alias the input.

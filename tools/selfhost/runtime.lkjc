@@ -106,6 +106,6 @@ declarations.begin
                   (call ci::both
                     (call ci::both (local dd) (local ee))
                     (call ci::both (local ff) (local gg)))))
-              (call machine::builtins (i64 1) (local g))
+              (call phase::emit (local data) (local layout) (call machine::builtins (i64 1) (local g)))
               (call machine::layout-failure (local g)))))))))
 declarations.end

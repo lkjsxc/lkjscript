@@ -59,7 +59,7 @@ impl Emitter<'_> {
         self.a.load(Si, R12, 16);
         self.a.load(Cx, R12, 8);
         self.a.mov(Di, Ax);
-        self.a.bytes(&[0xfc, 0xf3, 0xa4]); // cld; rep movsb, including zero.
+        self.runtime.copy_bytes(&mut self.a);
         self.a.store(R12, 16, Ax);
         self.a.store(R12, 24, Dx);
         self.a.bind(space);
@@ -68,7 +68,7 @@ impl Emitter<'_> {
         self.a.bin(0x01, Di, Dx);
         self.a.mov(Si, R13);
         self.a.mov(Cx, Bx);
-        self.a.bytes(&[0xfc, 0xf3, 0xa4]);
+        self.runtime.copy_bytes(&mut self.a);
         self.a.bin(0x01, Dx, Bx);
         self.a.store(R12, 8, Dx);
         self.a.mov(Ax, R12);

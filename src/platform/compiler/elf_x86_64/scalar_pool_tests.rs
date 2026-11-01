@@ -1,5 +1,5 @@
-//! Execute the real scalar routines and inspect their allocator cursor directly.
-//! Interning immutable payloads is not a logical integer limit or reclamation.
+//! Execute native scalar and allocator routines with real mmap/munmap calls.
+//! Passive observation overflow never grants or removes allocation permission.
 use super::*;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -17,12 +17,9 @@ fn native_elf_scalar_pool_preserves_payloads_without_advancing_the_heap()
 -> std::result::Result<(), String> {
     let mut a = Asm::new();
     let runtime = Runtime::new(&mut a);
-    let mut pool = Vec::new();
     let fail = a.label();
-    a.imm(R14, 0);
-    a.imm(R15, 0);
-    // Every cached integer and Boolean must return a tagged immutable payload
-    // without allocating, even across interleaved scalar kinds and repetition.
+    phase::process_context(&mut a);
+    // Cached immutable scalars have no observable address identity.
     for (label, tag, values) in [
         (runtime.integer, 2_u64, (-1_i64..=255).collect::<Vec<_>>()),
         (runtime.boolean, 1, vec![0, 1, 0, 1]),
@@ -41,17 +38,17 @@ fn native_elf_scalar_pool_preserves_payloads_without_advancing_the_heap()
             a.when(NE, fail);
             a.group(7, R15, 0);
             a.when(NE, fail);
-            a.group(7, R14, 0);
+            a.load(Cx, R14, 0);
+            a.group(7, Cx, 0);
             a.when(NE, fail);
         }
     }
-    // Outside the optimization's physical table every I64 remains supported by
-    // the ordinary allocator. Retaining one result must survive later calls.
     for value in [256_i64, -2, i64::MIN, i64::MAX] {
         a.imm(Ax, value as u64);
         a.call(runtime.integer);
         a.mov(R13, Ax);
-        a.group(7, R15, 0);
+        a.load(Cx, R14, 0);
+        a.group(7, Cx, 0);
         a.when(E, fail);
         for cached in [0_i64, 255, -1] {
             a.imm(Ax, cached as u64);
@@ -67,13 +64,221 @@ fn native_elf_scalar_pool_preserves_payloads_without_advancing_the_heap()
         a.bin(0x39, Cx, Dx);
         a.when(NE, fail);
     }
-    a.imm(Di, 0);
-    a.imm(Ax, 60);
-    a.syscall();
+    a.mov(Di, R14);
+    a.call(runtime.dispose);
+    a.group(7, Ax, 0);
+    a.when(NE, fail);
+    exit(&mut a, 0);
     a.bind(fail);
-    a.imm(Di, 70);
+    exit(&mut a, 70);
+    run_control(a, runtime, "scalar-pool")
+}
+
+#[test]
+fn native_elf_phase_allocator_saturation_is_passive_and_disposal_resets_exact_state()
+-> std::result::Result<(), String> {
+    let mut a = Asm::new();
+    let runtime = Runtime::new(&mut a);
+    let fail = a.label();
+    // A caller-owned Handle160 and a transient 128-byte recovery frame.
+    a.group(5, Sp, 288);
+    a.mov(R14, Sp);
+    a.lea(R15, Sp, 160);
+    a.imm(Ax, 0);
+    for offset in (0..288).step_by(8) {
+        a.store(Sp, offset, Ax);
+    }
+    a.store(R15, 0, Sp);
+    a.address(Ax, fail);
+    a.store(R15, 8, Ax);
+    a.store(R15, 24, R14);
+    a.imm(Ax, u64::MAX);
+    a.store(R14, 144, Ax);
+    // Attempt overflow observes a real allocation; it never denies it.
+    a.imm(Di, 0);
+    a.call(runtime.alloc);
+    a.group(7, Ax, 0);
+    a.when(E, fail);
+    a.mov(R12, Ax);
+    a.imm(Cx, 0x1234);
+    a.store(R12, 0, Cx);
+    a.load(Cx, R14, 152);
+    a.group(7, Cx, 1);
+    a.when(NE, fail);
+    // Seed only observations, then force a second real mapping.
+    a.imm(Ax, u64::MAX);
+    a.store(R14, 24, Ax);
+    a.store(R14, 32, Ax);
+    a.imm(Di, 65536);
+    a.call(runtime.alloc);
+    a.mov(Cx, Ax);
+    a.group(4, Cx, 63);
+    a.when(NE, fail);
+    for offset in [24, 32, 144] {
+        a.load(Cx, R14, offset);
+        a.imm(Dx, u64::MAX);
+        a.bin(0x39, Cx, Dx);
+        a.when(NE, fail);
+    }
+    a.load(Cx, R14, 40);
+    a.group(7, Cx, 3);
+    a.when(NE, fail);
+    a.load(Cx, R12, 0);
+    a.group(7, Cx, 0x1234);
+    a.when(NE, fail);
+    // Links identify payload starts, so base zero is not the empty sentinel.
+    a.load(Cx, R14, 0);
+    a.load(Cx, Cx, -48);
+    a.bin(0x39, Cx, R14);
+    a.when(NE, fail);
+    a.mov(Di, R14);
+    a.call(runtime.dispose);
+    a.group(7, Ax, 0);
+    a.when(NE, fail);
+    for offset in [0, 8, 16, 24, 32, 40, 56] {
+        a.load(Cx, R14, offset);
+        a.group(7, Cx, 0);
+        a.when(NE, fail);
+    }
+    a.load(Cx, R14, 48);
+    a.group(7, Cx, 2);
+    a.when(NE, fail);
+    // Reopening an empty context starts exact observations again.
+    a.imm(Ax, 0);
+    a.store(R14, 48, Ax);
+    a.imm(Di, 16);
+    a.call(runtime.alloc);
+    a.load(Cx, R14, 24);
+    a.group(7, Cx, 1);
+    a.when(NE, fail);
+    a.load(Cx, R14, 32);
+    a.group(7, Cx, 65536);
+    a.when(NE, fail);
+    a.load(Cx, R14, 40);
+    a.group(7, Cx, 0);
+    a.when(NE, fail);
+    // Checkpoint's call alignment must preserve the caller's flags too.
+    a.imm(Ax, 17);
+    a.group(7, Ax, 17);
+    runtime.checkpoint(&mut a);
+    a.when(NE, fail);
+    a.mov(Di, R14);
+    a.call(runtime.dispose);
+    a.group(7, Ax, 0);
+    a.when(NE, fail);
+    exit(&mut a, 0);
+    a.bind(fail);
+    exit(&mut a, 70);
+    run_control(a, runtime, "phase-saturation")
+}
+
+#[test]
+fn native_elf_phase_internal_extent_boundaries_preserve_recovery_classes()
+-> std::result::Result<(), String> {
+    let mut a = Asm::new();
+    let runtime = Runtime::new(&mut a);
+    let fail = a.label();
+    // Synthetic internal arithmetic controls: these do not claim a valid
+    // source program can materialize an I64::MAX-sized Bytes or ByteBuffer.
+    // Exercise the real helpers and recovery path without allocating memory.
+    a.group(5, Sp, 288);
+    a.mov(R14, Sp);
+    a.lea(R15, Sp, 160);
+    a.imm(Ax, 0);
+    for offset in (0..288).step_by(8) {
+        a.store(Sp, offset, Ax);
+    }
+    a.store(R15, 0, Sp);
+    a.store(R15, 24, R14);
+    for (case, label, status, attempts) in [
+        (0, runtime.bytes_capacity, 2, 0),
+        (1, runtime.buffer_capacity, 2, 0),
+        (2, runtime.overflow, 3, 0),
+        (3, runtime.bounds, 3, 0),
+        (3, runtime.bytes_index, 3, 0),
+        (3, runtime.buffer_index, 3, 0),
+        (4, runtime.bytes_range, 3, 0),
+        (5, runtime.capacity, 2, 1),
+    ] {
+        let recovered = a.label();
+        a.address(Ax, recovered);
+        a.store(R15, 8, Ax);
+        a.imm(Ax, 0);
+        a.store(R15, 64, Ax);
+        a.store(R15, 72, Ax);
+        match case {
+            0 => {
+                // An internal length outside the signed language domain.
+                a.imm(Bx, u64::MAX);
+                bytes::allocation_size(&mut a, label);
+            }
+            1 => {
+                // The checked buffer successor fails before any allocation.
+                a.imm(Bx, i64::MAX as u64);
+                buffer::push_length(&mut a, label);
+            }
+            2 => {
+                a.imm(Ax, i64::MAX as u64);
+                a.group(0, Ax, 1);
+                a.when(O, label);
+            }
+            3 => {
+                // Unsigned bounds comparison rejects a negative index.
+                a.imm(Ax, u64::MAX);
+                a.imm(Cx, 0);
+                a.bin(0x39, Ax, Cx);
+                a.when(AE, label);
+            }
+            4 => {
+                a.imm(Cx, u64::MAX);
+                a.imm(Dx, 0);
+                a.bin(0x39, Dx, Cx);
+                a.when(B, label);
+            }
+            _ => {
+                // Alignment overflows before mmap; the attempt is observed.
+                a.imm(Di, i64::MAX as u64);
+                a.call(runtime.alloc);
+            }
+        }
+        a.jump(fail);
+        a.bind(recovered);
+        a.bin(0x39, Sp, R14);
+        a.when(NE, fail);
+        a.load(Cx, R15, 64);
+        a.group(7, Cx, status);
+        a.when(NE, fail);
+        a.load(Cx, R15, 72);
+        a.imm(Dx, label as u64);
+        a.bin(0x39, Cx, Dx);
+        a.when(NE, fail);
+        // Neither context acquired a mapping or published an output root.
+        for offset in (0..128).step_by(8) {
+            a.load(Cx, R14, offset);
+            a.group(7, Cx, 0);
+            a.when(NE, fail);
+        }
+        a.load(Cx, R14, 144);
+        a.group(7, Cx, attempts);
+        a.when(NE, fail);
+        a.load(Cx, R14, 152);
+        a.group(7, Cx, 0);
+        a.when(NE, fail);
+    }
+    exit(&mut a, 0);
+    a.bind(fail);
+    exit(&mut a, 70);
+    run_control(a, runtime, "phase-internal-extent-boundaries")
+}
+
+fn exit(a: &mut Asm, status: u64) {
+    a.imm(Di, status);
     a.imm(Ax, 60);
     a.syscall();
+}
+
+fn run_control(mut a: Asm, runtime: Runtime, name: &str) -> std::result::Result<(), String> {
+    let mut pool = Vec::new();
     runtime.emit(&mut a, &mut pool);
     for (label, bytes) in pool {
         a.align();
@@ -83,12 +288,12 @@ fn native_elf_scalar_pool_preserves_payloads_without_advancing_the_heap()
     let code = a.finish().map_err(|e| format!("assembler: {e:?}"))?;
     let bytes = elf(&code).map_err(|e| format!("ELF: {e:?}"))?;
     let directory = tempfile::tempdir().map_err(|e| e.to_string())?;
-    let path = directory.path().join("scalar-pool");
+    let path = directory.path().join(name);
     crate::platform::owned_output::publish_executable_create_new(
         &path,
         &bytes,
         None,
-        "scalar pool native control",
+        "native scalar and phase allocator control",
     )
     .map_err(|e| format!("publication: {e:?}"))?;
     let mut child = Joined(
@@ -106,9 +311,7 @@ fn native_elf_scalar_pool_preserves_payloads_without_advancing_the_heap()
             return if status.code() == Some(0) {
                 Ok(())
             } else {
-                Err(format!(
-                    "scalar payload/allocation control failed: {status}"
-                ))
+                Err(format!("native {name} control failed: {status}"))
             };
         }
         if start.elapsed() >= Duration::from_secs(5) {

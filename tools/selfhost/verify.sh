@@ -27,6 +27,8 @@ sha256sum src/platform/compiler/selfhost_input.rs \
   tests/fixtures/selfhost-source-interface.lkjc \
   tests/fixtures/selfhost-source-interface-probes.lkjc \
   src/platform/execution/normalized/selfhost_source_artifact_tests.rs \
+  src/platform/execution/normalized/native_phase_tests.rs \
+  src/platform/execution/normalized/native_phase_caller.rs \
   src/platform/execution/normalized/selfhost_source_stage_controls.rs \
   src/platform/execution/normalized/selfhost_source_bulk_tests.rs \
   tests/fixtures/bulk-byte-intrinsics.lkjc \

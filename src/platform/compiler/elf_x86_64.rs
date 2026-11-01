@@ -17,6 +17,7 @@ mod bytes;
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod capacity_tests;
 mod filter;
+mod phase;
 #[cfg(test)]
 mod profiling;
 mod runtime;
@@ -198,6 +199,13 @@ pub(crate) fn compile_function(
         return Err(unsupported("native entry must have a closed signature"));
     }
     let binary_filter = filter::signature(program, entry);
+    let phase_boundary = binary_filter
+        && reachable.iter().all(|&index| {
+            matches!(
+                program.functions[index].effect,
+                crate::platform::kernel::FunctionEffect::Pure
+            )
+        });
     for parameter in function.parameters.iter().filter(|_| !binary_filter) {
         if !matches!(
             program.types.get(&parameter.ty).map(|t| &t.form),
@@ -239,6 +247,11 @@ pub(crate) fn compile_function(
         e.a.check()?;
     }
     e.runtime.emit(&mut e.a, &mut e.data);
+    let phase_exports = if phase_boundary {
+        Some(phase::emit_exports(&mut e, entry)?)
+    } else {
+        None
+    };
     for (label, bytes) in &e.data {
         e.a.align();
         e.a.bind(*label);
@@ -286,8 +299,16 @@ pub(crate) fn compile_function(
     }
     #[cfg(test)]
     profiling::record(&e)?;
+    let phase_addresses = phase_exports
+        .map(|(invoke, release)| -> Result<_> {
+            Ok((e.a.label_address(invoke)?, e.a.label_address(release)?))
+        })
+        .transpose()?;
     let code = e.a.finish()?;
-    let bytes = elf(&code)?;
+    let mut bytes = elf(&code)?;
+    if let Some((invoke, release)) = phase_addresses {
+        phase::write_table(&mut bytes, invoke, release);
+    }
     Ok((bytes, reachable.len(), e.rewrites))
 }
 
@@ -420,12 +441,12 @@ impl Emitter<'_> {
         self.a.push(Ax);
     }
     fn start(&mut self, entry: usize, parameters: usize) -> Result<()> {
+        self.a.imm(R15, 0);
         self.a.mov(R12, Sp);
         self.a.load(Ax, R12, 0);
         self.a.group_wide(7, Ax, layout_extent(parameters, 1, 1)?);
         self.a.when(NE, self.runtime.argument);
-        self.a.imm(R14, 0);
-        self.a.imm(R15, 0);
+        phase::process_context(&mut self.a);
         for parameter in 0..parameters {
             self.a
                 .load_offset(Di, R12, layout_offset(parameter, 8, 16)?);
@@ -465,6 +486,7 @@ impl Emitter<'_> {
     }
     fn function(&mut self, index: usize) -> Result<()> {
         self.a.bind(self.label(index)?);
+        self.runtime.checkpoint(&mut self.a);
         let function = &self.program.functions[index];
         let parameters = function.parameter_count;
         match function.body.clone() {
@@ -475,6 +497,9 @@ impl Emitter<'_> {
     fn code(&mut self, function: usize, code: &NormalizedCode) -> Result<()> {
         self.prologue(code.local_count);
         for parameter in 0..code.parameter_count {
+            if parameter.is_multiple_of(256) {
+                self.runtime.checkpoint(&mut self.a);
+            }
             self.argument(Ax, code.parameter_count - 1 - parameter);
             self.a.store_offset(Bp, -32 - i64::from(parameter) * 8, Ax);
         }
@@ -523,12 +548,16 @@ impl Emitter<'_> {
                 self.a.store_offset(Bp, -32 - i64::from(*local) * 8, Ax);
             }
             I::Drop => self.a.group(0, Sp, 8),
-            I::Jump(target) => self.a.jump(
-                *labels
-                    .get(*target as usize)
-                    .ok_or_else(|| unsupported("native jump is outside its body"))?,
-            ),
+            I::Jump(target) => {
+                self.runtime.checkpoint(&mut self.a);
+                self.a.jump(
+                    *labels
+                        .get(*target as usize)
+                        .ok_or_else(|| unsupported("native jump is outside its body"))?,
+                );
+            }
             I::JumpIfFalse(target) => {
+                self.runtime.checkpoint(&mut self.a);
                 self.a.pop(Ax);
                 self.a.load(Ax, Ax, 8);
                 self.a.bin(0x85, Ax, Ax);
@@ -551,7 +580,11 @@ impl Emitter<'_> {
             } => {
                 let tail = matches!(instruction, I::TailCall { .. });
                 if tail && target.0 as usize == function {
+                    self.runtime.checkpoint(&mut self.a);
                     for parameter in (0..*arguments).rev() {
+                        if parameter.is_multiple_of(256) {
+                            self.runtime.checkpoint(&mut self.a);
+                        }
                         self.a.pop(Ax);
                         self.a.store_offset(Bp, -32 - i64::from(parameter) * 8, Ax);
                     }
@@ -587,6 +620,9 @@ impl Emitter<'_> {
                 self.a.imm(Cx, u64::from(*items));
                 self.a.store(Ax, 8, Cx);
                 for item in (0..*items).rev() {
+                    if item.is_multiple_of(256) {
+                        self.runtime.checkpoint(&mut self.a);
+                    }
                     self.a.pop(Cx);
                     self.a.store_offset(Ax, 16 + i64::from(item) * 8, Cx);
                 }
@@ -619,6 +655,9 @@ impl Emitter<'_> {
                 self.a.imm(Cx, fields.len() as u64);
                 self.a.store(Ax, 8, Cx);
                 for (offset, &position) in order.iter().enumerate() {
+                    if offset.is_multiple_of(256) {
+                        self.runtime.checkpoint(&mut self.a);
+                    }
                     let key = self.constant(Constant::Text(names[position].to_string()));
                     self.a.address(Cx, key);
                     self.a.store_offset(Ax, layout_offset(offset, 16, 16)?, Cx);
@@ -649,6 +688,7 @@ impl Emitter<'_> {
                 let next = self.a.label();
                 let found = self.a.label();
                 self.a.bind(next);
+                self.runtime.checkpoint(&mut self.a);
                 self.a.bin(0x85, Dx, Dx);
                 self.a.when(E, self.runtime.bounds);
                 self.a.load(Si, Ax, 0);
@@ -682,6 +722,7 @@ impl Emitter<'_> {
         let next = self.a.label();
         let ready = self.a.label();
         self.a.bind(next);
+        self.runtime.checkpoint(&mut self.a);
         self.a.bin(0x39, Cx, R13);
         self.a.when(AE, ready);
         self.a.mov(Ax, Cx);
@@ -693,6 +734,9 @@ impl Emitter<'_> {
         self.a.jump(next);
         self.a.bind(ready);
         for argument in 0..arguments {
+            if argument.is_multiple_of(256) {
+                self.runtime.checkpoint(&mut self.a);
+            }
             self.a
                 .load_offset(Ax, Bx, i64::from(arguments - 1 - argument) * 8);
             self.a.push(Ax);
@@ -736,6 +780,7 @@ impl Emitter<'_> {
         let next = self.a.label();
         let ready = self.a.label();
         self.a.bind(next);
+        self.runtime.checkpoint(&mut self.a);
         self.a.bin(0x39, Cx, R13);
         self.a.when(AE, ready);
         self.a.mov(Ax, Cx);
@@ -752,6 +797,9 @@ impl Emitter<'_> {
         self.a.shift(4, Ax, 3);
         self.a.bin(0x01, Ax, Bx);
         for argument in 0..arguments {
+            if argument.is_multiple_of(256) {
+                self.runtime.checkpoint(&mut self.a);
+            }
             self.a
                 .load_offset(Cx, Sp, i64::from(arguments - 1 - argument) * 8);
             self.a.store_offset(Ax, 24 + i64::from(argument) * 8, Cx);
@@ -876,19 +924,12 @@ impl Emitter<'_> {
                 self.a.mov(R9, Ax);
                 self.a.lea(R8, Ax, 16);
                 self.a.lea(R10, R12, 16);
-                self.a.imm(Cx, 0);
-                let next = self.a.label();
-                let done = self.a.label();
-                self.a.bind(next);
-                self.a.bin(0x39, Cx, Bx);
-                self.a.when(AE, done);
-                self.a.load(Dx, R10, 0);
-                self.a.store(R8, 0, Dx);
-                self.a.group(0, R10, 8);
-                self.a.group(0, R8, 8);
-                self.a.group(0, Cx, 1);
-                self.a.jump(next);
-                self.a.bind(done);
+                self.a.mov(Si, R10);
+                self.a.mov(Di, R8);
+                self.a.mov(Cx, Bx);
+                self.a.shift(4, Cx, 3);
+                self.runtime.copy_bytes(&mut self.a);
+                self.a.mov(R8, Di);
                 self.a.store(R8, 0, R13);
                 self.a.mov(Ax, R9);
             }

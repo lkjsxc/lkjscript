@@ -38,12 +38,13 @@ declarations.begin
             (type ByteBuffer)
             (call asm::binary (bool true) (i64 133) (i64 9) (i64 9) (local e)))
           (binding branch (call ci::size (local f)))
-          (binding target (call ci::add (local branch) (if (local record) (i64 57) (i64 43))))
+          (binding target (call ci::add (local branch) (if (local record) (i64 91) (i64 77))))
           (binding g (type ByteBuffer) (call elf::condition (i64 132) (local target) (local f)))
           (binding loop (call ci::size (local g)))
+          (binding polled (type ByteBuffer) (call machine::wide-call (i64 51712) (local g)))
           (binding h
             (type ByteBuffer)
-            (call elf::raw (list I64 (i64 73) (i64 255) (i64 201) (i64 89)) (local g)))
+            (call elf::raw (list I64 (i64 73) (i64 255) (i64 201) (i64 89)) (local polled)))
           (binding i
             (type ByteBuffer)
             (if

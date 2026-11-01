@@ -332,7 +332,6 @@ impl Asm {
         self.absolute.push((self.bytes.len(), label));
         self.bytes(&[0; 8]);
     }
-    #[cfg(test)]
     pub(super) fn label_address(&self, label: Label) -> Result<u64> {
         let offset = self
             .labels

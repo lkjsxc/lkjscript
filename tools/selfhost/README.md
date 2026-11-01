@@ -1,131 +1,160 @@
 # Semantic compiler bootstrap
 
-The target is semantic self-hosting. The maintained project provides a normalized
-backend compiler and a restricted raw-source scalar compiler. The backend validates
-LKJCI1 mode 0/profile 6 for standalone Linux x86_64 ELF and
-mode 1/profile 7 for current `.lkja` artifacts. Both are current-only input
-contracts. Artifact projection and generated pools use 64-bit offsets and lengths;
-there are no independent 4 GiB pool, 8 MiB projected-unit, 100,000-entry,
-32,768-instruction/table or 128-local projection guards. Actual extents, canonical
-u32 semantic indices and the canonical unit/manifest/store codecs remain separate
-admission boundaries. Its unit map expands through canonical radix pages with a
-64 KiB physical page bound and no aggregate 700-unit guard.
+The maintained lkjscript compiler compiles its complete authoritative source
+graph to standalone Linux x86_64 ELF and canonical `.lkja` artifacts. Raw-source
+Milestone A was accepted at `010ce014ae97e87df17d2f6acbea728f73bf14d1`: native
+generations established `C2 = C3` and `Ahost = A1 = A2 = A3`, with source mutations,
+independent behavior, complete-inventory negative controls and strict loading.
+The [acceptance record](../../docs/decisions/20261101-active-source-acceptance.json)
+binds that exact implementation tree; [status](../../docs/status.md) identifies
+the current graph, subsequent candidates and current acceptance boundary.
 
-Mode 1 defaults to explicit tag 0 (`None`). Tag 1 preserves every finite u64
-allowance, including zero and `u64::MAX`. Finite admission compares the estimated
-proof requirement `4096 + 128*L + 64*(U*U + O)` exactly before carrier hashing or
-deep validation. The estimate is not an execution meter. The Rust exporter first
-measures projected output without allocating its byte buffer, admits the selected
-policy, then reserves and fills the measured extent. Prior host artifact admission,
-map reads, decoding and inventory preparation are outside that embedded policy.
+Full `P_self` semantics and repeated same-process native phase reclamation are
+separate Milestones B and C. Source reproduction alone does not establish them.
+See the [self-hosting contract](../../docs/spec/selfhosting.md) and
+[source compilation decision](../../docs/decisions/20261101-active-source-self-compilation.md).
 
-The current input covers pure scalar/byte function closures, buffers, List<I64>,
-structural records, branches and recursion. The previously accepted backend
-reproduction used Mode-0 profile 6 and Mode-1 profile 5. Profile-7 adoption and
-execution evidence are recorded separately in the
-[cutover decision](../../docs/decisions/20261030-artifact-profile7.md); the format
-change alone supplies no new fixed-point result. The artifact path serializes
-canonical unit fields and carries the admitted source closure; source semantic
-checking remains with Rust. See the
-[contract, schema and dependency inventory](../../docs/spec/selfhosting.md) and
-[artifact layout](../../docs/spec/selfhosting-artifact-input.md).
+## Current inputs and trust boundaries
 
-The `source-read`, `source-shape`, `source-fields`, `source-expr` and `source-owner`
-modules begin semantic-compiler admission with bounded current-format record
-decoding. They are separate from the normalized backend entrypoint. Tests compare
-decoded values on VM/reference/native, inspect every current source owner and
-type, and reject malformed envelopes and payloads with independently recomputed
-checksums. These readers do not yet resolve the source graph, check types or
-ownership, or normalize source expressions.
+| Entry path | Current input | Work performed inside lkjscript |
+| --- | --- | --- |
+| Normalized backend | `LKJCI1` mode 0/profile 6 | Admit the backend projection and emit standalone ELF |
+| Normalized backend | `LKJCI1` mode 1/profile 7 | Admit the backend projection and construct a canonical artifact |
+| Raw-source compiler | `LKJSRQ01` profile 2 around complete `LKJSG002` profile 3 | Admit source meaning and custody, resolve the requested target, lower it and emit the selected ELF/artifact output |
 
-`source-map`, `source-state`, `source-history` and `source-object` add the next
-source-identity layer: fixed-width logical map roots, package semantic-state and
-revision digests, current dependency/retirement records, and exact object-to-map
-bindings. The tests compare these with independent current codecs and logical
-root oracles. Matching these commitments does not establish reference resolution,
-type correctness, custody or execution permission.
+Each changed boundary has one current format. Predecessor selectors reject
+without fallback. The raw carrier includes the exact source revision binding,
+semantic-state claim and complete owner/type inventory. It supplies no inferred
+types, lowered entry index, custody certificate, normalized instructions or
+cached code. The complete carrier hash also binds unused supplied types that
+are not committed by semantic state alone.
 
-The `source-table`, `source-sort`, `source-edges`, `source-containment`,
-`source-members`, `source-forest` and `source-scope` modules add complete
-owner membership, reverse parent agreement, unique syntax containment, cycle
-rejection and exact value-local lexical scope for the existing decoded profile.
-Native source-inspection tests include both Rust-produced and self-host-produced
-ELF validators. This remains a restricted E1 milestone; complete semantic admission,
-source normalization and native phase reclamation retain their separate obligations.
-See the [source-input contract](../../docs/spec/selfhosting-source-input.md) and
-[complete active-source inventory](../../docs/decisions/20261022-active-compiler-profile.md).
-The latter is a reproducible observation of every supplied owner and type, including
-intrinsic substitutions, lexical scopes and direct/mutual recursion; it is not E2
-admission or an E3 custody certificate.
+The Rust compiler is a legitimate bootstrap producer and independent artifact
+oracle. Native self-produced generations consume the unchanged complete source
+carrier plus caller-selected TargetId and output mode. The source compiler
+constructs its own normalized backend projections; the caller does not supply
+Rust-normalized target input to those generations.
 
-The `compile-source-elf` target accepts only `LKJSRQ01` profile-1 requests:
-a 32-byte header carrying the caller's typed TargetId, followed by the exact
-complete `LKJSG002` carrier. Raw-only compilation input rejects with 12.
-`source-scalar-profile`, `source-scalar-infer` and `source-scalar` compose the
-existing E1 checks with whole-inventory typing for pure monomorphic functions
-over unrestricted Unit, Bool and I64, including the eight exact scalar intrinsics.
-Literals, locals, If, Let, Sequence and direct calls are supported; uncalled bodies,
-untaken branches, unused supplied types and unselected targets receive the same
-checks. Each of one or more command targets selects a component function port
-with pure signature `() -> I64`. After full admission, lkjscript resolves the
-request's live TargetId and derives the internal entry index. Recognized excluded
-forms return 13; scalar type/target inconsistencies and absent or retired
-selectors return 19. The E2 inspection entries continue to consume raw carriers.
+The backend profiles use wide offsets and lengths for their private projection
+pools. Removed aggregate projection quotas are distinct from remaining canonical
+unit/store representation boundaries. The canonical unit map grows through radix
+pages with a 64 KiB physical page bound, without an aggregate 700-unit guard.
+[Source framing](../../docs/spec/selfhosting-source-input.md) and
+[artifact framing](../../docs/spec/selfhosting-artifact-input.md) specify exact
+extents, policies and remaining boundaries.
 
-`source-scalar-plan`, `source-scalar-cursor`, `source-scalar-state`,
-`source-scalar-trace`, `source-scalar-emit` and `source-scalar-pack` derive
-layout, instructions and flow certificates inside lkjscript. `source-elf` passes
-that internally generated mode-0/profile-6 input to the existing ELF backend.
-Rust may bootstrap the compiler executable and serialize the caller's TargetId
-beside the unchanged carrier. It does not map the selector to an entry index,
-pre-filter source owners, lower targets or supply semantic certificates. Generated
-mode-0 input uses checked wide counts, offsets and extents without an 8 MiB quota.
-An absent proof policy is unmetered; an explicit finite u64 allowance is exact,
-including zero and the largest value. Carrier extents and remaining canonical
-object constraints define the supported representation. Calls use ordinary Call/Return; this scalar path establishes no owned-value
-cleanup contract.
-See the [scalar contract](../../docs/spec/selfhosting-source-input.md#scalar-source-admission-and-elf-lowering)
-for exact limits and remaining obligations. The
-[scalar decision](../../docs/decisions/20261023-source-scalar-e2-e3.md) records eight
-executed positive programs, ten semantic/profile controls and two independently
-constructed structural rejection controls. Compiler-source fixed points,
-canonical artifact parity and native reclamation remain required.
+An absent proof policy is unmetered. Every explicitly selected finite u64
+allowance remains finite and exact, including zero and `u64::MAX`. Estimated
+admission policies, evaluator work, cancellation, passive observations and actual
+allocation failure have different contracts. Unmetered admission does not remove
+structural checks or justify unchecked arithmetic.
 
-`project/` owns accepted meaning. The `.lkjc` modules in this directory are
-maintained authoring proposals. Changes pass ordinary graph admission before publication.
-Tests reconstruct the complete compiler through incremental public transactions:
-first typed interfaces one module at a time, then independently validated groups
-of function bodies. Replaying final definitions submits one complete public transaction
-on a private copy of the accepted graph and compares every canonical compilation
-unit's tables and payload, plus the complete native backend input. Both semantic
-fixture paths use ordinary unmetered memory repositories (`MemProjectStore::new(None)`)
-and canonical publication admission. Publication identities may change during body
-reconstruction. Interim nested-record results use an explicit heap worklist; independent
-wide-address probes select their entry within the fixture module.
-The deterministic mutation fixture independently reconstructs its baseline and mutant through
-the incremental path; this is separate from the complete replay equality check.
-The Rust test helper exports admitted input programs; the VM, disjoint reference
-interpreter and standalone native ELF execute the same lkjscript compiler. Tests validate the
-generated ELF and execute it in clean child environments. Emitted artifacts pass
-the unchanged strict loader and execute on both evaluators. Independent expected
-results and traps supplement compiler-engine agreement.
+## Source admission and lowering
 
-Run the development bootstrap harness from the repository root:
+The source modules compose explicit layers. Object readers decode current
+canonical payloads; graph/state/history checks bind their identities; membership,
+containment and scope passes reject missing or ambiguous ownership and lexical
+references. Namespace, contextual type-binder, structural-DAG and nominal
+parameter-flow checks follow. Every supplied owner and type is inspected,
+including uncalled functions, untaken branches and unselected targets.
+
+Despite their historical `source-scalar-*` names, the active compiler modules
+support the maintained compiler's compound feature closure: Text/StaticText,
+Bytes, affine ByteBuffer, List<I64>, structural records/fields and pure function
+types, alongside Unit, Bool and I64. Closed generic substitutions used by I64
+list operations are admitted explicitly. Expression admission and lowering
+cover lexical locals, Let, Sequence, If, lists, records, fields, direct calls,
+recursion and the exact active intrinsic signatures. Target selection supports
+pure `() -> I64` commands and the pure binary-filter signature
+`(Bytes) -> {diagnostic: I64, image: Bytes}`.
+
+ByteBuffer custody checks consumption, synchronous borrow qualification,
+branch-balanced disposal, reverse lexical cleanup and returned-owner transfer.
+A live owned local prevents unsafe tail transfer; lowering uses call, cleanup
+and return instead. Complete semantic and custody admission precedes emission.
+Unsupported forms reject explicitly rather than bypassing their semantics.
+
+The `source-scalar-plan`, cursor/state/trace/emit helpers and packing modules
+build typed backend input inside lkjscript. Source artifact construction includes
+canonical units, summaries, interfaces, maps and provenance. Closed bulk-byte
+intrinsics avoid per-octet temporary values and are supported by both evaluators
+and both native compiler paths. Capability support must precede adoption of a
+new feature into the maintained compiler. Refresh the active-source inventory
+and raw-source fixed point after any closure expansion.
+
+## Native phase ownership
+
+The native phase candidate gives a pure binary-filter invocation independent
+scratch and output allocation contexts. It promotes the complete surviving
+result into output storage before disposing scratch, and allows callers to
+retain independent output handles across later invocations. Cancellation,
+allocation failure, runtime rejection and cleanup failure have distinct native
+statuses, separate from a completed compiler diagnostic. Caller input, handle
+and cancellation storage have explicit lifetime and exclusivity requirements.
+
+The [native phase ABI](../../docs/spec/native-phases.md) specifies discovery,
+handle layout, invocation, release and recovery. Source modules `phase-asm`,
+`phase-code` and `phase` emit and check the runtime; corresponding Rust native
+owners implement the same external contract. Bulk copies and extent-scaled
+helper loops contain cancellation safe points. Internal phase contexts do not
+establish language-level lexical Regions or eliminate the native CALL stack.
+
+Production Milestone C acceptance requires repeated actual compilation inside
+one process, valid surviving output after scratch unmapping, failure/cancellation
+recovery and independent mapping observations. A modified-binary prototype,
+process exit or zeroed counters alone is insufficient. The current tested tree
+and terminal evidence belong in status; this description is not a new seal.
+
+## Authoritative graph and public adoption
+
+`project/` owns accepted program meaning. The `.lkjc` files in this directory are
+maintained authoring proposals. Adopt changes through supported public
+transactions and confirm public readback; editing a proposal does not update
+the authoritative compiler by itself.
+
+Tests reconstruct the compiler through ordinary public transactions: typed
+interfaces first, then validated function bodies. Complete proposal replay
+submits one public transaction on a private copy of the accepted graph and
+compares every canonical compilation unit and the complete native backend
+input. The replay and incremental-reconstruction paths use ordinary unmetered
+memory repositories and normal publication admission. Their publication
+identities may differ while canonical units agree.
+
+Independent mutation fixtures establish expected behavior or diagnostics rather
+than relying only on compiler-to-compiler equality. Tests execute the same
+compiler through VM, the disjoint canonical reference interpreter and native
+ELF. Every emitted artifact must pass strict loading and provenance checks.
+Source tests bind the exact graph, carrier, request, profiles, target, compiler
+bytes and deterministic execution context.
+
+## Development and verification
+
+Run the focused harness from the repository root under the shared Cargo target
+lease:
 
 ```sh
-bash tools/selfhost/verify.sh
+RUST_TEST_THREADS=8 bash tools/selfhost/verify.sh
 ```
 
-This focused harness is not full acceptance. Run the repository's official
-changed, fresh full and release-target checks after updating status and all
-maintained source. Build the native binary filter with
-`lkjscript --project tools/selfhost/project build --native-elf COMPILER --target compile-elf`;
-it reads one LKJCI1 input from stdin and emits complete ELF or `.lkja` bytes on stdout, with
-diagnostics on stderr. Select `--target compile-source-elf` to build the source
-scalar filter instead; its stdin is `LKJSRQ01` profile 1 containing the selected
-TargetId and complete `LKJSG002`, and its output is ELF. Evidence binds the
-complete request, carrier, target, compiler executable, profiles and context.
-An external launcher owns atomic output publication.
-Milestone D requires both native backend closure and `.lkja` emission. Full-profile
-semantic admission, phase-local regions and C2/C3 identity from the complete
-compiler source graph remain required for Tier 2.
+The focused harness is not full acceptance. Before integrating a dependency-
+closed milestone, finish public proposal adoption, generated discovery and
+status/specification edits; stage and freeze the exact candidate; bootstrap the
+verifier for its source/tree binding; run the complete selfhost selection,
+named maintained-native-closure, whole-owner/type inventory and raw-source
+fixed-point controls; then pass all fresh full gates and release-target checks.
+The [verification contract](../../docs/spec/verification.md) owns the exact
+protocol and evidence boundaries. Preserve working-tree/index quiescence
+throughout the seal and commit that exact tested tree.
+
+Build the normalized native filter with:
+
+```sh
+lkjscript --project tools/selfhost/project build --native-elf COMPILER --target compile-elf
+```
+
+It reads one admitted `LKJCI1` request from stdin and emits complete ELF or
+artifact bytes on stdout, with diagnostics on stderr. Select
+`--target compile-source-elf` for the raw-source filter. Its stdin is a current
+`LKJSRQ01` request carrying the selected TargetId, output mode and complete
+`LKJSG002` carrier. The target's historical name does not restrict the request
+to ELF output. An external launcher owns atomic output-file publication.

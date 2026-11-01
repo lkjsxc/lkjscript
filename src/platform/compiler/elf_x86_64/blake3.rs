@@ -41,11 +41,14 @@ fn child_parameters(a: &mut Asm) {
     a.load(R9, R12, 48);
 }
 
-pub(super) fn emit(a: &mut Asm, tree: Label) {
+pub(super) fn emit(a: &mut Asm, tree: Label, poll: Label) {
     let compress = a.label();
     let leaf = a.label();
     let finish = a.label();
     a.bind(tree);
+    a.bytes(&[0x9c]);
+    a.call(poll);
+    a.bytes(&[0x9d]);
     a.push(Bx);
     a.push(R12);
     a.push(R13);
@@ -62,6 +65,9 @@ pub(super) fn emit(a: &mut Asm, tree: Label) {
     let split = a.label();
     let divided = a.label();
     a.bind(split);
+    a.bytes(&[0x9c]);
+    a.call(poll);
+    a.bytes(&[0x9d]);
     a.mov(Ax, Bx);
     a.shift(4, Ax, 1);
     a.bin(0x39, Ax, Si);
@@ -104,6 +110,9 @@ pub(super) fn emit(a: &mut Asm, tree: Label) {
     a.imm(R13, 0); // Number of blocks already compressed in this chunk.
     let block = a.label();
     a.bind(block);
+    a.bytes(&[0x9c]);
+    a.call(poll);
+    a.bytes(&[0x9d]);
     a.imm(Ax, 0);
     for i in 0..8 {
         a.store(R12, BLOCK + i * 8, Ax);

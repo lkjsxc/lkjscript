@@ -111,7 +111,8 @@ declarations.begin
   (function create compress (visibility private) (effect pure)
     (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer)
     (body (let
-      (binding a (type ByteBuffer) (call copy (bool false) (i64 64) (i64 160) (i64 12) (i64 8) (i64 0) (local out)))
+      (binding polled (type ByteBuffer) (call machine::call (i64 51712) (local out)))
+      (binding a (type ByteBuffer) (call copy (bool false) (i64 64) (i64 160) (i64 12) (i64 8) (i64 0) (local polled)))
       (binding b (type ByteBuffer) (call initial (i64 192) (i64 4) (i64 0) (local a)))
       (binding c (type ByteBuffer) (call asm::load (i64 0) (i64 12) (i64 16) (local b)))
       (binding d (type ByteBuffer) (call asm::memory (bool false) (i64 137) (i64 0) (i64 12) (i64 208) (local c)))
