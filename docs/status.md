@@ -1,6 +1,6 @@
 # Current status
 
-Updated 2026-11-01 (Asia/Tokyo). Accepted typed meaning is the sole editable
+Updated 2026-11-02 (Asia/Tokyo). Accepted typed meaning is the sole editable
 program authority. Source proposals are adopted through public transactions.
 
 ## Current milestone and delivery boundary
@@ -15,24 +15,26 @@ reproduces standalone ELF and canonical artifacts. The accepted implementation i
 historical 29 fresh gates, release-target result and exact implementation tree;
 that seal does not cover subsequent phase-runtime changes.
 
-The Milestone C candidate on `runtime/20261101-native-phases` has passed focused
-production checks for repeated native invocation, scratch reclamation, independent
-output ownership and recovery. Both the Rust-produced compiler and the
-source-produced compiler were invoked repeatedly in a long-lived native process,
-with surviving outputs checked after scratch disposal. The complete raw-source
-fixed-point test also passed with `C2 = C3`, `Ahost = A1 = A2 = A3` and
-`original_repository_unchanged=true`.
+Milestone C is accepted on main at
+`a1e4c9dd3adaae299c17da220e238e135baabdc2`, tested tree
+`43041af8f6d72b3fa37c0bfa6e7acc2db2cfac9e`. The
+[phase acceptance record](decisions/20261101-native-phase-acceptance.json)
+binds the terminal staged-tree seal, all 29 fresh gates and release-target result.
+Both the Rust-produced compiler and source-produced compiler ran repeatedly
+within long-lived native processes, retaining promoted outputs after scratch
+disposal. The fresh raw-source fixed point passed with `C2 = C3`,
+`Ahost = A1 = A2 = A3` and `original_repository_unchanged=true`.
 
-**Fresh staged-tree acceptance and integration of Milestone C are pending.**
-The focused receipts below bind a test binary and the accepted source graph;
-they are not a staged-tree seal. Full `P_self` support (Milestone B), general
-lifecycle unbounding and repository-wide capacity freedom remain separate work.
+This acceptance is specific to native invocation scratch reclamation.
+Full `P_self` support (Milestone B), language-level Regions, general lifecycle
+unbounding and repository-wide capacity freedom remain separate work.
 No release archive or production deployment was published.
 
 ## Authoritative source and focused outputs
 
-The following identities belong to the phase candidate's accepted graph and
-completed focused fixed-point run, rather than to the earlier Milestone A seal.
+The following graph and fixed-point identities belong to the accepted phase
+implementation. The fresh seal reproduced them independently of the earlier
+focused run and the historical Milestone A seal.
 
 | Identity | Value |
 | --- | --- |
@@ -86,7 +88,7 @@ language intrinsic or semantic family to `F_active`. Language-level lexical
 Regions, first-class closure support beyond this active profile, nominal owned
 families and owned witnesses remain separate obligations.
 
-The candidate [native phase contract](spec/native-phases.md) exports recoverable
+The [native phase contract](spec/native-phases.md) exports recoverable
 invocation for a complete pure `(Bytes) -> {diagnostic: I64, image: Bytes}`
 closure. Each invocation has separate scratch and output slab chains. The entire
 surviving record and image are copied into the output context before scratch is
@@ -99,7 +101,7 @@ implementation and evidence boundaries.
 This work does not turn native calls into heap-backed frames or remove existing
 recursive lifecycle guards. General arbitrary-value promotion is not part of the
 binary-filter ABI. The earlier scalar pool and bulk byte intrinsics remain
-supported; their prior memory observations do not measure this phase candidate's
+supported; their prior memory observations do not measure the accepted phase implementation's
 peak live data, allocation traffic or performance improvement.
 
 ## Focused Milestone C evidence
@@ -150,39 +152,49 @@ counter reset or process-exit cleanup.
 
 Historical focused logs retain a stale `same_process_reclamation=false` summary
 label. Their explicit production phase records above establish which checks
-actually ran. The source of that label has been corrected; the pending full seal
-must cover that correction and the subsequent Rust guard completion-status fix.
+actually ran. The fresh staged-tree seal covers the corrected label and the
+subsequent Rust guard completion-status fix.
 The immutable focused receipts remain evidence for their original test binary.
 
-## Pending finalization and next work
+## Staged-tree acceptance and next work
 
-Final preparation passed formatting (5.168s), Clippy (43.417s), current CLI
-build (175.336s), discovery generation (0.860s) and discovery verification
-(0.889s). The current CLI SHA-256 is
-`ac9ab6365c8930479848cd568616b5066ed8ce31370acf0c4ca8170e85f931f1`;
-preparation receipt SHA-256 is
-`bd7f57070e50d773da6f62b58468d936c306454402ee8faf33dd122dec8fc1a5`.
-These preparation checks are separate from the focused test binary and the
-pending staged-tree seal.
+The frozen acceptance ran from 2026-11-01T15:22:46.487Z through
+2026-11-01T18:28:03.960Z against source commit
+`114f7764638a40e4239038b865eb2b265d785219` and staged tree
+`43041af8f6d72b3fa37c0bfa6e7acc2db2cfac9e`.
+Working-tree bytes, index, source identity and graph HEAD remained unchanged
+across every operation. The implementation commit preserves that exact tree;
+this acceptance documentation is a separate follow-up and does not inherit its seal.
 
-Finish documentation finalization, then freeze the intended tracked tree with
-zero unstaged or non-ignored untracked changes.
-Capture `expected_source=$(git rev-parse HEAD)` and
-`expected_tree=$(git write-tree)`; maintain working-tree and index quiescence
-through the staged verifier bootstrap, complete selfhost selection, named
-maintained-native-closure / whole-owner-type-inventory / raw-source controls,
-all 29 fresh full gates and release-target validation. Commit and integrate
-exactly that verified tree, binding terminal receipt hashes without a post-seal
-tracked edit. The current focused result does not pre-empt any of these gates.
+| Operation | Terminal result | Elapsed seconds |
+| --- | --- | --- |
+| Staged verifier bootstrap | Passed | 213.192 |
+| Literal selfhost script | 231 passed; 0 failed; 7 ignored | 4804.746 |
+| Maintained native closure | 1 passed; 0 failed; 0 ignored | 55.295 |
+| Complete owner/type inventory | 1 passed; 0 failed; 0 ignored | 38.964 |
+| Whole raw-source fixed point, including C1/C2 phase controls | 1 passed; 0 failed; 0 ignored | 1338.818 |
+| Full verification | 29 fresh gates passed; 0 reused; 0 unrun | 4662.348 |
+| Release-target validation | Passed | 0.006 |
 
-After Milestone C integration, advance the next dependency-closed Milestone B
-semantic batch. Closed pure callable values, Bind and Invoke require coherent
-source admission, both backend projections, evaluator capture validation and
-environment lifetime handling before adoption into maintained compiler source.
+Terminal seal SHA-256:
+`3b44651a9b9f463174a64d2604338e888f95bb0f77b8f2b5b35f69b0a79a8eee`.
+Full receipt SHA-256:
+`6395a29d8c4e1dd9f47988a0f7215735994752379087929d870aa4ff56361ec3`.
+Bootstrap receipt SHA-256:
+`643fd6db11216252347dc1581cb34b55c9f92411003a8608fc89fcbe9d23d75a`.
+The full harness did not retain its transient originals; its receipt records
+each fresh gate result, binary/input identities and output digests. The retained
+literal-selfhost and named-control logs provide the test counts above.
+
+The next dependency-closed Milestone B batch adds closed pure callable values,
+Bind and Invoke through source admission, canonical and native lowering, both
+native backends, and evaluator environment validation and lifetime handling.
+Its prepared text drafts are unadopted and unverified by compilation or execution.
+Capability checks must precede public compiler-proposal adoption.
 Nominal owned records/choices and Match, explicit owned witnesses/read views and
 lexical Regions remain required by `P_self`.
 
 The [capacity ledger](decisions/20261025-capacity-unbounding.md) continues to track
-canonical-unit/object envelopes, lifecycle and stack safety, map key/value scale,
-catalog/GC topology and package/data/queue/HTTP/tooling families. Neither full
-Tier 2 nor Tier 3 sovereignty is established by this candidate.
+unit/manifest limits, source and object envelopes, recursive lifecycles, maps,
+catalog/GC topology, and package/data/queue/HTTP/dev-tool policies. Each remaining
+family requires a complete producer-to-execution crossing and its own exact seal.

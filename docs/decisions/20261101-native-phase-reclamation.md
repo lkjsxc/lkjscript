@@ -201,14 +201,23 @@ The GC receipt SHA-256 is
 `c5393dc67d72b0cae7e7c8fb32d2581b70a33ccbff4abb62a195bd60a6097b0d`.
 Storage compaction and native reclamation are separate observations.
 
-### Remaining acceptance boundary
+### Accepted staged-tree boundary
 
-Formatting, Clippy, current CLI construction and generated-discovery checks
-passed during final preparation. Their receipt SHA-256 is
-`bd7f57070e50d773da6f62b58468d936c306454402ee8faf33dd122dec8fc1a5`.
-Fresh staged-tree bootstrap, complete selfhost verification, named controls,
-all 29 fresh full gates, release-target validation and integration are still
-pending for this candidate. The historical Milestone A seal covers its earlier
-implementation tree only. Until the new terminal seal is bound to the exact
-committed tree, this decision records completed focused Milestone C evidence,
-not accepted mainline completion.
+Milestone C was accepted as implementation commit
+`a1e4c9dd3adaae299c17da220e238e135baabdc2`, whose tree is exactly
+`43041af8f6d72b3fa37c0bfa6e7acc2db2cfac9e`. Staged-tree bootstrap, the complete
+literal selfhost script, named maintained-closure and whole-inventory controls,
+the whole raw-source fixed point with C1/C2 same-process phase checks, all
+29 fresh full gates and release-target validation passed. Main was fast-forwarded
+to that implementation and remote ancestry was checked.
+
+The [acceptance record](20261101-native-phase-acceptance.json) binds the exact
+source, tested tree, commands, elapsed times and terminal receipt hashes.
+Terminal seal SHA-256:
+`3b44651a9b9f463174a64d2604338e888f95bb0f77b8f2b5b35f69b0a79a8eee`.
+Full receipt SHA-256:
+`6395a29d8c4e1dd9f47988a0f7215735994752379087929d870aa4ff56361ec3`.
+This section is a documentation-only follow-up. It does not relabel this
+follow-up tree as the tested implementation tree or extend the older Milestone A
+seal. Lexical Regions, finer compiler-subpass lifetimes and remaining `P_self`
+semantic families remain separate work.

@@ -1,0 +1,523 @@
+{
+  "schema": "lkjscript.native-phase-acceptance.v1",
+  "status": "accepted",
+  "documentation_only_followup": true,
+  "implementation_commit": "a1e4c9dd3adaae299c17da220e238e135baabdc2",
+  "tested_source": "114f7764638a40e4239038b865eb2b265d785219",
+  "tested_tree": "43041af8f6d72b3fa37c0bfa6e7acc2db2cfac9e",
+  "started_utc": "2026-11-01T15:22:46.487Z",
+  "completed_utc": "2026-11-01T18:28:03.960Z",
+  "integrated_utc": "2026-11-01T23:07:08.732Z",
+  "graph_head_sha256": "46e8489a1033b25a7f4373016619b58172bf7b4069084123c781267454ac6eec",
+  "graph_revision": "rev_4738276e107d5ba43239a48a5c93ad852c76ab850e8bbf43346ef4ac520c7d59",
+  "semantic_state": "semantic_state_ac4cf31448b764ce6b563ba84cc1d2f0a241d00c5eaed0057657ed4799a43a46",
+  "terminal_receipt_sha256": "3b44651a9b9f463174a64d2604338e888f95bb0f77b8f2b5b35f69b0a79a8eee",
+  "full_receipt_sha256": "6395a29d8c4e1dd9f47988a0f7215735994752379087929d870aa4ff56361ec3",
+  "bootstrap_receipt_sha256": "643fd6db11216252347dc1581cb34b55c9f92411003a8608fc89fcbe9d23d75a",
+  "verifier": {
+    "path": "/home/coder/workspace/lkjscript/target/bootstrap/lkjscript-dev",
+    "sha256": "f38a1f19ee3bbfb0566ead4ee4e2aee400e22f38a9d2a4d9009dfc4c6661f240"
+  },
+  "operations": [
+    {
+      "name": "bootstrap",
+      "command": "/usr/bin/bash",
+      "args": [
+        "tools/bootstrap-verifier.sh",
+        "--expected-source",
+        "114f7764638a40e4239038b865eb2b265d785219",
+        "--expected-tree",
+        "43041af8f6d72b3fa37c0bfa6e7acc2db2cfac9e",
+        "--output",
+        "/home/coder/workspace/lkjscript/.artifacts/capacity-unbounding/seal-native-phase-20261101-round1/bootstrap"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "signal": null,
+      "elapsed_nanoseconds": "213191880096",
+      "stdout_sha256": "db3a96f22718450592ebac8c0f36d3f38172464cdd217e08c134f1493219de14",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "selfhost",
+      "command": "/usr/bin/bash",
+      "args": [
+        "tools/selfhost/verify.sh"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "signal": null,
+      "elapsed_nanoseconds": "4804746320731",
+      "stdout_sha256": "56baadcad2dc086c7adc31442fde267dc1575f941cfeee3c1e80ffbb6d8488b4",
+      "stderr_sha256": "51156983250f83a0b1b6f11f0e9e4c6dd8ea0f7c3391fae5860d155924f8e079",
+      "test_results": [
+        "test result: ok. 200 passed; 0 failed; 7 ignored; 0 measured; 2769 filtered out; finished in 4284.02s",
+        "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 2964 filtered out; finished in 0.00s",
+        "test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 2957 filtered out; finished in 121.41s"
+      ]
+    },
+    {
+      "name": "maintained-native-closure",
+      "command": "/usr/bin/flock",
+      "args": [
+        "--exclusive",
+        "/home/coder/workspace/lkjscript/target/.lkjscript-check.lock",
+        "/home/coder/.cargo/bin/cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--lib",
+        "selfhost_source_measure_maintained_native_closure",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "signal": null,
+      "elapsed_nanoseconds": "55295030925",
+      "stdout_sha256": "b4adb652be10dad9ad02cb5dd83e8c57a3ab3d1e53be12c90f0d38aebbdecefb",
+      "stderr_sha256": "448dd177d4cb43c13a34d893da26d9ccf6c3a56f5dd5079a5d246ce17163709f",
+      "test": {
+        "filter": "selfhost_source_measure_maintained_native_closure",
+        "name": "platform::execution::normalized::tests::selfhost_tests::source::measure::selfhost_source_measure_maintained_native_closure",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "inventory_sha256": "0f01c1b2773836600cf7003e9e666f6ac42066956ed8768ec792952b355024a8",
+        "caller_address_space_bytes": null,
+        "binary": {
+          "path": "/home/coder/workspace/lkjscript/target/release/deps/lkjscript-e2fdc52c2bd3596c",
+          "sha256": "ada77021577d726dbea91b06af78d375dae65166f3b7d2204837bb3ab3260429"
+        }
+      }
+    },
+    {
+      "name": "whole-owner-type-inventory",
+      "command": "/usr/bin/flock",
+      "args": [
+        "--exclusive",
+        "/home/coder/workspace/lkjscript/target/.lkjscript-check.lock",
+        "/home/coder/.cargo/bin/cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--lib",
+        "selfhost_source_profile_inventories_every_owner_and_type",
+        "--",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "signal": null,
+      "elapsed_nanoseconds": "38964459810",
+      "stdout_sha256": "0ec5b263371c427e32a0bac42427f1b04ffe8eaea370d4909e3c278ff16889ea",
+      "stderr_sha256": "448dd177d4cb43c13a34d893da26d9ccf6c3a56f5dd5079a5d246ce17163709f",
+      "test": {
+        "filter": "selfhost_source_profile_inventories_every_owner_and_type",
+        "name": "platform::execution::normalized::tests::selfhost_tests::source::profile::selfhost_source_profile_inventories_every_owner_and_type",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "inventory_sha256": "67736aee34b6e33a1fd3e2bbac489477617d4ac0d3cf4138f791db582edbcbf8",
+        "caller_address_space_bytes": null,
+        "binary": {
+          "path": "/home/coder/workspace/lkjscript/target/release/deps/lkjscript-e2fdc52c2bd3596c",
+          "sha256": "ada77021577d726dbea91b06af78d375dae65166f3b7d2204837bb3ab3260429"
+        }
+      }
+    },
+    {
+      "name": "raw-source-fixed-point",
+      "command": "/usr/bin/flock",
+      "args": [
+        "--exclusive",
+        "/home/coder/workspace/lkjscript/target/.lkjscript-check.lock",
+        "/usr/bin/prlimit",
+        "--as=34359738368",
+        "--",
+        "/home/coder/.cargo/bin/cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--lib",
+        "selfhost_source_artifact_whole_maintained_raw_source_fixed_point",
+        "--",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "signal": null,
+      "elapsed_nanoseconds": "1338818201164",
+      "stdout_sha256": "aaf404c53566d8d09955f974c78d0a0394b6adefe2b84c4e0c3268ea1ebe9c40",
+      "stderr_sha256": "938509f4fd0a37b0111a9cb9dfe80238f3b5083fdb2c0febe346d5657be0985d",
+      "test": {
+        "filter": "selfhost_source_artifact_whole_maintained_raw_source_fixed_point",
+        "name": "platform::execution::normalized::tests::selfhost_tests::source::scalar::source_artifact_tests::selfhost_source_artifact_whole_maintained_raw_source_fixed_point",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "inventory_sha256": "8dfffbda75ef9ee5565656337ac9bedfe72f8e70b05a7ff8ded8e93f859e75e8",
+        "caller_address_space_bytes": 34359738368,
+        "binary": {
+          "path": "/home/coder/workspace/lkjscript/target/release/deps/lkjscript-e2fdc52c2bd3596c",
+          "sha256": "ada77021577d726dbea91b06af78d375dae65166f3b7d2204837bb3ab3260429"
+        }
+      }
+    },
+    {
+      "name": "full",
+      "command": "/home/coder/workspace/lkjscript/target/bootstrap/lkjscript-dev",
+      "args": [
+        "check",
+        "full",
+        "--fresh",
+        "--machine",
+        "--jobs",
+        "4"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "signal": null,
+      "elapsed_nanoseconds": "4662347685350",
+      "stdout_sha256": "f71cb293b025a2c6d46c4464d4bb71e88710b00940fea18243ba6c3175f0d961",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "result": {
+        "gates": 29,
+        "fresh": 29,
+        "reused": 0,
+        "unrun": 0,
+        "receipt_sha256": "6395a29d8c4e1dd9f47988a0f7215735994752379087929d870aa4ff56361ec3"
+      }
+    },
+    {
+      "name": "release-target",
+      "command": "/home/coder/workspace/lkjscript/target/bootstrap/lkjscript-dev",
+      "args": [
+        "release",
+        "target"
+      ],
+      "status": "passed",
+      "exit_code": 0,
+      "signal": null,
+      "elapsed_nanoseconds": "6259052",
+      "stdout_sha256": "a15a5d8e7edde5fa876d808eb7ffbbaf3a1ac79f788178ff5c8bae4dd0c3557b",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "full": {
+    "fresh_passed": 29,
+    "reused": 0,
+    "unrun": [],
+    "originals_retained": false,
+    "gates": [
+      {
+        "name": "fmt",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "4793138407",
+        "input_fingerprint": "verification_a8220597f716446c0266cfef11b510112f8aa1623b63ef8fa5a5c6eb00bfd3eb",
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "clippy",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "39740655694",
+        "input_fingerprint": "verification_914f4c3a3d8c5af349be3c2accce1261ae5a30321c9515292a7bc30a38b6c0c4",
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_digest": "verification_c7eab87b2de8c0cbb50326ab05e041a15c188a964abf73ebd30706f41077848e"
+      },
+      {
+        "name": "workspace_tests",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "3959950786234",
+        "input_fingerprint": "verification_70e0a41d579258544a7efeb8040e8c2bf5c9149f353c2df86344217f57f31798",
+        "stdout_digest": "verification_0f273fd70c300863f91c03bd904c998b03b33a6358a68991d727dfd33715dd81",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "release_build",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "696561339200",
+        "input_fingerprint": "verification_fc33a8b4c387d66c178d818fa03517a4f4ef07c8be4a7dbb6a703e2a6eba00df",
+        "stdout_digest": "verification_e1d236ab5029b6bea5aacca1a3b2a01c40bb2afbaa8bf974d2ded5cdb5e6a795",
+        "stderr_digest": "verification_096a8c18e92d632dd2f88e5c0340e5cd2be634a90e4a0ca8af8b4549661f576d"
+      },
+      {
+        "name": "release_command_lifecycle",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "19576152618",
+        "input_fingerprint": "verification_8868e165366bd224959e9ea6f40e33f2fcb40b2421548e65d297d1e4ed764a68",
+        "stdout_digest": "verification_b8cbbbf8c079fc7fdf3b210ecf2dfc60a59fc91b2cb3a42cc102233726380c19",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "distributed_http_application",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "39986441266",
+        "input_fingerprint": "verification_858c509714761881277349d72e765702c94474cc65311ee80b5959b2ed566eab",
+        "stdout_digest": "verification_808dee99177f7a174f91399a3a1fcb60fc3a2ada63dd856275ff53d33e14c271",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "outbound_http_application",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "31448218026",
+        "input_fingerprint": "verification_5d7e2157e2c0a24fe7ea703d624cd47e3c5369932e1ef03efd683562205b9c6c",
+        "stdout_digest": "verification_e51f0f7f1c65c0d3c208441cc6142d1a62101e16c17f9484261350d5369fa555",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "offline_packages",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "311313471524",
+        "input_fingerprint": "verification_ce1b8d3dba1d079d5c2b3e2bc570b2413217c9b610fea4c1c94df0dad4a7852f",
+        "stdout_digest": "verification_225889ec77607347a46b531bd6be00759eb930a59047b0901ec8bfd738a44606",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "pure_tail",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "123503258669",
+        "input_fingerprint": "verification_176a0ff81aab10d4a43610560cc02ea3bf00b9de465698197a67a3aedae32124",
+        "stdout_digest": "verification_0c8d077f2166354455d1794973f14c1d2f24aa1448ea1736dd54b8e7768b4198",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "stateful_http_application",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "89307902287",
+        "input_fingerprint": "verification_6abd70465d1d83ba872e4e6bddb431688b6e6734c46b62402ad4a0526ae4fa16",
+        "stdout_digest": "verification_01657d40423241c120b83efc5cd3c8f591bbeeade8813208b4889bf6fad236cd",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "checker_self_test",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "849968901",
+        "input_fingerprint": "verification_2267c763e8cfe3f6fefd7c7088c260db7c952b141c4e24b129b2012162f712f5",
+        "stdout_digest": "verification_548230806767d82f215a3d77bed4382a1cddad00097f13e6cafb852e269081cf",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "rust_only_tooling",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "225190996",
+        "input_fingerprint": "verification_597175f2fffb59cfb7d02c387739cfbfd14546b5926df2a0f3714e0929457281",
+        "stdout_digest": "verification_e79333093501eaa9e7ee0158aecb7ddfbc2079d3d9cbd952c2d58e9ca052599f",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "generated_public_guides",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "1646396614",
+        "input_fingerprint": "verification_f07077e4074be568016395fb33cd50118c7e5efb431af5eae9b8a5ed70480973",
+        "stdout_digest": "verification_3bf1b776085c493f02b5aefac02ed517138908fa62c90b4006f26cad6f15784c",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "product_surface_audit",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "492470647",
+        "input_fingerprint": "verification_8eb6d3e4a0b26e11b99c055e37d0cea57f0cf020d13bc2cae764817145184ab2",
+        "stdout_digest": "verification_00f84dd6f97095df401d923d479a9dfd006c999ea28078ed07d8060eade7f1d5",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "standard_package_test",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "5744757392",
+        "input_fingerprint": "verification_25ed19501d0300332c90ec744d8c2a52cb2cab9cc098a5c913e864095b05ace5",
+        "stdout_digest": "verification_4ac83aa5253bc9d42660e94b0534b37352a0ebb065052b136c198616262d2442",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "application_package_test",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "7311403978",
+        "input_fingerprint": "verification_b6b83e99d47e3001fa512e485c10b3d6f48a49e265bd256b9043d1546e4e67ee",
+        "stdout_digest": "verification_1541f739d2326bea17f5e54ab7d6dceb3bb7dd48d0548f613e35ae9ebc85b503",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "standard_artifact_build",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "6483268806",
+        "input_fingerprint": "verification_cedf5e4feb1d45282d6f9313a9b1ceefc7014479252ec2abbbc758d07e8c4ae6",
+        "stdout_digest": "verification_1374b55954194e40c83f8955a65f2526f766cab3e3aa10752d29aa22923c15e8",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "standard_artifact_compare",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "21527352",
+        "input_fingerprint": "verification_e894f123bbfb7dd3482c9749d9faf37ce86f65902d71e2339c4a79394400cdaf",
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "builtin_package_export",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "1336836397",
+        "input_fingerprint": "verification_2efd01cbc510e5dd541dc9864b8242fdc6f1d9aad4d38ac6b5ec6f61f6310a09",
+        "stdout_digest": "verification_a452ca8df1641eb7702b498b2c38e00638d19c628756fede56cb5ea5dd1ac075",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "builtin_package_compare",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "25126845",
+        "input_fingerprint": "verification_b3bc054d23c1623bc11b0b7abc03ac034effcf4fd7cef39e6ed9ef924e45a100",
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "builtin_transport_export",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "1133978626",
+        "input_fingerprint": "verification_d3631ef8b1404a664f5adb96c52b266ccdb73a0c33b7fec29bec1d1aed115683",
+        "stdout_digest": "verification_7c0691ee5e1835d63e5ab3413bef2911565432ff79bad32a6b3c15aa58951c6c",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "builtin_transport_compare",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "21329649",
+        "input_fingerprint": "verification_1b32d3786d05fdf9070559a1986c224cc6c5512b3b4be9b28f4d730b6ff191e0",
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "application_artifact_build",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "7430797931",
+        "input_fingerprint": "verification_7343d515cd3878424551f669e6645e84bf22350164eb6e7ee3d0894a532ddf8f",
+        "stdout_digest": "verification_e1225ef4aa453c8fd9b010d8bb1665dcc23a57fe05b600585ab1f199e24510c6",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "application_artifact_compare",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "19421487",
+        "input_fingerprint": "verification_052efaa34ee74a907c3291776b27c6e5a21736f5ae11179772d598b57148d785",
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "native_package_plan_test",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "51890619724",
+        "input_fingerprint": "verification_8dd8d3f97092345ca353a48ec5f5c544f630ef38284bef78d72b49ca810b6682",
+        "stdout_digest": "verification_b18a891621d4fcdb8a868abb636105dfb47b69c5631179baa2d1372f8feac4d9",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "native_package_plan_build",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "13972385666",
+        "input_fingerprint": "verification_d0274fe91781516f238981b049ee3816e9561393503fef7d7e27db2a46f89ebb",
+        "stdout_digest": "verification_3eec8721ffaaa6966feb96035bbaaf2926cda1c2f3dcac9756385398f2733d45",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "native_package_plan_compare",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "21157340",
+        "input_fingerprint": "verification_83aeae567e0327822803c343141e0c8770bfada26fcf88f358175cff0ee62309",
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "service_acceptance",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "74869190236",
+        "input_fingerprint": "verification_abffaab555d932a2e1fc428f3ff1c7d21c04011785b9df73ca0451c5413d29f1",
+        "stdout_digest": "verification_2138999506c585d1cbcf9c873cb5a02dedcf2671f4b8681218fdaf732bb2e262",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      },
+      {
+        "name": "diff_check",
+        "status": "passed",
+        "execution": "fresh",
+        "exit_code": 0,
+        "elapsed_nanoseconds": "2251547393",
+        "input_fingerprint": "verification_591d63570fd0757004197ca5c8165a2a86cab8b91e918c438dda298aa505f3a6",
+        "stdout_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685",
+        "stderr_digest": "verification_8c41d99ada6a3d2359db76f14df4174debd6ef878a60bd4349d1c32d1e664685"
+      }
+    ]
+  },
+  "scope": [
+    "Repeated complete native compilation and validation within a process",
+    "Separate scratch and promoted-output ownership; retained outputs survive scratch unmapping",
+    "Cancellation, refusal, diagnostic/runtime rejection and cleanup retry controls",
+    "Raw-source C2=C3 and Ahost=A1=A2=A3 preserved"
+  ],
+  "not_established": [
+    "Language-level lexical Region support in native/source compilation",
+    "Finer internal compiler subpass reclamation",
+    "Full P_self semantic profile",
+    "Repository-wide capacity freedom",
+    "Release archive publication or deployment"
+  ]
+}

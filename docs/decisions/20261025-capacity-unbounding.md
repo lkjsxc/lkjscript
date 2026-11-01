@@ -1,23 +1,25 @@
 # Capacity removal: boundary census and integration ledger
 
-Updated 2026-11-01 (Asia/Tokyo).
+Updated 2026-11-02 (Asia/Tokyo).
 
-## Current dependency-closed candidate
+## Current accepted boundary and next batch
 
-Phase 1, unbounded lists, Profile 7, the stable artifact index sort and complete
-maintained raw-source self-compilation are accepted on main. The latest accepted
-implementation is `010ce014ae97e87df17d2f6acbea728f73bf14d1`, tested tree
-`7c4b670f4cabb5f50284f81b141fe81517a94e9d`; the documentation follow-up at
-`114f7764638a40e4239038b865eb2b265d785219` is distinct from that seal.
+Phase 1, unbounded lists, Profile 7, stable artifact index ordering, complete
+maintained raw-source self-compilation (Milestone A), and same-process native
+invocation scratch reclamation (Milestone C) are accepted on main.
+The latest implementation is `a1e4c9dd3adaae299c17da220e238e135baabdc2`,
+tested tree `43041af8f6d72b3fa37c0bfa6e7acc2db2cfac9e`.
+The [phase acceptance record](20261101-native-phase-acceptance.json) binds
+its fresh staged-tree seal, all 29 fresh gates, release-target result and
+raw-source fixed point with retained-output and reclamation controls.
 
-The [active-source decision](20261101-active-source-self-compilation.md) records
-Milestone A: C2=C3 and Ahost=A1=A2=A3, strict loading, source mutations and
-complete-inventory negatives. It passed all 29 fresh full gates and release
-target. The next [native phase batch](20261101-native-phase-reclamation.md)
-introduces separately owned scratch/output contexts and repeated same-process
-compiler invocation. Its exact current graph, controls and acceptance state live
-in [status](../status.md). Milestones B/C and remaining capacity families are not
-implied by the earlier Milestone A seal.
+The [active-source decision](20261101-active-source-self-compilation.md)
+remains the historical Milestone A record. The
+[native phase decision](20261101-native-phase-reclamation.md) establishes
+separately owned scratch/output contexts and repeated compiler invocation.
+Full `P_self` support and the remaining capacity families are not implied by
+either seal. The next closed-callable source/runtime batch is still unadopted
+and awaiting actual compiler feedback; [status](../status.md) records that boundary.
 
 | Coupled family | Candidate result / remaining dependency |
 | --- | --- |
@@ -25,14 +27,14 @@ implied by the earlier Milestone A seal.
 | Publication preview staging | Removed the aggregate 64 MiB admission; staged-object validation, corruption/cancellation/refusal and atomic replacement controls passed. This does not remove individual object-domain limits. |
 | Independent canonical-reference preparation | Removed implicit aggregate work/entry/metadata limits across schema, types, read views, associated proofs and dependency binding. Exact optional policies and saturation remain separate. The identical complete compiler tx that hit the old reference proof allowance is now publicly accepted and replayed. |
 | Byte movement and native scalar traffic | Added three closed bulk/word intrinsics through both evaluators and both backends before compiler adoption; immutable scalar pooling lets the pinned artifact request complete under the same 24 GiB process policy where the prior allocator failed. This is not phase reclamation or a semantic integer cap. |
-| Native invocation scratch lifetime | Candidate: current LKJPH001 handles own separate scratch/output slab chains, materialize complete surviving Bytes, reclaim scratch and release retained outputs. Pure closure, cancellation, failure, nested-state, independent mapping and retained-output controls are required through both native backends; exact acceptance is recorded in status. Lexical Regions remain separate. |
+| Native invocation scratch lifetime | Accepted Milestone C: LKJPH001 handles own separate scratch/output slab chains, promote complete surviving results, reclaim scratch and release retained outputs. Repeated compiler invocation, cancellation/failure/retry and independent mapping controls passed through Rust-produced and self-produced compilers under the exact phase seal. Lexical Regions and finer subpass lifetimes remain separate. |
 | Canonical unit / manifest / cache path | Still pending: per-unit byte/item limits, storage envelopes, metadata/preparation limits and narrow host IR identities must be removed through their complete consumers. Large aggregate artifacts do not prove large-unit admission. |
 | Source/object envelopes | Still pending: u32 carrier extents and Owner/Type/root/history/blob domain limits plus child/text policies. New profile 3 binds original provenance but does not widen these independent coordinates. |
 | Recursive lifecycle and native frames | Still pending: validation, lowering, codecs, clone/comparison/hash/debug and destruction must become stack safe together before depth guards disappear. Native CALL stack growth remains distinct. |
 | Map key/value and catalog/GC topology | Still pending: overflow/page contracts, reachability and transport, hierarchy/manifest scaling, pack counts and exact layout versus passive totals. Physical split/compaction targets may remain. |
 | Package/data/queue/HTTP/dev-tool policies | Continue dependency-closed audits; this compiler batch does not claim repository-wide quota removal. |
 
-Final acceptance must freeze all candidate inputs, bootstrap that exact staged tree,
+Each subsequent acceptance must freeze all candidate inputs, bootstrap that exact staged tree,
 run the literal selfhost/native script and named native/source controls, pass all
 29 fresh full gates and release target, then commit only that tree. Terminal
 receipts and the acceptance commit own the final seal; no later edit inherits it.
@@ -108,9 +110,9 @@ complete only when its listed downstream dependencies and verification are compl
 | LKJSG002 lengths/counts/offsets and per-object codec guards | Carrier producer, every source pass, diagnostics | 3/5. Current u32 extents remain checked; eventual widening must replace all directory/payload consumers | Explicit remaining representation boundary. New policy width does not imply 64-bit carrier extents |
 | `compiler/elf_x86_64::{Asm,compile,Emitter,elf}` | Rust native command compilation and ELF publication | 1/3/5/6. Fallible code/labels/worklists; usize label identity; absolute64 relocations/indirect transfers; checked wide frame and record offsets | Applied removal of 4,096-function/65,536-instruction/32MiB-image quotas. Arithmetic, wide-offset, 33MiB ELF and ordinary native controls passed. The public 4,097-function fixture publishes and compiles beyond both former inventories; ELF, VM and reference each return 4,097. |
 | `owned_output.rs`, CLI native build, artifact preparation | Create-new executable stage, artifact bundle, release readers | 1/2/6. Default native publication must not inherit artifact byte quota; explicit output policies remain exact; preserve atomic stage cleanup | Applied Option<usize> publisher; ordinary CLI usesNone and explicit0/exact/one-over/MAX policies pass with atomic cleanup. Artifact preparation16GiB and release reader caps remain separate obligations |
-| Native `heap/objects/runtime` and Rust ELF runtime | Byte allocation/copy/buffer growth/hash/derive/filter I/O | 1/3/5/6. Remove256MiB per-value checks; checked signed length, header/payload addition, geometric fallback, mmap extent checks | Applied Rust emitter and publicly adopted proposals. Arithmetic edge probes, existing native controls and Tier 1 native reproduction passed. The current phase candidate adds focused same-process production controls; its full acceptance remains separate |
+| Native `heap/objects/runtime` and Rust ELF runtime | Byte allocation/copy/buffer growth/hash/derive/filter I/O | 1/3/5/6. Remove256MiB per-value checks; checked signed length, header/payload addition, geometric fallback, mmap extent checks | Applied Rust emitter and publicly adopted proposals. Arithmetic edge probes, existing native controls and Tier 1 native reproduction passed. The later Milestone C seal adds accepted same-process production controls under its own exact tree |
 | Normalized `value/byte_buffer/owned_storage/vm/reference`, `bytes` | Allocation policy, immutable bytes and mutable buffers, VM/reference | 1/2/6. Remove hidden per-value cap; fallible reserve, exact RunPolicy, cancellation and honest merged observations | Applied. Finite0/exact/MAX, cancellation, and historical-bound arithmetic tests added |
-| Native allocation lifetime: R14/R15, `heap::allocate`, buffer discard/freeze | Source prepare -> lower -> ELF, repeated same-process invocation | 4/6. Separate scratch/output slab ownership, immutable caller input, complete surviving-result promotion and exact munmap/retry | Current candidate: LKJPH001 through both native backends. Repeated complete compiler invocations, retained outputs, cancellation, allocation and cleanup failures, retry and independent mapping controls pass focused verification. Full staged-tree acceptance remains pending in status; lexical Regions and finer subpass lifetimes are separate. |
+| Native allocation lifetime: R14/R15, `heap::allocate`, buffer discard/freeze | Source prepare -> lower -> ELF, repeated same-process invocation | 4/6. Separate scratch/output slab ownership, immutable caller input, complete surviving-result promotion and exact munmap/retry | Accepted Milestone C at `a1e4c9dd3adaae299c17da220e238e135baabdc2`, tested tree `43041af8f6d72b3fa37c0bfa6e7acc2db2cfac9e`. Repeated full compiler invocations, retained outputs, cancellation, allocation and cleanup failures, retry and independent mappings passed the fresh seal. Lexical Regions and finer subpass lifetimes remain separate. |
 | `execution/region{,/runtime,/persistence}.rs`, region value/VM/reference | Lexical region slots, relative pointers, persistence and native Region support | 1/3/5. Remove65,536 live-region cap and checked slot growth; widen u32 pointer/capacity/layout/slice fields coherently | Applied LKJREGN2/profile2 with64-bit header/cell/pointer/count fields, uncapped arena slots and iterative shared-DAG layout/codec/teardown. All46 region tests passed. Native Region/domain reclamation remains incomplete |
 | Kernel depth guards versus recursive consumers | Normalize/lower/interpret, codecs, display, equality/hash/clone/drop, native call stack | 1/3/5/6. Remove synthetic counters only after recursive lifecycle is replaced by heap worklists or justified safe mechanism | Pending full lifecycle cut. Iterative validator loops are identified; 256/1024 depth removal alone is unsafe |
 | Normalized `RunPolicy` call-depth/value-stack and raw admission items | Foreground/default execution, VM/reference, nested invocation | 1/2/5. Optional execution policies throughout; preserve cancellation/effects; stack-safe implementation before unbounded depth | Phase 1 accepted the four exact optional cumulative policies and independent saturation. The accepted list slice removes ordinary raw aggregate-item clamps; focused controls and all 29 fresh full gates passed. Default 4,096-call-depth, 1M-stack, nesting and remaining specialized item guards require separate cuts |
