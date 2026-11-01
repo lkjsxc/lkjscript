@@ -237,14 +237,14 @@ pub(crate) fn command(mut arguments: impl Iterator<Item = OsString>) -> Result<u
             command_base: 0,
             inventory_base: 0,
             schema: match selected_case.as_deref() {
-                Some("finite-callable") => "lkjscript-offline-finite-callable-semantic-1",
+                Some("finite-callable") => "lkjscript-offline-finite-callable-semantic-2",
                 Some("requirement-parameters") => {
-                    "lkjscript-offline-requirement-parameters-semantic-1"
+                    "lkjscript-offline-requirement-parameters-semantic-2"
                 }
-                Some("f64") => "lkjscript-offline-f64-semantic-1",
-                Some("parameter-type") => "lkjscript-offline-parameter-type-semantic-1",
-                Some("persistent-maps") => "lkjscript-offline-persistent-maps-semantic-1",
-                _ => "lkjscript-offline-semantic-1",
+                Some("f64") => "lkjscript-offline-f64-semantic-2",
+                Some("parameter-type") => "lkjscript-offline-parameter-type-semantic-2",
+                Some("persistent-maps") => "lkjscript-offline-persistent-maps-semantic-2",
+                _ => "lkjscript-offline-semantic-2",
             }
             .to_owned(),
             status: "failed".to_owned(),
@@ -1922,7 +1922,7 @@ pub(crate) fn read_semantic_receipt(path: &Path, verifier: &Path) -> Result<Rece
         "offline receipt encoding or path is noncanonical",
     )?;
     require(
-        receipt.schema == "lkjscript-offline-semantic-1"
+        receipt.schema == "lkjscript-offline-semantic-2"
             && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -2441,8 +2441,14 @@ mod tests {
             edges: 1,
             bytes: 1,
             oracle_validation_visits: 1,
+            oracle_validation_visits_saturated: false,
             oracle_validation_read_bytes: 1,
+            oracle_validation_read_bytes_saturated: false,
         };
+        verify_producer_inventory(&producer, &inventory).unwrap();
+        // Passive lower bounds do not change the independently compared source inventory.
+        inventory.oracle_validation_visits_saturated = true;
+        inventory.oracle_validation_read_bytes_saturated = true;
         verify_producer_inventory(&producer, &inventory).unwrap();
         inventory.packages[0].owners[0].2 = "changed-private-body".to_owned();
         assert!(verify_producer_inventory(&producer, &inventory).is_err());

@@ -15,7 +15,7 @@ use crate::platform::package_interface::{
 use crate::platform::persistent_map::{MapErrorClass, MapRoot, MapWork, PersistentMap};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StageOutcome, StoreError, StoreErrorClass,
-    StoreReadAdmission, StoreReadLimits, StoreWork,
+    StoreReadAdmission, StoreReadLimits, StoreWork, StoreWorkCounter,
 };
 use crate::platform::storage::page_store::ObjectPageReader;
 use crate::platform::witness::{FullWitness, rebuild_full_witness_checked};
@@ -36,8 +36,14 @@ pub const READINESS_CONTRACT_IDENTITY: &str = "lkjscript-package-transport-selec
 pub const READINESS_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const MAXIMUM_CONTAINER_BYTES: usize = 268_435_456;
 pub const MAXIMUM_CONTAINER_OBJECTS: usize = 1_000_000;
-pub const MAXIMUM_VALIDATION_VISITS: u64 = 16_000_000;
-pub const MAXIMUM_VALIDATION_READ_BYTES: u64 = 4_294_967_296;
+#[cfg(test)]
+pub(crate) const FORMER_VALIDATION_VISITS: u64 = 16_000_000;
+#[cfg(test)]
+pub(crate) const FORMER_VALIDATION_READ_BYTES: u64 = 4_294_967_296;
+
+#[path = "source_admission.rs"]
+mod admission;
+pub(crate) use admission::{SourceAllowance, SourceObservation};
 pub const READINESS_MAGIC: [u8; 8] = *b"LKJPTS02";
 pub const MAXIMUM_READINESS_BYTES: usize = 12 + 64 * super::MAXIMUM_PACKAGE_TRANSPORT_CANDIDATES;
 
@@ -124,8 +130,12 @@ pub struct AdmittedClosure {
     pub packages: BTreeMap<PackageRevisionDigest, Arc<ImmutablePackage>>,
     pub dependency_order: Vec<PackageRevisionDigest>,
     pub(crate) dependency_plan: super::NativePackagePlanEvidence,
+    /// Passive object-read and semantic work observations, not execution permission.
     pub validation_visits: u64,
+    pub validation_visits_saturated: bool,
     pub validation_read_bytes: u64,
+    pub validation_read_bytes_saturated: bool,
+    pub(crate) validation_semantic_visits: SourceObservation,
     pub dependency_edges: usize,
 }
 
@@ -364,11 +374,7 @@ impl PackageContainer {
         &self,
         control: &ExecutionControl,
     ) -> Result<AdmittedClosure, Diagnostic> {
-        self.admit_with_budget_and_control(
-            MAXIMUM_VALIDATION_VISITS,
-            MAXIMUM_VALIDATION_READ_BYTES,
-            control,
-        )
+        self.admit_with_budget_and_control(None, None, control)
     }
 
     #[cfg(test)]
@@ -378,39 +384,36 @@ impl PackageContainer {
         maximum_read_bytes: u64,
     ) -> Result<AdmittedClosure, Diagnostic> {
         self.admit_with_budget_and_control(
-            maximum_visits,
-            maximum_read_bytes,
+            Some(maximum_visits),
+            Some(maximum_read_bytes),
             &ExecutionControl::uncancelled(),
         )
     }
 
     pub(crate) fn admit_with_budget_and_control(
         &self,
-        maximum_visits: u64,
-        maximum_read_bytes: u64,
+        maximum_visits: Option<u64>,
+        maximum_read_bytes: Option<u64>,
         control: &ExecutionControl,
     ) -> Result<AdmittedClosure, Diagnostic> {
         control.check().map_err(execution_diagnostic)?;
-        if maximum_visits > MAXIMUM_VALIDATION_VISITS
-            || maximum_read_bytes > MAXIMUM_VALIDATION_READ_BYTES
-        {
-            return Err(limit("non-overridable admission ceilings"));
-        }
         // Include the decoder's one complete container read and object-integrity visits.
         let input_bytes = self.encoded_size()? as u64;
         let input_visits = self.objects.len() as u64;
-        let visits = maximum_visits
-            .checked_sub(input_visits)
-            .ok_or_else(|| limit("validation visits"))?;
-        let reads = maximum_read_bytes
-            .checked_sub(input_bytes)
-            .ok_or_else(|| limit("validation-read bytes"))?;
+        let mut visits = SourceAllowance::new(maximum_visits);
+        if !visits.reserve(input_visits) {
+            return Err(limit("validation visits"));
+        }
+        let mut reads = SourceAllowance::new(maximum_read_bytes);
+        if !reads.reserve(input_bytes) {
+            return Err(limit("validation-read bytes"));
+        }
         let mut admitted = collect_with_budget_and_control(
             &self.objects,
             self.root,
             &self.selections,
-            visits,
-            reads,
+            visits.remaining(),
+            reads.remaining(),
             control,
         )?;
         if admitted.container.objects != self.objects {
@@ -419,8 +422,20 @@ impl PackageContainer {
                 "container contains missing or extra canonical objects; export the complete current closure and restage",
             ));
         }
-        admitted.validation_visits += input_visits;
-        admitted.validation_read_bytes += input_bytes;
+        let mut visits = SourceObservation {
+            consumed: admitted.validation_visits,
+            saturated: admitted.validation_visits_saturated,
+        };
+        visits.observe(SourceObservation::exact(input_visits));
+        admitted.validation_visits = visits.consumed;
+        admitted.validation_visits_saturated = visits.saturated;
+        let mut reads = SourceObservation {
+            consumed: admitted.validation_read_bytes,
+            saturated: admitted.validation_read_bytes_saturated,
+        };
+        reads.observe(SourceObservation::exact(input_bytes));
+        admitted.validation_read_bytes = reads.consumed;
+        admitted.validation_read_bytes_saturated = reads.saturated;
         Ok(admitted)
     }
 }
@@ -523,44 +538,123 @@ pub(crate) struct CollectingStore<'a, S: ?Sized> {
     admission: RefCell<StoreReadAdmission>,
     objects: RefCell<BTreeMap<ObjectKey, Vec<u8>>>,
     retained_bytes: std::cell::Cell<usize>,
-    maximum_visits: u64,
-    semantic_visits: std::cell::Cell<u64>,
+    remaining_visits: std::cell::Cell<SourceAllowance>,
+    semantic_visits: std::cell::Cell<SourceObservation>,
 }
 impl<'a, S: ?Sized> CollectingStore<'a, S> {
     pub(crate) fn new(base: &'a S) -> Self {
+        Self::with_budget(base, None, None)
+    }
+
+    pub(crate) fn with_budget(
+        base: &'a S,
+        maximum_visits: Option<u64>,
+        maximum_read_bytes: Option<u64>,
+    ) -> Self {
         Self {
             base,
             admission: RefCell::new(StoreReadAdmission::new(StoreReadLimits {
-                maximum_catalog_lookups: Some(MAXIMUM_VALIDATION_VISITS),
-                maximum_objects: Some(MAXIMUM_VALIDATION_VISITS),
-                maximum_bytes: Some(MAXIMUM_VALIDATION_READ_BYTES),
+                maximum_catalog_lookups: maximum_visits,
+                maximum_objects: None,
+                maximum_bytes: maximum_read_bytes,
             })),
             objects: RefCell::new(BTreeMap::new()),
             retained_bytes: std::cell::Cell::new(84),
-            maximum_visits: MAXIMUM_VALIDATION_VISITS,
-            semantic_visits: std::cell::Cell::new(0),
+            remaining_visits: std::cell::Cell::new(SourceAllowance::new(maximum_visits)),
+            semantic_visits: std::cell::Cell::new(SourceObservation::default()),
         }
     }
-    pub(crate) fn visits(&self) -> u64 {
-        self.admission
-            .borrow()
-            .observation()
-            .objects
-            .saturating_add(self.semantic_visits.get())
+
+    fn visit_observation(&self) -> SourceObservation {
+        let reads = self.admission.borrow().observation();
+        let mut visits = SourceObservation {
+            consumed: reads.objects,
+            saturated: reads.counter_saturated(StoreWorkCounter::ObjectsRead),
+        };
+        visits.observe(self.semantic_visits.get());
+        visits
     }
+
+    pub(crate) fn visits(&self) -> u64 {
+        self.visit_observation().consumed
+    }
+
+    pub(crate) fn visits_saturated(&self) -> bool {
+        self.visit_observation().saturated
+    }
+
+    pub(crate) fn semantic_observation(&self) -> SourceObservation {
+        self.semantic_visits.get()
+    }
+
     pub(crate) fn read_bytes(&self) -> u64 {
         self.admission.borrow().observation().bytes
     }
-    fn charge_visits(&self, count: u64) -> Result<(), Diagnostic> {
-        if self
-            .visits()
-            .checked_add(count)
-            .is_none_or(|total| total > self.maximum_visits)
-        {
+
+    pub(crate) fn read_bytes_saturated(&self) -> bool {
+        self.admission
+            .borrow()
+            .observation()
+            .counter_saturated(StoreWorkCounter::BytesRead)
+    }
+
+    pub(crate) fn remaining_visits(&self) -> Option<u64> {
+        self.remaining_visits.get().remaining()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn remaining_read_bytes(&self) -> Option<u64> {
+        self.admission.borrow().remaining().maximum_bytes
+    }
+
+    pub(crate) fn remaining_kernel_work(&self) -> Result<Option<usize>, Diagnostic> {
+        self.remaining_visits()
+            .map(|remaining| {
+                usize::try_from(remaining)
+                    .map_err(|_| limit("kernel validation counter representation"))
+            })
+            .transpose()
+    }
+
+    pub(crate) fn charge_visits(&self, count: u64) -> Result<(), Diagnostic> {
+        self.charge_observed_visits(count, false)
+    }
+
+    pub(crate) fn charge_observed_visits(
+        &self,
+        count: u64,
+        saturated: bool,
+    ) -> Result<(), Diagnostic> {
+        if saturated && self.remaining_visits().is_some() {
+            return Err(corrupt(
+                "package_source_work_observation",
+                "a finite source phase returned an inexact work observation",
+            ));
+        }
+        let amount = SourceObservation {
+            consumed: count,
+            saturated,
+        };
+        let mut allowance = self.remaining_visits.get();
+        if !allowance.reserve_observed(amount) {
             return Err(limit("aggregate validation visits"));
         }
-        self.semantic_visits.set(self.semantic_visits.get() + count);
+        let mut observed = self.semantic_visits.get();
+        observed.observe(amount);
+        self.remaining_visits.set(allowance);
+        self.semantic_visits.set(observed);
         Ok(())
+    }
+
+    fn charge_modeled_visits(&self, amount: SourceObservation) -> Result<(), Diagnostic> {
+        if amount.saturated && self.remaining_visits().is_some() {
+            return Err(limit("aggregate validation visits"));
+        }
+        self.charge_observed_visits(amount.consumed, amount.saturated)
+    }
+
+    pub(crate) fn charge_visit_product(&self, factors: &[u64]) -> Result<(), Diagnostic> {
+        self.charge_modeled_visits(SourceObservation::product(factors))
     }
 }
 impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for CollectingStore<'_, S> {
@@ -601,15 +695,29 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for CollectingStore<
         let internal = *self.admission.borrow();
         let outer = *external;
         let mut allowance = internal.remaining();
-        allowance.maximum_objects = allowance
-            .maximum_objects
-            .map(|remaining| remaining.saturating_sub(self.semantic_visits.get()));
-        let mut admission = StoreReadAdmission::new(allowance.intersect(outer.remaining()));
+        allowance.maximum_objects = self.remaining_visits();
+        let joint_limits = allowance.intersect(outer.remaining());
+        let mut admission = StoreReadAdmission::new(joint_limits);
         let result = self.base.read_admitted(key, maximum, &mut admission, work);
         let next_internal = internal.charged_from(&admission)?;
         let next_outer = outer.charged_from(&admission)?;
+        let next_visits = self
+            .remaining_visits
+            .get()
+            .charged_from(
+                joint_limits.maximum_objects,
+                admission.remaining().maximum_objects,
+            )
+            .ok_or_else(|| {
+                StoreError::new(
+                    StoreErrorClass::Corrupt,
+                    "package_source_read_accounting",
+                    "joint source read lost its exact aggregate visit allowance",
+                )
+            })?;
         *self.admission.borrow_mut() = next_internal;
         *external = next_outer;
+        self.remaining_visits.set(next_visits);
         let bytes = result?;
         if let Some(bytes) = &bytes
             && !self.objects.borrow().contains_key(&key)
@@ -663,22 +771,15 @@ pub fn collect_with_control<S: ImmutableObjectStore + ?Sized>(
     selections: &[PackageTransportBinding],
     control: &ExecutionControl,
 ) -> Result<AdmittedClosure, Diagnostic> {
-    collect_with_budget_and_control(
-        base,
-        root,
-        selections,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
-        control,
-    )
+    collect_with_budget_and_control(base, root, selections, None, None, control)
 }
 
 pub(crate) fn collect_with_budget_and_control<S: ImmutableObjectStore + ?Sized>(
     base: &S,
     root: PackageTransportBinding,
     selections: &[PackageTransportBinding],
-    maximum_visits: u64,
-    maximum_read_bytes: u64,
+    maximum_visits: Option<u64>,
+    maximum_read_bytes: Option<u64>,
     control: &ExecutionControl,
 ) -> Result<AdmittedClosure, Diagnostic> {
     collect_admitted(
@@ -709,20 +810,14 @@ pub(crate) fn collect_preplanned_with_control<S: ImmutableObjectStore + ?Sized>(
     prior: super::PackageTransportClosureValidation,
     control: &ExecutionControl,
 ) -> Result<AdmittedClosure, Diagnostic> {
-    collect_preplanned_with_budget_and_control(
-        base,
-        prior,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
-        control,
-    )
+    collect_preplanned_with_budget_and_control(base, prior, None, None, control)
 }
 
 pub(crate) fn collect_preplanned_with_budget_and_control<S: ImmutableObjectStore + ?Sized>(
     base: &S,
     prior: super::PackageTransportClosureValidation,
-    maximum_visits: u64,
-    maximum_read_bytes: u64,
+    maximum_visits: Option<u64>,
+    maximum_read_bytes: Option<u64>,
     control: &ExecutionControl,
 ) -> Result<AdmittedClosure, Diagnostic> {
     let root = PackageTransportBinding {
@@ -747,30 +842,15 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     base: &S,
     root: PackageTransportBinding,
     selections: &[PackageTransportBinding],
-    maximum_visits: u64,
-    maximum_read_bytes: u64,
+    maximum_visits: Option<u64>,
+    maximum_read_bytes: Option<u64>,
     control: &ExecutionControl,
     prior: Option<&super::PackageRevisionClosureValidation>,
     reuse: Option<&mut SourceValidationReuse>,
 ) -> Result<AdmittedClosure, Diagnostic> {
     control.check().map_err(execution_diagnostic)?;
-    if maximum_visits > MAXIMUM_VALIDATION_VISITS
-        || maximum_read_bytes > MAXIMUM_VALIDATION_READ_BYTES
-    {
-        return Err(limit("non-overridable admission ceilings"));
-    }
-    let store = CollectingStore {
-        base,
-        admission: RefCell::new(StoreReadAdmission::new(StoreReadLimits {
-            maximum_catalog_lookups: Some(maximum_visits),
-            maximum_objects: Some(maximum_visits),
-            maximum_bytes: Some(maximum_read_bytes),
-        })),
-        objects: RefCell::new(BTreeMap::new()),
-        retained_bytes: std::cell::Cell::new(84 + selections.len() * 64),
-        maximum_visits,
-        semantic_visits: std::cell::Cell::new(0),
-    };
+    let store = CollectingStore::with_budget(base, maximum_visits, maximum_read_bytes);
+    store.retained_bytes.set(84 + selections.len() * 64);
     let mut work = StoreWork::default();
     let mut map_admission = crate::platform::persistent_map::MapAdmission::unbounded();
     let mut visit = |count| {
@@ -844,7 +924,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     let mut exact_selections = BTreeMap::new();
     if reuse.is_some() {
         let lookup = validation_reuse::selection_lookup_work(selections.len());
-        store.charge_visits(selections.len() as u64 * (lookup + 1))?;
+        store.charge_visit_product(&[selections.len() as u64, lookup + 1])?;
         for selection in selections {
             control.check().map_err(execution_diagnostic)?;
             exact_selections.insert(selection.package_revision, selection.transport);
@@ -864,16 +944,13 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
             .ok_or_else(|| corrupt("package_source_snapshot", "source snapshot disappeared"))?;
         shared_interfaces.attach(&mut snapshot, &validated.representation_revisions)?;
         // Dependency type copies have already reserved their base visits before growth.
-        let projection_visits = snapshot
-            .owners
-            .len()
-            .checked_add(snapshot.types.len())
-            .ok_or_else(|| limit("validation visits"))? as u64;
-        store.charge_visits(projection_visits)?;
+        let mut projection_visits = SourceObservation::exact(snapshot.owners.len() as u64);
+        projection_visits.observe(SourceObservation::exact(snapshot.types.len() as u64));
+        store.charge_modeled_visits(projection_visits)?;
         // Current interface evidence cannot stand in for the exact authored source profile.
         // Inspect every canonical owner/type, including private, unused and untaken content,
         // before the independent full witness is rebuilt from those bytes.
-        store.charge_visits(projection_visits)?;
+        store.charge_modeled_visits(projection_visits)?;
         admit_read_view_source_profile(
             &snapshot,
             &revisions[&binding.package_revision],
@@ -891,14 +968,11 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
                     &snapshot,
                     external,
                     &mut intrinsic_work,
-                    Some(
-                        usize::try_from(maximum_visits - store.visits())
-                            .map_err(|_| limit("validation visits"))?,
-                    ),
+                    store.remaining_kernel_work()?,
                 )?;
             }
         }
-        store.charge_visits(intrinsic_work.consumed as u64)?;
+        store.charge_observed_visits(intrinsic_work.consumed as u64, intrinsic_work.saturated)?;
         #[cfg(test)]
         tests::before_source_full_validation(control);
         // Fresh canonical reconstruction, exact interface attachment, profile and intrinsic
@@ -921,11 +995,10 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
                     proof,
                     &|| control.check().map_err(execution_diagnostic),
                 )
-                .map(|witness| (witness, 0))
+                .map(|witness| (witness, SourceObservation::default()))
             } else if cache.can_retain(&key, pending_validation_bytes) {
                 cache.reserve_pending(&store, control)?;
-                let remaining = usize::try_from(maximum_visits - store.visits())
-                    .map_err(|_| limit("validation visits"))?;
+                let remaining = store.remaining_kernel_work()?;
                 crate::platform::witness::rebuild_full_witness_checked_for_source(
                     &snapshot,
                     remaining,
@@ -933,30 +1006,40 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
                     key,
                 )
                 .map(|(witness, proof)| {
-                    let work = witness.report.full_validation.work_consumed;
-                    completed_validation = Some(proof);
+                    let report = &witness.report.full_validation;
+                    let work = SourceObservation {
+                        consumed: report.work_consumed,
+                        saturated: report.work_saturated,
+                    };
+                    completed_validation = proof;
                     (witness, work)
                 })
             } else {
                 // Optional metadata capacity cannot grant a larger validation allowance.
-                let remaining = usize::try_from(maximum_visits - store.visits())
-                    .map_err(|_| limit("validation visits"))?;
-                rebuild_full_witness_checked(&snapshot, Some(remaining), &|| {
+                let remaining = store.remaining_kernel_work()?;
+                rebuild_full_witness_checked(&snapshot, remaining, &|| {
                     control.check().map_err(execution_diagnostic)
                 })
                 .map(|witness| {
-                    let work = witness.report.full_validation.work_consumed;
+                    let report = &witness.report.full_validation;
+                    let work = SourceObservation {
+                        consumed: report.work_consumed,
+                        saturated: report.work_saturated,
+                    };
                     (witness, work)
                 })
             }
         } else {
-            let remaining = usize::try_from(maximum_visits - store.visits())
-                .map_err(|_| limit("validation visits"))?;
-            rebuild_full_witness_checked(&snapshot, Some(remaining), &|| {
+            let remaining = store.remaining_kernel_work()?;
+            rebuild_full_witness_checked(&snapshot, remaining, &|| {
                 control.check().map_err(execution_diagnostic)
             })
             .map(|witness| {
-                let work = witness.report.full_validation.work_consumed;
+                let report = &witness.report.full_validation;
+                let work = SourceObservation {
+                    consumed: report.work_consumed,
+                    saturated: report.work_saturated,
+                };
                 (witness, work)
             })
         }
@@ -975,7 +1058,10 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         })?;
         // The report retains the original complete proof's historical work count. Only
         // validation actually executed in this collector consumes its current remainder.
-        store.charge_visits(current_full_validation_work)?;
+        store.charge_observed_visits(
+            current_full_validation_work.consumed,
+            current_full_validation_work.saturated,
+        )?;
         let (interface_owners, interface_types) = project(&snapshot, &witness)?;
         let rebuilt = build_package_interface(&interface_owners, &interface_types)?;
         let revision = revisions
@@ -1031,12 +1117,9 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         &source_snapshots,
         &|| control.check().map_err(execution_diagnostic),
         &mut composed_work,
-        Some(
-            usize::try_from(maximum_visits - store.visits())
-                .map_err(|_| limit("validation visits"))?,
-        ),
+        store.remaining_kernel_work()?,
     )?;
-    store.charge_visits(composed_work.consumed as u64)?;
+    store.charge_observed_visits(composed_work.consumed as u64, composed_work.saturated)?;
     // Topology belongs to the checked native planner. Every exact package was
     // independently admitted above; retain that operation's plan through source
     // reconstruction instead of recomputing a second host order.
@@ -1047,8 +1130,14 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         cache.commit(pending_validations, &store, control)?;
     }
     let validation_visits = store.visits();
+    let validation_visits_saturated = store.visits_saturated();
+    let validation_read_bytes = store.read_bytes();
+    let validation_read_bytes_saturated = store.read_bytes_saturated();
+    let validation_semantic_visits = store.semantic_observation();
     Ok(AdmittedClosure {
-        validation_read_bytes: store.admission.borrow().observation().bytes,
+        validation_read_bytes,
+        validation_read_bytes_saturated,
+        validation_semantic_visits,
         container: PackageContainer {
             root,
             selections: selections.to_vec(),
@@ -1058,6 +1147,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         dependency_order,
         dependency_plan,
         validation_visits,
+        validation_visits_saturated,
         dependency_edges: validated.dependency_edges,
     })
 }
@@ -1817,18 +1907,35 @@ declarations.end
     fn aggregate_validation_exact_fit_and_one_over_and_independent_inventory() {
         let source = standard_source();
         let standalone = source.container.admit().unwrap();
-        let exact = source
-            .container
-            .admit_with_budget(
+        assert!(!standalone.validation_visits_saturated);
+        assert!(!standalone.validation_read_bytes_saturated);
+        for (visits, bytes) in [
+            (
                 standalone.validation_visits,
                 standalone.validation_read_bytes,
-            )
-            .unwrap();
-        assert_eq!(exact.validation_visits, standalone.validation_visits);
-        assert_eq!(
-            exact.validation_read_bytes,
-            standalone.validation_read_bytes
-        );
+            ),
+            (u64::MAX, u64::MAX),
+        ] {
+            let exact = source.container.admit_with_budget(visits, bytes).unwrap();
+            assert_eq!(exact.validation_visits, standalone.validation_visits);
+            assert_eq!(
+                exact.validation_read_bytes,
+                standalone.validation_read_bytes
+            );
+            assert!(!exact.validation_visits_saturated);
+            assert!(!exact.validation_read_bytes_saturated);
+            assert_eq!(exact.container.objects, standalone.container.objects);
+        }
+        for (visits, bytes) in [(Some(0), None), (None, Some(0))] {
+            assert_eq!(
+                source
+                    .container
+                    .admit_with_budget_and_control(visits, bytes, &ExecutionControl::uncancelled(),)
+                    .unwrap_err()
+                    .class,
+                DiagnosticClass::Resource
+            );
+        }
         assert!(
             source
                 .container

@@ -772,7 +772,7 @@ impl Checker<'_, '_, '_> {
 
     fn branch(&mut self, locals: &Locals) -> Result<Locals, ExecutionError> {
         allocate::<(LocalValueReference, Local)>(&mut self.closure.allocated, locals.len())?;
-        allocate::<usize>(&mut self.closure.allocated, locals.len().saturating_mul(3))?;
+        allocate::<[usize; 3]>(&mut self.closure.allocated, locals.len())?;
         Ok(locals.clone())
     }
 

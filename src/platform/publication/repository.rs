@@ -46,6 +46,7 @@ use crate::platform::execution::normalized::execution_diagnostic;
 use crate::platform::kernel::{
     KernelSnapshot, SemanticRoot, decode_root, encode_root, semantic_state_digest_from_root,
 };
+use crate::platform::package_transport::source::SourceObservation;
 use crate::platform::package_transport::{
     PackageRevision, PackageTransport, PackageTransportBinding, PackageTransportClosureValidation,
     validate_package_revision_closure_with_control,
@@ -62,7 +63,7 @@ use crate::platform::storage::directory::SealCheckpoint;
 use crate::platform::storage::directory::{PackDirectoryStore, SealReceipt};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, ObjectStage, StageOutcome, StoreError,
-    StoreErrorClass, StoreReadAdmission, StoreReadLimits, StoreWork,
+    StoreErrorClass, StoreReadAdmission, StoreReadLimits, StoreWork, StoreWorkCounter,
 };
 use crate::platform::storage::page_store::ObjectPageReader;
 use crate::platform::storage::project::{
@@ -205,7 +206,9 @@ pub struct PackageTransportStageReceipt {
     pub container_bytes: usize,
     pub container_commitment: String,
     pub validation_visits: u64,
+    pub validation_visits_saturated: bool,
     pub validation_read_bytes: u64,
+    pub validation_read_bytes_saturated: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -672,7 +675,9 @@ impl GraphRepository {
             container_bytes: container.len(),
             container_commitment: blake3::hash(container).to_hex().to_string(),
             validation_visits: installed.validation_visits,
+            validation_visits_saturated: installed.validation_visits_saturated,
             validation_read_bytes: installed.validation_read_bytes,
+            validation_read_bytes_saturated: installed.validation_read_bytes_saturated,
         })
     }
 
@@ -2549,10 +2554,7 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
     control: &ExecutionControl,
 ) -> Result<(u64, bool), Diagnostic> {
     use crate::platform::kernel::{PackageId, decode_dependency, decode_dependency_binding};
-    use crate::platform::package_transport::source::{
-        MAXIMUM_VALIDATION_READ_BYTES, MAXIMUM_VALIDATION_VISITS, SourceAdmissionSession, entries,
-        required,
-    };
+    use crate::platform::package_transport::source::{SourceAdmissionSession, entries, required};
     control.check().map_err(execution_diagnostic)?;
     checkpoint()?;
     let mut work = StoreWork::default();
@@ -2661,7 +2663,9 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
     // Priority is operational only. All original roots remain; only a successfully complete
     // source admission below can mark any exact revision checked and suppress a later root.
     let source_order = priority.into_order(&mut priority_work)?;
-    let mut semantic_visits = priority_work.consumed();
+    // Priority work is already observed by the outer collector. Supplier semantic work
+    // is separate from the reads that each inner collector passes through that store.
+    let mut semantic_visits = SourceObservation::default();
     let mut checked = BTreeSet::new();
     let mut snapshots = BTreeMap::new();
     let mut source_admission = SourceAdmissionSession::new(&overlay, control);
@@ -2680,31 +2684,10 @@ pub(super) fn validate_dependency_sources_controlled<S: ImmutableObjectStore + ?
             &mut work,
             control,
         )?;
-        let before_reads = overlay.visits();
-        let visits = MAXIMUM_VALIDATION_VISITS
-            .checked_sub(before_reads)
-            .and_then(|remaining| remaining.checked_sub(semantic_visits))
-            .ok_or_else(|| {
-                repository_error(
-                    DiagnosticClass::Resource,
-                    "package_source_budget",
-                    "candidate closure exhausted aggregate validation visits",
-                )
-            })?;
-        let read_bytes = MAXIMUM_VALIDATION_READ_BYTES - overlay.read_bytes();
         #[cfg(test)]
         dependency_source_priority::record_collection(dependency.package_revision);
-        let admitted =
-            source_admission.collect_preplanned_with_budget(closure, visits, read_bytes)?;
-        semantic_visits = semantic_visits
-            .checked_add(admitted.validation_visits - (overlay.visits() - before_reads))
-            .ok_or_else(|| {
-                repository_error(
-                    DiagnosticClass::Resource,
-                    "package_source_budget",
-                    "candidate closure aggregate validation visits overflowed",
-                )
-            })?;
+        let admitted = source_admission.collect_preplanned_with_budget(closure, None, None)?;
+        semantic_visits.observe(admitted.validation_semantic_visits);
         checked.extend(admitted.packages.keys().copied());
         for package in admitted.packages.into_values() {
             checkpoint()?;
@@ -2855,31 +2838,9 @@ fn install_package_container(
     use crate::platform::package_transport::source::PackageContainer;
     control.check().map_err(execution_diagnostic)?;
     let container = PackageContainer::decode(bytes, digest)?;
-    // Reserve the owning store's possible existing-object comparison and final durable readback
-    // before semantic validation. Neither stage nor readback may reset the admission counters.
-    let reserved_reads = (container.encoded_size()? as u64)
-        .checked_mul(2)
-        .ok_or_else(|| {
-            repository_error(
-                DiagnosticClass::Resource,
-                "package_source_budget",
-                "staging validation-read reservation overflow; restage a smaller closure",
-            )
-        })?;
-    let reserved_visits = (container.objects.len() as u64)
-        .checked_mul(3)
-        .ok_or_else(|| {
-            repository_error(
-                DiagnosticClass::Resource,
-                "package_source_budget",
-                "staging validation-visit reservation overflow; restage a smaller closure",
-            )
-        })?;
-    let admitted = container.admit_with_budget_and_control(
-        crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS - reserved_visits,
-        crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES - reserved_reads,
-        control,
-    )?;
+    // Ordinary staging has no aggregate work/read quota. Semantic admission and the
+    // final durable readback still inspect the complete exact source container.
+    let admitted = container.admit_with_budget_and_control(None, None, control)?;
     control.check().map_err(execution_diagnostic)?;
     let package = admitted
         .packages
@@ -2918,20 +2879,7 @@ fn install_package_container(
     let ready_bytes = readiness.encode()?;
     let mut work = StoreWork::default();
     let stage_input_visits = container.objects.len() as u64;
-    let mut install_admission = crate::platform::storage::object::StoreReadAdmission::new(
-        crate::platform::storage::object::StoreReadLimits {
-            maximum_catalog_lookups: Some(reserved_visits),
-            maximum_objects: Some(
-                crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS
-                    - admitted.validation_visits
-                    - stage_input_visits,
-            ),
-            maximum_bytes: Some(
-                crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES
-                    - admitted.validation_read_bytes,
-            ),
-        },
-    );
+    let mut install_admission = StoreReadAdmission::unbounded();
     package_stage_checkpoint(fault, PackageStagePoint::BeforeObjects)?;
     for (index, (key, value)) in container.objects.iter().enumerate() {
         control.check().map_err(execution_diagnostic)?;
@@ -2984,6 +2932,18 @@ fn install_package_container(
         package_stage_checkpoint(fault, PackageStagePoint::ReadinessSynced)?;
         memory.readiness = Some(readiness);
     }
+    let (validation_visits, validation_read_bytes) = stage_validation_observations(
+        SourceObservation {
+            consumed: admitted.validation_visits,
+            saturated: admitted.validation_visits_saturated,
+        },
+        SourceObservation {
+            consumed: admitted.validation_read_bytes,
+            saturated: admitted.validation_read_bytes_saturated,
+        },
+        stage_input_visits,
+        work,
+    );
     Ok(InstalledPackageTransport {
         revision: package.revision.clone(),
         transport: package.transport.clone(),
@@ -2998,9 +2958,31 @@ fn install_package_container(
         closure_packages: admitted.packages.len(),
         closure_edges: admitted.dependency_edges,
         closure_objects: container.objects.len(),
-        validation_visits: admitted.validation_visits + stage_input_visits + work.objects_read,
-        validation_read_bytes: admitted.validation_read_bytes + work.bytes_read,
+        validation_visits: validation_visits.consumed,
+        validation_visits_saturated: validation_visits.saturated,
+        validation_read_bytes: validation_read_bytes.consumed,
+        validation_read_bytes_saturated: validation_read_bytes.saturated,
     })
+}
+
+// Passive stage totals are independent from read permission. Per-counter flags
+// preserve exact-u64::MAX versus a saturated lower bound across all three phases.
+fn stage_validation_observations(
+    mut visits: SourceObservation,
+    mut read_bytes: SourceObservation,
+    stage_input_visits: u64,
+    work: StoreWork,
+) -> (SourceObservation, SourceObservation) {
+    visits.observe(SourceObservation::exact(stage_input_visits));
+    visits.observe(SourceObservation {
+        consumed: work.objects_read,
+        saturated: work.counter_saturated(StoreWorkCounter::ObjectsRead),
+    });
+    read_bytes.observe(SourceObservation {
+        consumed: work.bytes_read,
+        saturated: work.counter_saturated(StoreWorkCounter::BytesRead),
+    });
+    (visits, read_bytes)
 }
 
 fn package_stage_checkpoint(
@@ -3096,7 +3078,9 @@ struct InstalledPackageTransport {
     closure_edges: usize,
     closure_objects: usize,
     validation_visits: u64,
+    validation_visits_saturated: bool,
     validation_read_bytes: u64,
+    validation_read_bytes_saturated: bool,
 }
 
 fn open_optional_directory_at(

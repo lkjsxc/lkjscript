@@ -46,7 +46,7 @@ fn ordered(direct: &[DependencyRecord], incoming: &[DependencyRecord]) -> (Vec<u
             .unwrap();
     }
     let order = priority.into_order(&mut work).unwrap();
-    (order, work.consumed())
+    (order, store.visits())
 }
 
 #[test]
@@ -90,19 +90,22 @@ fn dependency_source_priority_requires_the_complete_exact_descendant_record() {
 }
 
 #[test]
-fn dependency_source_priority_reserves_shared_capacity_and_actual_control_before_growth() {
+fn dependency_source_priority_reserves_exact_optional_capacity_and_checks_control()
+-> Result<(), Diagnostic> {
     let direct = [dependency(1), dependency(2), dependency(3)];
     let (_, required) = ordered(&direct, &[direct[0].clone()]);
     assert!(required > 0);
     let objects = BTreeMap::<crate::platform::storage::object::ObjectKey, Vec<u8>>::new();
-    let store = CollectingStore::new(&objects);
-    for (earlier, succeeds) in [
-        (MAXIMUM_VALIDATION_VISITS - required, true),
-        (MAXIMUM_VALIDATION_VISITS - required + 1, false),
+    for (maximum, succeeds) in [
+        (None, true),
+        (Some(0), false),
+        (Some(required - 1), false),
+        (Some(required), true),
+        (Some(u64::MAX), true),
     ] {
+        let store = CollectingStore::with_budget(&objects, maximum, None);
         let control = ExecutionControl::uncancelled();
         let mut work = DependencySourcePriorityWork::new(&store, &|| Ok(()), &control);
-        work.consumed = earlier;
         let result = DependencySourcePriority::new(&direct, &mut work).and_then(|mut priority| {
             priority.observe_dependency(&direct[0], &direct, &mut work)?;
             priority.into_order(&mut work)
@@ -111,19 +114,35 @@ fn dependency_source_priority_reserves_shared_capacity_and_actual_control_before
         if let Err(error) = result {
             assert_eq!(error.class, DiagnosticClass::Resource);
         }
-        assert!(work.consumed() <= MAXIMUM_VALIDATION_VISITS);
+        if succeeds {
+            assert_eq!(store.visits(), required);
+            assert_eq!(
+                store.remaining_visits(),
+                maximum.map(|value| value - required)
+            );
+        }
+        assert!(!store.visits_saturated());
     }
+    let store = CollectingStore::new(&objects);
+    store.charge_visits(u64::MAX)?;
+    let control = ExecutionControl::uncancelled();
+    let mut work = DependencySourcePriorityWork::new(&store, &|| Ok(()), &control);
+    let priority = DependencySourcePriority::new(&direct, &mut work)?;
+    assert_eq!(priority.into_order(&mut work)?, [0, 1, 2]);
+    assert!(store.visits_saturated());
+    assert_eq!(store.remaining_visits(), None);
+
+    let store = CollectingStore::new(&objects);
     let control = ExecutionControl::uncancelled();
     control.cancel();
     let mut work = DependencySourcePriorityWork::new(&store, &|| Ok(()), &control);
-    assert_eq!(
-        DependencySourcePriority::new(&direct, &mut work)
-            .err()
-            .unwrap()
-            .class,
-        DiagnosticClass::Cancelled
-    );
-    assert_eq!(work.consumed(), 0);
+    let result = DependencySourcePriority::new(&direct, &mut work);
+    assert!(result.is_err());
+    if let Err(error) = result {
+        assert_eq!(error.class, DiagnosticClass::Cancelled);
+    }
+    assert_eq!(store.visits(), 0);
+    Ok(())
 }
 
 fn empty_source(package: PackageId, seed: &[u8]) -> KernelSnapshot {
@@ -283,7 +302,7 @@ fn dependency_source_priority_admits_two_maximal_roots_for_the_nine_supplier_ove
         &ExecutionControl::uncancelled(),
     )
     .unwrap();
-    assert!(observed.0 <= MAXIMUM_VALIDATION_VISITS);
+    assert!(observed.0 > 0);
     assert!(!observed.1);
     assert_eq!(
         collections(),

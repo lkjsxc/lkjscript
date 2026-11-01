@@ -6,6 +6,7 @@ use super::prepare::{
 };
 use super::reference::{NormalizedReferenceReadWork, reference_error, reference_resource};
 use super::value_schema::NormalizedValueSchema;
+use crate::platform::admission::{Meter, Observation};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionError;
 use crate::platform::kernel::{
@@ -38,10 +39,11 @@ fn source_error(error: Diagnostic) -> ExecutionError {
 pub(super) fn bind_associated_dependencies(
     snapshots: &[&KernelSnapshot],
     control: &crate::platform::execution::ExecutionControl,
-    work: &mut usize,
+    work: &mut Meter,
+    bytes: &mut Meter,
 ) -> Result<(), ExecutionError> {
     validate_dependency_closure(snapshots, control, work)?;
-    dependency_binding::validate(snapshots, control, work)
+    dependency_binding::validate_with_meters(snapshots, control, work, bytes)
 }
 
 #[derive(Clone, Debug, Default)]
@@ -53,7 +55,9 @@ pub struct NormalizedReferenceSchema {
     pub(super) source_admission_steps: u64,
     pub(super) source_admission_saturated: bool,
     pub(super) type_derivation_steps: u64,
+    pub(super) type_derivation_saturated: bool,
     pub(super) type_metadata_bytes: u64,
+    pub(super) type_metadata_saturated: bool,
     pub(super) affine_variants: Vec<bool>,
     pub(super) capture_safe_types: BTreeSet<TypeObjectDigest>,
     pub(super) transferable_types: BTreeSet<TypeObjectDigest>,
@@ -111,21 +115,20 @@ impl NormalizedReferenceSchema {
         let mut functions = BTreeSet::new();
         let mut records = BTreeMap::new();
         let mut variants = BTreeMap::new();
-        let mut visited = 0_usize;
         let mut inputs = Vec::new();
-        let mut source_work = 0_usize;
+        let mut source_work = Meter::new(None);
         for snapshot in snapshots {
             control.check()?;
             let package = snapshot.root.package_id;
-            if !packages.insert(package) || packages.len() > 10_000 {
-                return Err(inventory_error("duplicate or excessive canonical packages"));
+            if !packages.insert(package) {
+                return Err(inventory_error("duplicate canonical packages"));
             }
             // Raw snapshots carry no current artifact admission token. Check complete local
             // meaning, including nominal/callable flow and foreign application scope, before
-            // deriving any exact instances. The work allowance is shared across packages.
+            // deriving any exact instances. Ordinary source admission has no work quota.
             let report = crate::platform::kernel::validate_full_checked(
                 snapshot,
-                Some(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK - source_work),
+                None,
                 &mut crate::platform::kernel::ValidationWork::default(),
                 &|| {
                     control.check().map_err(|error| {
@@ -139,20 +142,17 @@ impl NormalizedReferenceSchema {
                     source_error,
                 )
             })?;
-            source_work += report.work_consumed as usize;
-            schema.source_admission_steps = source_work as u64;
+            source_charge(
+                &mut source_work,
+                Observation {
+                    consumed: report.work_consumed,
+                    saturated: report.work_saturated,
+                },
+            )?;
+            schema.source_admission_steps = source_work.observation().consumed;
+            schema.source_admission_saturated = source_work.observation().saturated;
+            inputs.try_reserve(1).map_err(|_| source_allocation())?;
             inputs.push(snapshot);
-            visited = visited
-                .checked_add(snapshot.owners.len())
-                .and_then(|count| count.checked_add(snapshot.types.len()))
-                .and_then(|count| count.checked_add(snapshot.dependency_types.len()))
-                .filter(|count| *count <= 16_000_000)
-                .ok_or_else(|| {
-                    reference_resource(
-                        "normalized_reference_inventory_bound",
-                        "canonical reference inventory exceeds 16000000 visits",
-                    )
-                })?;
             schema.work.owner_reads = schema
                 .work
                 .owner_reads
@@ -210,7 +210,7 @@ impl NormalizedReferenceSchema {
                             } => {
                                 let constraints =
                                     nominal_constraints(snapshot, *id, type_parameters)?;
-                                let mut layout = Vec::with_capacity(fields.len());
+                                let mut layout = source_items(fields.len())?;
                                 for field in fields {
                                     let Some(OwnerRecord::Field(record)) =
                                         snapshot.owners.get(&OwnerKey::Field(*field))
@@ -254,7 +254,7 @@ impl NormalizedReferenceSchema {
                             } => {
                                 let constraints =
                                     nominal_constraints(snapshot, *id, type_parameters)?;
-                                let mut layout = Vec::with_capacity(cases.len());
+                                let mut layout = source_items(cases.len())?;
                                 for case in cases {
                                     let Some(OwnerRecord::Case(record)) =
                                         snapshot.owners.get(&OwnerKey::Case(*case))
@@ -299,31 +299,34 @@ impl NormalizedReferenceSchema {
                 }
             }
         }
-        let after_local_full = source_work;
+        let after_local_full = source_work.observation();
         validate_dependency_closure(&inputs, control, &mut source_work)?;
         dependency_binding::validate(&inputs, control, &mut source_work)?;
-        let after_dependency_correspondence = source_work;
-        schema.source_admission_steps = source_work as u64;
-        schema.functions = functions.into_iter().collect();
-        schema.records = records.into_values().collect();
-        schema.variants = variants.into_values().collect();
-        schema.affine_variants = schema
-            .variants
-            .iter()
-            .map(|variant| {
-                let mut affine = false;
-                for case in variant.cases.iter() {
-                    if let Some(payload) = case.payload {
-                        let ty = schema.types.get(&payload).ok_or_else(|| {
-                            inventory_error("missing canonical affinity payload type")
-                        })?;
-                        affine |= matches!(ty.form, TypeForm::CapabilityResource { .. });
-                    }
+        let after_dependency_correspondence = source_work.observation();
+        schema.source_admission_steps = source_work.observation().consumed;
+        schema.source_admission_saturated = source_work.observation().saturated;
+        schema.functions = source_items(functions.len())?;
+        schema.functions.extend(functions);
+        schema.records = source_items(records.len())?;
+        schema.records.extend(records.into_values());
+        schema.variants = source_items(variants.len())?;
+        schema.variants.extend(variants.into_values());
+        schema.affine_variants = source_items(schema.variants.len())?;
+        for variant in &schema.variants {
+            let mut affine = false;
+            for case in variant.cases.iter() {
+                if let Some(payload) = case.payload {
+                    let ty = schema.types.get(&payload).ok_or_else(|| {
+                        inventory_error("missing canonical affinity payload type")
+                    })?;
+                    affine |= matches!(ty.form, TypeForm::CapabilityResource { .. });
                 }
-                Ok(affine)
-            })
-            .collect::<Result<_, ExecutionError>>()?;
-        let mut composed_work = crate::platform::kernel::ValidationWork::exact(source_work);
+            }
+            schema.affine_variants.push(affine);
+        }
+        // A new exact phase counter avoids treating a saturated earlier observation
+        // as an exact seed. Phase totals are combined only as passive observations.
+        let mut composed_work = crate::platform::kernel::ValidationWork::default();
         crate::platform::kernel::callable_flow::validate_snapshot_callable_closure(
             &inputs,
             &|| {
@@ -332,21 +335,22 @@ impl NormalizedReferenceSchema {
                 })
             },
             &mut composed_work,
-            super::reference_types::requires_associated_preparation(&inputs)
-                .then_some(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK),
+            None,
         )
         .map_err(source_error)?;
-        source_work = composed_work.consumed;
-        schema.source_admission_saturated = composed_work.saturated;
-        let after_composed = source_work;
-        schema.source_admission_steps = source_work as u64;
+        let mut composed = Observation::from_usize(composed_work.consumed);
+        composed.saturated |= composed_work.saturated;
+        source_charge(&mut source_work, composed)?;
+        let after_composed = source_work.observation();
+        schema.source_admission_steps = after_composed.consumed;
+        schema.source_admission_saturated = after_composed.saturated;
         super::reference_types::complete(&mut schema, &inputs, control).map_err(|mut error| {
             if error.code == "kernel_associated_reference_capacity"
                 && error.message.contains("reference_flow phase=")
             {
                 error.message.push_str(&format!(
-                    "; reference_source_admission packages={} after_local_full={} after_dependency_correspondence={} after_composed={}",
-                    inputs.len(), after_local_full, after_dependency_correspondence, after_composed,
+                    "; reference_source_admission packages={} after_local_full={} after_dependency_correspondence={} after_composed={} observation_saturated={}",
+                    inputs.len(), after_local_full.consumed, after_dependency_correspondence.consumed, after_composed.consumed, after_composed.saturated,
                 ));
             }
             error
@@ -622,25 +626,41 @@ impl NormalizedReferenceSchema {
     }
 }
 
+fn source_charge(work: &mut Meter, amount: Observation) -> Result<(), ExecutionError> {
+    work.charge(amount).map_err(|_| {
+        reference_resource(
+            "normalized_reference_inventory_bound",
+            "canonical source admission exhausted the selected work allowance",
+        )
+    })
+}
+
+fn source_allocation() -> ExecutionError {
+    reference_resource(
+        "normalized_reference_inventory_bound",
+        "canonical source admission cannot reserve representable or available storage",
+    )
+}
+
+fn source_items<T>(count: usize) -> Result<Vec<T>, ExecutionError> {
+    let mut items = Vec::new();
+    items
+        .try_reserve_exact(count)
+        .map_err(|_| source_allocation())?;
+    Ok(items)
+}
+
 // Bind exact source inventories and reject package dependency cycles here.
 // Supplied witnesses can still create callable cycles across the package DAG;
 // complete composition is proved separately before instance derivation.
 fn validate_dependency_closure(
     snapshots: &[&KernelSnapshot],
     control: &crate::platform::execution::ExecutionControl,
-    work: &mut usize,
+    work: &mut Meter,
 ) -> Result<(), ExecutionError> {
     let mut tick = || {
         control.check()?;
-        *work = work
-            .checked_add(1)
-            .filter(|count| *count <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
-                reference_resource(
-                    "normalized_reference_inventory_bound",
-                    "canonical source admission work is exhausted",
-                )
-            })?;
+        source_charge(work, Observation::exact(1))?;
         Ok::<_, ExecutionError>(())
     };
     let mut remaining = snapshots
@@ -648,37 +668,30 @@ fn validate_dependency_closure(
         .map(|snapshot| (snapshot.root.package_id, snapshot.dependencies.len()))
         .collect::<BTreeMap<_, _>>();
     let mut parents = BTreeMap::<PackageId, Vec<PackageId>>::new();
-    let mut edges = 0_usize;
     for snapshot in snapshots {
         tick()?;
         for dependency in snapshot.dependencies.keys() {
             tick()?;
-            edges += 1;
-            if edges > 100_000 {
-                return Err(reference_resource(
-                    "normalized_reference_inventory_bound",
-                    "canonical reference dependency inventory exceeds 100000 edges",
-                ));
-            }
             if !remaining.contains_key(dependency) {
                 return Err(inventory_error(
                     "complete canonical dependency body is unavailable",
                 ));
             }
-            parents
-                .entry(*dependency)
-                .or_default()
-                .push(snapshot.root.package_id);
+            let values = parents.entry(*dependency).or_default();
+            values.try_reserve(1).map_err(|_| source_allocation())?;
+            values.push(snapshot.root.package_id);
         }
     }
-    let mut ready = remaining
-        .iter()
-        .filter_map(|(package, count)| (*count == 0).then_some(*package))
-        .collect::<Vec<_>>();
+    let mut ready = source_items(remaining.len())?;
+    ready.extend(
+        remaining
+            .iter()
+            .filter_map(|(package, count)| (*count == 0).then_some(*package)),
+    );
     let mut admitted = 0_usize;
     while let Some(package) = ready.pop() {
         tick()?;
-        admitted += 1;
+        admitted = admitted.checked_add(1).ok_or_else(source_allocation)?;
         for parent in parents.remove(&package).unwrap_or_default() {
             tick()?;
             let count = remaining
@@ -751,3 +764,7 @@ fn nominal_constraints(
 fn inventory_error(message: &str) -> ExecutionError {
     reference_error("normalized_reference_inventory", message)
 }
+
+#[cfg(test)]
+#[path = "reference_schema_capacity_tests.rs"]
+mod capacity_tests;

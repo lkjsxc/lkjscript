@@ -1151,14 +1151,17 @@ fn reference_associated_combined_parallel_permissions_distinguish_equal_self_out
 fn reference_associated_combined_completion_budget_and_cancellation_keep_fresh_authority() {
     let case = forwarding();
     let healthy = complete(&case.fixture).unwrap();
-    let steps = usize::try_from(healthy.type_derivation_steps).unwrap();
-    let bytes = usize::try_from(healthy.type_metadata_bytes).unwrap();
+    let steps = healthy.type_derivation_steps;
+    let bytes = healthy.type_metadata_bytes;
     let proof = derive(&case.fixture).unwrap();
     assert!(steps > proof.steps && bytes > proof.bytes);
     let exact = super::reference_types::associated_schema_fixture_with_limits(
         &[&case.fixture.source],
         proof,
-        Limits { steps, bytes },
+        Limits {
+            steps: Some(steps),
+            bytes: Some(bytes),
+        },
         &ExecutionControl::uncancelled(),
     )
     .unwrap();
@@ -1168,12 +1171,12 @@ fn reference_associated_combined_completion_budget_and_cancellation_keep_fresh_a
     );
     for limits in [
         Limits {
-            steps: steps - 1,
-            bytes,
+            steps: Some(steps - 1),
+            bytes: Some(bytes),
         },
         Limits {
-            steps,
-            bytes: bytes - 1,
+            steps: Some(steps),
+            bytes: Some(bytes - 1),
         },
     ] {
         let proof = derive(&case.fixture).unwrap();

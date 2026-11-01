@@ -29,12 +29,9 @@ impl SourceValidationBinding {
         control.check().map_err(execution_diagnostic)?;
         let count = snapshot.representation_dependencies.len();
         let lookup = selection_lookup_work(selections.len());
-        let work = u64::try_from(count)
-            .ok()
-            .and_then(|count| count.checked_mul(lookup + 3))
-            .and_then(|count| count.checked_add(8))
-            .ok_or_else(|| limit("source proof binding work"))?;
-        store.charge_visits(work)?;
+        let mut work = SourceObservation::product(&[count as u64, lookup + 3]);
+        work.observe(SourceObservation::exact(8));
+        store.charge_modeled_visits(work)?;
         let mut representations = Vec::with_capacity(count);
         for dependency in snapshot.representation_dependencies.values() {
             control.check().map_err(execution_diagnostic)?;
@@ -101,11 +98,11 @@ impl SourceValidationReuse {
         control.check().map_err(execution_diagnostic)?;
         // Reserve the map lookup, both complete equality comparisons (here and at the
         // witness boundary) and the fixed seven-field validation report copy before work.
-        store.charge_visits(
-            selection_lookup_work(self.completed.len())
-                + 24
-                + binding.representations.len() as u64 * 4,
-        )?;
+        let mut work = SourceObservation::product(&[binding.representations.len() as u64, 4]);
+        work.observe(SourceObservation::exact(
+            selection_lookup_work(self.completed.len()) + 24,
+        ));
+        store.charge_modeled_visits(work)?;
         Ok(self
             .completed
             .get(&binding.package.package_revision)
@@ -147,11 +144,13 @@ impl SourceValidationReuse {
         control: &ExecutionControl,
     ) -> Result<(), Diagnostic> {
         control.check().map_err(execution_diagnostic)?;
-        let commit_work = pending.len() as u64
-            * (selection_lookup_work(self.completed.len() + pending.len()) + 4);
+        let commit_work = SourceObservation::product(&[
+            pending.len() as u64,
+            selection_lookup_work(self.completed.len() + pending.len()) + 4,
+        ]);
         // Reserve both the complete preflight traversal and all lookup/insertion work before
         // inspection or growth. Check cancellation per entry while mutation is still absent.
-        store.charge_visits(commit_work)?;
+        store.charge_modeled_visits(commit_work)?;
         let mut pending_bytes = 0_u64;
         for proof in &pending {
             control.check().map_err(execution_diagnostic)?;
@@ -201,8 +200,8 @@ impl<'a, S: ImmutableObjectStore + ?Sized> SourceAdmissionSession<'a, S> {
     pub(crate) fn collect_preplanned_with_budget(
         &mut self,
         prior: super::super::PackageTransportClosureValidation,
-        maximum_visits: u64,
-        maximum_read_bytes: u64,
+        maximum_visits: Option<u64>,
+        maximum_read_bytes: Option<u64>,
     ) -> Result<AdmittedClosure, Diagnostic> {
         let root = PackageTransportBinding {
             package_revision: prior.logical.root,
@@ -251,26 +250,19 @@ mod tests {
         session
             .collect_preplanned_with_budget(
                 super::super::tests::source_validation_reuse_plan(&source.container),
-                MAXIMUM_VALIDATION_VISITS,
-                MAXIMUM_VALIDATION_READ_BYTES,
+                Some(FORMER_VALIDATION_VISITS),
+                Some(FORMER_VALIDATION_READ_BYTES),
             )
             .unwrap();
         let completed = session.reuse.completed.values().next().unwrap();
         let required = completed.modeled_rebuild_work();
         assert!(required > 0);
         for (maximum, succeeds) in [(required, true), (required - 1, false)] {
-            let store = CollectingStore {
-                base: &source.container.objects,
-                admission: RefCell::new(StoreReadAdmission::new(StoreReadLimits {
-                    maximum_catalog_lookups: Some(maximum),
-                    maximum_objects: Some(maximum),
-                    maximum_bytes: Some(MAXIMUM_VALIDATION_READ_BYTES),
-                })),
-                objects: RefCell::new(BTreeMap::new()),
-                retained_bytes: std::cell::Cell::new(84),
-                maximum_visits: maximum,
-                semantic_visits: std::cell::Cell::new(0),
-            };
+            let store = CollectingStore::with_budget(
+                &source.container.objects,
+                Some(maximum),
+                Some(FORMER_VALIDATION_READ_BYTES),
+            );
             let result = session
                 .reuse
                 .reserve_reconstruction(completed, &store, &control);

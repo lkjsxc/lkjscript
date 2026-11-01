@@ -2045,20 +2045,6 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             LimitUnit::Items,
             OverridePolicy::Fixed,
         ),
-        LimitDescriptor {
-            name: "package_validation_visits",
-            value: crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS,
-            class: LimitClass::DeterministicOperationBudget,
-            unit: LimitUnit::Work,
-            override_policy: OverridePolicy::Fixed,
-        },
-        LimitDescriptor {
-            name: "package_validation_read_bytes",
-            value: crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES,
-            class: LimitClass::DeterministicOperationBudget,
-            unit: LimitUnit::Bytes,
-            override_policy: OverridePolicy::Fixed,
-        },
         limit(
             "http_route_method_bytes",
             MAXIMUM_HTTP_ROUTE_METHOD_BYTES,
@@ -2735,16 +2721,34 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Reduce the maintained builtin inventory; no caller override increases this process-wide bound.",
         ),
         diagnostic(
-            "package_oracle_copy_budget",
+            "publication_dependency_priority_allocation",
             DiagnosticClass::Resource,
-            "Independent source reuse exhausted its modeled copy-byte or validation-work bound.",
-            "Use a smaller complete closure; the independent oracle has no caller override for this bound.",
+            "Direct dependency source priority could not reserve its actual inventory vectors.",
+            "Release host memory and retry the same candidate; no publication has occurred.",
+        ),
+        diagnostic(
+            "package_closure_oracle_allocation",
+            DiagnosticClass::Resource,
+            "The independent source oracle could not reserve storage for an actual source copy.",
+            "Release host memory and retry the same exact closure; no candidate has been accepted.",
+        ),
+        diagnostic(
+            "package_source_work_observation",
+            DiagnosticClass::Corrupt,
+            "A source phase returned an inexact observation after finite work admission.",
+            "Discard the result and inspect the current implementation's exact work accounting.",
+        ),
+        diagnostic(
+            "package_source_read_accounting",
+            DiagnosticClass::Corrupt,
+            "A jointly admitted source read lost its exact finite allowance transition.",
+            "Discard the result and inspect the current implementation's nested read accounting.",
         ),
         diagnostic(
             "package_source_budget",
             DiagnosticClass::Resource,
-            "The complete source closure exhausted a fixed admission dimension.",
-            "Use the named bound and exact revision to export a smaller closure and restage; there is no public override.",
+            "A source operation exhausted an explicitly selected finite work/read allowance or an exact representation boundary.",
+            "Inspect the named metric and selected allowance; ordinary source admission has no default aggregate work/read quota.",
         ),
         diagnostic(
             "package_source_container_bytes",
@@ -8256,6 +8260,49 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ],
                 )?);
             }
+            records.push(compact_record(
+                "package.source-admission",
+                &[
+                    ("default-validation-visits", "unbounded".to_owned()),
+                    ("default-validation-read-bytes", "unbounded".to_owned()),
+                    (
+                        "ordinary-paths",
+                        "collection-staging-dependency-validation-independent-oracle-link-readback"
+                            .to_owned(),
+                    ),
+                    (
+                        "selected-policy",
+                        "exact-optional-per-invocation-work-and-read-bytes".to_owned(),
+                    ),
+                    ("zero", "exact-finite-zero".to_owned()),
+                    ("u64-max", "exact-finite-maximum-not-unbounded".to_owned()),
+                    (
+                        "work-metric",
+                        "canonical-object-reservations-plus-semantic-visits".to_owned(),
+                    ),
+                    (
+                        "catalog-lookup-policy",
+                        "same-finite-work-value-separate-read-counter".to_owned(),
+                    ),
+                    (
+                        "read-metric",
+                        "admitted-canonical-object-read-bytes".to_owned(),
+                    ),
+                    (
+                        "observation",
+                        "per-counter-saturation-flag-true-means-lower-bound".to_owned(),
+                    ),
+                    ("observation-permission", "none".to_owned()),
+                    (
+                        "proof-reuse",
+                        "exact-bound-complete-validation-or-full-validation-fallback".to_owned(),
+                    ),
+                    (
+                        "remaining-limits",
+                        "container-topology-object-depth-and-storage-representation".to_owned(),
+                    ),
+                ],
+            )?);
         }
         RegistrySection::Diagnostics => {
             records.push(compact_record(
@@ -10414,6 +10461,38 @@ mod tests {
                 "missing compact response diagnostic descriptor {code}"
             );
         }
+    }
+
+    #[test]
+    fn source_admission_discovery_distinguishes_optional_permission_from_observation()
+    -> Result<(), String> {
+        assert!(limit_descriptors().iter().all(|descriptor| !matches!(
+            descriptor.name,
+            "package_validation_visits" | "package_validation_read_bytes"
+        )));
+        assert!(
+            diagnostic_descriptors()
+                .iter()
+                .all(|descriptor| { descriptor.code != "package_oracle_copy_budget" })
+        );
+        let records = section_records(RegistrySection::Limits)?;
+        let admission = records
+            .iter()
+            .find(|record| record.starts_with("package.source-admission "))
+            .ok_or_else(|| "missing source admission discovery".to_owned())?;
+        for field in [
+            "default-validation-visits=unbounded",
+            "default-validation-read-bytes=unbounded",
+            "zero=exact-finite-zero",
+            "u64-max=exact-finite-maximum-not-unbounded",
+            "observation-permission=none",
+        ] {
+            assert!(
+                admission.contains(field),
+                "missing source policy field {field}"
+            );
+        }
+        Ok(())
     }
 
     #[test]

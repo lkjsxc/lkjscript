@@ -60,10 +60,19 @@ UTF-8 context with DERIVE_KEY_CONTEXT, then hashes the material with the context
 key and DERIVE_KEY_MATERIAL. The intermediate key uses 32 bytes of lexical stack
 storage; both inputs retain the 256 MiB value bound. This neutral operation is
 required by current artifact and object identities.
-ByteBuffer empty/push/get/length/freeze/discard preserve admitted exclusive
-mutation and scoped read-only borrowing. Growth doubles capacity up to 256 MiB;
-freeze copies into independent immutable bytes. Affine custody is established by
-complete source and normalized admission. All backing storage belongs to the
+ByteBuffer empty/push/append-slice/append-i64-le/get/length/freeze/discard preserve
+admitted exclusive mutation and scoped read-only borrowing. Growth uses checked
+geometric capacity or the complete required contiguous extent; no per-buffer logical
+byte quota is selected by these operations. Bulk append checks the complete source
+window and new length before reservation, then copies bytes without boxing each
+octet. The unaligned `core.bytes.read-i64-le` and paired word append use signed
+little-endian eight-byte words with exact range checks. Native freeze copies into
+independent immutable bytes. Affine custody is established by
+complete source and normalized admission. Immutable native I64 values -1 through 255 and both Bool values share read-only
+scalar objects; all other integers retain ordinary checked allocation. This
+physical lookup table does not restrict supported scalar values or change affine
+custody. It does not reclaim general scratch allocations.
+All dynamically allocated backing storage belongs to the
 process heap, including retired growth allocations and abandoned buffers; it is
 reclaimed at process exit, with no per-buffer RSS reclamation claim.
 The standard library's pure map and fold run as native calls.

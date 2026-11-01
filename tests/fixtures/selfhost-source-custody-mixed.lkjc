@@ -1,0 +1,22 @@
+declarations.begin
+(units
+  (module create custody-mixed-control
+    (external create empty (visibility private) (implementation core.buffer.empty) (returns ByteBuffer))
+    (external create size (visibility private) (implementation core.buffer.length)
+      (parameter create buffer (type ByteBuffer) (use borrow)) (returns I64))
+    (external create discard (visibility private) (implementation core.buffer.discard)
+      (parameter create buffer (type ByteBuffer) (use consume)) (returns Unit))
+    (function create mixed (visibility private) (effect pure)
+      (parameter create borrowed (type ByteBuffer) (use borrow))
+      (parameter create consumed (type ByteBuffer) (use consume)) (returns I64)
+      (body (sequence (call discard (local consumed)) (call size (local borrowed)))))
+    (function create entry (visibility public) (effect pure) (returns I64)
+      (body (let
+        (binding first (type ByteBuffer) (call empty))
+        (binding second (type ByteBuffer) (call empty))
+        (in (call mixed (local first) (local second))))))
+    (component create main (visibility public)
+      (port create run (type (function () I64)) (function entry))))
+  (target create scalar-main (component custody-mixed-control::main)
+    (runner command) (port custody-mixed-control::main::run)))
+declarations.end

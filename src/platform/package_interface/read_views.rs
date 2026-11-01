@@ -4,8 +4,8 @@
 //! its scope binders, and this module grants no construction or field authority.
 
 use super::{
-    MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK, PACKAGE_INTERFACE_CONTRACT_VERSION,
-    PackageInterfaceOwner, RepresentationBudget, interface_error,
+    PACKAGE_INTERFACE_CONTRACT_VERSION, PackageInterfaceOwner, RepresentationBudget,
+    interface_error,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
@@ -19,6 +19,10 @@ use crate::platform::kernel::{
 use crate::platform::semantic_id::TypeParameterId;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+
+#[cfg(test)]
+#[path = "read_views_work_admission_tests.rs"]
+mod work_admission_tests;
 
 fn reject(message: &str) -> Diagnostic {
     interface_error(
@@ -373,7 +377,6 @@ struct Admission<'a, 't, 'r> {
     resolve: &'r mut dyn FnMut(
         DeclarationReference,
     ) -> Result<Option<&'a PackageInterfaceOwner>, Diagnostic>,
-    work: usize,
     storage: RepresentationBudget,
     deferred: bool,
     visit: &'r mut dyn FnMut(u64) -> Result<(), Diagnostic>,
@@ -385,12 +388,9 @@ impl<'a, 't> Admission<'a, 't, '_> {
     }
 
     fn charge(&mut self, count: usize, depth: usize) -> Result<(), Diagnostic> {
+        // The caller owns work permission. Type-depth admission is a separate
+        // current lifecycle boundary and does not become an aggregate work quota.
         (self.visit)(u64::try_from(count).map_err(|_| capacity())?)?;
-        self.work = self
-            .work
-            .checked_add(count)
-            .filter(|work| *work <= MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK)
-            .ok_or_else(capacity)?;
         if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
             return Err(capacity());
         }
@@ -1814,7 +1814,6 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
         owners,
         types,
         resolve,
-        work: 0,
         storage: RepresentationBudget::default(),
         deferred: false,
         visit,
@@ -2206,7 +2205,6 @@ pub(crate) fn validate_region_read_resolved_metered<'a>(
         owners,
         types,
         resolve,
-        work: 0,
         storage: RepresentationBudget::default(),
         deferred: false,
         visit,
@@ -2241,7 +2239,6 @@ pub(crate) fn validate_view_application_resolved_metered<'a>(
         owners,
         types,
         resolve,
-        work: 0,
         storage: RepresentationBudget::default(),
         deferred: false,
         visit,

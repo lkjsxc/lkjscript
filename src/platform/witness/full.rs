@@ -15,7 +15,7 @@ use crate::platform::kernel::{
     extract_relations_with_fanout_limit, validate_full,
 };
 use crate::platform::persistent_map::{
-    MapError, MapErrorClass, MapRoot, MapWork, MemoryPageStore, PersistentMap,
+    MapError, MapErrorClass, MapRoot, MapWork, MapWorkCounter, MemoryPageStore, PersistentMap,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -144,8 +144,16 @@ impl CompletedSourceValidation {
     }
 }
 
-fn modeled_source_rebuild_work(witness: &FullWitness) -> Result<u64, Diagnostic> {
-    let report = &witness.report;
+fn modeled_source_rebuild_work(report: &WitnessBuildReport) -> Option<u64> {
+    if report
+        .map_work
+        .counter_saturated(MapWorkCounter::KeyComparisons)
+        || report
+            .map_work
+            .counter_saturated(MapWorkCounter::EntriesVisited)
+    {
+        return None;
+    }
     // Reserve current construction using complete accepted cardinalities and actual canonical
     // map work. This is a modeled cardinality/map-work reservation, not an exact observation of every
     // legacy summary/ownership traversal or host allocation. Existing current source/profile
@@ -169,28 +177,25 @@ fn modeled_source_rebuild_work(witness: &FullWitness) -> Result<u64, Diagnostic>
     .try_fold(8_u64, |total, (count, weight)| {
         count.checked_mul(weight)?.checked_add(total)
     })
-    .ok_or_else(|| {
-        witness_error(
-            crate::platform::diagnostic::DiagnosticClass::Resource,
-            "witness_source_rebuild_work",
-            "modeled current source witness reconstruction work overflowed",
-        )
-    })
 }
 
 pub(crate) fn rebuild_full_witness_checked_for_source(
     snapshot: &KernelSnapshot,
-    maximum_work: usize,
+    maximum_work: Option<usize>,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
     binding: crate::platform::package_transport::source::SourceValidationBinding,
-) -> Result<(FullWitness, CompletedSourceValidation), Vec<Diagnostic>> {
-    let witness = rebuild_full_witness_checked(snapshot, Some(maximum_work), checkpoint)?;
+) -> Result<(FullWitness, Option<CompletedSourceValidation>), Vec<Diagnostic>> {
+    let witness = rebuild_full_witness_checked(snapshot, maximum_work, checkpoint)?;
     // Mint only after real full validation, canonical facts and the end checkpoint succeed.
-    let completed = CompletedSourceValidation {
-        binding,
-        report: witness.report.full_validation.clone(),
-        modeled_rebuild_work: modeled_source_rebuild_work(&witness).map_err(|error| vec![error])?,
-    };
+    // An unavailable exact reuse reservation disables this optional cache entry; it does
+    // not reject a successfully validated source or promote a lower bound to permission.
+    let completed = modeled_source_rebuild_work(&witness.report).map(|modeled_rebuild_work| {
+        CompletedSourceValidation {
+            binding,
+            report: witness.report.full_validation.clone(),
+            modeled_rebuild_work,
+        }
+    });
     Ok((witness, completed))
 }
 
@@ -474,4 +479,62 @@ fn map_diagnostic(error: MapError) -> Diagnostic {
         MapErrorClass::Store => DiagnosticClass::Infrastructure,
     };
     Diagnostic::new(class, error.code, error.message)
+}
+
+#[cfg(test)]
+mod source_rebuild_work_tests {
+    use super::{FullValidationReport, MapWork, MapWorkCounter, WitnessBuildReport};
+
+    fn report() -> WitnessBuildReport {
+        WitnessBuildReport {
+            full_validation: FullValidationReport {
+                owners_checked: 0,
+                type_objects_checked: 0,
+                expression_records_checked: 0,
+                relation_edges: 0,
+                dependencies_checked: 0,
+                retirements_checked: 0,
+                work_consumed: 0,
+                work_saturated: false,
+            },
+            owners_summarized: 0,
+            namespace_entries: 0,
+            ownership_entries: 0,
+            relation_edges: 0,
+            test_dependency_entries: 0,
+            summary_objects: 0,
+            map_pages: 0,
+            map_bytes: 0,
+            map_work: MapWork::default(),
+        }
+    }
+
+    #[test]
+    fn optional_source_reuse_requires_an_exact_reconstruction_reservation() {
+        let mut current = report();
+        assert_eq!(super::modeled_source_rebuild_work(&current), Some(8));
+        current.owners_summarized = 3;
+        current.map_work.entries_visited = 2;
+        assert_eq!(super::modeled_source_rebuild_work(&current), Some(58));
+        current.owners_summarized = u64::MAX;
+        assert_eq!(super::modeled_source_rebuild_work(&current), None);
+        current = report();
+        current.map_work.key_comparisons = u64::MAX;
+        assert_eq!(super::modeled_source_rebuild_work(&current), None);
+        for counter in [
+            MapWorkCounter::KeyComparisons,
+            MapWorkCounter::EntriesVisited,
+        ] {
+            current = report();
+            current.map_work.mark_counter_saturated(counter);
+            assert_eq!(super::modeled_source_rebuild_work(&current), None);
+        }
+        // Unused telemetry does not poison a reservation whose own inputs are exact.
+        current = report();
+        current
+            .map_work
+            .mark_counter_saturated(MapWorkCounter::BytesRead);
+        current.full_validation.work_saturated = true;
+        assert_eq!(super::modeled_source_rebuild_work(&current), Some(8));
+    }
 }

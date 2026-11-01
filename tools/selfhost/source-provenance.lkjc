@@ -1,0 +1,121 @@
+declarations.begin
+(units
+  (module create source-provenance
+    (function create failure
+      (visibility private)
+      (effect pure)
+      (returns (record (code I64) (revision Bytes) (repository Bytes) (core Bytes)))
+      (body
+        (record structural
+          (field code (i64 12))
+          (field revision (call ci::text-bytes (text "")))
+          (field repository (call ci::text-bytes (text "")))
+          (field core (call ci::text-bytes (text ""))))))
+    (function create framed
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (returns Bool)
+      (body
+        (if
+          (call ci::lt (call ci::length (local graph)) (i64 128))
+          (bool false)
+          (if
+            (call ci::same
+              (call ci::slice (local graph) (i64 0) (i64 8))
+              (call ci::text-bytes (text "LKJSG002")))
+            (if
+              (call ci::eq (call ci::u32 (local graph) (i64 8)) (call ci::length (local graph)))
+              (if
+                (call ci::eq (call ci::u32 (local graph) (i64 112)) (i64 3))
+                (call ci::eq (call ci::u32 (local graph) (i64 124)) (i64 0))
+                (bool false))
+              (bool false))
+            (bool false)))))
+    (function create extent
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create start (type I64))
+      (parameter create count (type I64))
+      (parameter create width (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local start) (i64 0))
+          (i64 -1)
+          (if
+            (call ci::lt (local count) (i64 0))
+            (i64 -1)
+            (if
+              (call ci::lte (local width) (i64 0))
+              (i64 -1)
+              (if
+                (call ci::lt (call ci::length (local graph)) (local start))
+                (i64 -1)
+                (if
+                  (call ci::lte
+                    (local count)
+                    (call ci::div (call ci::sub (call ci::length (local graph)) (local start)) (local width)))
+                  (call ci::add (local start) (call ci::mul (local count) (local width)))
+                  (i64 -1))))))))
+    (function create position
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (returns I64)
+      (body
+        (if
+          (call framed (local graph))
+          (let
+            (binding name-end (call ci::add (i64 128) (call ci::u32 (local graph) (i64 24))))
+            (binding start (call ci::u32 (local graph) (i64 116)))
+            (binding length (call ci::u32 (local graph) (i64 120)))
+            (in
+              (if
+                (call ci::eq (local start) (local name-end))
+                (if
+                  (call ci::lte (i64 32) (local length))
+                  (call extent (local graph) (local start) (local length) (i64 1))
+                  (i64 -1))
+                (i64 -1))))
+          (i64 -1))))
+    (function create read
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (returns (record (code I64) (revision Bytes) (repository Bytes) (core Bytes)))
+      (body
+        (let
+          (binding end (call position (local graph)))
+          (in
+            (if
+              (call ci::lt (local end) (i64 0))
+              (call failure)
+              (let
+                (binding start (call ci::u32 (local graph) (i64 116)))
+                (binding core (call ci::slice (local graph) (call ci::add (local start) (i64 32)) (local end)))
+                (binding checked (call source-history::revision (local core)))
+                (in
+                  (if
+                    (call ci::eq (field (local checked) (name diagnostic)) (i64 0))
+                    (if
+                      (call ci::same
+                        (call ci::slice
+                          (local core)
+                          (call ci::sub (call ci::length (local core)) (i64 32))
+                          (call ci::length (local core)))
+                        (call ci::slice (local graph) (i64 48) (i64 80)))
+                      (if
+                        (call ci::same
+                          (field (local checked) (name image))
+                          (call ci::slice (local graph) (local start) (call ci::add (local start) (i64 32))))
+                        (record structural
+                          (field code (i64 0))
+                          (field revision (field (local checked) (name image)))
+                          (field repository (call ci::slice (local core) (i64 3) (i64 19)))
+                          (field core (local core)))
+                        (call failure))
+                      (call failure))
+                    (call failure)))))))))))
+declarations.end

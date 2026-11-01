@@ -1586,7 +1586,7 @@ fn complete_prepared_closure_uses_one_work_budget_and_failure_preserves_healthy_
     let control = ExecutionControl::uncancelled();
     let (mut candidate, mut budget) =
         Proof::reconstruct_raw(&[&fixture.source], &control, Budget::new(&control)).unwrap();
-    budget.remaining = 0;
+    budget.work = Meter::new(Some(0));
     assert_eq!(
         candidate
             .prepare_complete_closure(budget)
@@ -1617,33 +1617,29 @@ fn complete_prepared_closure_uses_one_work_budget_and_failure_preserves_healthy_
         let facts = resolver.facts(scalar, context, 0).unwrap();
         assert_eq!(facts.category, ValueCategory::OrdinaryData);
         assert!(facts.metadata && facts.transfer && facts.share);
-        (
-            kernel::contract::MAXIMUM_VALIDATION_WORK - resolver.budget.remaining,
-            resolver.budget.entries,
-        )
+        let work = resolver.budget.work.observation();
+        let entries = resolver.budget.entries.observation();
+        assert!(!work.saturated && !entries.saturated);
+        (work.consumed, entries.consumed)
     };
     let (empty_work, empty_entries) = measure(&empty_context);
     let (large_work, large_entries) = measure(&large_context);
-    assert!(large_entries - empty_entries >= large_context.lexical.len());
-    assert!(large_work - empty_work >= large_context.lexical.len());
+    assert!(large_entries - empty_entries >= large_context.lexical.len() as u64);
+    assert!(large_work - empty_work >= large_context.lexical.len() as u64);
     let mut exact = healthy.resolver_with_control(healthy.types(), &control);
-    exact.budget.remaining = large_work;
-    exact.budget.entries = kernel::contract::MAXIMUM_VALIDATION_WORK - large_entries;
+    exact.budget.work = Meter::new(Some(large_work));
+    exact.budget.entries = Meter::new(Some(large_entries));
     let facts = exact.facts(scalar, &large_context, 0).unwrap();
     assert_eq!(facts.category, ValueCategory::OrdinaryData);
     assert!(facts.metadata && facts.transfer && facts.share);
-    assert_eq!(exact.budget.remaining, 0);
-    assert_eq!(
-        exact.budget.entries,
-        kernel::contract::MAXIMUM_VALIDATION_WORK
-    );
+    assert_eq!(exact.budget.work.remaining(), Some(0));
+    assert_eq!(exact.budget.entries.remaining(), Some(0));
     for storage in [false, true] {
         let mut resolver = healthy.resolver_with_control(healthy.types(), &control);
         if storage {
-            resolver.budget.entries =
-                kernel::contract::MAXIMUM_VALIDATION_WORK - (large_entries - 1);
+            resolver.budget.entries = Meter::new(Some(large_entries - 1));
         } else {
-            resolver.budget.remaining = large_work - 1;
+            resolver.budget.work = Meter::new(Some(large_work - 1));
         }
         assert_eq!(
             resolver.facts(scalar, &large_context, 0).unwrap_err().class,
@@ -1655,8 +1651,7 @@ fn complete_prepared_closure_uses_one_work_budget_and_failure_preserves_healthy_
     // The first owned key is not allocated before its complete lexical debit
     // and cancellable prefix finish. Failure leaves private facts state empty.
     let mut resolver = healthy.resolver_with_control(healthy.types(), &control);
-    resolver.budget.entries =
-        kernel::contract::MAXIMUM_VALIDATION_WORK - (large_context.lexical.len() - 1);
+    resolver.budget.entries = Meter::new(Some(large_context.lexical.len() as u64 - 1));
     let mut state = FactsState::default();
     assert_eq!(
         resolver
@@ -1699,7 +1694,7 @@ fn complete_prepared_closure_uses_one_work_budget_and_failure_preserves_healthy_
     let healthy = admit(&source).unwrap();
     let (mut candidate, mut budget) =
         Proof::reconstruct_raw(&[&source], &control, Budget::new(&control)).unwrap();
-    budget.remaining = 2;
+    budget.work = Meter::new(Some(2));
     assert_eq!(
         candidate
             .prepare_complete_closure(budget)
@@ -1730,7 +1725,7 @@ fn complete_prepared_closure_uses_one_work_budget_and_failure_preserves_healthy_
         admit(&growing)
             .unwrap_err()
             .message
-            .contains("depth boundary")
+            .contains("recursive admission depth guard")
     );
     assert!(admit(&source).unwrap().prepared_transferable(two).unwrap());
 }
@@ -7139,16 +7134,14 @@ fn raw_capability_signature_suffix_and_result_boundaries_remain_exact() {
     let control = ExecutionControl::uncancelled();
     let proof = admit(&fixture.source).unwrap();
     let measure = |ty, levels: usize| {
-        let limit = 64 * (levels + 2);
-        let mut budget = Budget::new(&control);
-        budget.remaining = limit;
+        let limit = 64 * (levels as u64 + 2);
+        let budget = Budget::with_limits(&control, Some(limit), None);
         let mut resolver = proof.resolver_with_budget(&dag.types, budget);
         let free = resolver.resource_free(ty, &Context::default(), 0).unwrap();
-        (
-            free,
-            limit - resolver.budget.remaining,
-            resolver.budget.entries,
-        )
+        let work = resolver.budget.work.observation();
+        let storage = resolver.budget.entries.observation();
+        assert!(!work.saturated && !storage.saturated);
+        (free, work.consumed, storage.consumed)
     };
     let (small_free, small_work, small_storage) = measure(roots[11], 12);
     let (large_free, large_work, large_storage) = measure(roots[23], 24);
@@ -8716,3 +8709,6 @@ fn raw_lexical_associated_projection_preparation_keeps_witness_and_loan_authorit
     );
     assert!(Proof::reconstruct_with_types(&[&fixture.source], &derived, &control).is_ok());
 }
+
+#[path = "reference_read_view_capacity_tests.rs"]
+mod capacity;

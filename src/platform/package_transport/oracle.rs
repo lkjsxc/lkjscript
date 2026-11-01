@@ -1,12 +1,12 @@
 //! Independent closure and interface inventory reconstruction from neutral canonical records.
 //! Does not call transport admission, production closure resolution, interface projection, or linking.
 
-use super::source::PackageContainer;
+use super::source::{PackageContainer, SourceObservation};
 use super::{PackageRevision, PackageTransport};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::*;
 use crate::platform::package_interface::{PackageInterfaceOwner, decode_package_interface_binding};
-use crate::platform::persistent_map::{MapRoot, MapWork, PersistentMap};
+use crate::platform::persistent_map::{MapError, MapErrorClass, MapRoot, MapWork, PersistentMap};
 use crate::platform::storage::object::{
     ImmutableObjectStore, ObjectDomain, ObjectKey, StageOutcome, StoreError, StoreErrorClass,
     StoreWork,
@@ -29,17 +29,19 @@ pub(crate) struct OracleClosure {
     pub objects: usize,
     pub edges: usize,
     pub validation_visits: u64,
+    pub validation_visits_saturated: bool,
     pub validation_read_bytes: u64,
+    pub validation_read_bytes_saturated: bool,
 }
 
 impl OracleClosure {
-    /// A finite copy model, not allocator or RSS accounting. The encoded source bounds
-    /// strings and vector payloads; every retained map record also reserves 256 bytes.
+    /// Passive modeled copy work, not allocation permission or allocator/RSS accounting.
+    /// Overflow marks a lower bound and cannot reject ordinary independent reconstruction.
     pub(crate) fn package_copy_material(
         &self,
         package: PackageId,
-        encoded_source_bytes: usize,
-    ) -> Option<(usize, usize)> {
+        encoded_source_bytes: SourceObservation,
+    ) -> Option<(SourceObservation, SourceObservation)> {
         let snapshot = self.snapshots.get(&package)?;
         let interfaces = self.interfaces.get(&package)?;
         let types = self.interface_types.get(&package)?;
@@ -57,10 +59,12 @@ impl OracleClosure {
             types.len(),
         ]
         .into_iter()
-        .try_fold(0_usize, usize::checked_add)?;
-        let bytes = encoded_source_bytes
-            .checked_mul(4)?
-            .checked_add(records.checked_mul(256)?)?;
+        .fold(SourceObservation::default(), |mut total, records| {
+            total.observe(observed_count(records));
+            total
+        });
+        let mut bytes = observed_product(encoded_source_bytes, 4);
+        bytes.observe(observed_product(records, 256));
         Some((bytes, records))
     }
 }
@@ -79,105 +83,64 @@ fn failure(message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Corrupt, "package_closure_oracle", message)
 }
 
-#[cfg(test)]
-#[test]
-fn shared_builtin_oracle_copy_reservation_is_atomic_and_separate_from_reads() {
-    #![allow(clippy::unwrap_used)]
-    let objects = BTreeMap::new();
-    let reader = Reader {
-        objects: &objects,
-        seen: RefCell::new(BTreeSet::new()),
-        visits: Cell::new(0),
-        bytes: Cell::new(7),
-        copy_bytes: Cell::new(0),
-    };
-    let standard = crate::platform::builtin_standard::BuiltinStandard::load().unwrap();
-    let encoded = standard
-        .admitted_source()
-        .container
-        .objects
-        .values()
-        .map(Vec::len)
-        .sum();
-    let (bytes, records) = standard
-        .independent_source()
-        .package_copy_material(standard.package, encoded)
-        .unwrap();
-    assert!(bytes > encoded);
-    let visits = u64::try_from(records + bytes.div_ceil(64)).unwrap();
-    reader.visits.set(16_000_000 - visits);
-    reader.copy_bytes.set(MAXIMUM_ORACLE_COPY_BYTES - bytes);
-    reader.reserve_copy(bytes, records).unwrap();
-    assert_eq!(reader.visits.get(), 16_000_000);
-    assert_eq!(reader.copy_bytes.get(), MAXIMUM_ORACLE_COPY_BYTES);
-    assert_eq!(reader.bytes.get(), 7);
-
-    reader.visits.set(16_000_000 - visits + 1);
-    reader.copy_bytes.set(0);
-    assert_eq!(
-        reader.reserve_copy(bytes, records).unwrap_err().class,
-        DiagnosticClass::Resource
-    );
-    assert_eq!(reader.visits.get(), 16_000_000 - visits + 1);
-    assert_eq!(reader.copy_bytes.get(), 0);
-    reader.visits.set(0);
-    reader.copy_bytes.set(MAXIMUM_ORACLE_COPY_BYTES - bytes + 1);
-    assert_eq!(
-        reader.reserve_copy(bytes, records).unwrap_err().class,
-        DiagnosticClass::Resource
-    );
-    assert_eq!(reader.visits.get(), 0);
-    assert_eq!(
-        reader.copy_bytes.get(),
-        MAXIMUM_ORACLE_COPY_BYTES - bytes + 1
-    );
-    assert_eq!(reader.bytes.get(), 7);
+fn observed_count(count: usize) -> SourceObservation {
+    match u64::try_from(count) {
+        Ok(consumed) => SourceObservation::exact(consumed),
+        Err(_) => SourceObservation {
+            consumed: u64::MAX,
+            saturated: true,
+        },
+    }
 }
+
+fn observed_product(value: SourceObservation, factor: u64) -> SourceObservation {
+    let mut result = SourceObservation::product(&[value.consumed, factor]);
+    result.saturated |= value.saturated && factor != 0;
+    result
+}
+
+fn observe(counter: &Cell<SourceObservation>, additional: SourceObservation) {
+    let mut next = counter.get();
+    next.observe(additional);
+    counter.set(next);
+}
+
+#[cfg(test)]
+#[path = "oracle_observation_tests.rs"]
+mod observation_tests;
 
 struct Reader<'a> {
     objects: &'a BTreeMap<ObjectKey, Vec<u8>>,
     seen: RefCell<BTreeSet<ObjectKey>>,
-    visits: Cell<u64>,
-    bytes: Cell<u64>,
-    copy_bytes: Cell<usize>,
+    visits: Cell<SourceObservation>,
+    bytes: Cell<SourceObservation>,
+    copy_bytes: Cell<SourceObservation>,
 }
 
-const MAXIMUM_ORACLE_COPY_BYTES: usize = 256 * 1_048_576;
+impl<'a> Reader<'a> {
+    fn new(objects: &'a BTreeMap<ObjectKey, Vec<u8>>) -> Self {
+        Self {
+            objects,
+            seen: RefCell::new(BTreeSet::new()),
+            visits: Cell::new(SourceObservation::default()),
+            bytes: Cell::new(SourceObservation::default()),
+            copy_bytes: Cell::new(SourceObservation::default()),
+        }
+    }
 
-impl Reader<'_> {
-    fn reserve_copy(&self, bytes: usize, records: usize) -> Result<(), Diagnostic> {
-        let exhausted = || {
-            Diagnostic::new(
-                DiagnosticClass::Resource,
-                "package_oracle_copy_budget",
-                "independent source reuse exhausted its modeled copy-byte or validation-work bound",
-            )
-        };
-        let total = self
-            .copy_bytes
-            .get()
-            .checked_add(bytes)
-            .filter(|total| *total <= MAXIMUM_ORACLE_COPY_BYTES)
-            .ok_or_else(exhausted)?;
-        let visits = records
-            .checked_add(bytes.div_ceil(64))
-            .and_then(|visits| u64::try_from(visits).ok())
-            .and_then(|visits| self.visits.get().checked_add(visits))
-            .filter(|visits| *visits <= 16_000_000)
-            .ok_or_else(exhausted)?;
-        self.visits.set(visits);
-        self.copy_bytes.set(total);
-        Ok(())
+    fn observe_copy(&self, bytes: SourceObservation, mut records: SourceObservation) {
+        records.observe(SourceObservation {
+            consumed: bytes.consumed.div_ceil(64),
+            saturated: bytes.saturated,
+        });
+        observe(&self.visits, records);
+        observe(&self.copy_bytes, bytes);
     }
 
     fn charge(&self, visits: usize) -> Result<(), Diagnostic> {
-        let visits = self
-            .visits
-            .get()
-            .checked_add(u64::try_from(visits).map_err(|_| failure("oracle visit conversion"))?)
-            .filter(|visits| *visits <= 16_000_000)
-            .ok_or_else(|| failure("oracle exhausted 16000000 aggregate validation visits"))?;
-        self.visits.set(visits);
+        // Keep the callback result shape used by independent semantic walkers. This
+        // passive observation never supplies or removes execution permission.
+        observe(&self.visits, observed_count(visits));
         Ok(())
     }
     fn object(&self, domain: ObjectDomain, digest: [u8; 32]) -> Result<Vec<u8>, Diagnostic> {
@@ -204,10 +167,32 @@ impl Reader<'_> {
         let mut result = Vec::new();
         PersistentMap::from_root(root)
             .for_each(&reader, &mut MapWork::default(), |key, value| {
-                result.push((key.to_vec(), value.to_vec()));
+                let exhausted = || MapError {
+                    class: MapErrorClass::Resource,
+                    code: "package_closure_oracle_allocation",
+                    message: "independent source map inventory cannot reserve its buffer".into(),
+                };
+                result.try_reserve(1).map_err(|_| exhausted())?;
+                let mut key_copy = Vec::new();
+                key_copy
+                    .try_reserve_exact(key.len())
+                    .map_err(|_| exhausted())?;
+                let mut value_copy = Vec::new();
+                value_copy
+                    .try_reserve_exact(value.len())
+                    .map_err(|_| exhausted())?;
+                key_copy.extend_from_slice(key);
+                value_copy.extend_from_slice(value);
+                result.push((key_copy, value_copy));
                 Ok(())
             })
-            .map_err(|error| failure(error.message))?;
+            .map_err(|error| {
+                if error.class == MapErrorClass::Resource {
+                    Diagnostic::new(DiagnosticClass::Resource, error.code, error.message)
+                } else {
+                    failure(error.message)
+                }
+            })?;
         if result.len() as u64 != root.entries() {
             return Err(failure("map inventory count disagreement"));
         }
@@ -222,27 +207,11 @@ impl ImmutableObjectStore for Reader<'_> {
         maximum: Option<usize>,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
-        self.charge(1).map_err(|error| {
-            StoreError::new(
-                StoreErrorClass::Resource,
-                "package_oracle_visits",
-                error.message,
-            )
-        })?;
-        let additional = self.objects.get(&key).map_or(0, Vec::len) as u64;
-        let bytes = self
-            .bytes
-            .get()
-            .checked_add(additional)
-            .filter(|bytes| *bytes <= 4_294_967_296)
-            .ok_or_else(|| {
-                StoreError::new(
-                    StoreErrorClass::Resource,
-                    "package_oracle_read_bytes",
-                    "oracle exhausted 4294967296 aggregate validation-read bytes",
-                )
-            })?;
-        self.bytes.set(bytes);
+        observe(&self.visits, SourceObservation::exact(1));
+        observe(
+            &self.bytes,
+            observed_count(self.objects.get(&key).map_or(0, Vec::len)),
+        );
         let bytes = self.objects.read(key, maximum, work)?;
         if bytes.is_some() {
             self.seen.borrow_mut().insert(key);
@@ -267,13 +236,7 @@ impl ImmutableObjectStore for Reader<'_> {
 }
 
 pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure, Diagnostic> {
-    let reader = Reader {
-        objects: &container.objects,
-        seen: RefCell::new(BTreeSet::new()),
-        visits: Cell::new(0),
-        bytes: Cell::new(0),
-        copy_bytes: Cell::new(0),
-    };
+    let reader = Reader::new(&container.objects);
     let mut snapshots = BTreeMap::new();
     let mut revisions = BTreeMap::new();
     let mut interfaces = BTreeMap::new();
@@ -364,19 +327,19 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                 return Err(failure("retained builtin oracle revision changed"));
             }
             let package = revision.package;
-            let source_bytes = standard
-                .admitted_source()
-                .container
-                .objects
-                .values()
-                .try_fold(0_usize, |total, bytes| total.checked_add(bytes.len()))
-                .ok_or_else(|| failure("retained builtin source byte overflow"))?;
+            let source_bytes = standard.admitted_source().container.objects.values().fold(
+                SourceObservation::default(),
+                |mut total, bytes| {
+                    total.observe(observed_count(bytes.len()));
+                    total
+                },
+            );
             let (copy_bytes, records) = cached
                 .package_copy_material(package, source_bytes)
-                .ok_or_else(|| failure("retained builtin oracle copy inventory overflow"))?;
-            // Reserve all three deep copies before the first allocation. Physical reads
-            // above remain independently charged; no historical validation work is reused.
-            reader.reserve_copy(copy_bytes, records)?;
+                .ok_or_else(|| failure("retained builtin oracle copy inventory is absent"))?;
+            // Observe all three deep copies independently of the physical reads above.
+            // No historical validation work or producer proof becomes current permission.
+            reader.observe_copy(copy_bytes, records);
             snapshots.insert(package, cached.snapshots[&package].clone());
             interfaces.insert(package, cached.interfaces[&package].clone());
             interface_types.insert(package, cached.interface_types[&package].clone());
@@ -752,19 +715,22 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
         }
         #[cfg(test)]
         FULL_PACKAGE_VALIDATIONS.with(|count| count.set(count.get().saturating_add(1)));
-        let validation = crate::platform::kernel::validate_full_with_limit(
-            snapshot,
-            Some((16_000_000 - reader.visits.get()) as usize),
-        )
-        .map_err(|errors| {
-            failure(format!(
-                "canonical type validation rejected independent inventory: {}",
-                errors
-                    .first()
-                    .map_or("missing diagnostic", |error| error.code.as_str())
-            ))
-        })?;
-        reader.charge(validation.work_consumed as usize)?;
+        let validation = crate::platform::kernel::validate_full_with_limit(snapshot, None)
+            .map_err(|errors| {
+                failure(format!(
+                    "canonical type validation rejected independent inventory: {}",
+                    errors
+                        .first()
+                        .map_or("missing diagnostic", |error| error.code.as_str())
+                ))
+            })?;
+        observe(
+            &reader.visits,
+            SourceObservation {
+                consumed: validation.work_consumed,
+                saturated: validation.work_saturated,
+            },
+        );
         let mut intrinsic_work = crate::platform::kernel::ValidationWork::default();
         for record in snapshot.owners.values() {
             if let OwnerRecord::Declaration(DeclarationRecord {
@@ -776,11 +742,13 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
                     snapshot,
                     external,
                     &mut intrinsic_work,
-                    Some((16_000_000 - reader.visits.get()) as usize),
+                    None,
                 )?;
             }
         }
-        reader.charge(intrinsic_work.consumed)?;
+        let mut intrinsic_observation = observed_count(intrinsic_work.consumed);
+        intrinsic_observation.saturated |= intrinsic_work.saturated;
+        observe(&reader.visits, intrinsic_observation);
     }
     // A package dependency DAG cannot establish finite generic instantiation:
     // a supplied witness may dispatch from an upstream body back downstream.
@@ -793,9 +761,11 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
         &complete_sources,
         &|| Ok(()),
         &mut composition_work,
-        Some((16_000_000 - reader.visits.get()) as usize),
+        None,
     )?;
-    reader.charge(composition_work.consumed)?;
+    let mut composition_observation = observed_count(composition_work.consumed);
+    composition_observation.saturated |= composition_work.saturated;
+    observe(&reader.visits, composition_observation);
     if *reader.seen.borrow() != container.objects.keys().copied().collect() {
         return Err(failure("missing or extra complete source object"));
     }
@@ -806,8 +776,10 @@ pub(crate) fn reconstruct(container: &PackageContainer) -> Result<OracleClosure,
         interface_types,
         objects: container.objects.len(),
         edges,
-        validation_visits: reader.visits.get(),
-        validation_read_bytes: reader.bytes.get(),
+        validation_visits: reader.visits.get().consumed,
+        validation_visits_saturated: reader.visits.get().saturated,
+        validation_read_bytes: reader.bytes.get().consumed,
+        validation_read_bytes_saturated: reader.bytes.get().saturated,
     })
 }
 
@@ -1192,13 +1164,22 @@ fn extend_representation_inventory(
             ));
         };
         reader.charge(declaration.payload.type_parameters().iter().count())?;
-        reader.charge(match &declaration.payload {
+        let representation_work = match &declaration.payload {
             DeclarationPayload::OwnedRecord { fields, .. }
-            | DeclarationPayload::Record { fields, .. } => fields.len().saturating_mul(3),
-            DeclarationPayload::Variant { cases, .. } => cases.len().saturating_mul(3),
-            DeclarationPayload::ReadView(view) => 1 + view.fields.len().saturating_mul(3),
-            _ => 0,
-        })?;
+            | DeclarationPayload::Record { fields, .. } => {
+                observed_product(observed_count(fields.len()), 3)
+            }
+            DeclarationPayload::Variant { cases, .. } => {
+                observed_product(observed_count(cases.len()), 3)
+            }
+            DeclarationPayload::ReadView(view) => {
+                let mut work = observed_product(observed_count(view.fields.len()), 3);
+                work.observe(SourceObservation::exact(1));
+                work
+            }
+            _ => SourceObservation::default(),
+        };
+        observe(&reader.visits, representation_work);
         let (payload, members) = match &declaration.payload {
             DeclarationPayload::OwnedRecord {
                 type_parameters,

@@ -1,0 +1,288 @@
+declarations.begin
+(units
+  (module create source-artifact-closure
+    (function create failed
+      (visibility package)
+      (effect pure)
+      (parameter create code (type I64))
+      (parameter create runtime (type ByteBuffer) (use consume))
+      (parameter create reference (type ByteBuffer) (use consume))
+      (parameter create pending (type ByteBuffer) (use consume))
+      (parameter create objects (type ByteBuffer) (use consume))
+      (returns (record (code I64) (runtime Bytes) (reference Bytes) (pending Bytes) (objects Bytes)))
+      (body
+        (let
+          (binding drop0 (call ci::discard (local runtime)))
+          (binding drop1 (call ci::discard (local reference)))
+          (binding drop2 (call ci::discard (local pending)))
+          (binding drop3 (call ci::discard (local objects)))
+          (in
+            (record structural
+              (field code (local code))
+              (field runtime (call ci::text-bytes (text "")))
+              (field reference (call ci::text-bytes (text "")))
+              (field pending (call ci::text-bytes (text "")))
+              (field objects (call ci::text-bytes (text ""))))))))
+    (function create inventory
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create row (type I64))
+      (parameter create runtime (type ByteBuffer) (use consume))
+      (parameter create reference (type ByteBuffer) (use consume))
+      (parameter create pending (type ByteBuffer) (use consume))
+      (parameter create objects (type ByteBuffer) (use consume))
+      (returns (record (code I64) (runtime Bytes) (reference Bytes) (pending Bytes) (objects Bytes)))
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (record structural
+            (field code (i64 0))
+            (field runtime (call ci::freeze (local runtime)))
+            (field reference (call ci::freeze (local reference)))
+            (field pending (call ci::freeze (local pending)))
+            (field objects (call ci::freeze (local objects))))
+          (if
+            (call source-interface-record::allowed (call source-table::kind (local graph) (local row)))
+            (let
+              (binding is-runtime
+                (call source-artifact-owners::runtime (local graph) (local parents) (local row)))
+              (binding is-reference
+                (call source-artifact-owners::reference (local graph) (local parents) (local row)))
+              (binding roots
+                (call source-artifact-types::owner
+                  (local graph)
+                  (local row)
+                  (local is-runtime)
+                  (local is-reference)))
+              (in
+                (if
+                  (call ci::eq (field (local roots) (name code)) (i64 0))
+                  (let
+                    (binding selected (call ci::either (local is-runtime) (local is-reference)))
+                    (binding directory
+                      (call ci::add (call ci::u32 (local graph) (i64 80)) (call ci::mul (local row) (i64 50))))
+                    (binding image
+                      (if
+                        (local selected)
+                        (call source-table::data (local graph) (local row))
+                        (call ci::text-bytes (text ""))))
+                    (binding digest
+                      (if
+                        (local selected)
+                        (call wire::digest (text "lkjscript.kernel.owner-object.v14") (local image))
+                        (call ci::text-bytes (text ""))))
+                    (in
+                      (if
+                        (if
+                          (local selected)
+                          (call source-unit-tables::equal-window
+                            (local graph)
+                            (call ci::add (local directory) (i64 18))
+                            (local digest)
+                            (i64 0)
+                            (i64 32)
+                            (i64 0))
+                          (bool true))
+                        (if
+                          (call ci::both
+                            (call source-unit-tables::room
+                              (call ci::size (local runtime))
+                              (if (local is-runtime) (i64 56) (i64 0)))
+                            (call ci::both
+                              (call source-unit-tables::room
+                                (call ci::size (local reference))
+                                (if (local is-reference) (i64 50) (i64 0)))
+                              (call ci::both
+                                (call source-unit-tables::room
+                                  (call ci::size (local pending))
+                                  (call ci::length (field (local roots) (name bytes))))
+                                (call ci::both
+                                  (call source-unit-tables::room
+                                    (call ci::size (local objects))
+                                    (if
+                                      (local selected)
+                                      (call source-unit-tables::add (i64 48) (call ci::length (local image)))
+                                      (i64 0)))
+                                  (bool true)))))
+                          (let
+                            (binding next-runtime
+                              (type ByteBuffer)
+                              (if
+                                (local is-runtime)
+                                (call source-artifact-owners::runtime-row
+                                  (local graph)
+                                  (local row)
+                                  (local runtime))
+                                (local runtime)))
+                            (binding next-reference
+                              (type ByteBuffer)
+                              (if
+                                (local is-reference)
+                                (call wire::range
+                                  (local graph)
+                                  (local directory)
+                                  (call ci::add (local directory) (i64 50))
+                                  (local reference))
+                                (local reference)))
+                            (binding next-pending
+                              (type ByteBuffer)
+                              (call wire::range
+                                (field (local roots) (name bytes))
+                                (i64 0)
+                                (call ci::length (field (local roots) (name bytes)))
+                                (local pending)))
+                            (binding next-objects
+                              (type ByteBuffer)
+                              (if
+                                (local selected)
+                                (call source-interface-wire::frame
+                                  (i64 1)
+                                  (local digest)
+                                  (local image)
+                                  (local objects))
+                                (local objects)))
+                            (in
+                              (call inventory
+                                (local graph)
+                                (local parents)
+                                (call ci::add (local row) (i64 1))
+                                (local next-runtime)
+                                (local next-reference)
+                                (local next-pending)
+                                (local next-objects))))
+                          (call failed
+                            (i64 3)
+                            (local runtime)
+                            (local reference)
+                            (local pending)
+                            (local objects)))
+                        (call failed
+                          (i64 12)
+                          (local runtime)
+                          (local reference)
+                          (local pending)
+                          (local objects)))))
+                  (call failed
+                    (field (local roots) (name code))
+                    (local runtime)
+                    (local reference)
+                    (local pending)
+                    (local objects)))))
+            (call failed (i64 13) (local runtime) (local reference) (local pending) (local objects))))))
+    (function create finish
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create inventory
+        (type (record (code I64) (runtime Bytes) (reference Bytes) (pending Bytes) (objects Bytes))))
+      (returns
+        (record (code I64) (runtime Bytes) (root Bytes) (reference Bytes) (types Bytes) (objects Bytes)))
+      (body
+        (if
+          (call ci::eq (field (local inventory) (name code)) (i64 0))
+          (let
+            (binding types
+              (call source-interface-types::prepare (local graph) (field (local inventory) (name pending))))
+            (in
+              (if
+                (call ci::eq (field (local types) (name code)) (i64 0))
+                (let
+                  (binding map (call unit-map::encode (field (local inventory) (name reference)) (i64 33)))
+                  (binding page-buffer (type ByteBuffer) (call ci::empty))
+                  (binding pages
+                    (call source-interface-wire::pages
+                      (field (local map) (name pages))
+                      (i64 0)
+                      (local page-buffer)))
+                  (in
+                    (if
+                      (call ci::eq (field (local pages) (name code)) (i64 0))
+                      (if
+                        (call source-unit-tables::room
+                          (call source-unit-tables::add
+                            (call ci::length (field (local inventory) (name objects)))
+                            (call ci::length (field (local types) (name objects))))
+                          (call ci::length (field (local pages) (name objects))))
+                        (record structural
+                          (field code (i64 0))
+                          (field runtime (field (local inventory) (name runtime)))
+                          (field root
+                            (call source-interface-wire::root
+                              (field (local map) (name digest))
+                              (call ci::div
+                                (call ci::length (field (local inventory) (name reference)))
+                                (i64 50))
+                              (field (local map) (name content))))
+                          (field reference (field (local inventory) (name reference)))
+                          (field types (field (local types) (name types)))
+                          (field objects
+                            (call ci::concat
+                              (call ci::concat
+                                (field (local inventory) (name objects))
+                                (field (local types) (name objects)))
+                              (field (local pages) (name objects)))))
+                        (record structural
+                          (field code (i64 3))
+                          (field runtime (call ci::text-bytes (text "")))
+                          (field root (call ci::text-bytes (text "")))
+                          (field reference (call ci::text-bytes (text "")))
+                          (field types (call ci::text-bytes (text "")))
+                          (field objects (call ci::text-bytes (text "")))))
+                      (record structural
+                        (field code (field (local pages) (name code)))
+                        (field runtime (call ci::text-bytes (text "")))
+                        (field root (call ci::text-bytes (text "")))
+                        (field reference (call ci::text-bytes (text "")))
+                        (field types (call ci::text-bytes (text "")))
+                        (field objects (call ci::text-bytes (text "")))))))
+                (record structural
+                  (field code (field (local types) (name code)))
+                  (field runtime (call ci::text-bytes (text "")))
+                  (field root (call ci::text-bytes (text "")))
+                  (field reference (call ci::text-bytes (text "")))
+                  (field types (call ci::text-bytes (text "")))
+                  (field objects (call ci::text-bytes (text "")))))))
+          (record structural
+            (field code (field (local inventory) (name code)))
+            (field runtime (call ci::text-bytes (text "")))
+            (field root (call ci::text-bytes (text "")))
+            (field reference (call ci::text-bytes (text "")))
+            (field types (call ci::text-bytes (text "")))
+            (field objects (call ci::text-bytes (text "")))))))
+    (function create project
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (returns
+        (record (code I64) (runtime Bytes) (root Bytes) (reference Bytes) (types Bytes) (objects Bytes)))
+      (body
+        (if
+          (call ci::eq
+            (call ci::length (local parents))
+            (call source-unit-tables::mul (call source-table::count (local graph)) (i64 12)))
+          (let
+            (binding runtime (type ByteBuffer) (call ci::empty))
+            (binding reference (type ByteBuffer) (call ci::empty))
+            (binding pending (type ByteBuffer) (call ci::empty))
+            (binding objects (type ByteBuffer) (call ci::empty))
+            (binding inventory
+              (call inventory
+                (local graph)
+                (local parents)
+                (i64 0)
+                (local runtime)
+                (local reference)
+                (local pending)
+                (local objects)))
+            (in (call finish (local graph) (local inventory))))
+          (record structural
+            (field code (i64 3))
+            (field runtime (call ci::text-bytes (text "")))
+            (field root (call ci::text-bytes (text "")))
+            (field reference (call ci::text-bytes (text "")))
+            (field types (call ci::text-bytes (text "")))
+            (field objects (call ci::text-bytes (text "")))))))))
+declarations.end

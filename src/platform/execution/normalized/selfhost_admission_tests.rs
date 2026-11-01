@@ -45,7 +45,13 @@ fn selfhost_admission_checks_derived_hash_signatures_and_unknown_codes() {
         (5, vec![4], 28, 8),
         (5, vec![6, 5], 28, 8),
         (5, vec![4, 6], 28, 8),
-        (5, vec![4, 5], 29, 5),
+        // Bulk codes 29..=31 are current registered intrinsics. A forged
+        // derive-key signature reaches their signature check, not unknown-code
+        // admission. The next code remains explicitly unsupported.
+        (5, vec![4, 5], 29, 8),
+        (5, vec![4, 5], 30, 8),
+        (5, vec![4, 5], 31, 8),
+        (5, vec![4, 5], 32, 5),
     ] {
         let mut changed = functions.clone();
         changed[1].result = result;
@@ -53,7 +59,7 @@ fn selfhost_admission_checks_derived_hash_signatures_and_unknown_codes() {
         changed[1].locals = locals.into_iter().map(owned).collect();
         changed[1].external = external;
         let (code, image) = compile(&input::encode(&changed, 0).unwrap());
-        assert_eq!(code, expected);
+        assert_eq!(code, expected, "external code={external}, result={result}");
         assert!(image.is_empty());
     }
 }

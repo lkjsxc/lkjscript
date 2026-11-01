@@ -1,207 +1,134 @@
 # Current status
 
-Updated 2026-10-31 (Asia/Tokyo). Accepted typed meaning is the sole editable authority.
-Production bytecode is checked against an independent canonical interpreter.
+Updated 2026-11-01 (Asia/Tokyo). Accepted typed meaning is the sole editable
+program authority. Source proposals are adopted through public transactions.
 
-## Accepted implementation and evidence
+## Current milestone and delivery boundary
 
-The stable artifact index sort is accepted and integrated at commit
-`67132509f820b8e6b1f5e7ba55112e310e0da162`, Git tree
-`ba3b9359df57717a360d33fb3f6017679fdbc975`. Local main, origin/main and
-the read-only remote main ref agreed after fast-forward and push. Acceptance
-completed 2026-10-31 08:29:27 JST against precommit source HEAD
-`bcf455816c11f99ebb60e76f786a1c2baf1e41e7` and that exact staged tree.
-This documentation-only follow-up is separate from the tested implementation.
+The maintained compiler has passed the complete raw-source Milestone A component:
+its native generations consume the exact authoritative source closure, perform
+source admission and lowering, and reproduce both ELF and canonical artifacts.
+The test establishes `C2 = C3` and `Ahost = A1 = A2 = A3`, with independent
+behavior, source mutations, complete-inventory negatives and strict loading.
+The original repository was byte-for-byte unchanged by the test.
 
-| Operation on the exact sort tree | Result | Time |
-| --- | --- | ---: |
-| Staged-tree verifier bootstrap | Passed; four Cargo units reused | 8.403s |
-| Literal selfhost selection | 152 passed / 0 failed / 3 ignored | 3,470.68s test time |
-| Native ELF selection | 11 passed / 0 failed / 0 ignored | 119.22s test time |
-| Combined literal selfhost script | Passed | 3,590.370s |
-| Named maintained native closure | 1 passed | 23.088s command time |
-| Named whole owner/type inventory | 1 passed | 13.210s command time |
-| Fresh full registry, four workers | 29 passed / 0 reused / 0 unrun | 3,942.735s checker time |
-| Release target | Passed | 0.006s |
+This is focused component evidence, not the fresh full staged-tree acceptance
+seal. The working branch is `compiler/20261031-source-active`, based on
+`71405a389a422a8fa51850ef70ba9f34040aca56` (tree
+`d1036ebca89238a914d221c7ba3d0d951b4f0f21`). That base is the last observed
+local/remote mainline commit; its tree does not contain this candidate.
+The [source self-compilation decision](decisions/20261101-active-source-self-compilation.md)
+records exact component identities, measurements and evidence boundaries.
+Terminal acceptance and integration must bind the finalized staged tree in the
+acceptance commit and external receipt, without editing sealed inputs.
 
-Full receipt SHA-256:
-`0b9ed248f5797176ae7eb0b8bb23bbe2dc18b7ac3bd842ec93cc604b08140f25`.
-Bootstrap receipt:
-`f8a7e5472d4abbc05e159ab4a4d74c84fa6074496cfb76cbfbcf6bbea18986cd`.
-Terminal checkpoint:
-`493017e05517612444b2fba36ddfde6a13baa58db501b8db225bfea962ed55c0`.
-Independent review:
-`b8ef93868e56477ef1ebcb1e3b032b554817f07a490bb7c9395fc3f55d553bf6`.
-The verifier SHA-256 remains
-`2c798059ce30fdb6e4e42d63061d8ddb4a81efb1bd6eaf3e1c7f924c97929747`.
-No release archive or deployment was published.
+Tier 2 remains incomplete: full `P_self` semantics (Milestone B) and repeated
+same-process native phase reclamation (Milestone C) are separate obligations.
+No release archive or deployment has been published for this candidate.
 
-The accepted sort tree's Mode-0 native C2/C3 equality is 1,262,139 bytes,
-SHA-256 `0f52a49e0d4a79c0119f9b70e3ae7c44d901d03810e38962b2402f372ad5c24d`.
-Mode-1 C1/C2/C3 artifact equality is 10,400,001 bytes, SHA-256
-`af8231de18b4e20866bd37672d3efcda50617fd2d29cb1bcccd080153523b7a7`;
-the capacity artifact is 11,179,173 bytes, SHA-256
-`737f18a830ae343e1c7715e840a22edc13507856a8475e7eb68dec745be552b3`.
-Complete canonical object comparisons, strict loading, independent behavior and
-compiler-mutation controls passed. These are projected-input backend results.
+## Authoritative source and exact outputs
 
-Profile 7 was previously accepted at
-`5e7e8d37831b33a9e44c3e50a0b733cfd049b64d`, tree
-`06ad6feaa9df96a12f1e1ecab039855bff6072e1`, with precommit source
-`932f197ebcd9c17e2702372300ab73996bb20754`. Its
-[decision](decisions/20261030-artifact-profile7.md) retains the historical seal.
-The [sorting decision](decisions/20261031-artifact-index-sort.md) owns the current
-implementation and measurements; the
-[capacity ledger](decisions/20261025-capacity-unbounding.md) owns remaining boundaries.
+| Identity | Current value |
+| --- | --- |
+| Graph revision | `rev_cd5e4e228db3c5abadec2e3e28bb2fbda602c3812177a6ab666fcf2240eb992a` |
+| Public HEAD SHA-256 | `39d171a01e15cdf6fc9999c61dfcd0511cb7dc7a9600f274dcb3fa6b2d883082` |
+| Semantic state | `semantic_state_01600719c76251652588c725f184f5b392b63d3a69f4ae36f52d18ba486fc606` |
+| Complete source carrier | 17,598,834 bytes, profile 3 |
+| Carrier SHA-256 | `404a5a97895b4156f67ef3c14c1f612007e4c238bed4054e88128677047e04bd` |
+| C2/C3 standalone Linux x86_64 ELF | 3,869,405 bytes |
+| C2/C3 SHA-256 | `ecef194cc2751ebb73d59ce4fed4e5c3c0353179e2affa7787a29aafd3d53b59` |
+| Ahost/A1/A2/A3 canonical artifact | 16,947,150 bytes |
+| Artifact SHA-256 | `59e1d8a6b9867e2ab2c43636dd8b75a0b4df8d2ca1ad7fe1d6607ef74f3430e1` |
 
-## Accepted capacity and policy capabilities
+The complete inventory contains 118 modules, 59,883 owners, 88 supplied types,
+1,096 callables (1,069 pure and 27 external), 50,246 expressions, 4,514 lexical
+bindings and 35,651 retirements. All 20 generic application sites and all
+supplied, uncalled, untaken and unselected source are inventoried. Parameter modes
+are 3,595 unrestricted, 300 consume and one borrow. Public readback covers all
+owners in 15 pages. Complete proposal replay matches 1,103 canonical units.
 
-The 46-dimensional change-policy API defaults to `None` and preserves exact
-finite allowances, including zero and `u64::MAX`, without engine clamping.
-Store, map, kernel and publication observations carry saturation separately from
-permission. Ordinary memory-project storage, compiler reconstruction and compiler
-proof admission use optional exact policies with unmetered defaults. The two
-literal/test-retention ownership helpers charge through the same exact saturation
-owner; that repair does not assert an exhaustive audit of every accumulator.
+Public GC retained the exact HEAD and complete source transport while compacting
+200 packs / 199,266,800 bytes into seven packs / 191,469,725 bytes. These are disk
+observations, not native memory reclamation. The 21,795,545-byte source transport
+has SHA-256 `86e2aeda5ad71147deb5c1e4e5e2f88ffb13b92ad20c7aaa1ae2afd8d5d3cecc`.
 
-Compact authoring and logical-plan I/O have no aggregate byte or record defaults.
-Transaction and semantic-diff codecs decode sequences progressively without the
-former 4 MiB payload or 100,000-edit defaults. Their logical storage domains are
-unbounded, while exact explicit read policies and checked pack framing remain.
-The 32 MiB pack target is a physical grouping choice. Receipt contract 2 and
-LKJABDG2 are current-only; all six maintained repositories were publicly
-republished without changing canonical meaning or source inventories.
+## Implemented candidate capabilities
 
-Complete callable edits preserve retained parameter identities and explicitly
-order the final parameter list. Public transactions can delete parameters with
-their corresponding caller/body repairs. Normalized queries have no default
-output-byte allowance, exact finite fitting, resumable pagination and independent
-read telemetry. All four cumulative execution policies preserve exact zero and
-finite allowances and independent saturation flags across VM/reference, child
-execution and receipts. Discovery emits each scalar once with units and exactness.
+Source compilation covers the active scalar/compound type closure, structural
+record inference, fields, lists, lexical control flow, direct recursion, closed
+I64 generic list substitutions, exact intrinsic signatures and binary-filter
+entrypoints. Affine ByteBuffer admission tracks consumption, synchronous borrowing,
+branch-balanced disposal, reverse lexical cleanup and returned-owner transfer.
+Owned locals prevent unsafe tail transfer; lowering emits call/cleanup/return
+instead. Canonical unit, summary, interface, map, pack and artifact construction
+is source-driven, not supplied as Rust-normalized target input.
 
-Lists have no default one-million-element or height-3 ceiling. Their 32-way radix
-and 32-element tail are physical units. Construction, traversal and disposal use
-worklists sized from the representable index width. Ordinary raw-value admission
-has no separate one-million-item subtotal or visit-fuel cap; exact selected
-collection/allocation policies, cancellation, identity and type checks remain.
+`LKJSG002` profile 3 carries the original revision core and claim; `LKJSRQ01`
+profile 2 carries caller TargetId and ELF/artifact mode. Predecessor selectors
+reject. Unused supplied types remain bound by the complete carrier hash even when
+they do not change semantic-state identity. Canonical meaning stays in its current
+schema epoch. Mode-0 profile 6 and Mode-1 profile 7 remain the current backend
+projections, which the source compiler now constructs itself.
 
-Native layout and Mode-0 profile 6 remove former function, instruction, image,
-local, stack and descriptor defaults through wide checked framing and emission.
-The public 4,097-function witness crosses 65,536 instructions and agrees across
-native ELF, VM and reference. LKJSG002 and LKJREGN2 profile 2 are current; source
-carrier aggregate-byte and graph/map defaults were removed, but source carrier
-u32 extents and independent object/depth boundaries remain.
+Ordinary package/source admission, publication previews and canonical-reference
+proof preparation no longer impose their former aggregate default work/storage
+quotas. Exact optional finite policies, independent saturation flags, cancellation,
+structural checks and atomic publication remain. The identical complete compiler
+transaction that previously exhausted the reference proof allowance was publicly
+accepted after that path was repaired. Recursive lifecycle guards are not removed.
 
-Mode-1 profile 7 widens projected unit, object, metadata and pool fields, checks
-complete extents before allocation and retains exact optional u64 estimated-proof
-policies. Tag zero bypasses the estimate. Native emission, canonical map/pack
-construction, strict loading, independent behavior and malformed controls pass.
-This cut removes projection-only ceilings; it does not remove the canonical unit
-codec's independent 8 MiB cap or the outer 4 MiB CompilerUnit storage allowance.
+Three closed byte intrinsics are supported by both evaluators and both native
+compiler paths: `core.buffer.append-slice`, `core.buffer.append-i64-le` and
+`core.bytes.read-i64-le`. Source support preceded adoption in maintained helpers.
+Bulk operations avoid per-octet boxed temporaries. Immutable native scalars -1
+through 255 and both Booleans reuse read-only objects; other I64 values retain
+checked allocation. Neither mechanism limits the semantic integer domain.
 
-## Accepted artifact ordering
+## Focused evidence and measured cost
 
-The stable index merge sort passed public adoption, complete proposal replay,
-a pinned complete-compiler artifact comparison and the fresh acceptance above.
-The [sorting decision](decisions/20261031-artifact-index-sort.md) owns its algorithm,
-source bindings, measurements and evidence limits.
+The complete raw-source fixed-point test passed with 1 passed / 0 failed /
+0 ignored in 524.24s test time. Receipt SHA-256:
+`29c9087d37072113fb723469e2c0cc195366a412259e1e1e045f29cb177fb551`.
+Its source-file inventory binds the working candidate independently of the base
+Git commit. The test includes 82 active-profile cases (26 positive, 56 negative)
+on both C2/C3 and both output modes; bulk-byte controls; four-engine behavior;
+layer-reaching diagnostics 6 and 12–19; and a compiler-source mutation changing
+an independently expected diagnostic from 12 to 77. Every artifact generation is
+strictly loaded with complete unit and provenance comparison.
 
-On the identical 650-unit pinned input, VM instructions decreased from 826,835,225
-to 739,945,099 and canonical reference expressions from 438,158,052 to 387,022,989.
-Observed VM/reference times decreased from 103.671s / 526.016s to
-93.557s / 482.161s. These are single-run timings. Modeled cumulative allocations
-decreased by 8.26% / 8.30%; allocator traffic, copied bytes, peak live bytes, mapped
-capacity and RSS were not measured. All four evaluators emitted the identical
-10,338,849-byte artifact before and after; strict loading and 37,712 independent
-canonical object comparisons passed. This input is a projected artifact request,
-not the raw-source self-compilation required by Milestone A.
+Additional completed focused selections include 224 canonical-reference/admission
+tests; 27 source semantic tests with two explicit measurement tests ignored; six
+artifact tests with the whole-source control separately invoked; and four
+inventory/replay controls. Release workspace/all-target/all-feature Clippy with
+`-D warnings`, product build and generated-discovery verification passed before
+finalization. These selections do not substitute for fresh full acceptance.
 
-## Authoritative compiler closure
+On the same pinned 17,263,085-byte raw artifact request and source graph, the old
+native scalar allocator exhausted an explicit 24 GiB process address-space policy
+without output. The new scalar pool completed in 18.304s, producing the exact
+16,783,727-byte oracle artifact; sampled peak VmSize/RSS was 16,041,940 /
+15,798,460 KiB. This establishes completion under the same explicit process policy,
+not a timing speedup against the failed run. Current-source artifact emission
+completed in 19.303s with sampled peak RSS 16,452,192 KiB. Actual allocation traffic,
+bytes copied and peak live language data were not measured. General native scratch
+allocations still remain until process exit.
 
-The current graph revision is
-`rev_71fade8bd535b16925f51aa8c0e00260bf375288febad1654a602f7308f01d83`.
-Its public HEAD SHA-256 is
-`34b5ed697976321ad1c26b5554ee9fb82911a2389c5398c591c1ae7fb12048bc`;
-its semantic state is
-`semantic_state_4afafbe96907620b4e04d62319faa3c1253ce8c8ee56a012fd834a084883d7fc`.
+## Next acceptance and architectural work
 
-The refreshed inventory contains 73 modules, 651 callables (627 pure and 24
-external), 36,295 owners, 41 types, 29 structural record types and 29,438
-retirements. It covers 30,873 expression owners, 7,768 call expressions,
-2,527 bindings, 16 generic application sites and all supplied/uncalled/untaken
-source. Parameter modes are 1,980 unrestricted, 182 consume and one borrow.
-Complete proposal/body replay agrees with 655 canonical units. Public readback
-covered all owners in nine pages. The sort uses existing semantic families and
-intrinsics.
+Finalize and stage this dependency-closed candidate; bootstrap the exact staged
+tree; run the literal selfhost/native script, named maintained-native-closure and
+whole-owner/type controls, the explicit raw-source fixed point, all 29 fresh full
+gates and release target; commit only the tested tree and integrate normally.
+The named historical closure control now uses unsupported F64 rather than the
+newly supported Bytes type for its unused-descriptor negative; the corrected
+control passed in 45.48s test time (1 passed, zero failed/ignored).
 
-The complete source carrier is 12,312,663 bytes, SHA-256
-`0f8b486925e1482fbb482204c3952313448635d868dca42156d83682707cbc60`.
-Physical storage is four packs / 87,934,112 bytes after public GC. These are
-physical storage observations, separate from Git and semantic identities.
-
-The following fixed points belong to the accepted Profile-7 graph before the
-sorting change; the current accepted tree's fixed points are recorded above.
-
-| Reproduction on the accepted Profile-7 tree | Bytes | SHA-256 |
-| --- | ---: | --- |
-| Mode-0 profile-6 native compiler, C2 = C3 | 1,249,170 | `c613d7c604322d42f4cec6bd65d83520828d901fa7f620c792707aeb1caeedb7` |
-| Mode-1 profile-7 input, policy tag zero, 650 units | 10,806,949 | `c50451cd991e04fe64e38f5a7bae5a4d34497cbfd54e614ad2c9c137bde19791` |
-| Strictly loaded artifact, C1 = C2 = C3 | 10,338,816 | `41dd8141cb12a9501e69c8092e0b8e5d7c020765967511ec051c50bacac18f23` |
-
-That Profile-7 source-compiler backend closure exported 624 functions / 36,561
-nodes in 3,984,067 normalized-input bytes. Both backend generations emitted the
-same 2,366,697-byte source-compiler executable and compiled independent scalar
-requests. This establishes Tier 1 reproduction of the source compiler, not
-raw-source self-compilation of the maintained compiler.
-
-## Next dependency batches and unproven claims
-
-The next dependency-closed batch removes the aggregate default source-admission
-work/read ceilings that refused a larger complete compiler authoring workload,
-then integrates the drafted compound/custody source compiler and canonical
-artifact path. The current drafts contain 117 modules / 1,089 callables; these
-are proposal counts, not an accepted graph inventory.
-
-An isolated earlier compound/custody prototype consumed its own complete raw
-source and produced equal C2/C3 ELF bytes (2,891,380 bytes, SHA-256
-`d8037e1033f84076cfa2a9372ad148c4521a6308c170a2a82d937a491a3a8de3`).
-Each self-produced stage passed 13 behavioral/source-mutation and 19
-negative/baseline controls: 64 cases total. Receipt SHA-256:
-`f51f3fe9bfa30eb9879e80d1da146a6c9b3ff02682a13e1bd061c9fb5fc31fa4`.
-That prototype uses earlier private request profiles and is separate from the
-maintained graph and current-format acceptance.
-
-The new current-format source artifact draft produced a 135,359-byte fixture
-artifact equal byte-for-byte to a fresh C0 public build, SHA-256
-`5d62f0fff6b42a6fa1e30d7a84d6e0fa6a594f31bebd8d7fea80f0f52ca13d0b`.
-C0's writer strictly loaded those equal bytes before publication; the emitted
-scalar ELF executed with result 42. Receipt SHA-256:
-`39d7e52c1b56149f03817671611b2447ad300bf3604084212490dc37a0d7c40d`.
-The draft was evaluated by a local development interpreter. Its Rust harness,
-native whole-compiler artifact fixed point, public adoption and fresh gates
-remain pending.
-
-Milestone A requires source-driven compound types and all active expressions,
-complete intrinsic and closed generic admission, affine ByteBuffer custody and
-borrow checking, binary-filter targets, and both ELF and canonical artifact
-emission. The scalar source route currently supports Unit/Bool/I64 and its eight
-closed intrinsics. It cannot compile the complete active closure. Refresh the
-whole-owner/type inventory after each compiler change and establish capability
-before adopting new feature families into maintained compiler source.
-
-Remaining coupled capacity families are canonical unit/manifest/cache storage and
-codecs; source carrier/object envelopes; recursive validation, lowering, codecs
-and destruction; map key/value scale; catalog and GC topology/accounting; and
-package/data/queue/HTTP/tooling policies. Each requires an end-to-end workload and
-all its coupled readers, writers and lifetime paths. Increasing a constant or
-removing only an outer guard is insufficient.
-
-Milestone C requires separate native phase allocation contexts, sound survivor
-promotion and repeated same-process success/failure/cancellation evidence. Native
-backing allocations still live until process exit. Milestone B adds the remaining
-P_self families: nominal owned records/choices and Match, closures and Invoke,
-explicit owned implementation witnesses/read views, and lexical regions.
-Complete Tier 2, repository-wide capacity liberation, bounded same-process RSS,
-phase reclamation and Tier 3 sovereignty remain unproved. Projected-input fixed
-points do not establish source-derived `A_host = A1 = A2 = A3`.
+After integration, prioritize separate child phase allocation contexts and sound
+survivor promotion, with repeated native invocations in one process, including
+failure and cancellation. Process exit, scalar interning and bulk-copy efficiency
+are not that proof. Then close remaining `P_self` nominal owned records/choices and
+Match, closures/Invoke, explicit owned witnesses/read views and lexical Regions.
+The [capacity ledger](decisions/20261025-capacity-unbounding.md) retains the coupled
+canonical-unit/object envelopes, lifecycle/stack safety, map key/value, catalog/GC
+and package/data/queue/HTTP/tooling families. Repository-wide capacity freedom,
+full Tier 2 and Tier 3 sovereignty remain unproved.

@@ -1,0 +1,380 @@
+declarations.begin
+(units
+  (module create source-unit
+    (function create failure
+      (visibility private)
+      (effect pure)
+      (parameter create code (type I64))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (record structural (field diagnostic (local code)) (field image (call ci::text-bytes (text ""))))))
+    (function create abort
+      (visibility private)
+      (effect pure)
+      (parameter create code (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body (sequence (call ci::discard (local out)) (call failure (local code)))))
+    (function create failed-preparation
+      (visibility private)
+      (effect pure)
+      (parameter create code (type I64))
+      (returns
+        (record
+          (code I64)
+          (graph Bytes)
+          (facts Bytes)
+          (parents Bytes)
+          (types Bytes)
+          (mapping Bytes)
+          (custody Bytes)))
+      (body
+        (record
+          structural
+          (field code (local code))
+          (field graph (call ci::text-bytes (text "")))
+          (field facts (call ci::text-bytes (text "")))
+          (field parents (call ci::text-bytes (text "")))
+          (field types (call ci::text-bytes (text "")))
+          (field mapping (call ci::text-bytes (text "")))
+          (field custody (call ci::text-bytes (text ""))))))
+    (function create prepare
+      (visibility private)
+      (effect pure)
+      (parameter create request (type Bytes))
+      (returns
+        (record
+          (code I64)
+          (graph Bytes)
+          (facts Bytes)
+          (parents Bytes)
+          (types Bytes)
+          (mapping Bytes)
+          (custody Bytes)))
+      (body
+        (let
+          (binding framed (call source-request::read (local request)))
+          (in
+            (if
+              (call ci::eq (field (local framed) (name code)) (i64 0))
+              (if
+                (call ci::eq (field (local framed) (name mode)) (i64 1))
+                (let
+                  (binding graph (field (local framed) (name graph)))
+                  (binding prepared (call source-scalar::prepare (local graph)))
+                  (in
+                    (if
+                      (call ci::eq (field (local prepared) (name code)) (i64 0))
+                      (let
+                        (binding target
+                          (call
+                            source-table::owner
+                            (local graph)
+                            (field (local framed) (name target))
+                            (i64 0)
+                            (i64 12)))
+                        (in
+                          (if
+                            (call ci::lt (local target) (i64 0))
+                            (call failed-preparation (i64 19))
+                            (if
+                              (call
+                                ci::eq
+                                (call source-table::kind (local graph) (local target))
+                                (i64 20))
+                              (record
+                                structural
+                                (field code (i64 0))
+                                (field graph (local graph))
+                                (field facts (field (local prepared) (name facts)))
+                                (field parents (field (local prepared) (name parents)))
+                                (field types (field (local prepared) (name types)))
+                                (field mapping (field (local prepared) (name mapping)))
+                                (field custody (field (local prepared) (name custody))))
+                              (call failed-preparation (i64 19))))))
+                      (call failed-preparation (field (local prepared) (name code))))))
+                (call failed-preparation (i64 12)))
+              (call failed-preparation (field (local framed) (name code))))))))
+    (function create header
+      (visibility private)
+      (effect pure)
+      (parameter create magic (type Text))
+      (parameter create count (type I64))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding empty (type ByteBuffer) (call ci::empty))
+          (binding prefix
+            (type ByteBuffer)
+            (call ci::append (call ci::text-bytes (local magic)) (i64 0) (local empty)))
+          (in (call ci::le (local count) (i64 8) (local prefix))))))
+    (function create compilation-owner
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (returns Bool)
+      (body
+        (let
+          (binding kind (call source-table::kind (local graph) (local row)))
+          (in
+            (call
+              ci::either
+              (call ci::either (call ci::eq (local kind) (i64 5)) (call ci::eq (local kind) (i64 6)))
+              (call ci::either (call ci::eq (local kind) (i64 9)) (call ci::eq (local kind) (i64 20))))))))
+    (function create count
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (parameter create units (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (local units)
+          (call
+            count
+            (local graph)
+            (call ci::add (local row) (i64 1))
+            (if
+              (call compilation-owner (local graph) (local row))
+              (call ci::add (local units) (i64 1))
+              (local units))))))
+    (function create summary-layout
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create rows (type Bytes))
+      (returns Bool)
+      (body
+        (call
+          ci::eq
+          (call ci::length (local rows))
+          (call ci::mul (call source-table::count (local graph)) (i64 224)))))
+    (function create inspect-summaries
+      (visibility public)
+      (effect pure)
+      (parameter create request (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding prepared (call prepare (local request)))
+          (in
+            (if
+              (call ci::eq (field (local prepared) (name code)) (i64 0))
+              (let
+                (binding graph (field (local prepared) (name graph)))
+                (binding summaries
+                  (call source-summary::prepare (local graph) (field (local prepared) (name parents))))
+                (in
+                  (if
+                    (call ci::eq (field (local summaries) (name code)) (i64 0))
+                    (if
+                      (call summary-layout (local graph) (field (local summaries) (name rows)))
+                      (let
+                        (binding prefix
+                          (type ByteBuffer)
+                          (call header (text "LKJSUS01") (call source-table::count (local graph))))
+                        (binding out
+                          (type ByteBuffer)
+                          (call ci::append (field (local summaries) (name rows)) (i64 0) (local prefix)))
+                        (in
+                          (record
+                            structural
+                            (field diagnostic (i64 0))
+                            (field image (call ci::freeze (local out))))))
+                      (call failure (i64 3)))
+                    (call failure (field (local summaries) (name code))))))
+              (call failure (field (local prepared) (name code))))))))
+    (function create fill
+      (visibility private)
+      (effect pure)
+      (parameter create descriptor (type Bytes))
+      (parameter create summaries (type Bytes))
+      (parameter create row (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding at (call ci::mul (local row) (i64 224)))
+          (binding empty (type ByteBuffer) (call ci::empty))
+          (binding prefix
+            (type ByteBuffer)
+            (call wire::range (local descriptor) (i64 0) (i64 48) (local empty)))
+          (binding semantic
+            (type ByteBuffer)
+            (call
+              wire::range
+              (local summaries)
+              (local at)
+              (call ci::add (local at) (i64 160))
+              (local prefix)))
+          (binding validation
+            (type ByteBuffer)
+            (call
+              wire::range
+              (local summaries)
+              (call ci::add (local at) (i64 192))
+              (call ci::add (local at) (i64 224))
+              (local semantic)))
+          (binding out
+            (type ByteBuffer)
+            (call
+              wire::range
+              (local descriptor)
+              (i64 240)
+              (call ci::length (local descriptor))
+              (local validation)))
+          (in (call ci::freeze (local out))))))
+    (function create entry
+      (visibility private)
+      (effect pure)
+      (parameter create row (type I64))
+      (parameter create encoded (type (record (digest Bytes) (image Bytes) (key Bytes))))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::le (local row) (i64 8) (local out)))
+          (binding b
+            (type ByteBuffer)
+            (call ci::append (field (local encoded) (name key)) (i64 0) (local a)))
+          (binding c
+            (type ByteBuffer)
+            (call ci::append (field (local encoded) (name digest)) (i64 0) (local b)))
+          (binding d
+            (type ByteBuffer)
+            (call ci::le (call ci::length (field (local encoded) (name image))) (i64 8) (local c)))
+          (in (call ci::append (field (local encoded) (name image)) (i64 0) (local d))))))
+    (function create walk
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create custody (type Bytes))
+      (parameter create summaries (type Bytes))
+      (parameter create row (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (record structural (field diagnostic (i64 0)) (field image (call ci::freeze (local out))))
+          (if
+            (call compilation-owner (local graph) (local row))
+            (let
+              (binding lowered
+                (call
+                  source-unit-lower::prepare
+                  (local graph)
+                  (local facts)
+                  (local parents)
+                  (local types)
+                  (local mapping)
+                  (local custody)
+                  (local row)))
+              (in
+                (if
+                  (call ci::eq (field (local lowered) (name code)) (i64 0))
+                  (if
+                    (call ci::lte (i64 432) (call ci::length (field (local lowered) (name descriptor))))
+                    (let
+                      (binding descriptor
+                        (call
+                          fill
+                          (field (local lowered) (name descriptor))
+                          (local summaries)
+                          (local row)))
+                      (in
+                        (if
+                          (call artifact-check::unit (local descriptor))
+                          (let
+                            (binding encoded (call unit-wire::encode-unit (local descriptor) (i64 0)))
+                            (binding after
+                              (type ByteBuffer)
+                              (call entry (local row) (local encoded) (local out)))
+                            (in
+                              (call
+                                walk
+                                (local graph)
+                                (local facts)
+                                (local parents)
+                                (local types)
+                                (local mapping)
+                                (local custody)
+                                (local summaries)
+                                (call ci::add (local row) (i64 1))
+                                (local after))))
+                          (call abort (i64 3) (local out)))))
+                    (call abort (i64 3) (local out)))
+                  (call abort (field (local lowered) (name code)) (local out)))))
+            (call
+              walk
+              (local graph)
+              (local facts)
+              (local parents)
+              (local types)
+              (local mapping)
+              (local custody)
+              (local summaries)
+              (call ci::add (local row) (i64 1))
+              (local out))))))
+    (function create compile
+      (visibility public)
+      (effect pure)
+      (parameter create request (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding prepared (call prepare (local request)))
+          (in
+            (if
+              (call ci::eq (field (local prepared) (name code)) (i64 0))
+              (let
+                (binding graph (field (local prepared) (name graph)))
+                (binding summaries
+                  (call source-summary::prepare (local graph) (field (local prepared) (name parents))))
+                (in
+                  (if
+                    (call ci::eq (field (local summaries) (name code)) (i64 0))
+                    (if
+                      (call summary-layout (local graph) (field (local summaries) (name rows)))
+                      (let
+                        (binding out
+                          (type ByteBuffer)
+                          (call header (text "LKJSUN01") (call count (local graph) (i64 0) (i64 0))))
+                        (in
+                          (call
+                            walk
+                            (local graph)
+                            (field (local prepared) (name facts))
+                            (field (local prepared) (name parents))
+                            (field (local prepared) (name types))
+                            (field (local prepared) (name mapping))
+                            (field (local prepared) (name custody))
+                            (field (local summaries) (name rows))
+                            (i64 0)
+                            (local out))))
+                      (call failure (i64 3)))
+                    (call failure (field (local summaries) (name code))))))
+              (call failure (field (local prepared) (name code))))))))
+    (component create compiler
+      (visibility public)
+      (port create summaries
+        (type (function (Bytes) (record (diagnostic I64) (image Bytes))))
+        (function inspect-summaries))
+      (port create units
+        (type (function (Bytes) (record (diagnostic I64) (image Bytes))))
+        (function compile))))
+  (target create source-unit-summaries
+    (component source-unit::compiler)
+    (runner command)
+    (port source-unit::compiler::summaries))
+  (target create compile-source-units
+    (component source-unit::compiler)
+    (runner command)
+    (port source-unit::compiler::units)))
+declarations.end

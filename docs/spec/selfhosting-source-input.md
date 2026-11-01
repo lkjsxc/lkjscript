@@ -2,7 +2,8 @@
 
 This is a restricted source-admission slice toward the
 [semantic self-hosting contract](selfhosting.md). It carries current canonical
-source objects, logical directories and a claimed semantic-state identity.
+source objects, logical directories, a claimed semantic-state identity and the
+original canonical RevisionCore binding that state to its semantic revision.
 It contains no normalized instructions, inferred types, reference summaries,
 validation certificates, compiled units or executable templates.
 
@@ -15,18 +16,19 @@ typing, affine custody, effects or witness validity. The additional
 scope contract below. `source-namespace::validate`, `source-type-scope::validate`
 and `source-nominal::validate` successively add namespace uniqueness, contextual
 type/R/E binder scope, structural type DAG proof and nominal member parameter flow
-over the same decoded profile. `source-scalar::validate` adds whole-inventory
-typing for the restricted scalar profile below, and `source-elf::compile` lowers
-that profile to ELF. Full-profile normalization and the Tier 2 compiler-source
-fixed point remain separate work.
+over the same decoded profile. `source-scalar::prepare` adds whole-inventory
+active-profile typing and affine ByteBuffer custody. `source-elf::compile` lowers
+the admitted source to standalone ELF or canonical artifacts. Implementation
+capability and accepted native fixed-point evidence remain distinct; the full
+P_self profile and same-process reclamation retain their separate obligations.
 
 The current carrier has one package and no dependencies or external blobs.
 Recognized unsupported boundaries reject explicitly; importing a package's
 interface or prior validation witness cannot supply its missing source bodies.
 This carrier is separate from normalized LKJCI1: mode 0 uses profile 6 for ELF
 and mode 1 uses profile 7 for canonical artifacts. The existing Tier 1 paths use
-Rust admission and normalization. The scalar source route instead derives its
-mode-0 input inside lkjscript from the raw carrier.
+Rust admission and normalization. The source route derives both mode-0 and
+mode-1 inputs inside lkjscript from the complete raw carrier.
 
 ## Exact bytes
 
@@ -35,7 +37,8 @@ the explicit proof allowance is u64 little-endian. Complete input is at least
 128 bytes, and its actual length must equal the encoded u32 length. There is no
 separate aggregate byte or entity-count quota. Empty directories are allowed.
 Package identity is nonzero and the package name has 1 through 128 canonical
-name bytes. The current format is a clean cut: old LKJSG001 carriers reject.
+name bytes. The only current carrier is magic LKJSG002 with explicit profile 3.
+Predecessor profile values and other magic values reject without fallback.
 
 | Header offset | Width | Meaning |
 | --- | --- | --- |
@@ -55,10 +58,18 @@ name bytes. The current format is a clean cut: old LKJSG001 carriers reject.
 | 96 | 4 | First canonical-object byte offset |
 | 100 | 4 | Proof policy: 0 = unbounded, 1 = finite; other tags reject |
 | 104 | 8 | Exact finite proof allowance; zero for the unbounded tag |
-| 112 | 16 | Zero |
+| 112 | 4 | Current source profile, exactly 3 |
+| 116 | 4 | Provenance block offset P |
+| 120 | 4 | Provenance block byte length Q |
+| 124 | 4 | Reserved zero |
 
-The name starts at offset 128. The three directories follow immediately, in
-owner/type/retirement order. Their row formats are:
+The name starts at offset 128 and ends at P = 128 + name_length. The provenance
+block follows immediately. Its first 32 bytes are the claimed raw RevisionId;
+its remaining bytes are the exact current canonical RevisionCore. The owner
+directory starts at P + Q, followed by type, retirement and span directories.
+Package-name scanning and semantic-state material stop at P; they never include
+provenance bytes. Directory row formats remain:
+
 
 | Directory | Row width | Fields |
 | --- | --- | --- |
@@ -72,6 +83,20 @@ pairs `(absolute_offset, byte_length)`. Its entries correspond to owners, types
 and retirements in that order. Objects follow immediately in span order. Every
 span must begin at the preceding span's end and the final span must end at L.
 There is no padding, overlap, gap, aliasing or trailing data.
+
+The provenance block is mandatory. RevisionCore retains its current canonical
+versions, nonzero RepositoryId, ordered zero/one/two-parent vector and
+SemanticStateDigest. The canonical parser checks the fields, typed tags, ordering,
+minimal integer encodings and exact end. Its 53/86/119-byte core lengths follow
+the current history contract; length alone is not admission. Parent and revision
+digest values are checked by exact derivation without an added nonzero rule.
+
+After recomputing the complete source semantic state, source admission verifies
+the original core's state binding and independently derives its RevisionId in
+the current semantic-revision domain. It requires equality with the claimed ID.
+This adds no witness, inferred type table, interface claim or generated code to
+the carrier. Canonical schema epoch is unchanged; the new private carrier
+profile disambiguates the incompatible projection layout.
 
 Ordinary carriers select unbounded proof work with tag 0 and zero allowance
 bytes. They neither compute nor enforce a synthetic minimum estimate. Tag 1
@@ -128,8 +153,9 @@ The compiler recomputes the logical owner and retirement map roots, the empty
 dependency root, and the semantic-state digest from the actual package identity,
 name and complete logical rows. It compares that digest with the header's claimed
 state. Repository identity and physical map page locators do not enter this
-semantic-state commitment. A digest match supplies no historical validation
-certificate or execution authority.
+semantic-state commitment. The separately verified original RevisionCore binds
+repository identity and revision parents to that state. Neither digest match
+supplies a historical validation certificate or execution authority.
 
 The type directory contains content-addressed objects; its complete membership is
 not a separate input to the kernel semantic-state digest. All supplied types are
@@ -417,186 +443,205 @@ source validation still uses a Rust-bootstrapped normalized validator; it is not
 source-to-normalized self-compilation. Complete carrier SHA-256 and semantic-state
 identity remain separate evidence.
 
-These layers establish restricted-profile E1 admission. The scalar extension below
-adds a separate E2/E3 path. Broader source forms, full contextual read/witness
-scope and effect applications, general application typing, callable generic
-finite-flow, custody, witnesses and full-profile normalization remain required.
-Regions, implementation calls and other excluded forms still reject with 13.
-The full Tier 2 profile, compiler-source ELF/artifact fixed points and measured
-native phase reclamation remain unchanged.
+These layers establish restricted-profile E1 admission. The active-profile
+extension below adds compound typing, exact ByteBuffer custody and both E3 output
+paths. Full contextual read/witness scope, effect applications, general callable
+generics, nominal owned aggregates, first-class functions and lexical Regions
+remain separate semantic extensions. The full Tier 2 profile, complete-source
+fixed-point equations and measured same-process reclamation requirements are
+unchanged.
 
-## Scalar source admission and ELF lowering
+## Active compiler source admission and both output paths
 
 `source-scalar::prepare` composes carrier/reference, containment, lexical scope,
-namespace, structural/contextual type and nominal checks before scalar profile
-admission and expression typing. `source-scalar::validate` returns the resulting
-diagnostic. These E2 entry points inspect raw complete `LKJSG002` carriers.
-`source-elf::compile` consumes an explicit source request, additionally lowers
-the selected admitted target and returns `{diagnostic: I64, image: Bytes}`; the
-`compile-source-elf` command target exposes it as a native binary filter.
-Success returns ELF bytes. Failure returns the diagnostic with an empty image.
+namespace, contextual type/DAG and nominal checks before active-profile typing
+and affine custody admission. It returns source-derived facts, containment
+parents, admitted types, type mapping and custody evidence. These are internal
+compiler results, never producer-supplied certificates. `source-scalar::validate`
+returns the same admission diagnostic without emission.
+
+`source-elf::compile`, exposed by the `compile-source-elf` binary-filter target,
+returns `{diagnostic: I64, image: Bytes}` and serves both current output modes.
+It admits the complete embedded source once before resolving the caller's target
+or choosing an output path. Rejection returns an empty image.
 
 ### Explicit source request
 
-The current source compilation request is `LKJSRQ01`, profile 1. Its 32-byte
-header precedes the exact complete `LKJSG002` carrier:
+The only current request is `LKJSRQ01`, profile 2. Its 32-byte header precedes
+the complete `LKJSG002` profile-3 carrier:
 
 | Offset | Width | Meaning |
 | --- | --- | --- |
 | 0 | 8 | ASCII `LKJSRQ01` |
-| 8 | 4 | Little-endian u32 profile, exactly 1 |
-| 12 | 17 | Canonical encoded Target owner key: domain tag 12 and 16 identity bytes |
-| 29 | 3 | Zero reserved bytes |
-| 32 | Remaining bytes | Unchanged complete `LKJSG002` carrier |
+| 8 | 4 | Little-endian u32 request profile, exactly 2 |
+| 12 | 17 | Canonical Target key: domain tag 12 and its nonzero 16-byte identity |
+| 29 | 1 | Output mode: 0 for standalone ELF, 1 for canonical `.lkja` |
+| 30 | 2 | Reserved zero |
+| 32 | Remaining bytes | Unchanged complete current source carrier |
 
-The all-zero Target identity is invalid. Owner-key domain tag 12 is distinct
-from Target owner-kind tag 20. Unknown magic/profile, wrong domain, zero identity,
-nonzero reserved bytes and incomplete framing reject with 12. Raw-only
-`LKJSG002` input is no longer accepted by `source-elf::compile`.
+Unknown profiles or modes, wrong target domain, zero target identity, reserved
+bits and malformed framing reject with 12. Predecessor request/source readers
+and raw-carrier-only compilation requests are not retained. The request has no
+second length field: exact carrier partition and end checks reject truncation
+and trailing bytes. Request transport adds exactly 32 bytes.
 
-After checking the request header, the compiler admits the entire embedded
-carrier through E1 and E2. Every supplied target is checked, including unselected
-targets. It then resolves the selected key in the live owner directory. Missing
-or retired targets reject with 19; negative lookup rows are never used for table
-access. Component, port, callable signature and the normalized entry index are
-derived inside lkjscript. The host supplies only the caller's TargetId.
+Every supplied target receives E1/E2 checks. After complete admission, the
+selected key must resolve to a live Target; absent or retired selectors reject
+with 19 before any row access. Component/port agreement, entry signature and
+the native entry index are derived inside lkjscript. The host supplies only the
+caller TargetId and output mode. Mode 1 still requires a valid selected target,
+but emits the complete admitted package artifact, including all compilation
+owners and targets. Target selection does not prune its source or unit closure.
 
-The request has no second length field. Existing carrier length, partition and
-commitment checks reject truncated or trailing payload bytes. The carrier length,
-tagged proof policy and object constraints define the supported payload domain;
-request transport adds exactly 32 bytes.
+### Admitted active profile
 
-### Admitted scalar profile
-
-| Dimension | Current scalar contract |
+| Dimension | Current contract |
 | --- | --- |
-| Value types | Unrestricted Unit, Bool and I64 |
-| Supplied descriptors | Those three primitive types and pure function descriptors whose parameters and result are scalar |
-| Declarations | Modules, pure monomorphic Functions, the eight exact scalar External implementations below, and Components without requirements; their Parameters, ordinary Let Bindings, Expressions, function Ports and Target |
-| Expressions | Unit/Bool/I64 literals, parameter/binding Local, If, Let, nonempty Sequence and direct Call |
-| Calls and functions | Exact argument arity/types and declared result type; no type, requirement or effect parameters or application arguments |
-| Entry | One or more command Targets, each with no runner arguments and selecting a function Port of its Component with pure `() -> I64` signature; the request selects one live TargetId |
-| Excluded source families | Other External/intrinsic declarations, Text/StaticText, Bytes, ByteBuffer, List, records/choices, task callables, first-class function values/Invoke, generics, witnesses, read views and Regions |
+| Copyable values | Unit, Bool, I64, Text/StaticText, Bytes, List<I64>, and structural records over admitted copyable values |
+| Affine values | ByteBuffer, with exact consume moves and synchronous borrowed length reads |
+| Supplied descriptors | The corresponding compound descriptors, pure Function signatures, and the scoped TypeParameter/List<T> descriptors of the recognized list intrinsics |
+| Declarations | Modules; pure monomorphic Functions; exact active External implementations; Components with empty requirements; their signature, syntax and function-port owners; command Targets |
+| Expressions | Literals, structural Record and Field, List<I64>, Local, If, Let, nonempty Sequence and direct Call |
+| Generic calls | The closed I64 substitutions for the exact `core.list.length` and `core.list.get` signatures; no general generic function-body expansion |
+| Entry signatures | Pure `() -> I64` or `(Bytes) -> {diagnostic: I64, image: Bytes}`, through a component function port with no runner arguments |
+| Remaining families | Nominal owned aggregates/choices and Match, arbitrary List<T>, first-class closures/Invoke, task/effect applications, explicit implementation witnesses/read views and lexical Regions remain separate extensions |
 
-A function descriptor is admitted for signature/port description; it does not
-admit function-valued expressions. Parameters are unrestricted. Let annotations,
-when present, must be scalar and equal the initializer's inferred type. If
-conditions must be Bool and both branches must have the same type. Sequence
-typing checks every item and takes the final item's type. Direct and mutual
-recursion use declared signatures; they do not require expanding call bodies.
+Pure Function descriptors describe signatures and ports; they do not admit
+function-valued expressions. Structural field descriptors retain exact names
+and child types. Source record evaluation preserves authored field order while
+runtime layout uses canonical field order. Let annotations must agree with the
+initializer's type, If conditions are Bool, both branches agree, and Sequence
+checks every item before taking its last type. Declared signatures type direct
+and mutual recursion without expanding callees.
 
-External admission uses the complete implementation identifier rather than the
-declaration name. The following pure implementations require an empty type-parameter
-list and exactly two unrestricted parameters with these types:
+External admission uses the complete implementation identifier, independently
+of the declaration name. The maintained `ci` declarations use these 24 exact
+implementations. Parameters are unrestricted unless their mode is shown:
 
-| Implementation | Mode-0 primitive code | Parameters | Result |
-| --- | --- | --- | --- |
-| `core.i64.add` | 1 | I64, I64 | I64 |
-| `core.i64.subtract` | 2 | I64, I64 | I64 |
-| `core.i64.multiply` | 3 | I64, I64 | I64 |
-| `core.i64.divide` | 4 | I64, I64 | I64 |
-| `core.i64.equal` | 5 | I64, I64 | Bool |
-| `core.i64.less` | 6 | I64, I64 | Bool |
-| `core.bool.and` | 9 | Bool, Bool | Bool |
-| `core.bool.or` | 10 | Bool, Bool | Bool |
+| Implementation | Parameters | Result |
+| --- | --- | --- |
+| `core.i64.add` / `subtract` / `multiply` / `divide` | I64, I64 | I64 |
+| `core.i64.equal` / `less` | I64, I64 | Bool |
+| `core.bool.and` / `or` | Bool, Bool | Bool |
+| `core.bytes.equal` | Bytes, Bytes | Bool |
+| `core.bytes.get` | Bytes, I64 | I64 |
+| `core.bytes.length` | Bytes | I64 |
+| `core.bytes.slice` | Bytes, I64, I64 | Bytes |
+| `core.bytes.concat` | Bytes, Bytes | Bytes |
+| `core.bytes.from-list` | List<I64> | Bytes |
+| `core.bytes.from-text` | Text | Bytes |
+| `core.bytes.blake3` | Bytes | Bytes |
+| `core.bytes.blake3-derive-key` | Text, Bytes | Bytes |
+| `core.buffer.empty` | None | ByteBuffer |
+| `core.buffer.push` | I64, consume ByteBuffer | ByteBuffer |
+| `core.buffer.length` | borrow ByteBuffer | I64 |
+| `core.buffer.freeze` | consume ByteBuffer | Bytes |
+| `core.buffer.discard` | consume ByteBuffer | Unit |
+| `core.list.length` | List<T>, closed with T=I64 | I64 |
+| `core.list.get` | List<T>, I64, closed with T=I64 | T |
 
-Every supplied External is checked, including unused declarations and aliases.
-Unknown or other implementation identifiers, generic binders, and borrowed or
-consumed parameters reject with 13. A recognized implementation with the wrong
-scalar signature or arity rejects with 19. External remains a pure callable
-declaration; this permission does not admit a TaskFunction with an empty effect
-row. Calls preserve eager left-to-right argument evaluation, including Boolean
-and/or, and the existing normalized integer overflow and division traps.
+Every supplied External and descriptor is checked, including uncalled aliases
+and unused Types. Recognized signatures must have the exact arity, parameter
+uses and result. Unknown/unsupported forms reject with 13; type, arity, result,
+annotation or custody disagreements reject with 19. Task functions remain
+unsupported even with an empty effect row. Calls preserve eager left-to-right
+argument evaluation and current arithmetic trap order.
 
-Profile checking visits every supplied type and owner. Inference visits every
-Binding and Expression, then checks every Function body against its declared
-result. Uncalled functions, untaken branches, unused supplied types and unselected
-targets receive the same checks. A carrier without any Target rejects with 13. An unused non-scalar descriptor therefore rejects with 13.
-A task Function or TaskFunction descriptor remains outside the scalar profile
-even when its effect row is empty.
+### Affine custody and native lowering
 
-Inference stores one unresolved-or-scalar fact per owner. Each complete pass
-either resolves all remaining facts, strictly decreases the unresolved count,
-or rejects with 19. Published facts never change type. This is a finite progress
-measure over admitted syntax; it is separate from the earlier carrier proof-work
-allowance.
+Owned ByteBuffer parameters consume custody. Ordinary owned locals require
+explicit ByteBuffer annotations. A consume operand transfers a live owner and
+cannot use an already moved or borrowed owner. The recognized borrowed buffer
+length call creates only a synchronous loan; it uses qualifier 1 and releases
+that loan at call return. Borrowed values cannot be stored, aggregated, returned
+or consumed. General borrowed helper functions remain outside this profile.
 
-### Internal normalization and bounds
+Both If branches are admitted. Branch-balanced disposal removes owners retained
+on only one branch. Scope exit disposes remaining owners in reverse lexical
+order; returning an owner transfers it and disposes other live owners. Sequence
+discards owned intermediate results. A tail-position call is emitted as TailCall
+only when its transfer leaves no owned local live. Otherwise native lowering
+uses Call, required cleanup and Return. The generated backend independently
+checks the resulting flow certificates.
 
-The planner inventories every supplied Function and admitted External in canonical
-owner order, assigns stable parameter/binding slots and computes instruction counts.
-Each External has a zero-instruction callable row with its exact parameter/result
-types, parameter slots and primitive code. Calls use this same canonical callable
-directory. The cursor
-walks admitted containment and preserves source operand, initializer and sequence
-order. State and trace construction derive operand types and lexical local
-availability from the inferred facts and exact parents. Lowering emits literals,
-loads/stores, sequence drops, conditional/unconditional jumps, direct Call and
-Return. Even a call in tail position uses ordinary Call/Return. This profile has
-no owned values and makes no claim about asymmetric consumption, borrow lifetime
-or disposal lowering.
+The planner inventories all callables in canonical owner order, derives local
+slots and control flow, and writes current mode-0/profile-6 input. Primitive and
+structural-record runtime descriptors, type payloads, qualifier cells and every
+instruction state come from source admission and lowering. This internal format
+is passed through `elf::compile-elf`; no host-normalized IR is an input.
 
-`source-scalar-pack` writes current mode-0/profile-6 LKJCI1, including dynamic
-section offsets, seven primitive descriptors, separate type/qualifier cells, wide
-function/instruction rows, flow certificates and the complete input checksum.
-`source-elf` passes those internally produced bytes through the existing
-`elf::compile-elf` validation and emission path. No Rust target normalization,
-inferred tables or custody certificates are inputs to this process.
+Plan rows, trace headers and runtime state cells retain their checked u64 fields
+and signed-I64 byte-index extent. Dynamic record metadata is included in layout
+measurement before emission. Generated mode-0 policy is unbounded. Source u32
+framing, canonical object bounds, canonical IR u32 identities and existing depth
+guards remain separate capacity work. Heap-backed evaluator frames and generated
+native CALL frames have different physical growth behavior; this profile does
+not claim general native stack unbounding or same-process reclamation.
 
-The source carrier retains u32 directory/extent framing and individual
-object/field bounds. Its default proof policy is unbounded, and neither the
-former combined-directory quota nor a synthetic proof estimate bounds carrier
-bytes. Generated Mode-0 input has no default byte, function, parameter, local or
-operand-stack quota. The encoder checks the physical extent
-`384 + 80*F + 64*N + B` against nonnegative I64; 384 is the 160-byte header plus
-seven 32-byte primitive descriptors. The generated policy tag is unbounded and no
-finite proof estimate is required. Functions and admitted Externals share the
-canonical callable directory, and parameters are included in each local count.
+### Canonical artifact construction
 
-Planner function/local rows use u64 fields; operand stack groups and trace
-headers likewise use u64 counts/offsets. A missing local slot is represented by
-the total supplied owner count, which is strictly greater than every valid
-function-local index. State cells carry a u64 type identity and separate u64
-qualifier; scalar facts still encode only the current three scalar types because
-the source language profile has not yet expanded. These changes remove prior
-128-slot sentinels and state-index arithmetic assumptions without weakening
-scope, cycle, typing or complete-carrier admission.
+Mode 1 derives every canonical CompilerUnit from original source fields. The
+source summary pass computes all seven owner-summary dimensions; canonical units
+use interface, implementation, type, effect, capability and validation-dependency
+dimensions. Unit lowering preserves original IDs, authored names and declared
+type descriptors. It follows canonical pre-tail instruction order, including
+ordinary Call and forward owned-Let Unit/StoreLocal cleanup. Native TailCall/Drop
+traces are not reinterpreted as canonical unit IR.
 
-| Diagnostic | Scalar extension |
+The compiler independently projects the public interface, selects exact runtime
+owners and callable reference containment, and derives their required transitive
+Type closure. Valid unused supplied Types are admitted but do not become unrelated
+artifact objects. It constructs PackageRevision from the original admitted
+RevisionCore, package identity, derived interface digest and empty dependencies.
+The source request contains no interface digest, witness, owner subset, compiler
+unit, compilation map or generated code.
+
+These source-derived results form current mode-1/profile-7 input inside lkjscript.
+Object rows use exact ObjectKey order. Equal keys are collapsed only after exact
+length and byte-window agreement; different bytes for one key reject before
+emission. Unit directories, metadata, descriptors and payload extents are checked
+before construction. The existing artifact validator then checks the generated
+carrier, and the canonical backend constructs units, maps, manifests, targeted
+packs and the final `.lkja` container.
+
+Interface/reference/compilation maps use the host's ordinary 16 KiB leaf target
+for their fixed-width rows, within the existing physical MapPage contract.
+Artifact packs use the current 4 MiB target, automatically adding segments and
+retaining valid oversized singleton objects. These are physical layout targets,
+not logical package ceilings. No canonical schema epoch change is made by this
+private source/provenance cut.
+
+### Diagnostics and evidence
+
+| Diagnostic | Active source path |
 | --- | --- |
-| 0 | Selected scalar admission/lowering checks succeeded |
-| 13 | Recognized form outside the scalar profile or retained lowering/profile bound |
-| 19 | Scalar type, call arity, annotation, function result, target/port agreement, absent/retired selected target or lowering-consistency failure |
+| 0 | Admission and the selected output path succeeded |
+| 3 | Generated internal representation/layout inconsistency or extent failure |
+| 6 | Exact caller-selected source proof allowance refused work |
+| 12 | Request/carrier/object framing, provenance or binding error |
+| 13 | Recognized form outside the supported profile |
+| 14 | Missing/incompatible source endpoint or live/retired collision |
+| 15 | Containment or lexical scope error |
+| 16 | Namespace collision |
+| 17 | Contextual binder or structural type-DAG error |
+| 18 | Expanding nominal parameter-slot cycle |
+| 19 | Type, custody, borrow, pure-call, result, target or lowering agreement error |
 
-Earlier diagnostics 6 and 12 through 18 retain their meanings. In particular,
-malformed carrier/binding errors remain 12, endpoint failures remain 14 and
-containment/value-local scope failures remain 15. Backend diagnostics propagate
-if the internally generated input fails backend validation. Rejection produces
-no executable bytes.
+Backend diagnostics otherwise propagate. Existing proof-policy metrics are not
+redefined as total compiler work. Their unbounded path remains distinct from
+every exact finite u64 allowance, including zero and u64::MAX.
 
-### Bootstrap and evidence boundary
+Rust may construct the initial compiler executable, frame unchanged complete
+source, transport requests and provide independent oracles. Subsequent native
+stages must consume that source directly, without Rust semantic preprocessing
+or an external VM. Evidence binds exact semantic revision and state, original
+RevisionCore, complete carrier/request SHA-256, caller target, both current
+profiles, executable bytes, target/ABI/flags and execution environment. A state
+digest alone does not bind unused supplied Type records.
 
-A Rust-built native compiler is permitted as the initial executable. The target
-program crosses that boundary only as complete raw `LKJSG002` bytes and the
-caller's canonical TargetId in a source request. Rust may serialize that request,
-transport bytes, launch processes and orchestrate independent controls.
-It must not pre-filter source owners/types or supply semantic or lowering
-results for the scalar target. The public meaning remains the accepted semantic
-project; the `.lkjc` files remain authoring proposals.
-
-Acceptance evidence must identify the complete carrier digest, complete request
-digest, canonical selected Target key, compiler executable, target/format profiles
-and execution context. The semantic-state
-digest alone is insufficient, including for unused-type mutations. Independent
-controls must cover valid scalar execution and fully rebound malformed/ill-typed
-carriers, reaching the intended admission layer. The
-[scalar decision](../decisions/20261023-source-scalar-e2-e3.md) records the current
-positive programs, semantic/profile controls and independently constructed missing
-endpoint and cyclic carriers. The latter pass commitment checks before rejecting
-at their intended structural layers. Executable and carrier identities bind these
-observations; publication still requires the complete frozen-tree gates.
-
-The scalar route emits ELF only. It does not establish compilation of the
-maintained compiler's complete source closure, source-driven C2/C3 identity,
-canonical `.lkja` A1/A2/A3 equality, Rust canonical-artifact parity or same-process
-native memory reclamation. Those remain separate Tier 2 obligations.
+Source-level and stored-object controls are separate from native fixed-point
+acceptance. Milestone A requires complete maintained F_active source to establish
+C2=C3 and Ahost=A1=A2=A3, strict loading/provenance for every generation, independent
+program behavior and compiler-source mutations, complete-inventory negatives and
+fresh frozen-tree gates. The broader P_self semantic families and same-process
+phase reclamation retain their separate requirements in [selfhosting.md](selfhosting.md).

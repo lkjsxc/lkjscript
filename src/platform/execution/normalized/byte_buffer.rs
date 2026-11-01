@@ -251,6 +251,60 @@ impl ByteBuffer {
         control.check()?;
         Ok(self)
     }
+    /// Append one admitted immutable byte window. Reservation precedes mutation;
+    /// cancellation or failure consumes and disposes this private builder. A
+    /// frozen Bytes value cannot alias a live mutable builder's storage.
+    pub(super) fn append_slice(
+        self,
+        data: &[u8],
+        start: i64,
+        end: i64,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
+        self.validate(self.domain, true)?;
+        control.check()?;
+        let selected = usize::try_from(start)
+            .ok()
+            .zip(usize::try_from(end).ok())
+            .and_then(|(start, end)| data.get(start..end))
+            .ok_or_else(|| {
+                ExecutionError::new(
+                    crate::platform::execution::ExecutionFailureClass::Trap,
+                    "normalized_bytes_range",
+                    "byte window is outside its source",
+                )
+            })?;
+        {
+            let mut storage = self.lock();
+            let bytes = storage.bytes.as_mut().ok_or_else(reject)?;
+            let required = bytes
+                .len()
+                .checked_add(selected.len())
+                .ok_or_else(storage_extent)?;
+            let capacity = growth_capacity(bytes.capacity(), required)?;
+            if required > bytes.capacity() {
+                reserve_growth(bytes, capacity, control, reserve)?;
+            }
+            // Physical copy chunks bound cancellation latency, not logical size.
+            for chunk in selected.chunks(65_536) {
+                control.check()?;
+                bytes.extend_from_slice(chunk);
+            }
+        }
+        control.check()?;
+        Ok(self)
+    }
+
+    pub(super) fn append_i64_le(
+        self,
+        value: i64,
+        control: &ExecutionControl,
+        reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
+    ) -> Result<Self, ExecutionError> {
+        self.append_slice(&value.to_le_bytes(), 0, 8, control, reserve)
+    }
+
     pub(super) fn freeze(self) -> Result<BytePayload, ExecutionError> {
         self.validate(self.domain, true)?;
         let bytes = self.lock().bytes.take().ok_or_else(reject)?;
@@ -354,6 +408,10 @@ impl Drop for StorageObservation {
         });
     }
 }
+#[cfg(test)]
+#[path = "byte_buffer_bulk_tests.rs"]
+mod bulk_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;

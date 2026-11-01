@@ -919,3 +919,15 @@ permute requirement, ordinary and effect arguments under the existing finite par
 This does not admit expanding ordinary-type cycles. Preparation work/storage exhaustion and
 cancellation remain separate from semantic invalidity; formal operation constraints introduce no
 quota or counter reset.
+
+### Fixed-width byte words
+
+The closed pure external `core.bytes.read-i64-le(Bytes, I64 offset) -> I64`
+interprets eight consecutive bytes as a signed little-endian two's-complement word.
+Unaligned offsets are legal. Negative offsets, truncated words and offset overflow
+trap as `normalized_bytes_range`. The paired consuming buffer operation
+`core.buffer.append-i64-le` writes all 64 bits without narrowing.
+`core.buffer.append-slice` copies an immutable byte window into an affine builder;
+its exact bounds, growth, cancellation and custody contracts are owned by
+[owned byte buffers](owned-byte-buffers.md). These are explicit closed externals;
+no standard-package wrapper or general borrowed-mutable view is implied.

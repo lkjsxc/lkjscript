@@ -148,7 +148,7 @@ impl Resolver<'_, '_> {
                 {
                     return Err(invalid("region binder and exact brand disagree"));
                 }
-                self.budget.reserve(context.lexical.len() + 1)?;
+                self.budget.reserve_counts(&[context.lexical.len(), 1])?;
                 let mut scoped = context.clone();
                 if !scoped.lexical.insert(binding) {
                     return Err(invalid("region binder is already live"));
@@ -352,3 +352,7 @@ fn region_pending<T>(pending: &mut Vec<T>, additional: usize) -> Result<()> {
         )
     })
 }
+
+#[cfg(test)]
+#[path = "reference_region_capacity_tests.rs"]
+mod capacity_tests;

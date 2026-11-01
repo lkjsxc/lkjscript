@@ -1,0 +1,38 @@
+declarations.begin
+(units
+  (module create source-custody-probe
+    (function create custody-evidence (visibility public) (effect pure)
+      (parameter create request (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body (let
+        (binding graph (call ci::slice (local request) (i64 32) (call ci::length (local request))))
+        (binding prepared (call source-scalar::prepare (local graph)))
+        (in (record structural
+          (field diagnostic (field (local prepared) (name code)))
+          (field image (field (local prepared) (name custody))))))))
+    (function create custody-input (visibility public) (effect pure)
+      (parameter create request (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body (let
+        (binding graph (call ci::slice (local request) (i64 32) (call ci::length (local request))))
+        (binding prepared (call source-scalar::prepare (local graph)))
+        (binding code (field (local prepared) (name code)))
+        (in (if (call ci::eq (local code) (i64 0))
+          (let
+            (binding target (call source-table::owner (local graph) (local request) (i64 12) (i64 12)))
+            (in (if (call ci::lt (local target) (i64 0))
+              (record structural (field diagnostic (i64 19)) (field image (call ci::text-bytes (text ""))))
+              (let
+                (binding lowered (call source-scalar-emit::lower
+                  (local graph)
+                  (field (local prepared) (name facts))
+                  (field (local prepared) (name parents))
+                  (field (local prepared) (name types))
+                  (field (local prepared) (name mapping))
+                  (field (local prepared) (name custody))
+                  (local target)))
+                (in (record structural
+                  (field diagnostic (field (local lowered) (name code)))
+                  (field image (field (local lowered) (name input)))))))))
+          (record structural (field diagnostic (local code)) (field image (call ci::text-bytes (text "")))))))))))
+declarations.end

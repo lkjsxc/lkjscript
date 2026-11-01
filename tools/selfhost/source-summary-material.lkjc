@@ -1,0 +1,113 @@
+declarations.begin
+(units
+  (module create source-summary-material
+    (function create piece
+      (visibility package)
+      (effect pure)
+      (parameter create tag (type I64))
+      (parameter create value (type Bytes))
+      (parameter create start (type I64))
+      (parameter create end (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding summary-buffer-1
+            (type ByteBuffer)
+            (let
+              (binding summary-buffer-0 (type ByteBuffer) (call ci::push (local tag) (local out)))
+              (in (call ci::le (call ci::sub (local end) (local start)) (i64 8) (local summary-buffer-0)))))
+          (in (call wire::range (local value) (local start) (local end) (local summary-buffer-1))))))
+    (function create byte-piece
+      (visibility package)
+      (effect pure)
+      (parameter create tag (type I64))
+      (parameter create value (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding summary-buffer-3
+            (type ByteBuffer)
+            (let
+              (binding summary-buffer-2 (type ByteBuffer) (call ci::push (local tag) (local out)))
+              (in (call ci::le (i64 1) (i64 8) (local summary-buffer-2)))))
+          (in (call ci::push (local value) (local summary-buffer-3))))))
+    (function create domain
+      (visibility package)
+      (effect pure)
+      (parameter create dimension (type I64))
+      (returns Text)
+      (body
+        (if
+          (call ci::eq (local dimension) (i64 0))
+          (text "lkjscript.owner-summary.interface")
+          (if
+            (call ci::eq (local dimension) (i64 1))
+            (text "lkjscript.owner-summary.implementation")
+            (if
+              (call ci::eq (local dimension) (i64 2))
+              (text "lkjscript.owner-summary.type")
+              (if
+                (call ci::eq (local dimension) (i64 3))
+                (text "lkjscript.owner-summary.effect")
+                (if
+                  (call ci::eq (local dimension) (i64 4))
+                  (text "lkjscript.owner-summary.capability")
+                  (if
+                    (call ci::eq (local dimension) (i64 5))
+                    (text "lkjscript.owner-summary.relation")
+                    (text "lkjscript.owner-summary.validation-dependency")))))))))
+    (function create finish
+      (visibility package)
+      (effect pure)
+      (parameter create dimension (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns Bytes)
+      (body
+        (call wire::digest
+          (call source-summary-material::domain (local dimension))
+          (call ci::freeze (local out)))))
+    (function create key-start
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (returns I64)
+      (body (call ci::add (call ci::u32 (local graph) (i64 80)) (call ci::mul (local row) (i64 50)))))
+    (function create owner-byte
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (parameter create offset (type I64))
+      (returns I64)
+      (body
+        (call ci::get
+          (local graph)
+          (call ci::add
+            (call ci::u32
+              (local graph)
+              (call ci::add (call ci::u32 (local graph) (i64 92)) (call ci::mul (local row) (i64 8))))
+            (local offset)))))
+    (function create digest-piece
+      (visibility package)
+      (effect pure)
+      (parameter create tag (type I64))
+      (parameter create rows (type Bytes))
+      (parameter create row (type I64))
+      (parameter create dimension (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding start
+            (call ci::add (call ci::mul (local row) (i64 224)) (call ci::mul (local dimension) (i64 32))))
+          (in
+            (call source-summary-material::piece
+              (local tag)
+              (local rows)
+              (local start)
+              (call ci::add (local start) (i64 32))
+              (local out))))))))
+declarations.end

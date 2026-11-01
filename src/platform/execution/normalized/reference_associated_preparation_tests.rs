@@ -819,12 +819,12 @@ fn canonical_associated_preparation_has_exact_capacity_and_cancelled_retry_bound
     .unwrap();
     for limits in [
         Limits {
-            steps: healthy.steps - 1,
-            bytes: healthy.bytes,
+            steps: Some(healthy.steps - 1),
+            bytes: Some(healthy.bytes),
         },
         Limits {
-            steps: healthy.steps,
-            bytes: healthy.bytes - 1,
+            steps: Some(healthy.steps),
+            bytes: Some(healthy.bytes - 1),
         },
     ] {
         assert_eq!(
@@ -843,14 +843,14 @@ fn canonical_associated_preparation_has_exact_capacity_and_cancelled_retry_bound
         &fixture,
         &[0, 1, 2],
         Limits {
-            steps: healthy.steps,
-            bytes: healthy.bytes,
+            steps: Some(healthy.steps),
+            bytes: Some(healthy.bytes),
         },
         &ExecutionControl::uncancelled(),
     )
     .unwrap();
     assert_eq!((exact.steps, exact.bytes), (healthy.steps, healthy.bytes));
-    for checks in [0, 10, healthy.steps as u64 / 2] {
+    for checks in [0, 10, healthy.steps / 2] {
         assert_eq!(
             prove(
                 &fixture,
@@ -1787,20 +1787,26 @@ fn canonical_associated_preparation_seals_indirect_invocations_and_callable_targ
                     .remove(&OwnerKey::Expression(case.invocation));
             }
         }
-        assert_eq!(
-            proof.closed(Limits::default(), &control).unwrap_err().code,
-            "reference_associated_preparation",
+        assert!(
+            matches!(
+                proof.closed(Budget {
+                    steps: Meter::new(None),
+                    bytes: Meter::new(None),
+                    control: &control,
+                }),
+                Err(error) if error.code == "reference_associated_preparation"
+            ),
             "corruption {corruption}"
         );
     }
     for limits in [
         Limits {
-            steps: healthy.steps - 1,
-            bytes: healthy.bytes,
+            steps: Some(healthy.steps - 1),
+            bytes: Some(healthy.bytes),
         },
         Limits {
-            steps: healthy.steps,
-            bytes: healthy.bytes - 1,
+            steps: Some(healthy.steps),
+            bytes: Some(healthy.bytes - 1),
         },
     ] {
         assert_eq!(
@@ -1814,8 +1820,8 @@ fn canonical_associated_preparation_seals_indirect_invocations_and_callable_targ
         &case.fixture,
         &[],
         Limits {
-            steps: healthy.steps,
-            bytes: healthy.bytes,
+            steps: Some(healthy.steps),
+            bytes: Some(healthy.bytes),
         },
         &control,
     )

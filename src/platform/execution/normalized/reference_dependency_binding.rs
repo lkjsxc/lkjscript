@@ -4,7 +4,8 @@
 //! Here every repeated exact selection must agree and every imported record and
 //! structural type must agree with the supplied source inventory.
 
-use super::{inventory_error, reference_resource};
+use super::{inventory_error, reference_resource, source_items};
+use crate::platform::admission::{Meter, Observation};
 use crate::platform::execution::{ExecutionControl, ExecutionError};
 use crate::platform::kernel::{
     DeclarationPayload as Source, DeclarationVisibility, DependencyRecord, FunctionEffect,
@@ -14,35 +15,27 @@ use crate::platform::kernel::{
 };
 use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
 
-const MAXIMUM_BYTES: usize = 64 * 1024 * 1024;
-
 struct Budget<'a> {
     control: &'a ExecutionControl,
-    work: &'a mut usize,
-    maximum_work: usize,
-    bytes: usize,
-    maximum_bytes: usize,
+    work: &'a mut Meter,
+    bytes: &'a mut Meter,
 }
 
 impl Budget<'_> {
     fn tick(&mut self) -> Result<(), ExecutionError> {
         self.control.check()?;
-        *self.work = self
-            .work
-            .checked_add(1)
-            .filter(|work| *work <= self.maximum_work)
-            .ok_or_else(capacity)?;
+        self.work
+            .charge(Observation::exact(1))
+            .map_err(|_| capacity())?;
         Ok(())
     }
 
     fn entries<T>(&mut self, count: usize) -> Result<(), ExecutionError> {
         // Conservatively charge each borrowed map entry plus tree bookkeeping.
         // This is cumulative allocation, including entries subsequently discarded.
-        self.bytes = count
-            .checked_mul(std::mem::size_of::<T>() + 128)
-            .and_then(|bytes| self.bytes.checked_add(bytes))
-            .filter(|bytes| *bytes <= self.maximum_bytes)
-            .ok_or_else(capacity)?;
+        self.bytes
+            .charge(Observation::product(count, std::mem::size_of::<T>() + 128))
+            .map_err(|_| capacity())?;
         Ok(())
     }
 
@@ -70,23 +63,33 @@ impl Budget<'_> {
 fn capacity() -> ExecutionError {
     reference_resource(
         "normalized_reference_dependency_bound",
-        "canonical dependency correspondence exhausted its work or metadata allowance",
+        "canonical dependency correspondence exhausted the selected work or metadata allowance",
     )
 }
 
 pub(super) fn validate(
     snapshots: &[&KernelSnapshot],
     control: &ExecutionControl,
-    work: &mut usize,
+    work: &mut Meter,
+) -> Result<(), ExecutionError> {
+    validate_with_meters(snapshots, control, work, &mut Meter::new(None))
+}
+
+// Associated preparation shares both selected allowances across its phases.
+// The metadata metric is the existing cumulative borrowed-entry model, including
+// correspondence indexes that are discarded before the next phase begins.
+pub(super) fn validate_with_meters(
+    snapshots: &[&KernelSnapshot],
+    control: &ExecutionControl,
+    work: &mut Meter,
+    bytes: &mut Meter,
 ) -> Result<(), ExecutionError> {
     validate_with_budget(
         snapshots,
         &mut Budget {
             control,
             work,
-            maximum_work: crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
-            bytes: 0,
-            maximum_bytes: MAXIMUM_BYTES,
+            bytes,
         },
     )
 }
@@ -236,7 +239,8 @@ fn authored_dependencies<'a>(
 ) -> Result<BTreeSet<crate::platform::kernel::PackageId>, ExecutionError> {
     let mut reachable = BTreeSet::new();
     budget.entries::<&KernelSnapshot>(1)?;
-    let mut pending = vec![snapshot];
+    let mut pending = source_items(1)?;
+    pending.push(snapshot);
     while let Some(source) = pending.pop() {
         budget.tick()?;
         for package in source.dependencies.keys() {
@@ -250,6 +254,9 @@ fn authored_dependencies<'a>(
             budget.entries::<crate::platform::kernel::PackageId>(1)?;
             budget.entries::<&KernelSnapshot>(1)?;
             reachable.insert(*package);
+            pending
+                .try_reserve(1)
+                .map_err(|_| super::source_allocation())?;
             pending.push(*child);
         }
     }

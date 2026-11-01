@@ -7,6 +7,28 @@ use crate::platform::package_transport::{oracle, source};
 use crate::platform::storage::object::{ObjectDomain, ObjectKey};
 
 #[test]
+fn shared_builtin_retention_requires_exact_observation_before_using_a_bound() {
+    use crate::platform::package_transport::source::SourceObservation;
+    assert_eq!(
+        retention::exact_observation(SourceObservation::exact(42)),
+        Some(42)
+    );
+    for consumed in [0, 42, u64::MAX] {
+        assert_eq!(
+            retention::exact_observation(SourceObservation {
+                consumed,
+                saturated: true
+            }),
+            None,
+        );
+    }
+    assert_eq!(
+        retention::exact_observation(SourceObservation::exact(u64::MAX)),
+        usize::try_from(u64::MAX).ok(),
+    );
+}
+
+#[test]
 fn shared_builtin_retention_accounts_for_aggregate_copies_and_program_reservation() {
     let standard = BuiltinStandard::load().unwrap();
     let material = standard.retained_material;

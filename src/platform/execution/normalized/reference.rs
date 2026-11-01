@@ -78,8 +78,11 @@ pub struct NormalizedReferenceObservation {
     pub allocated_bytes_saturated: bool,
     pub allocation_charges: u64,
     pub type_derivation_steps: u64,
+    pub type_derivation_saturated: bool,
     pub source_admission_steps: u64,
+    pub source_admission_saturated: bool,
     pub type_metadata_bytes: u64,
+    pub type_metadata_saturated: bool,
     pub(crate) value_work: super::value::ValueWork,
     pub collection_items: u64,
     pub collection_items_saturated: bool,
@@ -616,8 +619,11 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         });
         let schema_work = schema.work;
         let type_derivation_steps = schema.type_derivation_steps;
+        let type_derivation_saturated = schema.type_derivation_saturated;
         let source_admission_steps = schema.source_admission_steps;
+        let source_admission_saturated = schema.source_admission_saturated;
         let type_metadata_bytes = schema.type_metadata_bytes;
+        let type_metadata_saturated = schema.type_metadata_saturated;
         let list_work = super::list::Work::current();
         let map_work = super::map::Work::current();
         let regions = super::region_value::Arena::new()?;
@@ -677,8 +683,11 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 allocated_bytes_saturated: false,
                 allocation_charges: 0,
                 type_derivation_steps,
+                type_derivation_saturated,
                 source_admission_steps,
+                source_admission_saturated,
                 type_metadata_bytes,
+                type_metadata_saturated,
                 value_work: super::value::ValueWork::default(),
                 collection_items: 0,
                 collection_items_saturated: false,
@@ -706,17 +715,15 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         };
         let operation = (|| {
             state.control.check()?;
-            let bytes = usize::try_from(state.schema.type_metadata_bytes)
-                .ok()
-                .and_then(|bytes| bytes.checked_add(state.schema.affine_variants.len()))
-                .and_then(|bytes| bytes.checked_add(std::mem::size_of::<BoundReferenceSchema>()))
-                .ok_or_else(|| {
-                    reference_resource(
-                        "normalized_reference_allocation",
-                        "canonical proof storage accounting overflowed",
-                    )
-                })?;
-            state.charge_allocation(bytes as u64)?;
+            let mut bytes = crate::platform::admission::Observation {
+                consumed: state.schema.type_metadata_bytes,
+                saturated: state.schema.type_metadata_saturated,
+            };
+            bytes.observe(crate::platform::admission::Observation::sum_counts(&[
+                state.schema.affine_variants.len(),
+                std::mem::size_of::<BoundReferenceSchema>(),
+            ]));
+            charge_reference_preparation_allocation(state.policy, &mut state.observation, bytes)?;
             operation(&mut state)
         })();
         let result = match operation {
@@ -851,6 +858,34 @@ struct ReferenceState<'a> {
     allowances: Vec<Option<EffectRow>>,
     root_allowance: Option<EffectRow>,
     observation: NormalizedReferenceObservation,
+}
+
+/// Preparation has already built the schema. Its modeled cumulative storage is
+/// neither a contiguous allocation extent nor an exact quantity after overflow.
+/// This root attachment has no child shared budget; finite caller allocation
+/// policies must refuse an inexact charge, while ordinary observation can grow.
+fn charge_reference_preparation_allocation(
+    policy: NormalizedRunPolicy,
+    observation: &mut NormalizedReferenceObservation,
+    bytes: crate::platform::admission::Observation,
+) -> Result<(), ExecutionError> {
+    if !bytes.saturated {
+        return charge_reference_allocation(policy, observation, None, bytes.consumed);
+    }
+    if policy.maximum_allocated_bytes.is_some() {
+        return Err(reference_resource(
+            "normalized_reference_allocation",
+            "canonical proof storage exceeds the selected finite allocation allowance",
+        ));
+    }
+    crate::platform::execution::cumulative_observe(
+        &mut observation.allocated_bytes,
+        &mut observation.allocated_bytes_saturated,
+        bytes.consumed,
+        true,
+    );
+    observation.allocation_charges = observation.allocation_charges.saturating_add(1);
+    Ok(())
 }
 
 fn charge_reference_allocation(
@@ -7481,3 +7516,7 @@ mod cumulative_allocation_tests {
         assert_eq!(work.allocation_charges, 4);
     }
 }
+
+#[cfg(test)]
+#[path = "reference_admission_allocation_tests.rs"]
+mod preparation_allocation_tests;

@@ -10,12 +10,36 @@ The closed external inventory is exact:
 | --- | --- | --- |
 | `buffer-empty` / `core.buffer.empty` | none | owned ByteBuffer |
 | `buffer-push` / `core.buffer.push` | unrestricted I64, consume ByteBuffer | owned ByteBuffer |
+| Explicit external `core.buffer.append-slice` | unrestricted Bytes, unrestricted I64 start, unrestricted I64 end, consume ByteBuffer | owned ByteBuffer |
+| Explicit external `core.buffer.append-i64-le` | unrestricted I64, consume ByteBuffer | owned ByteBuffer |
 | `buffer-get` / `core.buffer.get` | unrestricted I64, borrow ByteBuffer | I64 |
 | `buffer-length` / `core.buffer.length` | borrow ByteBuffer | I64 |
 | `buffer-freeze` / `core.buffer.freeze` | consume ByteBuffer | Bytes |
 | `buffer-discard` / `core.buffer.discard` | consume ByteBuffer | Unit |
 
 Push accepts only integers in 0 through 255. Get accepts only nonnegative indices below length, including for empty buffers; invalid integers trap without wrapping or clamping. Freeze consumes the owner and adopts its Vec allocation into immutable Bytes. It retains spare capacity and does not guarantee allocator behavior, RSS reduction or zero allocation. No live mutable buffer shares payload storage with Bytes. Discard and implicit lexical drop release owned storage; neither promises secure erasure.
+
+Bulk append selects the immutable half-open byte window `[start,end)`. It requires
+`0 <= start <= end <= source length`, including empty spans at the end. Invalid
+bounds trap as `normalized_bytes_range`; they never clamp or copy a prefix.
+`core.buffer.append-i64-le` appends exactly eight little-endian two's-complement
+bytes for every I64 value, including MIN, MAX and negative values. The independent
+closed pure reader `core.bytes.read-i64-le(Bytes, I64 offset) -> I64` reads exactly
+eight bytes, permits unaligned offsets, and uses the same range trap for negative,
+truncated or unrepresentable spans. It neither decodes a variable-width integer
+nor restricts its result to nonnegative indexing values.
+
+Both append operations consume the builder and return its sole owner. Immutable
+input may have arbitrary aliases; it cannot alias a live mutable builder's payload.
+Check source bounds and the complete new contiguous length before reservation or
+mutation. A growth reserves the selected geometric-or-exact required capacity once;
+this modeled charge is not the sum of individual push charges or actual allocator
+traffic. Explicit caller allowances remain exact, including zero and finite MAX.
+VM and canonical-reference copies check cancellation before reservation, before
+allocation, at physical 64 KiB copy chunks and before return. Chunk size is not a
+logical size limit. Refusal or cancellation disposes the consumed private builder;
+no partial result escapes. Actual allocation and OS memory failures retain their
+ordinary failure contracts, including the limits of virtual-memory overcommit.
 
 Creation reserves modeled storage for the owner token, synchronized optional vector and loan bookkeeping, and shared-control counters before constructing any buffer storage. Both evaluators use that admitted constructor. Creation and capacity growth check cancellation before reservation and again before allocation; a reservation callback that cancels cannot authorize the subsequent allocation. Refused reservation propagates its resource failure without construction or growth. Capacity reservation remains cumulative admission, not a live-memory or allocator/RSS measurement. This corrects earlier undercounting: a fixed allocation policy may now refuse a program that previously completed, without making its meaning invalid or changing its encoded graph.
 

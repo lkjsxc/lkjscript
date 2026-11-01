@@ -139,10 +139,26 @@ declarations.end"#,
         scalar
     );
     let control = crate::platform::execution::ExecutionControl::uncancelled();
-    parallel_transfer_type(&schema, &[&source], parcel, None, &mut 0, &mut 0, &control)
-        .expect("actual cell movement does not require a bound on the record's owning formal");
-    parallel_share_type(&schema, &[&source], parcel, None, &mut 0, &mut 0, &control)
-        .expect("actual cell sharing does not require a bound on the record's owning formal");
+    parallel_transfer_type(
+        &schema,
+        &[&source],
+        parcel,
+        None,
+        &mut Meter::new(None),
+        &mut Meter::new(None),
+        &control,
+    )
+    .expect("actual cell movement does not require a bound on the record's owning formal");
+    parallel_share_type(
+        &schema,
+        &[&source],
+        parcel,
+        None,
+        &mut Meter::new(None),
+        &mut Meter::new(None),
+        &control,
+    )
+    .expect("actual cell sharing does not require a bound on the record's owning formal");
 }
 
 #[test]

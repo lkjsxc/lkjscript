@@ -1,0 +1,274 @@
+declarations.begin
+(units
+  (module create source-summary-order
+    (function create compare
+      (visibility package)
+      (effect pure)
+      (parameter create left (type Bytes))
+      (parameter create left-at (type I64))
+      (parameter create right (type Bytes))
+      (parameter create right-at (type I64))
+      (parameter create keys (type I64))
+      (parameter create column (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local column) (local keys))
+          (i64 0)
+          (let
+            (binding a
+              (call ci::u64 (local left) (call ci::add (local left-at) (call ci::mul (local column) (i64 8)))))
+            (binding b
+              (call ci::u64 (local right) (call ci::add (local right-at) (call ci::mul (local column) (i64 8)))))
+            (in
+              (if
+                (call ci::eq (local a) (local b))
+                (call source-summary-order::compare
+                  (local left)
+                  (local left-at)
+                  (local right)
+                  (local right-at)
+                  (local keys)
+                  (call ci::add (local column) (i64 1)))
+                (if (call ci::lt (local a) (local b)) (i64 -1) (i64 1))))))))
+    (function create merge
+      (visibility package)
+      (effect pure)
+      (parameter create left (type Bytes))
+      (parameter create right (type Bytes))
+      (parameter create width (type I64))
+      (parameter create keys (type I64))
+      (parameter create a (type I64))
+      (parameter create b (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns Bytes)
+      (body
+        (if
+          (call ci::eq (local a) (call ci::length (local left)))
+          (let
+            (binding summary-buffer-4
+              (type ByteBuffer)
+              (call wire::range (local right) (local b) (call ci::length (local right)) (local out)))
+            (in (call ci::freeze (local summary-buffer-4))))
+          (if
+            (call ci::eq (local b) (call ci::length (local right)))
+            (let
+              (binding summary-buffer-5
+                (type ByteBuffer)
+                (call wire::range (local left) (local a) (call ci::length (local left)) (local out)))
+              (in (call ci::freeze (local summary-buffer-5))))
+            (let
+              (binding take-left
+                (call ci::lt
+                  (call source-summary-order::compare
+                    (local left)
+                    (local a)
+                    (local right)
+                    (local b)
+                    (local keys)
+                    (i64 0))
+                  (i64 1)))
+              (binding next
+                (type ByteBuffer)
+                (if
+                  (local take-left)
+                  (call wire::range (local left) (local a) (call ci::add (local a) (local width)) (local out))
+                  (call wire::range (local right) (local b) (call ci::add (local b) (local width)) (local out))))
+              (in
+                (call source-summary-order::merge
+                  (local left)
+                  (local right)
+                  (local width)
+                  (local keys)
+                  (call ci::add (local a) (if (local take-left) (local width) (i64 0)))
+                  (call ci::add (local b) (if (local take-left) (i64 0) (local width)))
+                  (local next))))))))
+    (function create sort-span
+      (visibility package)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create width (type I64))
+      (parameter create keys (type I64))
+      (parameter create start (type I64))
+      (parameter create count (type I64))
+      (returns Bytes)
+      (body
+        (if
+          (call ci::lt (local count) (i64 2))
+          (call ci::slice
+            (local rows)
+            (local start)
+            (call ci::add (local start) (call ci::mul (local count) (local width))))
+          (let
+            (binding half (call ci::div (local count) (i64 2)))
+            (binding left
+              (call source-summary-order::sort-span
+                (local rows)
+                (local width)
+                (local keys)
+                (local start)
+                (local half)))
+            (binding right
+              (call source-summary-order::sort-span
+                (local rows)
+                (local width)
+                (local keys)
+                (call ci::add (local start) (call ci::mul (local half) (local width)))
+                (call ci::sub (local count) (local half))))
+            (in
+              (let
+                (binding summary-buffer-6 (type ByteBuffer) (call ci::empty))
+                (in
+                  (call source-summary-order::merge
+                    (local left)
+                    (local right)
+                    (local width)
+                    (local keys)
+                    (i64 0)
+                    (i64 0)
+                    (local summary-buffer-6)))))))))
+    (function create sort
+      (visibility package)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create width (type I64))
+      (parameter create keys (type I64))
+      (returns Bytes)
+      (body
+        (call source-summary-order::sort-span
+          (local rows)
+          (local width)
+          (local keys)
+          (i64 0)
+          (call ci::div (call ci::length (local rows)) (local width)))))
+    (function create unique-loop
+      (visibility package)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create width (type I64))
+      (parameter create keys (type I64))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns Bytes)
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local rows)))
+          (call ci::freeze (local out))
+          (let
+            (binding keep
+              (if
+                (call ci::eq (local at) (i64 0))
+                (bool true)
+                (if
+                  (call ci::eq
+                    (call source-summary-order::compare
+                      (local rows)
+                      (call ci::sub (local at) (local width))
+                      (local rows)
+                      (local at)
+                      (local keys)
+                      (i64 0))
+                    (i64 0))
+                  (bool false)
+                  (bool true))))
+            (binding next
+              (type ByteBuffer)
+              (if
+                (local keep)
+                (call wire::range (local rows) (local at) (call ci::add (local at) (local width)) (local out))
+                (local out)))
+            (in
+              (call source-summary-order::unique-loop
+                (local rows)
+                (local width)
+                (local keys)
+                (call ci::add (local at) (local width))
+                (local next)))))))
+    (function create unique
+      (visibility package)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create width (type I64))
+      (parameter create keys (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding summary-buffer-7 (type ByteBuffer) (call ci::empty))
+          (in
+            (call source-summary-order::unique-loop
+              (local rows)
+              (local width)
+              (local keys)
+              (i64 0)
+              (local summary-buffer-7))))))
+    (function create group-end
+      (visibility package)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create width (type I64))
+      (parameter create owner (type I64))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local rows)))
+          (local at)
+          (if
+            (call ci::eq (call ci::u64 (local rows) (local at)) (local owner))
+            (call source-summary-order::group-end
+              (local rows)
+              (local width)
+              (local owner)
+              (call ci::add (local at) (local width)))
+            (local at)))))
+    (function create directory-loop
+      (visibility package)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create width (type I64))
+      (parameter create count (type I64))
+      (parameter create owner (type I64))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns Bytes)
+      (body
+        (if
+          (call ci::eq (local owner) (local count))
+          (call ci::freeze (local out))
+          (let
+            (binding end
+              (call source-summary-order::group-end (local rows) (local width) (local owner) (local at)))
+            (in
+              (let
+                (binding summary-buffer-9
+                  (type ByteBuffer)
+                  (let
+                    (binding summary-buffer-8 (type ByteBuffer) (call ci::le (local at) (i64 8) (local out)))
+                    (in (call ci::le (local end) (i64 8) (local summary-buffer-8)))))
+                (in
+                  (call source-summary-order::directory-loop
+                    (local rows)
+                    (local width)
+                    (local count)
+                    (call ci::add (local owner) (i64 1))
+                    (local end)
+                    (local summary-buffer-9)))))))))
+    (function create directory
+      (visibility package)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create width (type I64))
+      (parameter create count (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding summary-buffer-10 (type ByteBuffer) (call ci::empty))
+          (in
+            (call source-summary-order::directory-loop
+              (local rows)
+              (local width)
+              (local count)
+              (i64 0)
+              (i64 0)
+              (local summary-buffer-10))))))))
+declarations.end

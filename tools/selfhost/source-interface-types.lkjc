@@ -1,0 +1,130 @@
+declarations.begin
+(units
+  (module create source-interface-types
+    (function create close
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create pending (type Bytes))
+      (parameter create seen (type Bytes))
+      (parameter create at (type I64))
+      (returns (record (code I64) (seen Bytes)))
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local pending)))
+          (record structural (field code (i64 0)) (field seen (local seen)))
+          (let
+            (binding row (call ci::u32 (local pending) (local at)))
+            (in
+              (if
+                (call ci::lt (local row) (call source-type-table::count (local graph)))
+                (if
+                  (call source-type-table::contains (local seen) (i64 0) (local row))
+                  (call close (local graph) (local pending) (local seen) (call ci::add (local at) (i64 4)))
+                  (let
+                    (binding children (call source-type-table::children (local graph) (local row)))
+                    (in
+                      (if
+                        (call ci::both
+                          (call source-unit-tables::room
+                            (call ci::length (local pending))
+                            (call ci::length (local children)))
+                          (call source-unit-tables::room (call ci::length (local seen)) (i64 4)))
+                        (call close
+                          (local graph)
+                          (call ci::concat (local pending) (local children))
+                          (call source-type-table::push (local seen) (local row))
+                          (call ci::add (local at) (i64 4)))
+                        (record structural (field code (i64 3)) (field seen (call ci::text-bytes (text ""))))))))
+                (record structural (field code (i64 14)) (field seen (call ci::text-bytes (text ""))))))))))
+    (function create emit
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create seen (type Bytes))
+      (parameter create row (type I64))
+      (parameter create types (type ByteBuffer) (use consume))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (types Bytes) (objects Bytes)))
+      (body
+        (if
+          (call ci::eq (local row) (call source-type-table::count (local graph)))
+          (record structural
+            (field code (i64 0))
+            (field types (call ci::freeze (local types)))
+            (field objects (call ci::freeze (local out))))
+          (if
+            (call source-type-table::contains (local seen) (i64 0) (local row))
+            (let
+              (binding image (call source-type-table::data (local graph) (local row)))
+              (binding digest (call wire::digest (text "lkjscript.kernel.type-object.v10") (local image)))
+              (binding at
+                (call ci::add (call ci::u32 (local graph) (i64 84)) (call ci::mul (local row) (i64 32))))
+              (in
+                (if
+                  (call source-unit-tables::equal-window
+                    (local graph)
+                    (local at)
+                    (local digest)
+                    (i64 0)
+                    (i64 32)
+                    (i64 0))
+                  (if
+                    (call ci::both
+                      (call source-unit-tables::room (call ci::size (local types)) (i64 32))
+                      (call source-unit-tables::room
+                        (call ci::size (local out))
+                        (call source-unit-tables::add (i64 48) (call ci::length (local image)))))
+                    (let
+                      (binding next-types
+                        (type ByteBuffer)
+                        (call wire::range (local digest) (i64 0) (i64 32) (local types)))
+                      (binding next-out
+                        (type ByteBuffer)
+                        (call source-interface-wire::frame (i64 2) (local digest) (local image) (local out)))
+                      (in
+                        (call emit
+                          (local graph)
+                          (local seen)
+                          (call ci::add (local row) (i64 1))
+                          (local next-types)
+                          (local next-out))))
+                    (let
+                      (binding a (call ci::discard (local types)))
+                      (binding b (call ci::discard (local out)))
+                      (in
+                        (record structural
+                          (field code (i64 3))
+                          (field types (call ci::text-bytes (text "")))
+                          (field objects (call ci::text-bytes (text "")))))))
+                  (let
+                    (binding a (call ci::discard (local types)))
+                    (binding b (call ci::discard (local out)))
+                    (in
+                      (record structural
+                        (field code (i64 12))
+                        (field types (call ci::text-bytes (text "")))
+                        (field objects (call ci::text-bytes (text "")))))))))
+            (call emit (local graph) (local seen) (call ci::add (local row) (i64 1)) (local types) (local out))))))
+    (function create prepare
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create pending (type Bytes))
+      (returns (record (code I64) (types Bytes) (objects Bytes)))
+      (body
+        (let
+          (binding closed (call close (local graph) (local pending) (call ci::text-bytes (text "")) (i64 0)))
+          (in
+            (if
+              (call ci::eq (field (local closed) (name code)) (i64 0))
+              (let
+                (binding types (type ByteBuffer) (call ci::empty))
+                (binding out (type ByteBuffer) (call ci::empty))
+                (in
+                  (call emit (local graph) (field (local closed) (name seen)) (i64 0) (local types) (local out))))
+              (record structural
+                (field code (field (local closed) (name code)))
+                (field types (call ci::text-bytes (text "")))
+                (field objects (call ci::text-bytes (text "")))))))))))
+declarations.end

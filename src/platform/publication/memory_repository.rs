@@ -242,7 +242,9 @@ impl GraphRepository {
             container_bytes: container.len(),
             container_commitment: blake3::hash(container).to_hex().to_string(),
             validation_visits: installed.validation_visits,
+            validation_visits_saturated: installed.validation_visits_saturated,
             validation_read_bytes: installed.validation_read_bytes,
+            validation_read_bytes_saturated: installed.validation_read_bytes_saturated,
         })
     }
 }

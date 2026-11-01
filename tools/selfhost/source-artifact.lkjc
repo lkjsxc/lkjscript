@@ -1,0 +1,195 @@
+declarations.begin
+(units
+  (module create source-artifact
+    (function create failure
+      (visibility private)
+      (effect pure)
+      (parameter create code (type I64))
+      (returns (record (code I64) (input Bytes)))
+      (body (record structural (field code (local code)) (field input (call ci::text-bytes (text ""))))))
+    (function create objects
+      (visibility private)
+      (effect pure)
+      (parameter create interface (type Bytes))
+      (parameter create closure (type Bytes))
+      (parameter create package (type (record (digest Bytes) (image Bytes))))
+      (returns (record (code I64) (objects Bytes)))
+      (body
+        (let
+          (binding length
+            (call
+              source-unit-tables::add
+              (call
+                source-unit-tables::add
+                (call ci::length (local interface))
+                (call ci::length (local closure)))
+              (call
+                source-unit-tables::add
+                (i64 48)
+                (call ci::length (field (local package) (name image))))))
+          (in
+            (if
+              (call ci::lt (local length) (i64 0))
+              (record structural (field code (i64 3)) (field objects (call ci::text-bytes (text ""))))
+              (let
+                (binding a (type ByteBuffer) (call ci::empty))
+                (binding b (type ByteBuffer) (call ci::append (local interface) (i64 0) (local a)))
+                (binding c (type ByteBuffer) (call ci::append (local closure) (i64 0) (local b)))
+                (binding d
+                  (type ByteBuffer)
+                  (call
+                    source-interface-wire::frame
+                    (i64 25)
+                    (field (local package) (name digest))
+                    (field (local package) (name image))
+                    (local c)))
+                (in (record structural (field code (i64 0)) (field objects (call ci::freeze (local d)))))))))))
+    (function create assemble
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create provenance
+        (type (record (code I64) (revision Bytes) (repository Bytes) (core Bytes))))
+      (parameter create units (type (record (code I64) (frames Bytes) (count I64) (bytes I64))))
+      (parameter create interface
+        (type
+          (record (code I64) (root Bytes) (digest Bytes) (owners Bytes) (types Bytes) (objects Bytes))))
+      (parameter create closure
+        (type
+          (record
+            (code I64)
+            (runtime Bytes)
+            (root Bytes)
+            (reference Bytes)
+            (types Bytes)
+            (objects Bytes))))
+      (returns (record (code I64) (input Bytes)))
+      (body
+        (let
+          (binding package
+            (call
+              source-package::encode
+              (local graph)
+              (field (local provenance) (name core))
+              (field (local interface) (name digest))))
+          (binding combined
+            (call
+              objects
+              (field (local interface) (name objects))
+              (field (local closure) (name objects))
+              (local package)))
+          (in
+            (if
+              (call ci::eq (field (local combined) (name code)) (i64 0))
+              (let
+                (binding data (field (local combined) (name objects)))
+                (binding objects (call source-artifact-objects::prepare (local data)))
+                (in
+                  (if
+                    (call ci::eq (field (local objects) (name code)) (i64 0))
+                    (call
+                      source-artifact-input::assemble
+                      (local graph)
+                      (field (local provenance) (name repository))
+                      (field (local package) (name digest))
+                      (field (local provenance) (name revision))
+                      (field (local interface) (name digest))
+                      (field (local interface) (name root))
+                      (field (local closure) (name root))
+                      (field (local closure) (name runtime))
+                      (field (local units) (name frames))
+                      (field (local units) (name count))
+                      (field (local units) (name bytes))
+                      (local data)
+                      (field (local objects) (name rows))
+                      (field (local objects) (name bytes)))
+                    (call failure (field (local objects) (name code))))))
+              (call failure (field (local combined) (name code))))))))
+    (function create prepare
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create custody (type Bytes))
+      (returns (record (code I64) (input Bytes)))
+      (body
+        (let
+          (binding provenance (call source-provenance::read (local graph)))
+          (in
+            (if
+              (call ci::eq (field (local provenance) (name code)) (i64 0))
+              (let
+                (binding summaries (call source-summary::prepare (local graph) (local parents)))
+                (in
+                  (if
+                    (call ci::eq (field (local summaries) (name code)) (i64 0))
+                    (let
+                      (binding units
+                        (call
+                          source-artifact-units::prepare
+                          (local graph)
+                          (local facts)
+                          (local parents)
+                          (local types)
+                          (local mapping)
+                          (local custody)
+                          (field (local summaries) (name rows))))
+                      (in
+                        (if
+                          (call ci::eq (field (local units) (name code)) (i64 0))
+                          (let
+                            (binding interface (call source-interface::project (local graph)))
+                            (in
+                              (if
+                                (call ci::eq (field (local interface) (name code)) (i64 0))
+                                (let
+                                  (binding closure
+                                    (call source-artifact-closure::project (local graph) (local parents)))
+                                  (in
+                                    (if
+                                      (call ci::eq (field (local closure) (name code)) (i64 0))
+                                      (call
+                                        assemble
+                                        (local graph)
+                                        (local provenance)
+                                        (local units)
+                                        (local interface)
+                                        (local closure))
+                                      (call failure (field (local closure) (name code))))))
+                                (call failure (field (local interface) (name code))))))
+                          (call failure (field (local units) (name code))))))
+                    (call failure (field (local summaries) (name code))))))
+              (call failure (field (local provenance) (name code))))))))
+    (function create compile-admitted
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create custody (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding prepared
+            (call
+              prepare
+              (local graph)
+              (local facts)
+              (local parents)
+              (local types)
+              (local mapping)
+              (local custody)))
+          (in
+            (if
+              (call ci::eq (field (local prepared) (name code)) (i64 0))
+              (call elf::compile-elf (field (local prepared) (name input)))
+              (record
+                structural
+                (field diagnostic (field (local prepared) (name code)))
+                (field image (call ci::text-bytes (text "")))))))))))
+declarations.end

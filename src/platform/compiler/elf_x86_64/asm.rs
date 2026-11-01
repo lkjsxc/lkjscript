@@ -332,6 +332,17 @@ impl Asm {
         self.absolute.push((self.bytes.len(), label));
         self.bytes(&[0; 8]);
     }
+    #[cfg(test)]
+    pub(super) fn label_address(&self, label: Label) -> Result<u64> {
+        let offset = self
+            .labels
+            .get(label)
+            .copied()
+            .flatten()
+            .ok_or_else(|| error("native_elf_label", "profiling label has no definition"))?;
+        absolute_address(offset)
+    }
+
     pub fn finish(mut self) -> Result<Vec<u8>> {
         self.check()?;
         for (offset, label) in self.absolute {

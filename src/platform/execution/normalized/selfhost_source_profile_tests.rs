@@ -157,6 +157,10 @@ fn selfhost_source_profile_inventories_every_owner_and_type() {
     assert_eq!(word(12), source.owners.len());
     assert_eq!(word(16), source.types.len());
     assert_eq!(word(20), source.retirements.len());
+    assert_eq!(word(112), 3);
+    assert_eq!(word(116), 128 + word(24));
+    assert_eq!(word(80), word(116) + word(120));
+    assert_eq!(word(124), 0);
     assert_eq!(&carrier[48..80], semantic_state.bytes());
 
     let mut owner_kinds = Histogram::new();
@@ -403,6 +407,14 @@ fn selfhost_source_profile_inventories_every_owner_and_type() {
         "composed_callable_metadata_bytes": composed.metadata_bytes,
         "carrier_bytes": carrier.len(),
         "carrier_sha256": carrier_sha256,
+        "carrier_profile": 3,
+        "semantic_revision_hex": crate::platform::semantic_id::encode_hex(
+            &carrier[word(116)..word(116) + 32]
+        ),
+        "revision_core_sha256": crate::platform::semantic_id::encode_hex(
+            &Sha256::digest(&carrier[word(116) + 32..word(80)])
+        ),
+        "provenance_source": "exact public maintained-compiler export",
         "semantic_state": semantic_state.to_string(),
         "owners": source.owners.len(),
         "types": source.types.len(),

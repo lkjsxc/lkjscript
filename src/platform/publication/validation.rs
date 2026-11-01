@@ -189,7 +189,7 @@ fn recheck(
         checkpoint()?;
         let key = object.key;
         if let StorageBackend::Memory(memory) = &store.base
-            && !store.derived.contains_key(&key)
+            && store.derived_bytes(key).is_none()
         {
             admission.admit_catalog_lookup().map_err(read_error)?;
             work.add(crate::platform::storage::object::StoreWork {
@@ -328,7 +328,7 @@ fn cache_entry(
         .into_iter()
         .map(|key| {
             let memory = match &store.base {
-                StorageBackend::Memory(memory) if !store.derived.contains_key(&key) => {
+                StorageBackend::Memory(memory) if store.derived_bytes(key).is_none() => {
                     memory.objects.get(&key).map(Arc::downgrade)
                 }
                 _ => None,
@@ -348,6 +348,10 @@ fn cache_entry(
 #[cfg(test)]
 #[path = "validation_cache_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "validation_preview_tests.rs"]
+mod preview_tests;
 
 #[derive(Debug)]
 pub(super) struct CurrentValidation {
@@ -425,7 +429,9 @@ impl RevalidatedBase {
 #[derive(Debug)]
 pub(super) struct ViewStore {
     base: StorageBackend,
-    derived: BTreeMap<ObjectKey, Vec<u8>>,
+    // Sorted by the complete ObjectKey ordering. Installations prepare one batch
+    // and merge it once, so growing a preview never requires per-object shifts.
+    derived: Vec<(ObjectKey, Vec<u8>)>,
     rebuild_reads: std::cell::Cell<StoreReadAdmission>,
     rebuild_objects: std::cell::RefCell<Option<BTreeSet<ObjectKey>>>,
     link_read_set: std::cell::RefCell<Option<LinkReadSet>>,
@@ -434,7 +440,6 @@ pub(super) struct ViewStore {
 #[derive(Debug, Default)]
 struct LinkReadSet {
     objects: BTreeSet<ObjectKey>,
-    visits: u64,
     modeled_bytes: usize,
 }
 
@@ -450,7 +455,7 @@ impl ViewStore {
     pub const fn new(base: StorageBackend) -> Self {
         Self {
             base,
-            derived: BTreeMap::new(),
+            derived: Vec::new(),
             rebuild_reads: std::cell::Cell::new(StoreReadAdmission::unbounded()),
             rebuild_objects: std::cell::RefCell::new(None),
             link_read_set: std::cell::RefCell::new(None),
@@ -483,20 +488,6 @@ impl ViewStore {
         let Some(recorded) = recorded.as_mut() else {
             return Ok(());
         };
-        let visits = recorded
-            .visits
-            .checked_add(1)
-            .filter(|visits| {
-                *visits <= crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS
-            })
-            .ok_or_else(|| {
-                StoreError::new(
-                    StoreErrorClass::Resource,
-                    "publication_link_read_set_work",
-                    "link read-set recording exceeds the source validation visit bound",
-                )
-            })?;
-        recorded.visits = visits;
         if !recorded.objects.contains(&key) {
             let bytes = recorded
                 .modeled_bytes
@@ -546,54 +537,159 @@ impl ViewStore {
     }
 
     pub fn install(&mut self, validation: &RevalidatedBase) -> Result<(), Diagnostic> {
+        let count = validation
+            .facts
+            .summary_objects
+            .len()
+            .checked_add(validation.facts.pages.objects().count())
+            .and_then(|count| count.checked_add(if validation.current.is_ok() { 1 } else { 0 }))
+            .ok_or_else(overlay_allocation)?;
+        let mut objects = Vec::new();
+        reserve_overlay(&mut objects, count)?;
         for (digest, bytes) in &validation.facts.summary_objects {
-            self.insert(
+            objects.push((
                 ObjectKey::from_digest(ObjectDomain::OwnerSummary, digest.bytes()),
-                bytes,
-            )?;
+                bytes.as_slice(),
+            ));
         }
         for (digest, bytes) in validation.facts.pages.objects() {
-            self.insert(
+            objects.push((
                 ObjectKey::from_digest(ObjectDomain::MapPage, digest.bytes()),
                 bytes,
-            )?;
+            ));
         }
         if let Ok(current) = &validation.current {
-            self.insert(
+            objects.push((
                 ObjectKey::from_digest(ObjectDomain::ValidationWitness, current.digest.bytes()),
-                &current.bytes,
-            )?;
+                current.bytes.as_slice(),
+            ));
         }
-        Ok(())
-    }
-
-    fn insert(&mut self, key: ObjectKey, bytes: &[u8]) -> Result<(), Diagnostic> {
-        key.verify(bytes).map_err(|error| {
-            Diagnostic::new(DiagnosticClass::Corrupt, error.code, error.message)
-        })?;
-        self.derived.insert(key, bytes.to_vec());
-        Ok(())
+        self.install_batch(objects, &|| Ok(()))
     }
 
     pub(super) fn install_candidate(
         &mut self,
         objects: &BTreeMap<ObjectKey, Vec<u8>>,
+        checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
     ) -> Result<(), Diagnostic> {
-        let bytes = objects.values().try_fold(0_usize, |total, bytes| {
-            total.checked_add(bytes.len())?.checked_add(192)
-        });
-        if bytes.is_none_or(|bytes| bytes > 64 * 1_048_576) {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "transaction_preview_capacity",
-                "candidate preview exceeds its 64 MiB staged-object admission",
-            ));
-        }
+        checkpoint()?;
+        let mut batch = Vec::new();
+        reserve_overlay(&mut batch, objects.len())?;
         for (key, bytes) in objects {
-            self.insert(*key, bytes)?;
+            checkpoint()?;
+            batch.push((*key, bytes.as_slice()));
         }
+        self.install_batch(batch, checkpoint)
+    }
+
+    fn derived_bytes(&self, key: ObjectKey) -> Option<&[u8]> {
+        self.derived
+            .binary_search_by_key(&key, |(key, _)| *key)
+            .ok()
+            .map(|index| self.derived[index].1.as_slice())
+    }
+
+    fn install_batch(
+        &mut self,
+        mut objects: Vec<(ObjectKey, &[u8])>,
+        checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
+    ) -> Result<(), Diagnostic> {
+        // In-place sorting allocates no second index. Verify the complete batch
+        // and all equal-key bindings before copying or changing the old overlay.
+        checkpoint()?;
+        objects.sort_unstable_by_key(|(key, _)| *key);
+        for (key, bytes) in &objects {
+            checkpoint()?;
+            key.verify(bytes).map_err(|error| {
+                Diagnostic::new(DiagnosticClass::Corrupt, error.code, error.message)
+            })?;
+        }
+        for pair in objects.windows(2) {
+            checkpoint()?;
+            if pair[0].0 == pair[1].0 && pair[0].1 != pair[1].1 {
+                return Err(overlay_collision());
+            }
+        }
+        objects.dedup_by_key(|(key, _)| *key);
+        let mut additional = 0_usize;
+        for (key, bytes) in &objects {
+            checkpoint()?;
+            if let Some(existing) = self.derived_bytes(*key) {
+                if existing != *bytes {
+                    return Err(overlay_collision());
+                }
+            } else {
+                additional = additional.checked_add(1).ok_or_else(overlay_allocation)?;
+            }
+        }
+        checkpoint()?;
+        if additional == 0 {
+            return Ok(());
+        }
+
+        let count = self
+            .derived
+            .len()
+            .checked_add(additional)
+            .ok_or_else(overlay_allocation)?;
+        let mut merged = Vec::new();
+        reserve_overlay(&mut merged, count)?;
+        let mut added = Vec::new();
+        reserve_overlay(&mut added, additional)?;
+        for (key, bytes) in objects {
+            checkpoint()?;
+            if self.derived_bytes(key).is_none() {
+                added.push((
+                    key,
+                    crate::platform::storage::object::copy_object_bytes(bytes)
+                        .map_err(read_error)?,
+                ));
+            }
+        }
+        checkpoint()?;
+
+        // Every check and allocation has completed. Both input sequences are
+        // sorted and disjoint. Moving their owned Vec payloads cannot fail, and
+        // the reserved union capacity prevents growth during this linear merge.
+        let mut old = std::mem::take(&mut self.derived).into_iter().peekable();
+        let mut added = added.into_iter().peekable();
+        while let (Some(left), Some(right)) = (old.peek(), added.peek()) {
+            let next = if left.0 < right.0 {
+                old.next()
+            } else {
+                added.next()
+            };
+            if let Some(object) = next {
+                merged.push(object);
+            }
+        }
+        merged.extend(old);
+        merged.extend(added);
+        self.derived = merged;
         Ok(())
     }
+}
+
+fn overlay_allocation() -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Resource,
+        "object_allocation",
+        "cannot reserve representable or available derived-object storage",
+    )
+}
+
+fn reserve_overlay<T>(objects: &mut Vec<T>, additional: usize) -> Result<(), Diagnostic> {
+    objects
+        .try_reserve_exact(additional)
+        .map_err(|_| overlay_allocation())
+}
+
+fn overlay_collision() -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Corrupt,
+        "object_digest_collision",
+        "one derived immutable object identity is bound to different bytes",
+    )
 }
 
 impl std::ops::Deref for ViewStore {
@@ -685,7 +781,7 @@ impl ViewStore {
         {
             return Ok(Some(bytes));
         }
-        if let Some(bytes) = self.derived.get(&key) {
+        if let Some(bytes) = self.derived_bytes(key) {
             admission.admit_catalog_lookup()?;
             admission.admit_object(bytes.len())?;
             if let Some(maximum_bytes) = maximum_bytes
@@ -710,7 +806,9 @@ impl ViewStore {
                 bytes_read: bytes.len() as u64,
                 ..crate::platform::storage::object::StoreWork::default()
             });
-            Ok(Some(bytes.clone()))
+            Ok(Some(crate::platform::storage::object::copy_object_bytes(
+                bytes,
+            )?))
         } else {
             Ok(None)
         }

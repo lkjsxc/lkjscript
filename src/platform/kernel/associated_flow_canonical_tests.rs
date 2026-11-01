@@ -150,7 +150,7 @@ fn canonical_repeated_methods_admit_large_unrelated_registry_without_relaxing_gr
         let (fixture, sites) = repeated_method_registry(expanding);
         // Literal lower bound for the removed all-declaration scan: every site
         // cloned every declaration before filtering. Even omitting its vectors
-        // and every other admission cost already exceeds the unchanged64MiB cap.
+        // and every other admission cost already exceeds this selected64MiB allowance.
         let one_scan: usize = fixture
             .source
             .owners
@@ -164,12 +164,11 @@ fn canonical_repeated_methods_admit_large_unrelated_registry_without_relaxing_gr
             })
             .sum();
         assert!(sites * one_scan > maximum_bytes);
-        let mut work = 0;
         let result = associated_flow_canonical_reference::validate(
             &[&fixture.source],
             &crate::platform::execution::ExecutionControl::uncancelled(),
-            &mut work,
-            contract::MAXIMUM_VALIDATION_WORK,
+            Some(contract::MAXIMUM_VALIDATION_WORK as u64),
+            Some(maximum_bytes as u64),
         );
         if expanding {
             let error = result.expect_err("actual positive associated recurrence must refuse");
@@ -180,9 +179,10 @@ fn canonical_repeated_methods_admit_large_unrelated_registry_without_relaxing_gr
             assert_eq!(error.code, "kernel_associated_reference_growth");
         } else {
             let proof = result.expect("irrelevant registry scans must not consume the growth cap");
-            assert!(proof.metadata_bytes > 0 && proof.metadata_bytes <= maximum_bytes);
+            assert!(!proof.metadata_bytes_saturated && !proof.steps_saturated);
+            assert!(proof.metadata_bytes > 0 && proof.metadata_bytes <= maximum_bytes as u64);
+            assert!(proof.steps > 0);
         }
-        assert!(work > 0);
     }
 }
 
@@ -1512,81 +1512,138 @@ fn canonical_view_type_objects_independently_reject_foreign_epochs() {
 }
 
 #[test]
-fn canonical_reference_flow_phase_ledger_preserves_exact_work_carry_and_cancellation() {
+fn canonical_reference_flow_phase_ledger_preserves_exact_optional_work_and_cancellation() {
+    use crate::platform::admission::{Meter, Observation};
     let fixture = recurrence(false, false, false);
     let control = crate::platform::execution::ExecutionControl::uncancelled();
-    let mut exact = 0;
-    let healthy = associated_flow_canonical_reference::validate(
+    let healthy =
+        associated_flow_canonical_reference::validate(&[&fixture.source], &control, None, None)
+            .unwrap();
+    assert!(healthy.steps > 0 && healthy.metadata_bytes > 0);
+    assert!(!healthy.steps_saturated && !healthy.metadata_bytes_saturated);
+    for (work, bytes) in [
+        (Some(healthy.steps), Some(healthy.metadata_bytes)),
+        (Some(u64::MAX), Some(u64::MAX)),
+    ] {
+        assert_eq!(
+            associated_flow_canonical_reference::validate(
+                &[&fixture.source],
+                &control,
+                work,
+                bytes,
+            )
+            .unwrap(),
+            healthy
+        );
+    }
+    // Nested phases pass remaining permission, then commit the returned exact
+    // observations; no maximum-minus-counter encoding is involved.
+    let mut parent = Meter::new(Some(healthy.steps + 9));
+    parent.charge(Observation::exact(9)).unwrap();
+    let nested = associated_flow_canonical_reference::validate(
         &[&fixture.source],
         &control,
-        &mut exact,
-        contract::MAXIMUM_VALIDATION_WORK,
+        parent.remaining(),
+        None,
     )
     .unwrap();
-    let mut repeated = 0;
-    assert_eq!(
-        associated_flow_canonical_reference::validate(
+    parent
+        .charge(Observation {
+            consumed: nested.steps,
+            saturated: nested.steps_saturated,
+        })
+        .unwrap();
+    assert_eq!(parent.remaining(), Some(0));
+    assert_eq!(parent.observation(), Observation::exact(healthy.steps + 9));
+    for (work, bytes, kind) in [
+        (Some(0), None, "reference work"),
+        (Some(healthy.steps - 1), None, "reference work"),
+        (None, Some(0), "reference storage"),
+        (None, Some(healthy.metadata_bytes - 1), "reference storage"),
+    ] {
+        let error = associated_flow_canonical_reference::validate(
             &[&fixture.source],
             &control,
-            &mut repeated,
-            exact,
+            work,
+            bytes,
         )
-        .unwrap(),
-        healthy
-    );
-    assert_eq!(repeated, exact);
-    let carry = 9;
-    assert!(exact + carry <= contract::MAXIMUM_VALIDATION_WORK);
-    let mut carried = carry;
-    assert_eq!(
-        associated_flow_canonical_reference::validate(
-            &[&fixture.source],
-            &control,
-            &mut carried,
-            exact + carry,
-        )
-        .unwrap(),
-        healthy
-    );
-    assert_eq!(carried, exact + carry);
-    let mut exhausted_work = carry;
-    let exhausted = associated_flow_canonical_reference::validate(
-        &[&fixture.source],
-        &control,
-        &mut exhausted_work,
-        carry,
-    )
-    .unwrap_err();
-    assert_eq!(
-        exhausted.class,
-        crate::platform::diagnostic::DiagnosticClass::Resource
-    );
-    assert_eq!(exhausted.code, "kernel_associated_reference_capacity");
-    assert_eq!(
-        exhausted.message,
-        "independent associated flow exhausted reference work"
-    );
-    assert_eq!(exhausted_work, carry);
-    assert_eq!(exhausted.notes.len(), 1);
-    assert!(exhausted.notes[0].contains("phase=associated presence"));
-    assert!(exhausted.notes[0].contains("entry=9 consumed=9 maximum=9"));
-    assert!(exhausted.notes[0].contains("after_presence: None"));
+        .unwrap_err();
+        assert_eq!(
+            error.class,
+            crate::platform::diagnostic::DiagnosticClass::Resource
+        );
+        assert_eq!(error.code, "kernel_associated_reference_capacity");
+        assert_eq!(
+            error.message,
+            format!("independent associated flow exhausted {kind}")
+        );
+        if work == Some(0) {
+            assert_eq!(error.notes.len(), 1);
+            assert!(error.notes[0].contains("phase=associated presence"));
+            assert!(
+                error.notes[0]
+                    .contains("entry=0 consumed=0 consumed_saturated=false maximum=Some(0)")
+            );
+            assert!(error.notes[0].contains("after_presence: None"));
+        }
+    }
     let cancelled = crate::platform::execution::ExecutionControl::uncancelled();
     cancelled.cancel();
-    let mut cancelled_work = carry;
-    let error = associated_flow_canonical_reference::validate(
-        &[&fixture.source],
-        &cancelled,
-        &mut cancelled_work,
-        exact + carry,
-    )
-    .unwrap_err();
+    let error =
+        associated_flow_canonical_reference::validate(&[&fixture.source], &cancelled, None, None)
+            .unwrap_err();
     assert_eq!(
         error.class,
         crate::platform::diagnostic::DiagnosticClass::Cancelled
     );
     assert!(error.notes.is_empty());
-    assert_eq!(cancelled_work, carry);
+    assert_eq!(
+        associated_flow_canonical_reference::validate(&[&fixture.source], &control, None, None,)
+            .unwrap(),
+        healthy
+    );
+}
+
+#[test]
+fn canonical_reference_presence_only_scan_returns_complete_work() {
+    let source = super::tests::transport_snapshot();
+    let control = crate::platform::execution::ExecutionControl::uncancelled();
+    let proof =
+        associated_flow_canonical_reference::validate(&[&source], &control, None, None).unwrap();
+    assert_eq!(
+        (
+            proof.contexts,
+            proof.slots,
+            proof.edges,
+            proof.metadata_bytes
+        ),
+        (0, 0, 0, 0)
+    );
+    assert_eq!(
+        proof.steps,
+        1 + source.owners.len() as u64
+            + source.types.len() as u64
+            + source.dependency_types.len() as u64
+    );
+    assert!(!proof.steps_saturated && !proof.metadata_bytes_saturated);
+    assert!(
+        associated_flow_canonical_reference::validate(
+            &[&source],
+            &control,
+            Some(proof.steps),
+            Some(0)
+        )
+        .is_ok()
+    );
+    assert!(
+        associated_flow_canonical_reference::validate(
+            &[&source],
+            &control,
+            Some(proof.steps - 1),
+            None
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -1596,23 +1653,29 @@ fn canonical_borrowed_declarations_preserve_model_and_scope_with_less_work() {
     let maximum_bytes = 64 * 1_048_576;
     for expanding in [false, true] {
         let mut fixture = recurrence(expanding, false, false);
-        let mut borrowed_work = 0;
-        let (borrowed, borrowed_bytes) = {
-            let borrowed_budget =
-                model::Budget::new(&checkpoint, &mut borrowed_work, maximum_work, maximum_bytes);
+        let (borrowed, borrowed_work, borrowed_bytes) = {
+            let borrowed_budget = model::Budget::new(
+                &checkpoint,
+                Some(maximum_work as u64),
+                Some(maximum_bytes as u64),
+            );
             let borrowed = CanonicalProgram::read_with_budget(
                 &[&fixture.source],
                 std::slice::from_ref(&fixture.entry),
                 &borrowed_budget,
             )
             .expect("complete borrowed translation");
-            let borrowed_bytes = borrowed_budget.bytes();
-            (borrowed, borrowed_bytes)
+            let observed_work = borrowed_budget.consumed();
+            let observed_bytes = borrowed_budget.bytes();
+            assert!(!observed_work.saturated && !observed_bytes.saturated);
+            (borrowed, observed_work.consumed, observed_bytes.consumed)
         };
-        let mut copied_work = 0;
-        let (copied, copied_bytes) = {
-            let copied_budget =
-                model::Budget::new(&checkpoint, &mut copied_work, maximum_work, maximum_bytes);
+        let (copied, copied_work, copied_bytes) = {
+            let copied_budget = model::Budget::new(
+                &checkpoint,
+                Some(maximum_work as u64),
+                Some(maximum_bytes as u64),
+            );
             // This comparison really serializes and clones declarations, type
             // objects and other raw owners at their lookup sites. It isolates those
             // avoided copies, rather than reconstructing every old allocation.
@@ -1622,8 +1685,10 @@ fn canonical_borrowed_declarations_preserve_model_and_scope_with_less_work() {
                 &copied_budget,
             )
             .expect("same input and allowance with real raw record copies");
-            let copied_bytes = copied_budget.bytes();
-            (copied, copied_bytes)
+            let observed_work = copied_budget.consumed();
+            let observed_bytes = copied_budget.bytes();
+            assert!(!observed_work.saturated && !observed_bytes.saturated);
+            (copied, observed_work.consumed, observed_bytes.consumed)
         };
         assert_eq!(
             format!("{:?}", borrowed.program),
@@ -1663,8 +1728,11 @@ fn canonical_borrowed_declarations_preserve_model_and_scope_with_less_work() {
         };
         owner.declaration = fixture.contract.declaration;
         for copies in [false, true] {
-            let mut work = 0;
-            let budget = model::Budget::new(&checkpoint, &mut work, maximum_work, maximum_bytes);
+            let budget = model::Budget::new(
+                &checkpoint,
+                Some(maximum_work as u64),
+                Some(maximum_bytes as u64),
+            );
             let result = if copies {
                 CanonicalProgram::read_with_raw_copies(&[&fixture.source], &[], &budget)
             } else {

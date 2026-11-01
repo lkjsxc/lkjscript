@@ -7,6 +7,7 @@
 //! algebra. Scope forwarding is zero constructor depth; nominal family binding
 //! constructors and every effective witness type actual retain the usual edges.
 
+use crate::platform::admission::{Meter, Observation};
 use crate::platform::diagnostic::Diagnostic;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
@@ -15,16 +16,16 @@ use std::ops::Deref;
 /// Fixed scalar error context; never an admission token or an additional work debit.
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct ReferencePhaseLedger {
-    pub(super) entry: usize,
+    pub(super) entry: Observation,
     pub(super) phase: &'static str,
-    pub(super) after_presence: Option<usize>,
-    pub(super) after_preflight: Option<usize>,
-    pub(super) after_inventory: Option<usize>,
-    pub(super) after_translation: Option<usize>,
-    pub(super) after_raw_admission: Option<usize>,
-    pub(super) after_classifier_admission: Option<usize>,
-    pub(super) after_context_growth: Option<usize>,
-    pub(super) after_reachability: Option<usize>,
+    pub(super) after_presence: Option<Observation>,
+    pub(super) after_preflight: Option<Observation>,
+    pub(super) after_inventory: Option<Observation>,
+    pub(super) after_translation: Option<Observation>,
+    pub(super) after_raw_admission: Option<Observation>,
+    pub(super) after_classifier_admission: Option<Observation>,
+    pub(super) after_context_growth: Option<Observation>,
+    pub(super) after_reachability: Option<Observation>,
     pub(super) last_completed_contexts: Option<usize>,
     pub(super) last_completed_slots: Option<usize>,
     pub(super) last_completed_edges: Option<usize>,
@@ -41,40 +42,34 @@ pub(super) enum ReferencePhaseBoundary {
     Reachability,
 }
 
-/// One operation-local allowance shared by raw translation and the independent
-/// algebraic proof. Reservations are cumulative, including disposable work.
+/// One operation-local pair of optional allowances, shared by raw translation
+/// and the independent algebraic proof. Modeled cumulative work and storage are
+/// passive observations when the corresponding caller allowance is absent.
 pub(super) struct Budget<'a> {
     checkpoint: &'a dyn Fn() -> Result<(), Diagnostic>,
-    work: RefCell<&'a mut usize>,
-    maximum_work: usize,
-    bytes: Cell<usize>,
-    maximum_bytes: usize,
+    work: RefCell<Meter>,
+    bytes: RefCell<Meter>,
     phase_ledger: Cell<ReferencePhaseLedger>,
 }
 
 impl<'a> Budget<'a> {
     pub(super) fn new(
         checkpoint: &'a dyn Fn() -> Result<(), Diagnostic>,
-        work: &'a mut usize,
-        maximum_work: usize,
-        maximum_bytes: usize,
+        maximum_work: Option<u64>,
+        maximum_bytes: Option<u64>,
     ) -> Self {
-        let entry = *work;
         Self {
             checkpoint,
-            work: RefCell::new(work),
-            maximum_work,
-            bytes: Cell::new(0),
-            maximum_bytes,
+            work: RefCell::new(Meter::new(maximum_work)),
+            bytes: RefCell::new(Meter::new(maximum_bytes)),
             phase_ledger: Cell::new(ReferencePhaseLedger {
-                entry,
                 phase: "initialization",
                 ..ReferencePhaseLedger::default()
             }),
         }
     }
-    pub(super) fn consumed(&self) -> usize {
-        **self.work.borrow()
+    pub(super) fn consumed(&self) -> Observation {
+        self.work.borrow().observation()
     }
     pub(super) fn phase_ledger(&self) -> ReferencePhaseLedger {
         self.phase_ledger.get()
@@ -108,58 +103,51 @@ impl<'a> Budget<'a> {
     }
     pub(super) fn tick(&self) -> Result<(), Refusal> {
         (self.checkpoint)().map_err(Refusal::Control)?;
-        let mut work = self.work.borrow_mut();
-        **work = (**work)
-            .checked_add(1)
-            .filter(|n| *n <= self.maximum_work)
-            .ok_or(Refusal::Capacity("reference work"))?;
-        Ok(())
+        self.work
+            .borrow_mut()
+            .charge(Observation::exact(1))
+            .map_err(|_| Refusal::Capacity("reference work"))
     }
     pub(super) fn reserve<T>(&self, count: usize) -> Result<(), Refusal> {
-        let bytes = count
-            .checked_mul(std::mem::size_of::<T>() + 4 * std::mem::size_of::<usize>())
-            .ok_or(Refusal::Capacity("reference storage"))?;
-        self.reserve_bytes(bytes)
+        let mut bytes = Observation::product(count, std::mem::size_of::<T>());
+        bytes.observe(Observation::product(
+            count,
+            4 * std::mem::size_of::<usize>(),
+        ));
+        self.reserve_observation(bytes)
     }
     pub(super) fn reserve_bytes(&self, bytes: usize) -> Result<(), Refusal> {
-        self.tick()?;
-        self.bytes.set(
-            self.bytes
-                .get()
-                .checked_add(bytes)
-                .filter(|n| *n <= self.maximum_bytes)
-                .ok_or(Refusal::Capacity("reference storage"))?,
-        );
-        Ok(())
+        self.reserve_observation(Observation::from_usize(bytes))
     }
-    pub(super) fn bytes(&self) -> usize {
-        self.bytes.get()
+    fn reserve_observation(&self, bytes: Observation) -> Result<(), Refusal> {
+        self.tick()?;
+        self.bytes
+            .borrow_mut()
+            .charge(bytes)
+            .map_err(|_| Refusal::Capacity("reference storage"))
+    }
+    pub(super) fn bytes(&self) -> Observation {
+        self.bytes.borrow().observation()
     }
 
-    /// Count the borrowed canonical serialization without creating a byte buffer.
-    /// Twice its size plus the inline record conservatively accounts for cloned
-    /// vectors/strings and the later wire buffer before either allocation occurs.
+    /// Count borrowed canonical serialization without creating a byte buffer.
+    /// This is an allocation model, never an extent used to allocate or encode.
+    /// Any selected finite allowance is debited before the caller clones data.
     pub(super) fn canonical_reserve<T: serde::Serialize>(&self, value: &T) -> Result<(), Refusal> {
         struct Counter<'a, 'b> {
             budget: &'a Budget<'b>,
-            bytes: usize,
+            bytes: Observation,
             refusal: Option<Refusal>,
         }
         impl std::io::Write for Counter<'_, '_> {
             fn write(&mut self, value: &[u8]) -> std::io::Result<usize> {
-                let result = self.budget.tick().and_then(|()| {
-                    self.bytes = self
-                        .bytes
-                        .checked_add(value.len())
-                        .ok_or(Refusal::Capacity("canonical storage size"))?;
-                    Ok(())
-                });
-                if let Err(error) = result {
+                if let Err(error) = self.budget.tick() {
                     self.refusal = Some(error);
                     return Err(std::io::Error::other(
                         "reference budget refused serialization",
                     ));
                 }
+                self.bytes.observe(Observation::from_usize(value.len()));
                 Ok(value.len())
             }
             fn flush(&mut self) -> std::io::Result<()> {
@@ -168,18 +156,16 @@ impl<'a> Budget<'a> {
         }
         let mut counter = Counter {
             budget: self,
-            bytes: 0,
+            bytes: Observation::default(),
             refusal: None,
         };
         if serde_json::to_writer(&mut counter, value).is_err() {
             return Err(counter.refusal.unwrap_or(Refusal::Inventory));
         }
-        let bytes = counter
-            .bytes
-            .checked_mul(2)
-            .and_then(|n| n.checked_add(std::mem::size_of::<T>()))
-            .ok_or(Refusal::Capacity("canonical storage size"))?;
-        self.reserve_bytes(bytes)
+        let mut bytes = counter.bytes;
+        bytes.observe(counter.bytes);
+        bytes.observe(Observation::from_usize(std::mem::size_of::<T>()));
+        self.reserve_observation(bytes)
     }
     pub(super) fn canonical_clone<T: serde::Serialize + Clone>(
         &self,
@@ -439,17 +425,21 @@ pub(super) enum Refusal {
 }
 
 #[derive(Clone, Copy)]
+#[cfg_attr(not(test), derive(Default))]
 pub(super) struct Limits {
-    pub contexts: usize,
-    pub slots: usize,
+    pub contexts: Option<u64>,
+    pub slots: Option<u64>,
+    // Test-only finite exploration is not the symbolic admission contract.
     #[cfg(test)]
     pub concrete_states: usize,
 }
+// The finite concrete-state fixture allowance differs from the product defaults.
+#[cfg(test)]
 impl Default for Limits {
     fn default() -> Self {
         Self {
-            contexts: 128,
-            slots: 256,
+            contexts: None,
+            slots: None,
             #[cfg(test)]
             concrete_states: 256,
         }
@@ -1301,7 +1291,10 @@ impl SubstitutionRelation<'_, '_> {
     fn slot(&mut self, slot: Slot) -> Result<(), Refusal> {
         self.program.budget.tick()?;
         if !self.slots.contains(&slot) {
-            if self.slots.len() >= self.limits.slots {
+            if self.limits.slots.is_some_and(|limit| {
+                let count = Observation::from_usize(self.slots.len());
+                count.saturated || count.consumed >= limit
+            }) {
                 return Err(Refusal::Capacity("reference slots"));
             }
             self.program.budget.reserve::<Slot>(1)?;
@@ -1381,7 +1374,10 @@ impl SubstitutionRelation<'_, '_> {
         if let Some(state) = self.contexts.get(&key) {
             return self.program.budget.clone_state(state);
         }
-        if self.contexts.len() >= self.limits.contexts {
+        if self.limits.contexts.is_some_and(|limit| {
+            let count = Observation::from_usize(self.contexts.len());
+            count.saturated || count.consumed >= limit
+        }) {
             return Err(Refusal::Capacity("reference contexts"));
         }
         let context = self.contexts.len();
@@ -1700,9 +1696,8 @@ impl Program {
         term: &Term,
         environment: &Environment<'_>,
     ) -> Result<Term, Refusal> {
-        let mut work = 0;
         let checkpoint = || Ok(());
-        let budget = Budget::new(&checkpoint, &mut work, usize::MAX, usize::MAX);
+        let budget = Budget::new(&checkpoint, None, None);
         BoundedProgram {
             program: self,
             budget: &budget,
@@ -1718,16 +1713,14 @@ impl Program {
     }
     #[cfg(test)]
     pub(super) fn admit(&self) -> Result<(), Refusal> {
-        let mut work = 0;
         let checkpoint = || Ok(());
-        let budget = Budget::new(&checkpoint, &mut work, usize::MAX, usize::MAX);
+        let budget = Budget::new(&checkpoint, None, None);
         self.admit_with_budget(&budget)
     }
     #[cfg(test)]
     pub(super) fn project(&self, witness: &Witness, member: Member) -> Result<Term, Refusal> {
-        let mut work = 0;
         let checkpoint = || Ok(());
-        let budget = Budget::new(&checkpoint, &mut work, usize::MAX, usize::MAX);
+        let budget = Budget::new(&checkpoint, None, None);
         BoundedProgram {
             program: self,
             budget: &budget,
@@ -1736,9 +1729,8 @@ impl Program {
     }
     #[cfg(test)]
     pub(super) fn concrete_closure(&self, limits: Limits) -> Result<BTreeSet<State>, Refusal> {
-        let mut work = 0;
         let checkpoint = || Ok(());
-        let budget = Budget::new(&checkpoint, &mut work, usize::MAX, usize::MAX);
+        let budget = Budget::new(&checkpoint, None, None);
         BoundedProgram {
             program: self,
             budget: &budget,
@@ -1754,9 +1746,8 @@ impl Program {
         actual_types: &[Term],
         actual_witnesses: &[Operand],
     ) -> Result<Term, Refusal> {
-        let mut work = 0;
         let checkpoint = || Ok(());
-        let budget = Budget::new(&checkpoint, &mut work, usize::MAX, usize::MAX);
+        let budget = Budget::new(&checkpoint, None, None);
         BoundedProgram {
             program: self,
             budget: &budget,
@@ -1772,8 +1763,7 @@ impl Program {
 }
 #[cfg(test)]
 pub(super) fn reference_classify(program: &Program, limits: Limits) -> Result<Proof, Refusal> {
-    let mut work = 0;
     let checkpoint = || Ok(());
-    let budget = Budget::new(&checkpoint, &mut work, usize::MAX, usize::MAX);
+    let budget = Budget::new(&checkpoint, None, None);
     reference_classify_with_budget(program, limits, &budget)
 }

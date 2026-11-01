@@ -11,14 +11,15 @@ use std::collections::{BTreeMap, BTreeSet};
 #[path = "read_view_flow_canonical_reference.rs"]
 mod views;
 
-const MAXIMUM_REFERENCE_BYTES: usize = 64 * 1_048_576;
-
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) struct ReferenceFlowWork {
     pub contexts: usize,
     pub slots: usize,
     pub edges: usize,
-    pub metadata_bytes: usize,
+    pub steps: u64,
+    pub steps_saturated: bool,
+    pub metadata_bytes: u64,
+    pub metadata_bytes_saturated: bool,
 }
 
 /// Complete symbolic source proof, before any concrete preparation queue grows.
@@ -27,15 +28,15 @@ pub(crate) struct ReferenceFlowWork {
 pub(crate) fn validate(
     snapshots: &[&KernelSnapshot],
     control: &ExecutionControl,
-    work: &mut usize,
-    maximum_work: usize,
+    maximum_work: Option<u64>,
+    maximum_metadata_bytes: Option<u64>,
 ) -> std::result::Result<ReferenceFlowWork, Diagnostic> {
     let checkpoint = || {
         control
             .check()
             .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))
     };
-    let budget = model::Budget::new(&checkpoint, work, maximum_work, MAXIMUM_REFERENCE_BYTES);
+    let budget = model::Budget::new(&checkpoint, maximum_work, maximum_metadata_bytes);
     let result = (|| {
         budget.observe_phase("associated presence");
         budget.tick()?;
@@ -70,12 +71,7 @@ pub(crate) fn validate(
         let canonical = CanonicalProgram::read_with_budget(snapshots, &[], &budget)?;
         let proof = model::reference_classify_with_budget(
             &canonical.program,
-            model::Limits {
-                contexts: maximum_work,
-                slots: maximum_work,
-                #[cfg(test)]
-                concrete_states: model::Limits::default().concrete_states,
-            },
+            model::Limits::default(),
             &budget,
         )?;
         if !proof.finite || proof.positive_diagonal.is_some() {
@@ -85,17 +81,26 @@ pub(crate) fn validate(
             contexts: proof.contexts,
             slots: proof.slots.len(),
             edges: proof.edges.len(),
-            metadata_bytes: budget.bytes(),
+            ..ReferenceFlowWork::default()
         })
     })();
-    result.map_err(|refusal| {
+    let steps = budget.consumed();
+    let metadata = budget.bytes();
+    result.map(|mut proof| {
+        // Presence-only inputs still consumed the complete raw inventory scan.
+        proof.steps = steps.consumed;
+        proof.steps_saturated = steps.saturated;
+        proof.metadata_bytes = metadata.consumed;
+        proof.metadata_bytes_saturated = metadata.saturated;
+        proof
+    }).map_err(|refusal| {
         let work_capacity = matches!(refusal, model::Refusal::Capacity("reference work"));
         let mut diagnostic = refusal_diagnostic(refusal);
         if work_capacity {
             let ledger = budget.phase_ledger();
             diagnostic.notes.push(format!(
-                "reference_flow phase={} entry={} consumed={} maximum={} metadata_bytes={} ledger={ledger:?}",
-                ledger.phase, ledger.entry, budget.consumed(), maximum_work, budget.bytes(),
+                "reference_flow phase={} entry={} consumed={} consumed_saturated={} maximum={maximum_work:?} metadata_bytes={} metadata_bytes_saturated={} ledger={ledger:?}",
+                ledger.phase, ledger.entry.consumed, steps.consumed, steps.saturated, metadata.consumed, metadata.saturated,
             ));
         }
         diagnostic
@@ -212,8 +217,7 @@ impl CanonicalProgram {
     #[cfg(test)]
     pub(super) fn read(snapshots: &[&KernelSnapshot], entries: &[CanonicalEntry]) -> Result<Self> {
         let checkpoint = || Ok(());
-        let mut work = 0;
-        let budget = model::Budget::new(&checkpoint, &mut work, usize::MAX, usize::MAX);
+        let budget = model::Budget::new(&checkpoint, None, None);
         Self::read_with_budget(snapshots, entries, &budget)
     }
     pub(super) fn read_with_budget(

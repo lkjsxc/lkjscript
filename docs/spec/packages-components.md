@@ -78,13 +78,33 @@ the existing exact intrinsic signature/effect contract and cannot install host i
 grant capabilities. Integrity proves content agreement, not publisher identity, original acceptance
 provenance, or source confidentiality.
 
-One admission allows at most 268,435,456 container bytes, 1,000,000 distinct objects, 10,000 packages
-including the root, 100,000 dependency edges, 16,000,000 aggregate owner/type/expression/relation
-validation visits, and 4,294,967,296 cumulative validation-read bytes. Existing narrower object,
-depth, authoring, output, and execution limits also apply. Counts and lengths are charged with
-checked arithmetic before allocation or work, without resetting aggregate budgets per package.
-Traversal is bounded and iterative with visited sets. There is no compression or public override;
-these are safety ceilings, not demonstrated capacities.
+Ordinary source admission, collection, staging, dependency validation, independent reconstruction
+and link readback have no default aggregate validation-visit or read-byte allowance. Internal
+budgeted source entry points accept `Option<u64>` for each metric: `None` is unbounded,
+`Some(0)` permits no positive reservation, and every `Some(n)`, including `Some(u64::MAX)`,
+is exact finite permission. No value is clamped to an implementation default or aliases `None`.
+The public commands use the ordinary unbounded aggregate policy.
+
+The source visit metric counts canonical object reservations plus semantic visits. An explicitly
+selected visit allowance also retains a separate catalog-lookup allowance with that same value.
+Collection's read metric counts admitted canonical object read bytes; complete container admission
+additionally reserves one complete encoded-container read and its object-integrity visits before
+collection. Exact nested allowances are charged across the operation without resetting per package
+or deriving remaining permission by subtracting passive totals. Modeled work is reserved before
+the corresponding operation. An overflowing modeled amount refuses under finite permission;
+under `None` it marks the observation inexact without refusing ordinary work.
+
+Visit/read observations carry independent saturation flags. A false flag means exact, including an
+exactly reached u64 maximum; a true flag means a lower bound. Observations never grant permission,
+size buffers or establish exact proof bounds. The independent oracle's modeled-copy observation
+is also passive and has no default copy allowance. It is not allocator traffic, live memory or RSS.
+
+Separate implementation limits remain: 268,435,456 container bytes, 1,000,000 distinct objects,
+10,000 packages including the root, and 100,000 dependency edges. Existing object, depth,
+authoring, output and execution limits also apply; their removal requires separate coupled work.
+All actual extents are checked before arithmetic, indexing or allocation. Finite-inventory
+traversal and visited sets preserve termination, and cancellation and actual allocation/I/O failure
+remain errors. Containers remain uncompressed; no public override increases these separate limits.
 
 `PACKAGE-TRANSPORTS` owns operational readiness. Private staging validates the complete container,
 durably installs immutable material, then publishes one atomic closure-ready selection binding the
@@ -115,9 +135,10 @@ map is not a cached validation result. The pool is local to that admission and
 releases its own references before return; snapshots retain only their selected
 maps. Flattened dependency type maps and application state remain separately owned.
 
-The existing aggregate visit budget accounts incoming bindings and shared-map
-bookkeeping before growth, record copies once before materialization, and the
-remaining type copies for every importing snapshot. No public ceiling is raised.
+The source visit metric accounts incoming bindings and shared-map bookkeeping
+before growth, record copies once before materialization, and the remaining type
+copies for every importing snapshot. Ordinary admission observes this work without
+an aggregate allowance; explicitly selected finite permission is charged exactly.
 Tiny interfaces may cost more bookkeeping. See the
 [sharing decision](../decisions/shared-dependency-interfaces.md) and
 [native diamond workload](../guides/native-shared-dependencies.md).

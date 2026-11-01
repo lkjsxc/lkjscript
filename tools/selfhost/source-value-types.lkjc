@@ -1,0 +1,665 @@
+declarations.begin
+(units
+  (module create source-value-types
+    (function create primitive
+      (visibility package)
+      (effect pure)
+      (parameter create kind (type I64))
+      (returns I64)
+      (body (call ci::add (i64 1) (call ci::mul (call ci::sub (local kind) (i64 1)) (i64 16)))))
+    (function create kind
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local identity) (i64 0))
+          (i64 0)
+          (call ci::u64 (local types) (call ci::sub (local identity) (i64 1))))))
+    (function create payload
+      (visibility package)
+      (effect pure)
+      (parameter create identity (type I64))
+      (returns I64)
+      (body (call ci::add (local identity) (i64 15))))
+    (function create successor
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding next
+            (call ci::add
+              (call ci::add (call ci::sub (local identity) (i64 1)) (i64 16))
+              (call ci::u64 (local types) (call ci::add (local identity) (i64 7)))))
+          (in
+            (if
+              (call ci::eq (local next) (call ci::length (local types)))
+              (i64 0)
+              (call ci::add (local next) (i64 1)))))))
+    (function create source
+      (visibility package)
+      (effect pure)
+      (parameter create mapping (type Bytes))
+      (parameter create row (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::lt (local row) (i64 0))
+          (i64 0)
+          (call ci::u64 (local mapping) (call ci::mul (local row) (i64 8))))))
+    (function create reference
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (call source (local mapping) (call source-type-table::lookup (local graph) (local data) (local at)))))
+    (function create item
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (call kind (local types) (local identity)) (i64 7))
+          (call primitive (i64 1))
+          (call ci::u64 (local types) (call payload (local identity))))))
+    (function create parameter
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (returns I64)
+      (body (call ci::u64 (local types) (call payload (local identity)))))
+    (function create value
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (returns Bool)
+      (body
+        (let
+          (binding tag (call kind (local types) (local identity)))
+          (in
+            (call ci::either
+              (call ci::both (call ci::lt (i64 0) (local tag)) (call ci::lt (local tag) (i64 6)))
+              (call ci::either
+                (call ci::either (call ci::eq (local tag) (i64 7)) (call ci::eq (local tag) (i64 8)))
+                (call ci::eq (local tag) (i64 10))))))))
+    (function create function-count
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (returns I64)
+      (body (call ci::u64 (local types) (call payload (local identity)))))
+    (function create function-parameter
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (parameter create index (type I64))
+      (returns I64)
+      (body
+        (call ci::u64
+          (local types)
+          (call ci::add
+            (call payload (local identity))
+            (call ci::mul (call ci::add (local index) (i64 1)) (i64 8))))))
+    (function create function-result
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (returns I64)
+      (body
+        (call function-parameter
+          (local types)
+          (local identity)
+          (call function-count (local types) (local identity)))))
+    (function create record-count
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (returns I64)
+      (body (call ci::u64 (local types) (call payload (local identity)))))
+    (function create field-row
+      (visibility private)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create at (type I64))
+      (parameter create index (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local index) (i64 0))
+          (local at)
+          (call field-row
+            (local types)
+            (call ci::add
+              (call ci::add (local at) (i64 16))
+              (call ci::u64 (local types) (call ci::add (local at) (i64 8))))
+            (call ci::sub (local index) (i64 1))))))
+    (function create field-type
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (parameter create index (type I64))
+      (returns I64)
+      (body
+        (call ci::u64
+          (local types)
+          (call field-row (local types) (call ci::add (call payload (local identity)) (i64 8)) (local index)))))
+    (function create field-name
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (parameter create index (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding at
+            (call field-row
+              (local types)
+              (call ci::add (call payload (local identity)) (i64 8))
+              (local index)))
+          (binding begin (call ci::add (local at) (i64 16)))
+          (in
+            (call ci::slice
+              (local types)
+              (local begin)
+              (call ci::add (local begin) (call ci::u64 (local types) (call ci::add (local at) (i64 8)))))))))
+    (function create equal-window
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create other (type Bytes))
+      (parameter create other-at (type I64))
+      (parameter create remaining (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local remaining) (i64 0))
+          (bool true)
+          (if
+            (call ci::eq (call ci::get (local data) (local at)) (call ci::get (local other) (local other-at)))
+            (call equal-window
+              (local data)
+              (call ci::add (local at) (i64 1))
+              (local other)
+              (call ci::add (local other-at) (i64 1))
+              (call ci::sub (local remaining) (i64 1)))
+            (bool false)))))
+    (function create find-field
+      (visibility private)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create at (type I64))
+      (parameter create name (type Bytes))
+      (parameter create index (type I64))
+      (parameter create remaining (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local remaining) (i64 0))
+          (i64 -1)
+          (let
+            (binding size (call ci::u64 (local types) (call ci::add (local at) (i64 8))))
+            (binding begin (call ci::add (local at) (i64 16)))
+            (in
+              (if
+                (if
+                  (call ci::eq (local size) (call ci::length (local name)))
+                  (call equal-window (local types) (local begin) (local name) (i64 0) (local size))
+                  (bool false))
+                (local index)
+                (call find-field
+                  (local types)
+                  (call ci::add (local begin) (local size))
+                  (local name)
+                  (call ci::add (local index) (i64 1))
+                  (call ci::sub (local remaining) (i64 1)))))))))
+    (function create field-index
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (parameter create name (type Bytes))
+      (returns I64)
+      (body
+        (call find-field
+          (local types)
+          (call ci::add (call payload (local identity)) (i64 8))
+          (local name)
+          (i64 0)
+          (call record-count (local types) (local identity)))))
+    (function create outcome
+      (visibility private)
+      (effect pure)
+      (parameter create code (type I64))
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (returns (record (code I64) (types Bytes) (identity I64)))
+      (body
+        (record structural
+          (field code (local code))
+          (field types (local types))
+          (field identity (local identity)))))
+    (function create find
+      (visibility private)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create tag (type I64))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local types)))
+          (i64 0)
+          (let
+            (binding size (call ci::u64 (local types) (call ci::add (local at) (i64 8))))
+            (binding begin (call ci::add (local at) (i64 16)))
+            (in
+              (if
+                (if
+                  (call ci::both
+                    (call ci::eq (call ci::u64 (local types) (local at)) (local tag))
+                    (call ci::eq (local size) (call ci::length (local data))))
+                  (call equal-window (local types) (local begin) (local data) (i64 0) (local size))
+                  (bool false))
+                (call ci::add (local at) (i64 1))
+                (call find (local types) (local tag) (local data) (call ci::add (local begin) (local size)))))))))
+    (function create intern
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create tag (type I64))
+      (parameter create data (type Bytes))
+      (returns (record (code I64) (types Bytes) (identity I64)))
+      (body
+        (let
+          (binding known (call find (local types) (local tag) (local data) (i64 0)))
+          (in
+            (if
+              (call ci::lt (i64 0) (local known))
+              (call outcome (i64 0) (local types) (local known))
+              (if
+                (call ci::lt (i64 9223372036854775791) (call ci::length (local types)))
+                (call outcome (i64 13) (local types) (i64 0))
+                (if
+                  (call ci::lt
+                    (call ci::sub (i64 9223372036854775791) (call ci::length (local types)))
+                    (call ci::length (local data)))
+                  (call outcome (i64 13) (local types) (i64 0))
+                  (let
+                    (binding a (type ByteBuffer) (call ci::empty))
+                    (binding b (type ByteBuffer) (call ci::append (local types) (i64 0) (local a)))
+                    (binding c (type ByteBuffer) (call ci::le (local tag) (i64 8) (local b)))
+                    (binding d
+                      (type ByteBuffer)
+                      (call ci::le (call ci::length (local data)) (i64 8) (local c)))
+                    (binding e (type ByteBuffer) (call ci::append (local data) (i64 0) (local d)))
+                    (in
+                      (call outcome
+                        (i64 0)
+                        (call ci::freeze (local e))
+                        (call ci::add (call ci::length (local types)) (i64 1))))))))))))
+    (function create initial
+      (visibility private)
+      (effect pure)
+      (parameter create tag (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns Bytes)
+      (body
+        (if
+          (call ci::eq (local tag) (i64 9))
+          (call ci::freeze (local out))
+          (let
+            (binding a (type ByteBuffer) (call ci::le (local tag) (i64 8) (local out)))
+            (binding b (type ByteBuffer) (call ci::le (i64 0) (i64 8) (local a)))
+            (in (call initial (call ci::add (local tag) (i64 1)) (local b)))))))
+    (function create field-payload
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create remaining (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (ready Bool) (bytes Bytes)))
+      (body
+        (if
+          (call ci::eq (local remaining) (i64 0))
+          (record structural
+            (field code (i64 0))
+            (field ready (bool true))
+            (field bytes (call ci::freeze (local out))))
+          (let
+            (binding name (call source-table::array (local data) (local at)))
+            (binding type-at
+              (call ci::add (field (local name) (name next)) (field (local name) (name value))))
+            (binding identity (call reference (local graph) (local mapping) (local data) (local type-at)))
+            (in
+              (if
+                (call ci::eq (local identity) (i64 0))
+                (record structural
+                  (field code (i64 0))
+                  (field ready (bool false))
+                  (field bytes (call ci::freeze (local out))))
+                (if
+                  (call value (local types) (local identity))
+                  (let
+                    (binding a (type ByteBuffer) (call ci::le (local identity) (i64 8) (local out)))
+                    (binding b
+                      (type ByteBuffer)
+                      (call ci::le (field (local name) (name value)) (i64 8) (local a)))
+                    (binding c
+                      (type ByteBuffer)
+                      (call wire::range
+                        (local data)
+                        (field (local name) (name next))
+                        (local type-at)
+                        (local b)))
+                    (in
+                      (call field-payload
+                        (local graph)
+                        (local types)
+                        (local mapping)
+                        (local data)
+                        (call ci::add (local type-at) (i64 33))
+                        (call ci::sub (local remaining) (i64 1))
+                        (local c))))
+                  (record structural
+                    (field code (i64 13))
+                    (field ready (bool false))
+                    (field bytes (call ci::freeze (local out)))))))))))
+    (function create function-payload
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create remaining (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (ready Bool) (bytes Bytes)))
+      (body
+        (if
+          (call ci::eq (local remaining) (i64 0))
+          (record structural
+            (field code (i64 0))
+            (field ready (bool true))
+            (field bytes (call ci::freeze (local out))))
+          (let
+            (binding identity (call reference (local graph) (local mapping) (local data) (local at)))
+            (in
+              (if
+                (call ci::eq (local identity) (i64 0))
+                (record structural
+                  (field code (i64 0))
+                  (field ready (bool false))
+                  (field bytes (call ci::freeze (local out))))
+                (if
+                  (call callable-value (local types) (local identity))
+                  (let
+                    (binding next (type ByteBuffer) (call ci::le (local identity) (i64 8) (local out)))
+                    (in
+                      (call function-payload
+                        (local graph)
+                        (local types)
+                        (local mapping)
+                        (local data)
+                        (call ci::add (local at) (i64 33))
+                        (call ci::sub (local remaining) (i64 1))
+                        (local next))))
+                  (record structural
+                    (field code (i64 13))
+                    (field ready (bool false))
+                    (field bytes (call ci::freeze (local out)))))))))))
+    (function create composite
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create form (type I64))
+      (returns (record (code I64) (types Bytes) (identity I64)))
+      (body
+        (let
+          (binding fields (call source-table::array (local data) (i64 20)))
+          (binding a (type ByteBuffer) (call ci::empty))
+          (binding b (type ByteBuffer) (call ci::le (field (local fields) (name value)) (i64 8) (local a)))
+          (binding encoded
+            (if
+              (call ci::eq (local form) (i64 10))
+              (call field-payload
+                (local graph)
+                (local types)
+                (local mapping)
+                (local data)
+                (field (local fields) (name next))
+                (field (local fields) (name value))
+                (local b))
+              (call function-payload
+                (local graph)
+                (local types)
+                (local mapping)
+                (local data)
+                (field (local fields) (name next))
+                (call ci::add (field (local fields) (name value)) (i64 1))
+                (local b))))
+          (in
+            (if
+              (call ci::eq (field (local encoded) (name code)) (i64 0))
+              (if
+                (field (local encoded) (name ready))
+                (call intern
+                  (local types)
+                  (if (call ci::eq (local form) (i64 10)) (i64 10) (i64 11))
+                  (field (local encoded) (name bytes)))
+                (call outcome (i64 0) (local types) (i64 0)))
+              (call outcome (field (local encoded) (name code)) (local types) (i64 0)))))))
+    (function create source-row
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create row (type I64))
+      (returns (record (code I64) (types Bytes) (identity I64)))
+      (body
+        (let
+          (binding data (call source-type-table::data (local graph) (local row)))
+          (binding form (call ci::get (local data) (i64 19)))
+          (in
+            (if
+              (call ci::lt (local form) (i64 6))
+              (call outcome
+                (i64 0)
+                (local types)
+                (call primitive
+                  (if
+                    (call ci::lt (local form) (i64 3))
+                    (call ci::sub (i64 3) (local form))
+                    (if
+                      (call ci::eq (local form) (i64 3))
+                      (i64 5)
+                      (if (call ci::eq (local form) (i64 4)) (i64 4) (i64 8))))))
+              (if
+                (call ci::eq (local form) (i64 20))
+                (call outcome (i64 0) (local types) (call primitive (i64 6)))
+                (if
+                  (call ci::eq (local form) (i64 7))
+                  (let
+                    (binding a (type ByteBuffer) (call ci::empty))
+                    (binding b
+                      (type ByteBuffer)
+                      (call ci::le
+                        (call source-table::owner (local graph) (local data) (i64 20) (i64 3))
+                        (i64 8)
+                        (local a)))
+                    (in (call intern (local types) (i64 12) (call ci::freeze (local b)))))
+                  (if
+                    (call ci::eq (local form) (i64 11))
+                    (let
+                      (binding child (call reference (local graph) (local mapping) (local data) (i64 20)))
+                      (in
+                        (if
+                          (call ci::eq (local child) (i64 0))
+                          (call outcome (i64 0) (local types) (i64 0))
+                          (if
+                            (call ci::eq (local child) (call primitive (i64 1)))
+                            (call outcome (i64 0) (local types) (call primitive (i64 7)))
+                            (if
+                              (call ci::eq (call kind (local types) (local child)) (i64 12))
+                              (let
+                                (binding a (type ByteBuffer) (call ci::empty))
+                                (binding b (type ByteBuffer) (call ci::le (local child) (i64 8) (local a)))
+                                (in (call intern (local types) (i64 9) (call ci::freeze (local b)))))
+                              (call outcome (i64 13) (local types) (i64 0)))))))
+                    (if
+                      (call ci::either
+                        (call ci::eq (local form) (i64 10))
+                        (call ci::eq (local form) (i64 16)))
+                      (call composite (local graph) (local types) (local mapping) (local data) (local form))
+                      (call outcome (i64 13) (local types) (i64 0)))))))))))
+    (function create pass
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create row (type I64))
+      (parameter create pending (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (types Bytes) (mapping Bytes) (pending I64)))
+      (body
+        (if
+          (call ci::eq (local row) (call source-type-table::count (local graph)))
+          (record structural
+            (field code (i64 0))
+            (field types (local types))
+            (field mapping (call ci::freeze (local out)))
+            (field pending (local pending)))
+          (let
+            (binding old (call source (local mapping) (local row)))
+            (binding resolved
+              (if
+                (call ci::lt (i64 0) (local old))
+                (call outcome (i64 0) (local types) (local old))
+                (call source-row (local graph) (local types) (local mapping) (local row))))
+            (in
+              (if
+                (call ci::eq (field (local resolved) (name code)) (i64 0))
+                (let
+                  (binding identity (field (local resolved) (name identity)))
+                  (binding next (type ByteBuffer) (call ci::le (local identity) (i64 8) (local out)))
+                  (in
+                    (call pass
+                      (local graph)
+                      (field (local resolved) (name types))
+                      (local mapping)
+                      (call ci::add (local row) (i64 1))
+                      (call ci::add
+                        (local pending)
+                        (if (call ci::eq (local identity) (i64 0)) (i64 1) (i64 0)))
+                      (local next))))
+                (record structural
+                  (field code (field (local resolved) (name code)))
+                  (field types (local types))
+                  (field mapping (call ci::freeze (local out)))
+                  (field pending (local pending)))))))))
+    (function create rounds
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create previous (type I64))
+      (returns (record (code I64) (types Bytes) (mapping Bytes)))
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::empty))
+          (binding next (call pass (local graph) (local types) (local mapping) (i64 0) (i64 0) (local a)))
+          (in
+            (if
+              (call ci::eq (field (local next) (name code)) (i64 0))
+              (if
+                (call ci::eq (field (local next) (name pending)) (i64 0))
+                (record structural
+                  (field code (i64 0))
+                  (field types (field (local next) (name types)))
+                  (field mapping (field (local next) (name mapping))))
+                (if
+                  (call ci::lt (field (local next) (name pending)) (local previous))
+                  (call rounds
+                    (local graph)
+                    (field (local next) (name types))
+                    (field (local next) (name mapping))
+                    (field (local next) (name pending)))
+                  (record structural
+                    (field code (i64 17))
+                    (field types (local types))
+                    (field mapping (local mapping)))))
+              (record structural
+                (field code (field (local next) (name code)))
+                (field types (local types))
+                (field mapping (local mapping))))))))
+    (function create zeros
+      (visibility private)
+      (effect pure)
+      (parameter create count (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns Bytes)
+      (body
+        (if
+          (call ci::eq (local count) (i64 0))
+          (call ci::freeze (local out))
+          (let
+            (binding next (type ByteBuffer) (call ci::le (i64 0) (i64 8) (local out)))
+            (in (call zeros (call ci::sub (local count) (i64 1)) (local next)))))))
+    (function create prepare
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (returns (record (code I64) (types Bytes) (mapping Bytes)))
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::empty))
+          (binding types (call initial (i64 1) (local a)))
+          (binding b (type ByteBuffer) (call ci::empty))
+          (binding count (call source-type-table::count (local graph)))
+          (binding mapping (call zeros (local count) (local b)))
+          (in (call rounds (local graph) (local types) (local mapping) (local count))))))
+    (function create owned
+      (visibility package)
+      (effect pure)
+      (parameter create identity (type I64))
+      (returns Bool)
+      (body (call ci::eq (local identity) (call primitive (i64 6)))))
+    (function create callable-value
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (returns Bool)
+      (body (call ci::either (call value (local types) (local identity)) (call owned (local identity)))))))
+declarations.end

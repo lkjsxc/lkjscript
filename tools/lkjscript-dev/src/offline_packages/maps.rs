@@ -1342,8 +1342,8 @@ mod tests {
         );
         let mut receipt: Receipt = serde_json::from_slice(&fs::read(&source).unwrap()).unwrap();
         let full = match receipt.schema.as_str() {
-            "lkjscript-offline-semantic-1" => true,
-            "lkjscript-offline-persistent-maps-semantic-1" => false,
+            "lkjscript-offline-semantic-2" => true,
+            "lkjscript-offline-persistent-maps-semantic-2" => false,
             other => panic!("unsupported current map fixture workload: {other}"),
         };
         if full {

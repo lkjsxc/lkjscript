@@ -1,0 +1,493 @@
+declarations.begin
+(units
+  (module create source-summary-aggregate
+    (function create contribution
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create roles (type Bytes))
+      (parameter create summaries (type Bytes))
+      (parameter create at (type I64))
+      (parameter create dimension (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding child (call ci::u64 (local roles) (call ci::add (local at) (i64 32))))
+          (binding mode (call ci::u64 (local roles) (call ci::add (local at) (i64 40))))
+          (binding role (call source-summary-roles::encode (local roles) (local at)))
+          (binding key (call source-summary-material::key-start (local graph) (local child)))
+          (binding with-role
+            (type ByteBuffer)
+            (call source-summary-material::piece
+              (i64 1)
+              (local role)
+              (i64 0)
+              (call ci::length (local role))
+              (local out)))
+          (binding prefix
+            (type ByteBuffer)
+            (call source-summary-material::piece
+              (i64 2)
+              (local graph)
+              (local key)
+              (call ci::add (local key) (i64 17))
+              (local with-role)))
+          (in
+            (if
+              (call ci::eq (local dimension) (i64 0))
+              (let
+                (binding summary-buffer-61
+                  (type ByteBuffer)
+                  (let
+                    (binding summary-buffer-60
+                      (type ByteBuffer)
+                      (let
+                        (binding summary-buffer-59
+                          (type ByteBuffer)
+                          (call source-summary-material::digest-piece
+                            (i64 3)
+                            (local summaries)
+                            (local child)
+                            (i64 0)
+                            (local prefix)))
+                        (in
+                          (call source-summary-material::digest-piece
+                            (i64 3)
+                            (local summaries)
+                            (local child)
+                            (i64 2)
+                            (local summary-buffer-59)))))
+                    (in
+                      (call source-summary-material::digest-piece
+                        (i64 3)
+                        (local summaries)
+                        (local child)
+                        (i64 3)
+                        (local summary-buffer-60)))))
+                (in
+                  (call source-summary-material::digest-piece
+                    (i64 3)
+                    (local summaries)
+                    (local child)
+                    (i64 4)
+                    (local summary-buffer-61))))
+              (if
+                (call ci::eq (local dimension) (i64 1))
+                (let
+                  (binding implementation
+                    (type ByteBuffer)
+                    (call source-summary-material::digest-piece
+                      (i64 3)
+                      (local summaries)
+                      (local child)
+                      (i64 1)
+                      (local prefix)))
+                  (in
+                    (if
+                      (call ci::eq (local mode) (i64 2))
+                      (let
+                        (binding summary-buffer-65
+                          (type ByteBuffer)
+                          (let
+                            (binding summary-buffer-64
+                              (type ByteBuffer)
+                              (let
+                                (binding summary-buffer-63
+                                  (type ByteBuffer)
+                                  (let
+                                    (binding summary-buffer-62
+                                      (type ByteBuffer)
+                                      (call source-summary-material::digest-piece
+                                        (i64 3)
+                                        (local summaries)
+                                        (local child)
+                                        (i64 0)
+                                        (local implementation)))
+                                    (in
+                                      (call source-summary-material::digest-piece
+                                        (i64 3)
+                                        (local summaries)
+                                        (local child)
+                                        (i64 2)
+                                        (local summary-buffer-62)))))
+                                (in
+                                  (call source-summary-material::digest-piece
+                                    (i64 3)
+                                    (local summaries)
+                                    (local child)
+                                    (i64 3)
+                                    (local summary-buffer-63)))))
+                            (in
+                              (call source-summary-material::digest-piece
+                                (i64 3)
+                                (local summaries)
+                                (local child)
+                                (i64 4)
+                                (local summary-buffer-64)))))
+                        (in
+                          (call source-summary-material::digest-piece
+                            (i64 3)
+                            (local summaries)
+                            (local child)
+                            (i64 5)
+                            (local summary-buffer-65))))
+                      (local implementation))))
+                (call source-summary-material::digest-piece
+                  (i64 3)
+                  (local summaries)
+                  (local child)
+                  (local dimension)
+                  (local prefix))))))))
+    (function create children
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create roles (type Bytes))
+      (parameter create summaries (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create dimension (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding next
+              (type ByteBuffer)
+              (if
+                (call ci::both
+                  (call ci::eq (local dimension) (i64 0))
+                  (call ci::eq (call ci::u64 (local roles) (call ci::add (local at) (i64 40))) (i64 2)))
+                (local out)
+                (call source-summary-aggregate::contribution
+                  (local graph)
+                  (local roles)
+                  (local summaries)
+                  (local at)
+                  (local dimension)
+                  (local out))))
+            (in
+              (call source-summary-aggregate::children
+                (local graph)
+                (local roles)
+                (local summaries)
+                (call ci::add (local at) (i64 48))
+                (local end)
+                (local dimension)
+                (local next)))))))
+    (function create dimension
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create roles (type Bytes))
+      (parameter create summaries (type Bytes))
+      (parameter create row (type I64))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create dimension (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding seed
+            (type ByteBuffer)
+            (let
+              (binding summary-buffer-66 (type ByteBuffer) (call ci::empty))
+              (in
+                (call source-summary-material::digest-piece
+                  (i64 0)
+                  (local summaries)
+                  (local row)
+                  (local dimension)
+                  (local summary-buffer-66)))))
+          (binding material
+            (type ByteBuffer)
+            (call source-summary-aggregate::children
+              (local graph)
+              (local roles)
+              (local summaries)
+              (local at)
+              (local end)
+              (local dimension)
+              (local seed)))
+          (in (call source-summary-material::finish (local dimension) (local material))))))
+    (function create semantic-dimensions
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create roles (type Bytes))
+      (parameter create summaries (type Bytes))
+      (parameter create row (type I64))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create dimension (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local dimension) (i64 6))
+          (call wire::range
+            (local summaries)
+            (call ci::add (call ci::mul (local row) (i64 224)) (i64 192))
+            (call ci::mul (call ci::add (local row) (i64 1)) (i64 224))
+            (local out))
+          (let
+            (binding digest
+              (call source-summary-aggregate::dimension
+                (local graph)
+                (local roles)
+                (local summaries)
+                (local row)
+                (local at)
+                (local end)
+                (local dimension)))
+            (binding next (type ByteBuffer) (call ci::append (local digest) (i64 0) (local out)))
+            (in
+              (call source-summary-aggregate::semantic-dimensions
+                (local graph)
+                (local roles)
+                (local summaries)
+                (local row)
+                (local at)
+                (local end)
+                (call ci::add (local dimension) (i64 1))
+                (local next)))))))
+    (function create owner
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create roles (type Bytes))
+      (parameter create summaries (type Bytes))
+      (parameter create row (type I64))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create validation (type Bool))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (call wire::range
+            (local summaries)
+            (call ci::mul (local row) (i64 224))
+            (call ci::mul (call ci::add (local row) (i64 1)) (i64 224))
+            (local out))
+          (if
+            (local validation)
+            (let
+              (binding digest
+                (call source-summary-aggregate::dimension
+                  (local graph)
+                  (local roles)
+                  (local summaries)
+                  (local row)
+                  (local at)
+                  (local end)
+                  (i64 6)))
+              (in
+                (let
+                  (binding summary-buffer-67
+                    (type ByteBuffer)
+                    (call wire::range
+                      (local summaries)
+                      (call ci::mul (local row) (i64 224))
+                      (call ci::add (call ci::mul (local row) (i64 224)) (i64 192))
+                      (local out)))
+                  (in (call ci::append (local digest) (i64 0) (local summary-buffer-67))))))
+            (call source-summary-aggregate::semantic-dimensions
+              (local graph)
+              (local roles)
+              (local summaries)
+              (local row)
+              (local at)
+              (local end)
+              (i64 0)
+              (local out))))))
+    (function create ready
+      (visibility package)
+      (effect pure)
+      (parameter create roles (type Bytes))
+      (parameter create settled (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (bool true)
+          (if
+            (call ci::eq
+              (call ci::get (local settled) (call ci::u64 (local roles) (call ci::add (local at) (i64 32))))
+              (i64 1))
+            (call source-summary-aggregate::ready
+              (local roles)
+              (local settled)
+              (call ci::add (local at) (i64 48))
+              (local end))
+            (bool false)))))
+    (function create scan
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create roles (type Bytes))
+      (parameter create directory (type Bytes))
+      (parameter create summaries (type Bytes))
+      (parameter create settled (type Bytes))
+      (parameter create validation (type Bool))
+      (parameter create row (type I64))
+      (parameter create remaining (type I64))
+      (parameter create progress (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (parameter create flags (type ByteBuffer) (use consume))
+      (returns (record (rows Bytes) (settled Bytes) (remaining I64) (progress I64)))
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (let
+            (binding rows (call ci::freeze (local out)))
+            (binding done (call ci::freeze (local flags)))
+            (in
+              (record structural
+                (field rows (local rows))
+                (field settled (local done))
+                (field remaining (local remaining))
+                (field progress (local progress)))))
+          (let
+            (binding at (call ci::u64 (local directory) (call ci::mul (local row) (i64 16))))
+            (binding end
+              (call ci::u64 (local directory) (call ci::add (call ci::mul (local row) (i64 16)) (i64 8))))
+            (binding was-settled (call ci::eq (call ci::get (local settled) (local row)) (i64 1)))
+            (binding ready
+              (if
+                (local was-settled)
+                (bool true)
+                (call source-summary-aggregate::ready (local roles) (local settled) (local at) (local end))))
+            (binding next
+              (type ByteBuffer)
+              (if
+                (if (local was-settled) (bool false) (local ready))
+                (call source-summary-aggregate::owner
+                  (local graph)
+                  (local roles)
+                  (local summaries)
+                  (local row)
+                  (local at)
+                  (local end)
+                  (local validation)
+                  (local out))
+                (call wire::range
+                  (local summaries)
+                  (call ci::mul (local row) (i64 224))
+                  (call ci::mul (call ci::add (local row) (i64 1)) (i64 224))
+                  (local out))))
+            (binding next-flags
+              (type ByteBuffer)
+              (call ci::push (if (local ready) (i64 1) (i64 0)) (local flags)))
+            (in
+              (call source-summary-aggregate::scan
+                (local graph)
+                (local roles)
+                (local directory)
+                (local summaries)
+                (local settled)
+                (local validation)
+                (call ci::add (local row) (i64 1))
+                (call ci::add (local remaining) (if (local ready) (i64 0) (i64 1)))
+                (call ci::add
+                  (local progress)
+                  (if (local was-settled) (i64 0) (if (local ready) (i64 1) (i64 0))))
+                (local next)
+                (local next-flags)))))))
+    (function create rounds
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create roles (type Bytes))
+      (parameter create directory (type Bytes))
+      (parameter create summaries (type Bytes))
+      (parameter create settled (type Bytes))
+      (parameter create validation (type Bool))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (let
+          (binding next
+            (let
+              (binding summary-buffer-68 (type ByteBuffer) (call ci::empty))
+              (binding summary-buffer-69 (type ByteBuffer) (call ci::empty))
+              (in
+                (call source-summary-aggregate::scan
+                  (local graph)
+                  (local roles)
+                  (local directory)
+                  (local summaries)
+                  (local settled)
+                  (local validation)
+                  (i64 0)
+                  (i64 0)
+                  (i64 0)
+                  (local summary-buffer-68)
+                  (local summary-buffer-69)))))
+          (in
+            (if
+              (call ci::eq (field (local next) (name remaining)) (i64 0))
+              (record structural (field code (i64 0)) (field rows (field (local next) (name rows))))
+              (if
+                (call ci::eq (field (local next) (name progress)) (i64 0))
+                (record structural (field code (i64 15)) (field rows (call ci::text-bytes (text ""))))
+                (call source-summary-aggregate::rounds
+                  (local graph)
+                  (local roles)
+                  (local directory)
+                  (field (local next) (name rows))
+                  (field (local next) (name settled))
+                  (local validation))))))))
+    (function create zeroes
+      (visibility package)
+      (effect pure)
+      (parameter create remaining (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns Bytes)
+      (body
+        (if
+          (call ci::eq (local remaining) (i64 0))
+          (call ci::freeze (local out))
+          (let
+            (binding summary-buffer-70 (type ByteBuffer) (call ci::push (i64 0) (local out)))
+            (in
+              (call source-summary-aggregate::zeroes
+                (call ci::sub (local remaining) (i64 1))
+                (local summary-buffer-70)))))))
+    (function create prepare
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create roles (type Bytes))
+      (parameter create directory (type Bytes))
+      (parameter create summaries (type Bytes))
+      (parameter create validation (type Bool))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (if
+          (call ci::both
+            (call ci::eq
+              (call ci::length (local directory))
+              (call ci::mul (call source-table::count (local graph)) (i64 16)))
+            (call ci::eq
+              (call ci::length (local summaries))
+              (call ci::mul (call source-table::count (local graph)) (i64 224))))
+          (call source-summary-aggregate::rounds
+            (local graph)
+            (local roles)
+            (local directory)
+            (local summaries)
+            (let
+              (binding summary-buffer-71 (type ByteBuffer) (call ci::empty))
+              (in
+                (call source-summary-aggregate::zeroes
+                  (call source-table::count (local graph))
+                  (local summary-buffer-71))))
+            (local validation))
+          (record structural (field code (i64 12)) (field rows (call ci::text-bytes (text "")))))))))
+declarations.end

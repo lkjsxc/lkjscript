@@ -9,6 +9,33 @@ fn fixture() -> KernelSnapshot {
     .unwrap()
 }
 
+/// A complete source with two same-named top-level modules. The existing class
+/// inventory controls use this same namespace mutation, independent of E2 forms.
+pub(super) fn artifact_rejection_fixture() -> Result<KernelSnapshot, String> {
+    let mut source = fixture();
+    let mut modules = source
+        .owners
+        .iter()
+        .filter_map(|(key, record)| match record {
+            OwnerRecord::Module(record) => Some((*key, record.name.clone())),
+            _ => None,
+        });
+    let (_, name) = modules
+        .next()
+        .ok_or_else(|| "namespace first module absent".to_owned())?;
+    let (other, _) = modules
+        .next()
+        .ok_or_else(|| "namespace second module absent".to_owned())?;
+    *name_mut(
+        source
+            .owners
+            .get_mut(&other)
+            .ok_or_else(|| "namespace module disappeared".to_owned())?,
+    ) = name;
+    rebind_owner_inventory(&mut source);
+    Ok(source)
+}
+
 fn name_mut(record: &mut OwnerRecord) -> &mut kernel::Name {
     match record {
         OwnerRecord::Module(value) => &mut value.name,

@@ -1,0 +1,278 @@
+declarations.begin
+(units
+  (module create pack-target
+    (function create extent
+      (visibility private)
+      (effect pure)
+      (parameter create left (type I64))
+      (parameter create right (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::either (call ci::lt (local left) (i64 0)) (call ci::lt (local right) (i64 0)))
+          (bool false)
+          (call ci::lte (local right) (call ci::sub (i64 9223372036854775807) (local left))))))
+    (function create failed-plan
+      (visibility private)
+      (effect pure)
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (diagnostic I64) (count I64) (size I64) (plan Bytes)))
+      (body
+        (sequence
+          (call ci::discard (local out))
+          (record
+            structural
+            (field diagnostic (i64 3))
+            (field count (i64 0))
+            (field size (i64 0))
+            (field plan (call ci::text-bytes (text "")))))))
+    (function create part
+      (visibility private)
+      (effect pure)
+      (parameter create start (type I64))
+      (parameter create end (type I64))
+      (parameter create size (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::le (local start) (i64 8) (local out)))
+          (binding b (type ByteBuffer) (call ci::le (local end) (i64 8) (local a)))
+          (in (call ci::le (local size) (i64 8) (local b))))))
+    (function create finish
+      (visibility private)
+      (effect pure)
+      (parameter create start (type I64))
+      (parameter create end (type I64))
+      (parameter create count (type I64))
+      (parameter create payload (type I64))
+      (parameter create parts (type I64))
+      (parameter create total (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (diagnostic I64) (count I64) (size I64) (plan Bytes)))
+      (body
+        (let
+          (binding packed (call pack::encoded-size (local count) (local payload)))
+          (in
+            (if
+              (call extent (local packed) (i64 40))
+              (if
+                (call extent (local total) (call ci::add (local packed) (i64 40)))
+                (let
+                  (binding after
+                    (type ByteBuffer)
+                    (call part (local start) (local end) (local packed) (local out)))
+                  (in
+                    (record
+                      structural
+                      (field diagnostic (i64 0))
+                      (field count (call ci::add (local parts) (i64 1)))
+                      (field size (call ci::add (local total) (call ci::add (local packed) (i64 40))))
+                      (field plan (call ci::freeze (local after))))))
+                (call failed-plan (local out)))
+              (call failed-plan (local out)))))))
+    (function create scan
+      (visibility private)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create at (type I64))
+      (parameter create start (type I64))
+      (parameter create count (type I64))
+      (parameter create payload (type I64))
+      (parameter create parts (type I64))
+      (parameter create total (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (diagnostic I64) (count I64) (size I64) (plan Bytes)))
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local rows)))
+          (call
+            finish
+            (local start)
+            (local at)
+            (local count)
+            (local payload)
+            (local parts)
+            (local total)
+            (local out))
+          (let
+            (binding next-bytes (call ci::field64 (local rows) (local at) (i64 16)))
+            (in
+              (if
+                (call extent (local payload) (local next-bytes))
+                (let
+                  (binding next-size
+                    (call
+                      pack::encoded-size
+                      (call ci::add (local count) (i64 1))
+                      (call ci::add (local payload) (local next-bytes))))
+                  (in
+                    (if
+                      (call
+                        ci::both
+                        (call ci::lt (i64 0) (local count))
+                        (call
+                          ci::either
+                          (call ci::lt (local next-size) (i64 0))
+                          (call ci::lt (i64 4194304) (local next-size))))
+                      (let
+                        (binding packed (call pack::encoded-size (local count) (local payload)))
+                        (in
+                          (if
+                            (call extent (local packed) (i64 40))
+                            (if
+                              (call extent (local total) (call ci::add (local packed) (i64 40)))
+                              (let
+                                (binding after
+                                  (type ByteBuffer)
+                                  (call part (local start) (local at) (local packed) (local out)))
+                                (in
+                                  (call
+                                    scan
+                                    (local rows)
+                                    (local at)
+                                    (local at)
+                                    (i64 0)
+                                    (i64 0)
+                                    (call ci::add (local parts) (i64 1))
+                                    (call ci::add (local total) (call ci::add (local packed) (i64 40)))
+                                    (local after))))
+                              (call failed-plan (local out)))
+                            (call failed-plan (local out)))))
+                      (if
+                        (call ci::lt (local next-size) (i64 0))
+                        (call failed-plan (local out))
+                        (call
+                          scan
+                          (local rows)
+                          (call ci::add (local at) (i64 56))
+                          (local start)
+                          (call ci::add (local count) (i64 1))
+                          (call ci::add (local payload) (local next-bytes))
+                          (local parts)
+                          (local total)
+                          (local out))))))
+                (if
+                  (call ci::lt (i64 0) (local count))
+                  (let
+                    (binding packed (call pack::encoded-size (local count) (local payload)))
+                    (in
+                      (if
+                        (call extent (local packed) (i64 40))
+                        (if
+                          (call extent (local total) (call ci::add (local packed) (i64 40)))
+                          (let
+                            (binding after
+                              (type ByteBuffer)
+                              (call part (local start) (local at) (local packed) (local out)))
+                            (in
+                              (call
+                                scan
+                                (local rows)
+                                (local at)
+                                (local at)
+                                (i64 0)
+                                (i64 0)
+                                (call ci::add (local parts) (i64 1))
+                                (call ci::add (local total) (call ci::add (local packed) (i64 40)))
+                                (local after))))
+                          (call failed-plan (local out)))
+                        (call failed-plan (local out)))))
+                  (call failed-plan (local out)))))))))
+    (function create prepare
+      (visibility public)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (returns (record (diagnostic I64) (count I64) (size I64) (plan Bytes)))
+      (body
+        (let
+          (binding out (type ByteBuffer) (call ci::empty))
+          (in
+            (if
+              (call
+                ci::both
+                (call ci::lt (i64 0) (call ci::length (local rows)))
+                (call
+                  ci::eq
+                  (call ci::mul (call ci::div (call ci::length (local rows)) (i64 56)) (i64 56))
+                  (call ci::length (local rows))))
+              (call scan (local rows) (i64 0) (i64 0) (i64 0) (i64 0) (i64 0) (i64 0) (local out))
+              (call failed-plan (local out)))))))
+    (function create failed-encoding
+      (visibility private)
+      (effect pure)
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (sequence
+          (call ci::discard (local out))
+          (record structural (field diagnostic (i64 3)) (field image (call ci::text-bytes (text "")))))))
+    (function create encode-parts
+      (visibility private)
+      (effect pure)
+      (parameter create input (type Bytes))
+      (parameter create generated (type Bytes))
+      (parameter create rows (type Bytes))
+      (parameter create plan (type Bytes))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local plan)))
+          (record structural (field diagnostic (i64 0)) (field image (call ci::freeze (local out))))
+          (let
+            (binding start (call ci::field64 (local plan) (local at) (i64 0)))
+            (binding end (call ci::field64 (local plan) (local at) (i64 8)))
+            (binding packed
+              (call
+                pack::encode
+                (local input)
+                (local generated)
+                (call ci::slice (local rows) (local start) (local end))))
+            (binding image (field (local packed) (name image)))
+            (in
+              (if
+                (call
+                  ci::eq
+                  (call ci::length (local image))
+                  (call ci::field64 (local plan) (local at) (i64 16)))
+                (let
+                  (binding a
+                    (type ByteBuffer)
+                    (call wire::be (call ci::length (local image)) (i64 8) (local out)))
+                  (binding b
+                    (type ByteBuffer)
+                    (call ci::append (field (local packed) (name digest)) (i64 0) (local a)))
+                  (binding c (type ByteBuffer) (call ci::append (local image) (i64 0) (local b)))
+                  (in
+                    (call
+                      encode-parts
+                      (local input)
+                      (local generated)
+                      (local rows)
+                      (local plan)
+                      (call ci::add (local at) (i64 24))
+                      (local c))))
+                (call failed-encoding (local out))))))))
+    (function create encode
+      (visibility public)
+      (effect pure)
+      (parameter create input (type Bytes))
+      (parameter create generated (type Bytes))
+      (parameter create rows (type Bytes))
+      (parameter create plan (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (let
+          (binding out (type ByteBuffer) (call ci::empty))
+          (in
+            (call
+              encode-parts
+              (local input)
+              (local generated)
+              (local rows)
+              (local plan)
+              (i64 0)
+              (local out))))))))
+declarations.end

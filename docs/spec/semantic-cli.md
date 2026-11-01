@@ -986,7 +986,19 @@ name, or artifact string scan is exposed or required.
 Current export creates one code-complete immutable source container for the root and its exact
 transitive closure. Dependency stage validates all canonical graphs, private bodies, interfaces,
 and closed intrinsic signatures, then atomically installs closure-ready operational material without
-changing semantic HEAD. Only reviewed `add.dependency` and `replace.dependency` install accepted
+changing semantic HEAD. These operations use unbounded ordinary aggregate source work/read
+admission. `package.source-admission` discovery states the exact optional internal policy,
+visit/read metrics and separate remaining container, topology, object, depth and storage limits.
+
+A successful dependency stage's `validation` record reports `contract`, `visits`,
+`visits-saturated`, `read-bytes` and `read-bytes-saturated`. Each true flag marks its numeric
+observation as a lower bound; false means exact, including exactly u64::MAX. A transformed lower
+bound may be numerically below u64::MAX while its flag remains true. These observations do not
+grant permission, size storage or prove an exact upper bound. Stage totals include the complete
+container-admission prefix, input staging and actual readback observations; they are not allocator,
+live-memory or RSS measurements. Saturation alone does not reject ordinary staging.
+
+Only reviewed `add.dependency` and `replace.dependency` install accepted
 bindings. The logical review contains ordered `package-before` and `package-after` inventories
 binding package, semantic revision, logical revision, and interface. Its bounded response summarizes
 added/removed/changed members and interface changes; the plan commitment binds the complete file.

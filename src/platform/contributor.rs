@@ -365,7 +365,9 @@ pub fn offline_package_inventory(
         edges: oracle.edges,
         bytes: bytes.len(),
         oracle_validation_visits: oracle.validation_visits,
+        oracle_validation_visits_saturated: oracle.validation_visits_saturated,
         oracle_validation_read_bytes: oracle.validation_read_bytes,
+        oracle_validation_read_bytes_saturated: oracle.validation_read_bytes_saturated,
     })
 }
 
@@ -377,7 +379,9 @@ pub struct OfflinePackageInventory {
     pub edges: usize,
     pub bytes: usize,
     pub oracle_validation_visits: u64,
+    pub oracle_validation_visits_saturated: bool,
     pub oracle_validation_read_bytes: u64,
+    pub oracle_validation_read_bytes_saturated: bool,
 }
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]

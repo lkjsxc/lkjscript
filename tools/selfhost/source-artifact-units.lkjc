@@ -1,0 +1,208 @@
+declarations.begin
+(units
+  (module create source-artifact-units
+    (function create failure
+      (visibility private)
+      (effect pure)
+      (parameter create code (type I64))
+      (returns (record (code I64) (frames Bytes) (count I64) (bytes I64)))
+      (body
+        (record
+          structural
+          (field code (local code))
+          (field frames (call ci::text-bytes (text "")))
+          (field count (i64 0))
+          (field bytes (i64 0)))))
+    (function create abort
+      (visibility private)
+      (effect pure)
+      (parameter create code (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (frames Bytes) (count I64) (bytes I64)))
+      (body (sequence (call ci::discard (local out)) (call failure (local code)))))
+    (function create selected
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (returns Bool)
+      (body
+        (let
+          (binding kind (call source-table::kind (local graph) (local row)))
+          (in
+            (call
+              ci::either
+              (call ci::eq (local kind) (i64 5))
+              (call
+                ci::either
+                (call ci::eq (local kind) (i64 6))
+                (call ci::either (call ci::eq (local kind) (i64 9)) (call ci::eq (local kind) (i64 20)))))))))
+    (function create fill
+      (visibility private)
+      (effect pure)
+      (parameter create descriptor (type Bytes))
+      (parameter create summaries (type Bytes))
+      (parameter create row (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding at (call ci::mul (local row) (i64 224)))
+          (binding a (type ByteBuffer) (call ci::empty))
+          (binding b (type ByteBuffer) (call wire::range (local descriptor) (i64 0) (i64 48) (local a)))
+          (binding c
+            (type ByteBuffer)
+            (call wire::range (local summaries) (local at) (call ci::add (local at) (i64 160)) (local b)))
+          (binding d
+            (type ByteBuffer)
+            (call
+              wire::range
+              (local summaries)
+              (call ci::add (local at) (i64 192))
+              (call ci::add (local at) (i64 224))
+              (local c)))
+          (binding e
+            (type ByteBuffer)
+            (call
+              wire::range
+              (local descriptor)
+              (i64 240)
+              (call ci::length (local descriptor))
+              (local d)))
+          (in (call ci::freeze (local e))))))
+    (function create walk
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create custody (type Bytes))
+      (parameter create summaries (type Bytes))
+      (parameter create row (type I64))
+      (parameter create count (type I64))
+      (parameter create bytes (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (frames Bytes) (count I64) (bytes I64)))
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (record
+            structural
+            (field code (i64 0))
+            (field frames (call ci::freeze (local out)))
+            (field count (local count))
+            (field bytes (local bytes)))
+          (if
+            (call selected (local graph) (local row))
+            (let
+              (binding lowered
+                (call
+                  source-unit-lower::prepare
+                  (local graph)
+                  (local facts)
+                  (local parents)
+                  (local types)
+                  (local mapping)
+                  (local custody)
+                  (local row)))
+              (in
+                (if
+                  (call ci::eq (field (local lowered) (name code)) (i64 0))
+                  (if
+                    (call ci::lte (i64 432) (call ci::length (field (local lowered) (name descriptor))))
+                    (let
+                      (binding descriptor
+                        (call
+                          fill
+                          (field (local lowered) (name descriptor))
+                          (local summaries)
+                          (local row)))
+                      (binding length (call ci::length (local descriptor)))
+                      (binding extent
+                        (call
+                          source-unit-tables::add
+                          (call ci::size (local out))
+                          (call source-unit-tables::add (i64 8) (local length))))
+                      (binding bytes (call source-unit-tables::add (local bytes) (local length)))
+                      (in
+                        (if
+                          (call
+                            ci::both
+                            (call ci::lte (i64 0) (local extent))
+                            (call
+                              ci::both
+                              (call ci::lte (i64 0) (local bytes))
+                              (call artifact-check::unit (local descriptor))))
+                          (let
+                            (binding a
+                              (type ByteBuffer)
+                              (call ci::le (local length) (i64 8) (local out)))
+                            (binding b
+                              (type ByteBuffer)
+                              (call ci::append (local descriptor) (i64 0) (local a)))
+                            (in
+                              (call
+                                walk
+                                (local graph)
+                                (local facts)
+                                (local parents)
+                                (local types)
+                                (local mapping)
+                                (local custody)
+                                (local summaries)
+                                (call ci::add (local row) (i64 1))
+                                (call ci::add (local count) (i64 1))
+                                (local bytes)
+                                (local b))))
+                          (call abort (i64 3) (local out)))))
+                    (call abort (i64 3) (local out)))
+                  (call abort (field (local lowered) (name code)) (local out)))))
+            (call
+              walk
+              (local graph)
+              (local facts)
+              (local parents)
+              (local types)
+              (local mapping)
+              (local custody)
+              (local summaries)
+              (call ci::add (local row) (i64 1))
+              (local count)
+              (local bytes)
+              (local out))))))
+    (function create prepare
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create custody (type Bytes))
+      (parameter create summaries (type Bytes))
+      (returns (record (code I64) (frames Bytes) (count I64) (bytes I64)))
+      (body
+        (if
+          (call
+            ci::eq
+            (call ci::length (local summaries))
+            (call source-unit-tables::mul (call source-table::count (local graph)) (i64 224)))
+          (let
+            (binding out (type ByteBuffer) (call ci::empty))
+            (in
+              (call
+                walk
+                (local graph)
+                (local facts)
+                (local parents)
+                (local types)
+                (local mapping)
+                (local custody)
+                (local summaries)
+                (i64 0)
+                (i64 0)
+                (i64 0)
+                (local out))))
+          (call failure (i64 3)))))))
+declarations.end

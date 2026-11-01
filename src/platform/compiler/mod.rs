@@ -22,6 +22,7 @@ pub(crate) mod manifest;
 pub(crate) mod selfhost_artifact_input;
 #[cfg(test)]
 pub(crate) mod selfhost_input;
+pub(crate) mod selfhost_source_input;
 pub(crate) mod unit;
 
 pub(crate) use artifact::{

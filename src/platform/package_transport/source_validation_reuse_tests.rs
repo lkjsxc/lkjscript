@@ -83,9 +83,50 @@ fn source_validation_reuse_collect<S: ImmutableObjectStore + ?Sized>(
 ) -> Result<AdmittedClosure, Diagnostic> {
     session.collect_preplanned_with_budget(
         source_validation_reuse_plan(container),
-        visits,
-        read_bytes,
+        Some(visits),
+        Some(read_bytes),
     )
+}
+
+#[test]
+fn source_validation_reuse_unbounded_and_maximum_finite_admit_same_exact_source() {
+    let source = source_validation_reuse_fixture();
+    let control = ExecutionControl::uncancelled();
+    let plan = source_validation_reuse_plan(&source.container);
+    let revision = source.container.root.package_revision;
+    for maximum in [None, Some(u64::MAX)] {
+        let mut session = SourceAdmissionSession::new(&source.container.objects, &control);
+        let before = crate::platform::witness::checked_full_validation_invocations();
+        let cold = session
+            .collect_preplanned_with_budget(plan.clone(), maximum, maximum)
+            .unwrap();
+        assert_eq!(
+            crate::platform::witness::checked_full_validation_invocations() - before,
+            1
+        );
+        let before = crate::platform::witness::checked_full_validation_invocations();
+        let warm = session
+            .collect_preplanned_with_budget(plan.clone(), maximum, maximum)
+            .unwrap();
+        assert_eq!(
+            crate::platform::witness::checked_full_validation_invocations(),
+            before
+        );
+        assert_eq!(session.completed_count(), 1);
+        for admitted in [&cold, &warm] {
+            assert!(!admitted.validation_visits_saturated);
+            assert!(!admitted.validation_read_bytes_saturated);
+            assert_eq!(admitted.container.objects, source.container.objects);
+            assert_eq!(
+                admitted.packages[&revision].snapshot.owners,
+                source.packages[&revision].snapshot.owners
+            );
+            assert_eq!(
+                admitted.packages[&revision].witness.manifest_digest,
+                source.packages[&revision].witness.manifest_digest
+            );
+        }
+    }
 }
 
 #[test]
@@ -100,8 +141,8 @@ fn source_validation_reuse_shares_only_complete_local_proofs_across_overlapping_
     source_validation_reuse_collect(
         &mut session,
         &left.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     assert_eq!(session.completed_count(), 2);
@@ -109,8 +150,8 @@ fn source_validation_reuse_shares_only_complete_local_proofs_across_overlapping_
     let reused = source_validation_reuse_collect(
         &mut session,
         &right.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     let reused_full_validations =
@@ -265,8 +306,8 @@ fn source_validation_reuse_rereads_private_and_imported_objects_before_every_hit
     source_validation_reuse_collect(
         &mut session,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     assert_eq!(session.completed_count(), 2);
@@ -278,8 +319,8 @@ fn source_validation_reuse_rereads_private_and_imported_objects_before_every_hit
         let missing = source_validation_reuse_collect(
             &mut session,
             &source.container,
-            MAXIMUM_VALIDATION_VISITS,
-            MAXIMUM_VALIDATION_READ_BYTES,
+            FORMER_VALIDATION_VISITS,
+            FORMER_VALIDATION_READ_BYTES,
         )
         .unwrap_err();
         let independent_missing = collect_preplanned_with_control(
@@ -295,8 +336,8 @@ fn source_validation_reuse_rereads_private_and_imported_objects_before_every_hit
         let corrupt = source_validation_reuse_collect(
             &mut session,
             &source.container,
-            MAXIMUM_VALIDATION_VISITS,
-            MAXIMUM_VALIDATION_READ_BYTES,
+            FORMER_VALIDATION_VISITS,
+            FORMER_VALIDATION_READ_BYTES,
         )
         .unwrap_err();
         assert_eq!(
@@ -310,8 +351,8 @@ fn source_validation_reuse_rereads_private_and_imported_objects_before_every_hit
     let recovered = source_validation_reuse_collect(
         &mut session,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     assert_eq!(
@@ -357,16 +398,16 @@ fn source_validation_reuse_exact_raw_transport_and_invalid_private_source_requir
     source_validation_reuse_collect(
         &mut session,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     let before_warm = crate::platform::witness::checked_full_validation_invocations();
     let warm = source_validation_reuse_collect(
         &mut session,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     assert_eq!(
@@ -378,8 +419,8 @@ fn source_validation_reuse_exact_raw_transport_and_invalid_private_source_requir
     let changed = source_validation_reuse_collect(
         &mut session,
         &other_transport,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     assert_eq!(
@@ -400,8 +441,8 @@ fn source_validation_reuse_exact_raw_transport_and_invalid_private_source_requir
     let refused = source_validation_reuse_collect(
         &mut session,
         &invalid,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap_err();
     assert_eq!(refused.code, "kernel_type_if_branches");
@@ -438,16 +479,16 @@ fn source_validation_reuse_binds_each_own_transitive_transport_selection() {
     source_validation_reuse_collect(
         &mut session,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     let before_warm = crate::platform::witness::checked_full_validation_invocations();
     let warm = source_validation_reuse_collect(
         &mut session,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     assert_eq!(
@@ -459,8 +500,8 @@ fn source_validation_reuse_binds_each_own_transitive_transport_selection() {
     let changed = source_validation_reuse_collect(
         &mut session,
         &alternate,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     assert_eq!(
@@ -492,8 +533,8 @@ fn source_validation_reuse_hit_boundary_obeys_actual_control_and_failed_first_at
     source_validation_reuse_collect(
         &mut session,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     {
@@ -501,8 +542,8 @@ fn source_validation_reuse_hit_boundary_obeys_actual_control_and_failed_first_at
         let error = source_validation_reuse_collect(
             &mut session,
             &source.container,
-            MAXIMUM_VALIDATION_VISITS,
-            MAXIMUM_VALIDATION_READ_BYTES,
+            FORMER_VALIDATION_VISITS,
+            FORMER_VALIDATION_READ_BYTES,
         )
         .unwrap_err();
         assert_eq!(error.class, DiagnosticClass::Cancelled);
@@ -517,8 +558,8 @@ fn source_validation_reuse_hit_boundary_obeys_actual_control_and_failed_first_at
         let error = source_validation_reuse_collect(
             &mut cold,
             &source.container,
-            MAXIMUM_VALIDATION_VISITS,
-            MAXIMUM_VALIDATION_READ_BYTES,
+            FORMER_VALIDATION_VISITS,
+            FORMER_VALIDATION_READ_BYTES,
         )
         .unwrap_err();
         assert_eq!(error.class, DiagnosticClass::Cancelled);
@@ -529,8 +570,8 @@ fn source_validation_reuse_hit_boundary_obeys_actual_control_and_failed_first_at
     let recovered = source_validation_reuse_collect(
         &mut fresh,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     assert_eq!(fresh.completed_count(), 1);
@@ -568,8 +609,8 @@ fn source_validation_reuse_fresh_composition_and_cancellation_do_not_publish_new
     source_validation_reuse_collect(
         &mut session,
         &supplier.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     assert_eq!(session.completed_count(), 1);
@@ -578,8 +619,8 @@ fn source_validation_reuse_fresh_composition_and_cancellation_do_not_publish_new
     let cancelled = source_validation_reuse_collect(
         &mut session,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap_err();
     assert_eq!(cancelled.class, DiagnosticClass::Cancelled);
@@ -596,8 +637,8 @@ fn source_validation_reuse_fresh_composition_and_cancellation_do_not_publish_new
     let recovered = source_validation_reuse_collect(
         &mut fresh_session,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     assert_eq!(fresh_session.completed_count(), 2);
@@ -615,15 +656,15 @@ fn source_validation_reuse_keeps_cumulative_exact_fit_and_capacity_skip_budgets(
     let cold = source_validation_reuse_collect(
         &mut measured,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     let warm = source_validation_reuse_collect(
         &mut measured,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     let aggregate_visits = cold.validation_visits + warm.validation_visits;
@@ -653,15 +694,15 @@ fn source_validation_reuse_keeps_cumulative_exact_fit_and_capacity_skip_budgets(
     let first = source_validation_reuse_collect(
         &mut no_capacity,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     let second = source_validation_reuse_collect(
         &mut no_capacity,
         &source.container,
-        MAXIMUM_VALIDATION_VISITS,
-        MAXIMUM_VALIDATION_READ_BYTES,
+        FORMER_VALIDATION_VISITS,
+        FORMER_VALIDATION_READ_BYTES,
     )
     .unwrap();
     assert_eq!(no_capacity.completed_count(), 0);

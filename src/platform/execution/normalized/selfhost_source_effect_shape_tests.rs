@@ -1,97 +1,21 @@
 //! Structural controls retain invalid unused descriptors in hash-consistent carriers.
 use super::*;
 
-fn word(bytes: &mut [u8], at: usize, value: usize) {
-    bytes[at..at + 4].copy_from_slice(&u32::try_from(value).unwrap().to_le_bytes());
-}
-
-// Serialize neutral inventories with optional raw objects that strict Rust encoders
-// deliberately refuse. Commit the actual object bytes, directory keys and roots.
+// Invalid local encodings retain their literal bytes and receive exact directory
+// state plus explicitly synthetic fixture provenance. One production writer owns
+// the carrier; this helper is not a second serialization implementation.
 fn raw_packet(
     source: &KernelSnapshot,
     owner_override: Option<(OwnerKey, Vec<u8>)>,
     extra_type: Option<Vec<u8>>,
 ) -> Vec<u8> {
-    let mut owners = Vec::new();
-    let mut bindings = Vec::new();
-    let mut objects = Vec::new();
-    for (key, record) in &source.owners {
-        let bytes = owner_override
+    source_fixture::raw_object_packet(
+        source,
+        owner_override
             .as_ref()
-            .filter(|(changed, _)| changed == key)
-            .map(|(_, bytes)| bytes.clone())
-            .unwrap_or_else(|| kernel::encode_owner(record).unwrap().1);
-        let binding = kernel::encode_owner_binding(&kernel::OwnerBinding {
-            kind: record.kind(),
-            object: kernel::OwnerObjectDigest::of(&bytes),
-        });
-        let key_bytes = kernel::owner_map_key(*key).to_vec();
-        owners.extend_from_slice(&key_bytes);
-        owners.extend_from_slice(&binding);
-        bindings.push((key_bytes, binding));
-        objects.push(bytes);
-    }
-    let mut types = source
-        .types
-        .iter()
-        .map(|(digest, object)| (*digest, kernel::encode_type_object(object).unwrap().1))
-        .collect::<BTreeMap<_, _>>();
-    if let Some(bytes) = extra_type {
-        types.insert(TypeObjectDigest::of(&bytes), bytes);
-    }
-    let mut type_keys = Vec::new();
-    for (digest, bytes) in &types {
-        type_keys.extend_from_slice(&digest.bytes());
-        objects.push(bytes.clone());
-    }
-    let mut retirements = Vec::new();
-    for (key, record) in &source.retirements {
-        let (digest, bytes) = kernel::encode_retirement(record).unwrap();
-        retirements.extend_from_slice(&kernel::retirement_map_key(*key));
-        retirements.extend_from_slice(&digest.bytes());
-        objects.push(bytes);
-    }
-    let content = crate::platform::persistent_map::MapContentRoot::from_sorted(bindings).unwrap();
-    let mut root = source.root.clone();
-    root.owners = crate::platform::persistent_map::MapRoot::from_parts(
-        root.owners.page(),
-        source.owners.len() as u64,
-        content.digest(),
-    );
-    let name = root.package_name.as_str().as_bytes();
-    let mut bytes = vec![0; 128];
-    bytes[..8].copy_from_slice(b"LKJSG002");
-    word(&mut bytes, 12, source.owners.len());
-    word(&mut bytes, 16, types.len());
-    word(&mut bytes, 20, source.retirements.len());
-    word(&mut bytes, 24, name.len());
-    bytes[32..48].copy_from_slice(&root.package_id.bytes());
-    bytes[48..80].copy_from_slice(
-        &kernel::semantic_state_digest_from_root(&root)
-            .unwrap()
-            .bytes(),
-    );
-    bytes.extend_from_slice(name);
-    for (at, section) in [(80, owners), (84, type_keys), (88, retirements)] {
-        let start = bytes.len();
-        word(&mut bytes, at, start);
-        bytes.extend(section);
-    }
-    let spans = bytes.len();
-    word(&mut bytes, 92, spans);
-    bytes.resize(spans + objects.len() * 8, 0);
-    let start = bytes.len();
-    word(&mut bytes, 96, start);
-    for (index, object) in objects.into_iter().enumerate() {
-        let start = bytes.len();
-        word(&mut bytes, spans + index * 8, start);
-        word(&mut bytes, spans + index * 8 + 4, object.len());
-        bytes.extend(object);
-    }
-    let length = bytes.len();
-    word(&mut bytes, 8, length);
-    graph::set_allowance(&mut bytes, None);
-    bytes
+            .map(|(key, bytes)| (*key, bytes.as_slice())),
+        extra_type.as_deref(),
+    )
 }
 
 fn raw_owner(source: &KernelSnapshot, owner: &OwnerRecord) {

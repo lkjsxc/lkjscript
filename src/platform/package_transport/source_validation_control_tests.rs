@@ -1,5 +1,133 @@
 // Included in source.rs tests. The phase probe cancels the real owning control, without
 // changing canonical inputs or installing a different source validation implementation.
+
+#[test]
+fn source_admission_unbounded_observations_do_not_exhaust_permission() {
+    let bytes = b"source admission observation".to_vec();
+    let key = ObjectKey::for_bytes(ObjectDomain::Blob, &bytes);
+    let objects = BTreeMap::from([(key, bytes.clone())]);
+    let store = CollectingStore::new(&objects);
+    store.charge_visits(FORMER_VALIDATION_VISITS + 1).unwrap();
+    assert_eq!(store.visits(), FORMER_VALIDATION_VISITS + 1);
+    assert!(!store.visits_saturated());
+    assert_eq!(store.remaining_kernel_work().unwrap(), None);
+    store.charge_visits(u64::MAX).unwrap();
+    assert!(store.visits_saturated());
+    store.charge_visits(1).unwrap();
+    // Seed a prior read observation without allocating its represented bytes. This is a
+    // scalar boundary control, not evidence of a physically large package admission.
+    store
+        .admission
+        .borrow_mut()
+        .admit_object_bytes(u64::MAX)
+        .unwrap();
+    assert!(!store.read_bytes_saturated());
+    let read = store.read(key, None, &mut StoreWork::default()).unwrap();
+    assert_eq!(read, Some(bytes.clone()));
+    assert_eq!(store.read_bytes(), u64::MAX);
+    assert!(store.read_bytes_saturated());
+    assert_eq!(store.remaining_visits(), None);
+    assert_eq!(store.remaining_read_bytes(), None);
+    assert_eq!(
+        store.read(key, None, &mut StoreWork::default()).unwrap(),
+        Some(bytes)
+    );
+    assert_eq!(store.objects.borrow().len(), 1);
+}
+
+#[test]
+fn source_admission_maximum_finite_visit_and_byte_allowances_remain_exact() {
+    let bytes = b"finite source admission".to_vec();
+    let key = ObjectKey::for_bytes(ObjectDomain::Blob, &bytes);
+    let objects = BTreeMap::from([(key, bytes.clone())]);
+    let store = CollectingStore::with_budget(&objects, Some(u64::MAX), None);
+    store.charge_visits(u64::MAX - 1).unwrap();
+    let mut outer = StoreReadAdmission::new(StoreReadLimits {
+        maximum_catalog_lookups: Some(2),
+        maximum_objects: Some(2),
+        maximum_bytes: Some(bytes.len() as u64 * 2),
+    });
+    assert_eq!(
+        store
+            .read_admitted(key, None, &mut outer, &mut StoreWork::default())
+            .unwrap(),
+        Some(bytes.clone())
+    );
+    assert_eq!(store.visits(), u64::MAX);
+    assert!(!store.visits_saturated());
+    assert_eq!(store.remaining_visits(), Some(0));
+    assert_eq!(outer.remaining().maximum_objects, Some(1));
+    let error = store
+        .read_admitted(key, None, &mut outer, &mut StoreWork::default())
+        .unwrap_err();
+    assert_eq!(error.code, "object_read_objects_exhausted");
+    // The failed read reserved one catalog lookup, but never reserved or copied an object.
+    assert_eq!(outer.remaining().maximum_catalog_lookups, Some(0));
+    assert_eq!(outer.remaining().maximum_objects, Some(1));
+    assert_eq!(outer.remaining().maximum_bytes, Some(bytes.len() as u64));
+    assert_eq!(store.visits(), u64::MAX);
+    assert_eq!(store.objects.borrow().len(), 1);
+    assert!(store.charge_visits(1).is_err());
+
+    let store = CollectingStore::with_budget(&objects, None, Some(u64::MAX));
+    store.charge_visits(u64::MAX).unwrap();
+    store.charge_visits(1).unwrap();
+    assert!(store.visits_saturated());
+    store
+        .admission
+        .borrow_mut()
+        .admit_object_bytes(u64::MAX - bytes.len() as u64)
+        .unwrap();
+    assert_eq!(store.remaining_read_bytes(), Some(bytes.len() as u64));
+    assert_eq!(
+        store.read(key, None, &mut StoreWork::default()).unwrap(),
+        Some(bytes)
+    );
+    assert_eq!(store.read_bytes(), u64::MAX);
+    assert!(!store.read_bytes_saturated());
+    assert_eq!(store.remaining_read_bytes(), Some(0));
+    assert_eq!(
+        store
+            .read(key, None, &mut StoreWork::default())
+            .unwrap_err()
+            .code,
+        "object_read_bytes_exhausted"
+    );
+    assert_eq!(store.remaining_read_bytes(), Some(0));
+}
+
+#[test]
+fn source_admission_joint_read_failure_commits_only_exact_prior_reservations() {
+    let bytes = b"joint source admission".to_vec();
+    let key = ObjectKey::for_bytes(ObjectDomain::Blob, &bytes);
+    let objects = BTreeMap::from([(key, bytes.clone())]);
+    let store = CollectingStore::with_budget(&objects, Some(2), Some(bytes.len() as u64));
+    store.charge_visits(1).unwrap();
+    let mut outer = StoreReadAdmission::new(StoreReadLimits {
+        maximum_catalog_lookups: Some(1),
+        maximum_objects: Some(1),
+        maximum_bytes: Some(bytes.len() as u64 - 1),
+    });
+    let error = store
+        .read_admitted(key, None, &mut outer, &mut StoreWork::default())
+        .unwrap_err();
+    assert_eq!(error.code, "object_read_bytes_exhausted");
+    assert_eq!(outer.remaining().maximum_catalog_lookups, Some(0));
+    assert_eq!(outer.remaining().maximum_objects, Some(1));
+    assert_eq!(outer.remaining().maximum_bytes, Some(bytes.len() as u64 - 1));
+    assert_eq!(store.remaining_visits(), Some(1));
+    assert_eq!(store.remaining_read_bytes(), Some(bytes.len() as u64));
+    assert_eq!(store.visits(), 1);
+    assert!(store.objects.borrow().is_empty());
+    assert_eq!(
+        store.read(key, None, &mut StoreWork::default()).unwrap(),
+        Some(bytes)
+    );
+    assert_eq!(store.remaining_visits(), Some(0));
+    assert_eq!(store.remaining_read_bytes(), Some(0));
+    assert_eq!(store.visits(), 2);
+}
+
 std::thread_local! {
     static CANCEL_BEFORE_SOURCE_FULL_VALIDATION: std::cell::Cell<bool> = const {
         std::cell::Cell::new(false)

@@ -842,6 +842,9 @@ fn selfhost_source_owners_reject_mismatched_headers_and_noncanonical_expressions
 #[path = "selfhost_source_binding_tests.rs"]
 mod binding;
 
+#[path = "selfhost_source_fixture.rs"]
+mod source_fixture;
+
 #[path = "selfhost_source_graph_tests.rs"]
 mod graph;
 

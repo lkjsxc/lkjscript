@@ -5,6 +5,7 @@
 //! are separate boundaries.
 
 use super::super::reference_effects;
+use crate::platform::admission::{Meter, Observation};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel;
 use crate::platform::kernel::{
@@ -192,51 +193,35 @@ pub(in super::super) struct Proof {
         BTreeMap<(DeclarationReference, ImplementationParameterId), ImplementationParameter>,
     #[cfg(test)]
     pub flow_work: crate::platform::kernel::associated_flow_canonical_reference::ReferenceFlowWork,
-    pub steps: usize,
-    pub bytes: usize,
+    pub steps: u64,
+    pub steps_saturated: bool,
+    pub bytes: u64,
+    pub bytes_saturated: bool,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Default)]
 pub(in super::super) struct Limits {
-    pub steps: usize,
-    pub bytes: usize,
-}
-impl Default for Limits {
-    fn default() -> Self {
-        Self {
-            steps: crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK,
-            bytes: 256 * 1024 * 1024,
-        }
-    }
+    pub steps: Option<u64>,
+    pub bytes: Option<u64>,
 }
 
 struct Budget<'a> {
-    steps: usize,
-    bytes: usize,
-    limits: Limits,
+    steps: Meter,
+    bytes: Meter,
     control: &'a ExecutionControl,
 }
 impl Budget<'_> {
     fn tick(&mut self) -> Result<(), ExecutionError> {
         self.control.check()?;
-        let next = self.steps.checked_add(1).ok_or_else(capacity)?;
-        if next > self.limits.steps {
-            return Err(capacity());
-        }
-        self.steps = next;
-        Ok(())
+        self.steps
+            .charge(Observation::exact(1))
+            .map_err(|_| capacity())
     }
     fn reserve<T>(&mut self, count: usize) -> Result<(), ExecutionError> {
         self.control.check()?;
-        let next = count
-            .checked_mul(std::mem::size_of::<T>())
-            .and_then(|added| self.bytes.checked_add(added))
-            .ok_or_else(capacity)?;
-        if next > self.limits.bytes {
-            return Err(capacity());
-        }
-        self.bytes = next;
-        Ok(())
+        self.bytes
+            .charge(Observation::product(count, std::mem::size_of::<T>()))
+            .map_err(|_| capacity())
     }
     fn node<T>(&mut self) -> Result<(), ExecutionError> {
         self.reserve::<T>(1)?;
@@ -348,7 +333,7 @@ fn reject() -> ExecutionError {
 fn capacity() -> ExecutionError {
     ExecutionError::resource(
         "reference_associated_preparation_capacity",
-        "independent canonical associated closure exceeded its finite preparation capacity",
+        "independent canonical associated closure exceeded an explicit allowance or representation capacity",
     )
 }
 
@@ -361,9 +346,8 @@ impl<'a> Derivation<'a> {
         let mut result = Self {
             snapshots: BTreeMap::new(),
             budget: Budget {
-                steps: 0,
-                bytes: 0,
-                limits,
+                steps: Meter::new(limits.steps),
+                bytes: Meter::new(limits.bytes),
                 control,
             },
             types: BTreeMap::new(),
@@ -3014,10 +2998,12 @@ impl<'a> Derivation<'a> {
             symbolic_formals: self.symbolic_formals,
             #[cfg(test)]
             flow_work: self.flow_work,
-            steps: self.budget.steps,
-            bytes: self.budget.bytes,
+            steps: self.budget.steps.observation().consumed,
+            steps_saturated: self.budget.steps.observation().saturated,
+            bytes: self.budget.bytes.observation().consumed,
+            bytes_saturated: self.budget.bytes.observation().saturated,
         };
-        result.closed(self.budget.limits, self.budget.control)?;
+        result.closed(self.budget)?;
         Ok(result)
     }
 }
@@ -3031,13 +3017,7 @@ impl Proof {
         std::mem::take(&mut self.types)
     }
 
-    fn closed(&mut self, limits: Limits, control: &ExecutionControl) -> Result<(), ExecutionError> {
-        let mut budget = Budget {
-            steps: self.steps,
-            bytes: self.bytes,
-            limits,
-            control,
-        };
+    fn closed(&mut self, mut budget: Budget<'_>) -> Result<(), ExecutionError> {
         budget.tick()?;
         if self.steps == 0 || self.bytes == 0 {
             return Err(reject());
@@ -3231,7 +3211,10 @@ impl Proof {
                 budget.tick()?;
             }
         }
-        self.steps = budget.steps;
+        self.steps = budget.steps.observation().consumed;
+        self.steps_saturated = budget.steps.observation().saturated;
+        self.bytes = budget.bytes.observation().consumed;
+        self.bytes_saturated = budget.bytes.observation().saturated;
         Ok(())
     }
 
@@ -3533,22 +3516,14 @@ pub(in super::super) fn derive<'a>(
     control: &'a ExecutionControl,
 ) -> Result<Proof, ExecutionError> {
     let mut derivation = Derivation::new(snapshots, limits, control)?;
-    let derivation_entry = derivation.budget.steps;
-    let maximum = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
-    let offset = maximum.saturating_sub(limits.steps);
-    let mut supplier_work = offset
-        .checked_add(derivation.budget.steps)
-        .ok_or_else(capacity)?;
+    let derivation_entry = derivation.budget.steps.observation();
     super::super::reference_schema::bind_associated_dependencies(
         snapshots,
         control,
-        &mut supplier_work,
+        &mut derivation.budget.steps,
+        &mut derivation.budget.bytes,
     )?;
-    derivation.budget.steps = supplier_work.checked_sub(offset).ok_or_else(capacity)?;
-    if derivation.budget.steps > limits.steps {
-        return Err(capacity());
-    }
-    let after_dependencies = derivation.budget.steps;
+    let after_dependencies = derivation.budget.steps.observation();
     for snapshot in snapshots {
         for (ty, object) in snapshot.types.iter().chain(&snapshot.dependency_types) {
             derivation.budget.tick()?;
@@ -3653,13 +3628,12 @@ pub(in super::super) fn derive<'a>(
     }
     // Raw inventories and symbolic obligations precede the independent growth
     // verdict. No concrete application/mapping body is enumerated before it.
-    let mut work = derivation.budget.steps;
-    let flow_entry = work;
+    let flow_entry = derivation.budget.steps.observation();
     let flow = crate::platform::kernel::associated_flow_canonical_reference::validate(
         snapshots,
         control,
-        &mut work,
-        limits.steps,
+        derivation.budget.steps.remaining(),
+        derivation.budget.bytes.remaining(),
     )
     .map_err(|error| {
         let class = match error.class {
@@ -3679,14 +3653,31 @@ pub(in super::super) fn derive<'a>(
                 message.push_str(&note);
             }
             message.push_str(&format!(
-                "; reference_derivation entry={} after_dependencies={} flow_entry={} work_debit={} maximum={}",
-                derivation_entry, after_dependencies, flow_entry, offset, limits.steps,
+                "; reference_derivation entry={derivation_entry:?} after_dependencies={after_dependencies:?} flow_entry={flow_entry:?} maximum_steps={:?} maximum_bytes={:?}",
+                limits.steps, limits.bytes,
             ));
         }
         ExecutionError::new(class, error.code, message)
     })?;
-    derivation.budget.steps = work;
-    derivation.budget.reserve::<u8>(flow.metadata_bytes)?;
+    // The independent flow checker received the exact remaining policies and
+    // enforced them before its work. Commit its observations without rebuilding
+    // permission from a potentially saturated counter.
+    derivation
+        .budget
+        .steps
+        .charge(Observation {
+            consumed: flow.steps,
+            saturated: flow.steps_saturated,
+        })
+        .map_err(|_| capacity())?;
+    derivation
+        .budget
+        .bytes
+        .charge(Observation {
+            consumed: flow.metadata_bytes,
+            saturated: flow.metadata_bytes_saturated,
+        })
+        .map_err(|_| capacity())?;
     #[cfg(test)]
     {
         derivation.flow_work = flow;
@@ -3708,6 +3699,10 @@ pub(super) fn check_inventory(
 #[cfg(test)]
 #[path = "reference_associated_preparation_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "reference_associated_capacity_tests.rs"]
+mod capacity_tests;
 
 #[cfg(test)]
 pub(in super::super) mod test_support {

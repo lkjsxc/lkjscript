@@ -1,10 +1,63 @@
 //! Raw canonical descriptor prerequisites. These do not admit executable source or mint a seal.
 use super::*;
 use crate::platform::kernel::*;
+use crate::platform::package_transport::source::{SourceAllowance, SourceObservation};
 use crate::platform::package_transport::{PackageRevision, validate_package_interface_closure};
 use crate::platform::semantic_id::*;
 
 const SEED: &[u8] = b"associated-interface-authority";
+
+// The caller owns aggregate permission. Passive observations are independent and
+// are asserted exact only when these small fixtures use them as measured fits.
+struct AssociatedTestMeter {
+    allowance: std::cell::Cell<SourceAllowance>,
+    observed: std::cell::Cell<SourceObservation>,
+}
+
+impl AssociatedTestMeter {
+    fn new(maximum: Option<u64>) -> Self {
+        Self {
+            allowance: std::cell::Cell::new(SourceAllowance::new(maximum)),
+            observed: std::cell::Cell::new(SourceObservation::default()),
+        }
+    }
+
+    fn charge(
+        &self,
+        control: &crate::platform::execution::ExecutionControl,
+        count: u64,
+    ) -> Result<(), Diagnostic> {
+        control
+            .check()
+            .map_err(crate::platform::execution::normalized::execution_diagnostic)?;
+        let mut allowance = self.allowance.get();
+        if !allowance.reserve(count) {
+            return Err(interface_error(
+                DiagnosticClass::Resource,
+                "associated_interface_test_callback_work",
+                "the shared interface validation callback exhausted its visit allowance",
+            ));
+        }
+        let mut observed = self.observed.get();
+        observed.observe(SourceObservation::exact(count));
+        self.allowance.set(allowance);
+        self.observed.set(observed);
+        Ok(())
+    }
+
+    fn exact_work(&self) -> u64 {
+        let observed = self.observed.get();
+        assert!(
+            !observed.saturated,
+            "fixture work must be exact before sizing a finite allowance"
+        );
+        observed.consumed
+    }
+
+    fn remaining(&self) -> Option<u64> {
+        self.allowance.get().remaining()
+    }
+}
 
 fn current_header(owner: OwnerKey, kind: OwnerKind) -> OwnerHeader {
     OwnerHeader {
@@ -1391,92 +1444,90 @@ fn associated_interface_borrow_function_uses_exact_source_parameter_owner() {
 }
 
 #[test]
-fn associated_interface_borrow_source_and_result_share_capacity_and_cancellation() {
+fn associated_interface_borrow_source_and_result_share_capacity_and_cancellation()
+-> Result<(), Diagnostic> {
     use crate::platform::execution::ExecutionControl;
-    use crate::platform::execution::normalized::execution_diagnostic;
     let f = fixture();
-    let mut complete = 0_u64;
-    {
-        let mut visit = |count| {
-            complete += count;
-            Ok(())
-        };
-        function_borrow_proof(&f, &mut AssociatedInterfaceAdmission::new(&mut visit)).unwrap();
-    }
-    let mut source_work = 0_u64;
-    {
-        let mut visit = |count| {
-            source_work += count;
-            Ok(())
-        };
-        interface_borrow_requirement_at(
-            f.consumer,
-            OwnerKey::Parameter(f.parameter),
-            f.projection,
-            &f.consumer_interface.type_objects,
-            &f.consumer_interface.owners,
-            &mut AssociatedInterfaceAdmission::new(&mut visit),
-        )
-        .unwrap();
-    }
+    let control = ExecutionControl::uncancelled();
+    let measured = AssociatedTestMeter::new(None);
+    let mut visit = |count| measured.charge(&control, count);
+    let _ = function_borrow_proof(&f, &mut AssociatedInterfaceAdmission::new(&mut visit))?;
+    let complete = measured.exact_work();
+    let source = AssociatedTestMeter::new(None);
+    let mut visit = |count| source.charge(&control, count);
+    let _ = interface_borrow_requirement_at(
+        f.consumer,
+        OwnerKey::Parameter(f.parameter),
+        f.projection,
+        &f.consumer_interface.type_objects,
+        &f.consumer_interface.owners,
+        &mut AssociatedInterfaceAdmission::new(&mut visit),
+    )?;
+    let source_work = source.exact_work();
     assert!(complete > source_work && source_work > 0);
-    // These measured fits test cumulative capacity, not semantic soundness from a finite prefix.
-    for maximum in [complete - 1, complete] {
+    // One caller allowance covers both proofs. A measured fit is capacity evidence,
+    // not semantic soundness inferred from an admitted finite prefix.
+    for maximum in [
+        None,
+        Some(0),
+        Some(complete - 1),
+        Some(complete),
+        Some(u64::MAX),
+    ] {
         let control = ExecutionControl::uncancelled();
-        let mut visit = |_| control.check().map_err(execution_diagnostic);
-        let mut admission = AssociatedInterfaceAdmission::new(&mut visit);
-        admission.maximum_work = usize::try_from(maximum).unwrap();
-        let result = function_borrow_proof(&f, &mut admission);
-        if maximum == complete {
-            result.unwrap();
-        } else {
-            assert_eq!(result.unwrap_err().class, DiagnosticClass::Resource);
+        let meter = AssociatedTestMeter::new(maximum);
+        let mut visit = |count| meter.charge(&control, count);
+        let result = function_borrow_proof(&f, &mut AssociatedInterfaceAdmission::new(&mut visit));
+        let fits = maximum.is_none_or(|limit| limit >= complete);
+        assert_eq!(
+            result.is_ok(),
+            fits,
+            "caller allowance {maximum:?}: {result:?}"
+        );
+        if fits {
+            assert_eq!(meter.exact_work(), complete);
+            assert_eq!(meter.remaining(), maximum.map(|limit| limit - complete));
+        } else if let Err(error) = result {
+            assert_eq!(error.class, DiagnosticClass::Resource);
+            assert_eq!(error.code, "associated_interface_test_callback_work");
+            assert!(maximum.is_some_and(|limit| meter.exact_work() <= limit));
         }
     }
     let control = ExecutionControl::uncancelled();
-    let mut charged = 0_u64;
-    {
-        let mut visit = |count| {
-            if charged == source_work && count == 0 {
-                control.cancel();
-            }
-            control.check().map_err(execution_diagnostic)?;
-            charged += count;
-            Ok(())
-        };
-        let mut admission = AssociatedInterfaceAdmission::new(&mut visit);
-        let error = function_borrow_proof(&f, &mut admission).unwrap_err();
-        assert_eq!(error.class, DiagnosticClass::Cancelled);
-        assert_eq!(error.code, "execution_cancelled");
-        assert_eq!(admission.work, usize::try_from(source_work).unwrap());
-    }
+    let meter = AssociatedTestMeter::new(None);
+    let mut visit = |count| {
+        if meter.exact_work() == source_work && count == 0 {
+            control.cancel();
+        }
+        meter.charge(&control, count)
+    };
+    let result = function_borrow_proof(&f, &mut AssociatedInterfaceAdmission::new(&mut visit));
+    assert!(
+        matches!(result, Err(error) if error.class == DiagnosticClass::Cancelled
+        && error.code == "execution_cancelled")
+    );
     assert!(control.is_cancelled());
-    assert_eq!(charged, source_work);
-    // Entry cancellation also precedes a malformed source lookup, retaining no proof growth.
+    assert_eq!(meter.exact_work(), source_work);
+    // Entry cancellation precedes a malformed lookup and retains no proof growth.
     let mut malformed = fixture();
     function_mut(&mut malformed).result.relation = ResultRelation::ReadFrom {
         source: ParameterId::migrate(SEED, 99),
     };
     let control = ExecutionControl::uncancelled();
     control.cancel();
-    let mut visit = |_| control.check().map_err(execution_diagnostic);
+    let meter = AssociatedTestMeter::new(None);
+    let mut visit = |count| meter.charge(&control, count);
     let mut admission = AssociatedInterfaceAdmission::new(&mut visit);
-    assert_eq!(
-        function_borrow_proof(&malformed, &mut admission)
-            .unwrap_err()
-            .class,
-        DiagnosticClass::Cancelled
-    );
-    assert_eq!(admission.work, 0);
+    assert!(matches!(function_borrow_proof(&malformed, &mut admission),
+        Err(error) if error.class == DiagnosticClass::Cancelled));
+    assert_eq!(meter.exact_work(), 0);
     assert_eq!(admission.storage.bytes, 0);
     let fresh = ExecutionControl::uncancelled();
-    function_borrow_proof(
-        &f,
-        &mut AssociatedInterfaceAdmission::new(&mut |_| {
-            fresh.check().map_err(execution_diagnostic)
-        }),
-    )
-    .unwrap();
+    let meter = AssociatedTestMeter::new(None);
+    let mut visit = |count| meter.charge(&fresh, count);
+    let _ = function_borrow_proof(&f, &mut AssociatedInterfaceAdmission::new(&mut visit))?;
+    assert_eq!(meter.exact_work(), complete);
+    Ok(())
 }
 
 fn load_public_interface(
@@ -1600,14 +1651,16 @@ fn nonborrow_nested_fixture() -> Fixture {
 fn associated_interface_complete_type_phase_checks_nonborrow_nested_and_each_owner_occurrence() {
     let f = nonborrow_nested_fixture();
     load_public_interface(f.consumer, &f.consumer_interface).unwrap();
-    let mut visit = |_| Ok(());
+    let control = crate::platform::execution::ExecutionControl::uncancelled();
+    let meter = AssociatedTestMeter::new(None);
+    let mut visit = |count| meter.charge(&control, count);
     let mut admission = AssociatedInterfaceAdmission::new(&mut visit);
     let types =
         load_interface_type_phase(f.consumer, &f.consumer_interface, &mut admission).unwrap();
     assert!(types.contains_key(&f.projection));
     let self_type = function_signature(&f).implementation_parameters[0].self_type;
     assert!(types.contains_key(&self_type));
-    assert!(admission.work > 0);
+    assert!(meter.exact_work() > 0);
     validate_owner_closure_metered(
         f.consumer,
         &f.consumer_interface.owners,
@@ -1753,171 +1806,139 @@ fn associated_interface_loaded_foreign_nonborrow_closure_discharges_unused_bindi
 }
 
 #[test]
-fn associated_interface_type_and_borrow_phases_share_capacity_and_real_cancellation() {
+fn associated_interface_type_and_borrow_phases_share_capacity_and_real_cancellation()
+-> Result<(), Diagnostic> {
     use crate::platform::execution::ExecutionControl;
-    use crate::platform::execution::normalized::execution_diagnostic;
     let f = fixture();
-    let callback_work = std::cell::Cell::new(0_u64);
-    let mut visit = |count| {
-        callback_work.set(callback_work.get().checked_add(count).unwrap());
-        Ok(())
-    };
+    let control = ExecutionControl::uncancelled();
+    let meter = AssociatedTestMeter::new(None);
+    let mut visit = |count| meter.charge(&control, count);
     let mut measured = AssociatedInterfaceAdmission::new(&mut visit);
-    let types =
-        load_interface_type_phase(f.consumer, &f.consumer_interface, &mut measured).unwrap();
-    let type_work = measured.work;
-    let type_callback_work = callback_work.get();
+    let types = load_interface_type_phase(f.consumer, &f.consumer_interface, &mut measured)?;
+    let type_work = meter.exact_work();
     validate_owner_closure_metered(
         f.consumer,
         &f.consumer_interface.owners,
         &types,
         &mut measured,
-    )
-    .unwrap();
-    let complete = measured.work;
-    let complete_callback_work = callback_work.get();
+    )?;
+    let complete = meter.exact_work();
     assert!(complete > type_work && type_work > 0);
-    // The ordinary type traversal also debits the actual shared callback; its work is not part
-    // of the associated-only counter. Both phases retain one cumulative callback allowance.
-    assert!(type_callback_work > u64::try_from(type_work).unwrap());
-    assert!(complete_callback_work > type_callback_work);
-    // A measured exact fit/one-short is capacity evidence, not a finite-prefix semantic proof.
-    for maximum in [complete - 1, complete] {
+    // The one caller-owned metric includes ordinary traversal and associated proof
+    // work. No associated-only counter or second hidden allowance remains.
+    for maximum in [
+        None,
+        Some(0),
+        Some(complete - 1),
+        Some(complete),
+        Some(u64::MAX),
+    ] {
         let control = ExecutionControl::uncancelled();
-        let mut visit = |_| control.check().map_err(execution_diagnostic);
+        let meter = AssociatedTestMeter::new(maximum);
+        let mut visit = |count| meter.charge(&control, count);
         let mut admission = AssociatedInterfaceAdmission::new(&mut visit);
-        admission.maximum_work = maximum;
-        let types =
-            load_interface_type_phase(f.consumer, &f.consumer_interface, &mut admission).unwrap();
-        let result = validate_owner_closure_metered(
-            f.consumer,
-            &f.consumer_interface.owners,
-            &types,
-            &mut admission,
-        );
-        if maximum == complete {
-            result.unwrap();
-        } else {
-            assert_eq!(result.unwrap_err().class, DiagnosticClass::Resource);
-        }
-    }
-    // Separately bound the actual callback, including ordinary traversal plus demanded
-    // associated proof work. No internal associated limit is shortened in this control.
-    for maximum in [complete_callback_work - 1, complete_callback_work] {
-        let control = ExecutionControl::uncancelled();
-        let remaining = std::cell::Cell::new(maximum);
-        let mut visit = |count| {
-            control.check().map_err(execution_diagnostic)?;
-            let next = remaining.get().checked_sub(count).ok_or_else(|| {
-                interface_error(
-                    DiagnosticClass::Resource,
-                    "associated_interface_test_callback_work",
-                    "the shared interface validation callback exhausted its visit allowance",
+        let result = load_interface_type_phase(f.consumer, &f.consumer_interface, &mut admission)
+            .and_then(|types| {
+                assert_eq!(meter.exact_work(), type_work);
+                validate_owner_closure_metered(
+                    f.consumer,
+                    &f.consumer_interface.owners,
+                    &types,
+                    &mut admission,
                 )
-            })?;
-            remaining.set(next);
-            Ok(())
-        };
-        let mut admission = AssociatedInterfaceAdmission::new(&mut visit);
-        let types =
-            load_interface_type_phase(f.consumer, &f.consumer_interface, &mut admission).unwrap();
-        assert_eq!(maximum - remaining.get(), type_callback_work);
-        let result = validate_owner_closure_metered(
-            f.consumer,
-            &f.consumer_interface.owners,
-            &types,
-            &mut admission,
+            });
+        let fits = maximum.is_none_or(|limit| limit >= complete);
+        assert_eq!(
+            result.is_ok(),
+            fits,
+            "caller allowance {maximum:?}: {result:?}"
         );
-        if maximum == complete_callback_work {
-            result.unwrap();
-            assert_eq!(remaining.get(), 0);
-            assert_eq!(admission.work, complete);
-        } else {
-            let error = result.unwrap_err();
+        if fits {
+            assert_eq!(meter.exact_work(), complete);
+            assert_eq!(meter.remaining(), maximum.map(|limit| limit - complete));
+        } else if let Err(error) = result {
             assert_eq!(error.class, DiagnosticClass::Resource);
             assert_eq!(error.code, "associated_interface_test_callback_work");
-            assert!(admission.work <= complete);
+            assert!(maximum.is_some_and(|limit| meter.exact_work() <= limit));
         }
     }
-    // The complete public entry also retains owner reservations and per-object charges in
-    // that same callback. Exercise its actual wiring, beyond manually composing private phases.
+    // The public entry additionally reserves owners and canonical object reads in
+    // that same callback; exercise its wiring beyond the private phase composition.
     let built = immutable_type_phase_build(&f.consumer_interface);
-    let public_callback_work = std::cell::Cell::new(0_u64);
-    validate_package_interface_metered(
+    let public_meter = AssociatedTestMeter::new(None);
+    let _ = validate_package_interface_metered(
         f.consumer,
         built.root,
         &built.objects,
         &mut StoreWork::default(),
         &mut MapAdmission::unbounded(),
-        &mut |count| {
-            public_callback_work.set(public_callback_work.get().checked_add(count).unwrap());
-            Ok(())
-        },
-    )
-    .unwrap();
-    let public_complete = public_callback_work.get();
-    assert!(public_complete > complete_callback_work);
-    for maximum in [public_complete - 1, public_complete] {
+        &mut |count| public_meter.charge(&control, count),
+    )?;
+    let public_complete = public_meter.exact_work();
+    assert!(public_complete > complete);
+    for maximum in [
+        None,
+        Some(0),
+        Some(public_complete - 1),
+        Some(public_complete),
+        Some(u64::MAX),
+    ] {
         let control = ExecutionControl::uncancelled();
-        let remaining = std::cell::Cell::new(maximum);
-        let mut visit = |count| {
-            control.check().map_err(execution_diagnostic)?;
-            let next = remaining.get().checked_sub(count).ok_or_else(|| {
-                interface_error(
-                    DiagnosticClass::Resource,
-                    "associated_interface_test_callback_work",
-                    "the shared interface validation callback exhausted its visit allowance",
-                )
-            })?;
-            remaining.set(next);
-            Ok(())
-        };
+        let meter = AssociatedTestMeter::new(maximum);
         let result = validate_package_interface_metered(
             f.consumer,
             built.root,
             &built.objects,
             &mut StoreWork::default(),
             &mut MapAdmission::unbounded(),
-            &mut visit,
+            &mut |count| meter.charge(&control, count),
         );
-        if maximum == public_complete {
-            result.unwrap();
-            assert_eq!(remaining.get(), 0);
-        } else {
-            let error = result.unwrap_err();
+        let fits = maximum.is_none_or(|limit| limit >= public_complete);
+        assert_eq!(
+            result.is_ok(),
+            fits,
+            "public caller allowance {maximum:?}: {result:?}"
+        );
+        if fits {
+            assert_eq!(meter.exact_work(), public_complete);
+            assert_eq!(
+                meter.remaining(),
+                maximum.map(|limit| limit - public_complete)
+            );
+        } else if let Err(error) = result {
             assert_eq!(error.class, DiagnosticClass::Resource);
             assert_eq!(error.code, "associated_interface_test_callback_work");
+            assert!(maximum.is_some_and(|limit| meter.exact_work() <= limit));
         }
     }
     let control = ExecutionControl::uncancelled();
-    let mut visit = |_| control.check().map_err(execution_diagnostic);
+    let meter = AssociatedTestMeter::new(None);
+    let mut visit = |count| meter.charge(&control, count);
     let mut admission = AssociatedInterfaceAdmission::new(&mut visit);
-    let types =
-        load_interface_type_phase(f.consumer, &f.consumer_interface, &mut admission).unwrap();
-    let before = admission.work;
+    let types = load_interface_type_phase(f.consumer, &f.consumer_interface, &mut admission)?;
+    let before = meter.exact_work();
     control.cancel();
-    assert_eq!(
+    assert!(matches!(
         validate_owner_closure_metered(
             f.consumer,
             &f.consumer_interface.owners,
             &types,
-            &mut admission
-        )
-        .unwrap_err()
-        .class,
-        DiagnosticClass::Cancelled
-    );
-    assert_eq!(admission.work, before);
+            &mut admission,
+        ),
+        Err(error) if error.class == DiagnosticClass::Cancelled
+    ));
+    assert_eq!(meter.exact_work(), before);
     let fresh = ExecutionControl::uncancelled();
-    let mut visit = |_| fresh.check().map_err(execution_diagnostic);
+    let meter = AssociatedTestMeter::new(None);
+    let mut visit = |count| meter.charge(&fresh, count);
     let mut admission = AssociatedInterfaceAdmission::new(&mut visit);
-    let types =
-        load_interface_type_phase(f.consumer, &f.consumer_interface, &mut admission).unwrap();
+    let types = load_interface_type_phase(f.consumer, &f.consumer_interface, &mut admission)?;
     validate_owner_closure_metered(
         f.consumer,
         &f.consumer_interface.owners,
         &types,
         &mut admission,
-    )
-    .unwrap();
+    )?;
+    assert_eq!(meter.exact_work(), complete);
+    Ok(())
 }

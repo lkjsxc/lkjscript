@@ -115,8 +115,40 @@ impl Runtime {
         a.bin(0x01, R15, Di);
         a.ret();
 
-        for (label, tag) in [(self.integer, 2), (self.boolean, 1)] {
+        // Scalars are immutable and have no observable address identity. Reuse
+        // read-only objects for byte values, the common -1 sentinel and Booleans.
+        // The table is a physical optimization: every other I64 still uses the
+        // ordinary checked allocation path, with unchanged tag and payload bits.
+        for (label, tag, minimum, count) in [
+            (self.integer, 2_u64, -1_i32, 257_usize),
+            (self.boolean, 1, 0, 2),
+        ] {
+            let mut table = [0_u8; 257 * 16];
+            for (index, row) in table
+                .as_chunks_mut::<16>()
+                .0
+                .iter_mut()
+                .take(count)
+                .enumerate()
+            {
+                row[..8].copy_from_slice(&tag.to_le_bytes());
+                row[8..].copy_from_slice(&(i64::from(minimum) + index as i64).to_le_bytes());
+            }
+            let cached = data(a, pool, &table[..count * 16]);
+            let allocate = a.label();
             a.bind(label);
+            a.group(7, Ax, minimum);
+            a.when(L, allocate);
+            a.group(7, Ax, minimum + count as i32);
+            a.when(GE, allocate);
+            if minimum != 0 {
+                a.group(5, Ax, minimum);
+            }
+            a.shift(4, Ax, 4);
+            a.address(Cx, cached);
+            a.bin(0x01, Ax, Cx);
+            a.ret();
+            a.bind(allocate);
             a.push(Ax);
             a.imm(Di, 16);
             a.call(self.alloc);

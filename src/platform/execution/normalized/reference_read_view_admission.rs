@@ -4,6 +4,7 @@
 //! or production view admission. Symbolic scope identity and accessible reference
 //! closure are proved separately from the invocation's live custody protocol.
 
+use crate::platform::admission::{Meter, Observation};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel::{
     self, AssociatedTypeBindingValue, AssociatedTypeBound, BindingKind, CallableResult,
@@ -76,26 +77,35 @@ pub(crate) struct Proof {
     control: ExecutionControl,
 }
 
-/// Bounds finite proof preparation, not execution or termination.
+/// Explicit proof allowances and passive modeled work/storage observations.
+/// Ordinary preparation selects no aggregate allowance. Depth guards remain
+/// until the complete recursive lifecycle has a separate stack-safety proof.
 struct Budget<'a> {
     control: &'a ExecutionControl,
-    remaining: usize,
-    entries: usize,
+    work: Meter,
+    entries: Meter,
 }
 
 impl<'a> Budget<'a> {
     fn new(control: &'a ExecutionControl) -> Self {
+        Self::with_limits(control, None, None)
+    }
+    fn with_limits(
+        control: &'a ExecutionControl,
+        maximum_work: Option<u64>,
+        maximum_entries: Option<u64>,
+    ) -> Self {
         Self {
             control,
-            remaining: kernel::contract::MAXIMUM_VALIDATION_WORK,
-            entries: 0,
+            work: Meter::new(maximum_work),
+            entries: Meter::new(maximum_entries),
         }
     }
     fn step(&mut self, depth: usize) -> Result<()> {
         self.control.check()?;
         if depth > kernel::contract::MAXIMUM_TYPE_DEPTH {
             return Err(invalid(
-                "canonical type/layout exceeds the semantic depth boundary",
+                "canonical type/layout exceeds the recursive admission depth guard",
             ));
         }
         self.charge_step()
@@ -107,27 +117,30 @@ impl<'a> Budget<'a> {
         self.charge_step()
     }
     fn charge_step(&mut self) -> Result<()> {
-        self.remaining = self.remaining.checked_sub(1).ok_or_else(|| {
+        self.work.charge(Observation::exact(1)).map_err(|_| {
             ExecutionError::resource(
                 "reference_read_view_proof_work",
-                "finite canonical view proof capacity exhausted",
+                "selected canonical view proof work allowance exhausted",
             )
-        })?;
-        Ok(())
+        })
     }
     fn reserve(&mut self, entries: usize) -> Result<()> {
+        self.reserve_observed(Observation::from_usize(entries))
+    }
+    fn reserve_counts(&mut self, entries: &[usize]) -> Result<()> {
+        self.reserve_observed(Observation::sum_counts(entries))
+    }
+    fn reserve_product(&mut self, entries: usize, multiplier: usize) -> Result<()> {
+        self.reserve_observed(Observation::product(entries, multiplier))
+    }
+    fn reserve_observed(&mut self, entries: Observation) -> Result<()> {
         self.control.check()?;
-        self.entries = self
-            .entries
-            .checked_add(entries)
-            .filter(|n| *n <= kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
-                ExecutionError::resource(
-                    "reference_read_view_proof_storage",
-                    "finite canonical view proof storage exhausted",
-                )
-            })?;
-        Ok(())
+        self.entries.charge(entries).map_err(|_| {
+            ExecutionError::resource(
+                "reference_read_view_proof_storage",
+                "selected canonical view proof entry allowance exhausted",
+            )
+        })
     }
 }
 
@@ -358,19 +371,11 @@ impl Proof {
             if proof.dependencies.contains_key(&snapshot.root.package_id) {
                 return Err(invalid("duplicate canonical package snapshot"));
             }
-            budget.reserve(
-                snapshot
-                    .owners
-                    .len()
-                    .checked_add(snapshot.types.len())
-                    .and_then(|n| n.checked_add(snapshot.dependency_types.len()))
-                    .ok_or_else(|| {
-                        ExecutionError::resource(
-                            "reference_read_view_proof_storage",
-                            "inventory overflow",
-                        )
-                    })?,
-            )?;
+            budget.reserve_counts(&[
+                snapshot.owners.len(),
+                snapshot.types.len(),
+                snapshot.dependency_types.len(),
+            ])?;
             proof.dependencies.insert(
                 snapshot.root.package_id,
                 snapshot.dependencies.keys().copied().collect(),
@@ -471,12 +476,7 @@ impl Proof {
     /// independently substituted field object. No cache entry is visible until
     /// that entire finite closure has completed successfully.
     fn prepare_complete_closure(&mut self, mut budget: Budget<'_>) -> Result<()> {
-        budget.reserve(self.types.len().checked_mul(3).ok_or_else(|| {
-            ExecutionError::resource(
-                "reference_read_view_proof_storage",
-                "prepared inventory overflow",
-            )
-        })?)?;
+        budget.reserve_product(self.types.len(), 3)?;
         let mut pending = Vec::new();
         pending.try_reserve_exact(self.types.len()).map_err(|_| {
             ExecutionError::resource(
@@ -726,12 +726,7 @@ impl Proof {
         sources: Vec<ReadScopeSource<u32>>,
         budget: &mut Budget<'_>,
     ) -> Result<()> {
-        budget.reserve(
-            parameters
-                .len()
-                .checked_add(sources.len())
-                .ok_or_else(|| invalid("scope inventory overflow"))?,
-        )?;
+        budget.reserve_counts(&[parameters.len(), sources.len()])?;
         if parameters.len() > kernel::contract::MAXIMUM_CHILDREN
             || sources.len() > kernel::contract::MAXIMUM_CHILDREN
         {
@@ -1418,7 +1413,7 @@ impl Resolver<'_, '_> {
         } = effect
         {
             self.budget
-                .reserve(requirements.len() + effect_parameters.len())?;
+                .reserve_counts(&[requirements.len(), effect_parameters.len()])?;
             for _ in requirements
                 .iter()
                 .map(|_| ())
@@ -1444,8 +1439,10 @@ impl Resolver<'_, '_> {
                 "requirement binder uses a predecessor function generation",
             ));
         }
-        self.budget
-            .reserve(function.effect_parameters.len() + function.requirement_parameters.len())?;
+        self.budget.reserve_counts(&[
+            function.effect_parameters.len(),
+            function.requirement_parameters.len(),
+        ])?;
         for _ in function
             .effect_parameters
             .iter()
@@ -1461,8 +1458,10 @@ impl Resolver<'_, '_> {
         )?;
         let context = Context::declaration(reference);
         let mut names = BTreeSet::new();
-        self.budget
-            .reserve(function.effect_parameters.len() + function.requirement_parameters.len())?;
+        self.budget.reserve_counts(&[
+            function.effect_parameters.len(),
+            function.requirement_parameters.len(),
+        ])?;
         for parameter in &function.effect_parameters {
             self.effect_parameter(
                 kernel::EffectParameterReference {
@@ -1520,7 +1519,8 @@ impl Resolver<'_, '_> {
                 "call effect/requirement actuals omit unused ordered formals or change arity",
             ));
         }
-        self.budget.reserve(effects.len() + requirements.len())?;
+        self.budget
+            .reserve_counts(&[effects.len(), requirements.len()])?;
         for (parameter, actual) in function.requirement_parameters.iter().zip(requirements) {
             let formal = kernel::RequirementParameterReference {
                 package: reference.package,
@@ -1544,7 +1544,7 @@ impl Resolver<'_, '_> {
         for (parameter, actual) in function.effect_parameters.iter().zip(effects) {
             self.admit_effect(actual, context)?;
             self.budget
-                .reserve(actual.requirements.len() + actual.parameters.len())?;
+                .reserve_counts(&[actual.requirements.len(), actual.parameters.len()])?;
             for _ in actual
                 .requirements
                 .iter()
@@ -1575,7 +1575,7 @@ impl Resolver<'_, '_> {
         self.budget.step(depth)?;
         row.validate()
             .map_err(|_| invalid("source effect row is not canonical"))?;
-        let mut count = row.requirements.len();
+        let mut count = Observation::from_usize(row.requirements.len());
         for parameter in &row.parameters {
             self.budget.step(depth)?;
             if let Some(actual) = substitution.effects.get(parameter) {
@@ -1583,18 +1583,14 @@ impl Resolver<'_, '_> {
                     .validate()
                     .map_err(|_| invalid("effect actual row is not canonical"))?;
             }
-            count = count
-                .checked_add(substitution.effects.get(parameter).map_or(1, |actual| {
-                    actual.requirements.len() + actual.parameters.len()
-                }))
-                .ok_or_else(|| {
-                    ExecutionError::resource(
-                        "reference_effect_substitution",
-                        "row occurrence count overflow",
-                    )
-                })?;
+            count.observe(substitution.effects.get(parameter).map_or(
+                Observation::exact(1),
+                |actual| {
+                    Observation::sum_counts(&[actual.requirements.len(), actual.parameters.len()])
+                },
+            ));
         }
-        self.budget.reserve(count)?;
+        self.budget.reserve_observed(count)?;
         let mut result = kernel::EffectRow::default();
         for operand in &row.requirements {
             self.budget.step(depth)?;
@@ -1787,7 +1783,7 @@ impl Resolver<'_, '_> {
         self.facts(port.function_type, context, 0)?;
         let (_, required) = self.caller_row(context)?;
         self.budget
-            .reserve(requirements.len() + required.requirements.len())?;
+            .reserve_counts(&[requirements.len(), required.requirements.len()])?;
         let mut available = kernel::EffectRow::default();
         for requirement in requirements {
             self.budget.step(0)?;
@@ -4133,7 +4129,7 @@ impl Resolver<'_, '_> {
         } = operand
         {
             self.budget
-                .reserve(type_arguments.len() + implementations.len())?;
+                .reserve_counts(&[type_arguments.len(), implementations.len()])?;
             for _ in type_arguments {
                 self.budget.step(depth)?;
             }
@@ -4152,14 +4148,14 @@ impl Resolver<'_, '_> {
         Ok(operand.clone())
     }
     fn copy_substitution(&mut self, source: &Substitution, depth: usize) -> Result<Substitution> {
-        self.budget.reserve(
-            source.types.len()
-                + source.effects.len()
-                + source.requirements.len()
-                + source.scopes.len()
-                + source.members.len()
-                + source.witnesses.len(),
-        )?;
+        self.budget.reserve_counts(&[
+            source.types.len(),
+            source.effects.len(),
+            source.requirements.len(),
+            source.scopes.len(),
+            source.members.len(),
+            source.witnesses.len(),
+        ])?;
         for _ in source
             .types
             .keys()
@@ -4173,7 +4169,7 @@ impl Resolver<'_, '_> {
         for row in source.effects.values() {
             self.budget.step(depth)?;
             self.budget
-                .reserve(row.requirements.len() + row.parameters.len())?;
+                .reserve_counts(&[row.requirements.len(), row.parameters.len()])?;
             for _ in row
                 .requirements
                 .iter()
@@ -6016,23 +6012,25 @@ impl Resolver<'_, '_> {
                 .form
             {
                 TypeForm::Applied { arguments, .. }
-                | TypeForm::ReadViewApplied { arguments, .. } => arguments.len(),
+                | TypeForm::ReadViewApplied { arguments, .. } => [arguments.len(), 0, 0],
                 TypeForm::StructuralRecord { fields }
                 | TypeForm::OwnedProduct { fields }
-                | TypeForm::OwnedChoice { cases: fields } => fields.len(),
-                TypeForm::Function { parameters, .. } => parameters.len(),
+                | TypeForm::OwnedChoice { cases: fields } => [fields.len(), 0, 0],
+                TypeForm::Function { parameters, .. } => [parameters.len(), 0, 0],
                 TypeForm::TaskFunction {
                     parameters, effect, ..
-                } => parameters
-                    .len()
-                    .checked_add(effect.requirements.len())
-                    .and_then(|count| count.checked_add(effect.parameters.len()))
-                    .ok_or_else(|| invalid("resource closure copied inventory overflow"))?,
-                _ => 0,
+                } => [
+                    parameters.len(),
+                    effect.requirements.len(),
+                    effect.parameters.len(),
+                ],
+                _ => [0, 0, 0],
             };
-            self.budget.reserve(copied)?;
-            for _ in 0..copied {
-                self.budget.step(depth)?;
+            self.budget.reserve_counts(&copied)?;
+            for count in copied {
+                for _ in 0..count {
+                    self.budget.step(depth)?;
+                }
             }
             let object = self.object(ty)?;
             let node_free = match object.form {
@@ -6888,7 +6886,7 @@ impl Resolver<'_, '_> {
                 type_arguments,
                 fields,
             } => {
-                self.budget.reserve(fields.len() * 2)?;
+                self.budget.reserve_product(fields.len(), 2)?;
                 let mut structural = Vec::new();
                 let nominal = if let Some(declaration) = nominal_type {
                     self.budget.reserve(type_arguments.len())?;
@@ -7540,13 +7538,13 @@ impl Resolver<'_, '_> {
                     if record.value.is_some() {
                         return Err(invalid("choice payload binding has an initializer"));
                     }
-                    self.budget.reserve(context.lexical.len() + 1)?;
+                    self.budget.reserve_counts(&[context.lexical.len(), 1])?;
                     for _ in &context.lexical {
                         self.budget.step(0)?;
                     }
                     let mut nested = context.clone();
                     nested.lexical.insert(arm.binding);
-                    self.budget.reserve(source.scopes.len() + 1)?;
+                    self.budget.reserve_counts(&[source.scopes.len(), 1])?;
                     for _ in &source.scopes {
                         self.budget.step(0)?;
                     }

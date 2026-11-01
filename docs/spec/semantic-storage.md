@@ -60,12 +60,22 @@ Process proof reuse is limited to 64 entries and 512 MiB of conservatively model
 Every hit rechecks the complete original object read set and exact used dependency transport
 selections; a changed selection requires fresh admission. Disk objects are reread and verified.
 Weak identities may establish unchanged immutable memory bytes without retaining their project
-arena, while charging the same object and byte admission limits. Oversized proofs are not cached.
+arena, while preserving applicable exact explicit object/read-byte policies and per-object checks.
+Ordinary link-read-set rechecks have no aggregate visit/read-byte default. Oversized proofs are not cached.
 One owning export shares its complete admitted source and current proof through compilation without
 retaining its private dependency maps in the global cache. Prepared execution retains the bounded
 read-set metadata and exact acceptance binding. Every invocation rereads and verifies the complete
 physical source and used selections, checks cancellation and rejects changed acceptance. This proof
 does not depend on global cache capacity or replace independent reference execution.
+
+Within a complete package source-admission operation, the separate invocation-local validation
+reuse cache retains at most 8 MiB of modeled material. Complete current validation and canonical
+witness reconstruction precede a new token, bound to the exact package, transport, semantic root,
+validator and representation. If overflow or relevant inexact observations prevent an exact
+modeled reconstruction reservation, return the valid witness without the optional token. A cache
+miss or retention refusal falls back to complete validation; no saturated observation is an exact
+proof bound. Cache retention never becomes an ordinary source-admission quota, and historical
+validation work is not charged again as though the operation repeated it.
 
 When no valid current base proof exists, ordinary reviewed edits use complete post-change validation
 and fresh witness maps within the existing publication owner. Only the valid candidate can publish;
@@ -268,7 +278,12 @@ operational data, grants, host paths, compiler caches, or executable units.
 Staging fully reconstructs and validates the entire container before installation, synchronizes
 immutable material, verifies its installed bytes, and exposes one complete readiness inventory.
 The input read, interface and semantic validation, existing-object comparison, and durable readback
-share the fixed aggregate admission. Failure before visibility preserves prior readiness and HEAD;
+preserve one operation's exact optional source work/read policies, unbounded by default. Explicit
+finite permission is charged before the corresponding work, including the container-admission
+prefix, without resetting per package or subtracting passive observations. Stage visit/read totals
+carry independent saturation flags and cannot grant permission or size storage. Finite allowance
+exhaustion, cancellation, structural violations and actual allocation/I/O failure still reject.
+Failure before visibility preserves prior readiness and HEAD;
 owned stages are removed, while unreachable immutable objects may remain. Lost acknowledgement
 after visibility is reported separately, and exact restaging identifies the complete staged result.
 Readiness is not a semantic dependency binding or a name registry. Acceptance rechecks the complete

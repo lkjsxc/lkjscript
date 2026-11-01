@@ -557,8 +557,8 @@ fn associated_reference_checks_unused_meaning_and_capacity_separately() {
     let proof = reference_classify(&phantom, Limits::default()).unwrap();
     assert!(!proof.finite);
     let exact = Limits {
-        contexts: proof.contexts,
-        slots: proof.slots.len(),
+        contexts: Some(proof.contexts as u64),
+        slots: Some(proof.slots.len() as u64),
         ..Limits::default()
     };
     assert!(!reference_classify(&phantom, exact).unwrap().finite);
@@ -566,7 +566,7 @@ fn associated_reference_checks_unused_meaning_and_capacity_separately() {
         reference_classify(
             &phantom,
             Limits {
-                slots: proof.slots.len() - 1,
+                slots: Some(proof.slots.len() as u64 - 1),
                 ..exact
             }
         ),
@@ -576,7 +576,7 @@ fn associated_reference_checks_unused_meaning_and_capacity_separately() {
         reference_classify(
             &phantom,
             Limits {
-                contexts: proof.contexts - 1,
+                contexts: Some(proof.contexts as u64 - 1),
                 ..exact
             }
         ),
@@ -806,13 +806,12 @@ fn associated_reference_many_zero_slots_do_not_spend_quadratic_storage() {
             ..Program::default()
         };
         let checkpoint = || Ok(());
-        let mut work = 0;
-        let budget = Budget::new(&checkpoint, &mut work, 10_000_000, 64 * 1_048_576);
+        let budget = Budget::new(&checkpoint, Some(10_000_000), Some(64 * 1_048_576));
         let proof = reference_classify_with_budget(
             &program,
             Limits {
-                contexts: 4,
-                slots: parameters + 1,
+                contexts: Some(4),
+                slots: Some(parameters as u64 + 1),
                 ..Limits::default()
             },
             &budget,
@@ -829,6 +828,104 @@ fn associated_reference_many_zero_slots_do_not_spend_quadratic_storage() {
         );
         assert_eq!(proof.finite, finite);
         assert_eq!(proof.positive_diagonal.is_none(), finite);
-        assert!(budget.bytes() < 64 * 1_048_576);
+        assert!(!budget.bytes().saturated);
+        assert!(budget.bytes().consumed < 64 * 1_048_576);
+    }
+}
+
+#[test]
+fn associated_reference_default_context_and_slot_admission_crosses_former_limits() {
+    let functions = (0..257)
+        .map(|ordinal| {
+            (
+                function_id(ordinal),
+                Function {
+                    parameters: 2,
+                    witnesses: Vec::new(),
+                    calls: Vec::new(),
+                },
+            )
+        })
+        .collect();
+    let program = Program {
+        functions,
+        ..Program::default()
+    };
+    let proof = reference_classify(&program, Limits::default()).unwrap();
+    assert!(proof.finite && proof.positive_diagonal.is_none());
+    assert_eq!(proof.contexts, 257);
+    assert_eq!(proof.slots.len(), 514);
+    assert!(proof.edges.is_empty());
+    for (contexts, slots) in [(Some(257), Some(514)), (Some(u64::MAX), Some(u64::MAX))] {
+        let retry = reference_classify(
+            &program,
+            Limits {
+                contexts,
+                slots,
+                ..Limits::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            (retry.contexts, retry.slots, retry.edges),
+            (proof.contexts, proof.slots.clone(), proof.edges.clone())
+        );
+    }
+    for (contexts, slots, kind) in [
+        (Some(0), None, "reference contexts"),
+        (Some(256), None, "reference contexts"),
+        (None, Some(0), "reference slots"),
+        (None, Some(513), "reference slots"),
+    ] {
+        assert_eq!(
+            reference_classify(
+                &program,
+                Limits {
+                    contexts,
+                    slots,
+                    ..Limits::default()
+                }
+            )
+            .unwrap_err(),
+            Refusal::Capacity(kind)
+        );
+    }
+}
+
+#[test]
+fn associated_reference_unbounded_budget_crosses_former_work_and_modeled_storage() {
+    let checkpoint = || Ok(());
+    let budget = Budget::new(&checkpoint, None, None);
+    for _ in 0..=super::contract::MAXIMUM_VALIDATION_WORK {
+        budget.tick().unwrap();
+    }
+    let modeled = 64 * 1_048_576 + 1;
+    budget.reserve_bytes(modeled).unwrap();
+    assert_eq!(
+        budget.consumed(),
+        crate::platform::admission::Observation::exact(
+            super::contract::MAXIMUM_VALIDATION_WORK as u64 + 2
+        )
+    );
+    assert_eq!(
+        budget.bytes(),
+        crate::platform::admission::Observation::from_usize(modeled)
+    );
+    for limit in [0, modeled as u64 - 1] {
+        let bounded = Budget::new(&checkpoint, None, Some(limit));
+        assert_eq!(
+            bounded.reserve_bytes(modeled),
+            Err(Refusal::Capacity("reference storage"))
+        );
+        assert_eq!(
+            bounded.bytes(),
+            crate::platform::admission::Observation::default()
+        );
+    }
+    for limit in [modeled as u64, u64::MAX] {
+        let bounded = Budget::new(&checkpoint, Some(1), Some(limit));
+        bounded.reserve_bytes(modeled).unwrap();
+        assert_eq!(bounded.bytes(), budget.bytes());
+        assert_eq!(bounded.tick(), Err(Refusal::Capacity("reference work")));
     }
 }

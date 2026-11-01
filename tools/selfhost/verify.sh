@@ -15,6 +15,23 @@ flock --exclusive "$selfhost_lease"
 mkdir -p .artifacts/selfhost
 sha256sum src/platform/compiler/selfhost_input.rs \
   src/platform/compiler/selfhost_artifact_input.rs \
+  src/platform/compiler/selfhost_source_input.rs \
+  src/platform/compiler/selfhost_source_input/export.rs \
+  src/platform/compiler/selfhost_source_input/tests.rs \
+  src/platform/execution/normalized/selfhost_source_fixture.rs \
+  src/platform/execution/normalized/selfhost_source_unit_tests.rs \
+  src/platform/execution/normalized/selfhost_source_interface_tests.rs \
+  tests/fixtures/selfhost-source-public-export.lkjp \
+  tests/fixtures/selfhost-source-profile3.lkjsg \
+  tests/fixtures/selfhost-source-units.lkjc \
+  tests/fixtures/selfhost-source-interface.lkjc \
+  tests/fixtures/selfhost-source-interface-probes.lkjc \
+  src/platform/execution/normalized/selfhost_source_artifact_tests.rs \
+  src/platform/execution/normalized/selfhost_source_stage_controls.rs \
+  src/platform/execution/normalized/selfhost_source_bulk_tests.rs \
+  tests/fixtures/bulk-byte-intrinsics.lkjc \
+  src/platform/execution/normalized/selfhost_source_artifact_support.rs \
+  tests/fixtures/selfhost-source-artifact.lkjc \
   tests/support/selfhost_proposals.rs \
   src/platform/execution/normalized/selfhost_tests.rs \
   src/platform/execution/normalized/selfhost_bytes_tests.rs \
@@ -25,8 +42,15 @@ sha256sum src/platform/compiler/selfhost_input.rs \
   src/platform/execution/normalized/selfhost_closure_tests.rs \
   src/platform/execution/normalized/selfhost_source_tests.rs \
   src/platform/execution/normalized/selfhost_source_scalar_tests.rs \
+  src/platform/execution/normalized/selfhost_source_compound_tests.rs \
+  src/platform/execution/normalized/selfhost_source_custody_tests.rs \
+  src/platform/execution/normalized/selfhost_source_custody_evidence_tests.rs \
   tests/fixtures/selfhost-source-scalar.lkjc \
   tests/fixtures/selfhost-source-scalar-intrinsics.lkjc \
+  tests/fixtures/selfhost-source-compound.lkjc \
+  tests/fixtures/selfhost-source-custody.lkjc \
+  tests/fixtures/selfhost-source-custody-mixed.lkjc \
+  tests/fixtures/selfhost-source-custody-probes.lkjc \
   src/platform/execution/normalized/selfhost_source_profile_tests.rs \
   src/platform/execution/normalized/selfhost_source_profile_flow_tests.rs \
   src/platform/execution/normalized/selfhost_source_measure_tests.rs \
@@ -86,6 +110,8 @@ while IFS= read -r selfhost_input; do
 done < .artifacts/selfhost/paths
 cargo test --release --locked --lib selfhost_ -- --test-threads="$selfhost_test_threads" --nocapture \
   2>&1 | tee .artifacts/selfhost/latest.log
+cargo test --release --locked --lib source_input_ -- --test-threads="$selfhost_test_threads" \
+  2>&1 | tee .artifacts/selfhost/source-input.log
 cargo test --release --locked --lib native_elf_ -- --test-threads="$selfhost_test_threads" \
   2>&1 | tee .artifacts/selfhost/native.log
 sha256sum --check .artifacts/selfhost/inputs.sha256

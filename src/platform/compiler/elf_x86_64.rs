@@ -12,11 +12,16 @@ use std::collections::{BTreeMap, HashSet};
 mod asm;
 mod blake3;
 mod buffer;
+mod buffer_bulk;
 mod bytes;
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod capacity_tests;
 mod filter;
+#[cfg(test)]
+mod profiling;
 mod runtime;
+#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+mod scalar_pool_tests;
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod stack_tests;
 use asm::{Asm, Label, R::*, *};
@@ -279,6 +284,8 @@ pub(crate) fn compile_function(
             }
         }
     }
+    #[cfg(test)]
+    profiling::record(&e)?;
     let code = e.a.finish()?;
     let bytes = elf(&code)?;
     Ok((bytes, reachable.len(), e.rewrites))

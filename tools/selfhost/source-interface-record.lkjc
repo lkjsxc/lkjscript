@@ -1,0 +1,263 @@
+declarations.begin
+(units
+  (module create source-interface-record
+    (function create allowed
+      (visibility package)
+      (effect pure)
+      (parameter create kind (type I64))
+      (returns Bool)
+      (body
+        (call ci::either
+          (call ci::eq (local kind) (i64 1))
+          (call ci::either
+            (call ci::eq (local kind) (i64 5))
+            (call ci::either
+              (call ci::eq (local kind) (i64 6))
+              (call ci::either
+                (call ci::eq (local kind) (i64 9))
+                (call ci::either
+                  (call ci::eq (local kind) (i64 11))
+                  (call ci::either
+                    (call ci::eq (local kind) (i64 15))
+                    (call ci::either
+                      (call ci::eq (local kind) (i64 16))
+                      (call ci::either
+                        (call ci::eq (local kind) (i64 17))
+                        (call ci::either
+                          (call ci::eq (local kind) (i64 19))
+                          (call ci::either (call ci::eq (local kind) (i64 20)) (bool false)))))))))))))
+    (function create public
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::either
+            (call ci::eq (call source-table::kind (local graph) (local row)) (i64 5))
+            (call ci::either
+              (call ci::eq (call source-table::kind (local graph) (local row)) (i64 6))
+              (call ci::either
+                (call ci::eq (call source-table::kind (local graph) (local row)) (i64 9))
+                (bool false))))
+          (let
+            (binding data (call source-table::data (local graph) (local row)))
+            (in
+              (call ci::eq
+                (call ci::get (local data) (call source-link-ref::name-end (local data) (i64 56)))
+                (i64 2))))
+          (bool false))))
+    (function create contains
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create left (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local left) (i64 0))
+          (bool false)
+          (if
+            (call source-unit-tables::equal-window
+              (local graph)
+              (call ci::add
+                (call ci::add (call ci::u32 (local graph) (i64 80)) (call ci::mul (local row) (i64 50)))
+                (i64 1))
+              (local data)
+              (call ci::add (local at) (i64 1))
+              (i64 16)
+              (i64 0))
+            (bool true)
+            (call contains
+              (local graph)
+              (local row)
+              (local data)
+              (call ci::add (local at) (i64 17))
+              (call ci::sub (local left) (i64 1)))))))
+    (function create listed
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (parameter create parent (type I64))
+      (parameter create kind (type I64))
+      (returns Bool)
+      (body
+        (let
+          (binding data (call source-table::data (local graph) (local parent)))
+          (binding parent-kind (call source-table::kind (local graph) (local parent)))
+          (binding start
+            (if
+              (call ci::eq (local kind) (i64 11))
+              (if
+                (call ci::eq (local parent-kind) (i64 5))
+                (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 2))
+                (field (call source-scalar-profile::function-parts (local graph) (local parent)) (name types)))
+              (if
+                (call ci::eq (local kind) (i64 15))
+                (call source-scalar-profile::parameters (local graph) (local parent))
+                (call source-table::skip
+                  (local data)
+                  (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 2))
+                  (i64 17)))))
+          (binding array (call source-table::array (local data) (local start)))
+          (in
+            (call contains
+              (local graph)
+              (local row)
+              (local data)
+              (field (local array) (name next))
+              (field (local array) (name value)))))))
+    (function create child
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (parameter create kind (type I64))
+      (returns Bool)
+      (body
+        (let
+          (binding data (call source-table::data (local graph) (local row)))
+          (binding parent
+            (call source-table::owner
+              (local graph)
+              (local data)
+              (if (call ci::eq (local kind) (i64 15)) (i64 40) (i64 39))
+              (i64 2)))
+          (in
+            (if
+              (call ci::lt (local parent) (i64 0))
+              (bool false)
+              (if
+                (call public (local graph) (local parent))
+                (let
+                  (binding parent-kind (call source-table::kind (local graph) (local parent)))
+                  (in
+                    (if
+                      (if
+                        (call ci::eq (local kind) (i64 19))
+                        (call ci::eq (local parent-kind) (i64 9))
+                        (call ci::either
+                          (call ci::eq (local parent-kind) (i64 5))
+                          (call ci::either (call ci::eq (local parent-kind) (i64 6)) (bool false))))
+                      (call listed (local graph) (local row) (local parent) (local kind))
+                      (bool false))))
+                (bool false)))))))
+    (function create selected
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (returns Bool)
+      (body
+        (let
+          (binding kind (call source-table::kind (local graph) (local row)))
+          (in
+            (if
+              (call ci::either
+                (call ci::eq (local kind) (i64 5))
+                (call ci::either
+                  (call ci::eq (local kind) (i64 6))
+                  (call ci::either (call ci::eq (local kind) (i64 9)) (bool false))))
+              (call public (local graph) (local row))
+              (if
+                (call ci::either
+                  (call ci::eq (local kind) (i64 11))
+                  (call ci::either
+                    (call ci::eq (local kind) (i64 15))
+                    (call ci::either (call ci::eq (local kind) (i64 19)) (bool false))))
+                (call child (local graph) (local row) (local kind))
+                (bool false)))))))
+    (function create declaration
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding data (call source-table::data (local graph) (local row)))
+          (binding kind (call source-table::kind (local graph) (local row)))
+          (binding name-end (call source-link-ref::name-end (local data) (i64 56)))
+          (binding start (call ci::add (local name-end) (i64 2)))
+          (binding end
+            (if
+              (call ci::eq (local kind) (i64 5))
+              (call ci::add (call source-custody-signature::result-at (local graph) (local row)) (i64 33))
+              (if
+                (call ci::eq (local kind) (i64 6))
+                (field (call source-scalar-profile::function-parts (local graph) (local row)) (name body))
+                (call ci::sub (call ci::length (local data)) (i64 32)))))
+          (in
+            (let
+              (binding b0 (type ByteBuffer) (call ci::empty))
+              (binding b1 (type ByteBuffer) (call ci::le (i64 1) (i64 1) (local b0)))
+              (binding b2 (type ByteBuffer) (call ci::le (i64 0) (i64 1) (local b1)))
+              (binding b3 (type ByteBuffer) (call wire::range (local data) (i64 19) (i64 39) (local b2)))
+              (binding b4
+                (type ByteBuffer)
+                (call wire::range (local data) (i64 56) (local name-end) (local b3)))
+              (binding b5
+                (type ByteBuffer)
+                (call ci::le
+                  (if
+                    (call ci::eq (local kind) (i64 5))
+                    (i64 3)
+                    (if (call ci::eq (local kind) (i64 6)) (i64 4) (i64 8)))
+                  (i64 1)
+                  (local b4)))
+              (binding b6
+                (type ByteBuffer)
+                (call wire::range (local data) (local start) (local end) (local b5)))
+              (in (call ci::freeze (local b6))))))))
+    (function create image
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding kind (call source-table::kind (local graph) (local row)))
+          (binding data (call source-table::data (local graph) (local row)))
+          (binding body
+            (if
+              (call ci::either
+                (call ci::eq (local kind) (i64 5))
+                (call ci::either
+                  (call ci::eq (local kind) (i64 6))
+                  (call ci::either (call ci::eq (local kind) (i64 9)) (bool false))))
+              (call declaration (local graph) (local row))
+              (let
+                (binding b0 (type ByteBuffer) (call ci::empty))
+                (binding b1 (type ByteBuffer) (call ci::le (i64 1) (i64 1) (local b0)))
+                (binding b2
+                  (type ByteBuffer)
+                  (call ci::le
+                    (if
+                      (call ci::eq (local kind) (i64 11))
+                      (i64 1)
+                      (if (call ci::eq (local kind) (i64 15)) (i64 6) (i64 8)))
+                    (i64 1)
+                    (local b1)))
+                (binding b3
+                  (type ByteBuffer)
+                  (call wire::range
+                    (local data)
+                    (i64 19)
+                    (if
+                      (call ci::eq (local kind) (i64 19))
+                      (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 33))
+                      (call ci::sub (call ci::length (local data)) (i64 32)))
+                    (local b2)))
+                (in (call ci::freeze (local b3))))))
+          (in
+            (call wire::envelope
+              (text "LKJPIF22")
+              (text "lkjscript.package-interface-owner-envelope.v22")
+              (local body))))))))
+declarations.end

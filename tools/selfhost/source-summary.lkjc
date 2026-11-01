@@ -1,0 +1,93 @@
+declarations.begin
+(units
+  (module create source-summary
+    (function create complete
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create roles (type Bytes))
+      (parameter create children (type Bytes))
+      (parameter create relations (type Bytes))
+      (parameter create outgoing (type Bytes))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (let
+          (binding local (call source-summary-local::prepare (local graph) (local relations) (local outgoing)))
+          (binding semantic
+            (call source-summary-aggregate::prepare
+              (local graph)
+              (local roles)
+              (local children)
+              (local local)
+              (bool false)))
+          (in
+            (if
+              (call ci::eq (field (local semantic) (name code)) (i64 0))
+              (let
+                (binding dependencies
+                  (let
+                    (binding summary-buffer-72 (type ByteBuffer) (call ci::empty))
+                    (in
+                      (call source-summary-local::validation
+                        (local graph)
+                        (local relations)
+                        (local outgoing)
+                        (field (local semantic) (name rows))
+                        (i64 0)
+                        (local summary-buffer-72)))))
+                (in
+                  (call source-summary-aggregate::prepare
+                    (local graph)
+                    (local roles)
+                    (local children)
+                    (local dependencies)
+                    (bool true))))
+              (record structural
+                (field code (field (local semantic) (name code)))
+                (field rows (call ci::text-bytes (text "")))))))))
+    (function create inventories
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (let
+          (binding roles (call source-summary-roles::prepare (local graph) (local parents)))
+          (in
+            (if
+              (call ci::eq (field (local roles) (name code)) (i64 0))
+              (let
+                (binding relations (call source-summary-relations::prepare (local graph)))
+                (in
+                  (if
+                    (call ci::eq (field (local relations) (name code)) (i64 0))
+                    (call source-summary::complete
+                      (local graph)
+                      (field (local roles) (name rows))
+                      (field (local roles) (name directory))
+                      (field (local relations) (name rows))
+                      (field (local relations) (name directory)))
+                    (record structural
+                      (field code (field (local relations) (name code)))
+                      (field rows (call ci::text-bytes (text "")))))))
+              (record structural
+                (field code (field (local roles) (name code)))
+                (field rows (call ci::text-bytes (text "")))))))))
+    (function create prepare
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (if
+          (call ci::lt (call ci::length (local graph)) (i64 128))
+          (record structural (field code (i64 12)) (field rows (call ci::text-bytes (text ""))))
+          (if
+            (call ci::lt
+              (call ci::div (i64 9223372036854775807) (i64 224))
+              (call source-table::count (local graph)))
+            (record structural (field code (i64 6)) (field rows (call ci::text-bytes (text ""))))
+            (call source-summary::inventories (local graph) (local parents))))))))
+declarations.end

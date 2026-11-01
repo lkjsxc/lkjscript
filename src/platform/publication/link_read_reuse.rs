@@ -123,17 +123,7 @@ impl RepositoryView {
         let objects = self.store.take_link_read_set();
         let value = result?;
         let mut work = RepositoryReadWork::default();
-        let mut admission = StoreReadAdmission::new(StoreReadLimits {
-            maximum_catalog_lookups: Some(
-                crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS,
-            ),
-            maximum_objects: Some(
-                crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS,
-            ),
-            maximum_bytes: Some(
-                crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES,
-            ),
-        });
+        let mut admission = StoreReadAdmission::unbounded();
         for key in objects {
             self.validation_checkpoint()?;
             consume_final_work(&mut reuse)?;

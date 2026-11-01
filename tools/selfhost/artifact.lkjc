@@ -39,38 +39,36 @@ declarations.begin
             (binding offset (call ci::u64 (local data) (local at)))
             (binding size (call ci::field64 (local data) (local at) (i64 8)))
             (binding unit
-              (call ci::slice
-                (local data)
-                (local offset)
-                (call ci::add (local offset) (local size))))
+              (call ci::slice (local data) (local offset) (call ci::add (local offset) (local size))))
             (binding image (field (call unit-wire::encode-unit (local unit) (i64 0)) (name image)))
             (binding used (call ci::size (local out)))
             (in
               (if
                 (call pool-extent (local used) (i64 8))
                 (if
-                  (call pool-extent
-                    (call ci::add (local used) (i64 8))
-                    (call ci::length (local image)))
+                  (call pool-extent (call ci::add (local used) (i64 8)) (call ci::length (local image)))
                   (let
                     (binding a
                       (type ByteBuffer)
                       (call ci::le (call ci::length (local image)) (i64 8) (local out)))
                     (binding b (type ByteBuffer) (call ci::append (local image) (i64 0) (local a)))
                     (in
-                      (call unit-pool
+                      (call
+                        unit-pool
                         (local data)
                         (call ci::add (local i) (i64 1))
                         (local count)
                         (local b))))
                   (sequence
                     (call ci::discard (local out))
-                    (record structural
+                    (record
+                      structural
                       (field diagnostic (i64 3))
                       (field pool (call ci::text-bytes (text ""))))))
                 (sequence
                   (call ci::discard (local out))
-                  (record structural
+                  (record
+                    structural
                     (field diagnostic (i64 3))
                     (field pool (call ci::text-bytes (text "")))))))))))
     (function create unit-facts
@@ -89,14 +87,16 @@ declarations.begin
           (local out)
           (let
             (binding unit
-              (call ci::u64
+              (call
+                ci::u64
                 (local data)
                 (call ci::add (call ci::u64 (local data) (i64 72)) (call ci::mul (local i) (i64 16)))))
             (binding size (call ci::u64 (local pool) (local at)))
             (binding offset (call ci::add (local at) (i64 8)))
             (binding end (call ci::add (local offset) (local size)))
             (binding digest
-              (call wire::digest
+              (call
+                wire::digest
                 (text "lkjscript.compiler-unit.v1")
                 (call ci::slice (local pool) (local offset) (local end))))
             (binding a
@@ -104,12 +104,11 @@ declarations.begin
               (call object-row (i64 13) (local offset) (local size) (local digest) (local out)))
             (binding b
               (type ByteBuffer)
-              (call ci::push
-                (call ci::add (call ci::u32 (local data) (local unit)) (i64 1))
-                (local a)))
+              (call ci::push (call ci::add (call ci::u32 (local data) (local unit)) (i64 1)) (local a)))
             (binding c
               (type ByteBuffer)
-              (call wire::range
+              (call
+                wire::range
                 (local data)
                 (call ci::add (local unit) (i64 32))
                 (call ci::add (local unit) (i64 48))
@@ -119,14 +118,16 @@ declarations.begin
               (call ci::push (call ci::field32 (local data) (local unit) (i64 8)) (local c)))
             (binding e
               (type ByteBuffer)
-              (call wire::range
+              (call
+                wire::range
                 (local pool)
                 (call ci::add (local offset) (i64 21))
                 (call ci::add (local offset) (i64 53))
                 (local d)))
             (binding f (type ByteBuffer) (call ci::append (local digest) (i64 0) (local e)))
             (in
-              (call unit-facts
+              (call
+                unit-facts
                 (local data)
                 (local pool)
                 (call ci::add (local i) (i64 1))
@@ -151,13 +152,15 @@ declarations.begin
             (binding offset (call ci::add (local at) (local start)))
             (binding next
               (type ByteBuffer)
-              (call wire::range
+              (call
+                wire::range
                 (local data)
                 (local offset)
                 (call ci::add (local offset) (local length))
                 (local out)))
             (in
-              (call pluck
+              (call
+                pluck
                 (local data)
                 (call ci::add (local at) (local stride))
                 (local stride)
@@ -196,9 +199,7 @@ declarations.begin
             (call ci::lt (call ci::sub (call ci::length (local pool)) (local at)) (i64 8))
             (sequence
               (call ci::discard (local out))
-              (record structural
-                (field diagnostic (i64 3))
-                (field rows (call ci::text-bytes (text "")))))
+              (record structural (field diagnostic (i64 3)) (field rows (call ci::text-bytes (text "")))))
             (let
               (binding size (call ci::u64 (local pool) (local at)))
               (binding offset (call ci::add (local at) (i64 8)))
@@ -207,34 +208,40 @@ declarations.begin
                   (call ci::lt (local size) (i64 1))
                   (sequence
                     (call ci::discard (local out))
-                    (record structural
+                    (record
+                      structural
                       (field diagnostic (i64 3))
                       (field rows (call ci::text-bytes (text "")))))
                   (if
                     (call ci::lt (i64 65536) (local size))
                     (sequence
                       (call ci::discard (local out))
-                      (record structural
+                      (record
+                        structural
                         (field diagnostic (i64 3))
                         (field rows (call ci::text-bytes (text "")))))
                     (if
-                      (call ci::lt
+                      (call
+                        ci::lt
                         (call ci::sub (call ci::length (local pool)) (local offset))
                         (local size))
                       (sequence
                         (call ci::discard (local out))
-                        (record structural
+                        (record
+                          structural
                           (field diagnostic (i64 3))
                           (field rows (call ci::text-bytes (text "")))))
                       (let
                         (binding end (call ci::add (local offset) (local size)))
                         (binding digest
-                          (call wire::digest
+                          (call
+                            wire::digest
                             (text "lkjscript.persistent-map-page.v2")
                             (call ci::slice (local pool) (local offset) (local end))))
                         (binding next
                           (type ByteBuffer)
-                          (call object-row
+                          (call
+                            object-row
                             (i64 5)
                             (call ci::add (local base) (local offset))
                             (local size)
@@ -250,17 +257,13 @@ declarations.begin
       (body
         (if
           (call ci::eq (call ci::length (local pool)) (i64 0))
-          (record structural
-            (field diagnostic (i64 3))
-            (field rows (call ci::text-bytes (text ""))))
+          (record structural (field diagnostic (i64 3)) (field rows (call ci::text-bytes (text ""))))
           (if
             (call pool-extent (local base) (call ci::length (local pool)))
             (let
               (binding out (type ByteBuffer) (call ci::empty))
               (in (call page-facts (local pool) (i64 0) (local base) (local out))))
-            (record structural
-              (field diagnostic (i64 3))
-              (field rows (call ci::text-bytes (text ""))))))))
+            (record structural (field diagnostic (i64 3)) (field rows (call ci::text-bytes (text ""))))))))
     (function create publish-rows
       (visibility private)
       (effect pure)
@@ -274,16 +277,14 @@ declarations.begin
         (let
           (binding count (call ci::div (call ci::length (local rows)) (i64 56)))
           (binding bytes (call artifact-order::byte-count (local rows) (i64 0) (i64 0)))
-          (binding packed-size (call pack::encoded-size (local count) (local bytes)))
+          (binding prepared (call pack-target::prepare (local rows)))
           (in
             (if
-              (call ci::lt (local packed-size) (i64 0))
-              (record structural
-                (field diagnostic (i64 3))
-                (field image (call ci::text-bytes (text ""))))
+              (call ci::eq (field (local prepared) (name diagnostic)) (i64 0))
               (let
                 (binding manifest
-                  (call artifact-manifest::artifact
+                  (call
+                    artifact-manifest::artifact
                     (local meta)
                     (local compilation-digest)
                     (call artifact-order::closure (local rows))
@@ -291,25 +292,57 @@ declarations.begin
                     (local bytes)))
                 (in
                   (if
-                    (call pool-extent (call ci::length (local manifest)) (i64 140))
+                    (call pool-extent (call ci::length (local manifest)) (i64 100))
                     (if
-                      (call pool-extent
-                        (call ci::add (call ci::length (local manifest)) (i64 140))
-                        (local packed-size))
+                      (call
+                        pool-extent
+                        (call ci::add (call ci::length (local manifest)) (i64 100))
+                        (field (local prepared) (name size)))
                       (let
-                        (binding packed (call pack::encode (local data) (local generated) (local rows)))
-                        (binding image
-                          (call artifact-manifest::container
-                            (local manifest)
-                            (field (local packed) (name digest))
-                            (field (local packed) (name image))))
-                        (in (record structural (field diagnostic (i64 0)) (field image (local image)))))
-                      (record structural
+                        (binding encoded
+                          (call
+                            pack-target::encode
+                            (local data)
+                            (local generated)
+                            (local rows)
+                            (field (local prepared) (name plan))))
+                        (in
+                          (if
+                            (call ci::eq (field (local encoded) (name diagnostic)) (i64 0))
+                            (if
+                              (call
+                                ci::eq
+                                (call ci::length (field (local encoded) (name image)))
+                                (field (local prepared) (name size)))
+                              (record
+                                structural
+                                (field diagnostic (i64 0))
+                                (field image
+                                  (call
+                                    artifact-manifest::container
+                                    (local manifest)
+                                    (field (local prepared) (name count))
+                                    (field (local encoded) (name image)))))
+                              (record
+                                structural
+                                (field diagnostic (i64 3))
+                                (field image (call ci::text-bytes (text "")))))
+                            (record
+                              structural
+                              (field diagnostic (i64 3))
+                              (field image (call ci::text-bytes (text "")))))))
+                      (record
+                        structural
                         (field diagnostic (i64 3))
                         (field image (call ci::text-bytes (text "")))))
-                    (record structural
+                    (record
+                      structural
                       (field diagnostic (i64 3))
-                      (field image (call ci::text-bytes (text ""))))))))))))
+                      (field image (call ci::text-bytes (text "")))))))
+              (record
+                structural
+                (field diagnostic (i64 3))
+                (field image (call ci::text-bytes (text "")))))))))
     (function create assemble
       (visibility private)
       (effect pure)
@@ -324,7 +357,8 @@ declarations.begin
         (if
           (call pool-extent (call ci::length (local pool)) (call ci::length (local map-pages)))
           (if
-            (call pool-extent
+            (call
+              pool-extent
               (call ci::add (call ci::length (local pool)) (call ci::length (local map-pages)))
               (call ci::length (local compilation)))
             (let
@@ -334,11 +368,13 @@ declarations.begin
                   (call ci::eq (field (local map-facts) (name diagnostic)) (i64 0))
                   (let
                     (binding compilation-digest
-                      (call wire::digest
+                      (call
+                        wire::digest
                         (text "lkjscript.compilation-manifest-object.v1")
                         (local compilation)))
                     (binding generated
-                      (call ci::concat
+                      (call
+                        ci::concat
                         (call ci::concat (local pool) (local map-pages))
                         (local compilation)))
                     (binding g (type ByteBuffer) (call ci::empty))
@@ -350,11 +386,10 @@ declarations.begin
                       (call ci::append (field (local map-facts) (name rows)) (i64 0) (local h)))
                     (binding j
                       (type ByteBuffer)
-                      (call object-row
+                      (call
+                        object-row
                         (i64 24)
-                        (call ci::add
-                          (call ci::length (local pool))
-                          (call ci::length (local map-pages)))
+                        (call ci::add (call ci::length (local pool)) (call ci::length (local map-pages)))
                         (call ci::length (local compilation))
                         (local compilation-digest)
                         (local i)))
@@ -366,16 +401,19 @@ declarations.begin
                     (binding sorted (call ci::freeze (local l)))
                     (binding source-offset (call ci::u64 (local data) (i64 88)))
                     (binding source
-                      (call ci::slice
+                      (call
+                        ci::slice
                         (local data)
                         (local source-offset)
-                        (call ci::add
+                        (call
+                          ci::add
                           (local source-offset)
                           (call ci::mul (call ci::u64 (local data) (i64 96)) (i64 56)))))
                     (binding m (type ByteBuffer) (call ci::empty))
                     (binding n
                       (type ByteBuffer)
-                      (call artifact-order::merge
+                      (call
+                        artifact-order::merge
                         (local source)
                         (i64 0)
                         (local sorted)
@@ -383,21 +421,19 @@ declarations.begin
                         (local m)))
                     (binding rows (call ci::freeze (local n)))
                     (in
-                      (call publish-rows
+                      (call
+                        publish-rows
                         (local data)
                         (local meta)
                         (local generated)
                         (local compilation-digest)
                         (local rows))))
-                  (record structural
+                  (record
+                    structural
                     (field diagnostic (i64 3))
                     (field image (call ci::text-bytes (text "")))))))
-            (record structural
-              (field diagnostic (i64 3))
-              (field image (call ci::text-bytes (text "")))))
-          (record structural
-            (field diagnostic (i64 3))
-            (field image (call ci::text-bytes (text "")))))))
+            (record structural (field diagnostic (i64 3)) (field image (call ci::text-bytes (text "")))))
+          (record structural (field diagnostic (i64 3)) (field image (call ci::text-bytes (text "")))))))
     (function create compile-pool
       (visibility private)
       (effect pure)
@@ -409,7 +445,8 @@ declarations.begin
           (binding count (call ci::u64 (local data) (i64 80)))
           (binding meta-offset (call ci::u64 (local data) (i64 104)))
           (binding meta
-            (call ci::slice
+            (call
+              ci::slice
               (local data)
               (local meta-offset)
               (call ci::add (local meta-offset) (call ci::u64 (local data) (i64 120)))))
@@ -423,16 +460,18 @@ declarations.begin
             (type ByteBuffer)
             (call pluck (local facts) (i64 0) (i64 138) (i64 56) (i64 82) (local e)))
           (binding bindings (call ci::freeze (local f)))
-          (binding map (call unit-map::encode (local bindings)))
+          (binding map (call unit-map::encode (local bindings) (i64 65)))
           (binding map-pages (field (local map) (name pages)))
           (binding compilation
-            (call artifact-manifest::compilation
+            (call
+              artifact-manifest::compilation
               (local meta)
               (field (local map) (name digest))
               (field (local map) (name content))
               (local count)))
           (in
-            (call assemble
+            (call
+              assemble
               (local data)
               (local meta)
               (local pool)
@@ -453,7 +492,8 @@ declarations.begin
             (if
               (call ci::eq (field (local projected) (name diagnostic)) (i64 0))
               (call compile-pool (local data) (field (local projected) (name pool)))
-              (record structural
+              (record
+                structural
                 (field diagnostic (i64 3))
                 (field image (call ci::text-bytes (text "")))))))))))
 declarations.end

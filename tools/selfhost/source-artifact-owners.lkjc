@@ -1,0 +1,168 @@
+declarations.begin
+(units
+  (module create source-artifact-owners
+    (function create listed-child
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create row (type I64))
+      (parameter create tag (type I64))
+      (returns Bool)
+      (body
+        (let
+          (binding parent (call source-table::parent (local parents) (local row)))
+          (in
+            (if
+              (call ci::lt (local parent) (call source-table::count (local graph)))
+              (let
+                (binding parent-kind (call source-table::kind (local graph) (local parent)))
+                (in
+                  (if
+                    (if
+                      (call ci::eq (local tag) (i64 19))
+                      (call ci::eq (local parent-kind) (i64 9))
+                      (call ci::either
+                        (call ci::eq (local parent-kind) (i64 5))
+                        (call ci::eq (local parent-kind) (i64 6))))
+                    (call source-interface-record::listed
+                      (local graph)
+                      (local row)
+                      (local parent)
+                      (local tag))
+                    (bool false))))
+              (bool false))))))
+    (function create nonunrestricted
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (parameter create index (type I64))
+      (parameter create left (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local left) (i64 0))
+          (bool false)
+          (let
+            (binding parameter
+              (call source-custody-signature::parameter (local graph) (local row) (local index)))
+            (in
+              (if
+                (call ci::eq (call source-custody-signature::mode (local graph) (local parameter)) (i64 0))
+                (call nonunrestricted
+                  (local graph)
+                  (local row)
+                  (call ci::add (local index) (i64 1))
+                  (call ci::sub (local left) (i64 1)))
+                (bool true)))))))
+    (function create memory-result
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (returns Bool)
+      (body
+        (let
+          (binding record (call source-table::data (local graph) (local row)))
+          (binding type-row
+            (call source-type-table::lookup
+              (local graph)
+              (local record)
+              (call source-custody-signature::result-at (local graph) (local row))))
+          (in
+            (if
+              (call ci::lt (local type-row) (i64 0))
+              (bool false)
+              (call ci::eq
+                (call ci::get (call source-type-table::data (local graph) (local type-row)) (i64 19))
+                (i64 20)))))))
+    (function create runtime
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create row (type I64))
+      (returns Bool)
+      (body
+        (let
+          (binding tag (call source-table::kind (local graph) (local row)))
+          (in
+            (if
+              (call ci::either (call ci::eq (local tag) (i64 5)) (call ci::eq (local tag) (i64 6)))
+              (if
+                (call memory-result (local graph) (local row))
+                (bool true)
+                (call nonunrestricted
+                  (local graph)
+                  (local row)
+                  (i64 0)
+                  (call source-custody-signature::count (local graph) (local row))))
+              (if
+                (call ci::either
+                  (call ci::eq (local tag) (i64 11))
+                  (call ci::either
+                    (call ci::eq (local tag) (i64 15))
+                    (call ci::either (call ci::eq (local tag) (i64 19)) (bool false))))
+                (call listed-child (local graph) (local parents) (local row) (local tag))
+                (call ci::either (call ci::eq (local tag) (i64 9)) (call ci::eq (local tag) (i64 20)))))))))
+    (function create reference
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create row (type I64))
+      (returns Bool)
+      (body
+        (let
+          (binding tag (call source-table::kind (local graph) (local row)))
+          (in
+            (if
+              (call ci::either (call ci::eq (local tag) (i64 5)) (call ci::eq (local tag) (i64 6)))
+              (bool true)
+              (if
+                (call ci::either (call ci::eq (local tag) (i64 16)) (call ci::eq (local tag) (i64 17)))
+                (let
+                  (binding up (call source-table::parent (local parents) (local row)))
+                  (in
+                    (if
+                      (call ci::both
+                        (call ci::lt (local up) (call source-table::count (local graph)))
+                        (if (call ci::eq (local up) (local row)) (bool false) (bool true)))
+                      (call reference (local graph) (local parents) (local up))
+                      (bool false))))
+                (bool false)))))))
+    (function create runtime-row
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding at
+            (call ci::add (call ci::u32 (local graph) (i64 80)) (call ci::mul (local row) (i64 50))))
+          (binding a
+            (type ByteBuffer)
+            (call ci::le (call ci::sub (call ci::get (local graph) (local at)) (i64 1)) (i64 4) (local out)))
+          (binding b
+            (type ByteBuffer)
+            (call ci::le
+              (call ci::sub (call ci::get (local graph) (call ci::add (local at) (i64 17))) (i64 1))
+              (i64 4)
+              (local a)))
+          (binding c
+            (type ByteBuffer)
+            (call wire::range
+              (local graph)
+              (call ci::add (local at) (i64 1))
+              (call ci::add (local at) (i64 17))
+              (local b)))
+          (in
+            (call wire::range
+              (local graph)
+              (call ci::add (local at) (i64 18))
+              (call ci::add (local at) (i64 50))
+              (local c))))))))
+declarations.end

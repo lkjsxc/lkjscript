@@ -1,0 +1,114 @@
+declarations.begin
+(units
+  (module create source-interface-wire
+    (function create frame
+      (visibility package)
+      (effect pure)
+      (parameter create domain (type I64))
+      (parameter create digest (type Bytes))
+      (parameter create image (type Bytes))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::le (local domain) (i64 8) (local out)))
+          (binding b (type ByteBuffer) (call wire::range (local digest) (i64 0) (i64 32) (local a)))
+          (binding c (type ByteBuffer) (call ci::le (call ci::length (local image)) (i64 8) (local b)))
+          (in (call wire::range (local image) (i64 0) (call ci::length (local image)) (local c))))))
+    (function create root
+      (visibility package)
+      (effect pure)
+      (parameter create page (type Bytes))
+      (parameter create count (type I64))
+      (parameter create content (type Bytes))
+      (returns Bytes)
+      (body
+        (let
+          (binding b0 (type ByteBuffer) (call ci::empty))
+          (binding b1
+            (type ByteBuffer)
+            (call wire::range (local page) (i64 0) (call ci::length (local page)) (local b0)))
+          (binding b2 (type ByteBuffer) (call ci::le (local count) (i64 8) (local b1)))
+          (binding b3
+            (type ByteBuffer)
+            (call wire::range (local content) (i64 0) (call ci::length (local content)) (local b2)))
+          (in (call ci::freeze (local b3))))))
+    (function create identity
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create count (type I64))
+      (parameter create content (type Bytes))
+      (returns Bytes)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::empty))
+          (binding b (type ByteBuffer) (call ci::push (i64 1) (local a)))
+          (binding c (type ByteBuffer) (call ci::push (i64 1) (local b)))
+          (binding d (type ByteBuffer) (call ci::push (i64 18) (local c)))
+          (binding e (type ByteBuffer) (call wire::range (local graph) (i64 32) (i64 48) (local d)))
+          (binding f (type ByteBuffer) (call ci::push (i64 1) (local e)))
+          (binding g (type ByteBuffer) (call wire::range (local content) (i64 0) (i64 32) (local f)))
+          (binding h (type ByteBuffer) (call wire::unsigned (local count) (local g)))
+          (binding body (call ci::freeze (local h)))
+          (binding image
+            (call wire::envelope
+              (text "LKJPIFI1")
+              (text "lkjscript.package-interface-identity.v1")
+              (local body)))
+          (in (call wire::digest (text "lkjscript.kernel.package-interface.v1") (local image))))))
+    (function create pages
+      (visibility package)
+      (effect pure)
+      (parameter create pages (type Bytes))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (objects Bytes)))
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local pages)))
+          (record structural (field code (i64 0)) (field objects (call ci::freeze (local out))))
+          (if
+            (call source-read::range (local pages) (local at) (i64 8) (call ci::length (local pages)))
+            (if
+              (call ci::lt (call ci::get (local pages) (call ci::add (local at) (i64 7))) (i64 128))
+              (let
+                (binding length (call ci::u64 (local pages) (local at)))
+                (binding start (call ci::add (local at) (i64 8)))
+                (in
+                  (if
+                    (call source-read::range
+                      (local pages)
+                      (local start)
+                      (local length)
+                      (call ci::length (local pages)))
+                    (if
+                      (call source-unit-tables::room
+                        (call ci::size (local out))
+                        (call source-unit-tables::add (i64 48) (local length)))
+                      (let
+                        (binding end (call ci::add (local start) (local length)))
+                        (binding image (call ci::slice (local pages) (local start) (local end)))
+                        (binding digest
+                          (call wire::digest (text "lkjscript.persistent-map-page.v2") (local image)))
+                        (binding next
+                          (type ByteBuffer)
+                          (call frame (i64 5) (local digest) (local image) (local out)))
+                        (in (call pages (local pages) (local end) (local next))))
+                      (let
+                        (binding discarded (call ci::discard (local out)))
+                        (in
+                          (record structural
+                            (field code (i64 3))
+                            (field objects (call ci::text-bytes (text "")))))))
+                    (let
+                      (binding discarded (call ci::discard (local out)))
+                      (in
+                        (record structural (field code (i64 3)) (field objects (call ci::text-bytes (text "")))))))))
+              (let
+                (binding discarded (call ci::discard (local out)))
+                (in (record structural (field code (i64 3)) (field objects (call ci::text-bytes (text "")))))))
+            (let
+              (binding discarded (call ci::discard (local out)))
+              (in (record structural (field code (i64 3)) (field objects (call ci::text-bytes (text ""))))))))))))
+declarations.end

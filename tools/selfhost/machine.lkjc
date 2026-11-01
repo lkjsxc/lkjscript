@@ -699,7 +699,7 @@ declarations.begin
       (returns (record (code I64) (bytes Bytes)))
       (body
         (if
-          (call ci::eq (local code) (i64 29))
+          (call ci::eq (local code) (i64 32))
           (let
             (binding final (type ByteBuffer) (call ci::pad (i64 65536) (i64 0) (local out)))
             (in

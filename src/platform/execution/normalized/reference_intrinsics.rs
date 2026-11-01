@@ -118,6 +118,84 @@ impl ReferenceState<'_> {
                 buffer.establish_admission(self.schema.value_origin)?;
                 CheckedValue::memory(&self.schema, NormalizedValue::ByteBuffer(buffer))
             }
+            "core.buffer.append-slice" => {
+                let values: [CheckedValue; 4] = arguments
+                    .try_into()
+                    .map_err(|_| reference_type_error("buffer append arity"))?;
+                let [data, start, end, buffer] = values;
+                let (
+                    NormalizedValue::Bytes(data),
+                    NormalizedValue::I64(start),
+                    NormalizedValue::I64(end),
+                    NormalizedValue::ByteBuffer(buffer),
+                ) = (
+                    data.release(),
+                    start.release(),
+                    end.release(),
+                    buffer.release(),
+                )
+                else {
+                    return Err(reference_type_error("buffer append types"));
+                };
+                buffer.validate(self.memory_domain, true)?;
+                let control = self.control;
+                let buffer =
+                    buffer.append_slice(data.as_ref(), start, end, control, &mut |bytes| {
+                        self.charge_allocation(bytes)
+                    })?;
+                buffer.establish_admission(self.schema.value_origin)?;
+                CheckedValue::memory(&self.schema, NormalizedValue::ByteBuffer(buffer))
+            }
+            "core.buffer.append-i64-le" => {
+                let values: [CheckedValue; 2] = arguments
+                    .try_into()
+                    .map_err(|_| reference_type_error("buffer word arity"))?;
+                let [value, buffer] = values;
+                let (NormalizedValue::I64(value), NormalizedValue::ByteBuffer(buffer)) =
+                    (value.release(), buffer.release())
+                else {
+                    return Err(reference_type_error("buffer word types"));
+                };
+                buffer.validate(self.memory_domain, true)?;
+                let control = self.control;
+                let buffer = buffer
+                    .append_i64_le(value, control, &mut |bytes| self.charge_allocation(bytes))?;
+                buffer.establish_admission(self.schema.value_origin)?;
+                CheckedValue::memory(&self.schema, NormalizedValue::ByteBuffer(buffer))
+            }
+            "core.bytes.read-i64-le" => {
+                let values: [CheckedValue; 2] = arguments
+                    .try_into()
+                    .map_err(|_| reference_type_error("byte word arity"))?;
+                let [data, index] = values;
+                let (NormalizedValue::Bytes(data), NormalizedValue::I64(index)) =
+                    (data.release(), index.release())
+                else {
+                    return Err(reference_type_error("byte word types"));
+                };
+                let end = index.checked_add(8).ok_or_else(|| {
+                    ExecutionError::new(
+                        crate::platform::execution::ExecutionFailureClass::Trap,
+                        "normalized_bytes_range",
+                        "byte word range overflow",
+                    )
+                })?;
+                if index < 0 || end < index || end as u64 > data.len() as u64 {
+                    return Err(ExecutionError::new(
+                        crate::platform::execution::ExecutionFailureClass::Trap,
+                        "normalized_bytes_range",
+                        "byte word is outside its source",
+                    ));
+                }
+                let selected = &data[index as usize..end as usize];
+                let mut word = 0_u64;
+                for (position, byte) in selected.iter().enumerate() {
+                    word |= u64::from(*byte) << (position * 8);
+                }
+                let value = word as i64;
+                self.control.check()?;
+                CheckedValue::primitive(&self.schema, NormalizedValue::I64(value))
+            }
             "core.buffer.length" | "core.buffer.get" => {
                 let expected = if implementation == "core.buffer.get" {
                     2

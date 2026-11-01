@@ -11,6 +11,20 @@ fn fixture() -> KernelSnapshot {
     .unwrap()
 }
 
+/// Reuse the established Left-to-Right shared-descriptor scope violation. Both
+/// descriptors and every referenced binder remain present in the raw closure.
+pub(super) fn artifact_rejection_fixture() -> Result<KernelSnapshot, String> {
+    let mut source = fixture();
+    let foreign = field_type(&source, "Left", "item");
+    let key = field_key(&source, "Right", "item");
+    let Some(OwnerRecord::Field(record)) = source.owners.get_mut(&key) else {
+        return Err("type-scope target field absent".to_owned());
+    };
+    record.ty = foreign;
+    rebind(&mut source);
+    Ok(source)
+}
+
 fn declaration(source: &KernelSnapshot, name: &str) -> DeclarationId {
     source
         .owners

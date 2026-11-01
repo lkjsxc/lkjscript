@@ -1,0 +1,546 @@
+declarations.begin
+(units
+  (module create source-summary-relations
+    (function create row
+      (visibility package)
+      (effect pure)
+      (parameter create source (type I64))
+      (parameter create rank (type I64))
+      (parameter create target (type I64))
+      (parameter create tag (type I64))
+      (parameter create propagation (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding summary-buffer-22
+            (type ByteBuffer)
+            (let
+              (binding summary-buffer-21
+                (type ByteBuffer)
+                (let
+                  (binding summary-buffer-20
+                    (type ByteBuffer)
+                    (let
+                      (binding summary-buffer-19
+                        (type ByteBuffer)
+                        (call ci::le (local source) (i64 8) (local out)))
+                      (in (call ci::le (local rank) (i64 8) (local summary-buffer-19)))))
+                  (in (call ci::le (local target) (i64 8) (local summary-buffer-20)))))
+              (in (call ci::le (local tag) (i64 8) (local summary-buffer-21)))))
+          (in (call ci::le (local propagation) (i64 8) (local summary-buffer-22))))))
+    (function create ports
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create source (type I64))
+      (parameter create at (type I64))
+      (parameter create remaining (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local remaining) (i64 0))
+          (local out)
+          (let
+            (binding summary-buffer-23
+              (type ByteBuffer)
+              (call source-summary-relations::row
+                (local source)
+                (i64 20)
+                (call source-table::owner (local graph) (local data) (local at) (i64 11))
+                (i64 19)
+                (i64 2)
+                (local out)))
+            (in
+              (call source-summary-relations::ports
+                (local graph)
+                (local data)
+                (local source)
+                (call ci::add (local at) (i64 17))
+                (call ci::sub (local remaining) (i64 1))
+                (local summary-buffer-23)))))))
+    (function create direct
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create source (type I64))
+      (parameter create kind (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local kind) (i64 17))
+          (if
+            (call ci::eq (call ci::get (local data) (i64 37)) (i64 5))
+            (call source-summary-relations::row
+              (local source)
+              (i64 7)
+              (call source-table::owner
+                (local graph)
+                (local data)
+                (i64 39)
+                (if (call ci::lt (call ci::get (local data) (i64 38)) (i64 2)) (i64 7) (i64 8)))
+              (i64 8)
+              (i64 1)
+              (local out))
+            (if
+              (call ci::eq (call ci::get (local data) (i64 37)) (i64 10))
+              (call source-summary-relations::row
+                (local source)
+                (i64 9)
+                (call source-table::owner (local graph) (local data) (i64 57) (i64 2))
+                (i64 10)
+                (i64 2)
+                (local out))
+              (local out)))
+          (if
+            (call ci::eq (local kind) (i64 19))
+            (call source-summary-relations::row
+              (local source)
+              (i64 10)
+              (call source-table::owner
+                (local graph)
+                (local data)
+                (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 51))
+                (i64 2))
+              (i64 11)
+              (i64 2)
+              (local out))
+            (if
+              (call ci::eq (local kind) (i64 9))
+              (let
+                (binding at (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 2)))
+                (binding ports
+                  (call source-table::array
+                    (local data)
+                    (call source-table::skip (local data) (local at) (i64 17))))
+                (in
+                  (call source-summary-relations::ports
+                    (local graph)
+                    (local data)
+                    (local source)
+                    (field (local ports) (name next))
+                    (field (local ports) (name value))
+                    (local out))))
+              (if
+                (call ci::eq (local kind) (i64 20))
+                (let
+                  (binding at (call source-link-ref::name-end (local data) (i64 39)))
+                  (binding component
+                    (type ByteBuffer)
+                    (call source-summary-relations::row
+                      (local source)
+                      (i64 21)
+                      (call source-table::owner
+                        (local graph)
+                        (local data)
+                        (call ci::add (local at) (i64 17))
+                        (i64 2))
+                      (i64 20)
+                      (i64 3)
+                      (local out)))
+                  (in
+                    (if
+                      (call ci::eq (call ci::get (local data) (call ci::add (local at) (i64 34))) (i64 0))
+                      (local component)
+                      (call source-summary-relations::row
+                        (local source)
+                        (i64 22)
+                        (call source-table::owner
+                          (local graph)
+                          (local data)
+                          (call ci::add (local at) (i64 52))
+                          (i64 11))
+                        (i64 21)
+                        (i64 3)
+                        (local component)))))
+                (local out)))))))
+    (function create type-profile
+      (visibility package)
+      (effect pure)
+      (parameter create form (type I64))
+      (returns Bool)
+      (body
+        (call ci::either
+          (call ci::eq (local form) (i64 0))
+          (call ci::either
+            (call ci::eq (local form) (i64 1))
+            (call ci::either
+              (call ci::eq (local form) (i64 2))
+              (call ci::either
+                (call ci::eq (local form) (i64 3))
+                (call ci::either
+                  (call ci::eq (local form) (i64 4))
+                  (call ci::either
+                    (call ci::eq (local form) (i64 5))
+                    (call ci::either
+                      (call ci::eq (local form) (i64 7))
+                      (call ci::either
+                        (call ci::eq (local form) (i64 10))
+                        (call ci::either
+                          (call ci::eq (local form) (i64 11))
+                          (call ci::either
+                            (call ci::eq (local form) (i64 16))
+                            (call ci::either (call ci::eq (local form) (i64 20)) (bool false))))))))))))))
+    (function create type-inventory
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local row) (call source-type-table::count (local graph)))
+          (i64 0)
+          (if
+            (call source-summary-relations::type-profile
+              (call ci::get (call source-type-table::data (local graph) (local row)) (i64 19)))
+            (call source-summary-relations::type-inventory (local graph) (call ci::add (local row) (i64 1)))
+            (i64 13)))))
+    (function create type-walk
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create pending (type Bytes))
+      (parameter create seen (type Bytes))
+      (parameter create source (type I64))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local pending)))
+          (record structural (field code (i64 0)) (field rows (call ci::freeze (local out))))
+          (let
+            (binding row (call ci::u32 (local pending) (local at)))
+            (in
+              (if
+                (call ci::lt (local row) (call source-type-table::count (local graph)))
+                (if
+                  (call source-type-table::contains (local seen) (i64 0) (local row))
+                  (call source-summary-relations::type-walk
+                    (local graph)
+                    (local pending)
+                    (local seen)
+                    (local source)
+                    (call ci::add (local at) (i64 4))
+                    (local out))
+                  (let
+                    (binding value (call source-type-table::data (local graph) (local row)))
+                    (binding next-seen (call source-type-table::push (local seen) (local row)))
+                    (binding next-pending
+                      (call ci::concat
+                        (local pending)
+                        (call source-type-table::children (local graph) (local row))))
+                    (binding next
+                      (type ByteBuffer)
+                      (if
+                        (call ci::eq (call ci::get (local value) (i64 19)) (i64 7))
+                        (call source-summary-relations::row
+                          (local source)
+                          (i64 5)
+                          (call source-table::owner (local graph) (local value) (i64 20) (i64 3))
+                          (i64 6)
+                          (i64 1)
+                          (local out))
+                        (local out)))
+                    (in
+                      (call source-summary-relations::type-walk
+                        (local graph)
+                        (local next-pending)
+                        (local next-seen)
+                        (local source)
+                        (call ci::add (local at) (i64 4))
+                        (local next)))))
+                (let
+                  (binding discarded (call ci::discard (local out)))
+                  (in (record structural (field code (i64 14)) (field rows (call ci::text-bytes (text ""))))))))))))
+    (function create owner
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create source (type I64))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (let
+          (binding value (call source-table::data (local graph) (local source)))
+          (binding roots (call source-type-uses::owner (local graph) (local value)))
+          (binding direct
+            (type ByteBuffer)
+            (let
+              (binding summary-buffer-24 (type ByteBuffer) (call ci::empty))
+              (in
+                (call source-summary-relations::direct
+                  (local graph)
+                  (local value)
+                  (local source)
+                  (call source-table::kind (local graph) (local source))
+                  (local summary-buffer-24)))))
+          (in
+            (call source-summary-relations::type-walk
+              (local graph)
+              (local roots)
+              (call ci::text-bytes (text ""))
+              (local source)
+              (i64 0)
+              (local direct))))))
+    (function create inventory
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (record structural (field code (i64 0)) (field rows (call ci::freeze (local out))))
+          (let
+            (binding selected (call source-summary-relations::owner (local graph) (local row)))
+            (in
+              (if
+                (call ci::eq (field (local selected) (name code)) (i64 0))
+                (let
+                  (binding summary-buffer-25
+                    (type ByteBuffer)
+                    (call ci::append (field (local selected) (name rows)) (i64 0) (local out)))
+                  (in
+                    (call source-summary-relations::inventory
+                      (local graph)
+                      (call ci::add (local row) (i64 1))
+                      (local summary-buffer-25))))
+                (let
+                  (binding discarded (call ci::discard (local out)))
+                  (in
+                    (record structural
+                      (field code (field (local selected) (name code)))
+                      (field rows (call ci::text-bytes (text ""))))))))))))
+    (function create targets
+      (visibility package)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create count (type I64))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local rows)))
+          (i64 0)
+          (let
+            (binding target (call ci::u64 (local rows) (call ci::add (local at) (i64 16))))
+            (in
+              (if
+                (call ci::both (call ci::lt (i64 -1) (local target)) (call ci::lt (local target) (local count)))
+                (call source-summary-relations::targets
+                  (local rows)
+                  (local count)
+                  (call ci::add (local at) (i64 40)))
+                (i64 14)))))))
+    (function create prepare
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (returns (record (code I64) (rows Bytes) (directory Bytes)))
+      (body
+        (let
+          (binding types (call source-summary-relations::type-inventory (local graph) (i64 0)))
+          (in
+            (if
+              (call ci::eq (local types) (i64 0))
+              (let
+                (binding inventory
+                  (let
+                    (binding summary-buffer-26 (type ByteBuffer) (call ci::empty))
+                    (in
+                      (call source-summary-relations::inventory (local graph) (i64 0) (local summary-buffer-26)))))
+                (in
+                  (if
+                    (call ci::eq (field (local inventory) (name code)) (i64 0))
+                    (let
+                      (binding targets
+                        (call source-summary-relations::targets
+                          (field (local inventory) (name rows))
+                          (call source-table::count (local graph))
+                          (i64 0)))
+                      (in
+                        (if
+                          (call ci::eq (local targets) (i64 0))
+                          (let
+                            (binding sorted
+                              (call source-summary-order::sort
+                                (field (local inventory) (name rows))
+                                (i64 40)
+                                (i64 3)))
+                            (binding rows (call source-summary-order::unique (local sorted) (i64 40) (i64 3)))
+                            (in
+                              (record structural
+                                (field code (i64 0))
+                                (field rows (local rows))
+                                (field directory
+                                  (call source-summary-order::directory
+                                    (local rows)
+                                    (i64 40)
+                                    (call source-table::count (local graph)))))))
+                          (record structural
+                            (field code (local targets))
+                            (field rows (call ci::text-bytes (text "")))
+                            (field directory (call ci::text-bytes (text "")))))))
+                    (record structural
+                      (field code (field (local inventory) (name code)))
+                      (field rows (call ci::text-bytes (text "")))
+                      (field directory (call ci::text-bytes (text "")))))))
+              (record structural
+                (field code (local types))
+                (field rows (call ci::text-bytes (text "")))
+                (field directory (call ci::text-bytes (text "")))))))))
+    (function create encoded
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create rows (type Bytes))
+      (parameter create at (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding target (call ci::u64 (local rows) (call ci::add (local at) (i64 16))))
+          (binding key-at (call source-summary-material::key-start (local graph) (local target)))
+          (in
+            (let
+              (binding summary-buffer-31
+                (type ByteBuffer)
+                (let
+                  (binding summary-buffer-30
+                    (type ByteBuffer)
+                    (let
+                      (binding summary-buffer-29
+                        (type ByteBuffer)
+                        (let
+                          (binding summary-buffer-28
+                            (type ByteBuffer)
+                            (let
+                              (binding summary-buffer-27 (type ByteBuffer) (call ci::empty))
+                              (in
+                                (call ci::push
+                                  (call ci::u64 (local rows) (call ci::add (local at) (i64 24)))
+                                  (local summary-buffer-27)))))
+                          (in (call ci::push (i64 2) (local summary-buffer-28)))))
+                      (in (call wire::range (local graph) (i64 32) (i64 48) (local summary-buffer-29)))))
+                  (in
+                    (call wire::range
+                      (local graph)
+                      (local key-at)
+                      (call ci::add (local key-at) (i64 17))
+                      (local summary-buffer-30)))))
+              (in (call ci::freeze (local summary-buffer-31))))))))
+    (function create material
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create rows (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding encoded (call source-summary-relations::encoded (local graph) (local rows) (local at)))
+            (in
+              (let
+                (binding summary-buffer-32
+                  (type ByteBuffer)
+                  (call source-summary-material::piece
+                    (i64 1)
+                    (local encoded)
+                    (i64 0)
+                    (call ci::length (local encoded))
+                    (local out)))
+                (in
+                  (call source-summary-relations::material
+                    (local graph)
+                    (local rows)
+                    (call ci::add (local at) (i64 40))
+                    (local end)
+                    (local summary-buffer-32)))))))))
+    (function create dependencies
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create rows (type Bytes))
+      (parameter create semantic (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding encoded (call source-summary-relations::encoded (local graph) (local rows) (local at)))
+            (binding target (call ci::u64 (local rows) (call ci::add (local at) (i64 16))))
+            (binding propagation (call ci::u64 (local rows) (call ci::add (local at) (i64 32))))
+            (binding edge
+              (type ByteBuffer)
+              (call source-summary-material::piece
+                (i64 1)
+                (local encoded)
+                (i64 0)
+                (call ci::length (local encoded))
+                (local out)))
+            (binding interface
+              (type ByteBuffer)
+              (call source-summary-material::digest-piece
+                (i64 3)
+                (local semantic)
+                (local target)
+                (i64 0)
+                (local edge)))
+            (binding next
+              (type ByteBuffer)
+              (if
+                (call ci::eq (local propagation) (i64 1))
+                (call source-summary-material::digest-piece
+                  (i64 4)
+                  (local semantic)
+                  (local target)
+                  (i64 2)
+                  (local interface))
+                (if
+                  (call ci::eq (local propagation) (i64 2))
+                  (let
+                    (binding summary-buffer-33
+                      (type ByteBuffer)
+                      (call source-summary-material::digest-piece
+                        (i64 5)
+                        (local semantic)
+                        (local target)
+                        (i64 3)
+                        (local interface)))
+                    (in
+                      (call source-summary-material::digest-piece
+                        (i64 6)
+                        (local semantic)
+                        (local target)
+                        (i64 4)
+                        (local summary-buffer-33))))
+                  (call source-summary-material::digest-piece
+                    (i64 7)
+                    (local semantic)
+                    (local target)
+                    (i64 1)
+                    (local interface)))))
+            (in
+              (call source-summary-relations::dependencies
+                (local graph)
+                (local rows)
+                (local semantic)
+                (call ci::add (local at) (i64 40))
+                (local end)
+                (local next)))))))))
+declarations.end

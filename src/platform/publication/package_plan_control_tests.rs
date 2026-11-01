@@ -150,14 +150,10 @@ fn controlled_package_stage_cancels_inside_native_input_without_exposing_readine
     assert_eq!(receipt.outcome, StageOutcome::Inserted);
     assert_eq!(receipt.closure_packages, 2);
     assert_eq!(receipt.closure_edges, 1);
-    assert!(
-        receipt.validation_visits
-            <= crate::platform::package_transport::source::MAXIMUM_VALIDATION_VISITS
-    );
-    assert!(
-        receipt.validation_read_bytes
-            <= crate::platform::package_transport::source::MAXIMUM_VALIDATION_READ_BYTES
-    );
+    assert!(receipt.validation_visits > 0);
+    assert!(!receipt.validation_visits_saturated);
+    assert!(receipt.validation_read_bytes >= exported.container.len() as u64);
+    assert!(!receipt.validation_read_bytes_saturated);
     let actual = target
         .repository
         .staged_package_source(exported.revision_digest)
@@ -245,4 +241,38 @@ fn prepared_dependency_change_passes_its_control_into_native_planning_and_recove
     let exported = target.repository.export_package_container().unwrap();
     assert_eq!(exported.packages.len(), 3);
     assert_eq!(exported.dependency_edges, 2);
+}
+
+#[test]
+fn source_stage_observations_preserve_each_counter_saturation_without_admission() {
+    let (visits, bytes) = stage_validation_observations(
+        SourceObservation::exact(u64::MAX - 1),
+        SourceObservation::exact(7),
+        1,
+        StoreWork::default(),
+    );
+    assert_eq!(visits, SourceObservation::exact(u64::MAX));
+    assert_eq!(bytes, SourceObservation::exact(7));
+    let mut work = StoreWork {
+        objects_read: 1,
+        bytes_read: u64::MAX,
+        ..StoreWork::default()
+    };
+    work.add(StoreWork {
+        bytes_read: 1,
+        ..StoreWork::default()
+    });
+    let (exact_visits, saturated_bytes) = stage_validation_observations(
+        SourceObservation::default(),
+        SourceObservation::default(),
+        0,
+        work,
+    );
+    assert_eq!(exact_visits, SourceObservation::exact(1));
+    assert!(saturated_bytes.saturated);
+    let (visits, bytes) = stage_validation_observations(visits, bytes, 0, work);
+    assert_eq!(visits.consumed, u64::MAX);
+    assert!(visits.saturated);
+    assert_eq!(bytes.consumed, u64::MAX);
+    assert!(bytes.saturated);
 }

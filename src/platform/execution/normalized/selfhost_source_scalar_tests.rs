@@ -7,6 +7,18 @@ use super::*;
 use crate::platform::kernel::ExpressionOperation as E;
 use crate::platform::semantic_id::{BindingId, DeclarationId, ExpressionId, PortId, TargetId};
 
+#[path = "selfhost_source_compound_tests.rs"]
+mod compound;
+
+#[path = "selfhost_source_interface_tests.rs"]
+mod source_interface_tests;
+
+#[path = "selfhost_source_artifact_tests.rs"]
+mod source_artifact_tests;
+
+#[path = "selfhost_source_unit_tests.rs"]
+mod units;
+
 const SCALAR_SOURCE: &str = include_str!("../../../../tests/fixtures/selfhost-source-scalar.lkjc");
 const INTRINSIC_SOURCE: &str =
     include_str!("../../../../tests/fixtures/selfhost-source-scalar-intrinsics.lkjc");
@@ -26,6 +38,7 @@ struct Case {
     request_sha256: String,
     diagnostic: i64,
     result: Option<ScalarResult>,
+    e1_diagnostic: i64,
     e1: OnceLock<()>,
 }
 
@@ -60,6 +73,7 @@ impl Case {
             request_sha256,
             diagnostic,
             result,
+            e1_diagnostic: 0,
             e1: OnceLock::new(),
         }
     }
@@ -71,19 +85,31 @@ impl Case {
         self
     }
 
+    fn rejected_at_e1(mut self, diagnostic: i64) -> Self {
+        assert_ne!(diagnostic, 0);
+        assert_eq!(self.diagnostic, diagnostic);
+        self.e1_diagnostic = diagnostic;
+        self
+    }
+
     fn assert_e1(&self) {
         self.e1.get_or_init(|| {
-            // Every derived semantic negative must reach E2 after independently
-            // checking canonical hashes, complete references, syntax and binders.
+            // Semantic negatives must pass E1; unsupported E1 shape controls
+            // explicitly name their earlier diagnostic instead. Check both
+            // independently without supplying the result to the compiler.
             let (code, state) = super::result("read-nominal", &self.carrier);
             assert_eq!(
-                code, 0,
+                code, self.e1_diagnostic,
                 "E1 control={}, carrier_sha256={}",
                 self.name, self.carrier_sha256,
             );
             assert_eq!(
                 state.as_slice(),
-                &self.carrier[48..80],
+                if self.e1_diagnostic == 0 {
+                    &self.carrier[48..80]
+                } else {
+                    &[][..]
+                },
                 "E1 complete carrier control={}",
                 self.name,
             );
@@ -111,19 +137,7 @@ pub(super) fn target_id(source: &KernelSnapshot, name: &str) -> TargetId {
 }
 
 pub(super) fn source_request(carrier: &[u8], selected_target: TargetId) -> Vec<u8> {
-    let capacity = 32usize
-        .checked_add(carrier.len())
-        .expect("source request size");
-    let mut request = Vec::with_capacity(capacity);
-    request.extend_from_slice(b"LKJSRQ01");
-    request.extend_from_slice(&1u32.to_le_bytes());
-    request.extend_from_slice(
-        &kernel::EncodedOwnerKey::new(OwnerKey::Target(selected_target)).bytes(),
-    );
-    request.extend_from_slice(&[0; 3]);
-    assert_eq!(request.len(), 32);
-    request.extend_from_slice(carrier);
-    request
+    source_fixture::request(carrier, selected_target)
 }
 
 fn fixture() -> &'static KernelSnapshot {
@@ -437,8 +451,9 @@ fn cases() -> &'static [Case] {
         ));
 
         let mut source = base.clone();
-        insert_unused_type(&mut source, kernel::TypeForm::Bytes);
-        let unsupported = Case::new("unused-unsupported-bytes-type", source, 13, None);
+        insert_unused_type(&mut source, kernel::TypeForm::F64);
+        let unsupported =
+            Case::new("unused-unsupported-f64-type", source, 13, None).rejected_at_e1(13);
         assert_same_state_different_carrier(&cases[0], &unsupported);
         cases.push(unsupported);
 
@@ -637,7 +652,7 @@ fn intrinsic_cases() -> Vec<Case> {
             panic!("intrinsic fixture custody");
         };
         record.use_mode = use_mode;
-        cases.push(Case::new(name, source, 13, None));
+        cases.push(Case::new(name, source, 19, None));
     }
 
     let mut source = base.clone();
@@ -857,11 +872,11 @@ fn selfhost_source_scalar_e2_checks_complete_carriers_in_vm_reference_and_native
 fn selfhost_source_scalar_e3_compiles_selected_requests_and_executes_independent_results() {
     let compiler = native_compiler();
     for case in cases() {
-        let image = run_filter(compiler, case, &case.request, "LKJSRQ01/profile1");
+        let image = run_filter(compiler, case, &case.request, "LKJSRQ01/profile2");
         if case.name == "same-carrier-other-target" {
             assert_eq!(
                 image,
-                run_filter(compiler, case, &case.request, "LKJSRQ01/profile1"),
+                run_filter(compiler, case, &case.request, "LKJSRQ01/profile2"),
             );
         }
         if matches!(
@@ -1059,7 +1074,7 @@ fn selfhost_source_scalar_e3_lowers_more_than_historical_node_limit_natively() {
          expected_mode0_nodes={expected_nodes} expected_mode0_state_bytes={expected_state_bytes} \
          program_sha256={} program_bytes={} compile_ms={compile_ms} \
          source_shape=balanced_sequence_tree max_sequence_fanout=16 derived_sequence_levels=4 \
-         input=LKJSRQ01 request_profile=1 request_sha256={} selected_target={} \
+         input=LKJSRQ01 request_profile=2 request_sha256={} selected_target={} \
          target=linux-x86_64 arguments=[] environment=empty \
          stdin_chunk_bytes=4093 filter_deadline_seconds=10",
         compiler.source_carrier_sha256,
@@ -1100,7 +1115,7 @@ fn assert_request_rejection(
         "selfhost scalar request control={name} source_carrier_sha256={} \
          executable_sha256={} carrier_fixture_sha256={} request_sha256={} \
          request_payload_sha256={} selector_hex={} request_bytes={} \
-         input=LKJSRQ01 expected_request_profile=1 diagnostic={diagnostic} \
+         input=LKJSRQ01 expected_request_profile=2 diagnostic={diagnostic} \
          target=linux-x86_64 arguments=[] environment=empty \
          stdin_chunk_bytes=127 filter_deadline_seconds=10",
         compiler.source_carrier_sha256,
@@ -1141,9 +1156,11 @@ fn check_request_controls(compiler: &NativeCompiler) {
     let mut changed = valid.to_vec();
     changed[0] ^= 1;
     reject("request-wrong-magic", &changed, 12);
-    let mut changed = valid.to_vec();
-    changed[8..12].copy_from_slice(&2u32.to_le_bytes());
-    reject("request-unknown-profile", &changed, 12);
+    for profile in [0_u32, 1, 3, u32::MAX] {
+        let mut changed = valid.to_vec();
+        changed[8..12].copy_from_slice(&profile.to_le_bytes());
+        reject(&format!("request-rejected-profile-{profile}"), &changed, 12);
+    }
     let mut changed = valid.to_vec();
     // Keep the live Target's identity bytes: a lookup that ignores the tag
     // would otherwise resolve the valid target and silently accept this request.
@@ -1152,7 +1169,12 @@ fn check_request_controls(compiler: &NativeCompiler) {
     let mut changed = valid.to_vec();
     changed[13..29].fill(0);
     reject("request-zero-identity", &changed, 12);
-    for offset in 29..32 {
+    for mode in [2_u8, 255] {
+        let mut changed = valid.to_vec();
+        changed[29] = mode;
+        reject(&format!("request-unknown-mode-{mode}"), &changed, 12);
+    }
+    for offset in 30..32 {
         let mut changed = valid.to_vec();
         changed[offset] = 1;
         reject(&format!("request-reserved-{offset}"), &changed, 12);
@@ -1218,7 +1240,7 @@ fn check_request_controls(compiler: &NativeCompiler) {
 
     let unsupported = cases()
         .iter()
-        .find(|case| case.name == "unused-unsupported-bytes-type")
+        .find(|case| case.name == "unused-unsupported-f64-type")
         .unwrap();
     assert_request_rejection(
         compiler,
@@ -1302,7 +1324,7 @@ fn assert_raw_scalar_e3_rejection(
          entry={} source_carrier_sha256={} executable_sha256={} \
          carrier_sha256={carrier_sha256} carrier_bytes={} semantic_state_hex={} \
          request_sha256={request_sha256} selected_target={selected_target} \
-         input=LKJSRQ01 request_profile=1 target=linux-x86_64 arguments=[] environment=empty \
+         input=LKJSRQ01 request_profile=2 target=linux-x86_64 arguments=[] environment=empty \
          stdin_chunk_bytes=127 filter_deadline_seconds=10",
         compiler.entry,
         compiler.source_carrier_sha256,

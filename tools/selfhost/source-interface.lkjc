@@ -1,0 +1,196 @@
+declarations.begin
+(units
+  (module create source-interface
+    (function create inventory
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (parameter create owners (type ByteBuffer) (use consume))
+      (parameter create out (type ByteBuffer) (use consume))
+      (parameter create pending (type ByteBuffer) (use consume))
+      (returns (record (code I64) (owners Bytes) (objects Bytes) (pending Bytes)))
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (record structural
+            (field code (i64 0))
+            (field owners (call ci::freeze (local owners)))
+            (field objects (call ci::freeze (local out)))
+            (field pending (call ci::freeze (local pending))))
+          (if
+            (call source-interface-record::allowed (call source-table::kind (local graph) (local row)))
+            (if
+              (call source-interface-record::selected (local graph) (local row))
+              (let
+                (binding image (call source-interface-record::image (local graph) (local row)))
+                (binding digest (call wire::digest (text "lkjscript.package-interface-owner.v7") (local image)))
+                (binding roots
+                  (call source-type-uses::owner
+                    (local graph)
+                    (call source-table::data (local graph) (local row))))
+                (in
+                  (if
+                    (call ci::both
+                      (call source-unit-tables::room (call ci::size (local owners)) (i64 49))
+                      (call ci::both
+                        (call source-unit-tables::room
+                          (call ci::size (local out))
+                          (call source-unit-tables::add (i64 48) (call ci::length (local image))))
+                        (call source-unit-tables::room
+                          (call ci::size (local pending))
+                          (call ci::length (local roots)))))
+                    (let
+                      (binding keys
+                        (type ByteBuffer)
+                        (call wire::range
+                          (local graph)
+                          (call ci::add
+                            (call ci::u32 (local graph) (i64 80))
+                            (call ci::mul (local row) (i64 50)))
+                          (call ci::add
+                            (call ci::add
+                              (call ci::u32 (local graph) (i64 80))
+                              (call ci::mul (local row) (i64 50)))
+                            (i64 17))
+                          (local owners)))
+                      (binding next-owners
+                        (type ByteBuffer)
+                        (call wire::range (local digest) (i64 0) (i64 32) (local keys)))
+                      (binding next-out
+                        (type ByteBuffer)
+                        (call source-interface-wire::frame (i64 23) (local digest) (local image) (local out)))
+                      (binding next-pending
+                        (type ByteBuffer)
+                        (call wire::range (local roots) (i64 0) (call ci::length (local roots)) (local pending)))
+                      (in
+                        (call inventory
+                          (local graph)
+                          (call ci::add (local row) (i64 1))
+                          (local next-owners)
+                          (local next-out)
+                          (local next-pending))))
+                    (let
+                      (binding a (call ci::discard (local owners)))
+                      (binding b (call ci::discard (local out)))
+                      (binding c (call ci::discard (local pending)))
+                      (in
+                        (record structural
+                          (field code (i64 3))
+                          (field owners (call ci::text-bytes (text "")))
+                          (field objects (call ci::text-bytes (text "")))
+                          (field pending (call ci::text-bytes (text "")))))))))
+              (call inventory
+                (local graph)
+                (call ci::add (local row) (i64 1))
+                (local owners)
+                (local out)
+                (local pending)))
+            (let
+              (binding a (call ci::discard (local owners)))
+              (binding b (call ci::discard (local out)))
+              (binding c (call ci::discard (local pending)))
+              (in
+                (record structural
+                  (field code (i64 13))
+                  (field owners (call ci::text-bytes (text "")))
+                  (field objects (call ci::text-bytes (text "")))
+                  (field pending (call ci::text-bytes (text ""))))))))))
+    (function create finish
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create inventory (type (record (code I64) (owners Bytes) (objects Bytes) (pending Bytes))))
+      (parameter create types (type (record (code I64) (types Bytes) (objects Bytes))))
+      (returns (record (code I64) (root Bytes) (digest Bytes) (owners Bytes) (types Bytes) (objects Bytes)))
+      (body
+        (let
+          (binding owners (field (local inventory) (name owners)))
+          (binding count (call ci::div (call ci::length (local owners)) (i64 49)))
+          (binding map (call unit-map::encode (local owners) (i64 32)))
+          (binding out (type ByteBuffer) (call ci::empty))
+          (binding pages
+            (call source-interface-wire::pages (field (local map) (name pages)) (i64 0) (local out)))
+          (in
+            (if
+              (call ci::eq (field (local pages) (name code)) (i64 0))
+              (let
+                (binding extent
+                  (call source-unit-tables::add
+                    (call source-unit-tables::add
+                      (call ci::length (field (local inventory) (name objects)))
+                      (call ci::length (field (local types) (name objects))))
+                    (call ci::length (field (local pages) (name objects)))))
+                (in
+                  (if
+                    (call ci::lt (local extent) (i64 0))
+                    (record structural
+                      (field code (i64 3))
+                      (field root (call ci::text-bytes (text "")))
+                      (field digest (call ci::text-bytes (text "")))
+                      (field owners (call ci::text-bytes (text "")))
+                      (field types (call ci::text-bytes (text "")))
+                      (field objects (call ci::text-bytes (text ""))))
+                    (record structural
+                      (field code (i64 0))
+                      (field root
+                        (call source-interface-wire::root
+                          (field (local map) (name digest))
+                          (local count)
+                          (field (local map) (name content))))
+                      (field digest
+                        (call source-interface-wire::identity
+                          (local graph)
+                          (local count)
+                          (field (local map) (name content))))
+                      (field owners (local owners))
+                      (field types (field (local types) (name types)))
+                      (field objects
+                        (call ci::concat
+                          (call ci::concat
+                            (field (local inventory) (name objects))
+                            (field (local types) (name objects)))
+                          (field (local pages) (name objects))))))))
+              (record structural
+                (field code (field (local pages) (name code)))
+                (field root (call ci::text-bytes (text "")))
+                (field digest (call ci::text-bytes (text "")))
+                (field owners (call ci::text-bytes (text "")))
+                (field types (call ci::text-bytes (text "")))
+                (field objects (call ci::text-bytes (text "")))))))))
+    (function create project
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (returns (record (code I64) (root Bytes) (digest Bytes) (owners Bytes) (types Bytes) (objects Bytes)))
+      (body
+        (let
+          (binding owners (type ByteBuffer) (call ci::empty))
+          (binding out (type ByteBuffer) (call ci::empty))
+          (binding pending (type ByteBuffer) (call ci::empty))
+          (binding inventory (call inventory (local graph) (i64 0) (local owners) (local out) (local pending)))
+          (in
+            (if
+              (call ci::eq (field (local inventory) (name code)) (i64 0))
+              (let
+                (binding types
+                  (call source-interface-types::prepare (local graph) (field (local inventory) (name pending))))
+                (in
+                  (if
+                    (call ci::eq (field (local types) (name code)) (i64 0))
+                    (call finish (local graph) (local inventory) (local types))
+                    (record structural
+                      (field code (field (local types) (name code)))
+                      (field root (call ci::text-bytes (text "")))
+                      (field digest (call ci::text-bytes (text "")))
+                      (field owners (call ci::text-bytes (text "")))
+                      (field types (call ci::text-bytes (text "")))
+                      (field objects (call ci::text-bytes (text "")))))))
+              (record structural
+                (field code (field (local inventory) (name code)))
+                (field root (call ci::text-bytes (text "")))
+                (field digest (call ci::text-bytes (text "")))
+                (field owners (call ci::text-bytes (text "")))
+                (field types (call ci::text-bytes (text "")))
+                (field objects (call ci::text-bytes (text "")))))))))))
+declarations.end

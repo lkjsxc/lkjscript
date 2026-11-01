@@ -10,6 +10,19 @@ fn fixture() -> KernelSnapshot {
     .unwrap()
 }
 
+/// Reuse the established first-initializer/self-binding negative for generated
+/// compiler acceptance. This only constructs and rehashes a complete fixture.
+pub(super) fn artifact_rejection_fixture() -> KernelSnapshot {
+    let mut source = fixture();
+    let first = binder(&source, "first");
+    let value = initializer(&source, first);
+    expression(&mut source, value).operation = kernel::ExpressionOperation::Local {
+        value: kernel::LocalValueReference::LexicalBinding(first),
+    };
+    rebind_owner_inventory(&mut source);
+    source
+}
+
 fn binder(source: &KernelSnapshot, name: &str) -> BindingId {
     source
         .owners

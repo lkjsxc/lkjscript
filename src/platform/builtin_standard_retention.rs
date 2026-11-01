@@ -3,6 +3,7 @@
 //! each decoded inventory record reserves another 256 modeled bytes. All copies count.
 
 use super::*;
+use crate::platform::package_transport::source::SourceObservation;
 
 pub(super) const PROGRAM_MATERIAL_RESERVATION: usize = 16 * 1_048_576;
 
@@ -27,6 +28,16 @@ impl RetainedMaterial {
             return Err(builtin_retention_limit());
         }
         Ok(self)
+    }
+}
+
+// A finite cache-retention proof requires exact counts. A saturated passive
+// observation remains inexact even if a later transformation reduced its value.
+pub(super) fn exact_observation(value: SourceObservation) -> Option<usize> {
+    if value.saturated {
+        None
+    } else {
+        usize::try_from(value.consumed).ok()
     }
 }
 
@@ -93,11 +104,18 @@ pub(super) fn retained_material(
                 .map(|set| set.len()))?,
         ])?;
         retained.add(witness_bytes.checked_mul(4)?, witness_records)?;
-        let (oracle_bytes, oracle_records) =
-            oracle.package_copy_material(package.revision.package, source_bytes)?;
-        // package_copy_material already includes its per-record allowance.
-        retained.bytes = retained.bytes.checked_add(oracle_bytes)?;
-        retained.records = retained.records.checked_add(oracle_records)?;
+        let (oracle_bytes, oracle_records) = oracle.package_copy_material(
+            package.revision.package,
+            SourceObservation::exact(u64::try_from(source_bytes).ok()?),
+        )?;
+        // package_copy_material already includes its per-record allowance. Its
+        // passive lower bounds cannot establish this finite retention proof.
+        retained.bytes = retained
+            .bytes
+            .checked_add(exact_observation(oracle_bytes)?)?;
+        retained.records = retained
+            .records
+            .checked_add(exact_observation(oracle_records)?)?;
     }
     // Public interface maps are owned separately from both admitted closures.
     retained.add(source_bytes.checked_mul(4)?, public_interface_records)?;

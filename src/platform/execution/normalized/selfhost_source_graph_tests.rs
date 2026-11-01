@@ -15,73 +15,20 @@ pub(super) fn set_allowance(bytes: &mut [u8], allowance: Option<u64>) {
     bytes[104..112].copy_from_slice(&allowance.unwrap_or(0).to_le_bytes());
 }
 
+// Fixture facade: the exact maintained compiler snapshot uses its real public
+// export/core; independent and mutated snapshots use explicit synthetic fixture
+// history. All current framing is owned by compiler::selfhost_source_input.
 pub(super) fn packet(source: &KernelSnapshot) -> Vec<u8> {
-    packet_with_commitment(source, kernel::semantic_state_digest(source).unwrap())
+    source_fixture::packet(source)
 }
 
-// The ordinary helper retains the strict independent snapshot oracle. A fixture
-// targeting an object/directory binding error must instead supply a commitment
-// rebuilt from its actual encoded map rows, because that oracle rejects the
-// intended defect before the native reader can observe it.
-fn packet_with_commitment(source: &KernelSnapshot, state: kernel::SemanticStateDigest) -> Vec<u8> {
-    assert!(source.dependencies.is_empty());
-    assert!(source.dependency_types.is_empty());
-    assert!(source.blobs.is_empty());
-    let mut owners = Vec::new();
-    let mut types = Vec::new();
-    let mut retirements = Vec::new();
-    let mut objects = Vec::new();
-    for (key, record) in &source.owners {
-        let (digest, bytes) = kernel::encode_owner(record).unwrap();
-        owners.extend_from_slice(&kernel::owner_map_key(*key));
-        owners.extend_from_slice(&kernel::encode_owner_binding(&kernel::OwnerBinding {
-            kind: record.kind(),
-            object: digest,
-        }));
-        objects.push(bytes);
-    }
-    for (key, object) in &source.types {
-        let (digest, bytes) = kernel::encode_type_object(object).unwrap();
-        assert_eq!(*key, digest);
-        types.extend_from_slice(&digest.bytes());
-        objects.push(bytes);
-    }
-    for (key, record) in &source.retirements {
-        let (digest, bytes) = kernel::encode_retirement(record).unwrap();
-        retirements.extend_from_slice(&kernel::retirement_map_key(*key));
-        retirements.extend_from_slice(&digest.bytes());
-        objects.push(bytes);
-    }
-    let name = source.root.package_name.as_str().as_bytes();
-    let mut bytes = vec![0; 128];
-    bytes[..8].copy_from_slice(b"LKJSG002");
-    word(&mut bytes, 12, source.owners.len());
-    word(&mut bytes, 16, source.types.len());
-    word(&mut bytes, 20, source.retirements.len());
-    word(&mut bytes, 24, name.len());
-    bytes[32..48].copy_from_slice(&source.root.package_id.bytes());
-    bytes[48..80].copy_from_slice(&state.bytes());
-    bytes.extend_from_slice(name);
-    for (at, section) in [(80, owners), (84, types), (88, retirements)] {
-        let start = bytes.len();
-        word(&mut bytes, at, start);
-        bytes.extend(section);
-    }
-    let spans = bytes.len();
-    word(&mut bytes, 92, spans);
-    bytes.resize(spans + objects.len() * 8, 0);
-    let start = bytes.len();
-    word(&mut bytes, 96, start);
-    for (index, object) in objects.into_iter().enumerate() {
-        let start = bytes.len();
-        word(&mut bytes, spans + index * 8, start);
-        word(&mut bytes, spans + index * 8 + 4, object.len());
-        bytes.extend(object);
-    }
-    let length = bytes.len();
-    word(&mut bytes, 8, length);
-    set_allowance(&mut bytes, None);
-    bytes
+// Binding negatives supply their actual directory commitment without asking the
+// independent snapshot oracle to reject the intended defect before source E1.
+pub(super) fn packet_with_fixture_commitment(
+    source: &KernelSnapshot,
+    state: kernel::SemanticStateDigest,
+) -> Vec<u8> {
+    source_fixture::packet_with_fixture_commitment(source, state)
 }
 
 // Synthetic capacity fixtures change inventories outside a repository. Rebuild
@@ -261,12 +208,14 @@ fn selfhost_source_graph_rejects_extent_directory_order_and_object_forgery() {
     for length in [0, 7, 8, 31, 79, 99, 127, 128, bytes.len() - 1] {
         expect("read-graph", &bytes[..length], 12);
     }
-    for offset in [0, 8, 24, 32, 48, 80, 84, 88, 92, 96, 104, 127] {
+    for offset in [
+        0, 8, 24, 32, 48, 80, 84, 88, 92, 96, 104, 112, 116, 120, 124, 127,
+    ] {
         let mut changed = bytes.clone();
         changed[offset] ^= 1;
         expect("read-graph", &changed, 12);
     }
-    for offset in [12, 16, 20, 24, 80, 84, 88, 92, 96] {
+    for offset in [12, 16, 20, 24, 80, 84, 88, 92, 96, 116, 120] {
         let mut changed = bytes.clone();
         word(&mut changed, offset, u32::MAX as usize);
         expect("read-graph", &changed, 12);
@@ -281,6 +230,11 @@ fn selfhost_source_graph_rejects_extent_directory_order_and_object_forgery() {
     for tag in [2, u32::MAX as usize] {
         let mut changed = bytes.clone();
         word(&mut changed, 100, tag);
+        expect("read-graph", &changed, 12);
+    }
+    for profile in [0, 1, 2, 4, u32::MAX as usize] {
+        let mut changed = bytes.clone();
+        word(&mut changed, 112, profile);
         expect("read-graph", &changed, 12);
     }
     let mut obsolete = bytes.clone();
@@ -750,7 +704,7 @@ fn selfhost_source_graph_native_admits_carriers_above_former_entity_quota() {
     );
     let invalid_state = kernel::semantic_state_digest_from_root(&source.root).unwrap();
     assert_ne!(expected, invalid_state);
-    let invalid = packet_with_commitment(&source, invalid_state);
+    let invalid = packet_with_fixture_commitment(&source, invalid_state);
     assert_eq!(invalid.len(), bytes.len());
     assert_eq!(read_word(&invalid, 20), RETIREMENTS);
     assert_eq!(&invalid[48..80], &invalid_state.bytes());
@@ -765,10 +719,11 @@ fn selfhost_source_graph_native_admits_carriers_above_former_entity_quota() {
     let span_at = read_word(&invalid, 92);
     let mut state_input = vec![0; 32];
     state_input[..16].copy_from_slice(&invalid[32..48]);
-    word(&mut state_input, 16, owner_at - 128);
+    let name_end = 128 + read_word(&invalid, 24);
+    word(&mut state_input, 16, name_end - 128);
     word(&mut state_input, 20, type_at - owner_at);
     word(&mut state_input, 28, span_at - retirement_at);
-    state_input.extend_from_slice(&invalid[128..owner_at]);
+    state_input.extend_from_slice(&invalid[128..name_end]);
     state_input.extend_from_slice(&invalid[owner_at..type_at]);
     state_input.extend_from_slice(&invalid[retirement_at..span_at]);
     emitted_result_bytes("read-state", &state_input, 0, &invalid_state.bytes());

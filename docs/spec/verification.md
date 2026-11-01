@@ -98,6 +98,26 @@ Offline composition runs all nine independent fixture families on eight workers,
 after shared public discovery. Reserved command/export/runner ranges prevent collisions;
 all workers join before ordered evidence merge and complete independent admission.
 
+Offline semantic receipts require both `oracle_validation_visits_saturated` and
+`oracle_validation_read_bytes_saturated` beside their numeric inventory observations.
+A true flag marks a lower bound; no consumer may use it as an exact proof upper
+bound, allocation extent or remaining allowance. The current report selectors are:
+
+| Report family | Current selector |
+| --- | --- |
+| Full offline semantics | `lkjscript-offline-semantic-2` |
+| Finite callable | `lkjscript-offline-finite-callable-semantic-2` |
+| Requirement parameters | `lkjscript-offline-requirement-parameters-semantic-2` |
+| F64 | `lkjscript-offline-f64-semantic-2` |
+| Parameter type | `lkjscript-offline-parameter-type-semantic-2` |
+| Persistent maps | `lkjscript-offline-persistent-maps-semantic-2` |
+
+Producers and all report readers require these current layouts. Missing flags and
+predecessor selectors reject without fallback or default-filled observations;
+regenerate incompatible derived receipts. This report-layout change does not alter
+canonical package/program meaning or its schema epoch. Complete independent source
+admission remains required when reading a current receipt.
+
 Production executes normalized bytecode. The reference interpreter reconstructs
 meaning independently from canonical owners, including signatures, layouts, types,
 targets, tests and blobs. Removal of compiled tables must not disable reference
@@ -123,6 +143,12 @@ injections must fail discriminating controls, then restored controls must pass.
   Semantic validity, preparation capacity, quotas, cancellation and deadlines differ.
   Count raw-result/input nodes, constructor work, repeated nodes and hidden scans.
   Modeled work, allocator work, live memory and RSS are distinct measurements.
+- Exercise package source admission with ordinary `None`, explicit zero, one-short,
+  exact and `Some(u64::MAX)` allowances. Check passive visit/read saturation separately
+  from permission and preserve exact nested-read accounting on failure. Missing exact
+  optional reuse evidence must fall back to complete validation. Seeded-counter tests
+  establish arithmetic behavior; capacity acceptance also requires a complete public
+  workload crossing the former boundary, readback/replay and independent oracle agreement.
 - Publish under the owning lock after revalidation. Stale, invalid, exhausted or
   interrupted candidates expose no partial authority. Accepted keyed retries retain
   original outcomes after descendants. Concurrent same-base writers have one winner.

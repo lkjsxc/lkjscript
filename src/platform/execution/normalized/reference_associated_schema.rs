@@ -4,14 +4,15 @@ use super::super::prepare::{
     NormalizedRecordField, NormalizedRecordLayout, NormalizedVariantCase, NormalizedVariantLayout,
 };
 use super::*;
+use crate::platform::admission::{Meter, Observation};
 use crate::platform::kernel::{CaseReference, FieldReference};
 use crate::platform::semantic_id::{CaseId, FieldId};
 
 fn inventory(
     schema: &mut NormalizedReferenceSchema,
     snapshots: &[&KernelSnapshot],
-    visits: &mut usize,
-    bytes: &mut usize,
+    visits: &mut Meter,
+    bytes: &mut Meter,
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), ExecutionError> {
     // These layouts are rebuilt directly from canonical owners. Existing schema
@@ -26,10 +27,9 @@ fn inventory(
     for snapshot in snapshots {
         for (key, owner) in &snapshot.owners {
             control.check()?;
-            *visits = visits
-                .checked_add(1)
-                .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-                .ok_or_else(capacity)?;
+            visits
+                .charge(Observation::exact(1))
+                .map_err(|_| capacity())?;
             let (OwnerKey::Declaration(id), OwnerRecord::Declaration(declaration)) = (key, owner)
             else {
                 continue;
@@ -73,13 +73,13 @@ fn inventory(
             allocate::<usize>(bytes, 8)?;
             allocate::<TypeParameterId>(bytes, parameters.len())?;
             allocate::<crate::platform::kernel::TypeParameterConstraints>(bytes, parameters.len())?;
-            let mut constraints = Vec::with_capacity(parameters.len());
+            let mut constraints = Vec::new();
+            reserve_rows(&mut constraints, parameters.len())?;
             for id in parameters {
                 control.check()?;
-                *visits = visits
-                    .checked_add(1)
-                    .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-                    .ok_or_else(capacity)?;
+                visits
+                    .charge(Observation::exact(1))
+                    .map_err(|_| capacity())?;
                 let OwnerRecord::TypeParameter(parameter) = snapshot
                     .owners
                     .get(&OwnerKey::TypeParameter(*id))
@@ -101,15 +101,13 @@ fn inventory(
             if matches!(declaration.payload, DeclarationPayload::Variant { .. }) {
                 allocate::<NormalizedVariantCase>(bytes, cases.len())?;
                 allocate::<NormalizedVariantLayout>(bytes, 1)?;
-                let mut layout = Vec::with_capacity(cases.len());
+                let mut layout = Vec::new();
+                reserve_rows(&mut layout, cases.len())?;
                 for id in cases {
                     control.check()?;
-                    *visits = visits
-                        .checked_add(1)
-                        .filter(|n| {
-                            *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK
-                        })
-                        .ok_or_else(capacity)?;
+                    visits
+                        .charge(Observation::exact(1))
+                        .map_err(|_| capacity())?;
                     let OwnerRecord::Case(case) = snapshot
                         .owners
                         .get(&OwnerKey::Case(*id))
@@ -130,6 +128,7 @@ fn inventory(
                         payload: case.payload,
                     });
                 }
+                reserve_rows(&mut schema.variants, 1)?;
                 schema.variants.push(NormalizedVariantLayout {
                     declaration: reference,
                     type_parameters: parameters.to_vec().into(),
@@ -140,15 +139,13 @@ fn inventory(
             } else {
                 allocate::<NormalizedRecordField>(bytes, fields.len())?;
                 allocate::<NormalizedRecordLayout>(bytes, 1)?;
-                let mut layout = Vec::with_capacity(fields.len());
+                let mut layout = Vec::new();
+                reserve_rows(&mut layout, fields.len())?;
                 for id in fields {
                     control.check()?;
-                    *visits = visits
-                        .checked_add(1)
-                        .filter(|n| {
-                            *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK
-                        })
-                        .ok_or_else(capacity)?;
+                    visits
+                        .charge(Observation::exact(1))
+                        .map_err(|_| capacity())?;
                     let OwnerRecord::Field(field) = snapshot
                         .owners
                         .get(&OwnerKey::Field(*id))
@@ -173,6 +170,7 @@ fn inventory(
                     index_node::<DeclarationReference>(bytes)?;
                     schema.owned_record_declarations.insert(reference);
                 }
+                reserve_rows(&mut schema.records, 1)?;
                 schema.records.push(NormalizedRecordLayout {
                     declaration: reference,
                     owned,
@@ -185,8 +183,20 @@ fn inventory(
         }
     }
     allocate::<DeclarationReference>(bytes, functions.len())?;
-    schema.functions = functions.into_iter().collect();
+    let mut ordered = Vec::new();
+    reserve_rows(&mut ordered, functions.len())?;
+    ordered.extend(functions);
+    schema.functions = ordered;
     Ok(())
+}
+
+fn reserve_rows<T>(rows: &mut Vec<T>, count: usize) -> Result<(), ExecutionError> {
+    rows.try_reserve_exact(count).map_err(|_| {
+        ExecutionError::resource(
+            "reference_instantiation_storage",
+            "cannot allocate representable associated schema metadata",
+        )
+    })
 }
 
 fn capacity() -> ExecutionError {
@@ -219,37 +229,37 @@ pub(super) fn core_with_limits(
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), ExecutionError> {
     control.check()?;
-    // A single initial debit preserves the existing shared finite helpers. All
-    // later phases see the same remaining allowance, including the proof costs.
-    let work_debit = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK
-        .checked_sub(
-            limits
-                .steps
-                .min(crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK),
-        )
-        .ok_or_else(capacity)?;
-    let bytes_debit = MAXIMUM_METADATA_BYTES
-        .checked_sub(limits.bytes.min(MAXIMUM_METADATA_BYTES))
-        .ok_or_else(capacity)?;
-    let mut visits = usize::try_from(schema.source_admission_steps)
-        .map_err(|_| capacity())?
-        .checked_add(proof.steps)
-        .and_then(|n| n.checked_add(work_debit))
-        .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-        .ok_or_else(capacity)?;
-    let mut bytes = proof
-        .bytes
-        .checked_add(bytes_debit)
-        .filter(|n| *n <= MAXIMUM_METADATA_BYTES)
-        .ok_or_else(capacity)?;
+    // The caller's finite policy includes source admission and the complete
+    // proof. Keep the source prefix separate so phase telemetry never subtracts
+    // a saturated total to invent an exact derivation count.
+    let mut prefix = Meter::new(limits.steps);
+    prefix
+        .charge(Observation {
+            consumed: schema.source_admission_steps,
+            saturated: schema.source_admission_saturated,
+        })
+        .map_err(|_| capacity())?;
+    let mut visits = Meter::new(prefix.remaining());
+    visits
+        .charge(Observation {
+            consumed: proof.steps,
+            saturated: proof.steps_saturated,
+        })
+        .map_err(|_| capacity())?;
+    let mut bytes = Meter::new(limits.bytes);
+    bytes
+        .charge(Observation {
+            consumed: proof.bytes,
+            saturated: proof.bytes_saturated,
+        })
+        .map_err(|_| capacity())?;
     // A complete object inventory has one owner. The retained proof stores only
     // immutable identities and source/application metadata after this move.
     for (ty, object) in &schema.types {
         control.check()?;
-        visits = visits
-            .checked_add(1)
-            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(capacity)?;
+        visits
+            .charge(Observation::exact(1))
+            .map_err(|_| capacity())?;
         if proof.types.get(ty) != Some(object) {
             return Err(failure());
         }
@@ -263,10 +273,9 @@ pub(super) fn core_with_limits(
     schema.register_read_views(snapshots, control)?;
     for _ in snapshots {
         control.check()?;
-        visits = visits
-            .checked_add(1)
-            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(capacity)?;
+        visits
+            .charge(Observation::exact(1))
+            .map_err(|_| capacity())?;
         index_node::<(PackageId, &KernelSnapshot)>(&mut bytes)?;
     }
     let mut closure = Closure {
@@ -488,11 +497,9 @@ pub(super) fn core_with_limits(
         },
     )
     .map_err(|error| at_stage(error, "associated permission discharge"))?;
-    schema.type_derivation_steps = (visits as u64)
-        .checked_sub(work_debit as u64)
-        .ok_or_else(capacity)?
-        .checked_sub(schema.source_admission_steps)
-        .ok_or_else(capacity)?;
-    schema.type_metadata_bytes = bytes.checked_sub(bytes_debit).ok_or_else(capacity)? as u64;
+    schema.type_derivation_steps = visits.observation().consumed;
+    schema.type_derivation_saturated = visits.observation().saturated;
+    schema.type_metadata_bytes = bytes.observation().consumed;
+    schema.type_metadata_saturated = bytes.observation().saturated;
     Ok(())
 }

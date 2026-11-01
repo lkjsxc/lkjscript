@@ -1,6 +1,7 @@
 //! Complete canonical permission obligations. A scoped member supplies only its
 //! Owned bound; property derivation never turns that bound into movement or sharing.
 use super::*;
+use crate::platform::admission::{Meter as AdmissionMeter, Observation};
 use crate::platform::execution::ExecutionControl;
 use crate::platform::kernel::{FunctionEffect, OwnerKind, ParameterParent, ParameterUse};
 use associated_preparation::{Proof, ReadContext, SymbolicSelection, SymbolicSelectionSource};
@@ -12,24 +13,20 @@ pub(super) type NominalConstraints = BTreeSet<(
 )>;
 
 pub(super) struct Meter<'a> {
-    pub visits: &'a mut usize,
-    pub bytes: &'a mut usize,
+    pub visits: &'a mut AdmissionMeter,
+    pub bytes: &'a mut AdmissionMeter,
     pub control: &'a ExecutionControl,
 }
 
 impl Meter<'_> {
     pub(super) fn tick(&mut self) -> Result<(), ExecutionError> {
         self.control.check()?;
-        *self.visits = self
-            .visits
-            .checked_add(1)
-            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
-                ExecutionError::resource(
-                    "reference_associated_permission_work",
-                    "canonical permission obligations exceeded cumulative validation work",
-                )
-            })?;
+        self.visits.charge(Observation::exact(1)).map_err(|_| {
+            ExecutionError::resource(
+                "reference_associated_permission_work",
+                "canonical permission obligations exceeded the selected validation allowance",
+            )
+        })?;
         Ok(())
     }
     fn reserve<T>(&mut self, count: usize) -> Result<(), ExecutionError> {
@@ -409,7 +406,8 @@ impl Collector<'_, '_, '_, '_> {
     ) -> Result<(), ExecutionError> {
         let count = actuals.len().checked_add(1).ok_or_else(capacity)?;
         self.meter.reserve::<TypeObjectDigest>(count)?;
-        let mut arguments = Vec::with_capacity(count);
+        let mut arguments = Vec::new();
+        arguments.try_reserve_exact(count).map_err(|_| capacity())?;
         arguments.push(self_type);
         arguments.extend_from_slice(actuals);
         self.constraint(origin, owner, contract, &arguments, scope)

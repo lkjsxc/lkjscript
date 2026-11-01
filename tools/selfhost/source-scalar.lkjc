@@ -5,35 +5,64 @@ declarations.begin
       (visibility private)
       (effect pure)
       (parameter create code (type I64))
-      (returns (record (code I64) (facts Bytes) (parents Bytes)))
+      (returns
+        (record (code I64) (facts Bytes) (parents Bytes) (types Bytes) (mapping Bytes) (custody Bytes)))
       (body
         (record structural
           (field code (local code))
           (field facts (call ci::text-bytes (text "")))
-          (field parents (call ci::text-bytes (text ""))))))
+          (field parents (call ci::text-bytes (text "")))
+          (field types (call ci::text-bytes (text "")))
+          (field mapping (call ci::text-bytes (text "")))
+          (field custody (call ci::text-bytes (text ""))))))
+    (function create infer
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (returns
+        (record (code I64) (facts Bytes) (parents Bytes) (types Bytes) (mapping Bytes) (custody Bytes)))
+      (body
+        (let
+          (binding profile (call source-scalar-profile::check (local graph) (local types) (local mapping)))
+          (in
+            (if
+              (call ci::eq (local profile) (i64 0))
+              (let
+                (binding inferred
+                  (call source-scalar-infer::check (local graph) (local types) (local mapping)))
+                (in
+                  (if
+                    (call ci::eq (field (local inferred) (name code)) (i64 0))
+                    (call admit
+                      (local graph)
+                      (local parents)
+                      (field (local inferred) (name types))
+                      (local mapping)
+                      (field (local inferred) (name rows)))
+                    (call failure (field (local inferred) (name code))))))
+              (call failure (local profile)))))))
     (function create finish
       (visibility private)
       (effect pure)
       (parameter create graph (type Bytes))
       (parameter create parents (type Bytes))
-      (returns (record (code I64) (facts Bytes) (parents Bytes)))
+      (returns
+        (record (code I64) (facts Bytes) (parents Bytes) (types Bytes) (mapping Bytes) (custody Bytes)))
       (body
         (let
-          (binding profile (call source-scalar-profile::check (local graph)))
+          (binding prepared (call source-value-types::prepare (local graph)))
           (in
             (if
-              (call ci::eq (local profile) (i64 0))
-              (let
-                (binding inferred (call source-scalar-infer::check (local graph)))
-                (in
-                  (if
-                    (call ci::eq (field (local inferred) (name code)) (i64 0))
-                    (record structural
-                      (field code (i64 0))
-                      (field facts (field (local inferred) (name rows)))
-                      (field parents (local parents)))
-                    (call failure (field (local inferred) (name code))))))
-              (call failure (local profile)))))))
+              (call ci::eq (field (local prepared) (name code)) (i64 0))
+              (call infer
+                (local graph)
+                (local parents)
+                (field (local prepared) (name types))
+                (field (local prepared) (name mapping)))
+              (call failure (field (local prepared) (name code))))))))
     (function create scope
       (visibility private)
       (effect pure)
@@ -49,7 +78,8 @@ declarations.begin
             (observed-high I64)
             (observed-low I64)
             (saturated Bool))))
-      (returns (record (code I64) (facts Bytes) (parents Bytes)))
+      (returns
+        (record (code I64) (facts Bytes) (parents Bytes) (types Bytes) (mapping Bytes) (custody Bytes)))
       (body
         (let
           (binding scoped (call source-scope::check (local graph) (local parents) (local work)))
@@ -77,7 +107,8 @@ declarations.begin
       (visibility package)
       (effect pure)
       (parameter create graph (type Bytes))
-      (returns (record (code I64) (facts Bytes) (parents Bytes)))
+      (returns
+        (record (code I64) (facts Bytes) (parents Bytes) (types Bytes) (mapping Bytes) (custody Bytes)))
       (body
         (if
           (call ci::lt (call ci::length (local graph)) (i64 128))
@@ -113,5 +144,35 @@ declarations.begin
                 (if
                   (call ci::eq (field (local prepared) (name code)) (i64 0))
                   (call ci::slice (local graph) (i64 48) (i64 80))
-                  (call ci::text-bytes (text "")))))))))))
+                  (call ci::text-bytes (text "")))))))))
+    (function create admit
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create facts (type Bytes))
+      (returns
+        (record (code I64) (facts Bytes) (parents Bytes) (types Bytes) (mapping Bytes) (custody Bytes)))
+      (body
+        (let
+          (binding checked
+            (call source-custody::prepare
+              (local graph)
+              (local parents)
+              (local types)
+              (local mapping)
+              (local facts)))
+          (in
+            (if
+              (call ci::eq (field (local checked) (name code)) (i64 0))
+              (record structural
+                (field code (i64 0))
+                (field facts (local facts))
+                (field parents (local parents))
+                (field types (local types))
+                (field mapping (local mapping))
+                (field custody (field (local checked) (name evidence))))
+              (call failure (field (local checked) (name code))))))))))
 declarations.end

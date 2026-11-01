@@ -368,6 +368,66 @@ impl Machine<'_> {
                 buffer.establish_admission(self.program.value_origin)?;
                 CheckedValue::memory(self.program, NormalizedValue::ByteBuffer(buffer))
             }
+            "core.buffer.append-slice" => {
+                let values = take_intrinsic_arguments::<4>(arguments, "buffer append arity")?;
+                let [data, start, end, buffer] = values;
+                let (
+                    NormalizedValue::Bytes(data),
+                    NormalizedValue::I64(start),
+                    NormalizedValue::I64(end),
+                    NormalizedValue::ByteBuffer(buffer),
+                ) = (
+                    data.into_raw(),
+                    start.into_raw(),
+                    end.into_raw(),
+                    buffer.into_raw(),
+                )
+                else {
+                    return Err(type_error("buffer append types"));
+                };
+                buffer.validate(self.memory_domain, true)?;
+                let control = self.control;
+                let buffer =
+                    buffer.append_slice(data.as_ref(), start, end, control, &mut |bytes| {
+                        self.charge_allocation(bytes)
+                    })?;
+                buffer.establish_admission(self.program.value_origin)?;
+                CheckedValue::memory(self.program, NormalizedValue::ByteBuffer(buffer))
+            }
+            "core.buffer.append-i64-le" => {
+                let values = take_intrinsic_arguments::<2>(arguments, "buffer word arity")?;
+                let [value, buffer] = values;
+                let (NormalizedValue::I64(value), NormalizedValue::ByteBuffer(buffer)) =
+                    (value.into_raw(), buffer.into_raw())
+                else {
+                    return Err(type_error("buffer word types"));
+                };
+                buffer.validate(self.memory_domain, true)?;
+                let control = self.control;
+                let buffer = buffer
+                    .append_i64_le(value, control, &mut |bytes| self.charge_allocation(bytes))?;
+                buffer.establish_admission(self.program.value_origin)?;
+                CheckedValue::memory(self.program, NormalizedValue::ByteBuffer(buffer))
+            }
+            "core.bytes.read-i64-le" => {
+                let values = take_intrinsic_arguments::<2>(arguments, "byte word arity")?;
+                let [data, index] = values;
+                let (NormalizedValue::Bytes(data), NormalizedValue::I64(index)) =
+                    (data.into_raw(), index.into_raw())
+                else {
+                    return Err(type_error("byte word types"));
+                };
+                let selected = usize::try_from(index)
+                    .ok()
+                    .and_then(|start| start.checked_add(8).and_then(|end| data.get(start..end)))
+                    .and_then(|bytes| <[u8; 8]>::try_from(bytes).ok())
+                    .ok_or_else(|| {
+                        trap_error("normalized_bytes_range", "byte word is outside its source")
+                    })?;
+                let value = i64::from_le_bytes(selected);
+                self.control.check()?;
+                CheckedValue::scalar(self.program, NormalizedValue::I64(value))
+            }
             "core.buffer.length" | "core.buffer.get" => {
                 let expected = if implementation == "core.buffer.get" {
                     2

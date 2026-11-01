@@ -41,8 +41,6 @@ pub const PACKAGE_INTERFACE_ENVELOPE_DOMAIN: &str =
 const PACKAGE_INTERFACE_IDENTITY_MAGIC: [u8; 8] = *b"LKJPIFI1";
 const PACKAGE_INTERFACE_IDENTITY_DOMAIN: &str = "lkjscript.package-interface-identity.v1";
 pub const MAXIMUM_PACKAGE_INTERFACE_OWNER_BYTES: usize = 1024 * 1024;
-pub const MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK: usize =
-    crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
 const MAXIMUM_REPRESENTATION_METADATA_BYTES: usize = 64 * 1_048_576;
 
 struct RepresentationBudget {
@@ -121,6 +119,10 @@ mod associated_authority_tests;
 #[cfg(test)]
 #[path = "package_interface_read_view_tests.rs"]
 mod read_view_tests;
+
+#[cfg(test)]
+#[path = "package_interface_work_admission_tests.rs"]
+mod work_admission_tests;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PackageInterfaceOwnerDigest([u8; 32]);
@@ -574,13 +576,6 @@ impl PackageInterfaceSelection {
             }
             budget.reserve::<TypeObjectDigest>(1)?;
             visited.insert(digest);
-            if visited.len() > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK {
-                return Err(interface_error(
-                    DiagnosticClass::Resource,
-                    "package_interface_type_work",
-                    "owned representation closure exceeds its explicit validation work budget",
-                ));
-            }
             budget.reserve::<TypeObject>(1)?;
             let object = read_type(digest)?
                 .ok_or_else(|| interface_corrupt("owned representation type is absent"))?;
@@ -880,13 +875,6 @@ pub(crate) fn validate_package_interface_metered<S: ImmutableObjectStore + ?Size
     admission: &mut MapAdmission,
     visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
 ) -> Result<PackageInterfaceValidation, Diagnostic> {
-    if root.entries() > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK as u64 {
-        return Err(interface_error(
-            DiagnosticClass::Resource,
-            "package_interface_owner_work",
-            "package-interface owner count exceeds the current explicit validation work budget",
-        ));
-    }
     let map = PersistentMap::from_root(root);
     let object_reader = ObjectPageReader::new(store);
     let reader = ReachablePageReader::new(&object_reader);
@@ -1833,8 +1821,6 @@ pub(crate) enum AssociatedInterfaceProof {
 
 pub(crate) struct AssociatedInterfaceAdmission<'a> {
     visit: &'a mut dyn FnMut(u64) -> Result<(), Diagnostic>,
-    work: usize,
-    maximum_work: usize,
     storage: RepresentationBudget,
 }
 
@@ -1842,8 +1828,6 @@ impl<'v> AssociatedInterfaceAdmission<'v> {
     pub(crate) fn new(visit: &'v mut dyn FnMut(u64) -> Result<(), Diagnostic>) -> Self {
         Self {
             visit,
-            work: 0,
-            maximum_work: MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK,
             storage: RepresentationBudget::default(),
         }
     }
@@ -1857,19 +1841,9 @@ impl<'v> AssociatedInterfaceAdmission<'v> {
     }
 
     pub(crate) fn charge(&mut self, count: usize) -> Result<(), Diagnostic> {
-        (self.visit)(u64::try_from(count).map_err(|_| associated_interface_storage())?)?;
-        self.work = self
-            .work
-            .checked_add(count)
-            .filter(|work| *work <= self.maximum_work)
-            .ok_or_else(|| {
-                interface_error(
-                    DiagnosticClass::Resource,
-                    "package_interface_associated_work",
-                    "associated interface proof exceeds its work admission",
-                )
-            })?;
-        Ok(())
+        // The caller owns the exact optional work allowance and cancellation. A second
+        // cumulative counter would silently restrict ordinary unmetered interface admission.
+        (self.visit)(u64::try_from(count).map_err(|_| associated_interface_storage())?)
     }
 
     pub(crate) fn current(
@@ -2448,16 +2422,13 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
         if !visited.insert((source, digest)) {
             continue;
         }
-        // Preserve the type traversal's caller charge. Associated proof work below shares the
-        // same callback and its own cumulative admission with the owner/Borrow phase.
+        // Type traversal and associated proof share the caller's exact optional allowance.
         (associated_admission.visit)(1)?;
-        if visited.len() > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK
-            || depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-        {
+        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
             return Err(interface_error(
                 DiagnosticClass::Resource,
                 "package_interface_type_work",
-                "package-interface type closure exceeds its explicit validation work budget",
+                "package-interface type closure exceeds its type-depth bound",
             ));
         }
         let key = ObjectKey::from_digest(ObjectDomain::Type, digest.bytes());
@@ -2899,19 +2870,7 @@ fn representation_declarations_admitted(
     visit: &mut dyn FnMut(u64) -> Result<(), Diagnostic>,
     budget: &mut RepresentationBudget,
 ) -> Result<BTreeSet<OwnerKey>, Diagnostic> {
-    let mut traversals = 0usize;
-    let mut charge = || {
-        visit(1)?;
-        traversals = traversals.saturating_add(1);
-        if traversals > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK {
-            return Err(interface_error(
-                DiagnosticClass::Resource,
-                "package_interface_type_work",
-                "owned representation traversal exceeds its validation work budget",
-            ));
-        }
-        Ok(())
-    };
+    let mut charge = || visit(1);
     let mut owned = BTreeSet::new();
     for (key, owner) in owners {
         match &owner.record {
@@ -2955,13 +2914,6 @@ fn representation_declarations_admitted(
         }
         budget.reserve::<TypeObjectDigest>(1)?;
         visited.insert(digest);
-        if visited.len() > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK {
-            return Err(interface_error(
-                DiagnosticClass::Resource,
-                "package_interface_type_work",
-                "owned representation closure exceeds its validation work budget",
-            ));
-        }
         let object = types
             .get(&digest)
             .ok_or_else(|| interface_corrupt("owned representation type is absent"))?;
@@ -3025,13 +2977,6 @@ fn representation_declarations_admitted(
                         interface_nominal_layout_types(declaration.declaration, owners, budget)?;
                     budget.append_types(roots, &mut pending)?;
                 }
-            }
-            if seen_types.len() > MAXIMUM_PACKAGE_INTERFACE_VALIDATION_WORK {
-                return Err(interface_error(
-                    DiagnosticClass::Resource,
-                    "package_interface_type_work",
-                    "owned representation closure exceeds its validation work budget",
-                ));
             }
         }
     }

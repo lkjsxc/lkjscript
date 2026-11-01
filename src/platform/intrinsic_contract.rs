@@ -199,6 +199,26 @@ fn validate_shape(
             &[IntrinsicType::I64, IntrinsicType::ByteBuffer],
             &IntrinsicType::ByteBuffer,
         ),
+        "core.buffer.append-slice" => exact(
+            signature,
+            &[
+                IntrinsicType::Bytes,
+                IntrinsicType::I64,
+                IntrinsicType::I64,
+                IntrinsicType::ByteBuffer,
+            ],
+            &IntrinsicType::ByteBuffer,
+        ),
+        "core.buffer.append-i64-le" => exact(
+            signature,
+            &[IntrinsicType::I64, IntrinsicType::ByteBuffer],
+            &IntrinsicType::ByteBuffer,
+        ),
+        "core.bytes.read-i64-le" => exact(
+            signature,
+            &[IntrinsicType::Bytes, IntrinsicType::I64],
+            &IntrinsicType::I64,
+        ),
         "core.buffer.get" => exact(
             signature,
             &[IntrinsicType::I64, IntrinsicType::ByteBuffer],
@@ -552,6 +572,8 @@ pub(crate) fn validate_kernel_intrinsic<R: ExpressionRead + ?Sized>(
             | "core.cell.extract"
             | "core.cell.discard"
             | "core.buffer.push"
+            | "core.buffer.append-slice"
+            | "core.buffer.append-i64-le"
             | "core.buffer.freeze"
             | "core.buffer.discard"
                 if matches!(

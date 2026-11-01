@@ -220,6 +220,9 @@ fn primitive(name: &str) -> Result<u64, Diagnostic> {
         "core.list.length" => 26,
         "core.list.get" => 27,
         "core.bytes.blake3-derive-key" => 28,
+        "core.buffer.append-slice" => 29,
+        "core.buffer.append-i64-le" => 30,
+        "core.bytes.read-i64-le" => 31,
         _ => return Err(unsupported()),
     })
 }

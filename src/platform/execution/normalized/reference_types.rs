@@ -2,6 +2,7 @@
 //! This does not inspect bytecode, compiler tables, or production preparation.
 
 use super::reference_schema::NormalizedReferenceSchema;
+use crate::platform::admission::{Meter, Observation};
 use crate::platform::execution::ExecutionError;
 use crate::platform::kernel::{
     DeclarationPayload, DeclarationReference, ExpressionOperation, KernelSnapshot, OwnerKey,
@@ -78,7 +79,6 @@ type Application = (
     Vec<Witness>,
 );
 type Calls = VecDeque<Application>;
-const MAXIMUM_METADATA_BYTES: usize = 256 * 1024 * 1024;
 
 #[path = "reference_borrowed_admission.rs"]
 mod borrowed_admission;
@@ -134,8 +134,8 @@ struct Closure<'source, 'types> {
     symbolic: bool,
     snapshots: BTreeMap<PackageId, &'source KernelSnapshot>,
     types: &'types mut BTreeMap<TypeObjectDigest, TypeObject>,
-    visits: usize,
-    allocated: usize,
+    visits: Meter,
+    allocated: Meter,
     control: &'source crate::platform::execution::ExecutionControl,
     effects: super::reference_effects::Bindings,
     requirements: super::reference_effects::RequirementBindings,
@@ -144,21 +144,37 @@ struct Closure<'source, 'types> {
     interned_witnesses: BTreeMap<WitnessKey, Witness>,
 }
 
-fn allocate<T>(allocated: &mut usize, count: usize) -> Result<(), ExecutionError> {
-    *allocated = count
-        .checked_mul(std::mem::size_of::<T>())
-        .and_then(|bytes| allocated.checked_add(bytes))
-        .filter(|bytes| *bytes <= MAXIMUM_METADATA_BYTES)
-        .ok_or_else(|| {
-            ExecutionError::resource(
-                "reference_instantiation_storage",
-                "canonical type derivation exceeded the existing allocation limit",
-            )
-        })?;
-    Ok(())
+// Cumulative modeled metadata is independent of actual collection layouts. A
+// missing policy records a possibly inexact lower bound without refusing work.
+fn allocate<T>(allocated: &mut Meter, count: usize) -> Result<(), ExecutionError> {
+    allocate_counts::<T>(allocated, &[count])
 }
 
-fn index_node<T>(allocated: &mut usize) -> Result<(), ExecutionError> {
+fn allocate_counts<T>(allocated: &mut Meter, counts: &[usize]) -> Result<(), ExecutionError> {
+    let mut amount = Observation::exact(0);
+    for count in counts {
+        amount.observe(Observation::product(*count, std::mem::size_of::<T>()));
+    }
+    allocated.charge(amount).map_err(|_| {
+        ExecutionError::resource(
+            "reference_instantiation_storage",
+            "canonical type derivation exceeded the selected metadata allowance",
+        )
+    })
+}
+
+fn reserved_vec<T>(count: usize) -> Result<Vec<T>, ExecutionError> {
+    let mut values = Vec::new();
+    values.try_reserve_exact(count).map_err(|_| {
+        ExecutionError::resource(
+            "reference_instantiation_storage",
+            "canonical type derivation cannot reserve representable or available storage",
+        )
+    })?;
+    Ok(values)
+}
+
+fn index_node<T>(allocated: &mut Meter) -> Result<(), ExecutionError> {
     allocate::<T>(allocated, 1)?;
     allocate::<usize>(allocated, 3)
 }
@@ -194,7 +210,7 @@ fn admit_parameter_generation(owner: &OwnerRecord) -> Result<(), ExecutionError>
 }
 
 fn reserve_witness(
-    allocated: &mut usize,
+    allocated: &mut Meter,
     witness: &Witness,
     depth: usize,
     nodes: &mut usize,
@@ -959,7 +975,7 @@ impl<'source> Closure<'source, '_> {
 
     fn sequence_elements(&mut self) -> Result<(), ExecutionError> {
         allocate::<TypeObjectDigest>(&mut self.allocated, self.types.len())?;
-        let mut items = Vec::with_capacity(self.types.len());
+        let mut items = reserved_vec(self.types.len())?;
         for (ty, object) in self.types.iter() {
             self.control.check()?;
             if self
@@ -996,14 +1012,12 @@ impl<'source> Closure<'source, '_> {
             }
             let mut scope = None;
             for parameter in parameters {
-                self.visits = self
-                    .visits
-                    .checked_add(self.snapshots.len())
-                    .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-                    .ok_or_else(|| {
+                self.visits
+                    .charge(Observation::from_usize(self.snapshots.len()))
+                    .map_err(|_| {
                         ExecutionError::resource(
                             "reference_instantiation_work",
-                            "sequence element scope lookup exceeded finite work",
+                            "sequence element scope lookup exceeded the selected work allowance",
                         )
                     })?;
                 let mut parameter_scope = None;
@@ -1075,12 +1089,10 @@ impl<'source> Closure<'source, '_> {
                 let proof = self.associated_proof.clone().ok_or_else(failure)?;
                 let expected = proof.symbolic_formal(source, parameter, self.control)?;
                 self.tick()?;
-                for _ in 0..expected
-                    .type_arguments
-                    .len()
-                    .saturating_add(expected.name.as_str().len())
-                {
-                    self.tick()?;
+                for count in [expected.type_arguments.len(), expected.name.as_str().len()] {
+                    for _ in 0..count {
+                        self.tick()?;
+                    }
                 }
                 let OwnerRecord::Declaration(owner) =
                     self.owner(source.package, OwnerKey::Declaration(source.declaration))?
@@ -1260,7 +1272,7 @@ impl<'source> Closure<'source, '_> {
                     scope,
                 )?;
                 allocate::<Witness>(&mut self.allocated, implementations.len())?;
-                let mut selected = Vec::with_capacity(implementations.len());
+                let mut selected = reserved_vec(implementations.len())?;
                 for operand in implementations {
                     selected.push(self.witness_selection_in(
                         operand,
@@ -1349,7 +1361,7 @@ impl<'source> Closure<'source, '_> {
         }
         let self_type = self.identity(formal.self_type, bindings, 0)?;
         allocate::<TypeObjectDigest>(&mut self.allocated, formal.type_arguments.len())?;
-        let mut type_arguments = Vec::with_capacity(formal.type_arguments.len());
+        let mut type_arguments = reserved_vec(formal.type_arguments.len())?;
         for argument in &formal.type_arguments {
             self.scoped_type_parameters(*argument, bindings, 0)?;
             type_arguments.push(self.identity(*argument, bindings, 0)?);
@@ -1610,7 +1622,7 @@ impl<'source> Closure<'source, '_> {
                             Some(implementation),
                         ));
                         allocate::<Witness>(&mut self.allocated, mapping.implementations.len())?;
-                        let mut mapped = Vec::with_capacity(mapping.implementations.len());
+                        let mut mapped = reserved_vec(mapping.implementations.len())?;
                         for operand in &mapping.implementations {
                             mapped.push(self.witness_selection_in(
                                 operand,
@@ -1641,7 +1653,7 @@ impl<'source> Closure<'source, '_> {
                 }
                 let self_type = self.identity(scheme.self_type, &substitutions, 0)?;
                 allocate::<TypeObjectDigest>(&mut self.allocated, scheme.type_arguments.len())?;
-                let mut arguments = Vec::with_capacity(scheme.type_arguments.len());
+                let mut arguments = reserved_vec(scheme.type_arguments.len())?;
                 for argument in &scheme.type_arguments {
                     self.scoped_type_parameters(*argument, &templates, 0)?;
                     arguments.push(self.identity(*argument, &substitutions, 0)?);
@@ -1799,10 +1811,7 @@ impl<'source> Closure<'source, '_> {
                 &mut self.allocated,
                 implementation.type_parameters.len(),
             )?;
-            allocate::<usize>(
-                &mut self.allocated,
-                implementation.type_parameters.len().saturating_mul(3),
-            )?;
+            allocate::<[usize; 3]>(&mut self.allocated, implementation.type_parameters.len())?;
             let substitutions: Bindings = implementation
                 .type_parameters
                 .iter()
@@ -1825,7 +1834,7 @@ impl<'source> Closure<'source, '_> {
                 .collect::<Result<Vec<_>, _>>()?;
             if !self.symbolic {
                 allocate::<Witness>(&mut self.allocated, mapping.implementations.len())?;
-                let mut witnesses = Vec::with_capacity(mapping.implementations.len());
+                let mut witnesses = reserved_vec(mapping.implementations.len())?;
                 for operand in &mapping.implementations {
                     witnesses.push(self.witness_selection_in(
                         operand,
@@ -1853,14 +1862,12 @@ impl<'source> Closure<'source, '_> {
         owned_declarations: &BTreeSet<DeclarationReference>,
     ) -> Result<(), ExecutionError> {
         let mut queue = VecDeque::new();
-        self.visits = self
-            .visits
-            .checked_add(self.types.len())
-            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
+        self.visits
+            .charge(Observation::from_usize(self.types.len()))
+            .map_err(|_| {
                 ExecutionError::resource(
                     "reference_instantiation_work",
-                    "product type inventory exceeded its finite work bound",
+                    "product type inventory exceeded the selected work allowance",
                 )
             })?;
         for (ty, object) in self.types.iter() {
@@ -2009,14 +2016,12 @@ impl<'source> Closure<'source, '_> {
 
     fn tick(&mut self) -> Result<(), ExecutionError> {
         self.control.check()?;
-        self.visits = self
-            .visits
-            .checked_add(1)
-            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
+        self.visits
+            .charge(Observation::from_usize(1))
+            .map_err(|_| {
                 ExecutionError::resource(
                     "reference_instantiation_work",
-                    "canonical type instantiation exceeded its finite work bound",
+                    "canonical type instantiation exceeded the selected work allowance",
                 )
             })?;
         Ok(())
@@ -2654,7 +2659,7 @@ impl<'source> Closure<'source, '_> {
                     read_scope_arguments: _,
                 } => {
                     allocate::<TypeObjectDigest>(&mut self.allocated, type_arguments.len())?;
-                    let mut concrete = Vec::with_capacity(type_arguments.len());
+                    let mut concrete = reserved_vec(type_arguments.len())?;
                     for ty in type_arguments {
                         concrete.push(self.identity(ty, bindings, 0)?);
                     }
@@ -2678,7 +2683,7 @@ impl<'source> Closure<'source, '_> {
                         concrete.clone(),
                         if self.symbolic { scope } else { None },
                     ));
-                    let mut effects = Vec::with_capacity(effect_arguments.len());
+                    let mut effects = reserved_vec(effect_arguments.len())?;
                     for row in effect_arguments {
                         if self.symbolic {
                             continue;
@@ -2922,8 +2927,8 @@ fn check_duplicate_witness_dag_in(
         symbolic: false,
         snapshots: BTreeMap::from([(source.root.package_id, source)]),
         types: &mut types,
-        visits: 0,
-        allocated: 0,
+        visits: Meter::new(None),
+        allocated: Meter::new(None),
         control: &control,
         effects: BTreeMap::new(),
         requirements: BTreeMap::new(),
@@ -2951,7 +2956,14 @@ fn check_duplicate_witness_dag_in(
     if meaning != (keep, cell, Vec::new()) {
         return Err(failure());
     }
-    Ok((closure.interned_witnesses.len(), closure.visits))
+    let visits = closure.visits.observation();
+    if visits.saturated {
+        return Err(failure());
+    }
+    Ok((
+        closure.interned_witnesses.len(),
+        usize::try_from(visits.consumed).map_err(|_| failure())?,
+    ))
 }
 
 #[cfg(test)]
@@ -2970,8 +2982,8 @@ pub(super) fn check_product_substitution(
         symbolic: false,
         snapshots: BTreeMap::new(),
         types: &mut types,
-        visits: 0,
-        allocated: 0,
+        visits: Meter::new(None),
+        allocated: Meter::new(None),
         control: &control,
         effects: BTreeMap::new(),
         requirements: BTreeMap::new(),
@@ -2983,9 +2995,8 @@ pub(super) fn check_product_substitution(
     closure.product_depths(&[], &BTreeMap::new(), &BTreeSet::new())
 }
 
-// This independent preparation chain still shares a bounded source-work policy.
-// Keep its selection common to reconstruction and completion until its recursive
-// derived-witness traversal and all downstream debits have been replaced together.
+// Select the independent associated/region preparation path from the complete
+// canonical inventory. This semantic routing choice imposes no default quota.
 pub(super) fn requires_associated_preparation(snapshots: &[&KernelSnapshot]) -> bool {
     snapshots.iter().any(|snapshot| {
         snapshot.types.values().chain(snapshot.dependency_types.values()).any(|object| object.form.is_associated() || matches!(object.form, TypeForm::ReadViewApplied { .. }
@@ -3005,38 +3016,24 @@ pub(super) fn complete(
 ) -> Result<(), ExecutionError> {
     if requires_associated_preparation(snapshots) {
         // Independent canonical preparation precedes complete custody, nominal,
-        // property and permission proof under the remaining source allowance.
-        let maximum = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
-        let admitted = usize::try_from(schema.source_admission_steps).map_err(|_| failure())?;
-        let debited_maximum = maximum.checked_sub(admitted).ok_or_else(failure)?;
-        let proof = associated_preparation::check_inventory(snapshots, associated_preparation::Limits {
-            steps: debited_maximum,
-            bytes: MAXIMUM_METADATA_BYTES,
-        }, control).map_err(|mut error| {
-            if error.code == "kernel_associated_reference_capacity"
-                && error.message.contains("reference_flow phase=")
-            {
-                error.message.push_str(&format!(
-                    "; reference_source_debit source_admission_steps={} kernel_maximum={} debited_maximum={}",
-                    admitted, maximum, debited_maximum,
-                ));
-            }
-            error
-        })?;
+        // property and permission proofs. Ordinary source admission is unmetered.
+        let proof = associated_preparation::check_inventory(
+            snapshots,
+            associated_preparation::Limits::default(),
+            control,
+        )?;
         return associated_schema::core(schema, snapshots, proof, control);
     }
     // The witness-only admission entry bypasses reconstruction deliberately.
     // Rebuild missing affine nominal metadata from its canonical owners here too.
-    let mut nominal_metadata_bytes = 0;
-    let mut nominal_inventory_visits = 0;
+    let mut nominal_metadata_bytes = Meter::new(None);
+    let mut nominal_inventory_visits = Meter::new(None);
     for snapshot in snapshots {
         for (key, record) in &snapshot.owners {
             control.check()?;
-            nominal_inventory_visits += 1;
-            if nominal_inventory_visits > crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK
-            {
-                return Err(failure());
-            }
+            nominal_inventory_visits
+                .charge(Observation::exact(1))
+                .map_err(|_| failure())?;
             let (OwnerKey::Declaration(id), OwnerRecord::Declaration(owner)) = (key, record) else {
                 continue;
             };
@@ -3187,7 +3184,7 @@ pub(super) fn complete(
                                 function.implementation_parameters.len(),
                             )?;
                             let mut witnesses =
-                                Vec::with_capacity(function.implementation_parameters.len());
+                                reserved_vec(function.implementation_parameters.len())?;
                             for parameter in &function.implementation_parameters {
                                 witnesses.push(closure.symbolic_witness(
                                     scope,
@@ -3534,15 +3531,12 @@ pub(super) fn complete(
     // This includes unused targets and untaken expressions visited by body closure.
     for (target, arguments, scope) in parallel_targets {
         control.check()?;
-        visits = visits
-            .checked_add(1)
-            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
-                ExecutionError::resource(
-                    "reference_transfer_work",
-                    "canonical transfer proof exhausted its work allowance",
-                )
-            })?;
+        visits.charge(Observation::from_usize(1)).map_err(|_| {
+            ExecutionError::resource(
+                "reference_transfer_work",
+                "canonical transfer proof exhausted the selected work allowance",
+            )
+        })?;
         let snapshot = snapshots
             .iter()
             .find(|snapshot| snapshot.root.package_id == target.package)
@@ -3616,15 +3610,12 @@ pub(super) fn complete(
         let mut seen_owned = false;
         for parameter in &function.parameters {
             control.check()?;
-            visits = visits
-                .checked_add(1)
-                .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-                .ok_or_else(|| {
-                    ExecutionError::resource(
-                        "reference_transfer_work",
-                        "canonical transfer proof exhausted its work allowance",
-                    )
-                })?;
+            visits.charge(Observation::from_usize(1)).map_err(|_| {
+                ExecutionError::resource(
+                    "reference_transfer_work",
+                    "canonical transfer proof exhausted the selected work allowance",
+                )
+            })?;
             let Some(OwnerRecord::Parameter(parameter)) =
                 snapshot.owners.get(&OwnerKey::Parameter(*parameter))
             else {
@@ -3688,8 +3679,10 @@ pub(super) fn complete(
             }
         }
     }
-    schema.type_derivation_steps = visits as u64;
-    schema.type_metadata_bytes = bytes as u64;
+    schema.type_derivation_steps = visits.observation().consumed;
+    schema.type_derivation_saturated = visits.observation().saturated;
+    schema.type_metadata_bytes = bytes.observation().consumed;
+    schema.type_metadata_saturated = bytes.observation().saturated;
     Ok(())
 }
 
@@ -3976,8 +3969,8 @@ fn parallel_transfer_type(
     snapshots: &[&KernelSnapshot],
     ty: TypeObjectDigest,
     scope: Option<DeclarationReference>,
-    visits: &mut usize,
-    allocated: &mut usize,
+    visits: &mut Meter,
+    allocated: &mut Meter,
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), ExecutionError> {
     parallel_carrier_type(
@@ -3991,8 +3984,8 @@ fn parallel_share_type(
     snapshots: &[&KernelSnapshot],
     ty: TypeObjectDigest,
     scope: Option<DeclarationReference>,
-    visits: &mut usize,
-    allocated: &mut usize,
+    visits: &mut Meter,
+    allocated: &mut Meter,
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), ExecutionError> {
     parallel_carrier_type(
@@ -4014,8 +4007,8 @@ fn parallel_carrier_type(
     snapshots: &[&KernelSnapshot],
     ty: TypeObjectDigest,
     scope: Option<DeclarationReference>,
-    visits: &mut usize,
-    allocated: &mut usize,
+    visits: &mut Meter,
+    allocated: &mut Meter,
     control: &crate::platform::execution::ExecutionControl,
     share: bool,
 ) -> Result<(), ExecutionError> {
@@ -4040,8 +4033,8 @@ fn parallel_carrier_type_indexed(
     snapshots: &BTreeMap<PackageId, &KernelSnapshot>,
     ty: TypeObjectDigest,
     scope: Option<DeclarationReference>,
-    visits: &mut usize,
-    allocated: &mut usize,
+    visits: &mut Meter,
+    allocated: &mut Meter,
     control: &crate::platform::execution::ExecutionControl,
     share: bool,
 ) -> Result<(), ExecutionError> {
@@ -4066,8 +4059,8 @@ fn parallel_carrier_type_read(
     snapshots: CanonicalSources<'_, '_>,
     ty: TypeObjectDigest,
     scope: Option<DeclarationReference>,
-    visits: &mut usize,
-    allocated: &mut usize,
+    visits: &mut Meter,
+    allocated: &mut Meter,
     control: &crate::platform::execution::ExecutionControl,
     share: bool,
 ) -> Result<(), ExecutionError> {
@@ -4086,15 +4079,12 @@ fn parallel_carrier_type_read(
     let mut seen = BTreeSet::new();
     while let Some(vertex) = pending.pop_front() {
         control.check()?;
-        *visits = visits
-            .checked_add(1)
-            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
-                ExecutionError::resource(
-                    "reference_transfer_work",
-                    "canonical transfer proof exhausted its work allowance",
-                )
-            })?;
+        visits.charge(Observation::from_usize(1)).map_err(|_| {
+            ExecutionError::resource(
+                "reference_transfer_work",
+                "canonical transfer proof exhausted the selected work allowance",
+            )
+        })?;
         if seen.contains(&vertex) {
             continue;
         }
@@ -4292,17 +4282,10 @@ fn parallel_carrier_type_read(
                 if arguments.len() != parameters.len() {
                     return Err(failure());
                 }
-                let count = arguments
-                    .len()
-                    .checked_add(fields.len())
-                    .and_then(|n| n.checked_add(cases.len()))
-                    .ok_or_else(|| {
-                        ExecutionError::resource(
-                            "reference_instantiation_storage",
-                            "canonical carrier edge count overflowed",
-                        )
-                    })?;
-                allocate::<Vertex>(allocated, count)?;
+                allocate_counts::<Vertex>(
+                    allocated,
+                    &[arguments.len(), fields.len(), cases.len()],
+                )?;
                 for (parameter, actual) in parameters.iter().zip(arguments) {
                     associated_permissions::Meter {
                         visits,
@@ -4679,8 +4662,8 @@ enum Retention {
 
 fn property_types(
     schema: &NormalizedReferenceSchema,
-    visits: &mut usize,
-    allocated: &mut usize,
+    visits: &mut Meter,
+    allocated: &mut Meter,
     control: &crate::platform::execution::ExecutionControl,
     retention: Retention,
 ) -> Result<BTreeSet<TypeObjectDigest>, ExecutionError> {
@@ -4689,16 +4672,13 @@ fn property_types(
         Retention::Comparable | Retention::Transfer | Retention::Share
     );
     let secrets = retention == Retention::Ordinary;
-    fn tick(visits: &mut usize) -> Result<(), ExecutionError> {
-        *visits = visits
-            .checked_add(1)
-            .filter(|n| *n <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
-                ExecutionError::resource(
-                    "reference_constraint_work",
-                    "canonical capture proof exceeded validation work",
-                )
-            })?;
+    fn tick(visits: &mut Meter) -> Result<(), ExecutionError> {
+        visits.charge(Observation::from_usize(1)).map_err(|_| {
+            ExecutionError::resource(
+                "reference_constraint_work",
+                "canonical capture proof exceeded the selected work allowance",
+            )
+        })?;
         Ok(())
     }
     let mut safe = BTreeSet::new();
@@ -4985,8 +4965,8 @@ mod transfer_proof_tests {
             &[snapshot],
             ty,
             scope,
-            &mut 0,
-            &mut 0,
+            &mut Meter::new(None),
+            &mut Meter::new(None),
             &ExecutionControl::uncancelled(),
         )
     }
@@ -5044,8 +5024,8 @@ declarations.end
                 &[&snapshot],
                 sequence,
                 Some(scope),
-                &mut 0,
-                &mut 0,
+                &mut Meter::new(None),
+                &mut Meter::new(None),
                 &ExecutionControl::uncancelled(),
             );
             assert_eq!(read.is_ok(), shared, "{constraint:?}");
@@ -5060,8 +5040,8 @@ declarations.end
                     &[&snapshot],
                     sequence,
                     None,
-                    &mut 0,
-                    &mut 0,
+                    &mut Meter::new(None),
+                    &mut Meter::new(None),
                     &ExecutionControl::uncancelled()
                 )
                 .is_err()
@@ -5157,8 +5137,8 @@ declarations.end
                 &[&snapshot],
                 valid,
                 None,
-                &mut 0,
-                &mut 0,
+                &mut Meter::new(None),
+                &mut Meter::new(None),
                 &ExecutionControl::uncancelled()
             )
             .is_ok()
@@ -5185,8 +5165,8 @@ declarations.end
                 &[&snapshot],
                 poisoned,
                 None,
-                &mut 0,
-                &mut 0,
+                &mut Meter::new(None),
+                &mut Meter::new(None),
                 &ExecutionControl::uncancelled()
             )
             .is_err()
@@ -5204,8 +5184,8 @@ declarations.end
                 &[&snapshot],
                 valid,
                 None,
-                &mut 0,
-                &mut 0,
+                &mut Meter::new(None),
+                &mut Meter::new(None),
                 &ExecutionControl::uncancelled()
             )
             .is_err()
@@ -5560,14 +5540,14 @@ declarations.end
             panic!("function");
         };
         let schema = schema(&snapshot);
-        let mut work = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
+        let mut work = Meter::new(Some(0));
         let error = parallel_transfer_type(
             &schema,
             &[&snapshot],
             function.result.ty,
             Some(scope),
             &mut work,
-            &mut 0,
+            &mut Meter::new(None),
             &ExecutionControl::uncancelled(),
         )
         .unwrap_err();
@@ -5579,19 +5559,19 @@ declarations.end
             &[&snapshot],
             function.result.ty,
             Some(scope),
-            &mut 0,
-            &mut 0,
+            &mut Meter::new(None),
+            &mut Meter::new(None),
             &control,
         )
         .unwrap_err();
         assert_eq!(error.class, ExecutionFailureClass::Cancelled);
-        let mut metadata = MAXIMUM_METADATA_BYTES;
+        let mut metadata = Meter::new(Some(0));
         let error = parallel_transfer_type(
             &schema,
             &[&snapshot],
             function.result.ty,
             Some(scope),
-            &mut 0,
+            &mut Meter::new(None),
             &mut metadata,
             &ExecutionControl::uncancelled(),
         )
@@ -5675,8 +5655,8 @@ declarations.end
         );
         let safe = property_types(
             &schema,
-            &mut 0,
-            &mut 0,
+            &mut Meter::new(None),
+            &mut Meter::new(None),
             &ExecutionControl::uncancelled(),
             Retention::Transfer,
         )
@@ -5689,3 +5669,7 @@ declarations.end
         }
     }
 }
+
+#[cfg(test)]
+#[path = "reference_type_capacity_tests.rs"]
+mod capacity_tests;

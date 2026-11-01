@@ -873,12 +873,12 @@ fn canonical_associated_scoped_signatures_share_work_storage_and_cancel_hits() {
     let healthy = empty(&fixture).unwrap();
     for limits in [
         Limits {
-            steps: healthy.steps - 1,
-            bytes: healthy.bytes,
+            steps: Some(healthy.steps - 1),
+            bytes: Some(healthy.bytes),
         },
         Limits {
-            steps: healthy.steps,
-            bytes: healthy.bytes - 1,
+            steps: Some(healthy.steps),
+            bytes: Some(healthy.bytes - 1),
         },
     ] {
         let error = derive(
@@ -894,8 +894,8 @@ fn canonical_associated_scoped_signatures_share_work_storage_and_cancel_hits() {
         &[&fixture.source],
         &[],
         Limits {
-            steps: healthy.steps,
-            bytes: healthy.bytes,
+            steps: Some(healthy.steps),
+            bytes: Some(healthy.bytes),
         },
         &ExecutionControl::uncancelled(),
     )
@@ -915,7 +915,7 @@ fn canonical_associated_scoped_signatures_share_work_storage_and_cancel_hits() {
             .symbolic_mapping(fixture.implementations[0], method, &[], &cancelled)
             .is_err()
     );
-    for checks in [0, 1, 20, 200, healthy.steps as u64 / 2] {
+    for checks in [0, 1, 20, 200, healthy.steps / 2] {
         assert_eq!(
             derive(
                 &[&fixture.source],

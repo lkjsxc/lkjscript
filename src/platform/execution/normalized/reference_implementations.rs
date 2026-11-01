@@ -1399,16 +1399,12 @@ impl ReferenceState<'_> {
 
     fn witness_metadata_step(&mut self) -> Result<(), ExecutionError> {
         self.control.check()?;
-        self.observation.type_derivation_steps = self
-            .observation
-            .type_derivation_steps
-            .checked_add(1)
-            .ok_or_else(|| {
-                reference_resource(
-                    "normalized_reference_observation_overflow",
-                    "static witness work observation overflowed",
-                )
-            })?;
+        crate::platform::execution::cumulative_observe(
+            &mut self.observation.type_derivation_steps,
+            &mut self.observation.type_derivation_saturated,
+            1,
+            false,
+        );
         Ok(())
     }
 

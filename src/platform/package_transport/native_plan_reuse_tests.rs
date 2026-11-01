@@ -136,8 +136,8 @@ fn native_plan_reuse_preserves_complete_objects_and_exact_source_budgets() {
     let reused = collect_preplanned_with_budget_and_control(
         &source.container.objects,
         prior.clone(),
-        fresh.validation_visits,
-        fresh.validation_read_bytes,
+        Some(fresh.validation_visits),
+        Some(fresh.validation_read_bytes),
         &control,
     )
     .unwrap();
@@ -157,16 +157,16 @@ fn native_plan_reuse_preserves_complete_objects_and_exact_source_budgets() {
     let visits_refusal = collect_preplanned_with_budget_and_control(
         &source.container.objects,
         prior.clone(),
-        fresh.validation_visits - 1,
-        fresh.validation_read_bytes,
+        Some(fresh.validation_visits - 1),
+        Some(fresh.validation_read_bytes),
         &control,
     )
     .unwrap_err();
     let read_bytes_refusal = collect_preplanned_with_budget_and_control(
         &source.container.objects,
         prior,
-        fresh.validation_visits,
-        fresh.validation_read_bytes - 1,
+        Some(fresh.validation_visits),
+        Some(fresh.validation_read_bytes - 1),
         &control,
     )
     .unwrap_err();

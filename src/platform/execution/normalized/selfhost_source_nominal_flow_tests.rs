@@ -10,6 +10,18 @@ fn fixture() -> KernelSnapshot {
     .unwrap()
 }
 
+/// The first existing expanding-self-slot negative, shared with raw generated
+/// compiler acceptance. No source semantic validation runs during construction.
+pub(super) fn artifact_rejection_fixture() -> KernelSnapshot {
+    let mut source = fixture();
+    let t = parameter(&mut source, "Tree", "T");
+    let nested = intern(&mut source, kernel::TypeForm::List { item: t });
+    let grow = applied(&mut source, "Tree", vec![nested]);
+    member(&mut source, "Tree", "branch", grow);
+    rebind_owner_inventory(&mut source);
+    source
+}
+
 fn declaration(source: &KernelSnapshot, name: &str) -> DeclarationId {
     source
         .owners
@@ -125,7 +137,7 @@ fn rebind_owner_inventory(source: &mut KernelSnapshot) {
 // snapshot oracle instead requires exactly the types reachable from live owners.
 // Project only that neutral inventory boundary; preserve all owner meaning and
 // leave the raw carrier unchanged so both validators inspect the same mutation.
-fn live_type_oracle(source: &KernelSnapshot) -> KernelSnapshot {
+pub(super) fn live_type_oracle(source: &KernelSnapshot) -> KernelSnapshot {
     let mut oracle = source.clone();
     rebind_owner_inventory(&mut oracle);
     let mut pending: Vec<_> = oracle

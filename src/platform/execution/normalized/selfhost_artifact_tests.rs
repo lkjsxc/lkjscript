@@ -713,7 +713,8 @@ fn selfhost_artifact_map_pages_match_independent_logical_roots() {
             (0..count)
                 .map(|index| {
                     let mut key = [7; 17];
-                    key[15..17].copy_from_slice(&(index as u16).to_be_bytes());
+                    key[15] = (index % 256) as u8;
+                    key[16] = (index / 256) as u8;
                     key
                 })
                 .collect(),
@@ -757,11 +758,14 @@ fn selfhost_artifact_map_pages_match_independent_logical_roots() {
     let three_levels = entries_for(
         (0_u8..2)
             .flat_map(|group| {
-                (0_u16..897).map(move |index| {
-                    let mut key = [7; 17];
-                    key[1] = group;
-                    key[15..17].copy_from_slice(&index.to_be_bytes());
-                    key
+                (0_u8..2).flat_map(move |subgroup| {
+                    (0_u8..100).map(move |index| {
+                        let mut key = [7; 17];
+                        key[1] = group;
+                        key[2] = subgroup;
+                        key[16] = index;
+                        key
+                    })
                 })
             })
             .collect(),
@@ -770,14 +774,14 @@ fn selfhost_artifact_map_pages_match_independent_logical_roots() {
         ("empty", Vec::new(), Some(1)),
         ("singleton", prefix_15(1), Some(1)),
         ("small", prefix_15(9), Some(1)),
-        // 107 + 15 + count * 73: 65,530 bytes, then 65,603 bytes.
-        ("prefix15-fits", prefix_15(896), Some(1)),
-        ("prefix15-splits", prefix_15(897), None),
-        // 107 + 1 + count * 87: 65,532 bytes, then 65,619 bytes.
-        ("prefix1-fits", prefix_1(752), Some(1)),
-        ("prefix1-splits", prefix_1(753), None),
-        // One root, two child branches, and eight leaves.
-        ("three-levels", three_levels, Some(11)),
+        // 107 + 15 + count * 73: 16,328 bytes, then 16,401 bytes.
+        ("prefix15-fits", prefix_15(222), Some(1)),
+        ("prefix15-splits", prefix_15(223), None),
+        // 107 + 1 + count * 87: 16,377 bytes, then 16,464 bytes.
+        ("prefix1-fits", prefix_1(187), Some(1)),
+        ("prefix1-splits", prefix_1(188), None),
+        // One root, two child branches, and four leaves.
+        ("three-levels", three_levels, Some(7)),
     ];
     for (name, entries, expected_page_count) in cases {
         assert!(entries.windows(2).all(|pair| pair[0].0 < pair[1].0));
@@ -789,31 +793,18 @@ fn selfhost_artifact_map_pages_match_independent_logical_roots() {
             input.extend_from_slice(value);
         }
         let mut expected_pages = MemoryPageStore::default();
-        let expected = PersistentMap::from_sorted_with_leaf_target(
+        let expected = PersistentMap::from_sorted(
             &mut expected_pages,
             entries.clone(),
-            65_536,
             &mut MapWork::default(),
         )
         .unwrap();
         expected
             .verify(&expected_pages, &mut MapWork::default())
             .unwrap();
-        let mut logical_pages = MemoryPageStore::default();
-        let logical = PersistentMap::from_sorted(
-            &mut logical_pages,
-            entries.clone(),
-            &mut MapWork::default(),
-        )
-        .unwrap();
-        logical
-            .verify(&logical_pages, &mut MapWork::default())
-            .unwrap();
-        assert_eq!(
-            expected.root().content_root(),
-            logical.root().content_root(),
-            "{name}"
-        );
+        let logical =
+            crate::platform::persistent_map::MapContentRoot::from_sorted(entries.clone()).unwrap();
+        assert_eq!(expected.root().content_root(), logical, "{name}");
 
         let output = image("probe-map-pages", &input);
         let emitted = decode_pool(&output)
@@ -1509,3 +1500,6 @@ pub(super) fn capacity_invalid_unused_unit(input: &[u8]) -> Vec<u8> {
 fn selfhost_artifact_input_exceeds_former_unit_and_aggregate_byte_quotas() {
     capacity_bundle();
 }
+
+#[path = "selfhost_artifact_layout_tests.rs"]
+mod layout;

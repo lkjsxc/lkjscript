@@ -1,15 +1,14 @@
-//! Bounded operational priority for exact direct supplier source admission.
+//! Invocation-local operational priority for exact direct supplier source admission.
 //! This creates no topology evidence or permission; only successful complete native/source
 //! admission may populate the caller's existing checked set.
 use super::*;
 use crate::platform::kernel::{DependencyRecord, PackageId};
-use crate::platform::package_transport::source::{CollectingStore, MAXIMUM_VALIDATION_VISITS};
+use crate::platform::package_transport::source::CollectingStore;
 
 pub(super) struct DependencySourcePriorityWork<'scope, 'base, S: ?Sized> {
     store: &'scope CollectingStore<'base, S>,
     checkpoint: &'scope dyn Fn() -> Result<(), Diagnostic>,
     control: &'scope ExecutionControl,
-    consumed: u64,
 }
 
 impl<'scope, 'base, S: ?Sized> DependencySourcePriorityWork<'scope, 'base, S> {
@@ -22,39 +21,27 @@ impl<'scope, 'base, S: ?Sized> DependencySourcePriorityWork<'scope, 'base, S> {
             store,
             checkpoint,
             control,
-            consumed: 0,
         }
     }
 
     fn charge(&mut self, count: u64) -> Result<(), Diagnostic> {
         self.control.check().map_err(execution_diagnostic)?;
         (self.checkpoint)()?;
-        let consumed = self
-            .consumed
-            .checked_add(count)
-            .ok_or_else(priority_limit)?;
-        if self
-            .store
-            .visits()
-            .checked_add(consumed)
-            .is_none_or(|total| total > MAXIMUM_VALIDATION_VISITS)
-        {
-            return Err(priority_limit());
-        }
-        self.consumed = consumed;
-        Ok(())
+        self.store.charge_visits(count)
     }
 
-    pub(super) fn consumed(&self) -> u64 {
-        self.consumed
+    fn charge_product(&mut self, factors: &[u64]) -> Result<(), Diagnostic> {
+        self.control.check().map_err(execution_diagnostic)?;
+        (self.checkpoint)()?;
+        self.store.charge_visit_product(factors)
     }
 }
 
-fn priority_limit() -> Diagnostic {
+fn priority_allocation() -> Diagnostic {
     repository_error(
         DiagnosticClass::Resource,
-        "package_source_budget",
-        "candidate closure exhausted aggregate validation visits during direct source priority",
+        "publication_dependency_priority_allocation",
+        "cannot reserve the direct dependency source priority inventory",
     )
 }
 
@@ -80,9 +67,13 @@ impl DependencySourcePriority {
             ));
         }
         // Precharge the flag vector and bounded package/index catalogue before any growth.
-        work.charge(direct.len() as u64 * (lookup_work(direct.len()) + 3))?;
+        work.charge_product(&[direct.len() as u64, lookup_work(direct.len()) + 3])?;
         let mut by_package = BTreeMap::new();
-        let referenced_direct = vec![false; direct.len()];
+        let mut referenced_direct = Vec::new();
+        referenced_direct
+            .try_reserve_exact(direct.len())
+            .map_err(|_| priority_allocation())?;
+        referenced_direct.resize(direct.len(), false);
         for (index, binding) in direct.iter().enumerate() {
             work.charge(1)?;
             if by_package.insert(binding.package, index).is_some() {
@@ -122,8 +113,11 @@ impl DependencySourcePriority {
     ) -> Result<Vec<usize>, Diagnostic> {
         // Preserve canonical direct order within both classes. Retain EVERY original root:
         // cycles or roots not covered by an admitted ancestor still reach native validation.
-        work.charge(self.referenced_direct.len() as u64 * 3)?;
-        let mut order = Vec::with_capacity(self.referenced_direct.len());
+        work.charge_product(&[self.referenced_direct.len() as u64, 3])?;
+        let mut order = Vec::new();
+        order
+            .try_reserve_exact(self.referenced_direct.len())
+            .map_err(|_| priority_allocation())?;
         for referenced in [false, true] {
             for (index, actual) in self.referenced_direct.iter().enumerate() {
                 work.charge(1)?;

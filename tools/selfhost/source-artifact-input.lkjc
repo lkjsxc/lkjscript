@@ -1,0 +1,415 @@
+declarations.begin
+(units
+  (module create source-artifact-input
+    (function create failure
+      (visibility private)
+      (effect pure)
+      (returns (record (code I64) (input Bytes)))
+      (body (record structural (field code (i64 3)) (field input (call ci::text-bytes (text ""))))))
+    (function create layout
+      (visibility package)
+      (effect pure)
+      (parameter create count (type I64))
+      (parameter create unit-bytes (type I64))
+      (parameter create rows (type Bytes))
+      (parameter create object-bytes (type I64))
+      (parameter create runtime (type Bytes))
+      (returns
+        (record
+          (code I64)
+          (row-at I64)
+          (meta-at I64)
+          (metadata I64)
+          (unit-at I64)
+          (object-at I64)
+          (total I64)))
+      (body
+        (let
+          (binding row-at
+            (call
+              source-unit-tables::add
+              (i64 160)
+              (call source-unit-tables::mul (local count) (i64 16))))
+          (binding meta-at (call source-unit-tables::add (local row-at) (call ci::length (local rows))))
+          (binding metadata (call source-unit-tables::add (i64 312) (call ci::length (local runtime))))
+          (binding unit-at (call source-unit-tables::add (local meta-at) (local metadata)))
+          (binding object-at (call source-unit-tables::add (local unit-at) (local unit-bytes)))
+          (binding total (call source-unit-tables::add (local object-at) (local object-bytes)))
+          (in
+            (if
+              (call
+                ci::both
+                (call ci::lt (i64 0) (local count))
+                (call
+                  ci::both
+                  (call ci::lt (i64 0) (call ci::length (local rows)))
+                  (call
+                    ci::both
+                    (call
+                      ci::eq
+                      (call ci::mul (call ci::div (call ci::length (local rows)) (i64 56)) (i64 56))
+                      (call ci::length (local rows)))
+                    (call
+                      ci::both
+                      (call
+                        ci::eq
+                        (call ci::mul (call ci::div (call ci::length (local runtime)) (i64 56)) (i64 56))
+                        (call ci::length (local runtime)))
+                      (call ci::lte (i64 0) (local total))))))
+              (record
+                structural
+                (field code (i64 0))
+                (field row-at (local row-at))
+                (field meta-at (local meta-at))
+                (field metadata (local metadata))
+                (field unit-at (local unit-at))
+                (field object-at (local object-at))
+                (field total (local total)))
+              (record
+                structural
+                (field code (i64 3))
+                (field row-at (i64 0))
+                (field meta-at (i64 0))
+                (field metadata (i64 0))
+                (field unit-at (i64 0))
+                (field object-at (i64 0))
+                (field total (i64 0))))))))
+    (function create prefix
+      (visibility private)
+      (effect pure)
+      (parameter create total (type I64))
+      (parameter create count (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::empty))
+          (binding b
+            (type ByteBuffer)
+            (call ci::append (call ci::text-bytes (text "LKJCI001")) (i64 0) (local a)))
+          (binding c (type ByteBuffer) (call ci::le (i64 7) (i64 4) (local b)))
+          (binding d (type ByteBuffer) (call ci::le (i64 0) (i64 4) (local c)))
+          (binding e (type ByteBuffer) (call ci::le (local total) (i64 8) (local d)))
+          (binding f (type ByteBuffer) (call ci::le (local count) (i64 8) (local e)))
+          (binding g (type ByteBuffer) (call ci::le (i64 0) (i64 8) (local f)))
+          (in (call ci::freeze (local g))))))
+    (function create header-tail
+      (visibility private)
+      (effect pure)
+      (parameter create layout
+        (type
+          (record
+            (code I64)
+            (row-at I64)
+            (meta-at I64)
+            (metadata I64)
+            (unit-at I64)
+            (object-at I64)
+            (total I64))))
+      (parameter create count (type I64))
+      (parameter create object-count (type I64))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::empty))
+          (binding b (type ByteBuffer) (call ci::le (i64 160) (i64 8) (local a)))
+          (binding c (type ByteBuffer) (call ci::le (local count) (i64 8) (local b)))
+          (binding d
+            (type ByteBuffer)
+            (call ci::le (field (local layout) (name row-at)) (i64 8) (local c)))
+          (binding e (type ByteBuffer) (call ci::le (local object-count) (i64 8) (local d)))
+          (binding f
+            (type ByteBuffer)
+            (call ci::le (field (local layout) (name meta-at)) (i64 8) (local e)))
+          (binding g (type ByteBuffer) (call ci::le (i64 1) (i64 4) (local f)))
+          (binding h (type ByteBuffer) (call ci::le (i64 0) (i64 4) (local g)))
+          (binding j
+            (type ByteBuffer)
+            (call ci::le (field (local layout) (name metadata)) (i64 8) (local h)))
+          (in (call ci::pad (i64 88) (i64 0) (local j))))))
+    (function create unit-directory
+      (visibility private)
+      (effect pure)
+      (parameter create frames (type Bytes))
+      (parameter create at (type I64))
+      (parameter create offset (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local frames)))
+          (local out)
+          (let
+            (binding length (call ci::u64 (local frames) (local at)))
+            (binding a (type ByteBuffer) (call ci::le (local offset) (i64 8) (local out)))
+            (binding b (type ByteBuffer) (call ci::le (local length) (i64 8) (local a)))
+            (in
+              (call
+                unit-directory
+                (local frames)
+                (call ci::add (call ci::add (local at) (i64 8)) (local length))
+                (call ci::add (local offset) (local length))
+                (local b)))))))
+    (function create object-directory
+      (visibility private)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create at (type I64))
+      (parameter create offset (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local rows)))
+          (local out)
+          (let
+            (binding length (call ci::u64 (local rows) (call ci::add (local at) (i64 16))))
+            (binding a
+              (type ByteBuffer)
+              (call wire::range (local rows) (local at) (call ci::add (local at) (i64 8)) (local out)))
+            (binding b (type ByteBuffer) (call ci::le (local offset) (i64 8) (local a)))
+            (binding c
+              (type ByteBuffer)
+              (call
+                wire::range
+                (local rows)
+                (call ci::add (local at) (i64 16))
+                (call ci::add (local at) (i64 56))
+                (local b)))
+            (in
+              (call
+                object-directory
+                (local rows)
+                (call ci::add (local at) (i64 56))
+                (call ci::add (local offset) (local length))
+                (local c)))))))
+    (function create metadata
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create repository (type Bytes))
+      (parameter create package (type Bytes))
+      (parameter create revision (type Bytes))
+      (parameter create interface (type Bytes))
+      (parameter create interface-root (type Bytes))
+      (parameter create reference-root (type Bytes))
+      (parameter create runtime (type Bytes))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::append (local repository) (i64 0) (local out)))
+          (binding b (type ByteBuffer) (call wire::range (local graph) (i64 32) (i64 48) (local a)))
+          (binding c (type ByteBuffer) (call ci::append (local package) (i64 0) (local b)))
+          (binding d (type ByteBuffer) (call ci::append (local revision) (i64 0) (local c)))
+          (binding e (type ByteBuffer) (call wire::range (local graph) (i64 48) (i64 80) (local d)))
+          (binding f (type ByteBuffer) (call ci::append (local interface) (i64 0) (local e)))
+          (binding g (type ByteBuffer) (call ci::append (local interface-root) (i64 0) (local f)))
+          (binding h (type ByteBuffer) (call ci::append (local reference-root) (i64 0) (local g)))
+          (binding j
+            (type ByteBuffer)
+            (call ci::le (call ci::div (call ci::length (local runtime)) (i64 56)) (i64 8) (local h)))
+          (in (call ci::append (local runtime) (i64 0) (local j))))))
+    (function create unit-images
+      (visibility private)
+      (effect pure)
+      (parameter create frames (type Bytes))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local frames)))
+          (local out)
+          (let
+            (binding length (call ci::u64 (local frames) (local at)))
+            (binding start (call ci::add (local at) (i64 8)))
+            (binding end (call ci::add (local start) (local length)))
+            (binding next
+              (type ByteBuffer)
+              (call wire::range (local frames) (local start) (local end) (local out)))
+            (in (call unit-images (local frames) (local end) (local next)))))))
+    (function create object-images
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create rows (type Bytes))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local rows)))
+          (local out)
+          (let
+            (binding start (call ci::u64 (local rows) (call ci::add (local at) (i64 8))))
+            (binding length (call ci::u64 (local rows) (call ci::add (local at) (i64 16))))
+            (binding next
+              (type ByteBuffer)
+              (call
+                wire::range
+                (local data)
+                (local start)
+                (call ci::add (local start) (local length))
+                (local out)))
+            (in
+              (call
+                object-images
+                (local data)
+                (local rows)
+                (call ci::add (local at) (i64 56))
+                (local next)))))))
+    (function create content
+      (visibility private)
+      (effect pure)
+      (parameter create layout
+        (type
+          (record
+            (code I64)
+            (row-at I64)
+            (meta-at I64)
+            (metadata I64)
+            (unit-at I64)
+            (object-at I64)
+            (total I64))))
+      (parameter create graph (type Bytes))
+      (parameter create repository (type Bytes))
+      (parameter create package (type Bytes))
+      (parameter create revision (type Bytes))
+      (parameter create interface (type Bytes))
+      (parameter create interface-root (type Bytes))
+      (parameter create reference-root (type Bytes))
+      (parameter create runtime (type Bytes))
+      (parameter create frames (type Bytes))
+      (parameter create count (type I64))
+      (parameter create unit-bytes (type I64))
+      (parameter create data (type Bytes))
+      (parameter create rows (type Bytes))
+      (parameter create object-bytes (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding a
+            (type ByteBuffer)
+            (call
+              header-tail
+              (local layout)
+              (local count)
+              (call ci::div (call ci::length (local rows)) (i64 56))))
+          (binding b
+            (type ByteBuffer)
+            (call unit-directory (local frames) (i64 0) (field (local layout) (name unit-at)) (local a)))
+          (binding c
+            (type ByteBuffer)
+            (call
+              object-directory
+              (local rows)
+              (i64 0)
+              (field (local layout) (name object-at))
+              (local b)))
+          (binding d
+            (type ByteBuffer)
+            (call
+              metadata
+              (local graph)
+              (local repository)
+              (local package)
+              (local revision)
+              (local interface)
+              (local interface-root)
+              (local reference-root)
+              (local runtime)
+              (local c)))
+          (binding e (type ByteBuffer) (call unit-images (local frames) (i64 0) (local d)))
+          (binding f (type ByteBuffer) (call object-images (local data) (local rows) (i64 0) (local e)))
+          (in (call ci::freeze (local f))))))
+    (function create assemble
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create repository (type Bytes))
+      (parameter create package (type Bytes))
+      (parameter create revision (type Bytes))
+      (parameter create interface (type Bytes))
+      (parameter create interface-root (type Bytes))
+      (parameter create reference-root (type Bytes))
+      (parameter create runtime (type Bytes))
+      (parameter create frames (type Bytes))
+      (parameter create count (type I64))
+      (parameter create unit-bytes (type I64))
+      (parameter create data (type Bytes))
+      (parameter create rows (type Bytes))
+      (parameter create object-bytes (type I64))
+      (returns (record (code I64) (input Bytes)))
+      (body
+        (let
+          (binding layout
+            (call
+              layout
+              (local count)
+              (local unit-bytes)
+              (local rows)
+              (local object-bytes)
+              (local runtime)))
+          (in
+            (if
+              (call ci::eq (field (local layout) (name code)) (i64 0))
+              (if
+                (call
+                  ci::both
+                  (call ci::eq (call ci::length (local repository)) (i64 16))
+                  (call
+                    ci::both
+                    (call ci::eq (call ci::length (local package)) (i64 32))
+                    (call
+                      ci::both
+                      (call ci::eq (call ci::length (local revision)) (i64 32))
+                      (call
+                        ci::both
+                        (call ci::eq (call ci::length (local interface)) (i64 32))
+                        (call
+                          ci::both
+                          (call ci::eq (call ci::length (local interface-root)) (i64 72))
+                          (call ci::eq (call ci::length (local reference-root)) (i64 72)))))))
+                (let
+                  (binding head (call prefix (field (local layout) (name total)) (local count)))
+                  (binding body
+                    (call
+                      content
+                      (local layout)
+                      (local graph)
+                      (local repository)
+                      (local package)
+                      (local revision)
+                      (local interface)
+                      (local interface-root)
+                      (local reference-root)
+                      (local runtime)
+                      (local frames)
+                      (local count)
+                      (local unit-bytes)
+                      (local data)
+                      (local rows)
+                      (local object-bytes)))
+                  (in
+                    (if
+                      (call
+                        ci::eq
+                        (call source-unit-tables::add (i64 72) (call ci::length (local body)))
+                        (field (local layout) (name total)))
+                      (let
+                        (binding checksum (call ci::digest (call ci::concat (local head) (local body))))
+                        (binding a (type ByteBuffer) (call ci::empty))
+                        (binding b (type ByteBuffer) (call ci::append (local head) (i64 0) (local a)))
+                        (binding c
+                          (type ByteBuffer)
+                          (call ci::append (local checksum) (i64 0) (local b)))
+                        (binding d (type ByteBuffer) (call ci::append (local body) (i64 0) (local c)))
+                        (in
+                          (record
+                            structural
+                            (field code (i64 0))
+                            (field input (call ci::freeze (local d))))))
+                      (call failure))))
+                (call failure))
+              (call failure))))))))
+declarations.end

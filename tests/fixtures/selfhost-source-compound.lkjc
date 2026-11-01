@@ -1,0 +1,139 @@
+declarations.begin
+(units
+  (module create compound-controls
+    (external create sum (visibility private) (implementation core.i64.add)
+      (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+    (external create difference (visibility private) (implementation core.i64.subtract)
+      (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+    (external create product (visibility private) (implementation core.i64.multiply)
+      (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+    (external create quotient (visibility private) (implementation core.i64.divide)
+      (parameter create a (type I64)) (parameter create b (type I64)) (returns I64))
+    (external create same-number (visibility private) (implementation core.i64.equal)
+      (parameter create a (type I64)) (parameter create b (type I64)) (returns Bool))
+    (external create smaller (visibility private) (implementation core.i64.less)
+      (parameter create a (type I64)) (parameter create b (type I64)) (returns Bool))
+    (external create both-values (visibility private) (implementation core.bool.and)
+      (parameter create a (type Bool)) (parameter create b (type Bool)) (returns Bool))
+    (external create either-value (visibility private) (implementation core.bool.or)
+      (parameter create a (type Bool)) (parameter create b (type Bool)) (returns Bool))
+    (external create bytes-length (visibility private) (implementation core.bytes.length)
+      (parameter create data (type Bytes)) (returns I64))
+    (external create bytes-get (visibility private) (implementation core.bytes.get)
+      (parameter create data (type Bytes)) (parameter create index (type I64)) (returns I64))
+    (external create bytes-slice (visibility private) (implementation core.bytes.slice)
+      (parameter create data (type Bytes)) (parameter create start (type I64))
+      (parameter create end (type I64)) (returns Bytes))
+    (external create bytes-concat (visibility private) (implementation core.bytes.concat)
+      (parameter create a (type Bytes)) (parameter create b (type Bytes)) (returns Bytes))
+    (external create bytes-same (visibility private) (implementation core.bytes.equal)
+      (parameter create a (type Bytes)) (parameter create b (type Bytes)) (returns Bool))
+    (external create bytes-from-list (visibility private) (implementation core.bytes.from-list)
+      (parameter create values (type (list I64))) (returns Bytes))
+    (external create bytes-from-text (visibility private) (implementation core.bytes.from-text)
+      (parameter create value (type Text)) (returns Bytes))
+    (external create digest (visibility private) (implementation core.bytes.blake3)
+      (parameter create data (type Bytes)) (returns Bytes))
+    (external create derive (visibility private) (implementation core.bytes.blake3-derive-key)
+      (parameter create context (type Text)) (parameter create data (type Bytes)) (returns Bytes))
+    (external create list-size (visibility private) (implementation core.list.length)
+      (type-parameter create T) (parameter create values (type (list T))) (returns I64))
+    (external create list-get (visibility private) (implementation core.list.get)
+      (type-parameter create T) (parameter create values (type (list T)))
+      (parameter create index (type I64)) (returns T))
+
+    (external create unused-bytes-get (visibility private) (implementation core.bytes.get)
+      (parameter create data (type Bytes)) (parameter create index (type I64)) (returns I64))
+    (external create unused-list-size (visibility private) (implementation core.list.length)
+      (type-parameter create T) (parameter create values (type (list T))) (returns I64))
+    (external create unused-list-get (visibility private) (implementation core.list.get)
+      (type-parameter create T) (parameter create values (type (list T)))
+      (parameter create index (type I64)) (returns T))
+
+    (function create static-identity (visibility public) (effect pure)
+      (parameter create value (type StaticText)) (returns StaticText) (body (local value)))
+    (function create unused-list-call (visibility public) (effect pure) (returns I64)
+      (body (call list-get (types I64) (list I64 (i64 7) (i64 11)) (i64 1))))
+    (function create unused-bytes-call (visibility public) (effect pure) (returns I64)
+      (body (call bytes-get (call bytes-from-text (text "unused")) (i64 0))))
+    (function create unused-field (visibility public) (effect pure) (returns I64)
+      (body (field (record structural (field answer (i64 19))) (name answer))))
+    (function create other-entry (visibility public) (effect pure) (returns I64)
+      (body (i64 17)))
+    (function create tail-step (visibility private) (effect pure)
+      (parameter create remaining (type I64)) (returns I64)
+      (body
+        (if (call same-number (local remaining) (i64 0))
+          (i64 42)
+          (let
+            (binding next (call difference (local remaining) (i64 1)))
+            (in
+              (sequence
+                (unit)
+                (if (call smaller (local next) (i64 250000))
+                  (call tail-step (local next))
+                  (call tail-step (local next)))))))))
+    (function create tail-entry (visibility public) (effect pure) (returns I64)
+      (body (call tail-step (i64 500000))))
+    (function create entry (visibility public) (effect pure) (returns I64)
+      (body
+        (let
+          (binding numbers (list I64 (i64 12) (i64 42) (i64 255)))
+          (binding payload (call bytes-from-list (local numbers)))
+          (binding label (text "AéZ"))
+          (binding label-bytes (call bytes-from-text (local label)))
+          (binding transient
+            (record structural
+              (field transient-count (call list-get (types I64) (local numbers) (i64 1)))
+              (field transient-data
+                (call bytes-concat (local label-bytes) (call bytes-slice (local payload) (i64 0) (i64 3))))))
+          (in
+            (sequence
+              (call static-identity (static-text "distinct static literal"))
+              (list I64)
+              (record structural (field discarded (unit)))
+              (if
+                (call both-values
+                  (call same-number (call bytes-length (local label-bytes)) (i64 4))
+                  (call both-values
+                    (call either-value (call smaller (call list-size (types I64) (local numbers)) (i64 4)) (bool false))
+                    (call bytes-same
+                      (call bytes-slice (field (local transient) (name transient-data)) (i64 4) (i64 7))
+                      (local payload))))
+                (call sum
+                  (field (local transient) (name transient-count))
+                  (call difference (call quotient (call product (i64 6) (i64 7)) (i64 2)) (i64 21)))
+                (i64 -1)))))))
+    (function create binary-entry (visibility public) (effect pure)
+      (parameter create input (type Bytes))
+      (returns (record (diagnostic I64) (image Bytes)))
+      (body
+        (record structural
+          (field diagnostic (i64 0))
+          (field image
+            (call bytes-concat
+              (call bytes-concat
+                (call bytes-from-list (list I64 (i64 0) (i64 255)))
+                (call bytes-concat (call bytes-from-text (text "é")) (local input)))
+              (call bytes-concat
+                (call digest (local input))
+                (call derive (text "lkjscript compound control") (local input))))))))
+
+    (component create main (visibility public)
+      (port create run (type (function () I64)) (function entry)))
+    (component create other (visibility public)
+      (port create run (type (function () I64)) (function other-entry)))
+    (component create tail (visibility public)
+      (port create run (type (function () I64)) (function tail-entry)))
+    (component create binary (visibility public)
+      (port create run (type (function (Bytes) (record (diagnostic I64) (image Bytes))))
+        (function binary-entry))))
+  (target create scalar-main (component compound-controls::main)
+    (runner command) (port compound-controls::main::run))
+  (target create compound-other (component compound-controls::other)
+    (runner command) (port compound-controls::other::run))
+  (target create compound-tail (component compound-controls::tail)
+    (runner command) (port compound-controls::tail::run))
+  (target create compound-binary (component compound-controls::binary)
+    (runner command) (port compound-controls::binary::run)))
+declarations.end

@@ -1,0 +1,701 @@
+declarations.begin
+(units
+  (module create source-summary-local
+    (function create external-interface
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding parameters (call source-table::skip (local data) (local at) (i64 17)))
+          (binding result (call source-table::skip (local data) (local parameters) (i64 17)))
+          (in
+            (let
+              (binding summary-buffer-36
+                (type ByteBuffer)
+                (let
+                  (binding summary-buffer-35
+                    (type ByteBuffer)
+                    (let
+                      (binding summary-buffer-34
+                        (type ByteBuffer)
+                        (call source-summary-material::byte-piece (i64 2) (i64 4) (local out)))
+                      (in
+                        (call source-summary-material::piece
+                          (i64 4)
+                          (local data)
+                          (local at)
+                          (local parameters)
+                          (local summary-buffer-34)))))
+                  (in
+                    (call source-summary-material::piece
+                      (i64 5)
+                      (local data)
+                      (local parameters)
+                      (local result)
+                      (local summary-buffer-35)))))
+              (in
+                (call source-summary-material::piece
+                  (i64 6)
+                  (local data)
+                  (local result)
+                  (call ci::add (local result) (i64 33))
+                  (local summary-buffer-36))))))))
+    (function create function-interface
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding parts (call source-function::parts (local data) (local at)))
+          (binding requirements (field (local parts) (name requirements)))
+          (binding effects (field (local parts) (name effects)))
+          (binding types (field (local parts) (name types)))
+          (binding parameters (field (local parts) (name parameters)))
+          (binding result (field (local parts) (name result)))
+          (binding first
+            (type ByteBuffer)
+            (call source-summary-material::piece
+              (i64 10)
+              (local data)
+              (local at)
+              (local requirements)
+              (local out)))
+          (binding effect-parameters
+            (type ByteBuffer)
+            (call source-summary-material::piece
+              (i64 7)
+              (local data)
+              (local effects)
+              (local types)
+              (local first)))
+          (binding requirement-parameters
+            (type ByteBuffer)
+            (if
+              (call ci::eq
+                (field (call source-table::array (local data) (local requirements)) (name value))
+                (i64 0))
+              (local effect-parameters)
+              (call source-summary-material::piece
+                (i64 9)
+                (local data)
+                (local requirements)
+                (local effects)
+                (local effect-parameters))))
+          (in
+            (let
+              (binding summary-buffer-41
+                (type ByteBuffer)
+                (let
+                  (binding summary-buffer-40
+                    (type ByteBuffer)
+                    (let
+                      (binding summary-buffer-39
+                        (type ByteBuffer)
+                        (let
+                          (binding summary-buffer-38
+                            (type ByteBuffer)
+                            (let
+                              (binding summary-buffer-37
+                                (type ByteBuffer)
+                                (call source-summary-material::byte-piece
+                                  (i64 2)
+                                  (i64 5)
+                                  (local requirement-parameters)))
+                              (in
+                                (call source-summary-material::piece
+                                  (i64 4)
+                                  (local data)
+                                  (local types)
+                                  (local parameters)
+                                  (local summary-buffer-37)))))
+                          (in
+                            (call source-summary-material::piece
+                              (i64 5)
+                              (local data)
+                              (local parameters)
+                              (local result)
+                              (local summary-buffer-38)))))
+                      (in
+                        (call source-summary-material::piece
+                          (i64 6)
+                          (local data)
+                          (local result)
+                          (call ci::add (local result) (i64 34))
+                          (local summary-buffer-39)))))
+                  (in
+                    (call source-summary-material::piece
+                      (i64 12)
+                      (local data)
+                      (call ci::add (local result) (i64 34))
+                      (call ci::add (local result) (i64 35))
+                      (local summary-buffer-40)))))
+              (in
+                (call source-summary-material::piece
+                  (i64 13)
+                  (local data)
+                  (call ci::add (local result) (i64 35))
+                  (call ci::add (local result) (i64 36))
+                  (local summary-buffer-41))))))))
+    (function create component-interface
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding ports (call source-table::skip (local data) (local at) (i64 17)))
+          (in
+            (let
+              (binding summary-buffer-43
+                (type ByteBuffer)
+                (let
+                  (binding summary-buffer-42
+                    (type ByteBuffer)
+                    (call source-summary-material::byte-piece (i64 2) (i64 7) (local out)))
+                  (in
+                    (call source-summary-material::piece
+                      (i64 7)
+                      (local data)
+                      (local at)
+                      (local ports)
+                      (local summary-buffer-42)))))
+              (in
+                (call source-summary-material::piece
+                  (i64 8)
+                  (local data)
+                  (local ports)
+                  (call ci::sub (call ci::length (local data)) (i64 32))
+                  (local summary-buffer-43))))))))
+    (function create declaration-interface
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create kind (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding visibility (call source-link-ref::name-end (local data) (i64 56)))
+          (binding at (call ci::add (local visibility) (i64 2)))
+          (binding prefix
+            (type ByteBuffer)
+            (call source-summary-material::piece
+              (i64 1)
+              (local data)
+              (local visibility)
+              (call ci::add (local visibility) (i64 1))
+              (local out)))
+          (in
+            (if
+              (call ci::eq (local kind) (i64 5))
+              (call source-summary-local::external-interface (local data) (local at) (local prefix))
+              (if
+                (call ci::eq (local kind) (i64 6))
+                (call source-summary-local::function-interface (local data) (local at) (local prefix))
+                (call source-summary-local::component-interface (local data) (local at) (local prefix))))))))
+    (function create interface
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create kind (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::either
+            (call ci::eq (local kind) (i64 5))
+            (call ci::either
+              (call ci::eq (local kind) (i64 6))
+              (call ci::either (call ci::eq (local kind) (i64 9)) (bool false))))
+          (call source-summary-local::declaration-interface (local data) (local kind) (local out))
+          (if
+            (call ci::eq (local kind) (i64 11))
+            (call source-summary-material::piece
+              (i64 1)
+              (local data)
+              (call source-link-ref::name-end (local data) (i64 56))
+              (call ci::sub (call ci::length (local data)) (i64 32))
+              (local out))
+            (if
+              (call ci::eq (local kind) (i64 15))
+              (let
+                (binding at (call source-link-ref::name-end (local data) (i64 57)))
+                (in
+                  (let
+                    (binding summary-buffer-45
+                      (type ByteBuffer)
+                      (let
+                        (binding summary-buffer-44
+                          (type ByteBuffer)
+                          (call source-summary-material::piece
+                            (i64 1)
+                            (local data)
+                            (local at)
+                            (call ci::add (local at) (i64 33))
+                            (local out)))
+                        (in
+                          (call source-summary-material::piece
+                            (i64 2)
+                            (local data)
+                            (call ci::add (local at) (i64 33))
+                            (call ci::add (local at) (i64 34))
+                            (local summary-buffer-44)))))
+                    (in
+                      (call source-summary-material::piece
+                        (i64 3)
+                        (local data)
+                        (call ci::add (local at) (i64 34))
+                        (call ci::sub (call ci::length (local data)) (i64 32))
+                        (local summary-buffer-45))))))
+              (if
+                (call ci::eq (local kind) (i64 19))
+                (let
+                  (binding at (call source-link-ref::name-end (local data) (i64 56)))
+                  (in
+                    (call source-summary-material::piece
+                      (i64 1)
+                      (local data)
+                      (local at)
+                      (call ci::add (local at) (i64 33))
+                      (local out))))
+                (local out)))))))
+    (function create binding-implementation
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding at (call source-link-ref::name-end (local data) (i64 39)))
+          (binding value (call ci::add (local at) (i64 1)))
+          (binding declared
+            (call ci::add
+              (local value)
+              (if (call ci::eq (call ci::get (local data) (local value)) (i64 0)) (i64 1) (i64 18))))
+          (in
+            (let
+              (binding summary-buffer-47
+                (type ByteBuffer)
+                (let
+                  (binding summary-buffer-46
+                    (type ByteBuffer)
+                    (call source-summary-material::piece
+                      (i64 1)
+                      (local data)
+                      (local at)
+                      (local value)
+                      (local out)))
+                  (in
+                    (call source-summary-material::piece
+                      (i64 2)
+                      (local data)
+                      (local value)
+                      (local declared)
+                      (local summary-buffer-46)))))
+              (in
+                (call source-summary-material::piece
+                  (i64 3)
+                  (local data)
+                  (local declared)
+                  (call ci::sub (call ci::length (local data)) (i64 32))
+                  (local summary-buffer-47))))))))
+    (function create target-implementation
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding at (call source-link-ref::name-end (local data) (i64 39)))
+          (binding port (call ci::add (local at) (i64 34)))
+          (binding runner
+            (call ci::add
+              (local port)
+              (if (call ci::eq (call ci::get (local data) (local port)) (i64 0)) (i64 1) (i64 35))))
+          (in
+            (let
+              (binding summary-buffer-49
+                (type ByteBuffer)
+                (let
+                  (binding summary-buffer-48
+                    (type ByteBuffer)
+                    (call source-summary-material::piece
+                      (i64 1)
+                      (local data)
+                      (local at)
+                      (local port)
+                      (local out)))
+                  (in
+                    (call source-summary-material::piece
+                      (i64 2)
+                      (local data)
+                      (local port)
+                      (local runner)
+                      (local summary-buffer-48)))))
+              (in
+                (call source-summary-material::piece
+                  (i64 3)
+                  (local data)
+                  (local runner)
+                  (call ci::sub (call ci::length (local data)) (i64 32))
+                  (local summary-buffer-49))))))))
+    (function create implementation
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create kind (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local kind) (i64 5))
+          (let
+            (binding at (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 2)))
+            (binding result
+              (call source-table::skip
+                (local data)
+                (call source-table::skip (local data) (local at) (i64 17))
+                (i64 17)))
+            (in
+              (call source-summary-material::piece
+                (i64 1)
+                (local data)
+                (call ci::add (local result) (i64 33))
+                (call ci::sub (call ci::length (local data)) (i64 32))
+                (local out))))
+          (if
+            (call ci::eq (local kind) (i64 6))
+            (let
+              (binding parts
+                (call source-function::parts
+                  (local data)
+                  (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 2))))
+              (in
+                (call source-summary-material::piece
+                  (i64 2)
+                  (local data)
+                  (field (local parts) (name body))
+                  (call ci::add (field (local parts) (name body)) (i64 17))
+                  (local out))))
+            (if
+              (call ci::eq (local kind) (i64 16))
+              (call source-summary-local::binding-implementation (local data) (local out))
+              (if
+                (call ci::eq (local kind) (i64 17))
+                (let
+                  (binding summary-buffer-50
+                    (type ByteBuffer)
+                    (call source-summary-material::piece (i64 1) (local data) (i64 20) (i64 37) (local out)))
+                  (in
+                    (call source-summary-material::piece
+                      (i64 2)
+                      (local data)
+                      (i64 37)
+                      (call ci::sub (call ci::length (local data)) (i64 32))
+                      (local summary-buffer-50))))
+                (if
+                  (call ci::eq (local kind) (i64 19))
+                  (call source-summary-material::piece
+                    (i64 1)
+                    (local data)
+                    (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 33))
+                    (call ci::sub (call ci::length (local data)) (i64 32))
+                    (local out))
+                  (if
+                    (call ci::eq (local kind) (i64 20))
+                    (call source-summary-local::target-implementation (local data) (local out))
+                    (local out)))))))))
+    (function create types
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding roots (call source-type-uses::roots (local data)))
+          (binding at (field (local roots) (name at)))
+          (binding count (field (local roots) (name count)))
+          (binding encoded
+            (let
+              (binding summary-buffer-53
+                (type ByteBuffer)
+                (let
+                  (binding summary-buffer-52
+                    (type ByteBuffer)
+                    (let
+                      (binding summary-buffer-51 (type ByteBuffer) (call ci::empty))
+                      (in (call wire::unsigned (local count) (local summary-buffer-51)))))
+                  (in
+                    (call wire::range
+                      (local data)
+                      (local at)
+                      (call ci::add (local at) (call ci::mul (local count) (i64 33)))
+                      (local summary-buffer-52)))))
+              (in (call ci::freeze (local summary-buffer-53)))))
+          (in
+            (call source-summary-material::piece
+              (i64 1)
+              (local encoded)
+              (i64 0)
+              (call ci::length (local encoded))
+              (local out))))))
+    (function create effect
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create kind (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local kind) (i64 6))
+          (let
+            (binding parts
+              (call source-function::parts
+                (local data)
+                (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 2))))
+            (in
+              (call source-summary-material::piece
+                (i64 1)
+                (local data)
+                (field (local parts) (name effect))
+                (field (local parts) (name body))
+                (local out))))
+          (local out))))
+    (function create capability
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create kind (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local kind) (i64 9))
+          (let
+            (binding at (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 2)))
+            (in
+              (call source-summary-material::piece
+                (i64 1)
+                (local data)
+                (local at)
+                (call source-table::skip (local data) (local at) (i64 17))
+                (local out))))
+          (if
+            (call ci::eq (local kind) (i64 15))
+            (call source-summary-material::piece
+              (i64 1)
+              (local data)
+              (call ci::add (call source-link-ref::name-end (local data) (i64 57)) (i64 34))
+              (call ci::sub (call ci::length (local data)) (i64 32))
+              (local out))
+            (local out)))))
+    (function create material
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create relations (type Bytes))
+      (parameter create directory (type Bytes))
+      (parameter create row (type I64))
+      (parameter create kind (type I64))
+      (parameter create dimension (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local dimension) (i64 0))
+          (call source-summary-local::interface (local data) (local kind) (local out))
+          (if
+            (call ci::eq (local dimension) (i64 1))
+            (call source-summary-local::implementation (local data) (local kind) (local out))
+            (if
+              (call ci::eq (local dimension) (i64 2))
+              (call source-summary-local::types (local data) (local out))
+              (if
+                (call ci::eq (local dimension) (i64 3))
+                (call source-summary-local::effect (local data) (local kind) (local out))
+                (if
+                  (call ci::eq (local dimension) (i64 4))
+                  (call source-summary-local::capability (local data) (local kind) (local out))
+                  (if
+                    (call ci::eq (local dimension) (i64 5))
+                    (call source-summary-relations::material
+                      (local graph)
+                      (local relations)
+                      (call ci::u64 (local directory) (call ci::mul (local row) (i64 16)))
+                      (call ci::u64
+                        (local directory)
+                        (call ci::add (call ci::mul (local row) (i64 16)) (i64 8)))
+                      (local out))
+                    (local out)))))))))
+    (function create dimensions
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create relations (type Bytes))
+      (parameter create directory (type Bytes))
+      (parameter create row (type I64))
+      (parameter create kind (type I64))
+      (parameter create dimension (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local dimension) (i64 7))
+          (local out)
+          (let
+            (binding material
+              (type ByteBuffer)
+              (let
+                (binding summary-buffer-55
+                  (type ByteBuffer)
+                  (let
+                    (binding summary-buffer-54 (type ByteBuffer) (call ci::empty))
+                    (in (call ci::push (local kind) (local summary-buffer-54)))))
+                (in
+                  (call source-summary-local::material
+                    (local graph)
+                    (local data)
+                    (local relations)
+                    (local directory)
+                    (local row)
+                    (local kind)
+                    (local dimension)
+                    (local summary-buffer-55)))))
+            (binding digest (call source-summary-material::finish (local dimension) (local material)))
+            (binding next (type ByteBuffer) (call ci::append (local digest) (i64 0) (local out)))
+            (in
+              (call source-summary-local::dimensions
+                (local graph)
+                (local data)
+                (local relations)
+                (local directory)
+                (local row)
+                (local kind)
+                (call ci::add (local dimension) (i64 1))
+                (local next)))))))
+    (function create inventory
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create relations (type Bytes))
+      (parameter create directory (type Bytes))
+      (parameter create row (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns Bytes)
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (call ci::freeze (local out))
+          (let
+            (binding next
+              (type ByteBuffer)
+              (call source-summary-local::dimensions
+                (local graph)
+                (call source-table::data (local graph) (local row))
+                (local relations)
+                (local directory)
+                (local row)
+                (call source-table::kind (local graph) (local row))
+                (i64 0)
+                (local out)))
+            (in
+              (call source-summary-local::inventory
+                (local graph)
+                (local relations)
+                (local directory)
+                (call ci::add (local row) (i64 1))
+                (local next)))))))
+    (function create prepare
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create relations (type Bytes))
+      (parameter create directory (type Bytes))
+      (returns Bytes)
+      (body
+        (let
+          (binding summary-buffer-56 (type ByteBuffer) (call ci::empty))
+          (in
+            (call source-summary-local::inventory
+              (local graph)
+              (local relations)
+              (local directory)
+              (i64 0)
+              (local summary-buffer-56))))))
+    (function create validation
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create relations (type Bytes))
+      (parameter create directory (type Bytes))
+      (parameter create semantic (type Bytes))
+      (parameter create row (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns Bytes)
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (call ci::freeze (local out))
+          (let
+            (binding data (call source-table::data (local graph) (local row)))
+            (binding contract (call source-table::array (local data) (i64 19)))
+            (binding seed
+              (type ByteBuffer)
+              (let
+                (binding summary-buffer-58
+                  (type ByteBuffer)
+                  (let
+                    (binding summary-buffer-57 (type ByteBuffer) (call ci::empty))
+                    (in
+                      (call ci::push
+                        (call source-table::kind (local graph) (local row))
+                        (local summary-buffer-57)))))
+                (in
+                  (call source-summary-material::piece
+                    (i64 3)
+                    (local data)
+                    (i64 19)
+                    (field (local contract) (name next))
+                    (local summary-buffer-58)))))
+            (binding material
+              (type ByteBuffer)
+              (call source-summary-relations::dependencies
+                (local graph)
+                (local relations)
+                (local semantic)
+                (call ci::u64 (local directory) (call ci::mul (local row) (i64 16)))
+                (call ci::u64 (local directory) (call ci::add (call ci::mul (local row) (i64 16)) (i64 8)))
+                (local seed)))
+            (binding digest (call source-summary-material::finish (i64 6) (local material)))
+            (binding prefix
+              (type ByteBuffer)
+              (call wire::range
+                (local semantic)
+                (call ci::mul (local row) (i64 224))
+                (call ci::add (call ci::mul (local row) (i64 224)) (i64 192))
+                (local out)))
+            (binding next (type ByteBuffer) (call ci::append (local digest) (i64 0) (local prefix)))
+            (in
+              (call source-summary-local::validation
+                (local graph)
+                (local relations)
+                (local directory)
+                (local semantic)
+                (call ci::add (local row) (i64 1))
+                (local next)))))))))
+declarations.end

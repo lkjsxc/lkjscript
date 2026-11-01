@@ -1,0 +1,35 @@
+declarations.begin
+(units
+  (module create source-package
+    (function create encode
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create core (type Bytes))
+      (parameter create interface (type Bytes))
+      (returns (record (digest Bytes) (image Bytes)))
+      (body
+        (let
+          (binding a (type ByteBuffer) (call ci::empty))
+          (binding b (type ByteBuffer) (call ci::push (i64 1) (local a)))
+          (binding c (type ByteBuffer) (call ci::push (i64 1) (local b)))
+          (binding d (type ByteBuffer) (call ci::push (i64 18) (local c)))
+          (binding e (type ByteBuffer) (call wire::range (local graph) (i64 32) (i64 48) (local d)))
+          (binding f (type ByteBuffer) (call ci::append (local core) (i64 0) (local e)))
+          (binding g (type ByteBuffer) (call ci::push (i64 12) (local f)))
+          (binding h (type ByteBuffer) (call wire::range (local interface) (i64 0) (i64 32) (local g)))
+          (binding j (type ByteBuffer) (call ci::push (i64 0) (local h)))
+          (binding body (call ci::freeze (local j)))
+          (binding image
+            (call
+              wire::envelope
+              (text "LKJPKR01")
+              (text "lkjscript.package-revision-envelope.v1")
+              (local body)))
+          (in
+            (record
+              structural
+              (field digest
+                (call wire::digest (text "lkjscript.kernel.package-revision.v1") (local image)))
+              (field image (local image)))))))))
+declarations.end

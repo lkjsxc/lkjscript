@@ -1,0 +1,432 @@
+declarations.begin
+(units
+  (module create source-summary-roles
+    (function create expression-child
+      (visibility package)
+      (effect pure)
+      (parameter create operation (type I64))
+      (parameter create position (type I64))
+      (returns (record (code I64) (role I64) (subrole I64) (ordinal I64) (mode I64)))
+      (body
+        (if
+          (call ci::eq (local operation) (i64 7))
+          (if
+            (call ci::lt (local position) (i64 3))
+            (record structural
+              (field code (i64 0))
+              (field role (i64 15))
+              (field subrole (local position))
+              (field ordinal (i64 0))
+              (field mode (i64 2)))
+            (record structural
+              (field code (i64 15))
+              (field role (i64 0))
+              (field subrole (i64 0))
+              (field ordinal (i64 0))
+              (field mode (i64 0))))
+          (if
+            (call ci::eq (local operation) (i64 8))
+            (record structural
+              (field code (i64 0))
+              (field role (i64 15))
+              (field subrole (i64 3))
+              (field ordinal (i64 0))
+              (field mode (i64 2)))
+            (if
+              (call ci::eq (local operation) (i64 9))
+              (record structural
+                (field code (i64 0))
+                (field role (i64 15))
+                (field subrole (i64 4))
+                (field ordinal (local position))
+                (field mode (i64 2)))
+              (if
+                (call ci::eq (local operation) (i64 10))
+                (record structural
+                  (field code (i64 0))
+                  (field role (i64 15))
+                  (field subrole (i64 5))
+                  (field ordinal (local position))
+                  (field mode (i64 2)))
+                (if
+                  (call ci::eq (local operation) (i64 13))
+                  (record structural
+                    (field code (i64 0))
+                    (field role (i64 15))
+                    (field subrole (i64 8))
+                    (field ordinal (local position))
+                    (field mode (i64 2)))
+                  (if
+                    (call ci::eq (local operation) (i64 15))
+                    (record structural
+                      (field code (i64 0))
+                      (field role (i64 15))
+                      (field subrole (i64 10))
+                      (field ordinal (i64 0))
+                      (field mode (i64 2)))
+                    (if
+                      (call ci::eq (local operation) (i64 16))
+                      (record structural
+                        (field code (i64 0))
+                        (field role (i64 15))
+                        (field subrole (i64 11))
+                        (field ordinal (local position))
+                        (field mode (i64 2)))
+                      (record structural
+                        (field code (i64 13))
+                        (field role (i64 0))
+                        (field subrole (i64 0))
+                        (field ordinal (i64 0))
+                        (field mode (i64 0))))))))))))
+    (function create select
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create child (type I64))
+      (parameter create parent (type I64))
+      (parameter create position (type I64))
+      (returns (record (code I64) (role I64) (subrole I64) (ordinal I64) (mode I64)))
+      (body
+        (let
+          (binding kind (call source-table::kind (local graph) (local child)))
+          (in
+            (if
+              (call ci::either
+                (call ci::eq (local kind) (i64 1))
+                (call ci::either
+                  (call ci::eq (local kind) (i64 5))
+                  (call ci::either
+                    (call ci::eq (local kind) (i64 6))
+                    (call ci::either
+                      (call ci::eq (local kind) (i64 9))
+                      (call ci::either (call ci::eq (local kind) (i64 20)) (bool false))))))
+              (record structural
+                (field code (i64 0))
+                (field role (i64 0))
+                (field subrole (i64 0))
+                (field ordinal (i64 0))
+                (field mode (i64 0)))
+              (if
+                (if
+                  (call ci::either
+                    (call ci::eq (local kind) (i64 11))
+                    (call ci::either
+                      (call ci::eq (local kind) (i64 15))
+                      (call ci::either
+                        (call ci::eq (local kind) (i64 16))
+                        (call ci::either
+                          (call ci::eq (local kind) (i64 17))
+                          (call ci::either (call ci::eq (local kind) (i64 19)) (bool false))))))
+                  (bool false)
+                  (bool true))
+                (record structural
+                  (field code (i64 13))
+                  (field role (i64 0))
+                  (field subrole (i64 0))
+                  (field ordinal (i64 0))
+                  (field mode (i64 0)))
+                (if
+                  (call ci::lt (local parent) (i64 0))
+                  (record structural
+                    (field code (i64 15))
+                    (field role (i64 0))
+                    (field subrole (i64 0))
+                    (field ordinal (i64 0))
+                    (field mode (i64 0)))
+                  (if
+                    (call ci::eq (local parent) (call source-table::count (local graph)))
+                    (record structural
+                      (field code (i64 15))
+                      (field role (i64 0))
+                      (field subrole (i64 0))
+                      (field ordinal (i64 0))
+                      (field mode (i64 0)))
+                    (let
+                      (binding parent-kind (call source-table::kind (local graph) (local parent)))
+                      (in
+                        (if
+                          (call ci::eq (local kind) (i64 11))
+                          (if
+                            (call ci::either
+                              (call ci::eq (local parent-kind) (i64 5))
+                              (call ci::either (call ci::eq (local parent-kind) (i64 6)) (bool false)))
+                            (record structural
+                              (field code (i64 0))
+                              (field role (i64 4))
+                              (field subrole (i64 0))
+                              (field ordinal (i64 0))
+                              (field mode (i64 1)))
+                            (record structural
+                              (field code (i64 15))
+                              (field role (i64 0))
+                              (field subrole (i64 0))
+                              (field ordinal (i64 0))
+                              (field mode (i64 0))))
+                          (if
+                            (call ci::eq (local kind) (i64 15))
+                            (if
+                              (call ci::either
+                                (call ci::eq (local parent-kind) (i64 5))
+                                (call ci::either (call ci::eq (local parent-kind) (i64 6)) (bool false)))
+                              (record structural
+                                (field code (i64 0))
+                                (field role (i64 10))
+                                (field subrole (i64 0))
+                                (field ordinal (i64 0))
+                                (field mode (i64 1)))
+                              (record structural
+                                (field code (i64 15))
+                                (field role (i64 0))
+                                (field subrole (i64 0))
+                                (field ordinal (i64 0))
+                                (field mode (i64 0))))
+                            (if
+                              (call ci::eq (local kind) (i64 19))
+                              (if
+                                (call ci::eq (local parent-kind) (i64 9))
+                                (record structural
+                                  (field code (i64 0))
+                                  (field role (i64 13))
+                                  (field subrole (i64 0))
+                                  (field ordinal (i64 0))
+                                  (field mode (i64 1)))
+                                (record structural
+                                  (field code (i64 15))
+                                  (field role (i64 0))
+                                  (field subrole (i64 0))
+                                  (field ordinal (i64 0))
+                                  (field mode (i64 0))))
+                              (if
+                                (call ci::eq (local kind) (i64 16))
+                                (if
+                                  (call ci::eq (local parent-kind) (i64 17))
+                                  (if
+                                    (call ci::eq
+                                      (call source-summary-material::owner-byte
+                                        (local graph)
+                                        (local parent)
+                                        (i64 37))
+                                      (i64 8))
+                                    (record structural
+                                      (field code (i64 0))
+                                      (field role (i64 16))
+                                      (field subrole (i64 0))
+                                      (field ordinal (local position))
+                                      (field mode (i64 2)))
+                                    (record structural
+                                      (field code (i64 13))
+                                      (field role (i64 0))
+                                      (field subrole (i64 0))
+                                      (field ordinal (i64 0))
+                                      (field mode (i64 0))))
+                                  (record structural
+                                    (field code (i64 15))
+                                    (field role (i64 0))
+                                    (field subrole (i64 0))
+                                    (field ordinal (i64 0))
+                                    (field mode (i64 0))))
+                                (if
+                                  (call ci::eq (local kind) (i64 17))
+                                  (if
+                                    (call ci::eq (local parent-kind) (i64 6))
+                                    (record structural
+                                      (field code (i64 0))
+                                      (field role (i64 14))
+                                      (field subrole (i64 0))
+                                      (field ordinal (i64 0))
+                                      (field mode (i64 2)))
+                                    (if
+                                      (call ci::eq (local parent-kind) (i64 16))
+                                      (record structural
+                                        (field code (i64 0))
+                                        (field role (i64 14))
+                                        (field subrole (i64 4))
+                                        (field ordinal (i64 0))
+                                        (field mode (i64 2)))
+                                      (if
+                                        (call ci::eq (local parent-kind) (i64 17))
+                                        (call source-summary-roles::expression-child
+                                          (call source-summary-material::owner-byte
+                                            (local graph)
+                                            (local parent)
+                                            (i64 37))
+                                          (local position))
+                                        (record structural
+                                          (field code (i64 13))
+                                          (field role (i64 0))
+                                          (field subrole (i64 0))
+                                          (field ordinal (i64 0))
+                                          (field mode (i64 0))))))
+                                  (record structural
+                                    (field code (i64 13))
+                                    (field role (i64 0))
+                                    (field subrole (i64 0))
+                                    (field ordinal (i64 0))
+                                    (field mode (i64 0))))))))))))))))))
+    (function create row
+      (visibility package)
+      (effect pure)
+      (parameter create parent (type I64))
+      (parameter create role (type I64))
+      (parameter create subrole (type I64))
+      (parameter create ordinal (type I64))
+      (parameter create child (type I64))
+      (parameter create mode (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding summary-buffer-15
+            (type ByteBuffer)
+            (let
+              (binding summary-buffer-14
+                (type ByteBuffer)
+                (let
+                  (binding summary-buffer-13
+                    (type ByteBuffer)
+                    (let
+                      (binding summary-buffer-12
+                        (type ByteBuffer)
+                        (let
+                          (binding summary-buffer-11
+                            (type ByteBuffer)
+                            (call ci::le (local parent) (i64 8) (local out)))
+                          (in (call ci::le (local role) (i64 8) (local summary-buffer-11)))))
+                      (in (call ci::le (local subrole) (i64 8) (local summary-buffer-12)))))
+                  (in (call ci::le (local ordinal) (i64 8) (local summary-buffer-13)))))
+              (in (call ci::le (local child) (i64 8) (local summary-buffer-14)))))
+          (in (call ci::le (local mode) (i64 8) (local summary-buffer-15))))))
+    (function create inventory
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create row (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (record structural (field code (i64 0)) (field rows (call ci::freeze (local out))))
+          (let
+            (binding at (call ci::mul (local row) (i64 12)))
+            (binding parent (call ci::u32 (local parents) (call ci::add (local at) (i64 4))))
+            (binding position (call ci::u32 (local parents) (call ci::add (local at) (i64 8))))
+            (in
+              (if
+                (call ci::both
+                  (call ci::eq (call ci::u32 (local parents) (local at)) (local row))
+                  (call ci::lt (local parent) (call ci::add (call source-table::count (local graph)) (i64 1))))
+                (let
+                  (binding selected
+                    (call source-summary-roles::select
+                      (local graph)
+                      (local row)
+                      (local parent)
+                      (local position)))
+                  (in
+                    (if
+                      (call ci::eq (field (local selected) (name code)) (i64 0))
+                      (let
+                        (binding summary-buffer-16
+                          (type ByteBuffer)
+                          (if
+                            (call ci::eq (field (local selected) (name mode)) (i64 0))
+                            (local out)
+                            (call source-summary-roles::row
+                              (local parent)
+                              (field (local selected) (name role))
+                              (field (local selected) (name subrole))
+                              (field (local selected) (name ordinal))
+                              (local row)
+                              (field (local selected) (name mode))
+                              (local out))))
+                        (in
+                          (call source-summary-roles::inventory
+                            (local graph)
+                            (local parents)
+                            (call ci::add (local row) (i64 1))
+                            (local summary-buffer-16))))
+                      (let
+                        (binding discarded (call ci::discard (local out)))
+                        (in
+                          (record structural
+                            (field code (field (local selected) (name code)))
+                            (field rows (call ci::text-bytes (text "")))))))))
+                (let
+                  (binding discarded (call ci::discard (local out)))
+                  (in (record structural (field code (i64 15)) (field rows (call ci::text-bytes (text ""))))))))))))
+    (function create prepare
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (returns (record (code I64) (rows Bytes) (directory Bytes)))
+      (body
+        (if
+          (call ci::eq
+            (call ci::length (local parents))
+            (call ci::mul (call source-table::count (local graph)) (i64 12)))
+          (let
+            (binding inventory
+              (let
+                (binding summary-buffer-17 (type ByteBuffer) (call ci::empty))
+                (in
+                  (call source-summary-roles::inventory
+                    (local graph)
+                    (local parents)
+                    (i64 0)
+                    (local summary-buffer-17)))))
+            (in
+              (if
+                (call ci::eq (field (local inventory) (name code)) (i64 0))
+                (let
+                  (binding rows
+                    (call source-summary-order::sort (field (local inventory) (name rows)) (i64 48) (i64 5)))
+                  (in
+                    (record structural
+                      (field code (i64 0))
+                      (field rows (local rows))
+                      (field directory
+                        (call source-summary-order::directory
+                          (local rows)
+                          (i64 48)
+                          (call source-table::count (local graph)))))))
+                (record structural
+                  (field code (field (local inventory) (name code)))
+                  (field rows (call ci::text-bytes (text "")))
+                  (field directory (call ci::text-bytes (text "")))))))
+          (record structural
+            (field code (i64 15))
+            (field rows (call ci::text-bytes (text "")))
+            (field directory (call ci::text-bytes (text "")))))))
+    (function create encode
+      (visibility package)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create at (type I64))
+      (returns Bytes)
+      (body
+        (let
+          (binding role (call ci::u64 (local rows) (call ci::add (local at) (i64 8))))
+          (binding start
+            (type ByteBuffer)
+            (let
+              (binding summary-buffer-18 (type ByteBuffer) (call ci::empty))
+              (in (call wire::unsigned (local role) (local summary-buffer-18)))))
+          (binding subrole
+            (type ByteBuffer)
+            (if
+              (call ci::lt (local role) (i64 14))
+              (local start)
+              (call wire::unsigned (call ci::u64 (local rows) (call ci::add (local at) (i64 16))) (local start))))
+          (binding out
+            (type ByteBuffer)
+            (if
+              (call ci::lt (local role) (i64 15))
+              (local subrole)
+              (call wire::unsigned
+                (call ci::u64 (local rows) (call ci::add (local at) (i64 24)))
+                (local subrole))))
+          (in (call ci::freeze (local out))))))))
+declarations.end

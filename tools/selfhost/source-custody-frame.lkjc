@@ -1,0 +1,50 @@
+declarations.begin
+(units
+  (module create source-custody-frame
+    (function create push
+      (visibility package) (effect pure)
+      (parameter create stack (type Bytes)) (parameter create tag (type I64))
+      (parameter create row (type I64)) (parameter create mode (type I64))
+      (parameter create index (type I64)) (parameter create mark (type I64))
+      (parameter create extra (type I64)) (parameter create payload (type Bytes))
+      (returns (record (code I64) (stack Bytes)))
+      (body (if (call source-custody-state::room (call ci::length (local payload)) (i64 56))
+        (let (binding size (call ci::add (call ci::length (local payload)) (i64 56)))
+          (in (if (call source-custody-state::room (call ci::length (local stack)) (local size))
+            (let
+              (binding a (type ByteBuffer) (call ci::empty))
+              (binding b (type ByteBuffer) (call ci::append (local stack) (i64 0) (local a)))
+              (binding c (type ByteBuffer) (call ci::le (local tag) (i64 8) (local b)))
+              (binding d (type ByteBuffer) (call ci::le (local row) (i64 8) (local c)))
+              (binding e (type ByteBuffer) (call ci::le (local mode) (i64 8) (local d)))
+              (binding f (type ByteBuffer) (call ci::le (local index) (i64 8) (local e)))
+              (binding g (type ByteBuffer) (call ci::le (local mark) (i64 8) (local f)))
+              (binding h (type ByteBuffer) (call ci::le (local extra) (i64 8) (local g)))
+              (binding i (type ByteBuffer) (call ci::append (local payload) (i64 0) (local h)))
+              (binding j (type ByteBuffer) (call ci::le (local size) (i64 8) (local i)))
+              (in (record structural (field code (i64 0)) (field stack (call ci::freeze (local j))))))
+            (record structural (field code (i64 13)) (field stack (local stack))))))
+        (record structural (field code (i64 13)) (field stack (local stack))))))
+    (function create begin
+      (visibility private) (effect pure)
+      (parameter create stack (type Bytes)) (returns I64)
+      (body (call ci::sub (call ci::length (local stack))
+        (call ci::u64 (local stack) (call ci::sub (call ci::length (local stack)) (i64 8))))))
+    (function create pop
+      (visibility package) (effect pure)
+      (parameter create stack (type Bytes))
+      (returns (record (tag I64) (row I64) (mode I64) (index I64) (mark I64)
+        (extra I64) (payload Bytes) (rest Bytes)))
+      (body (let (binding at (call begin (local stack)))
+        (in (record structural
+          (field tag (call ci::u64 (local stack) (local at)))
+          (field row (call ci::u64 (local stack) (call ci::add (local at) (i64 8))))
+          (field mode (call ci::u64 (local stack) (call ci::add (local at) (i64 16))))
+          (field index (call ci::u64 (local stack) (call ci::add (local at) (i64 24))))
+          (field mark (call ci::u64 (local stack) (call ci::add (local at) (i64 32))))
+          (field extra (call ci::u64 (local stack) (call ci::add (local at) (i64 40))))
+          (field payload (call ci::slice (local stack) (call ci::add (local at) (i64 48))
+            (call ci::sub (call ci::length (local stack)) (i64 8))))
+          (field rest (call ci::slice (local stack) (i64 0) (local at))))))))
+  ))
+declarations.end

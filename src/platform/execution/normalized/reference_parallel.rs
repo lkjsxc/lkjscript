@@ -1590,6 +1590,24 @@ impl NormalizedReferenceObservation {
             child.collection_items,
             child.collection_items_saturated,
         );
+        crate::platform::execution::cumulative_observe(
+            &mut self.type_derivation_steps,
+            &mut self.type_derivation_saturated,
+            child.type_derivation_steps,
+            child.type_derivation_saturated,
+        );
+        crate::platform::execution::cumulative_observe(
+            &mut self.source_admission_steps,
+            &mut self.source_admission_saturated,
+            child.source_admission_steps,
+            child.source_admission_saturated,
+        );
+        crate::platform::execution::cumulative_observe(
+            &mut self.type_metadata_bytes,
+            &mut self.type_metadata_saturated,
+            child.type_metadata_bytes,
+            child.type_metadata_saturated,
+        );
         add!(
             calls,
             external_calls,
@@ -1623,6 +1641,9 @@ mod cumulative_observation_tests {
             capability_calls: u64::MAX - 1,
             allocated_bytes: u64::MAX - 1,
             collection_items: u64::MAX - 1,
+            type_derivation_steps: u64::MAX - 1,
+            source_admission_steps: u64::MAX - 1,
+            type_metadata_bytes: u64::MAX - 1,
             ..NormalizedReferenceObservation::default()
         };
         let child = NormalizedReferenceObservation {
@@ -1630,6 +1651,9 @@ mod cumulative_observation_tests {
             capability_calls: 1,
             allocated_bytes: 1,
             collection_items: 1,
+            type_derivation_steps: 1,
+            source_admission_steps: 1,
+            type_metadata_bytes: 1,
             ..NormalizedReferenceObservation::default()
         };
         parent.include_child(&child);
@@ -1641,6 +1665,12 @@ mod cumulative_observation_tests {
         assert!(!parent.allocated_bytes_saturated);
         assert_eq!(parent.collection_items, u64::MAX);
         assert!(!parent.collection_items_saturated);
+        assert_eq!(parent.type_derivation_steps, u64::MAX);
+        assert!(!parent.type_derivation_saturated);
+        assert_eq!(parent.source_admission_steps, u64::MAX);
+        assert!(!parent.source_admission_saturated);
+        assert_eq!(parent.type_metadata_bytes, u64::MAX);
+        assert!(!parent.type_metadata_saturated);
         parent.include_child(&child);
         assert_eq!(parent.expressions, u64::MAX);
         assert!(parent.expressions_saturated);
@@ -1650,6 +1680,12 @@ mod cumulative_observation_tests {
         assert!(parent.allocated_bytes_saturated);
         assert_eq!(parent.collection_items, u64::MAX);
         assert!(parent.collection_items_saturated);
+        assert_eq!(parent.type_derivation_steps, u64::MAX);
+        assert!(parent.type_derivation_saturated);
+        assert_eq!(parent.source_admission_steps, u64::MAX);
+        assert!(parent.source_admission_saturated);
+        assert_eq!(parent.type_metadata_bytes, u64::MAX);
+        assert!(parent.type_metadata_saturated);
         let mut inherited = NormalizedReferenceObservation::default();
         inherited.include_child(&parent);
         assert_eq!(inherited.expressions, u64::MAX);
@@ -1660,12 +1696,21 @@ mod cumulative_observation_tests {
         assert!(inherited.allocated_bytes_saturated);
         assert_eq!(inherited.collection_items, u64::MAX);
         assert!(inherited.collection_items_saturated);
+        assert_eq!(inherited.type_derivation_steps, u64::MAX);
+        assert!(inherited.type_derivation_saturated);
+        assert_eq!(inherited.source_admission_steps, u64::MAX);
+        assert!(inherited.source_admission_saturated);
+        assert_eq!(inherited.type_metadata_bytes, u64::MAX);
+        assert!(inherited.type_metadata_saturated);
         let serialized = serde_json::to_value(&inherited).unwrap();
         for field in [
             "expressions_saturated",
             "capability_calls_saturated",
             "allocated_bytes_saturated",
             "collection_items_saturated",
+            "type_derivation_saturated",
+            "source_admission_saturated",
+            "type_metadata_saturated",
         ] {
             assert_eq!(serialized[field], serde_json::Value::Bool(true));
         }

@@ -1,18 +1,44 @@
 # Capacity removal: boundary census and integration ledger
 
-Updated 2026-10-31 (Asia/Tokyo).
-Current state: Phase 1, the list slice and Profile 7 are accepted and integrated. Profile-7 tree `06ad6feaa9df96a12f1e1ecab039855bff6072e1` completed the literal selfhost/native script, both complete compiler controls, all 29 fresh full gates (zero reuse), and release target. Its terminal owner and committed-tree recovery audits joined successfully; main contains exact implementation commit `5e7e8d37831b33a9e44c3e50a0b733cfd049b64d`. This ledger update is a documentation follow-up to that tested tree.
-Reference source: `47e33ae90ec77b176597e45d7917694749526aba`.
-Reference tree: `32ff68b548b2fcb5aecd8c01229b8a7c757490d5`.
-Phase 1 accepted commit: `e7a44d289ddd90daf81125a9f37c66fa17cd3c21`.
-Phase 1 accepted tree: `bc733630e4850e1cc50e91607029a24ca520c6e1`.
-List accepted commit: `932f197ebcd9c17e2702372300ab73996bb20754`.
-List accepted tree: `6717d8249c1db319169b2b32be0e088ef09dea21`.
-Profile-7 accepted commit: `5e7e8d37831b33a9e44c3e50a0b733cfd049b64d`.
-Profile-7 accepted tree: `06ad6feaa9df96a12f1e1ecab039855bff6072e1`.
-Exact staged-tree verification and normal integration are bound by the acceptance commit and receipts.
+Updated 2026-11-01 (Asia/Tokyo).
 
-The next measured compiler batch replaces quadratic artifact selection with a stable index merge sort. Public adoption, complete proposal replay, refreshed F_active inventory and the pinned four-evaluator artifact comparison passed. Fresh full staged-tree acceptance is pending; [the sorting decision](20261031-artifact-index-sort.md) binds the evidence. This algorithmic change removes no independent storage or codec boundary.
+## Current dependency-closed candidate
+
+Phase 1, unbounded lists, Profile 7 and the stable artifact index sort are accepted
+on main. The latest accepted implementation is the sort at
+`67132509f820b8e6b1f5e7ba55112e310e0da162`, tree
+`ba3b9359df57717a360d33fb3f6017679fdbc975`; documentation base
+`71405a389a422a8fa51850ef70ba9f34040aca56` is separate.
+
+The [active-source candidate](20261101-active-source-self-compilation.md) now passes
+complete maintained raw-source self-compilation: C2=C3 and Ahost=A1=A2=A3, including
+strict loading, source mutations and complete-inventory negatives. That is focused
+Milestone A component evidence, not a full staged-tree seal or complete Tier 2.
+The candidate's public graph has 59,883 owners, 88 types and 1,103 canonical units.
+Current exact graph/input/output identities and acceptance state live in
+[status](../status.md); historical sections below retain their original scope.
+
+| Coupled family | Candidate result / remaining dependency |
+| --- | --- |
+| Package/source aggregate admission and offline reports | Ordinary work/read policies are None; finite caller policies remain exact, observations carry saturation, current semantic-2 reports require the new flags. Public former-boundary authoring/compile/export/native execution passed. |
+| Publication preview staging | Removed the aggregate 64 MiB admission; staged-object validation, corruption/cancellation/refusal and atomic replacement controls passed. This does not remove individual object-domain limits. |
+| Independent canonical-reference preparation | Removed implicit aggregate work/entry/metadata limits across schema, types, read views, associated proofs and dependency binding. Exact optional policies and saturation remain separate. The identical complete compiler tx that hit the old reference proof allowance is now publicly accepted and replayed. |
+| Byte movement and native scalar traffic | Added three closed bulk/word intrinsics through both evaluators and both backends before compiler adoption; immutable scalar pooling lets the pinned artifact request complete under the same 24 GiB process policy where the prior allocator failed. This is not phase reclamation or a semantic integer cap. |
+| Canonical unit / manifest / cache path | Still pending: per-unit byte/item limits, storage envelopes, metadata/preparation limits and narrow host IR identities must be removed through their complete consumers. Large aggregate artifacts do not prove large-unit admission. |
+| Source/object envelopes | Still pending: u32 carrier extents and Owner/Type/root/history/blob domain limits plus child/text policies. New profile 3 binds original provenance but does not widen these independent coordinates. |
+| Recursive lifecycle and native frames | Still pending: validation, lowering, codecs, clone/comparison/hash/debug and destruction must become stack safe together before depth guards disappear. Native CALL stack growth remains distinct. |
+| Map key/value and catalog/GC topology | Still pending: overflow/page contracts, reachability and transport, hierarchy/manifest scaling, pack counts and exact layout versus passive totals. Physical split/compaction targets may remain. |
+| Package/data/queue/HTTP/dev-tool policies | Continue dependency-closed audits; this compiler batch does not claim repository-wide quota removal. |
+
+Final acceptance must freeze all candidate inputs, bootstrap that exact staged tree,
+run the literal selfhost/native script and named native/source controls, pass all
+29 fresh full gates and release target, then commit only that tree. Terminal
+receipts and the acceptance commit own the final seal; no later edit inherits it.
+
+Historical anchors: Phase 1 `e7a44d289ddd90daf81125a9f37c66fa17cd3c21`;
+list slice `932f197ebcd9c17e2702372300ab73996bb20754`; Profile 7
+`5e7e8d37831b33a9e44c3e50a0b733cfd049b64d`. Their detailed records below
+are not reset targets or claims about unverified later work.
 
 ## Authority and accounting
 

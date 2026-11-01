@@ -120,8 +120,8 @@ fn selfhost_source_measure_maintained_native_closure() {
         })
     };
     // Reproduce the combined source compiler through the already checked
-    // Tier 1 backend stages. Its own scalar frontend cannot compile this
-    // maintained compiler closure, so this is not source self-compilation.
+    // Tier 1 backend stages. This control supplies normalized input; complete
+    // raw-source self-compilation has its own separate acceptance control.
     let source_entry_declaration = super::function("source-elf", "compile");
     let source_entry = program.function(source_entry_declaration).unwrap().0 as usize;
     let started = Instant::now();
@@ -159,12 +159,14 @@ fn selfhost_source_measure_maintained_native_closure() {
     let selected_target = super::scalar::target_id(&scalar_source, "scalar-main");
     let scalar_carrier = graph::packet(&scalar_source);
     let scalar_request = super::scalar::source_request(&scalar_carrier, selected_target);
-    let unused_bytes = kernel::TypeObject::new(kernel::TypeForm::Bytes).unwrap();
-    let unused_digest = kernel::encode_type_object(&unused_bytes).unwrap().0;
+    // Bytes is in the active source profile. F64 remains unsupported, including
+    // in unused supplied TypeRecords that do not change semantic-state identity.
+    let unused_type = kernel::TypeObject::new(kernel::TypeForm::F64).unwrap();
+    let unused_digest = kernel::encode_type_object(&unused_type).unwrap().0;
     assert!(
         scalar_source
             .types
-            .insert(unused_digest, unused_bytes)
+            .insert(unused_digest, unused_type)
             .is_none()
     );
     let rejected_carrier = graph::packet(&scalar_source);
@@ -218,7 +220,9 @@ fn selfhost_source_measure_maintained_native_closure() {
             "accepted_carrier": identity(&scalar_carrier),
             "accepted_request": identity(&scalar_request),
             "request_format": "LKJSRQ01",
-            "request_profile": 1,
+            "request_profile": 2,
+            "source_profile": 3,
+            "output_mode": 0,
             "selected_target": selected_target,
             "selector_key_hex": crate::platform::semantic_id::encode_hex(
                 &kernel::EncodedOwnerKey::new(OwnerKey::Target(selected_target)).bytes()
@@ -228,7 +232,7 @@ fn selfhost_source_measure_maintained_native_closure() {
             "program_stdout": "42",
             "rejected_carrier": identity(&rejected_carrier),
             "rejected_request": identity(&rejected_request),
-            "rejection": "hash-consistent unused Bytes type",
+            "rejection": "hash-consistent unused F64 type",
             "rejection_diagnostic": 13,
             "compile_wall_time_ms": compile_ms,
             "reject_wall_time_ms": reject_ms,

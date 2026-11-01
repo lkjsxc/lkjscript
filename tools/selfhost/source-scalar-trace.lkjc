@@ -7,9 +7,17 @@ declarations.begin
       (parameter create out (type ByteBuffer) (use consume))
       (returns (record (code I64) (rows Bytes)))
       (body (record structural (field code (i64 13)) (field rows (call ci::freeze (local out))))))
+    (function create rejected
+      (visibility private)
+      (effect pure)
+      (parameter create code (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (rows Bytes)))
+      (body (record structural (field code (local code)) (field rows (call ci::freeze (local out))))))
     (function create types
       (visibility private)
       (effect pure)
+      (parameter create graph (type Bytes))
       (parameter create facts (type Bytes))
       (parameter create locals (type Bytes))
       (parameter create start (type I64))
@@ -28,20 +36,113 @@ declarations.begin
                 (call ci::add (local start) (local index))))
             (binding next
               (type ByteBuffer)
-              (call source-scalar-pack::value-type
-                (call ci::get (local facts) (local owner))
+              (call source-scalar-pack::qualified-type
+                (call source-scalar-infer::fact (local facts) (local owner))
+                (call source-custody-lower::local-qualifier (local graph) (local owner))
                 (local out)))
             (in
               (call types
+                (local graph)
                 (local facts)
                 (local locals)
                 (local start)
                 (local count)
                 (call ci::add (local index) (i64 1))
                 (local next)))))))
-    (function create node
+    (function create payload-size
+      (visibility package)
+      (effect pure)
+      (parameter create tag (type I64))
+      (parameter create count (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local tag) (i64 12))
+          (local count)
+          (if
+            (call ci::eq (local tag) (i64 14))
+            (if
+              (call ci::lt (i64 1152921504606846975) (local count))
+              (i64 -1)
+              (call ci::mul (local count) (i64 8)))
+            (i64 0)))))
+    (function create node-size
+      (visibility package)
+      (effect pure)
+      (parameter create locals (type I64))
+      (parameter create operands (type I64))
+      (parameter create payload (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::either (call ci::lt (local locals) (i64 0)) (call ci::lt (local operands) (i64 0)))
+          (i64 -1)
+          (if
+            (call ci::lt (local payload) (i64 0))
+            (i64 -1)
+            (if
+              (call ci::lt (i64 9223372036854775743) (local locals))
+              (i64 -1)
+              (let
+                (binding base (call ci::add (i64 64) (local locals)))
+                (in
+                  (if
+                    (call ci::lt (call ci::sub (i64 9223372036854775807) (local base)) (local operands))
+                    (i64 -1)
+                    (let
+                      (binding state (call ci::add (local base) (local operands)))
+                      (in
+                        (if
+                          (call ci::lt
+                            (call ci::sub (i64 9223372036854775807) (local state))
+                            (local payload))
+                          (i64 -1)
+                          (call ci::add (local state) (local payload)))))))))))))
+    (function create field-map
       (visibility private)
       (effect pure)
+      (parameter create index (type I64))
+      (parameter create count (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local index) (local count))
+          (local out)
+          (let
+            (binding next (type ByteBuffer) (call ci::le (local index) (i64 8) (local out)))
+            (in (call field-map (call ci::add (local index) (i64 1)) (local count) (local next)))))))
+    (function create payload
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create tag (type I64))
+      (parameter create anchor (type I64))
+      (parameter create count (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local tag) (i64 12))
+          (let
+            (binding data (call source-table::data (local graph) (local anchor)))
+            (binding text (call source-table::array (local data) (i64 39)))
+            (binding start (field (local text) (name next)))
+            (in
+              (call wire::range
+                (local data)
+                (local start)
+                (call ci::add (local start) (local count))
+                (local out))))
+          (if
+            (call ci::eq (local tag) (i64 14))
+            (call field-map (i64 0) (local count) (local out))
+            (local out)))))
+    (function create node
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
       (parameter create event
         (type
           (record (row I64) (enter Bool) (tag I64) (a I64) (b I64) (value I64) (anchor I64) (extra I64))))
@@ -52,6 +153,10 @@ declarations.begin
       (parameter create count (type I64))
       (parameter create parameters (type I64))
       (parameter create owner (type I64))
+      (parameter create evidence (type Bytes))
+      (parameter create state (type I64))
+      (parameter create forced (type I64))
+      (parameter create live (type I64))
       (parameter create out (type ByteBuffer) (use consume))
       (returns ByteBuffer)
       (body
@@ -73,6 +178,14 @@ declarations.begin
           (binding g
             (type ByteBuffer)
             (call ci::le (call ci::div (call ci::length (local operands)) (i64 16)) (i64 8) (local f)))
+          (binding with-payload
+            (type ByteBuffer)
+            (call payload
+              (local graph)
+              (field (local event) (name tag))
+              (field (local event) (name anchor))
+              (field (local event) (name b))
+              (local g)))
           (binding h
             (type ByteBuffer)
             (call source-scalar-state::flags
@@ -84,8 +197,127 @@ declarations.begin
               (i64 0)
               (field (local event) (name anchor))
               (local owner)
-              (local g)))
+              (local facts)
+              (local evidence)
+              (local state)
+              (local forced)
+              (local live)
+              (local with-payload)))
           (in (call ci::append (local operands) (i64 0) (local h))))))
+    (function create cleanup-result
+      (visibility private)
+      (effect pure)
+      (parameter create code (type I64))
+      (parameter create count (type I64))
+      (parameter create rows (type Bytes))
+      (returns (record (code I64) (count I64) (rows Bytes)))
+      (body
+        (record structural
+          (field code (local code))
+          (field count (local count))
+          (field rows (local rows)))))
+    (function create cleanup
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create plan (type Bytes))
+      (parameter create functions (type Bytes))
+      (parameter create locals (type Bytes))
+      (parameter create evidence (type Bytes))
+      (parameter create entries (type Bytes))
+      (parameter create directory (type Bytes))
+      (parameter create function (type I64))
+      (parameter create start (type I64))
+      (parameter create row (type I64))
+      (parameter create limit (type I64))
+      (parameter create nodes (type I64))
+      (returns (record (code I64) (count I64) (rows Bytes)))
+      (body
+        (let
+          (binding owner (call source-scalar-plan::function-owner (local functions) (local function)))
+          (binding count (call source-scalar-plan::local-count (local functions) (local function)))
+          (binding parameters (call source-scalar-plan::parameter-count (local functions) (local function)))
+          (binding block
+            (call source-custody-drop::block
+              (local graph)
+              (local facts)
+              (local parents)
+              (local plan)
+              (local locals)
+              (local start)
+              (local count)
+              (local parameters)
+              (local owner)
+              (local evidence)
+              (local entries)
+              (local directory)
+              (local row)
+              (local limit)))
+          (in
+            (if
+              (call ci::eq (field (local block) (name code)) (i64 0))
+              (if
+                (call ci::lt (field (local block) (name count)) (i64 0))
+                (call cleanup-result (i64 19) (i64 0) (call ci::text-bytes (text "")))
+                (if
+                  (call ci::either
+                    (call ci::lt (local limit) (call ci::length (field (local block) (name rows))))
+                    (call ci::lt (local nodes) (field (local block) (name count))))
+                  (call cleanup-result (i64 13) (i64 0) (call ci::text-bytes (text "")))
+                  (if
+                    (call ci::eq
+                      (call source-table::kind
+                        (local graph)
+                        (call source-table::parent (local parents) (local row)))
+                      (i64 6))
+                    (let
+                      (binding remaining
+                        (call ci::sub (local limit) (call ci::length (field (local block) (name rows)))))
+                      (binding available (call ci::sub (local nodes) (field (local block) (name count))))
+                      (binding tail
+                        (call source-custody-drop::block
+                          (local graph)
+                          (local facts)
+                          (local parents)
+                          (local plan)
+                          (local locals)
+                          (local start)
+                          (local count)
+                          (local parameters)
+                          (local owner)
+                          (local evidence)
+                          (local entries)
+                          (local directory)
+                          (local owner)
+                          (local remaining)))
+                      (in
+                        (if
+                          (call ci::eq (field (local tail) (name code)) (i64 0))
+                          (if
+                            (call ci::lt (field (local tail) (name count)) (i64 0))
+                            (call cleanup-result
+                              (i64 19) (field (local block) (name count)) (field (local block) (name rows)))
+                            (if
+                              (call ci::either
+                                (call ci::lt (local remaining) (call ci::length (field (local tail) (name rows))))
+                                (call ci::lt (local available) (field (local tail) (name count))))
+                              (call cleanup-result
+                                (i64 13) (field (local block) (name count)) (field (local block) (name rows)))
+                              (call cleanup-result
+                                (i64 0)
+                                (call ci::add (field (local block) (name count)) (field (local tail) (name count)))
+                                (call ci::concat (field (local block) (name rows)) (field (local tail) (name rows))))))
+                          (call cleanup-result
+                            (field (local tail) (name code))
+                            (field (local block) (name count))
+                            (field (local block) (name rows))))))
+                    (local block))))
+              (call cleanup-result
+                (field (local block) (name code))
+                (i64 0)
+                (call ci::text-bytes (text ""))))))))
     (function create walk
       (visibility private)
       (effect pure)
@@ -95,10 +327,15 @@ declarations.begin
       (parameter create plan (type Bytes))
       (parameter create functions (type Bytes))
       (parameter create locals (type Bytes))
+      (parameter create fields (type Bytes))
+      (parameter create evidence (type Bytes))
+      (parameter create entries (type Bytes))
+      (parameter create directory (type Bytes))
       (parameter create function (type I64))
       (parameter create start (type I64))
       (parameter create row (type I64))
       (parameter create enter (type Bool))
+      (parameter create cleaned (type Bool))
       (parameter create pc (type I64))
       (parameter create limit (type I64))
       (parameter create out (type ByteBuffer) (use consume))
@@ -114,23 +351,161 @@ declarations.begin
               (if
                 (call ci::eq (local row) (call source-table::count (local graph)))
                 (if
-                  (call ci::lt
-                    (call ci::sub (local limit) (call ci::size (local out)))
-                    (call ci::mul (local count) (i64 16)))
+                  (call ci::either
+                    (call ci::lt (local count) (i64 0))
+                    (call ci::lt (call ci::div (i64 9223372036854775807) (i64 16)) (local count)))
                   (call failure (local out))
+                  (if
+                    (call ci::lt
+                      (call ci::sub (local limit) (call ci::size (local out)))
+                      (call ci::mul (local count) (i64 16)))
+                    (call failure (local out))
+                    (let
+                      (binding next
+                        (type ByteBuffer)
+                        (call types
+                          (local graph)
+                          (local facts)
+                          (local locals)
+                          (local start)
+                          (local count)
+                          (i64 0)
+                          (local out)))
+                      (in
+                        (if
+                          (call ci::eq (call source-table::kind (local graph) (local owner)) (i64 5))
+                          (call walk
+                            (local graph)
+                            (local facts)
+                            (local parents)
+                            (local plan)
+                            (local functions)
+                            (local locals)
+                            (local fields)
+                            (local evidence)
+                            (local entries)
+                            (local directory)
+                            (call ci::add (local function) (i64 1))
+                            (call ci::add (local start) (local count))
+                            (call source-table::count (local graph))
+                            (bool true)
+                            (bool false)
+                            (i64 0)
+                            (local limit)
+                            (local next))
+                          (let
+                            (binding source (call source-table::data (local graph) (local owner)))
+                            (binding parts
+                              (call source-scalar-profile::function-parts (local graph) (local owner)))
+                            (binding body
+                              (call source-table::owner
+                                (local graph)
+                                (local source)
+                                (field (local parts) (name body))
+                                (i64 9)))
+                            (in
+                              (call walk
+                                (local graph)
+                                (local facts)
+                                (local parents)
+                                (local plan)
+                                (local functions)
+                                (local locals)
+                                (local fields)
+                                (local evidence)
+                                (local entries)
+                                (local directory)
+                                (local function)
+                                (local start)
+                                (local body)
+                                (bool true)
+                                (bool false)
+                                (i64 0)
+                                (local limit)
+                                (local next)))))))))
+                (if
+                  (if (local enter) (bool false) (if (local cleaned) (bool false) (bool true)))
                   (let
-                    (binding next
-                      (type ByteBuffer)
-                      (call types
-                        (local facts)
-                        (local locals)
-                        (local start)
-                        (local count)
-                        (i64 0)
-                        (local out)))
+                    (binding planned (call source-scalar-plan::node-count (local plan) (local owner)))
+                    (binding remaining (call ci::sub (local limit) (call ci::size (local out))))
                     (in
                       (if
-                        (call ci::eq (call source-table::kind (local graph) (local owner)) (i64 5))
+                        (call ci::either
+                          (call ci::lt (local remaining) (i64 0))
+                          (call ci::lt (local planned) (local pc)))
+                        (call failure (local out))
+                        (let
+                          (binding block
+                            (call cleanup
+                              (local graph)
+                              (local facts)
+                              (local parents)
+                              (local plan)
+                              (local functions)
+                              (local locals)
+                              (local evidence)
+                              (local entries)
+                              (local directory)
+                              (local function)
+                              (local start)
+                              (local row)
+                              (local remaining)
+                              (call ci::sub (local planned) (local pc))))
+                          (in
+                            (if
+                              (call ci::lt (field (local block) (name count)) (i64 0))
+                              (call rejected (i64 19) (local out))
+                              (if
+                                (call ci::either
+                                  (call ci::lt
+                                    (local remaining)
+                                    (call ci::length (field (local block) (name rows))))
+                                  (call ci::lt
+                                    (call ci::sub (local planned) (local pc))
+                                    (field (local block) (name count))))
+                                (call failure (local out))
+                                (let
+                                  (binding next
+                                    (type ByteBuffer)
+                                    (call ci::append (field (local block) (name rows)) (i64 0) (local out)))
+                                  (binding next-pc (call ci::add (local pc) (field (local block) (name count))))
+                                  (in
+                                    (if
+                                      (call ci::eq (field (local block) (name code)) (i64 0))
+                                      (call walk
+                                        (local graph)
+                                        (local facts)
+                                        (local parents)
+                                        (local plan)
+                                        (local functions)
+                                        (local locals)
+                                        (local fields)
+                                        (local evidence)
+                                        (local entries)
+                                        (local directory)
+                                        (local function)
+                                        (local start)
+                                        (local row)
+                                        (bool false)
+                                        (bool true)
+                                        (local next-pc)
+                                        (local limit)
+                                        (local next))
+                                      (call rejected (field (local block) (name code)) (local next))))))))))))
+                  (let
+                    (binding event
+                      (call source-scalar-cursor::next
+                        (local graph)
+                        (local parents)
+                        (local facts)
+                        (local plan)
+                        (local fields)
+                        (local row)
+                        (local enter)
+                        (local pc)))
+                    (in
+                      (if
+                        (call ci::eq (field (local event) (name tag)) (i64 0))
                         (call walk
                           (local graph)
                           (local facts)
@@ -138,151 +513,159 @@ declarations.begin
                           (local plan)
                           (local functions)
                           (local locals)
-                          (call ci::add (local function) (i64 1))
-                          (call ci::add (local start) (local count))
-                          (call source-table::count (local graph))
-                          (bool true)
-                          (i64 0)
-                          (local limit)
-                          (local next))
-                        (let
-                          (binding source (call source-table::data (local graph) (local owner)))
-                          (binding parts
-                            (call source-scalar-profile::function-parts (local graph) (local owner)))
-                          (binding body
-                            (call source-table::owner
-                              (local graph)
-                              (local source)
-                              (field (local parts) (name body))
-                              (i64 9)))
-                          (in
-                            (call walk
-                              (local graph)
-                              (local facts)
-                              (local parents)
-                              (local plan)
-                              (local functions)
-                              (local locals)
-                              (local function)
-                              (local start)
-                              (local body)
-                              (bool true)
-                              (i64 0)
-                              (local limit)
-                              (local next))))))))
-                (let
-                  (binding event
-                    (call source-scalar-cursor::next
-                      (local graph)
-                      (local parents)
-                      (local facts)
-                      (local plan)
-                      (local row)
-                      (local enter)
-                      (local pc)))
-                  (in
-                    (if
-                      (call ci::eq (field (local event) (name tag)) (i64 0))
-                      (call walk
-                        (local graph)
-                        (local facts)
-                        (local parents)
-                        (local plan)
-                        (local functions)
-                        (local locals)
-                        (local function)
-                        (local start)
-                        (field (local event) (name row))
-                        (field (local event) (name enter))
-                        (local pc)
-                        (local limit)
-                        (local out))
-                      (if
-                        (call ci::lt
+                          (local fields)
+                          (local evidence)
+                          (local entries)
+                          (local directory)
+                          (local function)
+                          (local start)
+                          (field (local event) (name row))
+                          (field (local event) (name enter))
+                          (bool false)
                           (local pc)
-                          (call source-scalar-plan::node-count (local plan) (local owner)))
-                        (let
-                          (binding operands
-                            (call source-scalar-state::operands
-                              (local graph)
-                              (local parents)
-                              (local facts)
-                              (field (local event) (name anchor))
-                              (local owner)
-                              (field (local event) (name tag))
-                              (field (local event) (name extra))))
-                          (in
-                            (if
-                              (call ci::eq (field (local operands) (name code)) (i64 0))
-                              (let
-                                (binding increment
-                                  (call ci::add
-                                    (i64 64)
-                                    (call ci::add
-                                      (local count)
-                                      (call ci::length (field (local operands) (name bytes))))))
-                                (in
-                                  (if
-                                    (call ci::lt
-                                      (call ci::sub (local limit) (call ci::size (local out)))
-                                      (local increment))
-                                    (call failure (local out))
+                          (local limit)
+                          (local out))
+                        (if
+                          (call ci::lt
+                            (local pc)
+                            (call source-scalar-plan::node-count (local plan) (local owner)))
+                          (let
+                            (binding lowered
+                              (call source-custody-lower::instruction
+                                (local facts)
+                                (local evidence)
+                                (local entries)
+                                (local directory)
+                                (field (local event) (name tag))
+                                (field (local event) (name b))
+                                (field (local event) (name anchor))
+                                (local row)))
+                            (in
+                              (if
+                                (call ci::eq (field (local lowered) (name code)) (i64 0))
+                                (let
+                                  (binding event
+                                    (record structural
+                                      (field row (field (local event) (name row)))
+                                      (field enter (field (local event) (name enter)))
+                                      (field tag (field (local lowered) (name tag)))
+                                      (field a (field (local event) (name a)))
+                                      (field b (field (local lowered) (name b)))
+                                      (field value (field (local event) (name value)))
+                                      (field anchor (field (local event) (name anchor)))
+                                      (field extra (field (local event) (name extra)))))
+                                  (in
                                     (let
-                                      (binding next
-                                        (type ByteBuffer)
-                                        (call node
-                                          (local event)
-                                          (field (local operands) (name bytes))
+                                      (binding operands
+                                        (call source-scalar-state::operands
+                                          (local graph)
                                           (local parents)
-                                          (local locals)
-                                          (local start)
-                                          (local count)
-                                          (call source-scalar-plan::parameter-count
-                                            (local functions)
-                                            (local function))
+                                          (local facts)
+                                          (local evidence)
+                                          (local entries)
+                                          (local directory)
+                                          (field (local event) (name anchor))
                                           (local owner)
-                                          (local out)))
-                                      (binding next-pc (call ci::add (local pc) (i64 1)))
+                                          (field (local event) (name tag))
+                                          (field (local event) (name extra))))
                                       (in
                                         (if
-                                          (call ci::eq (field (local event) (name tag)) (i64 11))
-                                          (if
-                                            (call ci::eq
-                                              (local next-pc)
-                                              (call source-scalar-plan::node-count
-                                                (local plan)
-                                                (local owner)))
-                                            (call walk
-                                              (local graph)
-                                              (local facts)
-                                              (local parents)
-                                              (local plan)
-                                              (local functions)
-                                              (local locals)
-                                              (call ci::add (local function) (i64 1))
-                                              (call ci::add (local start) (local count))
-                                              (call source-table::count (local graph))
-                                              (bool true)
-                                              (i64 0)
-                                              (local limit)
-                                              (local next))
-                                            (call failure (local next)))
-                                          (call walk
-                                            (local graph)
-                                            (local facts)
-                                            (local parents)
-                                            (local plan)
-                                            (local functions)
-                                            (local locals)
-                                            (local function)
-                                            (local start)
-                                            (field (local event) (name row))
-                                            (field (local event) (name enter))
-                                            (local next-pc)
-                                            (local limit)
-                                            (local next))))))))
-                              (call failure (local out)))))
-                        (call failure (local out))))))))))))
+                                          (call ci::eq (field (local operands) (name code)) (i64 0))
+                                          (let
+                                            (binding increment
+                                              (call node-size
+                                                (local count)
+                                                (call ci::length (field (local operands) (name bytes)))
+                                                (call payload-size
+                                                  (field (local event) (name tag))
+                                                  (field (local event) (name b)))))
+                                            (in
+                                              (if
+                                                (call ci::either
+                                                  (call ci::lt (local increment) (i64 0))
+                                                  (call ci::lt
+                                                    (call ci::sub
+                                                      (local limit)
+                                                      (call ci::size (local out)))
+                                                    (local increment)))
+                                                (call failure (local out))
+                                                (let
+                                                  (binding next
+                                                    (type ByteBuffer)
+                                                    (call node
+                                                      (local graph)
+                                                      (local facts)
+                                                      (local event)
+                                                      (field (local operands) (name bytes))
+                                                      (local parents)
+                                                      (local locals)
+                                                      (local start)
+                                                      (local count)
+                                                      (call source-scalar-plan::parameter-count
+                                                        (local functions)
+                                                        (local function))
+                                                      (local owner)
+                                                      (local evidence)
+                                                      (field (local lowered) (name state))
+                                                      (field (local lowered) (name forced))
+                                                      (field (local lowered) (name live))
+                                                      (local out)))
+                                                  (binding next-pc (call ci::add (local pc) (i64 1)))
+                                                  (in
+                                                    (if
+                                                      (call ci::eq
+                                                        (field (local event) (name tag))
+                                                        (i64 11))
+                                                      (if
+                                                        (call ci::eq
+                                                          (local next-pc)
+                                                          (call source-scalar-plan::node-count
+                                                            (local plan)
+                                                            (local owner)))
+                                                        (call walk
+                                                          (local graph)
+                                                          (local facts)
+                                                          (local parents)
+                                                          (local plan)
+                                                          (local functions)
+                                                          (local locals)
+                                                          (local fields)
+                                                          (local evidence)
+                                                          (local entries)
+                                                          (local directory)
+                                                          (call ci::add (local function) (i64 1))
+                                                          (call ci::add (local start) (local count))
+                                                          (call source-table::count (local graph))
+                                                          (bool true)
+                                                          (bool false)
+                                                          (i64 0)
+                                                          (local limit)
+                                                          (local next))
+                                                        (call failure (local next)))
+                                                      (call walk
+                                                        (local graph)
+                                                        (local facts)
+                                                        (local parents)
+                                                        (local plan)
+                                                        (local functions)
+                                                        (local locals)
+                                                        (local fields)
+                                                        (local evidence)
+                                                        (local entries)
+                                                        (local directory)
+                                                        (local function)
+                                                        (local start)
+                                                        (field (local event) (name row))
+                                                        (field (local event) (name enter))
+                                                        (bool false)
+                                                        (local next-pc)
+                                                        (local limit)
+                                                        (local next))))))))
+                                          (call rejected
+                                            (field (local operands) (name code))
+                                            (local out)))))))
+                                (call rejected (field (local lowered) (name code)) (local out)))))
+                          (call failure (local out)))))))))))))
     (function create encode
       (visibility package)
       (effect pure)
@@ -292,6 +675,10 @@ declarations.begin
       (parameter create plan (type Bytes))
       (parameter create functions (type Bytes))
       (parameter create locals (type Bytes))
+      (parameter create fields (type Bytes))
+      (parameter create evidence (type Bytes))
+      (parameter create entries (type Bytes))
+      (parameter create directory (type Bytes))
       (returns (record (code I64) (rows Bytes)))
       (body
         (let
@@ -306,10 +693,15 @@ declarations.begin
               (local plan)
               (local functions)
               (local locals)
+              (local fields)
+              (local evidence)
+              (local entries)
+              (local directory)
               (i64 0)
               (i64 0)
               (local owner-count)
               (bool true)
+              (bool false)
               (i64 0)
               (local trace-limit)
               (local trace-buffer))))))))

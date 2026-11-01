@@ -8,7 +8,9 @@ use crate::platform::kernel::{
     SemanticRoot, TypeObject, TypeObjectDigest, decode_owner, decode_owner_binding,
     decode_type_object,
 };
-use crate::platform::package_transport::source::{CollectingStore, entries, required};
+use crate::platform::package_transport::source::{
+    CollectingStore, SourceObservation, entries, required,
+};
 use crate::platform::storage::object::{ImmutableObjectStore, ObjectDomain, StoreWork};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -97,7 +99,7 @@ pub(super) fn validate<S: ImmutableObjectStore + ?Sized>(
     store: &CollectingStore<'_, S>,
     root: &SemanticRoot,
     suppliers: &BTreeMap<PackageId, KernelSnapshot>,
-    prior_semantic_work: u64,
+    mut prior_semantic_work: SourceObservation,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
 ) -> Result<(u64, bool), Diagnostic> {
     checkpoint()?;
@@ -149,11 +151,13 @@ pub(super) fn validate<S: ImmutableObjectStore + ?Sized>(
         &mut composed_work,
         None,
     )?;
-    let (sum, overflowed) = prior_semantic_work.overflowing_add(store.visits());
-    let base = if overflowed { u64::MAX } else { sum };
-    let (sum, final_overflow) = base.overflowing_add(composed_work.consumed as u64);
-    Ok((
-        if final_overflow { u64::MAX } else { sum },
-        overflowed || final_overflow || composed_work.saturated,
-    ))
+    prior_semantic_work.observe(SourceObservation {
+        consumed: store.visits(),
+        saturated: store.visits_saturated(),
+    });
+    prior_semantic_work.observe(SourceObservation {
+        consumed: composed_work.consumed as u64,
+        saturated: composed_work.saturated,
+    });
+    Ok((prior_semantic_work.consumed, prior_semantic_work.saturated))
 }

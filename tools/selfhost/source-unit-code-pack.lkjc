@@ -1,0 +1,182 @@
+declarations.begin
+(units
+  (module create source-unit-code-pack
+    (function create next
+      (visibility package)
+      (effect pure)
+      (parameter create trace (type Bytes))
+      (parameter create cursor (type I64))
+      (returns I64)
+      (body
+        (call ci::add
+          (call ci::add (local cursor) (i64 48))
+          (call ci::mul (call ci::u64 (local trace) (call ci::add (local cursor) (i64 40))) (i64 8)))))
+    (function create label
+      (visibility package)
+      (effect pure)
+      (parameter create trace (type Bytes))
+      (parameter create owner (type I64))
+      (parameter create label (type I64))
+      (parameter create cursor (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local cursor) (call ci::length (local trace)))
+          (i64 -1)
+          (if
+            (if
+              (call ci::eq (call ci::u64 (local trace) (local cursor)) (i64 0))
+              (call ci::both
+                (call ci::eq (call ci::u64 (local trace) (call ci::add (local cursor) (i64 8))) (local owner))
+                (call ci::eq (call ci::u64 (local trace) (call ci::add (local cursor) (i64 16))) (local label)))
+              (bool false))
+            (call ci::u64 (local trace) (call ci::add (local cursor) (i64 24)))
+            (call label (local trace) (local owner) (local label) (call next (local trace) (local cursor)))))))
+    (function create extra-size
+      (visibility package)
+      (effect pure)
+      (parameter create trace (type Bytes))
+      (parameter create cursor (type I64))
+      (parameter create total (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local cursor) (call ci::length (local trace)))
+          (local total)
+          (call extra-size
+            (local trace)
+            (call next (local trace) (local cursor))
+            (call ci::add
+              (local total)
+              (call ci::mul (call ci::u64 (local trace) (call ci::add (local cursor) (i64 40))) (i64 8)))))))
+    (function create extras
+      (visibility package)
+      (effect pure)
+      (parameter create trace (type Bytes))
+      (parameter create cursor (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (if
+          (call ci::eq (local cursor) (call ci::length (local trace)))
+          (record structural (field code (i64 0)) (field bytes (call ci::freeze (local out))))
+          (let
+            (binding end (call next (local trace) (local cursor)))
+            (binding next
+              (type ByteBuffer)
+              (call wire::range (local trace) (call ci::add (local cursor) (i64 48)) (local end) (local out)))
+            (in (call extras (local trace) (local end) (local next)))))))
+    (function create rows
+      (visibility package)
+      (effect pure)
+      (parameter create trace (type Bytes))
+      (parameter create cursor (type I64))
+      (parameter create offset (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (if
+          (call ci::eq (local cursor) (call ci::length (local trace)))
+          (call extras (local trace) (i64 0) (local out))
+          (let
+            (binding tag (call ci::u64 (local trace) (local cursor)))
+            (in
+              (if
+                (call ci::eq (local tag) (i64 0))
+                (call rows (local trace) (call next (local trace) (local cursor)) (local offset) (local out))
+                (let
+                  (binding jump
+                    (call ci::either (call ci::eq (local tag) (i64 10)) (call ci::eq (local tag) (i64 11))))
+                  (binding extra
+                    (call ci::either (call ci::eq (local tag) (i64 12)) (call ci::eq (local tag) (i64 15))))
+                  (binding count (call ci::u64 (local trace) (call ci::add (local cursor) (i64 40))))
+                  (binding a
+                    (if
+                      (local jump)
+                      (call label
+                        (local trace)
+                        (call ci::u64 (local trace) (call ci::add (local cursor) (i64 8)))
+                        (call ci::u64 (local trace) (call ci::add (local cursor) (i64 16)))
+                        (i64 0))
+                      (call ci::u64 (local trace) (call ci::add (local cursor) (i64 8)))))
+                  (in
+                    (if
+                      (call ci::lt (local a) (i64 0))
+                      (record structural (field code (i64 3)) (field bytes (call ci::freeze (local out))))
+                      (let
+                        (binding row
+                          (let
+                            (binding b0 (type ByteBuffer) (call ci::empty))
+                            (binding b1 (type ByteBuffer) (call ci::le (local tag) (i64 8) (local b0)))
+                            (binding b2 (type ByteBuffer) (call ci::le (local a) (i64 8) (local b1)))
+                            (binding b3
+                              (type ByteBuffer)
+                              (call ci::le
+                                (if
+                                  (local jump)
+                                  (i64 0)
+                                  (call ci::u64 (local trace) (call ci::add (local cursor) (i64 16))))
+                                (i64 8)
+                                (local b2)))
+                            (binding b4
+                              (type ByteBuffer)
+                              (call wire::range
+                                (local trace)
+                                (call ci::add (local cursor) (i64 24))
+                                (call ci::add (local cursor) (i64 32))
+                                (local b3)))
+                            (binding b5
+                              (type ByteBuffer)
+                              (call ci::le (if (local extra) (local offset) (i64 0)) (i64 8) (local b4)))
+                            (binding b6 (type ByteBuffer) (call ci::le (local count) (i64 8) (local b5)))
+                            (in (call ci::freeze (local b6)))))
+                        (binding next
+                          (type ByteBuffer)
+                          (call wire::range (local row) (i64 0) (i64 48) (local out)))
+                        (in
+                          (call rows
+                            (local trace)
+                            (call next (local trace) (local cursor))
+                            (call ci::add (local offset) (call ci::mul (local count) (i64 8)))
+                            (local next)))))))))))))
+    (function create project
+      (visibility package)
+      (effect pure)
+      (parameter create code (type (record (code I64) (pool Bytes) (locals I64) (count I64) (trace Bytes))))
+      (parameter create parameters (type I64))
+      (parameter create base (type I64))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (let
+          (binding rows-at (call source-unit-tables::add (local base) (i64 32)))
+          (binding extras-at
+            (call source-unit-tables::add
+              (local rows-at)
+              (call source-unit-tables::mul (field (local code) (name count)) (i64 48))))
+          (binding end
+            (call source-unit-tables::add
+              (local extras-at)
+              (call extra-size (field (local code) (name trace)) (i64 0) (i64 0))))
+          (in
+            (if
+              (call ci::lt (local end) (i64 0))
+              (record structural (field code (i64 3)) (field bytes (call ci::text-bytes (text ""))))
+              (let
+                (binding header
+                  (let
+                    (binding b0 (type ByteBuffer) (call ci::empty))
+                    (binding b1 (type ByteBuffer) (call ci::le (local parameters) (i64 8) (local b0)))
+                    (binding b2
+                      (type ByteBuffer)
+                      (call ci::le (field (local code) (name locals)) (i64 8) (local b1)))
+                    (binding b3 (type ByteBuffer) (call ci::le (local rows-at) (i64 8) (local b2)))
+                    (binding b4
+                      (type ByteBuffer)
+                      (call ci::le (field (local code) (name count)) (i64 8) (local b3)))
+                    (in (call ci::freeze (local b4)))))
+                (binding out (type ByteBuffer) (call ci::empty))
+                (binding prefix
+                  (type ByteBuffer)
+                  (call wire::range (local header) (i64 0) (i64 32) (local out)))
+                (in (call rows (field (local code) (name trace)) (i64 0) (local extras-at) (local prefix)))))))))))
+declarations.end

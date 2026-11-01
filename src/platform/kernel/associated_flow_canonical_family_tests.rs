@@ -1027,13 +1027,13 @@ fn assert_limits_cancel_retry(family: &Family) {
 fn bounded_reference(
     family: &Family,
     checkpoint: &dyn Fn() -> Result<(), Diagnostic>,
-    work: &mut usize,
-    maximum_work: usize,
-    maximum_bytes: usize,
-) -> Result<(model::Proof, usize), model::Refusal> {
+    work: &mut u64,
+    maximum_work: u64,
+    maximum_bytes: u64,
+) -> Result<(model::Proof, u64), model::Refusal> {
     // Translation and classification share one allowance. A fresh proof cannot
     // conceal its raw-reader allocation behind a second independent budget.
-    let budget = model::Budget::new(checkpoint, work, maximum_work, maximum_bytes);
+    let budget = model::Budget::new(checkpoint, Some(maximum_work), Some(maximum_bytes));
     let program = CanonicalProgram::read_with_budget(
         &[&family.common.source],
         std::slice::from_ref(&family.entry),
@@ -1041,7 +1041,11 @@ fn bounded_reference(
     )?;
     let proof =
         model::reference_classify_with_budget(&program.program, model::Limits::default(), &budget)?;
-    Ok((proof, budget.bytes()))
+    let steps = budget.consumed();
+    let bytes = budget.bytes();
+    assert!(!steps.saturated && !bytes.saturated);
+    *work = steps.consumed;
+    Ok((proof, bytes.consumed))
 }
 
 fn assert_reference_limits_cancel_retry(family: &Family) {
@@ -1056,7 +1060,7 @@ fn assert_reference_limits_cancel_retry(family: &Family) {
         family,
         &checkpoint,
         &mut work,
-        contract::MAXIMUM_VALIDATION_WORK,
+        contract::MAXIMUM_VALIDATION_WORK as u64,
         64 * 1_048_576,
     )
     .unwrap();

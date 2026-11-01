@@ -43,6 +43,9 @@ impl Emitter<'_> {
                 }
             }
             "core.buffer.push" => self.buffer_push(),
+            "core.buffer.append-slice" => self.buffer_append_slice(),
+            "core.buffer.append-i64-le" => self.buffer_append_i64_le(),
+            "core.bytes.read-i64-le" => self.bytes_read_i64_le(),
             "core.buffer.length" => {
                 self.a.load(Ax, Ax, 8);
                 self.a.call(self.runtime.integer);

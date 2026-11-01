@@ -6,25 +6,7 @@ declarations.begin
       (effect pure)
       (parameter create data (type Bytes))
       (returns I64)
-      (body
-        (let
-          (binding length (call ci::length (local data)))
-          (in
-            (if
-              (call ci::lt (local length) (i64 128))
-              (i64 12)
-              (if
-                (call ci::same
-                  (call ci::slice (local data) (i64 0) (i64 8))
-                  (call ci::text-bytes (text "LKJSG002")))
-                (if
-                  (call ci::eq (call ci::u32 (local data) (i64 8)) (local length))
-                  (if
-                    (call artifact-check::zeros (local data) (i64 112) (i64 128))
-                    (call header (local data))
-                    (i64 12))
-                  (i64 12))
-                (i64 12)))))))
+      (body (if (call source-provenance::framed (local data)) (call header (local data)) (i64 12))))
     (function create header
       (visibility private)
       (effect pure)
@@ -57,45 +39,41 @@ declarations.begin
           (binding owners (call ci::u32 (local data) (i64 12)))
           (binding types (call ci::u32 (local data) (i64 16)))
           (binding retired (call ci::u32 (local data) (i64 20)))
-          (binding owner-at (call ci::add (i64 128) (call ci::u32 (local data) (i64 24))))
-          (binding type-at (call ci::add (local owner-at) (call ci::mul (local owners) (i64 50))))
-          (binding retirement-at (call ci::add (local type-at) (call ci::mul (local types) (i64 32))))
-          (binding span-at (call ci::add (local retirement-at) (call ci::mul (local retired) (i64 49))))
+          (binding name-end (call ci::add (i64 128) (call ci::u32 (local data) (i64 24))))
+          (binding owner-at (call source-provenance::position (local data)))
+          (binding type-at
+            (call source-provenance::extent (local data) (local owner-at) (local owners) (i64 50)))
+          (binding retirement-at
+            (call source-provenance::extent (local data) (local type-at) (local types) (i64 32)))
+          (binding span-at
+            (call source-provenance::extent (local data) (local retirement-at) (local retired) (i64 49)))
           (binding object-at
-            (call ci::add
+            (call source-provenance::extent
+              (local data)
               (local span-at)
-              (call ci::mul
-                (call ci::add (local owners) (call ci::add (local types) (local retired)))
-                (i64 8))))
+              (call ci::add (local owners) (call ci::add (local types) (local retired)))
+              (i64 8)))
           (in
             (if
-              (call ci::lt (call ci::length (local data)) (local object-at))
+              (call ci::lt (local object-at) (i64 0))
               (i64 12)
               (if
-                (call ci::eq (call ci::u32 (local data) (i64 80)) (local owner-at))
+                (call ci::both
+                  (call ci::eq (call ci::u32 (local data) (i64 80)) (local owner-at))
+                  (call ci::both
+                    (call ci::eq (call ci::u32 (local data) (i64 84)) (local type-at))
+                    (call ci::both
+                      (call ci::eq (call ci::u32 (local data) (i64 88)) (local retirement-at))
+                      (call ci::both
+                        (call ci::eq (call ci::u32 (local data) (i64 92)) (local span-at))
+                        (call ci::eq (call ci::u32 (local data) (i64 96)) (local object-at))))))
                 (if
-                  (call ci::eq (call ci::u32 (local data) (i64 84)) (local type-at))
+                  (call artifact-check::zeros (local data) (i64 32) (i64 48))
+                  (i64 12)
                   (if
-                    (call ci::eq (call ci::u32 (local data) (i64 88)) (local retirement-at))
-                    (if
-                      (call ci::eq (call ci::u32 (local data) (i64 92)) (local span-at))
-                      (if
-                        (call ci::eq (call ci::u32 (local data) (i64 96)) (local object-at))
-                        (if
-                          (call artifact-check::zeros (local data) (i64 32) (i64 48))
-                          (i64 12)
-                          (if
-                            (call source-read::name-scan
-                              (local data)
-                              (i64 128)
-                              (local owner-at)
-                              (bool true))
-                            (call indices (local data))
-                            (i64 12)))
-                        (i64 12))
-                      (i64 12))
-                    (i64 12))
-                  (i64 12))
+                    (call source-read::name-scan (local data) (i64 128) (local name-end) (bool true))
+                    (call indices (local data))
+                    (i64 12)))
                 (i64 12)))))))
     (function create indices
       (visibility private)
@@ -172,12 +150,9 @@ declarations.begin
               (if (call ci::eq (local expected) (call ci::length (local data))) (i64 0) (i64 12))
               (let
                 (binding span-at
-                  (call ci::add
-                    (call ci::u32 (local data) (i64 92))
-                    (call ci::mul (local index) (i64 8))))
+                  (call ci::add (call ci::u32 (local data) (i64 92)) (call ci::mul (local index) (i64 8))))
                 (binding object-at (call ci::u32 (local data) (local span-at)))
-                (binding object-length
-                  (call ci::u32 (local data) (call ci::add (local span-at) (i64 4))))
+                (binding object-length (call ci::u32 (local data) (call ci::add (local span-at) (i64 4))))
                 (in
                   (if
                     (call ci::eq (local object-at) (local expected))
@@ -217,9 +192,7 @@ declarations.begin
               (call ci::lt (local index) (local owners))
               (let
                 (binding at
-                  (call ci::add
-                    (call ci::u32 (local data) (i64 80))
-                    (call ci::mul (local index) (i64 50))))
+                  (call ci::add (call ci::u32 (local data) (i64 80)) (call ci::mul (local index) (i64 50))))
                 (in
                   (call source-object::owner
                     (local image)
@@ -283,12 +256,15 @@ declarations.begin
           (binding result
             (call source-state::root
               (call ci::slice (local data) (i64 32) (i64 48))
-              (call ci::slice (local data) (i64 128) (call ci::u32 (local data) (i64 80)))
+              (call ci::slice
+                (local data)
+                (i64 128)
+                (call ci::add (i64 128) (call ci::u32 (local data) (i64 24))))
               (call ci::slice
                 (local data)
                 (call ci::u32 (local data) (i64 80))
                 (call ci::u32 (local data) (i64 84)))
-              (call ci::slice (local data) (i64 0) (i64 0))
+              (call ci::text-bytes (text ""))
               (call ci::slice
                 (local data)
                 (call ci::u32 (local data) (i64 88))
@@ -300,7 +276,7 @@ declarations.begin
                 (call ci::same
                   (field (local result) (name image))
                   (call ci::slice (local data) (i64 48) (i64 80)))
-                (i64 0)
+                (field (call source-provenance::read (local data)) (name code))
                 (i64 12))
               (field (local result) (name diagnostic)))))))))
 declarations.end

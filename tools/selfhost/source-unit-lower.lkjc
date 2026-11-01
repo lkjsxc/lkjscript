@@ -1,0 +1,315 @@
+declarations.begin
+(units
+  (module create source-unit-lower
+    (function create assemble
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create owner (type I64))
+      (parameter create tables (type Bytes))
+      (parameter create signature (type Bytes))
+      (parameter create payload (type Bytes))
+      (parameter create tag (type I64))
+      (returns (record (code I64) (descriptor Bytes)))
+      (body
+        (let
+          (binding kind (call source-table::kind (local graph) (local owner)))
+          (binding signature-at (call source-unit-tables::add (i64 272) (call ci::length (local tables))))
+          (binding payload-at
+            (call source-unit-tables::add (local signature-at) (call ci::length (local signature))))
+          (binding end (call source-unit-tables::add (local payload-at) (call ci::length (local payload))))
+          (in
+            (if
+              (call ci::lt (local end) (i64 0))
+              (record structural (field code (i64 3)) (field descriptor (call ci::text-bytes (text ""))))
+              (record structural
+                (field code (i64 0))
+                (field descriptor
+                  (let
+                    (binding b0 (type ByteBuffer) (call ci::empty))
+                    (binding b1
+                      (type ByteBuffer)
+                      (call ci::le (if (call ci::eq (local kind) (i64 20)) (i64 11) (i64 1)) (i64 4) (local b0)))
+                    (binding b2
+                      (type ByteBuffer)
+                      (call ci::le (call ci::sub (local kind) (i64 1)) (i64 4) (local b1)))
+                    (binding b3 (type ByteBuffer) (call ci::le (local kind) (i64 4) (local b2)))
+                    (binding b4 (type ByteBuffer) (call ci::le (i64 0) (i64 4) (local b3)))
+                    (binding b5 (type ByteBuffer) (call wire::range (local graph) (i64 32) (i64 48) (local b4)))
+                    (binding b6
+                      (type ByteBuffer)
+                      (call wire::range
+                        (call source-unit-tables::owner-id (local graph) (local owner))
+                        (i64 0)
+                        (call ci::length (call source-unit-tables::owner-id (local graph) (local owner)))
+                        (local b5)))
+                    (binding b7
+                      (type ByteBuffer)
+                      (call wire::range
+                        (call source-unit-tables::zeros (i64 192))
+                        (i64 0)
+                        (call ci::length (call source-unit-tables::zeros (i64 192)))
+                        (local b6)))
+                    (binding b8 (type ByteBuffer) (call ci::le (i64 272) (i64 8) (local b7)))
+                    (binding b9
+                      (type ByteBuffer)
+                      (call ci::le
+                        (if
+                          (call ci::eq (call ci::length (local signature)) (i64 0))
+                          (i64 0)
+                          (local signature-at))
+                        (i64 8)
+                        (local b8)))
+                    (binding b10 (type ByteBuffer) (call ci::le (local tag) (i64 4) (local b9)))
+                    (binding b11 (type ByteBuffer) (call ci::le (i64 0) (i64 4) (local b10)))
+                    (binding b12 (type ByteBuffer) (call ci::le (local payload-at) (i64 8) (local b11)))
+                    (binding b13
+                      (type ByteBuffer)
+                      (call wire::range (local tables) (i64 0) (call ci::length (local tables)) (local b12)))
+                    (binding b14
+                      (type ByteBuffer)
+                      (call wire::range
+                        (local signature)
+                        (i64 0)
+                        (call ci::length (local signature))
+                        (local b13)))
+                    (binding b15
+                      (type ByteBuffer)
+                      (call wire::range (local payload) (i64 0) (call ci::length (local payload)) (local b14)))
+                    (in (call ci::freeze (local b15)))))))))))
+    (function create external-payload
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create owner (type I64))
+      (parameter create base (type I64))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (let
+          (binding record (call source-table::data (local graph) (local owner)))
+          (binding name
+            (call source-table::array
+              (local record)
+              (call ci::add (call source-custody-signature::result-at (local graph) (local owner)) (i64 33))))
+          (binding start (call source-unit-tables::add (local base) (i64 16)))
+          (binding end (call source-unit-tables::add (local start) (field (local name) (name value))))
+          (in
+            (if
+              (call ci::lt (local end) (i64 0))
+              (record structural (field code (i64 3)) (field bytes (call ci::text-bytes (text ""))))
+              (record structural
+                (field code (i64 0))
+                (field bytes
+                  (let
+                    (binding b0 (type ByteBuffer) (call ci::empty))
+                    (binding b1 (type ByteBuffer) (call ci::le (local start) (i64 8) (local b0)))
+                    (binding b2
+                      (type ByteBuffer)
+                      (call ci::le (field (local name) (name value)) (i64 8) (local b1)))
+                    (binding b3
+                      (type ByteBuffer)
+                      (call wire::range
+                        (local record)
+                        (field (local name) (name next))
+                        (call ci::add (field (local name) (name next)) (field (local name) (name value)))
+                        (local b2)))
+                    (in (call ci::freeze (local b3)))))))))))
+    (function create callable-payload
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create owner (type I64))
+      (parameter create signature
+        (type
+          (record
+            (code I64)
+            (pool Bytes)
+            (binders Bytes)
+            (parameters Bytes)
+            (slots Bytes)
+            (count I64)
+            (result I64))))
+      (parameter create code (type (record (code I64) (pool Bytes) (locals I64) (count I64) (trace Bytes))))
+      (parameter create tables (type Bytes))
+      (returns (record (code I64) (descriptor Bytes)))
+      (body
+        (let
+          (binding encoded
+            (call source-unit-tables-signature::project
+              (local signature)
+              (call source-unit-tables::add (i64 272) (call ci::length (local tables)))))
+          (in
+            (if
+              (call ci::eq (field (local encoded) (name code)) (i64 0))
+              (let
+                (binding base
+                  (call source-unit-tables::add
+                    (call source-unit-tables::add (i64 272) (call ci::length (local tables)))
+                    (call ci::length (field (local encoded) (name bytes)))))
+                (binding external (call ci::eq (call source-table::kind (local graph) (local owner)) (i64 5)))
+                (binding payload
+                  (if
+                    (local external)
+                    (call external-payload (local graph) (local owner) (local base))
+                    (call source-unit-code-pack::project
+                      (local code)
+                      (field (local signature) (name count))
+                      (local base))))
+                (in
+                  (if
+                    (call ci::eq (field (local payload) (name code)) (i64 0))
+                    (call assemble
+                      (local graph)
+                      (local owner)
+                      (local tables)
+                      (field (local encoded) (name bytes))
+                      (field (local payload) (name bytes))
+                      (if (local external) (i64 6) (i64 7)))
+                    (record structural (field code (i64 3)) (field descriptor (call ci::text-bytes (text "")))))))
+              (record structural (field code (i64 3)) (field descriptor (call ci::text-bytes (text "")))))))))
+    (function create callable
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create owner (type I64))
+      (returns (record (code I64) (descriptor Bytes)))
+      (body
+        (let
+          (binding signature (call source-unit-tables-signature::prepare (local graph) (local owner)))
+          (in
+            (if
+              (call ci::eq (field (local signature) (name code)) (i64 0))
+              (let
+                (binding code
+                  (if
+                    (call ci::eq (call source-table::kind (local graph) (local owner)) (i64 5))
+                    (record structural
+                      (field code (i64 0))
+                      (field pool (field (local signature) (name pool)))
+                      (field locals (i64 0))
+                      (field count (i64 0))
+                      (field trace (call ci::text-bytes (text ""))))
+                    (call source-unit-code::prepare
+                      (local graph)
+                      (local parents)
+                      (local mapping)
+                      (local owner)
+                      (local signature))))
+                (in
+                  (if
+                    (call ci::eq (field (local code) (name code)) (i64 0))
+                    (let
+                      (binding tables (call source-unit-tables::project (field (local code) (name pool))))
+                      (in
+                        (if
+                          (call ci::eq (field (local tables) (name code)) (i64 0))
+                          (call callable-payload
+                            (local graph)
+                            (local parents)
+                            (local mapping)
+                            (local owner)
+                            (local signature)
+                            (local code)
+                            (field (local tables) (name bytes)))
+                          (record structural
+                            (field code (i64 3))
+                            (field descriptor (call ci::text-bytes (text "")))))))
+                    (record structural
+                      (field code (field (local code) (name code)))
+                      (field descriptor (call ci::text-bytes (text "")))))))
+              (record structural (field code (i64 3)) (field descriptor (call ci::text-bytes (text "")))))))))
+    (function create container
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create owner (type I64))
+      (returns (record (code I64) (descriptor Bytes)))
+      (body
+        (let
+          (binding component (call ci::eq (call source-table::kind (local graph) (local owner)) (i64 9)))
+          (binding parts
+            (if
+              (local component)
+              (call source-unit-lower-ports::component (local graph) (local owner))
+              (call source-unit-lower-ports::target (local graph) (local owner))))
+          (in
+            (if
+              (call ci::eq (field (local parts) (name code)) (i64 0))
+              (let
+                (binding tables (call source-unit-tables::project (field (local parts) (name pool))))
+                (in
+                  (if
+                    (call ci::eq (field (local tables) (name code)) (i64 0))
+                    (let
+                      (binding base
+                        (call source-unit-tables::add
+                          (i64 272)
+                          (call ci::length (field (local tables) (name bytes)))))
+                      (binding rows
+                        (call source-unit-tables::add (local base) (if (local component) (i64 16) (i64 0))))
+                      (binding end
+                        (call source-unit-tables::add
+                          (local rows)
+                          (call ci::length (field (local parts) (name rows)))))
+                      (in
+                        (if
+                          (call ci::lt (local end) (i64 0))
+                          (record structural
+                            (field code (i64 3))
+                            (field descriptor (call ci::text-bytes (text ""))))
+                          (let
+                            (binding payload
+                              (if
+                                (local component)
+                                (let
+                                  (binding b0 (type ByteBuffer) (call ci::empty))
+                                  (binding b1 (type ByteBuffer) (call ci::le (local rows) (i64 8) (local b0)))
+                                  (binding b2
+                                    (type ByteBuffer)
+                                    (call ci::le (field (local parts) (name count)) (i64 8) (local b1)))
+                                  (binding b3
+                                    (type ByteBuffer)
+                                    (call wire::range
+                                      (field (local parts) (name rows))
+                                      (i64 0)
+                                      (call ci::length (field (local parts) (name rows)))
+                                      (local b2)))
+                                  (in (call ci::freeze (local b3))))
+                                (field (local parts) (name rows))))
+                            (in
+                              (call assemble
+                                (local graph)
+                                (local owner)
+                                (field (local tables) (name bytes))
+                                (call ci::text-bytes (text ""))
+                                (local payload)
+                                (if (local component) (i64 9) (i64 11))))))))
+                    (record structural (field code (i64 3)) (field descriptor (call ci::text-bytes (text "")))))))
+              (record structural (field code (i64 3)) (field descriptor (call ci::text-bytes (text "")))))))))
+    (function create prepare
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create custody (type Bytes))
+      (parameter create owner (type I64))
+      (returns (record (code I64) (descriptor Bytes)))
+      (body
+        (let
+          (binding kind (call source-table::kind (local graph) (local owner)))
+          (in
+            (if
+              (call ci::either (call ci::eq (local kind) (i64 5)) (call ci::eq (local kind) (i64 6)))
+              (call callable (local graph) (local parents) (local mapping) (local owner))
+              (if
+                (call ci::either (call ci::eq (local kind) (i64 9)) (call ci::eq (local kind) (i64 20)))
+                (call container (local graph) (local owner))
+                (record structural (field code (i64 13)) (field descriptor (call ci::text-bytes (text ""))))))))))))
+declarations.end

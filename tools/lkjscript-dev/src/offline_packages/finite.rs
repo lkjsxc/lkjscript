@@ -730,11 +730,11 @@ pub(super) fn read_focused(path: &Path, verifier: &Path) -> Result<(), DevError>
     require(
         matches!(
             receipt.schema.as_str(),
-            "lkjscript-offline-finite-callable-semantic-1"
-                | "lkjscript-offline-requirement-parameters-semantic-1"
-                | "lkjscript-offline-f64-semantic-1"
-                | "lkjscript-offline-parameter-type-semantic-1"
-                | "lkjscript-offline-persistent-maps-semantic-1"
+            "lkjscript-offline-finite-callable-semantic-2"
+                | "lkjscript-offline-requirement-parameters-semantic-2"
+                | "lkjscript-offline-f64-semantic-2"
+                | "lkjscript-offline-parameter-type-semantic-2"
+                | "lkjscript-offline-persistent-maps-semantic-2"
         ) && receipt.status == "fresh passed"
             && receipt.failure.is_none()
             && receipt.cleanup_complete
@@ -758,22 +758,22 @@ pub(super) fn read_focused(path: &Path, verifier: &Path) -> Result<(), DevError>
             && Path::new(&receipt.evidence_root) == root.canonicalize()?,
         "finite execution paths or environment binding differ",
     )?;
-    let _ = if receipt.schema == "lkjscript-offline-requirement-parameters-semantic-1" {
+    let _ = if receipt.schema == "lkjscript-offline-requirement-parameters-semantic-2" {
         super::requirements::validate(&receipt, root)?
-    } else if receipt.schema == "lkjscript-offline-f64-semantic-1" {
+    } else if receipt.schema == "lkjscript-offline-f64-semantic-2" {
         require(
             receipt.inventories.len() == 3,
             "F64 focused source inventories incomplete",
         )?;
         super::f64::validate(&receipt, root, 3)?
-    } else if receipt.schema == "lkjscript-offline-parameter-type-semantic-1" {
+    } else if receipt.schema == "lkjscript-offline-parameter-type-semantic-2" {
         require(
             receipt.inventories.len() == 4,
             "parameter-type focused source inventories incomplete",
         )?;
         super::parameter_type::validate(&receipt, root, 0..4)?;
         Vec::new()
-    } else if receipt.schema == "lkjscript-offline-persistent-maps-semantic-1" {
+    } else if receipt.schema == "lkjscript-offline-persistent-maps-semantic-2" {
         require(
             receipt.inventories.len() == 4,
             "map focused source inventories incomplete",

@@ -71,6 +71,8 @@ pub(crate) mod transaction_outcome_tests;
 #[path = "transaction_participation_tests.rs"]
 mod transaction_participation_tests;
 
+#[path = "bulk_byte_intrinsic_tests.rs"]
+mod bulk_byte_intrinsic_tests;
 #[path = "byte_buffer_tests.rs"]
 pub(crate) mod byte_buffer_tests;
 #[path = "bytes_reuse_tests.rs"]

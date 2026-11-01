@@ -1,0 +1,61 @@
+declarations.begin
+(units
+  (module create source-request
+    (function create failure
+      (visibility private)
+      (effect pure)
+      (returns (record (code I64) (mode I64) (target Bytes) (graph Bytes)))
+      (body
+        (record structural
+          (field code (i64 12))
+          (field mode (i64 0))
+          (field target (call ci::text-bytes (text "")))
+          (field graph (call ci::text-bytes (text ""))))))
+    (function create framed
+      (visibility package)
+      (effect pure)
+      (parameter create request (type Bytes))
+      (returns Bool)
+      (body
+        (if
+          (call ci::lt (call ci::length (local request)) (i64 32))
+          (bool false)
+          (if
+            (call ci::same
+              (call ci::slice (local request) (i64 0) (i64 8))
+              (call ci::text-bytes (text "LKJSRQ01")))
+            (if
+              (call ci::eq (call ci::u32 (local request) (i64 8)) (i64 2))
+              (if
+                (call ci::eq (call ci::get (local request) (i64 12)) (i64 12))
+                (if
+                  (call artifact-check::zeros (local request) (i64 13) (i64 29))
+                  (bool false)
+                  (if
+                    (call ci::lt (call ci::get (local request) (i64 29)) (i64 2))
+                    (call artifact-check::zeros (local request) (i64 30) (i64 32))
+                    (bool false)))
+                (bool false))
+              (bool false))
+            (bool false)))))
+    (function create read
+      (visibility package)
+      (effect pure)
+      (parameter create request (type Bytes))
+      (returns (record (code I64) (mode I64) (target Bytes) (graph Bytes)))
+      (body
+        (if
+          (call framed (local request))
+          (let
+            (binding graph (call ci::slice (local request) (i64 32) (call ci::length (local request))))
+            (in
+              (if
+                (call source-provenance::framed (local graph))
+                (record structural
+                  (field code (i64 0))
+                  (field mode (call ci::get (local request) (i64 29)))
+                  (field target (call ci::slice (local request) (i64 12) (i64 29)))
+                  (field graph (local graph)))
+                (call failure))))
+          (call failure))))))
+declarations.end

@@ -1,0 +1,193 @@
+declarations.begin
+(units
+  (module create source-unit-lower-ports
+    (function create ports
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create cursor (type I64))
+      (parameter create left (type I64))
+      (parameter create pool (type Bytes))
+      (parameter create rows (type Bytes))
+      (parameter create count (type I64))
+      (returns (record (code I64) (pool Bytes) (rows Bytes) (count I64)))
+      (body
+        (if
+          (call ci::eq (local left) (i64 0))
+          (record structural
+            (field code (i64 0))
+            (field pool (local pool))
+            (field rows (local rows))
+            (field count (local count)))
+          (let
+            (binding owner (call source-table::owner (local graph) (local data) (local cursor) (i64 11)))
+            (binding record (call source-table::data (local graph) (local owner)))
+            (binding name-end (call source-link-ref::name-end (local record) (i64 56)))
+            (binding implementation
+              (call source-unit-tables::reference
+                (local pool)
+                (i64 0)
+                (local record)
+                (call ci::add (local name-end) (i64 34))))
+            (in
+              (if
+                (call ci::eq (field (local implementation) (name code)) (i64 0))
+                (let
+                  (binding reference (call source-unit-tables::local-ref (local graph) (local owner)))
+                  (binding port
+                    (call source-unit-tables::intern
+                      (field (local implementation) (name pool))
+                      (i64 5)
+                      (local reference)
+                      (i64 0)
+                      (i64 32)))
+                  (in
+                    (if
+                      (call ci::eq (field (local port) (name code)) (i64 0))
+                      (let
+                        (binding ty
+                          (call source-unit-tables::type
+                            (field (local port) (name pool))
+                            (local record)
+                            (local name-end)))
+                        (in
+                          (if
+                            (call ci::eq (field (local ty) (name code)) (i64 0))
+                            (if
+                              (call source-unit-tables::room (call ci::length (local rows)) (i64 32))
+                              (call ports
+                                (local graph)
+                                (local data)
+                                (call ci::add (local cursor) (i64 17))
+                                (call ci::sub (local left) (i64 1))
+                                (field (local ty) (name pool))
+                                (call ci::concat
+                                  (local rows)
+                                  (let
+                                    (binding b0 (type ByteBuffer) (call ci::empty))
+                                    (binding b1
+                                      (type ByteBuffer)
+                                      (call ci::le (field (local port) (name index)) (i64 8) (local b0)))
+                                    (binding b2
+                                      (type ByteBuffer)
+                                      (call ci::le (field (local ty) (name index)) (i64 8) (local b1)))
+                                    (binding b3 (type ByteBuffer) (call ci::le (i64 0) (i64 8) (local b2)))
+                                    (binding b4
+                                      (type ByteBuffer)
+                                      (call ci::le
+                                        (field (local implementation) (name index))
+                                        (i64 8)
+                                        (local b3)))
+                                    (in (call ci::freeze (local b4)))))
+                                (call ci::add (local count) (i64 1)))
+                              (record structural
+                                (field code (i64 3))
+                                (field pool (local pool))
+                                (field rows (call ci::text-bytes (text "")))
+                                (field count (i64 0))))
+                            (record structural
+                              (field code (i64 3))
+                              (field pool (local pool))
+                              (field rows (call ci::text-bytes (text "")))
+                              (field count (i64 0))))))
+                      (record structural
+                        (field code (i64 3))
+                        (field pool (local pool))
+                        (field rows (call ci::text-bytes (text "")))
+                        (field count (i64 0))))))
+                (record structural
+                  (field code (i64 3))
+                  (field pool (local pool))
+                  (field rows (call ci::text-bytes (text "")))
+                  (field count (i64 0)))))))))
+    (function create component
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create owner (type I64))
+      (returns (record (code I64) (pool Bytes) (rows Bytes) (count I64)))
+      (body
+        (let
+          (binding record (call source-table::data (local graph) (local owner)))
+          (binding at
+            (call source-table::skip
+              (local record)
+              (call ci::add (call source-link-ref::name-end (local record) (i64 56)) (i64 2))
+              (i64 17)))
+          (binding ports (call source-table::array (local record) (local at)))
+          (in
+            (call ports
+              (local graph)
+              (local record)
+              (field (local ports) (name next))
+              (field (local ports) (name value))
+              (call ci::text-bytes (text ""))
+              (call ci::text-bytes (text ""))
+              (i64 0))))))
+    (function create target
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create owner (type I64))
+      (returns (record (code I64) (pool Bytes) (rows Bytes) (count I64)))
+      (body
+        (let
+          (binding record (call source-table::data (local graph) (local owner)))
+          (binding at (call source-link-ref::name-end (local record) (i64 39)))
+          (binding component
+            (call source-unit-tables::reference
+              (call ci::text-bytes (text ""))
+              (i64 0)
+              (local record)
+              (local at)))
+          (binding has-port
+            (call ci::eq (call ci::get (local record) (call ci::add (local at) (i64 34))) (i64 1)))
+          (in
+            (if
+              (call ci::eq (field (local component) (name code)) (i64 0))
+              (let
+                (binding port
+                  (if
+                    (local has-port)
+                    (call source-unit-tables::reference
+                      (field (local component) (name pool))
+                      (i64 5)
+                      (local record)
+                      (call ci::add (local at) (i64 35)))
+                    (record structural
+                      (field code (i64 0))
+                      (field index (i64 0))
+                      (field pool (field (local component) (name pool))))))
+                (in
+                  (if
+                    (call ci::eq (field (local port) (name code)) (i64 0))
+                    (record structural
+                      (field code (i64 0))
+                      (field pool (field (local port) (name pool)))
+                      (field rows
+                        (let
+                          (binding b0 (type ByteBuffer) (call ci::empty))
+                          (binding b1
+                            (type ByteBuffer)
+                            (call ci::le (field (local component) (name index)) (i64 8) (local b0)))
+                          (binding b2
+                            (type ByteBuffer)
+                            (call ci::le (if (local has-port) (i64 1) (i64 0)) (i64 8) (local b1)))
+                          (binding b3
+                            (type ByteBuffer)
+                            (call ci::le (field (local port) (name index)) (i64 8) (local b2)))
+                          (binding b4 (type ByteBuffer) (call ci::le (i64 0) (i64 8) (local b3)))
+                          (in (call ci::freeze (local b4)))))
+                      (field count (i64 0)))
+                    (record structural
+                      (field code (i64 3))
+                      (field pool (call ci::text-bytes (text "")))
+                      (field rows (call ci::text-bytes (text "")))
+                      (field count (i64 0))))))
+              (record structural
+                (field code (i64 3))
+                (field pool (call ci::text-bytes (text "")))
+                (field rows (call ci::text-bytes (text "")))
+                (field count (i64 0))))))))))
+declarations.end

@@ -8,18 +8,30 @@ declarations.begin
       (parameter create start (type I64))
       (parameter create end (type I64))
       (parameter create at (type I64))
+      (parameter create value-width (type I64))
       (returns I64)
       (body
         (if
           (call ci::eq (local at) (i64 17))
           (local at)
           (if
-            (call ci::eq
+            (call
+              ci::eq
               (call ci::get (local data) (call ci::add (local start) (local at)))
-              (call ci::get
+              (call
+                ci::get
                 (local data)
-                (call ci::add (call ci::sub (local end) (i64 82)) (local at))))
-            (call prefix (local data) (local start) (local end) (call ci::add (local at) (i64 1)))
+                (call
+                  ci::add
+                  (call ci::sub (local end) (call ci::add (i64 17) (local value-width)))
+                  (local at))))
+            (call
+              prefix
+              (local data)
+              (local start)
+              (local end)
+              (call ci::add (local at) (i64 1))
+              (local value-width))
             (local at)))))
     (function create group-end
       (visibility private)
@@ -29,21 +41,25 @@ declarations.begin
       (parameter create end (type I64))
       (parameter create prefix (type I64))
       (parameter create edge (type I64))
+      (parameter create value-width (type I64))
       (returns I64)
       (body
         (if
           (call ci::eq (local at) (local end))
           (local at)
           (if
-            (call ci::eq
+            (call
+              ci::eq
               (call ci::get (local data) (call ci::add (local at) (local prefix)))
               (local edge))
-            (call group-end
+            (call
+              group-end
               (local data)
-              (call ci::add (local at) (i64 82))
+              (call ci::add (local at) (call ci::add (i64 17) (local value-width)))
               (local end)
               (local prefix)
-              (local edge))
+              (local edge)
+              (local value-width))
             (local at)))))
     (function create children
       (visibility private)
@@ -52,6 +68,7 @@ declarations.begin
       (parameter create at (type I64))
       (parameter create end (type I64))
       (parameter create prefix (type I64))
+      (parameter create value-width (type I64))
       (parameter create out (type ByteBuffer) (use consume))
       (returns ByteBuffer)
       (body
@@ -61,33 +78,52 @@ declarations.begin
           (let
             (binding edge (call ci::get (local data) (call ci::add (local at) (local prefix))))
             (binding next
-              (call group-end
+              (call
+                group-end
                 (local data)
-                (call ci::add (local at) (i64 82))
+                (call ci::add (local at) (call ci::add (i64 17) (local value-width)))
                 (local end)
                 (local prefix)
-                (local edge)))
-            (binding digest (call content (local data) (local at) (local next)))
+                (local edge)
+                (local value-width)))
+            (binding digest (call content (local data) (local at) (local next) (local value-width)))
             (binding a (type ByteBuffer) (call ci::push (local edge) (local out)))
             (binding b
               (type ByteBuffer)
-              (call ci::le
-                (call ci::div (call ci::sub (local next) (local at)) (i64 82))
+              (call
+                ci::le
+                (call
+                  ci::div
+                  (call ci::sub (local next) (local at))
+                  (call ci::add (i64 17) (local value-width)))
                 (i64 8)
                 (local a)))
             (binding c (type ByteBuffer) (call ci::push (i64 1) (local b)))
             (binding d (type ByteBuffer) (call ci::append (local digest) (i64 0) (local c)))
-            (in (call children (local data) (local next) (local end) (local prefix) (local d)))))))
+            (in
+              (call
+                children
+                (local data)
+                (local next)
+                (local end)
+                (local prefix)
+                (local value-width)
+                (local d)))))))
     (function create content
       (visibility public)
       (effect pure)
       (parameter create data (type Bytes))
       (parameter create start (type I64))
       (parameter create end (type I64))
+      (parameter create value-width (type I64))
       (returns Bytes)
       (body
         (let
-          (binding count (call ci::div (call ci::sub (local end) (local start)) (i64 82)))
+          (binding count
+            (call
+              ci::div
+              (call ci::sub (local end) (local start))
+              (call ci::add (i64 17) (local value-width))))
           (binding canonical
             (if
               (call ci::eq (local count) (i64 0))
@@ -111,22 +147,25 @@ declarations.begin
                   (binding b (type ByteBuffer) (call ci::le (i64 17) (i64 2) (local a)))
                   (binding c
                     (type ByteBuffer)
-                    (call wire::range
+                    (call
+                      wire::range
                       (local data)
                       (local start)
                       (call ci::add (local start) (i64 17))
                       (local b)))
-                  (binding d (type ByteBuffer) (call ci::le (i64 65) (i64 4) (local c)))
+                  (binding d (type ByteBuffer) (call ci::le (local value-width) (i64 4) (local c)))
                   (binding e
                     (type ByteBuffer)
-                    (call wire::range
+                    (call
+                      wire::range
                       (local data)
                       (call ci::add (local start) (i64 17))
                       (local end)
                       (local d)))
                   (in (call ci::freeze (local e))))
                 (let
-                  (binding prefix (call prefix (local data) (local start) (local end) (i64 0)))
+                  (binding prefix
+                    (call prefix (local data) (local start) (local end) (i64 0) (local value-width)))
                   (binding children
                     (let
                       (binding wire-temp-24
@@ -134,11 +173,13 @@ declarations.begin
                         (let
                           (binding wire-temp-23 (type ByteBuffer) (call ci::empty))
                           (in
-                            (call children
+                            (call
+                              children
                               (local data)
                               (local start)
                               (local end)
                               (local prefix)
+                              (local value-width)
                               (local wire-temp-23)))))
                       (in (call ci::freeze (local wire-temp-24)))))
                   (binding a
@@ -150,7 +191,8 @@ declarations.begin
                   (binding b (type ByteBuffer) (call ci::le (local prefix) (i64 2) (local a)))
                   (binding c
                     (type ByteBuffer)
-                    (call wire::range
+                    (call
+                      wire::range
                       (local data)
                       (local start)
                       (call ci::add (local start) (local prefix))
@@ -158,7 +200,8 @@ declarations.begin
                   (binding d (type ByteBuffer) (call ci::push (i64 0) (local c)))
                   (binding e
                     (type ByteBuffer)
-                    (call ci::le
+                    (call
+                      ci::le
                       (call ci::div (call ci::length (local children)) (i64 42))
                       (i64 2)
                       (local d)))
@@ -170,6 +213,7 @@ declarations.begin
       (parameter create data (type Bytes))
       (parameter create at (type I64))
       (parameter create prefix (type I64))
+      (parameter create value-width (type I64))
       (parameter create out (type ByteBuffer) (use consume))
       (returns ByteBuffer)
       (body
@@ -182,49 +226,52 @@ declarations.begin
               (call ci::le (call ci::sub (i64 17) (local prefix)) (i64 2) (local out)))
             (binding b
               (type ByteBuffer)
-              (call wire::range
+              (call
+                wire::range
                 (local data)
                 (call ci::add (local at) (local prefix))
                 (call ci::add (local at) (i64 17))
                 (local a)))
-            (binding c (type ByteBuffer) (call ci::le (i64 65) (i64 4) (local b)))
+            (binding c (type ByteBuffer) (call ci::le (local value-width) (i64 4) (local b)))
             (binding d
               (type ByteBuffer)
-              (call wire::range
+              (call
+                wire::range
                 (local data)
                 (call ci::add (local at) (i64 17))
-                (call ci::add (local at) (i64 82))
+                (call ci::add (local at) (call ci::add (i64 17) (local value-width)))
                 (local c)))
             (in
-              (call entries
+              (call
+                entries
                 (local data)
-                (call ci::add (local at) (i64 82))
+                (call ci::add (local at) (call ci::add (i64 17) (local value-width)))
                 (local prefix)
+                (local value-width)
                 (local d)))))))
     (function create leaf
       (visibility private)
       (effect pure)
       (parameter create data (type Bytes))
+      (parameter create value-width (type I64))
       (returns (record (content Bytes) (digest Bytes) (image Bytes)))
       (body
         (let
           (binding length (call ci::length (local data)))
-          (binding count (call ci::div (local length) (i64 82)))
+          (binding count (call ci::div (local length) (call ci::add (i64 17) (local value-width))))
           (binding prefix
             (if
               (call ci::eq (local count) (i64 0))
               (i64 0)
-              (call prefix (local data) (i64 0) (local length) (i64 0))))
-          (binding content (call content (local data) (i64 0) (local length)))
+              (call prefix (local data) (i64 0) (local length) (i64 0) (local value-width))))
+          (binding content (call content (local data) (i64 0) (local length) (local value-width)))
           (binding a
             (type ByteBuffer)
             (let
               (binding wire-temp-27 (i64 2))
               (binding wire-temp-28 (type ByteBuffer) (call ci::empty))
               (in (call ci::le (local prefix) (local wire-temp-27) (local wire-temp-28)))))
-          (binding b
-            (type ByteBuffer)
-            (call wire::range (local data) (i64 0) (local prefix) (local a)))
+          (binding b (type ByteBuffer) (call wire::range (local data) (i64 0) (local prefix) (local a)))
           (binding c (type ByteBuffer) (call ci::le (local count) (i64 8) (local b)))
           (binding d (type ByteBuffer) (call ci::le (local length) (i64 8) (local c)))
           (binding e (type ByteBuffer) (call ci::push (i64 1) (local d)))
@@ -234,7 +281,7 @@ declarations.begin
             (let
               (binding wire-temp-29
                 (type ByteBuffer)
-                (call entries (local data) (i64 0) (local prefix) (local g)))
+                (call entries (local data) (i64 0) (local prefix) (local value-width) (local g)))
               (in (call ci::freeze (local wire-temp-29)))))
           (binding h
             (type ByteBuffer)
@@ -245,125 +292,208 @@ declarations.begin
               (in (call ci::append (local wire-temp-30) (local wire-temp-31) (local wire-temp-32)))))
           (binding i (type ByteBuffer) (call ci::le (i64 1) (i64 2) (local h)))
           (binding j (type ByteBuffer) (call ci::le (i64 0) (i64 2) (local i)))
-          (binding k
-            (type ByteBuffer)
-            (call ci::le (call ci::length (local payload)) (i64 8) (local j)))
+          (binding k (type ByteBuffer) (call ci::le (call ci::length (local payload)) (i64 8) (local j)))
           (binding core (call ci::concat (call ci::freeze (local k)) (local payload)))
           (binding image
-            (call ci::concat
+            (call
+              ci::concat
               (local core)
               (call wire::digest (text "lkjscript.persistent-map-checksum.v2") (local core))))
           (in
-            (record structural
+            (record
+              structural
               (field content (local content))
-              (field digest
-                (call wire::digest (text "lkjscript.persistent-map-page.v2") (local image)))
+              (field digest (call wire::digest (text "lkjscript.persistent-map-page.v2") (local image)))
               (field image (local image)))))))
     (function create frame
-      (visibility private) (effect pure)
+      (visibility private)
+      (effect pure)
       (parameter create image (type Bytes))
       (returns Bytes)
-      (body (let
-        (binding out (type ByteBuffer) (call ci::empty))
-        (binding header (type ByteBuffer)
-          (call ci::le (call ci::length (local image)) (i64 8) (local out)))
-        (binding complete (type ByteBuffer) (call ci::append (local image) (i64 0) (local header)))
-        (in (call ci::freeze (local complete))))))
+      (body
+        (let
+          (binding out (type ByteBuffer) (call ci::empty))
+          (binding header
+            (type ByteBuffer)
+            (call ci::le (call ci::length (local image)) (i64 8) (local out)))
+          (binding complete (type ByteBuffer) (call ci::append (local image) (i64 0) (local header)))
+          (in (call ci::freeze (local complete))))))
     (function create branch
-      (visibility private) (effect pure)
+      (visibility private)
+      (effect pure)
       (parameter create data (type Bytes))
       (parameter create prefix (type I64))
       (parameter create children (type Bytes))
+      (parameter create value-width (type I64))
       (returns (record (content Bytes) (digest Bytes) (image Bytes)))
-      (body (let
-        (binding length (call ci::length (local data)))
-        (binding content (call content (local data) (i64 0) (local length)))
-        (binding a (type ByteBuffer) (call ci::empty))
-        (binding b (type ByteBuffer) (call ci::le (local prefix) (i64 2) (local a)))
-        (binding c (type ByteBuffer) (call wire::range (local data) (i64 0) (local prefix) (local b)))
-        (binding d (type ByteBuffer) (call ci::le (call ci::div (local length) (i64 82)) (i64 8) (local c)))
-        (binding e (type ByteBuffer) (call ci::le (local length) (i64 8) (local d)))
-        (binding f (type ByteBuffer) (call ci::push (i64 1) (local e)))
-        (binding g (type ByteBuffer) (call ci::append (local content) (i64 0) (local f)))
-        (binding h (type ByteBuffer) (call ci::push (i64 0) (local g)))
-        (binding i (type ByteBuffer)
-          (call ci::le (call ci::div (call ci::length (local children)) (i64 82)) (i64 2) (local h)))
-        (binding j (type ByteBuffer) (call ci::append (local children) (i64 0) (local i)))
-        (binding payload (call ci::freeze (local j)))
-        (binding k (type ByteBuffer) (call ci::empty))
-        (binding l (type ByteBuffer) (call ci::append (call ci::text-bytes (text "LKJPMAP2")) (i64 0) (local k)))
-        (binding m (type ByteBuffer) (call ci::le (i64 1) (i64 2) (local l)))
-        (binding n (type ByteBuffer) (call ci::le (i64 1) (i64 2) (local m)))
-        (binding o (type ByteBuffer) (call ci::le (call ci::length (local payload)) (i64 8) (local n)))
-        (binding core (call ci::concat (call ci::freeze (local o)) (local payload)))
-        (binding image (call ci::concat (local core)
-          (call wire::digest (text "lkjscript.persistent-map-checksum.v2") (local core))))
-        (in (record structural
-          (field content (local content))
-          (field digest (call wire::digest (text "lkjscript.persistent-map-page.v2") (local image)))
-          (field image (local image)))))))
+      (body
+        (let
+          (binding length (call ci::length (local data)))
+          (binding content (call content (local data) (i64 0) (local length) (local value-width)))
+          (binding a (type ByteBuffer) (call ci::empty))
+          (binding b (type ByteBuffer) (call ci::le (local prefix) (i64 2) (local a)))
+          (binding c (type ByteBuffer) (call wire::range (local data) (i64 0) (local prefix) (local b)))
+          (binding d
+            (type ByteBuffer)
+            (call
+              ci::le
+              (call ci::div (local length) (call ci::add (i64 17) (local value-width)))
+              (i64 8)
+              (local c)))
+          (binding e (type ByteBuffer) (call ci::le (local length) (i64 8) (local d)))
+          (binding f (type ByteBuffer) (call ci::push (i64 1) (local e)))
+          (binding g (type ByteBuffer) (call ci::append (local content) (i64 0) (local f)))
+          (binding h (type ByteBuffer) (call ci::push (i64 0) (local g)))
+          (binding i
+            (type ByteBuffer)
+            (call ci::le (call ci::div (call ci::length (local children)) (i64 82)) (i64 2) (local h)))
+          (binding j (type ByteBuffer) (call ci::append (local children) (i64 0) (local i)))
+          (binding payload (call ci::freeze (local j)))
+          (binding k (type ByteBuffer) (call ci::empty))
+          (binding l
+            (type ByteBuffer)
+            (call ci::append (call ci::text-bytes (text "LKJPMAP2")) (i64 0) (local k)))
+          (binding m (type ByteBuffer) (call ci::le (i64 1) (i64 2) (local l)))
+          (binding n (type ByteBuffer) (call ci::le (i64 1) (i64 2) (local m)))
+          (binding o (type ByteBuffer) (call ci::le (call ci::length (local payload)) (i64 8) (local n)))
+          (binding core (call ci::concat (call ci::freeze (local o)) (local payload)))
+          (binding image
+            (call
+              ci::concat
+              (local core)
+              (call wire::digest (text "lkjscript.persistent-map-checksum.v2") (local core))))
+          (in
+            (record
+              structural
+              (field content (local content))
+              (field digest (call wire::digest (text "lkjscript.persistent-map-page.v2") (local image)))
+              (field image (local image)))))))
     (function create page-children
-      (visibility private) (effect pure)
+      (visibility private)
+      (effect pure)
       (parameter create data (type Bytes))
       (parameter create at (type I64))
       (parameter create prefix (type I64))
+      (parameter create value-width (type I64))
       (parameter create pages (type ByteBuffer) (use consume))
       (parameter create children (type ByteBuffer) (use consume))
       (returns (record (children Bytes) (pages Bytes)))
       (body
-        (if (call ci::eq (local at) (call ci::length (local data)))
+        (if
+          (call ci::eq (local at) (call ci::length (local data)))
           (let
             (binding page-bytes (call ci::freeze (local pages)))
             (binding child-bytes (call ci::freeze (local children)))
-            (in (record structural (field children (local child-bytes)) (field pages (local page-bytes)))))
+            (in
+              (record structural (field children (local child-bytes)) (field pages (local page-bytes)))))
           (let
             (binding edge (call ci::get (local data) (call ci::add (local at) (local prefix))))
-            (binding next (call group-end (local data) (call ci::add (local at) (i64 82))
-              (call ci::length (local data)) (local prefix) (local edge)))
-            (binding child (call encode (call ci::slice (local data) (local at) (local next))))
-            (binding page-buffer (type ByteBuffer)
+            (binding next
+              (call
+                group-end
+                (local data)
+                (call ci::add (local at) (call ci::add (i64 17) (local value-width)))
+                (call ci::length (local data))
+                (local prefix)
+                (local edge)
+                (local value-width)))
+            (binding child
+              (call encode (call ci::slice (local data) (local at) (local next)) (local value-width)))
+            (binding page-buffer
+              (type ByteBuffer)
               (call ci::append (field (local child) (name pages)) (i64 0) (local pages)))
             (binding a (type ByteBuffer) (call ci::push (local edge) (local children)))
-            (binding b (type ByteBuffer) (call ci::append (field (local child) (name digest)) (i64 0) (local a)))
-            (binding c (type ByteBuffer) (call ci::le
-              (call ci::div (call ci::sub (local next) (local at)) (i64 82)) (i64 8) (local b)))
-            (binding d (type ByteBuffer) (call ci::le (call ci::sub (local next) (local at)) (i64 8) (local c)))
+            (binding b
+              (type ByteBuffer)
+              (call ci::append (field (local child) (name digest)) (i64 0) (local a)))
+            (binding c
+              (type ByteBuffer)
+              (call
+                ci::le
+                (call
+                  ci::div
+                  (call ci::sub (local next) (local at))
+                  (call ci::add (i64 17) (local value-width)))
+                (i64 8)
+                (local b)))
+            (binding d
+              (type ByteBuffer)
+              (call ci::le (call ci::sub (local next) (local at)) (i64 8) (local c)))
             (binding e (type ByteBuffer) (call ci::push (i64 1) (local d)))
-            (binding f (type ByteBuffer) (call ci::append (field (local child) (name content)) (i64 0) (local e)))
-            (in (call page-children (local data) (local next) (local prefix) (local page-buffer) (local f)))))))
+            (binding f
+              (type ByteBuffer)
+              (call ci::append (field (local child) (name content)) (i64 0) (local e)))
+            (in
+              (call
+                page-children
+                (local data)
+                (local next)
+                (local prefix)
+                (local value-width)
+                (local page-buffer)
+                (local f)))))))
     (function create encode
-      (visibility public) (effect pure)
+      (visibility public)
+      (effect pure)
       (parameter create data (type Bytes))
+      (parameter create value-width (type I64))
       (returns (record (content Bytes) (digest Bytes) (image Bytes) (pages Bytes)))
-      (body (let
-        (binding length (call ci::length (local data)))
-        (binding count (call ci::div (local length) (i64 82)))
-        (binding prefix (if (call ci::eq (local count) (i64 0)) (i64 0)
-          (call prefix (local data) (i64 0) (local length) (i64 0))))
-        (binding capacity (call ci::div (call ci::sub (i64 65429) (local prefix))
-          (call ci::sub (i64 88) (local prefix))))
-        (in
-          (if (call ci::lt (local capacity) (local count))
-            (let
-              (binding page-buffer (type ByteBuffer) (call ci::empty))
-              (binding child-buffer (type ByteBuffer) (call ci::empty))
-              (binding children (call page-children (local data) (i64 0) (local prefix)
-                (local page-buffer) (local child-buffer)))
-              (binding page (call branch (local data) (local prefix) (field (local children) (name children))))
-              (binding image (field (local page) (name image)))
-              (in (record structural
-                (field content (field (local page) (name content)))
-                (field digest (field (local page) (name digest)))
-                (field image (local image))
-                (field pages (call ci::concat (field (local children) (name pages)) (call frame (local image)))))))
-            (let
-              (binding page (call leaf (local data)))
-              (binding image (field (local page) (name image)))
-              (in (record structural
-                (field content (field (local page) (name content)))
-                (field digest (field (local page) (name digest)))
-                (field image (local image))
-                (field pages (call frame (local image))))))))))
-    )
-))
+      (body
+        (let
+          (binding length (call ci::length (local data)))
+          (binding count (call ci::div (local length) (call ci::add (i64 17) (local value-width))))
+          (binding prefix
+            (if
+              (call ci::eq (local count) (i64 0))
+              (i64 0)
+              (call prefix (local data) (i64 0) (local length) (i64 0) (local value-width))))
+          (binding capacity
+            (call
+              ci::div
+              (call ci::sub (i64 16277) (local prefix))
+              (call ci::sub (call ci::add (i64 23) (local value-width)) (local prefix))))
+          (in
+            (if
+              (call
+                ci::both
+                (call ci::lt (i64 1) (local count))
+                (call ci::lt (local capacity) (local count)))
+              (let
+                (binding page-buffer (type ByteBuffer) (call ci::empty))
+                (binding child-buffer (type ByteBuffer) (call ci::empty))
+                (binding children
+                  (call
+                    page-children
+                    (local data)
+                    (i64 0)
+                    (local prefix)
+                    (local value-width)
+                    (local page-buffer)
+                    (local child-buffer)))
+                (binding page
+                  (call
+                    branch
+                    (local data)
+                    (local prefix)
+                    (field (local children) (name children))
+                    (local value-width)))
+                (binding image (field (local page) (name image)))
+                (in
+                  (record
+                    structural
+                    (field content (field (local page) (name content)))
+                    (field digest (field (local page) (name digest)))
+                    (field image (local image))
+                    (field pages
+                      (call ci::concat (field (local children) (name pages)) (call frame (local image)))))))
+              (let
+                (binding page (call leaf (local data) (local value-width)))
+                (binding image (field (local page) (name image)))
+                (in
+                  (record
+                    structural
+                    (field content (field (local page) (name content)))
+                    (field digest (field (local page) (name digest)))
+                    (field image (local image))
+                    (field pages (call frame (local image)))))))))))))
 declarations.end

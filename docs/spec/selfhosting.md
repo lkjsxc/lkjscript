@@ -28,8 +28,9 @@ retain compact evidence before removing task-owned stage binaries.
 All integers are little-endian. Magic is `LKJCI001`. The selector at offset 112
 chooses ELF (0, profile `6`) or artifact (1, profile `7`). Each selector admits
 only its current profile; neither route retains an old-profile reader. The Tier 1
-route retains Rust semantic admission and IR export. The restricted scalar source
-route constructs profile-6 input inside lkjscript after complete source admission.
+route retains Rust semantic admission and IR export. The active source route
+constructs profile-6 ELF input and profile-7 artifact input inside lkjscript after
+complete source admission.
 The [artifact layout](selfhosting-artifact-input.md) has its own 64-bit unit,
 source-object, metadata and generated-pool framing. Both modes distinguish an
 unbounded policy tag from an exact finite u64 allowance, including zero and
@@ -169,6 +170,14 @@ External codes 1–7 are I64 add, subtract, multiply, divide, equal, less and
 less-equal; 8–10 are Bool not, and and or. Codes 11–19 are Bytes length, get,
 from-list, from-text, copy, slice, concat, equal and BLAKE3. Codes 20–25 are buffer
 empty, push, length, get, freeze and discard; 26–27 are List<I64> length and get.
+Codes 29–31 are `core.buffer.append-slice(Bytes, I64 start, I64 end, consume ByteBuffer) -> ByteBuffer`,
+`core.buffer.append-i64-le(I64, consume ByteBuffer) -> ByteBuffer`, and
+`core.bytes.read-i64-le(Bytes, I64 offset) -> I64`. They use the existing descriptor,
+ordered parameter and ownership-qualifier encodings. Span checks precede copying;
+word operations preserve every signed I64 bit pattern. The Mode-1 external-name
+registry admits these same closed names and keeps strict canonical unit validation.
+This supported-alphabet extension changes neither framing nor the current selector;
+no predecessor reader is introduced. Unsupported names and codes still reject.
 Code 28 is `core.bytes.blake3-derive-key(Text context, Bytes material) -> Bytes`.
 It returns 32 domain-derived bytes; this is BLAKE3 derive-key mode, not a context
 prefix passed to unkeyed hashing. It supplies the current `.lkja` object, unit and
@@ -186,8 +195,8 @@ explicit closed type instantiation per declaration, needed for generic list
 primitives. Inconsistent instantiations, unsupported types, effects, witnesses,
 regions and instructions reject with `compiler_input_unsupported`. This exporter
 remains the Tier 1 route and bootstrap path for the maintained compiler closure.
-The scalar source route does not call it to lower target programs; extending
-independent source admission and lowering to the complete compiler remains required.
+The active source route does not call this Rust exporter to lower target programs.
+Complete maintained-source fixed-point acceptance remains a separate proof.
 
 ## Compiler component and artifact contract
 
@@ -389,12 +398,11 @@ execution, including records outside the backend entrypoint's reachable closure.
 
 Record-shape readers alone do not establish graph or semantic validity. The
 logical binding and reference passes below add exact object bindings and endpoint
-closure. Dependency closure, unique syntax ownership, array identity uniqueness,
-acyclicity, expression typing, affine/borrow/region/effect rules, witnesses and
-normalization remain Milestone E work. Decoding scans bytes and returns scalar
-cursors; no phase-local graph arena or region-native memory claim is made.
-Semantic traversal and lexical Region tables precede the Milestone F source-graph
-fixed point.
+closure. Higher source passes separately establish containment, lexical scope,
+namespace, type/DAG, typing and active ByteBuffer custody properties. Broader
+P_self witness, owned aggregate, effect and Region obligations remain distinct.
+Decoding scans bytes and returns scalar cursors; it makes no phase-arena or
+region-native reclamation claim. The A/B/C milestones below govern acceptance.
 
 ### Logical source identities and object bindings
 
@@ -434,11 +442,14 @@ Region tables remain required before the Tier 2 source-graph fixed point.
 
 The [canonical source carrier](selfhosting-source-input.md), `LKJSG002`, holds raw
 current owner/type/retirement objects, exact logical directories, span boundaries
-and a claimed semantic state. It contains no host-derived reference inventory or
-normalized IR. `source-graph::validate` bounds the complete input and traversal
-allowance, verifies strict directory ordering and complete object partitioning,
-binds every object and recomputes the logical state. Live and retired identities
-are disjoint. `source-index` supplies bounded binary lookup over admitted rows.
+and a claimed semantic state. Current profile 3 also carries the original canonical
+RevisionCore and claimed RevisionId. It contains no host-derived reference
+inventory or normalized IR. `source-graph::validate` checks physical extents,
+strict directory ordering and the complete object partition, binds every object,
+recomputes the logical state and verifies provenance. Ordinary proof work is
+unbounded; an explicitly selected allowance retains its exact metric. Live and
+retired identities are disjoint. `source-index` compares binary-search windows
+in place over admitted rows.
 
 `source-links::validate` first performs that admission, then scans every included
 owner and type. Shared reference helpers and separate owner/expression readers
@@ -517,53 +528,49 @@ starts from Rust-bootstrapped normalized input, without source-to-normalized low
 
 This E1 extension does not establish E1-final. Call/FunctionValue R/E application
 arguments, owned/witness/read/region forms and Match still need broader admission.
-The scalar route below adds restricted expression typing and lowering. General
-application typing, callable generic finite-flow, custody, effect compatibility,
-requirement satisfaction, witnesses and full-profile source normalization remain
-E2/E3 obligations.
+The active route below adds compound expression typing, exact ByteBuffer custody
+and both output paths. General generic bodies, nominal owned aggregates, closures,
+effect compatibility, requirement satisfaction, implementation witnesses, source-tied
+views and Regions retain their broader E2/E3 obligations.
 
-### Scalar source admission and lowering
+### Active compiler source admission and lowering
 
-`source-elf::compile`, exposed by the `compile-source-elf` command target, consumes
-only a `LKJSRQ01` profile-1 request: an explicit typed TargetId and the complete
-unchanged `LKJSG002` carrier. Raw-only calls reject. `source-scalar::prepare`
-continues to inspect raw carriers and performs the composed E1 checks, scalar
-profile admission and expression typing before selection or lowering.
-The profile admits unrestricted Unit, Bool and I64, pure monomorphic function
-signatures, the eight exact scalar intrinsics in the source-input contract,
-literals, locals, If, Let, Sequence and direct calls. One or more command targets
-may be supplied; every target must select a component function port with pure
-signature `() -> I64`. The request selects one live TargetId inside lkjscript.
-All supplied owners and types participate, including uncalled function bodies,
-untaken branches, unused descriptors and unselected targets. Task callables remain unsupported even
-with an empty effect row. The
-[source-input contract](selfhosting-source-input.md#scalar-source-admission-and-elf-lowering)
-defines the exact request header, complete restricted profile and diagnostics 12, 13 and 19.
+The current source route consumes only a LKJSRQ01 profile-2 request: the caller's
+typed TargetId, output mode and complete LKJSG002 profile-3 carrier. The carrier
+includes the original canonical RevisionCore, whose derived revision and state
+are checked inside lkjscript. Neither interface metadata, normalization, custody
+evidence nor compiler units are request inputs. The
+[source-input contract](selfhosting-source-input.md#active-compiler-source-admission-and-both-output-paths)
+defines exact framing, the active semantic profile, both output paths and diagnostics.
 
-The `source-scalar-plan/cursor/state/trace/emit/pack` modules derive stable function
-and local indexes, control flow, operand/local state certificates and current
-mode-0/profile-6 bytes. They then invoke `elf::compile-elf`; this internal
-normalized representation is produced entirely inside lkjscript. Calls use
-ordinary Call and each function returns through Return. There is no tail-call
-optimization or owned-value cleanup in this scalar profile. Its function/local plan
-rows and trace headers use u64 fields; the no-local sentinel is the complete owner
-count, outside every valid local index. Generated Mode-0 input uses the unbounded
-policy tag and checked I64 extents. `LKJSG002` still has u32 carrier framing and
-per-object bounds; this backend cut does not widen those source fields.
+Whole-inventory E1/E2 covers compound copyable types, all active ci intrinsics,
+closed I64 list substitutions and exact affine ByteBuffer custody. Native lowering
+derives current Profile-6 descriptors and flow state, including branch/scope
+cleanup, returned-owner transfer and tail-call cleanup fallback. Canonical lowering
+independently derives all pre-tail CompilerUnits and seven owner-summary dimensions,
+the exact public interface and runtime/reference/type closure, PackageRevision,
+and Profile-7 input for canonical artifact emission. The same standalone source
+compiler entry serves ELF and artifact requests.
 
-Rust may build the initial native compiler executable, serialize the caller's
-TargetId beside the unchanged carrier, and provide transport and independent test
-orchestration. It must not select or pre-filter source owners, map TargetId to an
-entry index, or supply target semantic tables, lowered instructions or flow
-certificates. Evidence binds the complete carrier, request and selected target,
-compiler executable, profiles and execution context. The
-[scalar decision](../decisions/20261023-source-scalar-e2-e3.md) records eight
-executed positive programs, ten semantic/profile controls and two independently
-constructed hash-consistent structural controls. Scalar source-to-ELF execution
-does not establish the maintained compiler's source-driven C2/C3 fixed
-point, canonical `.lkja` A1/A2/A3 equality or parity with Rust's canonical artifact
-emission. Full-profile semantic admission, both source-driven fixed points and
-measured same-process native reclamation remain required.
+The public meaning remains the accepted GraphRepository revision. Authoring texts
+must be adopted through supported public operations, read back and replayed. An
+implementation or local stored-object comparison does not establish the maintained
+compiler's native fixed point. Status and receipts must identify the exact accepted
+source tree/graph, complete input and tested compiler generations.
+
+### Separate acceptance milestones
+
+| Milestone | Required evidence |
+| --- | --- |
+| A: maintained F_active raw-source self-compilation | Refresh the exact authoritative owner/type/expression/intrinsic/use/call inventory; complete E1/E2/E3 inside lkjscript; C2=C3 and Ahost=A1=A2=A3 on complete raw S and declared E; strict loading/provenance, independent program behavior, compiler-source mutations and layer-reaching complete-inventory negatives. |
+| B: full P_self semantics | Independent source-driven programs and negative controls for required nominal owned records/choices/Match, first-class closures/Invoke, explicit OwnedContract/OwnedImplementation witnesses and associated source-tied views, and lexical Regions. Compiler closure coverage alone is insufficient. |
+| C: same-process native phase reclamation | Repeated full native compilation/validation in one long-lived process, with sound survivor promotion into a separate parent/output allocation context, child scratch reclamation, nested phases and successful/rejected/cancelled paths; exact allocator ownership/mapped counts plus corroborating process memory observations. |
+
+Milestone A is the primary bridge, not a replacement for B or C. Internal compiler
+scratch contexts and language-level lexical Region semantics remain separate.
+Process exit is not evidence of same-process reclamation. Promotion may not overwrite
+live scratch or leave surviving pointers in a rewound or unmapped child extent.
+The full P_self contract and final proof below remain authoritative.
 
 ## Tier 2 capability progress
 
@@ -576,9 +583,9 @@ bootstrap exporter and both output paths to support the adopted construct.
 
 | Family | Host execution | Selfhost IR/output | E1 decoding/references | E1 containment/names/binders | E2 semantics | E3 lowering | Independent source-driven controls | Compiler adoption |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Unit, Bool, I64, If, Let, Sequence and direct monomorphic recursion | VM/reference/native | Profile 6 | Current restricted profile | Current restricted profile | Scalar whole-inventory typing implemented | Scalar mode-0 lowering implemented; ordinary Call/Return | Eight executed positive cases; ten semantic/profile and two raw structural rejection controls | Current source use; complete source compilation pending |
-| Text/StaticText, Bytes, List<I64> and structural records | VM/reference/native | Profile 6 | Current restricted profile | Current restricted profile | Pending | Pending | Pending; Tier 1 controls exist | Current |
-| Affine ByteBuffer and borrowed buffer reads | VM/reference/native | Profile 6, with separate borrowed qualifier and cleanup fallback | Current restricted profile | Current restricted profile | Custody/borrow pending | Pending | Pending; Tier 1 controls exist | Current |
+| Unit, Bool, I64, If, Let, Sequence and direct monomorphic recursion | VM/reference/native | Profiles 6 and 7 | Current restricted profile | Current restricted profile | Whole-inventory typing | Native flow and canonical pre-tail lowering | Acceptance evidence is recorded by exact source/tree in status and receipts | Current; complete native source fixed point is a separate milestone |
+| Text/StaticText, Bytes, List<I64> and structural records | VM/reference/native | Profiles 6 and 7 | Current restricted profile | Current restricted profile | Active compound typing and closed list substitutions | Native and canonical lowering | Source controls and exact artifact oracle comparisons require recorded execution evidence | Current |
+| Affine ByteBuffer and borrowed buffer reads | VM/reference/native | Profiles 6 and 7 | Current restricted profile | Current restricted profile | Exact consume/borrow/scope/branch custody | Native cleanup fallback and canonical pre-tail cleanup | Source controls and exact artifact oracle comparisons require recorded execution evidence | Current; arbitrary owned aggregates/borrowed helpers remain separate |
 | Interface, Operation and operation Parameters, Requirement, effect/requirement binders | VM/reference | Effectful forms need extension | Owners, constraints and pure/task rows admitted; R/E applications pending | All 12 namespace classes; direct/nested R/E scope | Compatibility/substitution pending | Pending | Four-engine raw-carrier E1 controls; source-driven execution pending | Optional; compiler remains pure |
 | Nominal owned records/choices, Match and general List<T> | VM/reference; native portions restricted | Nominal/match extension needed | Ordinary Record/Variant members decoded; owned forms and Match pending | Field/Case admission and nominal slot flow present; match binders pending | Pending | Pending | Pending | Optional |
 | First-class functions, binding and Invoke | VM/reference/host ELF | Selfhost closure/invoke parity pending | Decoded restricted forms | Current lexical checks | Signature/capture/effect pending | Pending | Pending; host/Tier 1 closure controls exist | Optional |

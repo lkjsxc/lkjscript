@@ -14,11 +14,7 @@ declarations.begin
         (let
           (binding a (type ByteBuffer) (call ci::push (local tag) (local out)))
           (in
-            (call wire::range
-              (local data)
-              (local at)
-              (call ci::add (local at) (local width))
-              (local a))))))
+            (call wire::range (local data) (local at) (call ci::add (local at) (local width)) (local a))))))
     (function create owner-tag
       (visibility public)
       (effect pure)
@@ -49,17 +45,14 @@ declarations.begin
         (let
           (binding a
             (type ByteBuffer)
-            (call wire::range
-              (local data)
-              (local at)
-              (call ci::add (local at) (i64 32))
-              (local out)))
+            (call wire::range (local data) (local at) (call ci::add (local at) (i64 32)) (local out)))
           (binding b
             (type ByteBuffer)
             (call wire::unsigned (call ci::field64 (local data) (local at) (i64 32)) (local a)))
           (binding c (type ByteBuffer) (call ci::push (i64 1) (local b)))
           (in
-            (call wire::range
+            (call
+              wire::range
               (local data)
               (call ci::add (local at) (i64 40))
               (call ci::add (local at) (i64 72))
@@ -94,7 +87,8 @@ declarations.begin
             (binding a (type ByteBuffer) (call wire::unsigned (local ordinal) (local out)))
             (binding b
               (type ByteBuffer)
-              (call typed
+              (call
+                typed
                 (local data)
                 (call ci::add (local at) (i64 8))
                 (i64 16)
@@ -105,12 +99,7 @@ declarations.begin
               (call wire::unsigned (call ci::field32 (local data) (local at) (i64 4)) (local b)))
             (binding d
               (type ByteBuffer)
-              (call typed
-                (local data)
-                (call ci::add (local at) (i64 24))
-                (i64 32)
-                (i64 1)
-                (local c)))
+              (call typed (local data) (call ci::add (local at) (i64 24)) (i64 32) (i64 1) (local c)))
             (in (call owners (local data) (call ci::add (local at) (i64 56)) (local d)))))))
     (function create compilation
       (visibility public)
@@ -125,27 +114,18 @@ declarations.begin
           (binding a (type ByteBuffer) (call ci::empty))
           (binding b (type ByteBuffer) (call ci::le (i64 16843009) (i64 4) (local a)))
           (binding c (type ByteBuffer) (call typed (local meta) (i64 0) (i64 16) (i64 1) (local b)))
-          (binding d
-            (type ByteBuffer)
-            (call typed (local meta) (i64 16) (i64 16) (i64 18) (local c)))
-          (binding e
-            (type ByteBuffer)
-            (call typed (local meta) (i64 64) (i64 32) (i64 255) (local d)))
-          (binding f
-            (type ByteBuffer)
-            (call typed (local meta) (i64 32) (i64 32) (i64 11) (local e)))
-          (binding g
-            (type ByteBuffer)
-            (call typed (local meta) (i64 96) (i64 32) (i64 10) (local f)))
-          (binding h
-            (type ByteBuffer)
-            (call typed (local meta) (i64 128) (i64 32) (i64 12) (local g)))
+          (binding d (type ByteBuffer) (call typed (local meta) (i64 16) (i64 16) (i64 18) (local c)))
+          (binding e (type ByteBuffer) (call typed (local meta) (i64 64) (i64 32) (i64 255) (local d)))
+          (binding f (type ByteBuffer) (call typed (local meta) (i64 32) (i64 32) (i64 11) (local e)))
+          (binding g (type ByteBuffer) (call typed (local meta) (i64 96) (i64 32) (i64 10) (local f)))
+          (binding h (type ByteBuffer) (call typed (local meta) (i64 128) (i64 32) (i64 12) (local g)))
           (binding i (type ByteBuffer) (call ci::push (i64 0) (local h)))
           (binding j
             (type ByteBuffer)
             (call unit-root (local page) (local content) (local count) (local i)))
           (in
-            (call wire::envelope
+            (call
+              wire::envelope
               (text "LKJCMNFT")
               (text "lkjscript.compilation-manifest-envelope")
               (call ci::freeze (local j)))))))
@@ -162,26 +142,14 @@ declarations.begin
         (let
           (binding a (type ByteBuffer) (call ci::empty))
           (binding b (type ByteBuffer) (call ci::le (i64 4311810305) (i64 5) (local a)))
-          (binding c
-            (type ByteBuffer)
-            (call typed (local meta) (i64 16) (i64 16) (i64 18) (local b)))
+          (binding c (type ByteBuffer) (call typed (local meta) (i64 16) (i64 16) (i64 18) (local b)))
           (binding d (type ByteBuffer) (call ci::push (i64 1) (local c)))
           (binding e (type ByteBuffer) (call typed (local meta) (i64 0) (i64 16) (i64 1) (local d)))
-          (binding f
-            (type ByteBuffer)
-            (call typed (local meta) (i64 16) (i64 16) (i64 18) (local e)))
-          (binding g
-            (type ByteBuffer)
-            (call typed (local meta) (i64 32) (i64 32) (i64 11) (local f)))
-          (binding h
-            (type ByteBuffer)
-            (call typed (local meta) (i64 64) (i64 32) (i64 255) (local g)))
-          (binding i
-            (type ByteBuffer)
-            (call typed (local meta) (i64 96) (i64 32) (i64 10) (local h)))
-          (binding j
-            (type ByteBuffer)
-            (call typed (local meta) (i64 128) (i64 32) (i64 12) (local i)))
+          (binding f (type ByteBuffer) (call typed (local meta) (i64 16) (i64 16) (i64 18) (local e)))
+          (binding g (type ByteBuffer) (call typed (local meta) (i64 32) (i64 32) (i64 11) (local f)))
+          (binding h (type ByteBuffer) (call typed (local meta) (i64 64) (i64 32) (i64 255) (local g)))
+          (binding i (type ByteBuffer) (call typed (local meta) (i64 96) (i64 32) (i64 10) (local h)))
+          (binding j (type ByteBuffer) (call typed (local meta) (i64 128) (i64 32) (i64 12) (local i)))
           (binding k (type ByteBuffer) (call map-root (local meta) (i64 160) (local j)))
           (binding l (type ByteBuffer) (call ci::append (local compilation) (i64 0) (local k)))
           (binding m
@@ -193,7 +161,8 @@ declarations.begin
           (binding q (type ByteBuffer) (call wire::unsigned (local count) (local p)))
           (binding r (type ByteBuffer) (call wire::unsigned (local bytes) (local q)))
           (in
-            (call wire::envelope
+            (call
+              wire::envelope
               (text "LKJAMNFT")
               (text "lkjscript.artifact-manifest-envelope")
               (call ci::freeze (local r)))))))
@@ -201,8 +170,8 @@ declarations.begin
       (visibility public)
       (effect pure)
       (parameter create manifest (type Bytes))
-      (parameter create pack-id (type Bytes))
-      (parameter create pack (type Bytes))
+      (parameter create count (type I64))
+      (parameter create segments (type Bytes))
       (returns Bytes)
       (body
         (let
@@ -214,22 +183,20 @@ declarations.begin
           (binding d
             (type ByteBuffer)
             (call wire::be (call ci::length (local manifest)) (i64 8) (local c)))
-          (binding e (type ByteBuffer) (call wire::be (i64 1) (i64 8) (local d)))
+          (binding e (type ByteBuffer) (call wire::be (local count) (i64 8) (local d)))
           (binding f
             (type ByteBuffer)
-            (call ci::append
+            (call
+              ci::append
               (call wire::digest (text "lkjscript.artifact-manifest.v14") (local manifest))
               (i64 0)
               (local e)))
           (binding g (type ByteBuffer) (call ci::append (local manifest) (i64 0) (local f)))
-          (binding h
-            (type ByteBuffer)
-            (call wire::be (call ci::length (local pack)) (i64 8) (local g)))
-          (binding i (type ByteBuffer) (call ci::append (local pack-id) (i64 0) (local h)))
-          (binding j (type ByteBuffer) (call ci::append (local pack) (i64 0) (local i)))
-          (binding core (call ci::freeze (local j)))
+          (binding h (type ByteBuffer) (call ci::append (local segments) (i64 0) (local g)))
+          (binding core (call ci::freeze (local h)))
           (binding tail
-            (call ci::concat
+            (call
+              ci::concat
               (call wire::digest (text "lkjscript.artifact-bundle.complete") (local core))
               (call ci::text-bytes (text "LKJAEND!"))))
           (in (call ci::concat (local core) (local tail))))))))

@@ -999,7 +999,12 @@ impl RepositoryView {
                 "candidate preview does not bind this exact base",
             ));
         }
-        self.store.install_candidate(&prepared.objects)?;
+        let control = &self.control;
+        self.store.install_candidate(&prepared.objects, &|| {
+            control.check().map_err(|error| {
+                Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message)
+            })
+        })?;
         self.current = super::repository::read_publication(&self.store, prepared.head)?;
         self.revalidated = None;
         self.validation_reused = false;
@@ -2517,6 +2522,8 @@ impl RepositoryView {
         self.validation_steps = if overflow { u64::MAX } else { semantic_work };
         self.validation_work_saturated = overflow
             || validation.semantic_work_saturated
+            || built.admitted.validation_visits_saturated
+            || built.admitted.validation_read_bytes_saturated
             || rebuild_work.saturated
             || local_work.map.saturated
             || local_work.store.saturated;

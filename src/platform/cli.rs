@@ -1794,7 +1794,15 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
                             .to_owned(),
                     ),
                     ("visits", receipt.validation_visits.to_string()),
+                    (
+                        "visits-saturated",
+                        receipt.validation_visits_saturated.to_string(),
+                    ),
                     ("read-bytes", receipt.validation_read_bytes.to_string()),
+                    (
+                        "read-bytes-saturated",
+                        receipt.validation_read_bytes_saturated.to_string(),
+                    ),
                 ],
             )?;
             append_compact_record(

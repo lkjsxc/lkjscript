@@ -42,7 +42,9 @@ fn dependency_interface_fanout_matched_source_measurements() {
             "owners_per_supplier": owner_count, "types_per_supplier": type_count,
             "owner_copies": owner_copies, "type_copies": type_copies,
             "validation_visits": admitted.validation_visits,
+            "validation_visits_saturated": admitted.validation_visits_saturated,
             "validation_read_bytes": admitted.validation_read_bytes,
+            "validation_read_bytes_saturated": admitted.validation_read_bytes_saturated,
             "admission_ns": elapsed,
         }));
     }
