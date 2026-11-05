@@ -156,11 +156,7 @@ impl Machine<'_> {
                     items: &mut self.observation.collection_items,
                     items_saturated: &mut self.observation.collection_items_saturated,
                 }
-                .require_capture_type(
-                    *ty,
-                    &BTreeMap::new(),
-                    &mut std::collections::BTreeSet::new(),
-                )?;
+                .require_capture_type(*ty, &BTreeMap::new(), &mut Vec::new())?;
             }
         }
         self.charge_allocation(

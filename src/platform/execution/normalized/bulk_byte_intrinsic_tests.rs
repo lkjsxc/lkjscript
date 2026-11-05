@@ -52,7 +52,14 @@ fn bulk_intrinsics_public_words_and_range_traps_agree_across_host_engines() -> C
         .map(|pair| pair.0);
         for result in [vm, reference] {
             if let Some(value) = expected {
-                assert_eq!(checked(result)?, NormalizedValue::I64(value), "{name}");
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(checked(result)?),
+                        &(NormalizedValue::I64(value))
+                    ),
+                    Ok(true),
+                    "{name}"
+                );
             } else {
                 let error = result.err().ok_or("invalid range accepted")?;
                 assert_eq!(error.class, ExecutionFailureClass::Trap, "{name}");
@@ -115,12 +122,24 @@ fn bulk_intrinsics_public_binary_payloads_and_ownership_match_host_native() -> C
                 .iter()
                 .find(|(name, _)| name.as_str() == "diagnostic")
                 .ok_or("diagnostic absent")?;
-            assert_eq!(diagnostic.1, NormalizedValue::I64(0));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(diagnostic.1),
+                    &(NormalizedValue::I64(0))
+                ),
+                Ok(true)
+            );
             let image = fields
                 .iter()
                 .find(|(name, _)| name.as_str() == "image")
                 .ok_or("image absent")?;
-            assert_eq!(image.1, NormalizedValue::bytes(expected.as_slice()));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(image.1),
+                    &(NormalizedValue::bytes(expected.as_slice()))
+                ),
+                Ok(true)
+            );
         }
         assert_eq!(storage.live(), (0, 0));
         let native = native_filter_tests::execute_filter(&executable, &input, &[], 4093);

@@ -1,5 +1,6 @@
 //! Value and accounting evidence independent of the private slice descriptor.
 use super::*;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 
 #[test]
 fn byte_ranges_and_copies_agree_through_checked_and_explicit_core_hosts() {
@@ -72,8 +73,8 @@ fn byte_ranges_and_copies_agree_through_checked_and_explicit_core_hosts() {
                 .invoke(declaration, arguments.clone(), None, &control)
                 .unwrap()
                 .0;
-            assert_eq!(actual, expected);
-            assert_eq!(independent, expected);
+            assert_eq!(raw_value_equal(&(actual), &(expected)), Ok(true));
+            assert_eq!(raw_value_equal(&(independent), &(expected)), Ok(true));
             if name == "copy" {
                 let NormalizedValue::Bytes(input) = &arguments[0] else {
                     unreachable!()
@@ -85,7 +86,13 @@ fn byte_ranges_and_copies_agree_through_checked_and_explicit_core_hosts() {
             }
         }
     }
-    assert_eq!(root, NormalizedValue::bytes((0..=255).collect::<Vec<u8>>()));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(root),
+            &(NormalizedValue::bytes((0..=255).collect::<Vec<u8>>()))
+        ),
+        Ok(true)
+    );
 }
 
 fn observed(
@@ -152,11 +159,11 @@ fn byte_range_intrinsic_budget_boundaries_retain_joined_cleanup() {
         ] {
             let (result, total, calls) =
                 observed(&snapshot, name, arguments.clone(), None, reference);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(raw_value_equal(&(result.unwrap()), &(expected)), Ok(true));
             assert_eq!(calls, 1);
             let (result, charged, calls) =
                 observed(&snapshot, name, arguments.clone(), Some(total), reference);
-            assert_eq!(result.unwrap(), expected);
+            assert_eq!(raw_value_equal(&(result.unwrap()), &(expected)), Ok(true));
             assert_eq!((charged, calls), (total, 1));
             let (result, charged, calls) =
                 observed(&snapshot, name, arguments, Some(total - 1), reference);
@@ -195,7 +202,13 @@ fn byte_range_intrinsic_budget_boundaries_retain_joined_cleanup() {
         part - full,
         crate::platform::execution::normalized::bytes::BytePayload::SLICE_DESCRIPTOR_BYTES
     );
-    assert_eq!(input, NormalizedValue::bytes(vec![255; 2048]));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(input),
+            &(NormalizedValue::bytes(vec![255; 2048]))
+        ),
+        Ok(true)
+    );
 }
 
 #[test]

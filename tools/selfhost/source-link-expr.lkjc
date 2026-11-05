@@ -99,7 +99,7 @@ declarations.begin
                 (call ci::eq (local op) (i64 11))
                 (call call-value (local graph) (local data) (i64 0))
                 (if
-                  (call ci::eq (local op) (i64 12))
+                  (call ci::either (call ci::eq (local op) (i64 12)) (call ci::eq (local op) (i64 21)))
                   (call source-link-ref::array
                     (local graph)
                     (local data)

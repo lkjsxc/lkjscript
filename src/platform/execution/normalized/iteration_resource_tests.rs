@@ -639,7 +639,7 @@ fn task_tail_transfer_preserves_unused_consumed_and_final_handoff_resource_lifet
                     assert_eq!(resources.live_resources(), 0);
                 } else {
                     let (value, depth) = result.unwrap();
-                    assert_eq!(value, NormalizedValue::Unit);
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(NormalizedValue::Unit)), Ok(true));
                     assert!(depth <= 2);
                     assert_eq!(resources.live_resources(), usize::from(mode == "unused"));
                 }
@@ -776,7 +776,7 @@ fn check_scoped_borrow_with_effects(generic: bool, effects: Option<bool>) {
                     && !cancelled
                     && (maximum_calls >= 5 || (mode == "borrow-tail" && maximum_calls >= 4));
                 if succeeds {
-                    assert_eq!(result.unwrap(), NormalizedValue::Unit);
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(result.unwrap()), &(NormalizedValue::Unit)), Ok(true));
                     assert_eq!(
                         resources.live_resources(),
                         usize::from(mode == "borrow-tail")
@@ -1117,7 +1117,13 @@ fn requirement_resource_helpers_close_exact_operands_and_join_both_execution_own
                 }
                 assert_eq!(*events.lock().unwrap(), expected);
             } else {
-                assert_eq!(result.unwrap(), NormalizedValue::Unit);
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(result.unwrap()),
+                        &(NormalizedValue::Unit)
+                    ),
+                    Ok(true)
+                );
                 assert_eq!(
                     *events.lock().unwrap(),
                     vec![

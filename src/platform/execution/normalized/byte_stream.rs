@@ -1,6 +1,7 @@
 //! Exact Graph 10 byte-stream capability over task-owned opaque handles.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
+use super::child_storage::FieldsBuilder;
 use super::resource::NormalizedResourceScope;
 use super::value::{NormalizedRecord, NormalizedValue};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -9,6 +10,7 @@ use crate::platform::kernel::{
     DeclarationReference, Name, OperationReference, RequirementReference,
 };
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(test)]
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -109,17 +111,17 @@ impl NormalizedByteStreamAdapter {
         Ok(())
     }
 
-    fn read_result(&self, chunk: Option<Vec<u8>>) -> NormalizedValue {
+    fn read_result(&self, chunk: Option<Vec<u8>>) -> Result<NormalizedValue, ExecutionError> {
         let (done, chunk) = match chunk {
             Some(chunk) => (false, chunk),
             None => (true, Vec::new()),
         };
-        NormalizedValue::Record(NormalizedRecord::Structural {
-            fields: Arc::new(vec![
-                (self.chunk_name.clone(), NormalizedValue::bytes(chunk)),
-                (self.done_name.clone(), NormalizedValue::Bool(done)),
-            ]),
-        })
+        let mut fields = FieldsBuilder::with_capacity(2)?;
+        fields.try_push((self.chunk_name.clone(), NormalizedValue::bytes(chunk)))?;
+        fields.try_push((self.done_name.clone(), NormalizedValue::Bool(done)))?;
+        Ok(NormalizedValue::Record(NormalizedRecord::Structural {
+            fields: fields.finish()?,
+        }))
     }
 }
 
@@ -163,7 +165,7 @@ impl NormalizedCapabilityAdapter for NormalizedByteStreamAdapter {
                 };
                 resources
                     .read_byte_stream(policy.grant_requirement, *stream, control)
-                    .map(|chunk| self.read_result(chunk))
+                    .and_then(|chunk| self.read_result(chunk))
             }
             NormalizedByteStreamOperation::Close => {
                 let [NormalizedValue::Resource(stream)] = arguments.as_slice() else {
@@ -313,18 +315,17 @@ mod tests {
                 &ExecutionControl::uncancelled(),
             )
             .expect("first bounded read");
-        assert_eq!(
+        assert!(matches!(
             first,
-            NormalizedValue::Record(NormalizedRecord::Structural {
-                fields: Arc::new(vec![
-                    (
-                        Name::new("chunk").unwrap(),
-                        NormalizedValue::bytes(b"stre".to_vec())
-                    ),
-                    (Name::new("done").unwrap(), NormalizedValue::Bool(false)),
-                ]),
-            })
-        );
+            NormalizedValue::Record(NormalizedRecord::Structural { fields })
+                if matches!(
+                    fields.as_slice(),
+                    [(chunk, NormalizedValue::Bytes(bytes)), (done, NormalizedValue::Bool(false))]
+                        if chunk.as_str() == "chunk"
+                            && done.as_str() == "done"
+                            && bytes.as_ref() == b"stre"
+                )
+        ));
         let second = adapter
             .call(
                 &read,
@@ -348,7 +349,7 @@ mod tests {
         let NormalizedValue::Record(NormalizedRecord::Structural { fields }) = eof else {
             panic!("stream EOF record")
         };
-        assert_eq!(fields[1].1, NormalizedValue::Bool(true));
+        assert!(matches!(&fields[1].1, NormalizedValue::Bool(true)));
 
         let close = policy(
             interface,
@@ -358,7 +359,7 @@ mod tests {
             "close",
         );
         for _ in 0..2 {
-            assert_eq!(
+            assert!(matches!(
                 adapter
                     .call(
                         &close,
@@ -368,7 +369,7 @@ mod tests {
                     )
                     .expect("idempotent stream close"),
                 NormalizedValue::Unit
-            );
+            ));
         }
         assert_eq!(registry.live_streams(), 0);
         assert_eq!(scope.live_resources(), 0);
@@ -390,7 +391,7 @@ mod tests {
                     .expect("memory stream"),
             )
             .expect("stream handle");
-        assert_eq!(
+        assert!(matches!(
             adapter
                 .call(
                     &policy(
@@ -405,8 +406,8 @@ mod tests {
                     &ExecutionControl::uncancelled(),
                 )
                 .expect("whole stream read"),
-            NormalizedValue::bytes(b"whole".to_vec())
-        );
+            NormalizedValue::Bytes(bytes) if bytes.as_ref() == b"whole"
+        ));
         assert_eq!(registry.live_streams(), 0);
         assert_eq!(scope.live_resources(), 0);
 

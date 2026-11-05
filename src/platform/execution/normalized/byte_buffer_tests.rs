@@ -1,6 +1,7 @@
 //! Ownership, independent source execution, and raw-boundary regression tests.
 use super::super::prepare::NormalizedEntryPoint;
 use super::*;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 const INPUT: &str = include_str!("../../../../tests/fixtures/owned-byte-buffer.lkjc");
 pub(crate) fn author(extra: &str) -> Result<crate::platform::kernel::KernelSnapshot, String> {
     author_only(&format!("{INPUT}\n{extra}"))
@@ -81,9 +82,21 @@ fn byte_buffer_creation_reserves_complete_owned_storage_before_allocation() {
             (result, allocated, calls, storage.created())
         };
         let (value, total, calls, created) = run(None);
-        assert_eq!(value.unwrap(), NormalizedValue::Unit);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value.unwrap()),
+                &(NormalizedValue::Unit)
+            ),
+            Ok(true)
+        );
         assert_eq!((calls, created), (1, 1));
-        assert_eq!(run(Some(total)).0.unwrap(), NormalizedValue::Unit);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(run(Some(total)).0.unwrap()),
+                &(NormalizedValue::Unit)
+            ),
+            Ok(true)
+        );
 
         // Find creation, not merely successful completion: later stack/result
         // charges may fail after the allocation. No engine-wide magic quota.
@@ -138,8 +151,8 @@ fn byte_buffer_source_and_vm_have_exact_binary_and_cleanup() {
         )
         .invoke(d, vec![], None, &control)
         .unwrap();
-        assert_eq!(actual, expected);
-        assert_eq!(reference, expected);
+        assert_eq!(raw_value_equal(&(actual), &(expected)), Ok(true));
+        assert_eq!(raw_value_equal(&(reference), &(expected)), Ok(true));
         assert_eq!(work.live_call_frames_after, 0);
         assert_eq!(work.live_operands_after, 0);
         assert_eq!(reference_work.live_call_frames_after, 0);
@@ -164,8 +177,11 @@ fn byte_buffer_task_locals_preserve_task_kind_in_both_evaluators() {
                 NormalizedRunPolicy::foreground(),
             );
             assert_eq!(
-                engine.invoke(d, vec![], None, &control).unwrap().0,
-                NormalizedValue::bytes(vec![])
+                raw_value_equal(
+                    &(engine.invoke(d, vec![], None, &control).unwrap().0),
+                    &(NormalizedValue::bytes(vec![]))
+                ),
+                Ok(true)
             );
             engine
                 .invoke_root_target(&target, vec![], None, &control)
@@ -174,15 +190,24 @@ fn byte_buffer_task_locals_preserve_task_kind_in_both_evaluators() {
         } else {
             let engine = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground());
             assert_eq!(
-                engine.invoke(d, vec![], None, &control).unwrap().0,
-                NormalizedValue::bytes(vec![])
+                raw_value_equal(
+                    &(engine.invoke(d, vec![], None, &control).unwrap().0),
+                    &(NormalizedValue::bytes(vec![]))
+                ),
+                Ok(true)
             );
             engine
                 .invoke_root_target(&target, vec![], None, &control)
                 .unwrap()
                 .0
         };
-        assert_eq!(value, NormalizedValue::bytes(vec![]));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(NormalizedValue::bytes(vec![]))
+            ),
+            Ok(true)
+        );
         assert_eq!(observer.live(), (0, 0));
     }
 }
@@ -307,7 +332,13 @@ declarations.end
                 .unwrap()
                 .0
         };
-        assert_eq!(value, NormalizedValue::bytes(vec![17]));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(NormalizedValue::bytes(vec![17]))
+            ),
+            Ok(true)
+        );
         assert_eq!(storage.live(), (0, 0));
     }
 }
@@ -467,7 +498,7 @@ fn byte_buffer_long_owned_builder_borrowed_reader_and_both_owner_choices() {
                 )
                 .invoke(d, args, None, &control)
                 .unwrap();
-                assert_eq!(value, expected);
+                assert_eq!(raw_value_equal(&(value), &(expected)), Ok(true));
                 assert!(work.maximum_call_depth < 16);
                 if name.starts_with("long") {
                     assert!(work.tail_transfers >= 16383);
@@ -477,7 +508,7 @@ fn byte_buffer_long_owned_builder_borrowed_reader_and_both_owner_choices() {
                     NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                         .invoke(d, args, None, &control)
                         .unwrap();
-                assert_eq!(value, expected);
+                assert_eq!(raw_value_equal(&(value), &(expected)), Ok(true));
                 assert!(work.maximum_call_depth < 16);
                 if name.starts_with("long") {
                     assert!(work.tail_transfers >= 16383);
@@ -859,7 +890,13 @@ declarations.end"#,
                 .unwrap()
                 .0
         };
-        assert_eq!(value, NormalizedValue::I64(0));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(NormalizedValue::I64(0))
+            ),
+            Ok(true)
+        );
         assert_eq!(observer.live(), (0, 0));
     }
 }

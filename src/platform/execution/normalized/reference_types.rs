@@ -2862,7 +2862,9 @@ fn failure() -> ExecutionError {
 }
 
 fn at_stage(mut error: ExecutionError, stage: &str) -> ExecutionError {
-    error.message = format!("{} ({stage})", error.message);
+    if matches!(&error.message, std::borrow::Cow::Owned(_)) {
+        error.message = format!("{} ({stage})", error.message).into();
+    }
     error
 }
 

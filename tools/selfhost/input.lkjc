@@ -28,7 +28,30 @@ declarations.begin
     (function create table-is (visibility public) (effect pure) (parameter create data (type Bytes)) (parameter create at (type I64)) (parameter create values (type (list I64))) (parameter create i (type I64)) (returns Bool) (body (if (call eq (local i) (call list-size (types I64) (local values))) (bool true) (if (call eq (call u32 (local data) (call add (local at) (call mul (local i) (i64 4)))) (call list-get (types I64) (local values) (local i))) (call table-is (local data) (local at) (local values) (call add (local i) (i64 1))) (bool false)))))
     (external create list-size (visibility public) (implementation core.list.length) (type-parameter create T) (parameter create values (type (list T))) (returns I64))
     (external create list-get (visibility public) (implementation core.list.get) (type-parameter create T) (parameter create values (type (list T))) (parameter create i (type I64)) (returns T))
-    (function create validate (visibility public) (effect pure) (parameter create data (type Bytes)) (returns I64) (body (if (call lt (call length (local data)) (i64 128)) (i64 3) (if (call same (call slice (local data) (i64 0) (i64 8)) (call text-bytes (text "LKJCI001"))) (if (call eq (call u32 (local data) (i64 112)) (i64 0)) (if (call eq (call u32 (local data) (i64 8)) (i64 6)) (call flow::validate (local data)) (i64 2)) (if (call eq (call u32 (local data) (i64 112)) (i64 1)) (call artifact-input::validate (local data)) (i64 2))) (i64 1)))))
+    (function create validate
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (if
+          (call lt (call length (local data)) (i64 128))
+          (i64 3)
+          (if
+            (call same
+              (call slice (local data) (i64 0) (i64 8))
+              (call text-bytes (text "LKJCI001")))
+            (if
+              (call word-is (local data) (i64 112) (i64 0))
+              (if
+                (call eq (call u32 (local data) (i64 8)) (i64 8))
+                (call flow::validate (local data))
+                (i64 2))
+              (if
+                (call eq (call u32 (local data) (i64 112)) (i64 1))
+                (call artifact-input::validate (local data))
+                (i64 2)))
+            (i64 1)))))
     (function create append (visibility public) (effect pure) (parameter create data (type Bytes)) (parameter create i (type I64)) (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer) (body (call append-slice (local data) (local i) (call length (local data)) (local out))))
     (function create pad (visibility public) (effect pure) (parameter create end (type I64)) (parameter create byte (type I64)) (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer) (body (if (call lt (call size (local out)) (local end)) (let (binding next (type ByteBuffer) (call push (local byte) (local out))) (in (call pad (local end) (local byte) (local next)))) (local out))))
     (function create le (visibility public) (effect pure) (parameter create value (type I64)) (parameter create count (type I64)) (parameter create out (type ByteBuffer) (use consume)) (returns ByteBuffer) (body (if (call both (call eq (local count) (i64 8)) (if (call lt (local value) (i64 0)) (bool false) (bool true))) (call append-word (local value) (local out)) (if (call eq (local count) (i64 0)) (local out) (let (binding rest (call div (local value) (i64 256))) (binding next (type ByteBuffer) (call push (call sub (local value) (call mul (local rest) (i64 256))) (local out))) (in (call le (local rest) (call sub (local count) (i64 1)) (local next))))))))

@@ -83,13 +83,24 @@ declarations.begin
             (in
               (if
                 (call ci::eq (local tag) (i64 0))
-                (call rows (local trace) (call next (local trace) (local cursor)) (local offset) (local out))
+                (call rows
+                  (local trace)
+                  (call next (local trace) (local cursor))
+                  (local offset)
+                  (local out))
                 (let
                   (binding jump
-                    (call ci::either (call ci::eq (local tag) (i64 10)) (call ci::eq (local tag) (i64 11))))
+                    (call ci::either
+                      (call ci::eq (local tag) (i64 10))
+                      (call ci::eq (local tag) (i64 11))))
                   (binding extra
-                    (call ci::either (call ci::eq (local tag) (i64 12)) (call ci::eq (local tag) (i64 15))))
-                  (binding count (call ci::u64 (local trace) (call ci::add (local cursor) (i64 40))))
+                    (call ci::either
+                      (call ci::either
+                        (call ci::eq (local tag) (i64 12))
+                        (call ci::eq (local tag) (i64 13)))
+                      (call ci::eq (local tag) (i64 15))))
+                  (binding count
+                    (call ci::u64 (local trace) (call ci::add (local cursor) (i64 40))))
                   (binding a
                     (if
                       (local jump)
@@ -102,20 +113,28 @@ declarations.begin
                   (in
                     (if
                       (call ci::lt (local a) (i64 0))
-                      (record structural (field code (i64 3)) (field bytes (call ci::freeze (local out))))
+                      (record structural
+                        (field code (i64 3))
+                        (field bytes (call ci::freeze (local out))))
                       (let
                         (binding row
                           (let
                             (binding b0 (type ByteBuffer) (call ci::empty))
-                            (binding b1 (type ByteBuffer) (call ci::le (local tag) (i64 8) (local b0)))
-                            (binding b2 (type ByteBuffer) (call ci::le (local a) (i64 8) (local b1)))
+                            (binding b1
+                              (type ByteBuffer)
+                              (call ci::le (local tag) (i64 8) (local b0)))
+                            (binding b2
+                              (type ByteBuffer)
+                              (call ci::le (local a) (i64 8) (local b1)))
                             (binding b3
                               (type ByteBuffer)
                               (call ci::le
                                 (if
                                   (local jump)
                                   (i64 0)
-                                  (call ci::u64 (local trace) (call ci::add (local cursor) (i64 16))))
+                                  (call ci::u64
+                                    (local trace)
+                                    (call ci::add (local cursor) (i64 16))))
                                 (i64 8)
                                 (local b2)))
                             (binding b4
@@ -127,8 +146,13 @@ declarations.begin
                                 (local b3)))
                             (binding b5
                               (type ByteBuffer)
-                              (call ci::le (if (local extra) (local offset) (i64 0)) (i64 8) (local b4)))
-                            (binding b6 (type ByteBuffer) (call ci::le (local count) (i64 8) (local b5)))
+                              (call ci::le
+                                (if (local extra) (local offset) (i64 0))
+                                (i64 8)
+                                (local b4)))
+                            (binding b6
+                              (type ByteBuffer)
+                              (call ci::le (local count) (i64 8) (local b5)))
                             (in (call ci::freeze (local b6)))))
                         (binding next
                           (type ByteBuffer)

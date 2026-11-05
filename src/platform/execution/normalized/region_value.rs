@@ -1,6 +1,7 @@
 //! Fixed cell representation. Both evaluators supply independently admitted type
 //! inventories. Flat layout nodes and explicit worklists keep the whole codec
 //! lifecycle independent of the host call stack.
+use super::child_storage::Fields;
 use super::value::{NormalizedRecord, NormalizedValue, RawValue, ValueOrigin};
 use crate::platform::execution::{
     ExecutionControl, ExecutionError,
@@ -8,7 +9,6 @@ use crate::platform::execution::{
 };
 use crate::platform::kernel::{Name, TypeForm, TypeObject, TypeObjectDigest};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::Arc;
 
 pub(super) type Arena = runtime::Arena<ValueOrigin>;
 
@@ -403,14 +403,19 @@ impl Layout {
                     reserve_slots(&mut record, fields.len(), control, reserve)?;
                     for field in fields {
                         reserve(field.name.as_str().len() as u64)?;
+                        record.push((
+                            field.name.try_clone().map_err(|_| storage_error())?,
+                            NormalizedValue::Unit,
+                        ));
                     }
                     control.check()?;
-                    // All fallible work finishes before moving children out of guards.
-                    for (field, value) in fields.iter().zip(values.drain(first..)) {
-                        record.push((field.name.clone(), value.into_raw()));
+                    // Stage names before moving children; the owner factory guards
+                    // the completed payload if its allocation is refused.
+                    for ((_, slot), value) in record.iter_mut().zip(values.drain(first..)) {
+                        *slot = value.into_raw();
                     }
                     NormalizedValue::Record(NormalizedRecord::Structural {
-                        fields: Arc::new(record),
+                        fields: Fields::try_new(record)?,
                     })
                 }
             };

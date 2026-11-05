@@ -7,6 +7,7 @@ mod map_entries;
 #[path = "vm_owned_metadata.rs"]
 mod owned_metadata;
 
+use super::super::child_storage::{Captures, StorageFailure, reserve};
 use super::super::prepare::{NormalizedFieldSelector, NormalizedProgram};
 use super::super::resource::NormalizedResourceScope;
 use super::super::value::RawValue;
@@ -21,6 +22,7 @@ use crate::platform::kernel::{
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use triomphe::Arc as BindingOwner;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum Class {
@@ -755,17 +757,18 @@ impl Value {
         else {
             return Err(type_error("invoke callee is not a function"));
         };
-        let arguments = bound_arguments
-            .iter()
-            .flat_map(|prefix| prefix.iter())
-            .map(|raw| Self {
+        let prefix = bound_arguments.as_ref().map_or(&[][..], Captures::as_slice);
+        let mut arguments = Vec::new();
+        reserve(&mut arguments, prefix.len())?;
+        for raw in prefix {
+            arguments.push(Self {
                 raw: raw.clone(),
                 origin: self.origin,
                 class: Class::Free,
                 ordinary_type: None,
                 borrow: None,
-            })
-            .collect();
+            });
+        }
         Ok((*function, Arc::clone(type_arguments), arguments))
     }
 
@@ -841,7 +844,14 @@ impl Value {
             }
             NormalizedRecord::Nominal {
                 layout,
-                fields: Arc::new(fields.into_iter().map(|(_, value)| value.raw).collect()),
+                fields: {
+                    let mut storage =
+                        super::super::child_storage::ValuesBuilder::with_capacity(fields.len())?;
+                    for (_, value) in fields {
+                        storage.try_push(value.raw)?;
+                    }
+                    storage.finish()?
+                },
             }
         } else {
             if fields.windows(2).any(|pair| pair[0].0 >= pair[1].0) {
@@ -850,12 +860,14 @@ impl Value {
                 ));
             }
             NormalizedRecord::Structural {
-                fields: Arc::new(
-                    fields
-                        .into_iter()
-                        .map(|(name, value)| (name, value.raw))
-                        .collect(),
-                ),
+                fields: {
+                    let mut storage =
+                        super::super::child_storage::FieldsBuilder::with_capacity(fields.len())?;
+                    for (name, value) in fields {
+                        storage.try_push((name, value.raw))?;
+                    }
+                    storage.finish()?
+                },
             }
         };
         Ok(Self {
@@ -964,18 +976,17 @@ impl Value {
                 + 2 * std::mem::size_of::<usize>()
                 + 8) as u64,
         })?;
-        let fields = vec![
-            (
-                Name::new("key".to_owned()).map_err(|_| type_error("invalid map entry field"))?,
-                key.raw,
-            ),
-            (
-                Name::new("value".to_owned()).map_err(|_| type_error("invalid map entry field"))?,
-                value.raw,
-            ),
-        ];
+        let mut fields = super::super::child_storage::FieldsBuilder::with_capacity(2)?;
+        fields.try_push((
+            Name::new("key".to_owned()).map_err(|_| type_error("invalid map entry field"))?,
+            key.raw,
+        ))?;
+        fields.try_push((
+            Name::new("value".to_owned()).map_err(|_| type_error("invalid map entry field"))?,
+            value.raw,
+        ))?;
         let raw = NormalizedValue::Record(NormalizedRecord::Structural {
-            fields: Arc::new(fields),
+            fields: fields.finish()?,
         });
         reserve(super::super::map::Charge::default())?;
         Ok(Self {
@@ -1181,7 +1192,7 @@ type Visit<'a> = (
     TypeObjectDigest,
     usize,
     bool,
-    Arc<Bindings>,
+    BindingOwner<Bindings>,
     bool,
 );
 
@@ -1232,16 +1243,13 @@ impl Admission<'_> {
                 "bind target has unresolved effects or a resource-bearing signature",
             ));
         }
-        let existing = bound_arguments.as_deref().map_or(&[][..], Vec::as_slice);
+        let existing = bound_arguments.as_ref().map_or(&[][..], Captures::as_slice);
         let count = existing
             .len()
             .checked_add(arguments)
-            .filter(|count| {
-                *count <= target.parameters.len()
-                    && *count <= crate::platform::kernel::contract::MAXIMUM_CHILDREN
-            })
+            .filter(|count| *count <= target.parameters.len())
             .ok_or_else(|| {
-                admission_error("bound prefix exceeds remaining arity or the capture-slot bound")
+                admission_error("bound prefix exceeds the target's exact remaining arity")
             })?;
         if arguments != 0 {
             self.collection(count)?;
@@ -1290,20 +1298,20 @@ impl Admission<'_> {
             .and_then(|index| target.parameters.get(index))
             .ok_or_else(|| admission_error("capture index exceeds remaining arity"))?;
         self.binding_storage(type_arguments.len())?;
-        let bindings = Arc::new(
+        let bindings = BindingOwner::try_new(
             target
                 .type_parameters
                 .iter()
                 .copied()
                 .zip(type_arguments.iter().copied())
                 .collect::<Bindings>(),
-        );
+        )
+        .map_err(|_| StorageFailure::Allocation)?;
         self.allocate(std::mem::size_of::<Visit<'_>>() as u64)?;
-        self.inspect_pending(
-            vec![(argument.raw(), parameter.ty, 1, false, bindings, true)],
-            None,
-            false,
-        )?;
+        let mut pending = Vec::new();
+        reserve(&mut pending, 1)?;
+        pending.push((argument.raw(), parameter.ty, 0, false, bindings, true));
+        self.inspect_pending(pending, None, false)?;
         self.control.check()?;
         argument.class = Class::Retained(index);
         argument.ordinary_type = None;
@@ -1343,15 +1351,18 @@ impl Admission<'_> {
         else {
             return Err(type_error("bind completion has no callable"));
         };
-        let existing = bound_arguments.as_deref().map_or(&[][..], Vec::as_slice);
+        let existing = bound_arguments.as_ref().map_or(&[][..], Captures::as_slice);
         let count = existing
             .len()
             .checked_add(arguments.len())
-            .filter(|count| *count <= crate::platform::kernel::contract::MAXIMUM_CHILDREN)
-            .ok_or_else(|| admission_error("bind completion exceeds the checked prefix bound"))?;
-        let mut prefix = Vec::with_capacity(count);
-        prefix.extend(existing.iter().cloned());
-        prefix.extend(arguments.into_iter().map(Value::into_raw));
+            .ok_or_else(|| admission_error("bind completion prefix extent overflowed"))?;
+        let mut prefix = super::super::child_storage::ValuesBuilder::with_capacity(count)?;
+        for value in existing {
+            prefix.try_push(value.clone())?;
+        }
+        for value in arguments {
+            prefix.try_push(value.into_raw())?;
+        }
         self.control.check()?;
         Ok(Value {
             raw: NormalizedValue::Function {
@@ -1360,7 +1371,7 @@ impl Admission<'_> {
                 effect_arguments: Arc::clone(effect_arguments),
                 requirement_arguments: Arc::clone(requirement_arguments),
                 read_scope_arguments: Arc::clone(read_scope_arguments),
-                bound_arguments: Some(Arc::new(prefix)),
+                bound_arguments: Some(Captures::from_values(prefix.finish()?)),
             },
             origin: self.program.value_origin,
             class: Class::Free,
@@ -1373,12 +1384,14 @@ impl Admission<'_> {
         &mut self,
         ty: TypeObjectDigest,
         bindings: &Bindings,
-        checked: &mut std::collections::BTreeSet<TypeObjectDigest>,
+        checked: &mut Vec<TypeObjectDigest>,
     ) -> Result<(), ExecutionError> {
         let program = self.program;
         let control = self.control;
         self.allocate(std::mem::size_of::<(TypeObjectDigest, usize)>() as u64)?;
-        let mut pending = vec![(ty, 0_usize)];
+        let mut pending = Vec::new();
+        reserve(&mut pending, 1)?;
+        pending.push((ty, 0_usize));
         while let Some((ty, depth)) = pending.pop() {
             self.control.check()?;
             self.work.capture_admission_nodes = self.work.capture_admission_nodes.saturating_add(1);
@@ -1394,13 +1407,15 @@ impl Admission<'_> {
             let identity = self
                 .type_identity(ty, bindings)?
                 .ok_or_else(|| admission_error("capture type is unresolved or foreign"))?;
-            if checked.contains(&identity) {
-                continue;
-            }
+            let insertion = match checked.binary_search(&identity) {
+                Ok(_) => continue,
+                Err(insertion) => insertion,
+            };
             self.allocate(
                 (std::mem::size_of::<TypeObjectDigest>() + 3 * std::mem::size_of::<usize>()) as u64,
             )?;
-            checked.insert(identity);
+            reserve(checked, 1)?;
+            checked.insert(insertion, identity);
             if program.owned_record_layout(identity).is_some() {
                 return Err(admission_error("capture type is an affine nominal owner"));
             }
@@ -1410,6 +1425,7 @@ impl Admission<'_> {
             let mut append = |child| -> Result<(), ExecutionError> {
                 self.control.check()?;
                 self.allocate(std::mem::size_of::<(TypeObjectDigest, usize)>() as u64)?;
+                reserve(&mut pending, 1)?;
                 pending.push((child, depth + 1));
                 Ok(())
             };
@@ -1518,15 +1534,18 @@ impl Admission<'_> {
             }),
             Err(mut error) => {
                 super::super::value::release_raw_value(raw);
-                error.message = format!(
-                    "{} value admission: {}",
-                    if input {
-                        "invocation input"
-                    } else {
-                        "raw result"
-                    },
-                    error.message
-                );
+                if matches!(&error.message, std::borrow::Cow::Owned(_)) {
+                    error.message = format!(
+                        "{} value admission: {}",
+                        if input {
+                            "invocation input"
+                        } else {
+                            "raw result"
+                        },
+                        error.message
+                    )
+                    .into();
+                }
                 Err(error)
             }
         }
@@ -1559,8 +1578,12 @@ impl Admission<'_> {
         )?;
         self.allocate(std::mem::size_of::<Visit<'_>>() as u64)?;
         self.binding_storage(self.substitutions.len())?;
-        let bindings = Arc::new(self.substitutions.clone());
-        self.inspect_pending(vec![(raw, ty, 0, true, bindings, false)], authority, input)
+        let bindings = BindingOwner::try_new(self.substitutions.clone())
+            .map_err(|_| StorageFailure::Allocation)?;
+        let mut pending = Vec::new();
+        reserve(&mut pending, 1)?;
+        pending.push((raw, ty, 0, true, bindings, false));
+        self.inspect_pending(pending, authority, input)
     }
 
     fn inspect_pending(
@@ -1571,7 +1594,7 @@ impl Admission<'_> {
     ) -> Result<Inspection, ExecutionError> {
         let mut root_class = None;
         let mut root_identity = None;
-        let mut capture_types = std::collections::BTreeSet::new();
+        let mut capture_types = Vec::new();
         while let Some((value, ty, depth, affine_allowed, bindings, capture)) = pending.pop() {
             self.control.check()?;
             if capture {
@@ -1590,9 +1613,21 @@ impl Admission<'_> {
             if depth > 256 {
                 return Err(resource_error(
                     "normalized_value_depth",
-                    "value admission exceeds depth 256; reduce the input nesting",
+                    "inline Option/Result/Variant spine exceeds depth 256",
                 ));
             }
+            // Only Box-backed inline wrappers still recurse during Clone.
+            // Opaque Function/Record/List/Map ownership breaks that spine.
+            let next_depth = if matches!(
+                value,
+                NormalizedValue::Option(_)
+                    | NormalizedValue::Result { .. }
+                    | NormalizedValue::Variant { .. }
+            ) {
+                depth + 1
+            } else {
+                0
+            };
             let class = self.classify(value)?;
             if root_class.is_none() {
                 root_class = Some(class);
@@ -1653,6 +1688,7 @@ impl Admission<'_> {
                         .ok_or_else(|| admission_error("raw nominal record has a foreign identity or shape; use the exact record layout"))?;
                     self.collection(fields.len())?;
                     for (field, definition) in fields.iter().zip(definition.fields.iter()) {
+                        reserve(&mut children, 1)?;
                         children.push((field, definition.ty, false));
                     }
                 }
@@ -1673,6 +1709,7 @@ impl Admission<'_> {
                             ));
                         }
                         self.allocate(name.as_str().len() as u64)?;
+                        reserve(&mut children, 1)?;
                         children.push((field, expected.ty, false));
                     }
                 }
@@ -1702,6 +1739,7 @@ impl Admission<'_> {
                                         | TypeForm::CapabilityResource { .. }
                                 )
                             });
+                            reserve(&mut children, 1)?;
                             children.push((
                                 value.as_ref(),
                                 ty,
@@ -1720,17 +1758,20 @@ impl Admission<'_> {
                     self.allocate(values.metadata_bytes()?)?;
                     for value in values.iter() {
                         self.control.check()?;
+                        reserve(&mut children, 1)?;
                         children.push((value, *item, false));
                     }
                 }
                 (NormalizedValue::Option(value), TypeForm::Option { item }) => {
                     if let Some(value) = value {
                         self.collection(1)?;
+                        reserve(&mut children, 1)?;
                         children.push((value.as_ref(), *item, false));
                     }
                 }
                 (NormalizedValue::Result { success, value }, TypeForm::Result { ok, error }) => {
                     self.collection(1)?;
+                    reserve(&mut children, 1)?;
                     children.push((value.as_ref(), if *success { *ok } else { *error }, false));
                 }
                 (NormalizedValue::Map(values), TypeForm::Map { key, value: item }) => {
@@ -1767,6 +1808,7 @@ impl Admission<'_> {
                             ));
                         }
                         self.allocate(super::map_key_bytes(key))?;
+                        reserve(&mut children, 1)?;
                         children.push((value, *item, false));
                     }
                 }
@@ -1840,8 +1882,6 @@ impl Admission<'_> {
                         || bound_arguments
                             .as_ref()
                             .is_some_and(|prefix| prefix.is_empty())
-                        || bound_arguments.as_ref().map_or(0, |prefix| prefix.len())
-                            > crate::platform::kernel::contract::MAXIMUM_CHILDREN
                         || callable
                             .parameters
                             .len()
@@ -1891,22 +1931,19 @@ impl Admission<'_> {
                             ));
                         }
                         if constraint.requires_capture_safe() {
-                            self.require_capture_type(
-                                *ty,
-                                &BTreeMap::new(),
-                                &mut std::collections::BTreeSet::new(),
-                            )?;
+                            self.require_capture_type(*ty, &BTreeMap::new(), &mut Vec::new())?;
                         }
                     }
                     self.binding_storage(type_arguments.len())?;
-                    let substitutions = Arc::new(
+                    let substitutions = BindingOwner::try_new(
                         callable
                             .type_parameters
                             .iter()
                             .copied()
                             .zip(type_arguments.iter().copied())
                             .collect::<BTreeMap<_, _>>(),
-                    );
+                    )
+                    .map_err(|_| StorageFailure::Allocation)?;
                     let prefix_len = bound_arguments.as_ref().map_or(0, |prefix| prefix.len());
                     for (actual, expected) in
                         callable.parameters.iter().skip(prefix_len).zip(parameters)
@@ -1936,12 +1973,13 @@ impl Admission<'_> {
                         for (child, parameter) in
                             prefix.iter().zip(callable.parameters.iter()).rev()
                         {
+                            reserve(&mut pending, 1)?;
                             pending.push((
                                 child,
                                 parameter.ty,
-                                depth + 1,
+                                0,
                                 false,
-                                Arc::clone(&substitutions),
+                                BindingOwner::clone(&substitutions),
                                 true,
                             ));
                         }
@@ -1954,12 +1992,13 @@ impl Admission<'_> {
                 }
             }
             for (child, ty, allowed) in children.into_iter().rev() {
+                reserve(&mut pending, 1)?;
                 pending.push((
                     child,
                     ty,
-                    depth + 1,
+                    next_depth,
                     allowed,
-                    Arc::clone(&bindings),
+                    BindingOwner::clone(&bindings),
                     capture,
                 ));
             }

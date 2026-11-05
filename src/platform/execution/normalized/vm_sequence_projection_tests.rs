@@ -76,14 +76,26 @@ fn checked_sequence_get_retains_large_data_without_descendant_walks_or_owner_loa
             assert_eq!(selected.class, Class::Free);
             assert_eq!(selected.ordinary_type, Some(f.payload));
             assert!(selected.borrow.is_none());
-            assert_eq!(selected.raw(), &f.raw(count));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(selected.raw()),
+                    &(&f.raw(count))
+                ),
+                Ok(true)
+            );
         }
         let retained = project(&f, &read).unwrap();
         drop(read);
         token(&owner).validate(f.domain, true).unwrap();
         drop(owner);
         assert_eq!(observations.live(), (0, 0));
-        assert_eq!(retained.raw(), &f.raw(count));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(retained.raw()),
+                &(&f.raw(count))
+            ),
+            Ok(true)
+        );
     }
 }
 
@@ -198,20 +210,30 @@ fn checked_sequence_get_snapshot_survives_owning_and_scoped_domain_adoption() {
         .unwrap();
     let read = owner.duplicate(ParameterUse::Borrow).unwrap();
     assert_eq!(
-        read.sequence_item(
-            &f.program,
-            child_domain,
-            0,
-            &ExecutionControl::uncancelled(),
-            &mut |_| Ok(()),
-        )
-        .unwrap()
-        .raw(),
-        retained.raw()
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(read
+                .sequence_item(
+                    &f.program,
+                    child_domain,
+                    0,
+                    &ExecutionControl::uncancelled(),
+                    &mut |_| Ok(()),
+                )
+                .unwrap()
+                .raw()),
+            &(retained.raw())
+        ),
+        Ok(true)
     );
     drop(read);
     drop(owner);
-    assert_eq!(retained.raw(), &f.raw(8));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(retained.raw()),
+            &(&f.raw(8))
+        ),
+        Ok(true)
+    );
 }
 
 #[test]
@@ -252,7 +274,13 @@ fn checked_sequence_get_reserves_clone_spine_and_cancellation_leaves_healthy_own
         ) {
             Ok(selected) => {
                 successes += 1;
-                assert_eq!(selected.raw(), &f.raw(16));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(selected.raw()),
+                        &(&f.raw(16))
+                    ),
+                    Ok(true)
+                );
             }
             Err(error) => {
                 failures += 1;
@@ -265,7 +293,13 @@ fn checked_sequence_get_reserves_clone_spine_and_cancellation_leaves_healthy_own
         token(&owner)
             .validate_admission(f.program.value_origin)
             .unwrap();
-        assert_eq!(project(&f, &read).unwrap().raw(), &f.raw(16));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(project(&f, &read).unwrap().raw()),
+                &(&f.raw(16))
+            ),
+            Ok(true)
+        );
     }
     assert!(failures >= 10 && successes > 0);
     drop(read);

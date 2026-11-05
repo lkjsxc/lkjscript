@@ -4,10 +4,12 @@
 //! only when that tail is full, at most height + 1 branch nodes. Existing payloads
 //! are behind immutable element handles: neither append nor tree rotation clones them.
 
-use super::value::{NormalizedValue, RawValueWork, release_raw_value};
+use super::child_storage::{self, DropQueue, Pending, StorageFailure};
+use super::value::NormalizedValue;
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
 use std::cell::Cell;
 use std::sync::Arc;
+use triomphe::Arc as PayloadArc;
 
 pub(super) const FANOUT: usize = 32;
 // Each radix level consumes five index bits. These inline worklists cover every
@@ -16,10 +18,10 @@ pub(super) const FANOUT: usize = 32;
 // INDEX_LEVELS - 1 branch layers. Its leaf capacity still fits usize even when
 // the corresponding complete value capacity would not.
 const INDEX_LEVELS: usize = usize::BITS.div_ceil(FANOUT.ilog2()) as usize;
-type Leaves = [Option<Arc<Element>>; FANOUT];
+type Leaves = [Option<PayloadArc<Element>>; FANOUT];
 type Branches = [Option<Arc<Node>>; FANOUT];
 
-struct Element(NormalizedValue);
+pub(super) struct Element(pub(super) NormalizedValue, pub(super) Option<Pending>);
 
 enum Node {
     Leaf(Leaves),
@@ -200,21 +202,24 @@ fn node_charge() -> Charge {
 fn element_charge() -> Charge {
     Charge {
         slots: 0, // Its containing leaf reserves the element slot, including unused capacity.
-        bytes: (std::mem::size_of::<Element>() + 2 * std::mem::size_of::<usize>()) as u64,
+        // Preserve the existing finite evaluator metric. The private cleanup
+        // link is implementation storage, not an added semantic charge.
+        bytes: (std::mem::size_of::<NormalizedValue>() + 2 * std::mem::size_of::<usize>()) as u64,
     }
 }
 
 fn element(
     value: NormalizedValue,
     reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
-) -> Result<Arc<Element>, ExecutionError> {
+) -> Result<PayloadArc<Element>, ExecutionError> {
     // Own rejected raw payloads with the same stack-safe destruction as raw ingress.
-    let value = Element(value);
+    let value = Element(value, None);
     reserve(element_charge())?;
+    let value = PayloadArc::try_new(value).map_err(|_| StorageFailure::Allocation)?;
     observe(|work| {
         add_observed(&mut work.element_handle_allocations, 1, &mut work.saturated);
     });
-    Ok(Arc::new(value))
+    Ok(value)
 }
 
 fn leaf(
@@ -237,7 +242,7 @@ fn leaf(
         };
         for (target, item) in slots.iter_mut().zip(items) {
             if let Some(item) = item {
-                *target = Some(Arc::clone(item));
+                *target = Some(PayloadArc::clone(item));
                 observe(|work| {
                     add_observed(&mut work.element_handle_copies, 1, &mut work.saturated);
                 });
@@ -399,7 +404,7 @@ impl List {
         maximum_length: Option<u64>,
         reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
-        let value = Element(value);
+        let value = Element(value, None);
         let length = self.length.checked_add(1).ok_or_else(failure)?;
         admit_length(length, maximum_length)?;
         let mut result = self.clone();
@@ -417,10 +422,11 @@ impl List {
             tail_length
         };
         reserve(element_charge())?;
+        let value = PayloadArc::try_new(value).map_err(|_| StorageFailure::Allocation)?;
         observe(|work| {
             add_observed(&mut work.element_handle_allocations, 1, &mut work.saturated);
         });
-        items[slot] = Some(Arc::new(value));
+        items[slot] = Some(value);
         result.tail = Some(node(Node::Leaf(items)));
         result.length = length;
         reserve(Charge::default())?; // Independent cancellation check before result installation.
@@ -488,7 +494,7 @@ impl List {
             .ok_or_else(failure)
     }
 
-    pub(super) fn drain_unique(&mut self, values: &mut RawValueWork) {
+    pub(super) fn drain_unique(&mut self, values: &mut DropQueue) {
         // Each branch level adds at most FANOUT-1 pending siblings, in addition
         // to the two roots. Shared or scalar retired list payloads need no heap.
         let mut pending: [Option<Arc<Node>>; (FANOUT - 1) * (INDEX_LEVELS - 1) + 2] =
@@ -513,9 +519,7 @@ impl List {
                     }
                     Node::Leaf(items) => {
                         for item in items.into_iter().flatten() {
-                            if let Some(mut item) = Arc::into_inner(item) {
-                                values.push(std::mem::replace(&mut item.0, NormalizedValue::Unit));
-                            }
+                            values.enqueue_element(item);
                         }
                     }
                 }
@@ -526,32 +530,26 @@ impl List {
 
 impl Drop for Element {
     fn drop(&mut self) {
-        if !matches!(self.0, NormalizedValue::Unit) {
-            release_raw_value(std::mem::replace(&mut self.0, NormalizedValue::Unit));
-        }
+        child_storage::release_element(self);
     }
 }
 
 impl Drop for List {
     fn drop(&mut self) {
-        let mut values = RawValueWork::default();
+        let mut values = DropQueue::default();
         self.drain_unique(&mut values);
-        values.release();
+        values.drain();
     }
 }
 
 impl std::fmt::Debug for List {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.debug_list().entries(self.iter()).finish()
+        formatter
+            .debug_struct("List")
+            .field("len", &self.length)
+            .finish()
     }
 }
-
-impl PartialEq for List {
-    fn eq(&self, other: &Self) -> bool {
-        self.length == other.length && self.iter().eq(other.iter())
-    }
-}
-impl Eq for List {}
 
 struct Cursor<'a> {
     stack: [Option<(&'a Node, usize)>; INDEX_LEVELS],

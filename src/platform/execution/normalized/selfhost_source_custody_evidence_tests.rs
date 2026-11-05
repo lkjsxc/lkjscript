@@ -1,5 +1,6 @@
 //! Output-only custody/IR probes. These never supply host-derived facts to a compiler.
 use super::*;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 
 struct CustodyProbes {
     source: KernelSnapshot,
@@ -58,10 +59,13 @@ fn probe(case: &Case, name: &str) -> Vec<u8> {
         .invoke(entry, arguments, None, &control)
         .unwrap()
         .0;
-    assert_eq!(vm, reference, "{name}");
+    assert_eq!(raw_value_equal(&vm, &reference), Ok(true), "{name}");
     assert_eq!(
-        super::super::super::super::field(&vm, "diagnostic"),
-        &NormalizedValue::I64(0)
+        raw_value_equal(
+            super::super::super::super::field(&vm, "diagnostic"),
+            &NormalizedValue::I64(0),
+        ),
+        Ok(true),
     );
     let NormalizedValue::Bytes(expected) = super::super::super::super::field(&vm, "image") else {
         panic!("custody probe result");
@@ -283,7 +287,7 @@ impl<'a> Ir<'a> {
     fn new(bytes: &'a [u8]) -> Self {
         assert!(bytes.len() >= 160);
         assert_eq!(&bytes[..8], b"LKJCI001");
-        assert_eq!(u32::from_le_bytes(bytes[8..12].try_into().unwrap()), 6);
+        assert_eq!(u32::from_le_bytes(bytes[8..12].try_into().unwrap()), 8);
         assert_eq!(u32::from_le_bytes(bytes[12..16].try_into().unwrap()), 0);
         assert_eq!(size_word(bytes, 16), bytes.len());
         let mut committed = bytes[..40].to_vec();
@@ -357,7 +361,7 @@ fn source_ir(target: &str, name: &'static str, expected: i64) -> Vec<u8> {
     let bytes = probe(&case, "custody-input");
     let ir = Ir::new(&bytes);
     assert!(ir.function_count > 0);
-    // Run the maintained independent Profile6 validator/emitter on the output.
+    // Run the maintained independent Profile8 validator/emitter on the output.
     // Its inputs were derived inside lkjscript from source, never by Rust.
     let (code, image) = compile(&bytes);
     assert_eq!(code, 0);

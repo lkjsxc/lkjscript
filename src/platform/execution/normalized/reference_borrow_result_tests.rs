@@ -147,7 +147,13 @@ fn reference_borrow_result_retains_nested_source_and_disables_tail_replacement()
         NormalizedRunPolicy::foreground(),
         &ExecutionControl::uncancelled(),
     );
-    assert_eq!(result.unwrap(), NormalizedValue::I64(274));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(result.unwrap()),
+            &(NormalizedValue::I64(274))
+        ),
+        Ok(true)
+    );
     let observation = observation.unwrap();
     assert!(observation.maximum_call_depth >= 3);
     assert_eq!(observation.tail_transfers, 0);
@@ -178,7 +184,13 @@ fn reference_borrow_result_failed_adoption_keeps_packet_cleanup_owner() {
         NormalizedRunPolicy::foreground(),
         &ExecutionControl::uncancelled(),
     );
-    assert_eq!(healthy.unwrap(), NormalizedValue::I64(274));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(healthy.unwrap()),
+            &(NormalizedValue::I64(274))
+        ),
+        Ok(true)
+    );
 }
 
 #[test]
@@ -216,7 +228,13 @@ fn reference_borrow_result_refuses_each_custody_reservation_before_detachment() 
             NormalizedRunPolicy::foreground(),
             &ExecutionControl::uncancelled(),
         );
-        assert_eq!(healthy.unwrap(), NormalizedValue::I64(274));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(healthy.unwrap()),
+                &(NormalizedValue::I64(274))
+            ),
+            Ok(true)
+        );
     }
 }
 
@@ -238,7 +256,10 @@ impl NormalizedReferenceHost for InspectPanic<'_> {
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         if implementation.as_str() == "core.i64.add"
-            && arguments == [NormalizedValue::I64(137), NormalizedValue::I64(23)]
+            && matches!(
+                arguments.as_slice(),
+                [NormalizedValue::I64(137), NormalizedValue::I64(23)]
+            )
         {
             // This ordinary callback can run only after deep's callee has
             // departed and its returned cell has been adopted by the caller.
@@ -303,7 +324,13 @@ fn reference_borrow_result_host_unwind_releases_adopted_custody_before_owner() {
         if unwind {
             assert!(result.is_err());
         } else {
-            assert_eq!(result.unwrap().unwrap(), NormalizedValue::I64(160));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(result.unwrap().unwrap()),
+                    &(NormalizedValue::I64(160))
+                ),
+                Ok(true)
+            );
         }
         assert_eq!(products.live(), (0, 0));
         assert_eq!(cells.live(), (0, 0));
@@ -358,7 +385,13 @@ fn reference_borrow_result_trap_cancellation_and_reservation_leave_no_loans() {
         policy,
         &ExecutionControl::uncancelled(),
     );
-    assert_eq!(healthy.unwrap(), NormalizedValue::I64(274));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(healthy.unwrap()),
+            &(NormalizedValue::I64(274))
+        ),
+        Ok(true)
+    );
     let baseline = observation.unwrap();
     let (trap, _) = run_clean(
         &source,
@@ -382,7 +415,13 @@ fn reference_borrow_result_trap_cancellation_and_reservation_leave_no_loans() {
         );
         match result {
             Ok(value) => {
-                assert_eq!(value, NormalizedValue::I64(274));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(value),
+                        &(NormalizedValue::I64(274))
+                    ),
+                    Ok(true)
+                );
                 completed = true;
                 break;
             }
@@ -422,5 +461,11 @@ fn reference_borrow_result_trap_cancellation_and_reservation_leave_no_loans() {
         policy,
         &ExecutionControl::uncancelled(),
     );
-    assert_eq!(healthy.unwrap(), NormalizedValue::I64(274));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(healthy.unwrap()),
+            &(NormalizedValue::I64(274))
+        ),
+        Ok(true)
+    );
 }

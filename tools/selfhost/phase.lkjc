@@ -1,6 +1,6 @@
 declarations.begin
 (units (module create phase
-  (function create fits (visibility private) (effect pure)
+  (function create fits (visibility package) (effect pure)
     (parameter create part (type (record (code I64) (bytes Bytes))))
     (parameter create width (type I64)) (returns Bool)
     (body (call ci::both (call ci::eq (field (local part) (name code)) (i64 0))

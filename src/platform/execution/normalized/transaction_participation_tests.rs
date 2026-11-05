@@ -454,7 +454,13 @@ fn data_transaction_participation_uses_exact_scope_and_rechecks_retained_descrip
                     TransactionOutcomeContract::standard().unwrap().committed
                 );
             } else {
-                assert_eq!(value, NormalizedValue::Unit);
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(value),
+                        &(NormalizedValue::Unit)
+                    ),
+                    Ok(true)
+                );
             }
             assert_eq!(
                 observation, 4,
@@ -734,8 +740,11 @@ fn data_transaction_participation_does_not_open_a_snapshot_or_outlive_adapter_co
     let error = adapter.call(&call, vec![], &scope, &control).unwrap_err();
     assert_eq!(error.code, "normalized_data_transaction_required");
     assert_eq!(
-        transaction.call(&call, vec![], &scope, &control).unwrap(),
-        NormalizedValue::Unit
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(transaction.call(&call, vec![], &scope, &control).unwrap()),
+            &(NormalizedValue::Unit)
+        ),
+        Ok(true)
     );
     assert_eq!(
         transaction
@@ -767,8 +776,11 @@ fn data_transaction_participation_does_not_open_a_snapshot_or_outlive_adapter_co
     transaction.rollback().unwrap();
     let mut fresh = adapter.begin_transaction(&owner, &scope, &control).unwrap();
     assert_eq!(
-        fresh.call(&call, vec![], &scope, &control).unwrap(),
-        NormalizedValue::Unit
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(fresh.call(&call, vec![], &scope, &control).unwrap()),
+            &(NormalizedValue::Unit)
+        ),
+        Ok(true)
     );
     fresh.rollback().unwrap();
 }
@@ -892,17 +904,20 @@ fn data_transaction_participation_preserves_exact_alias_authority() {
                 .unwrap()
         );
         assert_eq!(
-            invoke(
-                &snapshot,
-                &program,
-                reference,
-                "participation-owner",
-                &bound,
-                NormalizedRunPolicy::foreground()
-            )
-            .unwrap()
-            .0,
-            NormalizedValue::Unit
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke(
+                    &snapshot,
+                    &program,
+                    reference,
+                    "participation-owner",
+                    &bound,
+                    NormalizedRunPolicy::foreground()
+                )
+                .unwrap()
+                .0),
+                &(NormalizedValue::Unit)
+            ),
+            Ok(true)
         );
         assert_eq!(
             *bound.trace.lock().unwrap(),

@@ -12,9 +12,21 @@ fn assert_integer_entries(value: &NormalizedValue, count: i64) {
         };
         assert_eq!(fields.len(), 2);
         assert_eq!(fields[0].0.as_str(), "key");
-        assert_eq!(fields[0].1, NormalizedValue::I64(index as i64));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(fields[0].1),
+                &(NormalizedValue::I64(index as i64))
+            ),
+            Ok(true)
+        );
         assert_eq!(fields[1].0.as_str(), "value");
-        assert_eq!(fields[1].1, NormalizedValue::I64(13 - 7 * index as i64));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(fields[1].1),
+                &(NormalizedValue::I64(13 - 7 * index as i64))
+            ),
+            Ok(true)
+        );
     }
 }
 
@@ -48,7 +60,13 @@ fn map_entries_native_tree_scan_is_linear_after_admission() {
                 &control,
                 None,
             );
-            assert_eq!(length.value.unwrap(), NormalizedValue::I64(count));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(length.value.unwrap()),
+                    &(NormalizedValue::I64(count))
+                ),
+                Ok(true)
+            );
             let entries = invoke(
                 &program,
                 &reader,
@@ -91,7 +109,13 @@ fn map_entries_native_tree_scan_is_linear_after_admission() {
             let NormalizedMapKey::I64(key) = key else {
                 unreachable!()
             };
-            assert_eq!(*value, NormalizedValue::I64(13 - 7 * key));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    value,
+                    &(NormalizedValue::I64(13 - 7 * key))
+                ),
+                Ok(true)
+            );
         }
     }
     for (count, scan) in production {

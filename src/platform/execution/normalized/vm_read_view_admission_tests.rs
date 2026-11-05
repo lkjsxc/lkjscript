@@ -168,7 +168,13 @@ fn prepared_vm_constructs_and_reads_real_view_then_drains_source_loans() {
         )
         .unwrap()
         .0;
-    assert_eq!(result, NormalizedValue::I64(73));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(result),
+            &(NormalizedValue::I64(73))
+        ),
+        Ok(true)
+    );
     assert_eq!(cells.live(), (0, 0));
     let observed = observed.into_inner().unwrap().unwrap();
     assert_eq!(observed.live_call_frames_after, 0);
@@ -713,7 +719,13 @@ declarations.end"#;
             )
             .unwrap()
             .0;
-        assert_eq!(result, NormalizedValue::I64(146));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(result),
+                &(NormalizedValue::I64(146))
+            ),
+            Ok(true)
+        );
         assert_eq!(cells.created(), 1);
         assert_eq!(cells.live(), (0, 0));
         let observation = observation.into_inner().unwrap().unwrap();
@@ -965,7 +977,13 @@ declarations.end"#;
                 assert_eq!(observation.capability_calls, 0);
                 value
             };
-            assert_eq!(value, NormalizedValue::I64(146));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(value),
+                    &(NormalizedValue::I64(146))
+                ),
+                Ok(true)
+            );
             assert_eq!(cells.created(), 1);
             assert_eq!(cells.live(), (0, 0));
         }

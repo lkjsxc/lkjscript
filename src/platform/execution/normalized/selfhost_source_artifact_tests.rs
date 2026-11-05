@@ -29,8 +29,14 @@ mod artifact_support;
 #[path = "selfhost_source_stage_controls.rs"]
 mod stage_controls;
 
+#[path = "selfhost_source_allocation_tests.rs"]
+mod allocation;
 #[path = "selfhost_source_bulk_tests.rs"]
 mod bulk;
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "selfhost_source_callable_tests.rs"]
+mod callable;
 
 #[path = "native_phase_tests.rs"]
 mod phase;
@@ -51,6 +57,21 @@ fn ensure(condition: bool, label: &str) -> Check<()> {
 
 fn equal<T: PartialEq + Debug>(actual: T, expected: T, label: &str) -> Check<()> {
     if actual == expected {
+        Ok(())
+    } else {
+        Err(format!("{label}: actual={actual:?}; expected={expected:?}"))
+    }
+}
+
+// Raw values have no infallible structural equality contract.
+fn equal_value(actual: &NormalizedValue, expected: &NormalizedValue, label: &str) -> Check<()> {
+    let same = crate::platform::execution::normalized::structural_equality::raw_structural_equal(
+        actual,
+        expected,
+        &ExecutionControl::uncancelled(),
+    )
+    .map_err(|error| format!("{label}: raw comparison failed: {error:?}"))?;
+    if same {
         Ok(())
     } else {
         Err(format!("{label}: actual={actual:?}; expected={expected:?}"))
@@ -566,14 +587,14 @@ fn scalar_behavior(
     let reference = NormalizedReferenceInterpreter::new(&case.source, &host.program, policy)
         .invoke(entry, Vec::new(), None, &control)
         .map_err(|error| format!("{label}: canonical reference: {error:?}"))?;
-    equal(
-        vm.0,
-        NormalizedValue::I64(expected),
+    equal_value(
+        &vm.0,
+        &NormalizedValue::I64(expected),
         &format!("{label}: artifact VM value"),
     )?;
-    equal(
-        reference.0,
-        NormalizedValue::I64(expected),
+    equal_value(
+        &reference.0,
+        &NormalizedValue::I64(expected),
         &format!("{label}: canonical reference value"),
     )?;
     equal(

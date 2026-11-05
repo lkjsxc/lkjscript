@@ -44,7 +44,13 @@ declarations.end
         let (value, work) = NormalizedVm::new(program, NormalizedRunPolicy::foreground(), &handle)
             .invoke(entry, vec![], None, &ExecutionControl::uncancelled())
             .unwrap();
-        assert_eq!(value, expected);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(expected)
+            ),
+            Ok(true)
+        );
         assert_eq!(
             (work.parallel_scopes, work.parallel_worker_dispatches),
             (1, 1)

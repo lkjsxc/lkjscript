@@ -6,11 +6,13 @@ use super::prepare::{NormalizedProgram, NormalizedTarget};
 use super::reference::{
     NormalizedReferenceBinding, NormalizedReferenceInterpreter, NormalizedReferenceObservation,
     NormalizedReferenceOwnerRead, NormalizedReferenceRead, NormalizedReferenceReadWork,
-    reference_observation_equal,
+    reference_observation_equal_with_control,
 };
+use super::structural_equality::raw_structural_equal;
 use super::value::NormalizedValue;
 use super::vm::{
-    NormalizedRunObservation, NormalizedRunPolicy, NormalizedVm, normalized_observation_equal,
+    NormalizedRunObservation, NormalizedRunPolicy, NormalizedVm,
+    normalized_observation_equal_with_control,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
@@ -170,7 +172,9 @@ pub(crate) fn run_pure_command_observed(
                 .observing_checked(&reference_observer)
                 .invoke_root_target(target_name, invocation.arguments, None, control)
                 .map_err(execution_diagnostic)?;
-        if production.0 != reference.0 {
+        if !raw_structural_equal(&production.0, &reference.0, control)
+            .map_err(execution_diagnostic)?
+        {
             return Err(runner_error(
                 DiagnosticClass::Infrastructure,
                 "normalized_runner_differential",
@@ -629,7 +633,11 @@ fn run_graph_tests_inner(
                 work.expressions_saturated,
             );
         }
-        if production.0.0 != oracle.0.0 || production.1.0 != oracle.1.0 {
+        if !raw_structural_equal(&production.0.0, &oracle.0.0, control)
+            .map_err(execution_diagnostic)?
+            || !raw_structural_equal(&production.1.0, &oracle.1.0, control)
+                .map_err(execution_diagnostic)?
+        {
             return Err(runner_error(
                 DiagnosticClass::Infrastructure,
                 "normalized_test_differential",
@@ -641,9 +649,13 @@ fn run_graph_tests_inner(
         }
         let (production_equal, reference_equal) = match comparison {
             ComparisonPolicy::Exact => (
-                normalized_observation_equal(&production.0.0, &production.1.0)
-                    .map_err(execution_diagnostic)?,
-                reference_observation_equal(&oracle.0.0, &oracle.1.0)
+                normalized_observation_equal_with_control(
+                    &production.0.0,
+                    &production.1.0,
+                    control,
+                )
+                .map_err(execution_diagnostic)?,
+                reference_observation_equal_with_control(&oracle.0.0, &oracle.1.0, control)
                     .map_err(execution_diagnostic)?,
             ),
         };

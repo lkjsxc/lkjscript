@@ -1,5 +1,6 @@
 //! Raw byte indexing through independently admitted source and both evaluators.
 use super::*;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 
 #[path = "bytes_range_tests.rs"]
 mod ranges;
@@ -79,8 +80,16 @@ fn bytes_slice_exhaustive_small_ranges_agree_with_independent_values() {
                 .unwrap()
                 .0;
                 let expected = NormalizedValue::bytes(original[start..end].to_vec());
-                assert_eq!(actual, expected, "{length} {start} {end}");
-                assert_eq!(reference, expected, "reference {length} {start} {end}");
+                assert_eq!(
+                    raw_value_equal(&(actual), &(expected)),
+                    Ok(true),
+                    "{length} {start} {end}"
+                );
+                assert_eq!(
+                    raw_value_equal(&(reference), &(expected)),
+                    Ok(true),
+                    "reference {length} {start} {end}"
+                );
                 if start != end {
                     let NormalizedValue::Bytes(window) = &actual else {
                         unreachable!()
@@ -89,7 +98,13 @@ fn bytes_slice_exhaustive_small_ranges_agree_with_independent_values() {
                 }
             }
         }
-        assert_eq!(bytes, NormalizedValue::bytes(original[..length].to_vec()));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(bytes),
+                &(NormalizedValue::bytes(original[..length].to_vec()))
+            ),
+            Ok(true)
+        );
     }
     // Byte ranges are not Unicode ranges: a split UTF-8 scalar is still valid Bytes.
     for (start, end, expected) in [
@@ -110,7 +125,13 @@ fn bytes_slice_exhaustive_small_ranges_agree_with_independent_values() {
             )
             .unwrap()
             .0;
-        assert_eq!(actual, NormalizedValue::bytes(expected));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(actual),
+                &(NormalizedValue::bytes(expected))
+            ),
+            Ok(true)
+        );
     }
 }
 
@@ -175,13 +196,28 @@ fn bytes_get_returns_every_unsigned_octet_without_text_interpretation() {
         .invoke(declaration, arguments, None, &control)
         .unwrap()
         .0;
-        assert_eq!(actual, NormalizedValue::I64(expected));
-        assert_eq!(reference, NormalizedValue::I64(expected));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(actual),
+                &(NormalizedValue::I64(expected))
+            ),
+            Ok(true)
+        );
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(reference),
+                &(NormalizedValue::I64(expected))
+            ),
+            Ok(true)
+        );
     }
     // The same retained carrier still contains every byte after every read.
     assert_eq!(
-        bytes,
-        NormalizedValue::bytes((0..=255).collect::<Vec<u8>>())
+        raw_value_equal(
+            &(bytes),
+            &(NormalizedValue::bytes((0..=255).collect::<Vec<u8>>()))
+        ),
+        Ok(true)
     );
 }
 

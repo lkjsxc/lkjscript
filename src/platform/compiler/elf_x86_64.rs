@@ -5,7 +5,7 @@ use crate::platform::execution::normalized::prepare::{
     NormalizedCode, NormalizedEntryPoint, NormalizedFieldSelector, NormalizedFunctionBody,
     NormalizedInstruction as I, NormalizedProgram,
 };
-use crate::platform::kernel::{Name, TypeForm};
+use crate::platform::kernel::{Name, ParameterUse, ResultRelation, TypeForm};
 use crate::platform::package::RunnerKind;
 use std::collections::{BTreeMap, HashSet};
 
@@ -16,6 +16,9 @@ mod buffer_bulk;
 mod bytes;
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod capacity_tests;
+#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+mod closure_tests;
+mod closures;
 mod filter;
 mod phase;
 #[cfg(test)]
@@ -134,6 +137,7 @@ struct Emitter<'a> {
     a: Asm,
     runtime: Runtime,
     functions: Vec<Option<Label>>,
+    bodies: Vec<Option<Label>>,
     constants: BTreeMap<Constant, Label>,
     data: Vec<(Label, Vec<u8>)>,
     rewrites: usize,
@@ -224,8 +228,30 @@ pub(crate) fn compile_function(
     let mut functions = Vec::new();
     reserve(&mut functions, program.functions.len())?;
     functions.resize(program.functions.len(), None);
+    let mut bodies = Vec::new();
+    reserve(&mut bodies, program.functions.len())?;
+    bodies.resize(program.functions.len(), None);
     for &index in &reachable {
+        let function = &program.functions[index];
+        if usize::try_from(function.parameter_count)
+            .map_err(|_| unsupported("native parameter count exceeds the host index domain"))?
+            != function.parameters.len()
+        {
+            return Err(unsupported("native callable parameter inventory disagrees"));
+        }
         functions[index] = Some(a.label());
+        if let NormalizedFunctionBody::Code(code) = &function.body {
+            if code.parameter_count != function.parameter_count
+                || code.local_count < code.parameter_count
+                || code.instructions.is_empty()
+            {
+                return Err(unsupported("native graph frame metadata is inconsistent"));
+            }
+            if function.graph_function && matches!(function.result.relation, ResultRelation::Value)
+            {
+                bodies[index] = Some(a.label());
+            }
+        }
     }
     a.check()?;
     let mut e = Emitter {
@@ -233,6 +259,7 @@ pub(crate) fn compile_function(
         a,
         runtime,
         functions,
+        bodies,
         constants: BTreeMap::new(),
         data: Vec::new(),
         rewrites: 0,
@@ -289,11 +316,28 @@ pub(crate) fn compile_function(
                 e.a.bytes(value.as_bytes());
             }
             Constant::Function(index) => {
+                let target = e.program.functions.get(*index).ok_or_else(|| {
+                    unsupported("native function constant has no target metadata")
+                })?;
+                let metadata = e.a.label();
                 e.a.bytes(&6_u64.to_le_bytes());
+                e.a.absolute(metadata);
+                e.a.bytes(&0_u64.to_le_bytes());
+                e.a.bind(metadata);
                 e.a.absolute(e.functions.get(*index).copied().flatten().ok_or_else(|| {
                     unsupported("native function constant is outside its closure")
                 })?);
-                e.a.bytes(&0_u64.to_le_bytes());
+                if let Some(body) = e.bodies.get(*index).copied().flatten() {
+                    e.a.absolute(body);
+                } else {
+                    e.a.bytes(&0_u64.to_le_bytes());
+                }
+                e.a.bytes(&u64::from(target.parameter_count).to_le_bytes());
+                let locals = match &target.body {
+                    NormalizedFunctionBody::Code(code) => u64::from(code.local_count),
+                    NormalizedFunctionBody::External(_) => 0,
+                };
+                e.a.bytes(&locals.to_le_bytes());
             }
         }
     }
@@ -469,7 +513,10 @@ impl Emitter<'_> {
         self.a.push(Bx);
         self.a.push(R12);
         self.a.push(R13);
-        self.a.group_wide(5, Sp, u64::from(locals) * 8);
+        self.a.mov(Ax, Sp);
+        self.a.group_wide(5, Ax, u64::from(locals) * 8);
+        self.a.when(B, self.runtime.capacity);
+        self.a.mov(Sp, Ax);
     }
     fn epilogue(&mut self) {
         self.a.lea(Sp, Bp, -24);
@@ -496,6 +543,12 @@ impl Emitter<'_> {
     }
     fn code(&mut self, function: usize, code: &NormalizedCode) -> Result<()> {
         self.prologue(code.local_count);
+        closures::initialize_locals(
+            &mut self.a,
+            &self.runtime,
+            code.parameter_count,
+            code.local_count,
+        )?;
         for parameter in 0..code.parameter_count {
             if parameter.is_multiple_of(256) {
                 self.runtime.checkpoint(&mut self.a);
@@ -505,7 +558,13 @@ impl Emitter<'_> {
         }
         let mut labels = Vec::new();
         reserve(&mut labels, code.instructions.len())?;
-        labels.extend((0..code.instructions.len()).map(|_| self.a.label()));
+        for index in 0..code.instructions.len() {
+            labels.push(if index == 0 {
+                self.bodies[function].unwrap_or_else(|| self.a.label())
+            } else {
+                self.a.label()
+            });
+        }
         self.a.check()?;
         let plan = super::egraph_opt::optimize(self.program, code);
         self.rewrites += plan.rewrites.len();
@@ -539,8 +598,18 @@ impl Emitter<'_> {
             I::Bool(v) => self.push_constant(Constant::Bool(*v)),
             I::I64(v) => self.push_constant(Constant::I64(*v)),
             I::Text(v) | I::StaticText(v) => self.push_constant(Constant::Text(v.to_string())),
-            I::LoadLocal { local, .. } | I::MoveLocal(local) => {
+            I::LoadLocal { local, use_mode } => {
                 self.a.load_offset(Ax, Bp, -32 - i64::from(*local) * 8);
+                if *use_mode == ParameterUse::Consume {
+                    self.a.imm(Cx, 0);
+                    self.a.store_offset(Bp, -32 - i64::from(*local) * 8, Cx);
+                }
+                self.a.push(Ax);
+            }
+            I::MoveLocal(local) => {
+                self.a.load_offset(Ax, Bp, -32 - i64::from(*local) * 8);
+                self.a.imm(Cx, 0);
+                self.a.store_offset(Bp, -32 - i64::from(*local) * 8, Cx);
                 self.a.push(Ax);
             }
             I::StoreLocal(local) => {
@@ -572,46 +641,26 @@ impl Emitter<'_> {
                 function: target,
                 arguments,
                 ..
+            } => {
+                self.a.call(self.label(target.0 as usize)?);
+                self.a.group_wide(0, Sp, u64::from(*arguments) * 8);
+                self.a.push(Ax);
             }
-            | I::TailCall {
+            I::TailCall {
                 function: target,
                 arguments,
                 ..
-            } => {
-                let tail = matches!(instruction, I::TailCall { .. });
-                if tail && target.0 as usize == function {
-                    self.runtime.checkpoint(&mut self.a);
-                    for parameter in (0..*arguments).rev() {
-                        if parameter.is_multiple_of(256) {
-                            self.runtime.checkpoint(&mut self.a);
-                        }
-                        self.a.pop(Ax);
-                        self.a.store_offset(Bp, -32 - i64::from(parameter) * 8, Ax);
-                    }
-                    self.a.jump(labels[0]);
-                } else {
-                    self.a.call(self.label(target.0 as usize)?);
-                    self.a.group_wide(0, Sp, u64::from(*arguments) * 8);
-                    if tail {
-                        self.epilogue();
-                    } else {
-                        self.a.push(Ax);
-                    }
-                }
-            }
+            } => self.tail_call(function, code, target.0 as usize, *arguments)?,
             I::FunctionValue { function, .. } => {
                 self.push_constant(Constant::Function(function.0 as usize))
             }
             I::BeginBind { .. } | I::Capture { .. } => {}
-            I::Invoke { arguments } | I::TailInvoke { arguments } => {
-                self.invoke(*arguments);
-                if matches!(instruction, I::TailInvoke { .. }) {
-                    self.epilogue();
-                } else {
-                    self.a.push(Ax);
-                }
+            I::Invoke { arguments } => {
+                closures::invoke(&mut self.a, &self.runtime, *arguments);
+                self.a.push(Ax);
             }
-            I::Bind { arguments } => self.bind(*arguments),
+            I::TailInvoke { arguments } => self.tail_invoke(function, code, *arguments)?,
+            I::Bind { arguments } => closures::bind(&mut self.a, &self.runtime, *arguments),
             I::List { items } => {
                 self.a.imm(Di, 16 + u64::from(*items) * 8);
                 self.a.call(self.runtime.alloc);
@@ -713,99 +762,6 @@ impl Emitter<'_> {
         }
         let _ = code;
         Ok(())
-    }
-    fn invoke(&mut self, arguments: u32) {
-        self.a.mov(Bx, Sp);
-        self.a.load_offset(R12, Bx, i64::from(arguments) * 8);
-        self.a.load(R13, R12, 16);
-        self.a.imm(Cx, 0);
-        let next = self.a.label();
-        let ready = self.a.label();
-        self.a.bind(next);
-        self.runtime.checkpoint(&mut self.a);
-        self.a.bin(0x39, Cx, R13);
-        self.a.when(AE, ready);
-        self.a.mov(Ax, Cx);
-        self.a.shift(4, Ax, 3);
-        self.a.bin(0x01, Ax, R12);
-        self.a.load(Ax, Ax, 24);
-        self.a.push(Ax);
-        self.a.group(0, Cx, 1);
-        self.a.jump(next);
-        self.a.bind(ready);
-        for argument in 0..arguments {
-            if argument.is_multiple_of(256) {
-                self.runtime.checkpoint(&mut self.a);
-            }
-            self.a
-                .load_offset(Ax, Bx, i64::from(arguments - 1 - argument) * 8);
-            self.a.push(Ax);
-        }
-        self.a.load(Ax, R12, 8);
-        self.a.indirect(Ax);
-        self.a.mov(Cx, R13);
-        self.a.group_wide(0, Cx, u64::from(arguments));
-        self.a.when(B, self.runtime.capacity);
-        self.a.mov(Dx, Cx);
-        self.a.shift(5, Dx, 61);
-        self.a.bin(0x85, Dx, Dx);
-        self.a.when(NE, self.runtime.capacity);
-        self.a.shift(4, Cx, 3);
-        self.a.bin(0x01, Sp, Cx);
-        self.a.group_wide(0, Sp, (u64::from(arguments) + 1) * 8);
-    }
-    fn bind(&mut self, arguments: u32) {
-        self.a.load_offset(R12, Sp, i64::from(arguments) * 8);
-        self.a.load(R13, R12, 16);
-        self.a.mov(Di, R13);
-        self.a.group_wide(0, Di, u64::from(arguments));
-        self.a.when(B, self.runtime.capacity);
-        self.a.mov(Dx, Di);
-        self.a.shift(5, Dx, 61);
-        self.a.bin(0x85, Dx, Dx);
-        self.a.when(NE, self.runtime.capacity);
-        self.a.shift(4, Di, 3);
-        self.a.group(0, Di, 24);
-        self.a.when(B, self.runtime.capacity);
-        self.a.call(self.runtime.alloc);
-        self.a.mov(Bx, Ax);
-        self.a.imm(Cx, 6);
-        self.a.store(Bx, 0, Cx);
-        self.a.load(Cx, R12, 8);
-        self.a.store(Bx, 8, Cx);
-        self.a.mov(Cx, R13);
-        self.a.group_wide(0, Cx, u64::from(arguments));
-        self.a.store(Bx, 16, Cx);
-        self.a.imm(Cx, 0);
-        let next = self.a.label();
-        let ready = self.a.label();
-        self.a.bind(next);
-        self.runtime.checkpoint(&mut self.a);
-        self.a.bin(0x39, Cx, R13);
-        self.a.when(AE, ready);
-        self.a.mov(Ax, Cx);
-        self.a.shift(4, Ax, 3);
-        self.a.lea(Dx, R12, 24);
-        self.a.bin(0x01, Dx, Ax);
-        self.a.load(Dx, Dx, 0);
-        self.a.bin(0x01, Ax, Bx);
-        self.a.store(Ax, 24, Dx);
-        self.a.group(0, Cx, 1);
-        self.a.jump(next);
-        self.a.bind(ready);
-        self.a.mov(Ax, R13);
-        self.a.shift(4, Ax, 3);
-        self.a.bin(0x01, Ax, Bx);
-        for argument in 0..arguments {
-            if argument.is_multiple_of(256) {
-                self.runtime.checkpoint(&mut self.a);
-            }
-            self.a
-                .load_offset(Cx, Sp, i64::from(arguments - 1 - argument) * 8);
-            self.a.store_offset(Ax, 24 + i64::from(argument) * 8, Cx);
-        }
-        self.a.group_wide(0, Sp, (u64::from(arguments) + 1) * 8);
-        self.a.push(Bx);
     }
     fn external(&mut self, name: &str, parameters: u32) -> Result<()> {
         self.prologue(0);

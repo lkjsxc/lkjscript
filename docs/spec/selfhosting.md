@@ -26,10 +26,10 @@ retain compact evidence before removing task-owned stage binaries.
 ## Current canonical input: LKJCI1
 
 All integers are little-endian. Magic is `LKJCI001`. The selector at offset 112
-chooses ELF (0, profile `6`) or artifact (1, profile `7`). Each selector admits
+chooses ELF (0, profile `8`) or artifact (1, profile `7`). Each selector admits
 only its current profile; neither route retains an old-profile reader. The Tier 1
 route retains Rust semantic admission and IR export. The active source route
-constructs profile-6 ELF input and profile-7 artifact input inside lkjscript after
+constructs profile-8 ELF input and profile-7 artifact input inside lkjscript after
 complete source admission.
 The [artifact layout](selfhosting-artifact-input.md) has its own 64-bit unit,
 source-object, metadata and generated-pool framing. Both modes distinguish an
@@ -38,7 +38,9 @@ unbounded policy tag from an exact finite u64 allowance, including zero and
 
 Mode 0 has a 160-byte header and dynamically placed descriptor, function,
 instruction and byte-pool sections. All counts, offsets, lengths and identities
-are eight-byte unsigned fields. Physical extents must fit nonnegative I64 because
+are eight-byte unsigned fields. The profile at offset 8 and policy tag at offset
+12 are separate u32 fields; the mode at offset 112 is checked as a complete u64.
+Physical extents must fit nonnegative I64 because
 the language byte-index API uses I64; words with bit 63 set are rejected before
 arithmetic or indexing. This is a checked representation boundary, not a default
 quota. Full-u64 policy allowances use two u32 limbs and are not restricted by this
@@ -47,14 +49,14 @@ physical-index domain.
 | Header offset | Width | Meaning |
 | --- | --- | --- |
 | 0 | 8 | Magic |
-| 8 | 4 | Profile, exactly 6 |
+| 8 | 4 | Profile, exactly 8 |
 | 12 | 4 | Admission policy tag: 0 unbounded, 1 finite |
 | 16 | 8 | Actual complete input byte length |
 | 24 | 8 | Function count F, positive |
 | 32 | 8 | Exact finite allowance; zero required with tag 0 |
 | 40 | 32 | BLAKE3 of bytes `[0,40)` concatenated with `[72,length)` |
 | 72 | 8 | Descriptor start, exactly 160 |
-| 80 | 8 | Total descriptor rows T = 7 primitives + R structural records |
+| 80 | 8 | Total descriptor rows T = 7 primitives + R records + C pure Function descriptors |
 | 88 | 8 | Function start D = 160 + 32*T |
 | 96 | 8 | Function count, exactly F |
 | 104 | 8 | Instruction start Q = D + 80*F |
@@ -80,8 +82,10 @@ including `Some(u64::MAX)`. The current modeled admission charge is
 `source-budget`'s u64 limbs, so neither multiplication overflow nor saturating
 comparison can admit a finite overrun. A finite zero allowance rejects with code 6.
 This allowance is distinct from evaluator instructions, allocation policies and
-cancellation. Admission termination follows advancing section/row cursors,
-strictly earlier record child types, finite permutation scans and checked forward
+cancellation. Function parameter metadata contributes to B and retained Pass
+markers contribute to N. The formula is this boundary's exact admission metric;
+it is not an upper bound on actual evaluator work. Admission termination follows advancing section/row cursors,
+strictly earlier compound child types, finite permutation scans and checked forward
 control edges; it does not depend on the allowance. Calls may recurse, but
 admission neither executes nor recursively traverses the call graph.
 
@@ -96,31 +100,66 @@ is not claimed by this wire-format cut.
 
 Descriptors have four u64 words, at `160 + 32*(type_identity - 1)`. IDs 1–6 are
 I64, Bool, Unit, Text, Bytes and ByteBuffer, with rows `[id,0,0,0]`. ID 7 is
-List<I64>, row `[7,1,0,0]`. Every ID from 8 through T denotes a structural record,
-row `[8,field_count,metadata_offset,0]`. Record metadata begins the byte pool in
-type order. Each record has 32-byte field rows
-`[child_type,name_offset,name_length,0]`, followed by its consecutive names.
-Names are nonempty UTF-8 in strictly increasing byte order. Child identities must
-be smaller than the containing identity and cannot be ByteBuffer; this preserves
-cycle rejection and excludes affine aggregates. Empty records are permitted.
-Every supplied descriptor, including unused ones, is validated.
+List<I64>, row `[7,1,0,0]`. Every identity from 8 through T names one of two
+compound kinds:
 
-Function rows have ten u64 words: reserved zero, result identity, parameter count,
-local count, first instruction, instruction count, external code, absolute
-local-type offset and two reserved zeros. Instruction ranges partition the table
-in function order. Code functions have external code zero and at least one
-instruction. Externals have no instructions and exactly as many locals as
-parameters; signatures must match their semantic intrinsic.
+| Kind | Four words | Metadata |
+| --- | --- | --- |
+| 8, structural Record | `[8,field_count,metadata_offset,0]` | 32-byte field rows `[child_type,name_offset,name_length,0]`, followed by consecutive UTF-8 names |
+| 9, pure Function | `[9,arity,parameter_offset,result_identity]` | Exactly arity u64 parameter identities in declaration order |
 
-After record metadata, each function contributes local value-type cells followed
-by each instruction's payload, one initialization flag (0 or 1) per local and
-incoming operand value-type cells. A cell is 16 bytes: `[identity:u64, qualifier:u64]`.
-Qualifier 0 is ordinary/owned; qualifier 1 is a borrowed ByteBuffer and requires
-identity 6. All other qualifiers reject. Borrowed cells occur only in parameter
-locals and operand stacks; results carry an ordinary identity. Identity 134 is
-an ordinary descriptor, as are identities above 255. Owned ByteBuffer parameters
-consume custody; other parameter identities are unrestricted. Layout validates
-all cells and extents before any transfer certificate is trusted.
+Compound metadata starts at P and is packed without gaps or overlap in descriptor
+identity order. A zero-arity Function records the exact current cursor and consumes
+zero metadata bytes. Record field names are nonempty UTF-8 in strictly increasing
+byte order. Every child identity, including a Function's result, is positive,
+strictly smaller than its containing identity, and different from ByteBuffer
+identity 6. This establishes a finite structural DAG and inductive copyability;
+there is no default arity, descriptor-count or environment-depth quota in this
+projection. Empty records and zero-arity Functions are permitted. Every supplied
+descriptor, including unused ones, is checked.
+
+Record/Field and binary-filter root checks require actual kind 8; an identity
+greater than 7 does not imply a record. Callable cells have ordinary qualifier 0.
+Runtime descriptors retain the existing Text/StaticText representation erasure;
+source admission still distinguishes their exact semantic types and Function
+signatures before constructing this private projection.
+
+Function rows have ten u64 words:
+
+| Offset | Meaning |
+| --- | --- |
+| 0 | Reserved zero |
+| 8 | Result identity |
+| 16 / 24 | Parameter count / local count |
+| 32 / 40 | First instruction / instruction count |
+| 48 | Registered external code, or zero for graph code |
+| 56 | Absolute local-type cell offset |
+| 64 | Exact full Function signature identity, or zero for a direct-only function |
+| 72 | Reserved zero |
+
+Instruction ranges partition the table in function order. Code functions have
+external code zero and at least one instruction. Externals have no instructions
+and exactly as many locals as parameters; signatures independently match their
+registered semantic intrinsic.
+
+A function is callable exactly when its result and all parameters are copyable
+and every parameter qualifier is zero. Its word at +64 must identify a kind-9
+descriptor with the same ordered parameter identities and result. Direct-only
+functions, including ByteBuffer-consuming or borrowing functions, require zero.
+This check includes uncalled functions. Producers intern full signatures and Bind
+suffix signatures deterministically; readers compare exact descriptor identities
+and do not silently equate independently numbered rows.
+
+After all compound metadata, each function contributes local value-type cells
+followed by each instruction's payload, one initialization flag (0 or 1) per local
+and incoming operand value-type cells. A cell is 16 bytes:
+`[identity:u64, qualifier:u64]`. Qualifier 0 is ordinary/owned; qualifier 1 is a
+borrowed ByteBuffer and requires identity 6. All other qualifiers reject. Borrowed
+cells occur only in parameter locals and operand stacks; results carry an ordinary
+identity. Identity 134 and identities above 255 remain ordinary descriptors.
+Owned ByteBuffer parameters consume custody; other parameter identities are
+unrestricted. Layout validates every cell and extent before any transfer
+certificate is trusted.
 
 Instruction rows are 64 bytes: u64 tag/A/B/C at offsets 0/8/16/24, signed I64
 immediate at 32, reserved u64 zero at 40, absolute state offset at 48 and incoming
@@ -143,11 +182,17 @@ longer discard high words. Record permutations contain u64 field indices.
 | 14 | Structural record | A type; B field count; C blob offset of 8*B-byte field permutation |
 | 15 | Field | A record type; B canonical field index |
 | 16 | Move buffer local | A initialized owned-buffer local index |
+| 17 | FunctionValue | A function index; its full signature must be nonzero |
+| 18 | Bind | A incoming Function identity; B prefix count; C exact residual Function identity |
+| 19 / 20 | Invoke / TailInvoke | A incoming Function identity; B remaining argument count; C zero |
+| 21 | Pass | No operands; checked unchanged operand stack |
 
 Unused operands and immediates are zero. Record permutations contain each field
 index exactly once; values are evaluated in source order and placed at canonical
 field positions. Lists require I64 elements. Field access requires its record type.
 Text rejects invalid UTF-8, including overlong sequences, surrogates and truncation.
+The new callable forms have no extra byte-pool payload. Their immediate and word
++40 are zero; C is nonzero only where Record or Bind requires it.
 
 Every instruction, including untaken and unreachable syntax, needs a supported
 form and valid transfer. Entry stacks are empty and only parameters are initialized.
@@ -164,7 +209,44 @@ edges. Calls check arity and ordered types. Return has exactly its one result;
 tail calls have exactly their arguments and the enclosing result type. Neither
 may abandon initialized owned-buffer locals. These are checked certificates, not
 trusted permission. No instruction falls out of a function. Backward jumps reject;
-recursion and self-tail calls remain available.
+recursion and checked direct/indirect tail forms remain available.
+
+### Closed pure callable transfer
+
+FunctionValue pushes the target's exact full signature with qualifier zero.
+For Bind/Invoke/TailInvoke with B=k and incoming depth d, the callee is at
+operand position `d-k-1`, followed by k arguments in evaluation order. The
+callee must be exactly A with qualifier zero; A must name kind 9. Arguments
+have qualifier zero and exactly match the corresponding parameter identities.
+
+Bind permits `k <= arity(A)`. C must have A's unchanged result and the exact
+remaining ordered parameter suffix. Empty Bind requires C=A. It pops the
+callee and prefix and pushes C. Captures are copyable by descriptor induction;
+neither an owner nor a borrowed ByteBuffer can be hidden inside a captured
+record or callable signature. Binding evaluates the complete callee first, then
+each new capture left to right.
+
+Invoke requires `k = arity(A)`, pops the callee and arguments, and pushes A's
+result. TailInvoke additionally requires `d=k+1`, the enclosing result identity,
+and no live owned local. It has no successor. Source lowering emits ordinary
+Invoke followed by required cleanup and Return whenever that tail condition
+does not hold. Repeated invocation preserves immutable captured values.
+
+Pass retains the exact operand stack and checks the ordinary successor and
+local-custody edge. It cannot grant initialization or custody, and cannot end a
+function without a successor. The Tier 1 exporter projects each canonical
+BeginBind/Capture marker as one Pass, preserving instruction PCs. It derives
+typed Bind/Invoke operations independently; it does not trust marker metadata
+as a capture certificate. Raw-source native lowering likewise retains marker
+positions. A Pass may emit zero machine bytes, so adjacent instruction labels
+can share an address without changing checked forward control flow.
+
+Canonical Mode 1 keeps the existing FunctionValue, BeginBind, Capture, Bind and
+Invoke instructions and their original PCs. Profile 8 does not change canonical
+artifact encoding, schema epoch, or the independent VM's capture-policy metric.
+Every new operation is checked in uncalled functions and untaken branches.
+Task callables, resource/owned captures, witnesses, lexical regions and general
+generic specialization remain outside this closed pure subset.
 
 External codes 1–7 are I64 add, subtract, multiply, divide, equal, less and
 less-equal; 8–10 are Bool not, and and or. Codes 11–19 are Bytes length, get,
@@ -280,9 +362,20 @@ register alphabet. Native encoding controls cover both signed32 boundaries and
 
 Calls align RSP to 16 before CALL and preserve the original argument base;
 callees observe RSP modulo 16 equal to 8. A count-driven prologue copies all
-parameters into variable local storage. Self-tail calls replace parameters and
-jump to the first instruction without growing the stack; other recursion uses
-ordinary frames. The local/stack tests independently exercise 256 arguments,
+parameters into variable local storage. Graph TailInvoke keeps the caller's
+original frame/return record, moves explicit arguments before immutable captured
+prefixes using overlap-safe copy order, clears fresh target locals and jumps to
+the target body. A complete outgoing window is reserved before ordinary Invoke
+uses copy or cancellation helpers. Empty Bind preserves its evaluated callee and
+allocates no environment. Pure callable environments use flat immutable prefixes;
+captured callable values may themselves retain environments.
+
+Self-tail calls and eligible graph tail transfers do not accumulate activations.
+Ordinary non-tail recursion still uses native CALL frames. External indirect
+terminals use ordinary Invoke and the retained terminal continuation; the closed
+registered alphabet cannot call back into graph code. Every path, including a
+zero-arity/zero-local tail, has a cancellation checkpoint. R14/R15 retain their
+phase ownership/recovery roles. The local/stack tests independently exercise 256 arguments,
 257 local slots and 256 operand cells. Explicit launcher output quotas and host
 OS/stack failures remain separate from admission. Mode-1 profile 7 widens private
 table and instruction projection fields; canonical IR indices, unit codecs and
@@ -365,7 +458,7 @@ remain deferred.
 ## Source-record decoding groundwork
 
 The source readers consume current kernel object bytes, before a semantic graph
-profile replaces the host-normalized LKJCI1 input. They do not make the normalized profile-6 `compile-elf` entrypoint a semantic compiler. `source-shape::type` and
+profile replaces the host-normalized LKJCI1 input. They do not make the normalized profile-8 `compile-elf` entrypoint a semantic compiler. `source-shape::type` and
 `source-owner::owner` return 0 for supported record shapes, 12 for malformed
 encoding and 13 for a recognized unsupported form. Rejection produces no artifact.
 A supported shape is not permission to execute or a proof of semantic validity.
@@ -388,7 +481,8 @@ Pure/task functions, externals, constants, records/variants, interfaces, compone
 and tests have structural readers. Implementation witnesses, associated owned
 types, borrowed results and read-scope metadata remain explicitly unsupported.
 Expression forms 0 through 16 cover literals, locals, branches, lets,
-calls/function values/invocation, records, variants, fields and lists. Nonempty
+calls/function values/invocation, records, variants, fields and lists. Sequence
+form 20 and prefix-Bind form 21 use their current canonical child encodings. Nonempty
 R/E application arguments and broader forms reject with code 13 before their
 unsupported payload is interpreted; this does not classify that payload as valid.
 
@@ -532,9 +626,10 @@ starts from Rust-bootstrapped normalized input, without source-to-normalized low
 This E1 extension does not establish E1-final. Call/FunctionValue R/E application
 arguments, owned/witness/read/region forms and Match still need broader admission.
 The active route below adds compound expression typing, exact ByteBuffer custody
-and both output paths. General generic bodies, nominal owned aggregates, closures,
+and both output paths. General generic bodies, nominal owned aggregates, task/effectful callables,
 effect compatibility, requirement satisfaction, implementation witnesses, source-tied
-views and Regions retain their broader E2/E3 obligations.
+views and Regions retain their broader E2/E3 obligations. The closed pure callable
+slice below does not establish those families.
 
 ### Active compiler source admission and lowering
 
@@ -547,9 +642,11 @@ evidence nor compiler units are request inputs. The
 defines exact framing, the active semantic profile, both output paths and diagnostics.
 
 Whole-inventory E1/E2 covers compound copyable types, all active ci intrinsics,
-closed I64 list substitutions and exact affine ByteBuffer custody. Native lowering
-derives current Profile-6 descriptors and flow state, including branch/scope
-cleanup, returned-owner transfer and tail-call cleanup fallback. Canonical lowering
+closed I64 list substitutions, closed pure FunctionValue/Bind/Invoke and exact
+affine ByteBuffer custody. Native lowering derives current Profile-8 record and
+Function descriptors, exact full/residual signatures and flow state, including
+branch/scope cleanup, returned-owner transfer and direct/indirect tail cleanup
+fallback. Canonical lowering
 independently derives all pre-tail CompilerUnits and seven owner-summary dimensions,
 the exact public interface and runtime/reference/type closure, PackageRevision,
 and Profile-7 input for canonical artifact emission. The same standalone source
@@ -594,12 +691,12 @@ bootstrap exporter and both output paths to support the adopted construct.
 
 | Family | Host execution | Selfhost IR/output | E1 decoding/references | E1 containment/names/binders | E2 semantics | E3 lowering | Independent source-driven controls | Compiler adoption |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Unit, Bool, I64, If, Let, Sequence and direct monomorphic recursion | VM/reference/native | Profiles 6 and 7 | Current restricted profile | Current restricted profile | Whole-inventory typing | Native flow and canonical pre-tail lowering | Acceptance evidence is recorded by exact source/tree in status and receipts | Current; complete native source fixed point is a separate milestone |
-| Text/StaticText, Bytes, List<I64> and structural records | VM/reference/native | Profiles 6 and 7 | Current restricted profile | Current restricted profile | Active compound typing and closed list substitutions | Native and canonical lowering | Source controls and exact artifact oracle comparisons require recorded execution evidence | Current |
-| Affine ByteBuffer and borrowed buffer reads | VM/reference/native | Profiles 6 and 7 | Current restricted profile | Current restricted profile | Exact consume/borrow/scope/branch custody | Native cleanup fallback and canonical pre-tail cleanup | Source controls and exact artifact oracle comparisons require recorded execution evidence | Current; arbitrary owned aggregates/borrowed helpers remain separate |
+| Unit, Bool, I64, If, Let, Sequence and direct monomorphic recursion | VM/reference/native | Profiles 8 and 7 | Current restricted profile | Current restricted profile | Whole-inventory typing | Native flow and canonical pre-tail lowering | Acceptance evidence is recorded by exact source/tree in status and receipts | Current; complete native source fixed point is a separate milestone |
+| Text/StaticText, Bytes, List<I64> and structural records | VM/reference/native | Profiles 8 and 7 | Current restricted profile | Current restricted profile | Active compound typing and closed list substitutions | Native and canonical lowering | Source controls and exact artifact oracle comparisons require recorded execution evidence | Current |
+| Affine ByteBuffer and borrowed buffer reads | VM/reference/native | Profiles 8 and 7 | Current restricted profile | Current restricted profile | Exact consume/borrow/scope/branch custody | Native cleanup fallback and canonical pre-tail cleanup | Source controls and exact artifact oracle comparisons require recorded execution evidence | Current; arbitrary owned aggregates/borrowed helpers remain separate |
 | Interface, Operation and operation Parameters, Requirement, effect/requirement binders | VM/reference | Effectful forms need extension | Owners, constraints and pure/task rows admitted; R/E applications pending | All 12 namespace classes; direct/nested R/E scope | Compatibility/substitution pending | Pending | Four-engine raw-carrier E1 controls; source-driven execution pending | Optional; compiler remains pure |
 | Nominal owned records/choices, Match and general List<T> | VM/reference; native portions restricted | Nominal/match extension needed | Ordinary Record/Variant members decoded; owned forms and Match pending | Field/Case admission and nominal slot flow present; match binders pending | Pending | Pending | Pending | Optional |
-| First-class functions, binding and Invoke | VM/reference/host ELF | Selfhost closure/invoke parity pending | Decoded restricted forms | Current lexical checks | Signature/capture/effect pending | Pending | Pending; host/Tier 1 closure controls exist | Optional |
+| Closed pure first-class functions, binding and Invoke | VM/reference/host ELF with complete capture/storage lifecycle | Profile-8 callable projection; unchanged canonical Mode 1 | Current FunctionValue/Invoke/Bind forms | Callee-first containment and lexical checks | Exact signatures, copyable captures, suffix types and custody | Native indirect/frame transfer and canonical BeginBind/Capture | Require raw-source four-engine positives, complete-inventory negatives, depth and tail controls; accepted evidence remains receipt-bound | Optional; support and proof must precede compiler adoption |
 | OwnedContract/OwnedImplementation, witnesses, associated types and read views | VM/reference | Witness resolution/read-view support needed | Broader forms unsupported | Contextual binders pending | Pending | Pending | Pending | Optional |
 | Lexical Region, capabilities, relative pointers/slices and slab persistence | VM/reference; native pending | Bootstrap/selfhost extension needed | Unsupported forms return 13 | Region/read-scope admission pending | Pending | Pending | Native and reclamation controls pending | Required before adopting lexical Regions in compiler source |
 
@@ -615,7 +712,7 @@ standard declarations, plus independent programs exercising I64 traps, Bool,
 Unit, Text, Bytes, structural/nominal records and choices, sequences/buffers,
 lexical region allocation/read/write/freeze, recursion, self-tail calls, closures
 and explicit contract/implementation witnesses. Missing features remain known
-limitations; profile 6 does not reduce these final requirements. Unsupported
+limitations; profile 8 does not reduce these final requirements. Unsupported
 broader constructs, including F64 and service capabilities, must reject before
 publication with deterministic diagnostics.
 

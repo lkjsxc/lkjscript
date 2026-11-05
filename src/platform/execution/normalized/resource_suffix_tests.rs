@@ -239,7 +239,7 @@ fn resource_suffix_both_evaluators_preserve_effect_order_and_join_failures() {
                     "{mode}/{reference}/{maximum_calls}/{cancelled}: {result:?}"
                 );
                 if let Ok(value) = result {
-                    assert_eq!(value, NormalizedValue::Unit);
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(NormalizedValue::Unit)), Ok(true));
                 }
                 assert_eq!(resources.live_resources(), 0);
                 resources.release_all();

@@ -65,8 +65,20 @@ fn round_trip(f: &Fixture, value: &NormalizedValue, ty: TypeObjectDigest) -> Vec
     let encoded = data_codec::encode_typed(&f.program, value, ty).unwrap();
     let independent = data_codec_reference::encode_typed(&f.reference, value, ty).unwrap();
     assert!(encoded == independent, "independent encoders disagree");
-    assert!(data_codec::decode_typed(&f.program, &encoded, ty).unwrap() == *value);
-    assert!(data_codec_reference::decode_typed(&f.reference, &encoded, ty).unwrap() == *value);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &data_codec::decode_typed(&f.program, &encoded, ty).unwrap(),
+            value
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &data_codec_reference::decode_typed(&f.reference, &encoded, ty).unwrap(),
+            value
+        ),
+        Ok(true)
+    );
     encoded
 }
 

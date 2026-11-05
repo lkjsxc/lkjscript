@@ -279,7 +279,15 @@ fn four_engines(
     let reference = NormalizedReferenceInterpreter::new(&probe.source, &probe.program, policy)
         .invoke(probe.entry, arguments, None, &control)
         .map_err(|error| format!("{label}: reference: {error:?}"))?;
-    assert_eq!(vm.0, reference.0, "{label}: VM/reference disagreement");
+    let same = crate::platform::execution::normalized::structural_equality::raw_structural_equal(
+        &vm.0,
+        &reference.0,
+        &control,
+    )
+    .map_err(|error| format!("{label}: VM/reference comparison failed: {error:?}"))?;
+    if !same {
+        return Err(format!("{label}: VM/reference disagreement"));
+    }
     assert_eq!(vm.1.live_call_frames_after, 0);
     assert_eq!(reference.1.live_call_frames_after, 0);
     let (code, expected) = filter_result(&vm.0)?;

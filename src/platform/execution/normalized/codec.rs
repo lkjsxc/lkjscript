@@ -1,5 +1,6 @@
 //! Strict typed JSON conversion at normalized Graph 10 runner boundaries.
 
+use super::child_storage::{FieldsBuilder, StorageFailure, ValuesBuilder};
 use super::prepare::{NormalizedRecordLayout, NormalizedVariantLayout};
 use super::value::{
     NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex,
@@ -367,27 +368,30 @@ fn from_json(
                     "structural-record fields do not equal the exact type",
                 ));
             }
-            let mut values = Vec::with_capacity(fields.len());
+            let mut values =
+                FieldsBuilder::with_capacity(fields.len()).map_err(child_storage_error)?;
             for field in fields {
                 let field_path = format!("{path}.{}", field.name.as_str());
                 let value = object.get(field.name.as_str()).ok_or_else(|| {
                     type_error(&field_path, "required structural field is missing")
                 })?;
-                values.push((
-                    field.name.clone(),
-                    from_json(
-                        program,
-                        value,
-                        field.ty,
-                        limits,
-                        &field_path,
-                        depth + 1,
-                        control,
-                    )?,
-                ));
+                values
+                    .try_push((
+                        field.name.clone(),
+                        from_json(
+                            program,
+                            value,
+                            field.ty,
+                            limits,
+                            &field_path,
+                            depth + 1,
+                            control,
+                        )?,
+                    ))
+                    .map_err(child_storage_error)?;
             }
             Ok(NormalizedValue::Record(NormalizedRecord::Structural {
-                fields: Arc::new(values),
+                fields: values.finish().map_err(child_storage_error)?,
             }))
         }
         TypeForm::List { item } => {
@@ -494,25 +498,28 @@ fn decode_named(
                 "nominal-record fields do not equal the exact layout",
             ));
         }
-        let mut fields = Vec::with_capacity(layout.fields.len());
+        let mut fields =
+            ValuesBuilder::with_capacity(layout.fields.len()).map_err(child_storage_error)?;
         for field in layout.fields.iter() {
             let field_path = format!("{path}.{}", field.name.as_str());
             let value = object
                 .get(field.name.as_str())
                 .ok_or_else(|| type_error(&field_path, "required nominal field is missing"))?;
-            fields.push(from_json(
-                program,
-                value,
-                field.ty,
-                limits,
-                &field_path,
-                depth + 1,
-                control,
-            )?);
+            fields
+                .try_push(from_json(
+                    program,
+                    value,
+                    field.ty,
+                    limits,
+                    &field_path,
+                    depth + 1,
+                    control,
+                )?)
+                .map_err(child_storage_error)?;
         }
         return Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
             layout: index,
-            fields: Arc::new(fields),
+            fields: fields.finish().map_err(child_storage_error)?,
         }));
     }
     if let Some((index, layout)) = variant_layout(program, ty) {
@@ -1072,4 +1079,9 @@ fn json_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
+}
+
+fn child_storage_error(error: StorageFailure) -> Diagnostic {
+    let error: crate::platform::execution::ExecutionError = error.into();
+    Diagnostic::new(DiagnosticClass::Resource, error.code, error.message)
 }

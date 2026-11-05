@@ -35,13 +35,28 @@ pub(super) fn items(length: usize) -> Vec<NormalizedValue> {
 fn verify(list: &List, length: usize) {
     assert_eq!(list.len(), length);
     for (index, value) in list.iter().enumerate() {
-        assert_eq!(*value, NormalizedValue::I64(index as i64 * 17 - 9));
-        assert_eq!(list.get(index), Some(value));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                value,
+                &(NormalizedValue::I64(index as i64 * 17 - 9))
+            ),
+            Ok(true)
+        );
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(list.get(index)),
+                &(Some(value))
+            ),
+            Ok(true)
+        );
     }
     for (index, value) in list.iter().rev().enumerate() {
         assert_eq!(
-            *value,
-            NormalizedValue::I64((length - index - 1) as i64 * 17 - 9)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                value,
+                &(NormalizedValue::I64((length - index - 1) as i64 * 17 - 9))
+            ),
+            Ok(true)
         );
     }
     assert!(list.get(length).is_none());
@@ -135,7 +150,13 @@ fn bulk_roots_remain_append_compatible_and_share_retained_payloads() {
         verify(&root, length);
         verify(&successor, length + 67);
         assert_eq!(sibling.len(), length + 1);
-        assert_eq!(sibling.get(length), Some(&NormalizedValue::Bool(true)));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(sibling.get(length)),
+                &(Some(&NormalizedValue::Bool(true)))
+            ),
+            Ok(true)
+        );
         for index in 0..length {
             assert!(std::ptr::eq(
                 root.get(index).unwrap(),
@@ -211,8 +232,11 @@ fn lists_cross_former_length_and_height_limits_without_losing_order_or_aliases()
         .unwrap();
     assert_eq!(sibling.len(), initial_length + 1);
     assert_eq!(
-        sibling.get(initial_length),
-        Some(&NormalizedValue::Bool(true))
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(sibling.get(initial_length)),
+            &(Some(&NormalizedValue::Bool(true)))
+        ),
+        Ok(true)
     );
     for index in [
         0,
@@ -229,8 +253,11 @@ fn lists_cross_former_length_and_height_limits_without_losing_order_or_aliases()
         initial_length - 1,
     ] {
         assert_eq!(
-            root.get(index),
-            Some(&NormalizedValue::I64(index as i64 * 17 - 9))
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(root.get(index)),
+                &(Some(&NormalizedValue::I64(index as i64 * 17 - 9)))
+            ),
+            Ok(true)
         );
         assert!(std::ptr::eq(
             root.get(index).unwrap(),
@@ -249,15 +276,21 @@ fn lists_cross_former_length_and_height_limits_without_losing_order_or_aliases()
     assert_eq!(mixed.size_hint(), (final_length, Some(final_length)));
     while front < back {
         assert_eq!(
-            mixed.next(),
-            Some(&NormalizedValue::I64(front as i64 * 17 - 9))
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(mixed.next()),
+                &(Some(&NormalizedValue::I64(front as i64 * 17 - 9)))
+            ),
+            Ok(true)
         );
         front += 1;
         if front < back {
             back -= 1;
             assert_eq!(
-                mixed.next_back(),
-                Some(&NormalizedValue::I64(back as i64 * 17 - 9))
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(mixed.next_back()),
+                    &(Some(&NormalizedValue::I64(back as i64 * 17 - 9)))
+                ),
+                Ok(true)
             );
         }
     }
@@ -267,8 +300,11 @@ fn lists_cross_former_length_and_height_limits_without_losing_order_or_aliases()
     drop(alias);
     drop(sibling);
     assert_eq!(
-        successor.get(initial_length),
-        Some(&NormalizedValue::I64(initial_length as i64 * 17 - 9))
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(successor.get(initial_length)),
+            &(Some(&NormalizedValue::I64(initial_length as i64 * 17 - 9)))
+        ),
+        Ok(true)
     );
     drop(successor);
 

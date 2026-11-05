@@ -1,9 +1,10 @@
 //! Runtime-only dense values for normalized Graph 14 execution.
 
 use super::bytes::BytePayload;
+use super::child_storage::{Captures, Fields, Values};
 use super::resource::NormalizedResourceHandle;
 use crate::platform::binary64::Binary64;
-use crate::platform::kernel::{Name, TypeObjectDigest};
+use crate::platform::kernel::TypeObjectDigest;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -84,18 +85,18 @@ dense_index!(OperationIndex);
 dense_index!(ComponentIndex);
 dense_index!(PortIndex);
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone)]
 pub enum NormalizedRecord {
     Nominal {
         layout: RecordLayoutIndex,
-        fields: Arc<Vec<NormalizedValue>>,
+        fields: Values,
     },
     Structural {
-        fields: Arc<Vec<(Name, NormalizedValue)>>,
+        fields: Fields,
     },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone)]
 pub enum NormalizedValue {
     RegionCap {
         ty: TypeObjectDigest,
@@ -141,9 +142,102 @@ pub enum NormalizedValue {
         effect_arguments: Arc<[crate::platform::kernel::EffectRow]>,
         requirement_arguments: Arc<[crate::platform::kernel::RequirementOperand]>,
         read_scope_arguments: Arc<[crate::platform::kernel::ReadScopeArgument]>,
-        bound_arguments: Option<Arc<Vec<NormalizedValue>>>,
+        bound_arguments: Option<Captures>,
     },
     Resource(NormalizedResourceHandle),
+}
+
+// Debug is passive presentation, not a serializer or a semantic admission walk.
+// Every composite prints only its own fixed-size metadata and child counts.
+impl std::fmt::Debug for NormalizedRecord {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Nominal { layout, fields } => formatter
+                .debug_struct("Nominal")
+                .field("layout", layout)
+                .field("fields", fields)
+                .finish(),
+            Self::Structural { fields } => formatter
+                .debug_struct("Structural")
+                .field("fields", fields)
+                .finish(),
+        }
+    }
+}
+
+impl std::fmt::Debug for NormalizedValue {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unit => formatter.write_str("Unit"),
+            Self::Bool(value) => formatter.debug_tuple("Bool").field(value).finish(),
+            Self::I64(value) => formatter.debug_tuple("I64").field(value).finish(),
+            Self::F64(value) => formatter.debug_tuple("F64").field(value).finish(),
+            Self::Bytes(value) => formatter
+                .debug_struct("Bytes")
+                .field("len", &value.len())
+                .finish(),
+            Self::Text(value) => formatter
+                .debug_struct("Text")
+                .field("bytes", &value.len())
+                .finish(),
+            Self::StaticText(value) => formatter
+                .debug_struct("StaticText")
+                .field("bytes", &value.len())
+                .finish(),
+            Self::Record(value) => formatter.debug_tuple("Record").field(value).finish(),
+            Self::Variant {
+                layout,
+                case,
+                payload,
+            } => formatter
+                .debug_struct("Variant")
+                .field("layout", layout)
+                .field("case", case)
+                .field("has_payload", &payload.is_some())
+                .finish(),
+            Self::Option(value) => formatter
+                .debug_struct("Option")
+                .field("is_some", &value.is_some())
+                .finish(),
+            Self::Result { success, .. } => formatter
+                .debug_struct("Result")
+                .field("success", success)
+                .finish(),
+            Self::List(value) => formatter.debug_tuple("List").field(value).finish(),
+            Self::Map(value) => formatter.debug_tuple("Map").field(value).finish(),
+            Self::Function {
+                function,
+                type_arguments,
+                effect_arguments,
+                requirement_arguments,
+                read_scope_arguments,
+                bound_arguments,
+            } => formatter
+                .debug_struct("Function")
+                .field("function", function)
+                .field("type_arguments", &type_arguments.len())
+                .field("effect_arguments", &effect_arguments.len())
+                .field("requirement_arguments", &requirement_arguments.len())
+                .field("read_scope_arguments", &read_scope_arguments.len())
+                .field("bound_arguments", bound_arguments)
+                .finish(),
+            Self::RegionCap { ty, .. } => formatter
+                .debug_struct("RegionCap")
+                .field("ty", ty)
+                .finish_non_exhaustive(),
+            Self::RegionPointer { ty, .. } => formatter
+                .debug_struct("RegionPointer")
+                .field("ty", ty)
+                .finish_non_exhaustive(),
+            Self::ReadView(_) => formatter.write_str("ReadView(<opaque token>)"),
+            Self::OwnedSequence(_) => formatter.write_str("OwnedSequence(<opaque token>)"),
+            Self::OwnedChoice(_) => formatter.write_str("OwnedChoice(<opaque token>)"),
+            Self::OwnedProduct(_) => formatter.write_str("OwnedProduct(<opaque token>)"),
+            Self::ByteBuffer(_) => formatter.write_str("ByteBuffer(<opaque token>)"),
+            Self::OwnedI64Cell(_) => formatter.write_str("OwnedI64Cell(<opaque token>)"),
+            Self::Resource(_) => formatter.write_str("Resource(<opaque handle>)"),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -464,130 +558,33 @@ impl Drop for RawArguments {
     }
 }
 
-/// Nonfallible raw teardown owns this scratch, separately from execution fuel.
-/// The first pending value is inline. Terminal values and single-child wrappers
-/// need no heap storage; retained Arc owners are released without visiting their
-/// shared contents. Owned argument/capture/record buffers are reused where possible.
-/// Additional scratch holds children emitted by uniquely released containers;
-/// several shared composite child handles can still occupy that frontier, without
-/// traversing or cloning their shared contents. This established cleanup owner is
-/// not a cumulative allocation ledger and cannot publish values after refusal.
-#[derive(Default)]
-pub(super) struct RawValueWork {
-    current: Option<NormalizedValue>,
-    values: Vec<NormalizedValue>,
-}
+/// Preserve authored order while owning unadmitted fields across failure paths.
+pub(super) struct RawValues(Vec<NormalizedValue>);
 
-impl RawValueWork {
-    pub(super) fn push(&mut self, mut value: NormalizedValue) {
-        loop {
-            value = match value {
-                NormalizedValue::Option(Some(value))
-                | NormalizedValue::Result { value, .. }
-                | NormalizedValue::Variant {
-                    payload: Some(value),
-                    ..
-                } => *value,
-                NormalizedValue::Unit
-                | NormalizedValue::Bool(_)
-                | NormalizedValue::I64(_)
-                | NormalizedValue::F64(_)
-                | NormalizedValue::Bytes(_)
-                | NormalizedValue::Text(_)
-                | NormalizedValue::StaticText(_)
-                | NormalizedValue::Option(None)
-                | NormalizedValue::Variant { payload: None, .. }
-                | NormalizedValue::Function {
-                    bound_arguments: None,
-                    ..
-                }
-                | NormalizedValue::Resource(_)
-                | NormalizedValue::ByteBuffer(_)
-                | NormalizedValue::OwnedI64Cell(_)
-                | NormalizedValue::OwnedProduct(_)
-                | NormalizedValue::OwnedChoice(_)
-                | NormalizedValue::OwnedSequence(_)
-                | NormalizedValue::ReadView(_) => return,
-                value => {
-                    if let Some(previous) = self.current.replace(value) {
-                        self.values.push(previous);
-                    }
-                    return;
-                }
-            };
-        }
+impl RawValues {
+    pub(super) fn new(values: Vec<NormalizedValue>) -> Self {
+        Self(values)
     }
 
-    fn extend_owned(&mut self, mut children: Vec<NormalizedValue>) {
-        if self.values.capacity().saturating_sub(self.values.len()) >= children.len() {
-            self.values.append(&mut children);
-        } else if children.capacity().saturating_sub(children.len()) >= self.values.len() {
-            // Reuse the larger already-owned buffer while preserving release order.
-            let previous = self.values.len();
-            children.append(&mut self.values);
-            children.rotate_right(previous);
-            self.values = children;
-        } else {
-            self.values.append(&mut children);
-        }
+    pub(super) fn as_slice(&self) -> &[NormalizedValue] {
+        &self.0
     }
 
-    pub(super) fn release(&mut self) {
-        while let Some(value) = self.current.take().or_else(|| self.values.pop()) {
-            match value {
-                NormalizedValue::Option(Some(value))
-                | NormalizedValue::Result { value, .. }
-                | NormalizedValue::Variant {
-                    payload: Some(value),
-                    ..
-                } => self.push(*value),
-                NormalizedValue::Function {
-                    bound_arguments: Some(children),
-                    ..
-                }
-                | NormalizedValue::Record(NormalizedRecord::Nominal {
-                    fields: children, ..
-                }) => {
-                    if let Some(children) = Arc::into_inner(children) {
-                        self.extend_owned(children);
-                    }
-                }
-                NormalizedValue::List(mut list) => list.drain_unique(self),
-                NormalizedValue::Record(NormalizedRecord::Structural { fields }) => {
-                    if let Some(fields) = Arc::into_inner(fields) {
-                        for (_, value) in fields {
-                            self.push(value);
-                        }
-                    }
-                }
-                NormalizedValue::Map(mut entries) => entries.drain_unique(self),
-                _ => {}
-            }
-        }
-    }
-
-    #[cfg(test)]
-    pub(super) fn scratch_storage(&self) -> (*const NormalizedValue, usize) {
-        (self.values.as_ptr(), self.values.capacity())
+    pub(super) fn into_vec(mut self) -> Vec<NormalizedValue> {
+        std::mem::take(&mut self.0)
     }
 }
 
-impl Drop for RawValueWork {
+impl Drop for RawValues {
     fn drop(&mut self) {
-        self.release();
+        release_raw_values(std::mem::take(&mut self.0));
     }
 }
 
 pub(super) fn release_raw_value(value: NormalizedValue) {
-    let mut work = RawValueWork::default();
-    work.push(value);
-    work.release();
+    super::child_storage::release_root(value);
 }
 
 pub(super) fn release_raw_values(values: Vec<NormalizedValue>) {
-    let mut work = RawValueWork {
-        current: None,
-        values,
-    };
-    work.release();
+    super::child_storage::release_roots(values);
 }

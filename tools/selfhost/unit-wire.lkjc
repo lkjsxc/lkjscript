@@ -413,7 +413,9 @@ declarations.begin
                   (binding wire-temp-17 (type ByteBuffer) (call wire::unsigned (local x) (local a)))
                   (in (call wire::unsigned (local y) (local wire-temp-17))))
                 (if
-                  (call ci::eq (local tag) (i64 12))
+                  (call ci::either
+                    (call ci::eq (local tag) (i64 12))
+                    (call ci::eq (local tag) (i64 13)))
                   (let
                     (binding b (type ByteBuffer) (call ci::le (i64 0) (i64 2) (local a)))
                     (binding c (type ByteBuffer) (call wire::unsigned (local x) (local b)))
@@ -433,7 +435,12 @@ declarations.begin
                             (local wire-temp-18)
                             (local wire-temp-19)
                             (local wire-temp-20)))))
-                    (binding e (type ByteBuffer) (call wire::unsigned (local y) (local d)))
+                    (binding e
+                      (type ByteBuffer)
+                      (if
+                        (call ci::eq (local tag) (i64 12))
+                        (call wire::unsigned (local y) (local d))
+                        (local d)))
                     (in (call ci::push (i64 0) (local e))))
                   (if
                     (call ci::eq (local tag) (i64 15))

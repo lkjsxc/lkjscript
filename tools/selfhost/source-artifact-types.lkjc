@@ -59,7 +59,7 @@ declarations.begin
           (binding op (call ci::get (local record) (i64 37)))
           (in
             (if
-              (call ci::eq (local op) (i64 10))
+              (call ci::either (call ci::eq (local op) (i64 10)) (call ci::eq (local op) (i64 11)))
               (let
                 (binding items (call source-table::array (local record) (i64 74)))
                 (binding out (type ByteBuffer) (call ci::empty))
@@ -73,7 +73,9 @@ declarations.begin
               (if
                 (call ci::eq (local op) (i64 16))
                 (call one (local graph) (local record) (i64 38))
-                (record structural (field code (i64 0)) (field bytes (call ci::text-bytes (text ""))))))))))
+                (record structural
+                  (field code (i64 0))
+                  (field bytes (call ci::text-bytes (text ""))))))))))
     (function create owner
       (visibility package)
       (effect pure)

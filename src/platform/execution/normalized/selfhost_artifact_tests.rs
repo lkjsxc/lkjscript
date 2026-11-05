@@ -1,6 +1,7 @@
 //! Artifact emission primitives use semantic inputs and independent strict readers.
 use super::*;
 use crate::platform::compiler::selfhost_artifact_input;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 use crate::platform::persistent_map::{
     MapRoot, MapWork, MemoryPageStore, PageDigest, PageStore, PersistentMap,
 };
@@ -110,7 +111,11 @@ fn profiled_result(name: &str, input: &[u8]) -> (i64, Vec<u8>, serde_json::Value
             reference.1.maximum_call_depth
         );
     }
-    assert!(vm.0 == reference.0, "compiler engines disagree for {name}");
+    assert_eq!(
+        raw_value_equal(&vm.0, &reference.0,),
+        Ok(true),
+        "compiler engines disagree for {name}",
+    );
     assert_eq!(vm.1.live_call_frames_after, 0);
     assert_eq!(reference.1.live_call_frames_after, 0);
     let NormalizedValue::Record(NormalizedRecord::Structural { fields }) = vm.0 else {
@@ -692,6 +697,270 @@ fn selfhost_artifact_units_match_canonical_complete_compiler_ir() {
     );
 }
 
+fn artifact_callable_source(capture: i64) -> crate::platform::kernel::KernelSnapshot {
+    let proposal = include_str!("../../../../tests/fixtures/selfhost-callable-projection.lkjc")
+        .replace("(i64 20)", &format!("(i64 {capture})"));
+    byte_buffer_tests::author_only(&proposal).unwrap()
+}
+
+fn artifact_callable_unit(
+    program: &NormalizedProgram,
+    declaration: crate::platform::kernel::DeclarationReference,
+) -> (crate::platform::compiler::CompilationUnit, Vec<u8>) {
+    program
+        .artifact()
+        .objects
+        .iter()
+        .filter(|(key, _)| key.domain == ObjectDomain::CompilerUnit)
+        .find_map(|(key, bytes)| {
+            let unit = crate::platform::compiler::CompilationUnit::decode(bytes, *key).unwrap();
+            (unit.source.owner == OwnerKey::Declaration(declaration.declaration))
+                .then(|| (unit, bytes.clone()))
+        })
+        .unwrap()
+}
+
+fn artifact_callable_word(bytes: &[u8], at: usize) -> usize {
+    usize::try_from(u64::from_le_bytes(bytes[at..at + 8].try_into().unwrap())).unwrap()
+}
+
+#[test]
+fn selfhost_artifact_callable_export_roundtrips_types_callees_generics_and_behavior() {
+    use crate::platform::compiler::unit::{CompilationPayload, CompiledInstruction as I};
+
+    for capture in [20_i64, 19] {
+        let source = artifact_callable_source(capture);
+        let original = prepare_snapshot(&source);
+        assert!(
+            source
+                .types
+                .values()
+                .any(|ty| matches!(ty.form, crate::platform::kernel::TypeForm::Function { .. }))
+        );
+        let mut tags = BTreeSet::new();
+        let mut empty_prefix = false;
+        let mut supplied_type = false;
+        for name in ["entry", "generic"] {
+            let declaration = declaration_named(&source, name);
+            let (unit, canonical) = artifact_callable_unit(&original, declaration);
+            let CompilationPayload::Function { code, .. } = &unit.payload else {
+                panic!("callable fixture is not a function")
+            };
+            empty_prefix |= code.instructions.windows(2).any(|pair| {
+                matches!(
+                    pair,
+                    [I::BeginBind { arguments: 0 }, I::Bind { arguments: 0 }]
+                )
+            });
+            for instruction in &code.instructions {
+                match instruction {
+                    I::FunctionValue {
+                        function,
+                        type_arguments,
+                        ..
+                    } => {
+                        tags.insert(13);
+                        let callee = unit.tables.declarations[*function as usize];
+                        assert_eq!(
+                            callee,
+                            declaration_named(
+                                &source,
+                                if name == "generic" { "get" } else { "plus" }
+                            )
+                        );
+                        if name == "generic" {
+                            assert_eq!(type_arguments.len(), 1);
+                            let ty = unit.tables.types[type_arguments[0] as usize];
+                            assert!(matches!(
+                                source.types[&ty].form,
+                                crate::platform::kernel::TypeForm::I64
+                            ));
+                            supplied_type = true;
+                        } else {
+                            assert!(type_arguments.is_empty());
+                        }
+                    }
+                    I::Invoke { .. } => {
+                        tags.insert(14);
+                    }
+                    I::Bind { .. } => {
+                        tags.insert(28);
+                    }
+                    I::BeginBind { .. } => {
+                        tags.insert(29);
+                    }
+                    I::Capture { .. } => {
+                        tags.insert(30);
+                    }
+                    _ => {}
+                }
+            }
+            let projection = selfhost_artifact_input::unit(&unit).unwrap();
+            let code_at = artifact_callable_word(&projection, 264);
+            assert_eq!(
+                artifact_callable_word(&projection, code_at + 24),
+                code.instructions.len()
+            );
+            // Four disjoint encoders must reproduce every canonical instruction,
+            // table reference and PC, including the empty-prefix marker pair.
+            assert_eq!(image("probe-unit", &projection), canonical);
+        }
+        assert_eq!(tags, BTreeSet::from([13, 14, 28, 29, 30]));
+        assert!(empty_prefix && supplied_type);
+
+        let projection = selfhost_artifact_input::bundle(original.artifact()).unwrap();
+        assert_eq!(&projection[8..12], &7_u32.to_le_bytes());
+        let emitted = image("compile-elf", &projection);
+        let loaded = crate::platform::compiler::load_artifact(&emitted).unwrap();
+        loaded.require_current_admission(|| Ok(())).unwrap();
+        // The full Type/Owner/unit inventory is retained, not just called
+        // functions or a runtime-shape substitute for canonical function types.
+        assert_eq!(loaded.manifest, original.artifact().manifest);
+        assert_eq!(loaded.objects, original.artifact().objects);
+        assert_eq!(loaded.bundle_digest, original.artifact().bundle_digest);
+        let program = NormalizedProgram::prepare(loaded).unwrap();
+        for (name, expected) in [
+            ("entry", capture + 22),
+            ("higher", capture + 22),
+            ("recorded", capture + 22),
+            ("generic", 42),
+            ("held", capture + 22),
+        ] {
+            let declaration = declaration_named(&source, name);
+            let policy = NormalizedRunPolicy::foreground();
+            let control = ExecutionControl::uncancelled();
+            let vm = NormalizedVm::for_test(&program, policy)
+                .invoke(declaration, vec![], None, &control)
+                .unwrap();
+            let reference = NormalizedReferenceInterpreter::new(&source, &program, policy)
+                .invoke(declaration, vec![], None, &control)
+                .unwrap();
+            assert!(
+                matches!(vm.0, NormalizedValue::I64(value) if value == expected),
+                "VM {name}"
+            );
+            assert!(
+                matches!(reference.0, NormalizedValue::I64(value) if value == expected),
+                "reference {name}"
+            );
+            assert_eq!(vm.1.live_call_frames_after, 0);
+            assert_eq!(reference.1.live_call_frames_after, 0);
+        }
+    }
+}
+
+#[test]
+fn selfhost_artifact_callable_projection_reaches_layout_and_strict_protocol_rejections() {
+    use crate::platform::compiler::unit::{CompilationPayload, CompiledInstruction as I};
+
+    let source = artifact_callable_source(20);
+    let program = prepare_snapshot(&source);
+    for name in ["entry", "generic"] {
+        let (unit, _) = artifact_callable_unit(&program, declaration_named(&source, name));
+        let CompilationPayload::Function { code, .. } = &unit.payload else {
+            panic!("callable fixture is not a function")
+        };
+        let valid = selfhost_artifact_input::unit(&unit).unwrap();
+        let code_at = artifact_callable_word(&valid, 264);
+        let nodes = artifact_callable_word(&valid, code_at + 16);
+        let function = code
+            .instructions
+            .iter()
+            .rposition(|i| matches!(i, I::FunctionValue { .. }))
+            .unwrap();
+        let invoke = code
+            .instructions
+            .iter()
+            .position(|i| matches!(i, I::Invoke { .. }))
+            .unwrap();
+        let mut mutations = vec![
+            (
+                nodes + function * 48 + 8,
+                unit.tables.declarations.len() as u64,
+            ),
+            (nodes + function * 48 + 16, 1),
+            (nodes + invoke * 48 + 8, u64::from(u32::MAX) + 1),
+            (nodes + invoke * 48 + 24, 1),
+        ];
+        if name == "generic" {
+            let extras = artifact_callable_word(&valid, nodes + function * 48 + 32);
+            assert_eq!(
+                artifact_callable_word(&valid, nodes + function * 48 + 40),
+                1
+            );
+            mutations.push((extras, unit.tables.types.len() as u64));
+        } else {
+            // The last function value is in the fixture's untaken else branch.
+            assert_eq!(
+                code.instructions
+                    .iter()
+                    .filter(|i| matches!(i, I::FunctionValue { .. }))
+                    .count(),
+                2
+            );
+            for predicate in [28, 29, 30] {
+                let pc = code
+                    .instructions
+                    .iter()
+                    .position(|i| match predicate {
+                        28 => matches!(i, I::Bind { .. }),
+                        29 => matches!(i, I::BeginBind { .. }),
+                        _ => matches!(i, I::Capture { .. }),
+                    })
+                    .unwrap();
+                mutations.push((nodes + pc * 48 + 16, 1));
+            }
+        }
+        for (offset, value) in mutations {
+            let mut changed = valid.clone();
+            changed[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+            assert_eq!(
+                result("probe-unit", &changed),
+                (10, vec![]),
+                "{name}/{offset}"
+            );
+        }
+    }
+
+    let (unit, _) = artifact_callable_unit(&program, declaration_named(&source, "factory"));
+    let CompilationPayload::Function { code, .. } = &unit.payload else {
+        panic!("factory fixture is not a function")
+    };
+    let valid = selfhost_artifact_input::unit(&unit).unwrap();
+    let code_at = artifact_callable_word(&valid, 264);
+    let nodes = artifact_callable_word(&valid, code_at + 16);
+    let capture = code
+        .instructions
+        .iter()
+        .position(|i| matches!(i, I::Capture { index: 0 }))
+        .unwrap();
+    let mut wrong_order = valid.clone();
+    wrong_order[nodes + capture * 48 + 8..nodes + capture * 48 + 16]
+        .copy_from_slice(&1_u64.to_le_bytes());
+    // The projection reader checks shape; the strict canonical reader checks
+    // the ordered capture protocol. Re-derive the object digest so it reaches
+    // that protocol instead of an earlier envelope/object-hash rejection.
+    let emitted = image("probe-unit", &wrong_order);
+    let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &emitted);
+    let error = crate::platform::compiler::CompilationUnit::decode(&emitted, key).unwrap_err();
+    assert_eq!(error.code, "compiler_unit_bind_protocol");
+
+    // Factory is outside entry's call closure. A hash-consistent malformed
+    // row there must still fail the complete Mode-1 bundle's unit scan.
+    let mut bundle = selfhost_artifact_input::bundle(program.artifact()).unwrap();
+    let directory = artifact_callable_word(&bundle, 72);
+    let count = artifact_callable_word(&bundle, 80);
+    let origin = (0..count)
+        .map(|i| artifact_callable_word(&bundle, directory + i * 16))
+        .find(|origin| bundle[*origin + 32..*origin + 48] == unit.source.owner.bytes())
+        .unwrap();
+    assert_eq!(&bundle[origin..origin + valid.len()], valid.as_slice());
+    let at = origin + nodes + capture * 48 + 16;
+    bundle[at..at + 8].copy_from_slice(&1_u64.to_le_bytes());
+    input::rechecksum(&mut bundle);
+    assert_eq!(result("compile-elf", &bundle), (10, vec![]));
+}
+
 #[test]
 fn selfhost_artifact_map_pages_match_independent_logical_roots() {
     type Entry = (Vec<u8>, Vec<u8>);
@@ -1108,18 +1377,24 @@ fn selfhost_artifact_container_executes_independent_and_mutated_programs() {
         let control = ExecutionControl::uncancelled();
         let policy = NormalizedRunPolicy::foreground();
         assert_eq!(
-            NormalizedVm::for_test(&program, policy)
-                .invoke(entry, vec![], None, &control)
-                .unwrap()
-                .0,
-            NormalizedValue::I64(expected)
+            raw_value_equal(
+                &NormalizedVm::for_test(&program, policy)
+                    .invoke(entry, vec![], None, &control)
+                    .unwrap()
+                    .0,
+                &NormalizedValue::I64(expected),
+            ),
+            Ok(true),
         );
         assert_eq!(
-            NormalizedReferenceInterpreter::new(&source, &program, policy)
-                .invoke(entry, vec![], None, &control)
-                .unwrap()
-                .0,
-            NormalizedValue::I64(expected)
+            raw_value_equal(
+                &NormalizedReferenceInterpreter::new(&source, &program, policy)
+                    .invoke(entry, vec![], None, &control)
+                    .unwrap()
+                    .0,
+                &NormalizedValue::I64(expected),
+            ),
+            Ok(true),
         );
         eprintln!(
             "selfhost artifact independent result={expected} input_bytes={} artifact_bytes={} artifact_sha256={}",
@@ -1148,18 +1423,24 @@ fn selfhost_artifact_object_scans_keep_bounded_call_frames() {
     let control = ExecutionControl::uncancelled();
     let policy = NormalizedRunPolicy::foreground();
     assert_eq!(
-        NormalizedVm::for_test(&program, policy)
-            .invoke(entry, vec![], None, &control)
-            .unwrap()
-            .0,
-        NormalizedValue::I64(42)
+        raw_value_equal(
+            &NormalizedVm::for_test(&program, policy)
+                .invoke(entry, vec![], None, &control)
+                .unwrap()
+                .0,
+            &NormalizedValue::I64(42),
+        ),
+        Ok(true),
     );
     assert_eq!(
-        NormalizedReferenceInterpreter::new(&source, &program, policy)
-            .invoke(entry, vec![], None, &control)
-            .unwrap()
-            .0,
-        NormalizedValue::I64(42)
+        raw_value_equal(
+            &NormalizedReferenceInterpreter::new(&source, &program, policy)
+                .invoke(entry, vec![], None, &control)
+                .unwrap()
+                .0,
+            &NormalizedValue::I64(42),
+        ),
+        Ok(true),
     );
 }
 
@@ -1184,28 +1465,34 @@ fn selfhost_artifact_container_carries_complete_compiler_and_executes_it() {
         .unwrap()
         .0;
     assert_eq!(
-        NormalizedVm::for_test(&program, policy)
-            .invoke(
-                entry,
-                vec![NormalizedValue::bytes(arithmetic.as_slice())],
-                None,
-                &control
-            )
-            .unwrap()
-            .0,
-        expected
+        raw_value_equal(
+            &NormalizedVm::for_test(&program, policy)
+                .invoke(
+                    entry,
+                    vec![NormalizedValue::bytes(arithmetic.as_slice())],
+                    None,
+                    &control
+                )
+                .unwrap()
+                .0,
+            &expected,
+        ),
+        Ok(true),
     );
     assert_eq!(
-        NormalizedReferenceInterpreter::new(source, &program, policy)
-            .invoke(
-                entry,
-                vec![NormalizedValue::bytes(arithmetic.as_slice())],
-                None,
-                &control
-            )
-            .unwrap()
-            .0,
-        expected
+        raw_value_equal(
+            &NormalizedReferenceInterpreter::new(source, &program, policy)
+                .invoke(
+                    entry,
+                    vec![NormalizedValue::bytes(arithmetic.as_slice())],
+                    None,
+                    &control
+                )
+                .unwrap()
+                .0,
+            &expected,
+        ),
+        Ok(true),
     );
     eprintln!(
         "selfhost artifact compiler functions={} input_bytes={} artifact_bytes={} artifact_sha256={}; strict loader and both artifact evaluators passed",
@@ -1251,11 +1538,15 @@ fn selfhost_artifact_executes_control_flow_and_exact_arithmetic_traps() {
             &control,
         );
         if let Some(expected) = expected {
-            assert_eq!(vm.unwrap().0, NormalizedValue::I64(expected), "{name}");
             assert_eq!(
-                reference.unwrap().0,
-                NormalizedValue::I64(expected),
-                "{name}"
+                raw_value_equal(&vm.unwrap().0, &NormalizedValue::I64(expected),),
+                Ok(true),
+                "{name}",
+            );
+            assert_eq!(
+                raw_value_equal(&reference.unwrap().0, &NormalizedValue::I64(expected),),
+                Ok(true),
+                "{name}",
             );
         } else {
             assert_eq!(vm.unwrap_err().code, "normalized_integer_overflow");
@@ -1450,18 +1741,24 @@ pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
         let policy = NormalizedRunPolicy::foreground();
         let control = ExecutionControl::uncancelled();
         assert_eq!(
-            NormalizedVm::for_test(&program, policy)
+            raw_value_equal(
+                &NormalizedVm::for_test(&program, policy)
                 .invoke(entry, vec![], None, &control)
                 .unwrap()
                 .0,
-            NormalizedValue::I64(42)
+                &NormalizedValue::I64(42),
+            ),
+            Ok(true),
         );
         assert_eq!(
-            NormalizedReferenceInterpreter::new(&source, &program, policy)
+            raw_value_equal(
+                &NormalizedReferenceInterpreter::new(&source, &program, policy)
                 .invoke(entry, vec![], None, &control)
                 .unwrap()
                 .0,
-            NormalizedValue::I64(42)
+                &NormalizedValue::I64(42),
+            ),
+            Ok(true),
         );
         eprintln!(
             "selfhost artifact capacity units=800 unused_text_functions=799 input_bytes={} input_sha256={} artifact_bytes={} artifact_sha256={} C1_sha256={} author_ms={author_ms} native_ms={native_ms}",

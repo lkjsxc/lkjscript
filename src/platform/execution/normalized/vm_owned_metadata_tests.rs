@@ -48,7 +48,13 @@ fn borrowed_metadata_survives_release_without_retaining_owner_or_loan() {
     drop(owner);
     assert_eq!(owners.live(), (0, 0));
     assert_eq!(cells.live(), (0, 0));
-    assert_eq!(selected.raw(), &f.raw(1024));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(selected.raw()),
+            &(&f.raw(1024))
+        ),
+        Ok(true)
+    );
 }
 
 #[test]
@@ -71,7 +77,13 @@ fn borrowed_metadata_raw_storage_and_late_invalid_input_confer_no_certificate() 
         assert!(f.project(&read).is_err());
         assert!(Value::memory(&f.program, NormalizedValue::OwnedProduct(token)).is_err());
     }
-    assert_eq!(f.project(&f.read(&f.owner(2))).unwrap().raw(), &f.raw(2));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(f.project(&f.read(&f.owner(2))).unwrap().raw()),
+            &(&f.raw(2))
+        ),
+        Ok(true)
+    );
 }
 
 #[test]
@@ -190,7 +202,13 @@ fn borrowed_metadata_scoped_domain_adoption_keeps_original_program_and_custody()
             &mut |_| Ok(()),
         )
         .unwrap();
-    assert_eq!(selected.raw(), &f.raw(8));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(selected.raw()),
+            &(&f.raw(8))
+        ),
+        Ok(true)
+    );
     assert!(f.project(&read).is_err());
     assert!(token(&owner).validate(f.domain, true).is_err());
     drop(read);

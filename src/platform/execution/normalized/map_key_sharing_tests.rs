@@ -57,8 +57,20 @@ fn map_keys_share_payload_across_persistent_updates() {
             .unwrap();
         let removed = replacement.remove(&key, &mut |_| Ok(())).unwrap();
         assert!(removed.is_empty());
-        assert_eq!(original.get(&key), Some(&Value::I64(11)));
-        assert_eq!(replacement.get(&key), Some(&Value::I64(22)));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(original.get(&key)),
+                &(Some(&Value::I64(11)))
+            ),
+            Ok(true)
+        );
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(replacement.get(&key)),
+                &(Some(&Value::I64(22)))
+            ),
+            Ok(true)
+        );
         for map in [&original, &replacement] {
             let stored = map.keys().next().unwrap();
             assert_eq!(key_bytes(stored), bytes(&input));

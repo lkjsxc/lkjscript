@@ -1,6 +1,7 @@
 //! Domain-derived hashing needed by current artifact object/container identities.
 use super::*;
 use crate::platform::compiler::elf_x86_64;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 
 pub(super) fn fixture(
     context: &str,
@@ -65,8 +66,14 @@ fn agrees(
         .invoke(declaration, values, None, &control)
         .unwrap()
         .0;
-    assert_eq!(vm, reference);
-    assert_eq!(vm, NormalizedValue::bytes(output.stdout.as_slice()));
+    assert_eq!(raw_value_equal(&(vm), &(reference)), Ok(true));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(vm),
+            &(NormalizedValue::bytes(output.stdout.as_slice()))
+        ),
+        Ok(true)
+    );
 }
 
 pub(super) fn vectors() -> serde_json::Value {

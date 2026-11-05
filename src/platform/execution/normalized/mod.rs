@@ -4,6 +4,7 @@ mod byte_buffer;
 mod byte_stream;
 mod bytes;
 mod capability;
+pub(crate) mod child_storage;
 mod codec;
 mod configuration;
 mod data;
@@ -49,6 +50,7 @@ mod secret;
 mod security;
 mod session;
 mod shared_budget;
+pub(crate) mod structural_equality;
 mod value;
 mod value_oracle;
 mod value_schema;
@@ -84,6 +86,8 @@ pub(crate) use worker::NormalizedWorkerApplication;
 mod lkjournal_tests;
 #[cfg(test)]
 mod owned_mailbox_tests;
+#[cfg(test)]
+mod post_effect_child_storage_tests;
 #[cfg(test)]
 mod reference_associated_integration_tests;
 #[cfg(test)]

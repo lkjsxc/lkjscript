@@ -305,6 +305,23 @@ impl Projection {
                     self.numbers(projection_extent(n, 32, 1)?, origin, type_arguments)?;
                     (12, u64::from(*function), u64::from(*arguments))
                 }
+                I::FunctionValue {
+                    requirement_arguments,
+                    effect_arguments,
+                    function,
+                    type_arguments,
+                    read_scope_arguments,
+                } if requirement_arguments.is_empty()
+                    && effect_arguments.is_empty()
+                    && read_scope_arguments.is_empty() =>
+                {
+                    self.numbers(projection_extent(n, 32, 1)?, origin, type_arguments)?;
+                    (13, u64::from(*function), 0)
+                }
+                I::Invoke { arguments } => (14, u64::from(*arguments), 0),
+                I::Bind { arguments } => (28, u64::from(*arguments), 0),
+                I::BeginBind { arguments } => (29, u64::from(*arguments), 0),
+                I::Capture { index } => (30, u64::from(*index), 0),
                 I::Record {
                     nominal_type: None,
                     type_arguments,
@@ -999,6 +1016,137 @@ mod tests {
     }
 
     #[test]
+    fn selfhost_artifact_callable_rows_preserve_canonical_fields_and_pcs() -> Result<(), Diagnostic>
+    {
+        // This is a representation control, not a claim that this synthetic
+        // stack program is semantically admitted. The graph roundtrip below
+        // separately starts from a strictly admitted callable artifact.
+        let code = CompiledCode {
+            parameter_count: 0,
+            local_count: 0,
+            instructions: vec![
+                I::FunctionValue {
+                    requirement_arguments: vec![],
+                    effect_arguments: vec![],
+                    function: u32::MAX,
+                    type_arguments: vec![0, u32::MAX],
+                    read_scope_arguments: vec![],
+                },
+                I::BeginBind { arguments: 0 },
+                I::Bind { arguments: 0 },
+                I::FunctionValue {
+                    requirement_arguments: vec![],
+                    effect_arguments: vec![],
+                    function: 1,
+                    type_arguments: vec![],
+                    read_scope_arguments: vec![],
+                },
+                I::BeginBind {
+                    arguments: u32::MAX,
+                },
+                I::I64(-7),
+                I::Capture { index: u32::MAX },
+                I::Bind {
+                    arguments: u32::MAX,
+                },
+                I::Invoke {
+                    arguments: u32::MAX,
+                },
+                I::Return,
+            ],
+        };
+        let actual = filled(|p| {
+            p.reserve(57)?;
+            p.code(57, &code)?;
+            Ok(())
+        })?;
+        let mut expected = vec![0; 57];
+        append_words(&mut expected, &[0, 0, 32, 10]);
+        let maximum = u64::from(u32::MAX);
+        for row in [
+            [13, maximum, 0, 0, 512, 2],
+            [29, 0, 0, 0, 0, 0],
+            [28, 0, 0, 0, 0, 0],
+            [13, 1, 0, 0, 528, 0],
+            [29, maximum, 0, 0, 0, 0],
+            [4, 0, 0, u64::MAX - 6, 0, 0],
+            [30, maximum, 0, 0, 0, 0],
+            [28, maximum, 0, 0, 0, 0],
+            [14, maximum, 0, 0, 0, 0],
+            [27, 0, 0, 0, 0, 0],
+        ] {
+            append_words(&mut expected, &row);
+        }
+        append_words(&mut expected, &[0, maximum]);
+        assert_eq!(actual, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn selfhost_artifact_callable_projection_rejects_unrepresented_actual_vectors()
+    -> Result<(), Diagnostic> {
+        use crate::platform::kernel::{
+            DeclarationReference, EffectRow, ReadScopeArgument, RequirementOperand,
+            RequirementReference,
+        };
+        use crate::platform::semantic_id::{BindingId, DeclarationId, RequirementId};
+
+        let package = PackageId::migrate(b"artifact-callable-actuals", 0);
+        let requirement = RequirementOperand::Concrete(RequirementReference {
+            package,
+            requirement: RequirementId::migrate(b"artifact-callable-actuals", 0),
+        });
+        let scope = ReadScopeArgument::Lexical {
+            callable: DeclarationReference {
+                package,
+                declaration: DeclarationId::migrate(b"artifact-callable-actuals", 0),
+            },
+            binding: BindingId::migrate(b"artifact-callable-actuals", 0),
+        };
+        for call in [false, true] {
+            for kind in 0..3 {
+                let requirement_arguments = if kind == 0 { vec![requirement] } else { vec![] };
+                let effect_arguments = if kind == 1 {
+                    vec![EffectRow::default()]
+                } else {
+                    vec![]
+                };
+                let read_scope_arguments = if kind == 2 { vec![scope] } else { vec![] };
+                let instruction = if call {
+                    I::Call {
+                        requirement_arguments,
+                        effect_arguments,
+                        function: 0,
+                        type_arguments: vec![],
+                        arguments: 0,
+                        read_scope_arguments,
+                    }
+                } else {
+                    I::FunctionValue {
+                        requirement_arguments,
+                        effect_arguments,
+                        function: 0,
+                        type_arguments: vec![],
+                        read_scope_arguments,
+                    }
+                };
+                let code = CompiledCode {
+                    parameter_count: 0,
+                    local_count: 0,
+                    instructions: vec![instruction, I::Return],
+                };
+                let mut projection = Projection::default();
+                let Err(error) = projection.code(0, &code) else {
+                    return Err(unsupported("test admitted an unrepresented actual vector"));
+                };
+                assert_eq!(error.code, "compiler_artifact_input_unsupported");
+                assert!(projection.output.is_none());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
     fn selfhost_artifact_input_signature_matches_independent_wide_golden_rows()
     -> Result<(), Diagnostic> {
         let mut signature = signature();
@@ -1297,7 +1445,11 @@ mod tests {
             CompiledCode {
                 parameter_count: 0,
                 local_count: 0,
-                instructions: vec![I::Invoke { arguments: 0 }],
+                instructions: vec![I::Map {
+                    key_type: 0,
+                    value_type: 0,
+                    entries: 0,
+                }],
             },
             CompiledCode {
                 parameter_count: 0,

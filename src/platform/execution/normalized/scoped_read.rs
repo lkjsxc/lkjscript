@@ -315,7 +315,11 @@ impl ScopedReadLease {
             || self.types.as_ref() != application.types().as_ref()
             || self.scopes.as_ref() != application.read_scope_arguments().as_ref()
             || self.ty != application.parameter(program, self.position)?
-            || self.backing != *value
+            || !crate::platform::execution::normalized::structural_equality::raw_structural_equal(
+                &self.backing,
+                value,
+                control,
+            )?
             || !application.matches(program, control)?
         {
             return Err(super::reject());

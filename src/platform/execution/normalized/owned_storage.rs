@@ -1,7 +1,8 @@
 //! Shared custody of an owned child vector. Sharing control never shares ownership.
-use super::value::{NormalizedValue, ValueOrigin};
+use super::child_storage::{self, DropQueue, Pending};
+use super::value::{NormalizedValue, RawValues, ValueOrigin};
 use crate::platform::execution::{ExecutionControl, ExecutionError};
-use crate::platform::kernel::{TypeObjectDigest, contract::MAXIMUM_TYPE_DEPTH};
+use crate::platform::kernel::TypeObjectDigest;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -18,7 +19,62 @@ struct Storage {
     // Physical absence of view carriers, independently of typed admission. Guarded
     // attachment preserves this fact; an arbitrary mutable callback invalidates it.
     view_free: bool,
+    // Revocation makes fields inaccessible before their physical teardown. These
+    // pre-existing metadata slots carry the unique retired owner and its queue link.
+    retired_fields: Option<Vec<NormalizedValue>>,
+    cleanup_next: Option<Pending>,
 }
+
+// Preserve the finite allocation-charge metric used before private retirement
+// metadata was added. This modeled charge is not an actual allocator upper bound.
+struct MeteredStorage {
+    _fields: Option<Vec<NormalizedValue>>,
+    _loans: usize,
+    _admitted_program: Option<ValueOrigin>,
+    _admission_valid: bool,
+    _view_free: bool,
+}
+
+/// Exactly one such token is created by the Owner -> Inert transition. Existing
+/// read/inert handles may retain the control block, but cannot access retired fields.
+pub(super) struct RetiredStorage {
+    storage: Arc<Mutex<Storage>>,
+}
+
+impl RetiredStorage {
+    fn lock(&self) -> MutexGuard<'_, Storage> {
+        self.storage
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    pub(super) fn set_next(&mut self, next: Option<Pending>) {
+        // Only the fresh unique retirement token can install this link.
+        self.lock().cleanup_next = next;
+    }
+
+    pub(super) fn take_next(&mut self) -> Option<Pending> {
+        self.lock().cleanup_next.take()
+    }
+
+    pub(super) fn pop(&mut self) -> Option<NormalizedValue> {
+        let mut storage = self.lock();
+        let value = storage.retired_fields.as_mut().and_then(Vec::pop);
+        if storage.retired_fields.as_ref().is_some_and(Vec::is_empty) {
+            // The vector is empty: its deallocation cannot drop a child while
+            // this storage mutex remains held.
+            storage.retired_fields = None;
+        }
+        value
+    }
+}
+
+impl Drop for RetiredStorage {
+    fn drop(&mut self) {
+        child_storage::release_retired(self);
+    }
+}
+
 pub struct OwnedStorage {
     // Read access can enter a child invocation without moving backing custody.
     origin: ValueOrigin,
@@ -59,7 +115,7 @@ impl std::fmt::Debug for OwnedStorage {
 }
 impl OwnedStorage {
     pub(super) const ALLOCATION_BYTES: u64 = (std::mem::size_of::<Self>()
-        + std::mem::size_of::<Mutex<Storage>>()
+        + std::mem::size_of::<Mutex<MeteredStorage>>()
         + 2 * std::mem::size_of::<usize>()) as u64;
     fn lock(&self) -> MutexGuard<'_, Storage> {
         self.storage
@@ -74,10 +130,12 @@ impl OwnedStorage {
         control: &ExecutionControl,
         reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
+        let fields = RawValues::new(fields);
         control.check()?;
-        reject_view_fields(&fields, control)?;
+        reject_view_fields(fields.as_slice(), control)?;
         reserve(Self::ALLOCATION_BYTES)?;
         control.check()?;
+        let fields = fields.into_vec();
         let product = Self {
             origin,
             backing_origin: origin,
@@ -88,6 +146,8 @@ impl OwnedStorage {
                 admitted_program: None,
                 admission_valid: false,
                 view_free: true,
+                retired_fields: None,
+                cleanup_next: None,
             })),
             mode: Mode::Owner,
         };
@@ -542,6 +602,16 @@ impl OwnedStorage {
         });
         Ok(fields)
     }
+    /// Retire into storage that was reserved with the original owner. No
+    /// allocation, cloning of payloads, or child destruction occurs under lock.
+    pub(super) fn revoke_for_cleanup(&mut self) -> Option<RetiredStorage> {
+        let fields = self.revoke()?;
+        self.lock().retired_fields = Some(fields);
+        Some(RetiredStorage {
+            storage: Arc::clone(&self.storage),
+        })
+    }
+
     pub(super) fn revoke(&mut self) -> Option<Vec<NormalizedValue>> {
         if self.mode != Mode::Owner {
             return None;
@@ -828,46 +898,9 @@ impl Drop for OwnedStorage {
             storage.loans = storage.loans.saturating_sub(1);
             return;
         }
-        let Some(fields) = self.revoke() else {
-            return;
-        };
-        // Finite admitted type depth bounds this allocation-free cleanup stack. Nested
-        // owners are revoked before their inert shells drop, avoiding recursive Drop.
-        let mut stack: [Option<std::vec::IntoIter<NormalizedValue>>; MAXIMUM_TYPE_DEPTH + 1] =
-            std::array::from_fn(|_| None);
-        stack[0] = Some(fields.into_iter());
-        let mut depth = 0;
-        loop {
-            let value = stack[depth].as_mut().and_then(Iterator::next);
-            match value {
-                Some(NormalizedValue::OwnedProduct(mut product)) => {
-                    if let Some(fields) = product.revoke() {
-                        depth += 1;
-                        stack[depth] = Some(fields.into_iter());
-                    }
-                }
-                Some(NormalizedValue::OwnedChoice(mut choice)) => {
-                    if let Some(fields) = choice.storage.revoke() {
-                        depth += 1;
-                        stack[depth] = Some(fields.into_iter());
-                    }
-                }
-                Some(NormalizedValue::OwnedSequence(mut sequence)) => {
-                    if let Some(fields) = sequence.storage.revoke() {
-                        depth += 1;
-                        stack[depth] = Some(fields.into_iter());
-                    }
-                }
-                Some(value) => drop(value),
-                None => {
-                    stack[depth] = None;
-                    if depth == 0 {
-                        break;
-                    }
-                    depth -= 1;
-                }
-            }
-        }
+        let mut work = DropQueue::default();
+        work.enqueue_owned(self.revoke_for_cleanup());
+        work.drain();
     }
 }
 
@@ -1073,17 +1106,21 @@ mod scoped_read_tests {
         .unwrap();
         owner.establish_admission(program).unwrap();
         assert_eq!(owner.admitted_program(), Some(program));
-        assert_eq!(
+        assert!(matches!(
             owner.pop(origin, &control).unwrap(),
             Some(NormalizedValue::I64(31))
-        );
+        ));
         assert_eq!(owner.admitted_program(), None);
         assert!(owner.validate_admission(program).is_err());
         assert!(owner.establish_admission(foreign).is_err());
 
         let empty = OwnedStorage::create(origin, ty, vec![], &control, &mut |_| Ok(())).unwrap();
         empty.establish_admission(program).unwrap();
-        assert_eq!(empty.pop(origin, &control).unwrap(), None);
+        assert!(empty.pop(origin, &control).unwrap().is_none());
         assert_eq!(empty.admitted_program(), Some(program));
     }
 }
+
+#[cfg(test)]
+#[path = "owned_storage_lifecycle_tests.rs"]
+mod lifecycle_tests;

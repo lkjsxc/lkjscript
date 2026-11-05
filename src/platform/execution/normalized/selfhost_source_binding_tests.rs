@@ -1,6 +1,7 @@
 //! Logical source commitments, canonical history, and exact object bindings.
 //! Matching digests do not establish graph semantics or execution permission.
 use super::*;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 
 fn map_packet(key_bytes: u32, value_bytes: u32, rows: &[(Vec<u8>, Vec<u8>)]) -> Vec<u8> {
     let mut bytes = Vec::new();
@@ -171,8 +172,14 @@ fn selfhost_source_maps_reject_invalid_widths_extents_duplicates_and_order() {
                 NormalizedValue::I64(value_bytes),
             ],
         );
-        assert_eq!(field(&observed, "diagnostic"), &NormalizedValue::I64(12));
-        assert_eq!(field(&observed, "image"), &NormalizedValue::bytes(&[][..]));
+        assert_eq!(
+            raw_value_equal(field(&observed, "diagnostic"), &NormalizedValue::I64(12),),
+            Ok(true),
+        );
+        assert_eq!(
+            raw_value_equal(field(&observed, "image"), &NormalizedValue::bytes(&[][..]),),
+            Ok(true),
+        );
     }
 }
 

@@ -1,6 +1,7 @@
 //! Exact durable-queue capability adapter over the representation-neutral queue engine.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
+use super::child_storage::{FieldsBuilder, ValuesBuilder};
 use super::prepare::{NormalizedOperation, NormalizedProgram, NormalizedRequirement};
 use super::resource::{NormalizedResourceHandle, NormalizedResourceScope, QueueLeaseInfo};
 use super::value::{NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex};
@@ -468,7 +469,7 @@ impl NormalizedCapabilityAdapter for NormalizedDurableQueueAdapter {
                     snapshot
                         .into_iter()
                         .map(|snapshot| codec.encode_snapshot(snapshot))
-                        .collect(),
+                        .collect::<Result<Vec<_>, _>>()?,
                 )?)
             }
         }
@@ -616,23 +617,23 @@ impl RecordCodec<LeaseInfoField> {
                 "queue lease info has no nominal runtime layout",
             )
         })?;
+        let mut fields = ValuesBuilder::with_capacity(self.fields.len())?;
+        for (_, field) in self.fields.iter() {
+            let value = match field {
+                LeaseInfoField::AttemptNumber => {
+                    NormalizedValue::I64(i64::from(info.attempt_number))
+                }
+                LeaseInfoField::JobId => NormalizedValue::text(info.job_id.clone()),
+                LeaseInfoField::LeaseUntilMilliseconds => {
+                    NormalizedValue::I64(info.lease_until_milliseconds)
+                }
+                LeaseInfoField::Payload => NormalizedValue::bytes(info.payload.clone()),
+            };
+            fields.try_push(value)?;
+        }
         Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
             layout,
-            fields: Arc::new(
-                self.fields
-                    .iter()
-                    .map(|(_, field)| match field {
-                        LeaseInfoField::AttemptNumber => {
-                            NormalizedValue::I64(i64::from(info.attempt_number))
-                        }
-                        LeaseInfoField::JobId => NormalizedValue::text(info.job_id.clone()),
-                        LeaseInfoField::LeaseUntilMilliseconds => {
-                            NormalizedValue::I64(info.lease_until_milliseconds)
-                        }
-                        LeaseInfoField::Payload => NormalizedValue::bytes(info.payload.clone()),
-                    })
-                    .collect(),
-            ),
+            fields: fields.finish()?,
         }))
     }
 }
@@ -660,36 +661,33 @@ impl RecordCodec<SnapshotField> {
         Self::structural(program, ty, &expected, "queue snapshot")
     }
 
-    fn encode_snapshot(&self, snapshot: JobSnapshot) -> NormalizedValue {
-        NormalizedValue::Record(NormalizedRecord::Structural {
-            fields: Arc::new(
-                self.fields
-                    .iter()
-                    .map(|(name, field)| {
-                        let value = match field {
-                            SnapshotField::AttemptCount => {
-                                NormalizedValue::I64(i64::from(snapshot.attempt_count))
-                            }
-                            SnapshotField::AvailableAtMilliseconds => {
-                                NormalizedValue::I64(snapshot.available_at_milliseconds)
-                            }
-                            SnapshotField::JobId => NormalizedValue::text(snapshot.job_id.clone()),
-                            SnapshotField::LastErrorClass => NormalizedValue::text(
-                                snapshot.last_error_class.clone().unwrap_or_default(),
-                            ),
-                            SnapshotField::LeaseUntilMilliseconds => NormalizedValue::I64(
-                                snapshot.lease_until_milliseconds.unwrap_or(-1),
-                            ),
-                            SnapshotField::Result => {
-                                NormalizedValue::bytes(snapshot.result.clone().unwrap_or_default())
-                            }
-                            SnapshotField::State => NormalizedValue::text(snapshot.state.as_str()),
-                        };
-                        (name.clone(), value)
-                    })
-                    .collect(),
-            ),
-        })
+    fn encode_snapshot(&self, snapshot: JobSnapshot) -> Result<NormalizedValue, ExecutionError> {
+        let mut fields = FieldsBuilder::with_capacity(self.fields.len())?;
+        for (name, field) in self.fields.iter() {
+            let value = match field {
+                SnapshotField::AttemptCount => {
+                    NormalizedValue::I64(i64::from(snapshot.attempt_count))
+                }
+                SnapshotField::AvailableAtMilliseconds => {
+                    NormalizedValue::I64(snapshot.available_at_milliseconds)
+                }
+                SnapshotField::JobId => NormalizedValue::text(snapshot.job_id.clone()),
+                SnapshotField::LastErrorClass => {
+                    NormalizedValue::text(snapshot.last_error_class.clone().unwrap_or_default())
+                }
+                SnapshotField::LeaseUntilMilliseconds => {
+                    NormalizedValue::I64(snapshot.lease_until_milliseconds.unwrap_or(-1))
+                }
+                SnapshotField::Result => {
+                    NormalizedValue::bytes(snapshot.result.clone().unwrap_or_default())
+                }
+                SnapshotField::State => NormalizedValue::text(snapshot.state.as_str()),
+            };
+            fields.try_push((name.clone(), value))?;
+        }
+        Ok(NormalizedValue::Record(NormalizedRecord::Structural {
+            fields: fields.finish()?,
+        }))
     }
 }
 

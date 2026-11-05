@@ -5,18 +5,19 @@ use super::super::value::{NormalizedRecord, RecordLayoutIndex, ValueOrigin};
 use super::bulk_tests::{items, model};
 use super::*;
 use crate::platform::execution::ExecutionControl;
+use crate::platform::execution::normalized::child_storage::Values;
 
-fn payload(origin: ValueOrigin, sentinel: &Arc<Vec<NormalizedValue>>) -> NormalizedValue {
+fn payload(origin: ValueOrigin, sentinel: &Values) -> NormalizedValue {
     NormalizedValue::Record(NormalizedRecord::Nominal {
         layout: RecordLayoutIndex(7, origin),
-        fields: Arc::clone(sentinel),
+        fields: sentinel.clone(),
     })
 }
 
 #[test]
 fn bulk_every_reservation_failure_releases_attached_and_pending_raw_owners() {
     let origin = ValueOrigin::fresh().unwrap();
-    let sentinel = Arc::new(vec![NormalizedValue::Unit]);
+    let sentinel = Values::try_new(vec![NormalizedValue::Unit]).unwrap();
     for length in [0, 33, 65, 1057] {
         let (leaves, branches, _) = model(length);
         let calls = length as u64 + leaves + branches + 1;
@@ -34,23 +35,23 @@ fn bulk_every_reservation_failure_releases_attached_and_pending_raw_owners() {
             assert!(result.is_err(), "length={length} refused={refused}");
             assert_eq!(visited, refused);
             assert_eq!(
-                Arc::strong_count(&sentinel),
+                sentinel.strong_count(),
                 1,
                 "attached or pending payload leaked: length={length} refused={refused}"
             );
         }
         let list =
             List::from_items(vec![payload(origin, &sentinel)], Some(1), &mut |_| Ok(())).unwrap();
-        assert_eq!(Arc::strong_count(&sentinel), 2);
+        assert_eq!(sentinel.strong_count(), 2);
         drop(list);
-        assert_eq!(Arc::strong_count(&sentinel), 1);
+        assert_eq!(sentinel.strong_count(), 1);
     }
 }
 
 #[test]
 fn bulk_cancel_at_every_reservation_including_empty_and_final_installation() {
     let origin = ValueOrigin::fresh().unwrap();
-    let sentinel = Arc::new(vec![NormalizedValue::Unit]);
+    let sentinel = Values::try_new(vec![NormalizedValue::Unit]).unwrap();
     for length in [0, 65, 1057] {
         let (leaves, branches, _) = model(length);
         let calls = length as u64 + leaves + branches + 1;
@@ -71,7 +72,7 @@ fn bulk_cancel_at_every_reservation_including_empty_and_final_installation() {
             assert!(result.is_err());
             assert_eq!(visited, cancelled);
             assert!(control.is_cancelled());
-            assert_eq!(Arc::strong_count(&sentinel), 1);
+            assert_eq!(sentinel.strong_count(), 1);
         }
     }
 }
@@ -80,7 +81,7 @@ fn bulk_cancel_at_every_reservation_including_empty_and_final_installation() {
 fn bulk_optional_length_policy_is_exact_and_refusal_precedes_storage() {
     let _scope = WorkScope::enter();
     let origin = ValueOrigin::fresh().unwrap();
-    let sentinel = Arc::new(vec![NormalizedValue::Unit]);
+    let sentinel = Values::try_new(vec![NormalizedValue::Unit]).unwrap();
     for (length, maximum, accepted) in [
         (0, None, true),
         (0, Some(0), true),
@@ -114,7 +115,7 @@ fn bulk_optional_length_policy_is_exact_and_refusal_precedes_storage() {
             Ok(list) => {
                 assert_eq!(list.len(), length);
                 assert_eq!(storage_requests != 0, length != 0);
-                assert_eq!(Arc::strong_count(&sentinel), length + 1);
+                assert_eq!(sentinel.strong_count(), length + 1);
                 drop(list);
             }
             Err(error) => {
@@ -124,7 +125,7 @@ fn bulk_optional_length_policy_is_exact_and_refusal_precedes_storage() {
                 assert_eq!(before.since(), Work::ZERO);
             }
         }
-        assert_eq!(Arc::strong_count(&sentinel), 1);
+        assert_eq!(sentinel.strong_count(), 1);
     }
 }
 
@@ -134,7 +135,7 @@ fn bulk_deep_pending_and_attached_payloads_drop_on_a_bounded_stack() {
         .stack_size(2 * 1024 * 1024)
         .spawn(|| {
             let origin = ValueOrigin::fresh().unwrap();
-            let sentinel = Arc::new(vec![NormalizedValue::Unit]);
+            let sentinel = Values::try_new(vec![NormalizedValue::Unit]).unwrap();
             let length = 1057;
             let (leaves, branches, _) = model(length);
             let calls = length as u64 + leaves + branches + 1;
@@ -158,7 +159,7 @@ fn bulk_deep_pending_and_attached_payloads_drop_on_a_bounded_stack() {
                     assert_eq!(result.is_ok(), refused == 0);
                     drop(result);
                     assert_eq!(
-                        Arc::strong_count(&sentinel),
+                        sentinel.strong_count(),
                         1,
                         "position={position} refused={refused}"
                     );

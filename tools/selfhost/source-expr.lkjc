@@ -315,7 +315,7 @@ declarations.begin
                                           (local cursor-1))))
                                     (local cursor-0))))
                               (if
-                                (call ci::eq (local operation) (i64 12))
+                                (call ci::either (call ci::eq (local operation) (i64 12)) (call ci::eq (local operation) (i64 21)))
                                 (let
                                   (binding cursor-0
                                     (call source-read::typed

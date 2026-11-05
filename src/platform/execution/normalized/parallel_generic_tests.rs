@@ -1,6 +1,7 @@
 //! Literal generic child meaning and independently expected returned owners/data.
 use super::super::super::owned_i64_cell::StorageObservation as Cells;
 use super::*;
+use crate::platform::execution::normalized::child_storage::Fields;
 
 const DIRECT: &str = include_str!("../../../../tests/fixtures/parallel-generic-direct.lkjc");
 
@@ -47,12 +48,19 @@ fn parallel_generic_direct_owned_and_composite_ordinary_results() {
             };
             let expected =
                 NormalizedValue::Record(super::super::super::value::NormalizedRecord::Structural {
-                    fields: Arc::new(vec![
+                    fields: Fields::try_new(vec![
                         (Name::new("scalar").unwrap(), NormalizedValue::I64(n)),
                         (Name::new("values").unwrap(), list()),
-                    ]),
+                    ])
+                    .unwrap(),
                 });
-            assert_eq!(result, expected);
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(result),
+                    &(expected)
+                ),
+                Ok(true)
+            );
             assert_eq!(cells.created(), 1);
             assert_eq!(cells.live(), (0, 0));
         }
@@ -101,15 +109,19 @@ fn parallel_generic_witness_identity_survives_forwarding_and_owned_returns() {
                     value
                 };
                 assert_eq!(
-                    value,
-                    NormalizedValue::Record(
-                        super::super::super::value::NormalizedRecord::Structural {
-                            fields: Arc::new(vec![
-                                (Name::new("left").unwrap(), NormalizedValue::I64(n)),
-                                (Name::new("right").unwrap(), NormalizedValue::I64(99))
-                            ])
-                        }
-                    )
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(value),
+                        &(NormalizedValue::Record(
+                            super::super::super::value::NormalizedRecord::Structural {
+                                fields: Fields::try_new(vec![
+                                    (Name::new("left").unwrap(), NormalizedValue::I64(n)),
+                                    (Name::new("right").unwrap(), NormalizedValue::I64(99))
+                                ])
+                                .unwrap()
+                            }
+                        ))
+                    ),
+                    Ok(true)
                 );
                 assert_eq!(cells.created(), 2);
                 assert_eq!(cells.live(), (0, 0));

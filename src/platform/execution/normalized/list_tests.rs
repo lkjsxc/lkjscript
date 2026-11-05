@@ -2,6 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use super::*;
+use crate::platform::execution::normalized::child_storage::{Captures, Values};
 
 fn append(list: &List, value: i64) -> List {
     list.append(NormalizedValue::I64(value), None, &mut |_| Ok(()))
@@ -62,7 +63,7 @@ fn verify(list: &List, expected: &[i64]) -> Result<(), String> {
         return Err("length".into());
     }
     for (index, value) in expected.iter().enumerate() {
-        if list.get(index) != Some(&NormalizedValue::I64(*value)) {
+        if !matches!(list.get(index), Some(NormalizedValue::I64(actual)) if actual == value) {
             return Err(format!("index {index}"));
         }
     }
@@ -91,13 +92,22 @@ fn verify(list: &List, expected: &[i64]) -> Result<(), String> {
     let mut front = 0;
     let mut back = expected.len();
     while front < back {
-        assert_eq!(both.next(), Some(&NormalizedValue::I64(expected[front])));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(both.next()),
+                &(Some(&NormalizedValue::I64(expected[front])))
+            ),
+            Ok(true)
+        );
         front += 1;
         if front < back {
             back -= 1;
             assert_eq!(
-                both.next_back(),
-                Some(&NormalizedValue::I64(expected[back]))
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(both.next_back()),
+                    &(Some(&NormalizedValue::I64(expected[back])))
+                ),
+                Ok(true)
             );
         }
     }
@@ -156,7 +166,13 @@ fn retained_roots_match_flat_oracle_across_tail_and_root_growth() {
                 &mut |_| Ok(()),
             )
             .unwrap();
-            assert_eq!(list, bulk);
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(list),
+                    &(bulk)
+                ),
+                Ok(true)
+            );
             verify(&bulk, &expected).unwrap();
         }
         list = append(&list, n as i64);
@@ -194,7 +210,7 @@ fn deterministic_branching_histories_and_wrong_tail_fault_sensitivity() {
         let (list, model) = roots.last().unwrap();
         let mut wrong = list.clone();
         let mut tail = leaf(wrong.tail.as_deref(), &mut |_| Ok(())).unwrap();
-        tail[0] = Some(Arc::new(Element(NormalizedValue::I64(i64::MIN))));
+        tail[0] = Some(PayloadArc::try_new(Element(NormalizedValue::I64(i64::MIN), None)).unwrap());
         wrong.tail = Some(node(Node::Leaf(tail)));
         assert!(
             verify(&wrong, model).is_err(),
@@ -246,7 +262,13 @@ fn aliased_append_obeys_independent_cost_schedule_and_payload_sharing() {
     assert_eq!(work.node_visits, 265); // 256 leaves, 8 bottom branches, one root.
     let before = Work::current();
     for index in 0..8192 {
-        assert_eq!(list.get(index), Some(&NormalizedValue::I64(index as i64)));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(list.get(index)),
+                &(Some(&NormalizedValue::I64(index as i64)))
+            ),
+            Ok(true)
+        );
     }
     assert_eq!(before.since().node_visits, 8160 * 3 + 32);
 }
@@ -341,8 +363,11 @@ fn nested_shared_payloads_are_not_cloned_and_deep_rejection_disposes_iteratively
             drop(list);
             drop(other);
             assert_eq!(
-                append(&List::default(), 42).get(0),
-                Some(&NormalizedValue::I64(42))
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(append(&List::default(), 42).get(0)),
+                    &(Some(&NormalizedValue::I64(42)))
+                ),
+                Ok(true)
             );
         })
         .unwrap()
@@ -357,9 +382,10 @@ fn flat_oracle_preserves_nested_nominal_and_transient_callable_elements() {
     let model = vec![
         NormalizedValue::Record(NormalizedRecord::Nominal {
             layout: RecordLayoutIndex(7, origin),
-            fields: Arc::new(vec![NormalizedValue::Option(Some(Box::new(
+            fields: Values::try_new(vec![NormalizedValue::Option(Some(Box::new(
                 NormalizedValue::list(vec![NormalizedValue::I64(17)]).unwrap(),
-            )))]),
+            )))])
+            .unwrap(),
         }),
         NormalizedValue::Function {
             read_scope_arguments: Arc::from([]),
@@ -367,7 +393,7 @@ fn flat_oracle_preserves_nested_nominal_and_transient_callable_elements() {
             effect_arguments: Arc::from([]),
             function: FunctionIndex(3, origin),
             type_arguments: Arc::from([]),
-            bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(5)])),
+            bound_arguments: Some(Captures::try_new(vec![NormalizedValue::I64(5)]).unwrap()),
         },
     ];
     let bulk = List::from_items(model.clone(), None, &mut |_| Ok(())).unwrap();
@@ -387,14 +413,44 @@ fn flat_oracle_preserves_nested_nominal_and_transient_callable_elements() {
             .append(NormalizedValue::I64(-1), None, &mut |_| Ok(()))
             .unwrap();
         for (i, expected) in model.iter().enumerate() {
-            assert_eq!(root.get(i), Some(expected));
-            assert_eq!(left.get(i), Some(expected));
-            assert_eq!(right.get(i), Some(expected));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(root.get(i)),
+                    &(Some(expected))
+                ),
+                Ok(true)
+            );
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(left.get(i)),
+                    &(Some(expected))
+                ),
+                Ok(true)
+            );
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(right.get(i)),
+                    &(Some(expected))
+                ),
+                Ok(true)
+            );
             assert!(std::ptr::eq(root.get(i).unwrap(), left.get(i).unwrap()));
         }
         assert_eq!(root.len(), 2);
-        assert_eq!(left.get(2), Some(&NormalizedValue::Bool(true)));
-        assert_eq!(right.get(2), Some(&NormalizedValue::I64(-1)));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(left.get(2)),
+                &(Some(&NormalizedValue::Bool(true)))
+            ),
+            Ok(true)
+        );
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(right.get(2)),
+                &(Some(&NormalizedValue::I64(-1)))
+            ),
+            Ok(true)
+        );
     }
 }
 
@@ -458,7 +514,7 @@ fn shared_radix_nodes_exercise_the_highest_representable_branch_depth() {
     let top_children = 1_usize << ((usize::BITS - 1) as usize - height * 5);
     assert!((2..32).contains(&top_children));
     let mut complete = Arc::new(Node::Leaf(std::array::from_fn(|index| {
-        Some(Arc::new(Element(NormalizedValue::I64(index as i64))))
+        Some(PayloadArc::try_new(Element(NormalizedValue::I64(index as i64), None)).unwrap())
     })));
     for _ in 1..height {
         complete = Arc::new(Node::Branch(std::array::from_fn(|_| {
@@ -474,29 +530,57 @@ fn shared_radix_nodes_exercise_the_highest_representable_branch_depth() {
         height,
         root: Some(root),
         tail: Some(Arc::new(Node::Leaf(std::array::from_fn(|index| {
-            (index == 0).then(|| Arc::new(Element(NormalizedValue::I64(-1))))
+            (index == 0)
+                .then(|| PayloadArc::try_new(Element(NormalizedValue::I64(-1), None)).unwrap())
         })))),
     };
     for index in [0, 31, 32, prefix_length / 2, prefix_length - 1] {
         assert_eq!(
-            list.get(index),
-            Some(&NormalizedValue::I64((index % 32) as i64))
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(list.get(index)),
+                &(Some(&NormalizedValue::I64((index % 32) as i64)))
+            ),
+            Ok(true)
         );
     }
-    assert_eq!(list.get(prefix_length), Some(&NormalizedValue::I64(-1)));
-    assert_eq!(list.get(prefix_length + 1), None);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(list.get(prefix_length)),
+            &(Some(&NormalizedValue::I64(-1)))
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(list.get(prefix_length + 1)),
+            &(None)
+        ),
+        Ok(true)
+    );
     let mut cursor = list.iter();
-    assert_eq!(cursor.next_back(), Some(&NormalizedValue::I64(-1)));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(cursor.next_back()),
+            &(Some(&NormalizedValue::I64(-1)))
+        ),
+        Ok(true)
+    );
     for index in 0..64 {
         assert_eq!(
-            cursor.next(),
-            Some(&NormalizedValue::I64((index % 32) as i64))
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(cursor.next()),
+                &(Some(&NormalizedValue::I64((index % 32) as i64)))
+            ),
+            Ok(true)
         );
         assert_eq!(
-            cursor.next_back(),
-            Some(&NormalizedValue::I64(
-                ((prefix_length - index - 1) % 32) as i64
-            ))
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(cursor.next_back()),
+                &(Some(&NormalizedValue::I64(
+                    ((prefix_length - index - 1) % 32) as i64
+                )))
+            ),
+            Ok(true)
         );
     }
     assert_eq!(cursor.len(), prefix_length - 128);
@@ -573,7 +657,13 @@ fn saturated_list_observations_remain_lower_bounds_and_grant_no_capacity() {
     WORK.set(exact_maximum);
     let list = append(&List::default(), 19);
     assert!(Work::current().saturated);
-    assert_eq!(list.get(0), Some(&NormalizedValue::I64(19)));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(list.get(0)),
+            &(Some(&NormalizedValue::I64(19)))
+        ),
+        Ok(true)
+    );
     drop(list);
     WORK.set(Work {
         full_materializations: u64::MAX,
@@ -587,7 +677,13 @@ fn saturated_list_observations_remain_lower_bounds_and_grant_no_capacity() {
         let list = List::default()
             .append(NormalizedValue::I64(17), maximum, &mut |_| Ok(()))
             .unwrap();
-        assert_eq!(list.get(0), Some(&NormalizedValue::I64(17)));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(list.get(0)),
+                &(Some(&NormalizedValue::I64(17)))
+            ),
+            Ok(true)
+        );
         assert!(Work::current().saturated);
     }
     let before = Work::current();

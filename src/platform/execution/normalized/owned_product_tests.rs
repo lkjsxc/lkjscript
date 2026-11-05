@@ -1,5 +1,6 @@
 //! Literal native product programs and independent expected results.
 use super::*;
+use crate::platform::execution::normalized::child_storage::Fields;
 
 fn composed_source() -> crate::platform::kernel::KernelSnapshot {
     byte_buffer_tests::author_only(
@@ -278,8 +279,8 @@ fn owned_products_composition_nested_cleanup_and_tail_transfer() {
                         .0
                 };
                 match name {
-                    "nested" => assert_eq!(actual, NormalizedValue::bytes(vec![0, 255, 128])),
-                    "abandoned" => assert_eq!(actual, NormalizedValue::Unit),
+                    "nested" => assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(actual), &(NormalizedValue::bytes(vec![0, 255, 128]))), Ok(true)),
+                    "abandoned" => assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(actual), &(NormalizedValue::Unit)), Ok(true)),
                     _ => {
                         let NormalizedValue::Record(
                             super::super::value::NormalizedRecord::Structural { fields },
@@ -287,9 +288,7 @@ fn owned_products_composition_nested_cleanup_and_tail_transfer() {
                         else {
                             panic!("ordinary result");
                         };
-                        assert_eq!(
-                            fields.as_ref(),
-                            &[
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(fields.as_slice(), &[
                                 (
                                     Name::new("bytes").unwrap(),
                                     NormalizedValue::bytes(vec![0, 255, 128])
@@ -297,8 +296,7 @@ fn owned_products_composition_nested_cleanup_and_tail_transfer() {
                                 (Name::new("opaque").unwrap(), NormalizedValue::I64(99)),
                                 (Name::new("scalar").unwrap(), NormalizedValue::I64(n)),
                                 (Name::new("tag").unwrap(), NormalizedValue::I64(128)),
-                            ]
-                        );
+                            ][..]), Ok(true));
                     }
                 }
                 assert_eq!(products.live(), (0, 0));
@@ -529,14 +527,22 @@ fn owned_products_metadata_read_preserves_owner_across_reborrow() {
                     .0
             };
             let expected = NormalizedValue::Record(NormalizedRecord::Structural {
-                fields: Arc::new(
+                fields: Fields::try_new(
                     ["direct", "forwarded", "payload"]
                         .into_iter()
                         .map(|name| (Name::new(name).unwrap(), NormalizedValue::I64(n)))
                         .collect(),
-                ),
+                )
+                .unwrap(),
             });
-            assert_eq!(result, expected, "reference={reference}");
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(result),
+                    &(expected)
+                ),
+                Ok(true),
+                "reference={reference}"
+            );
             assert_eq!(products.created(), 1);
             products.assert_transfers_preserve_allocations();
             assert_eq!(products.live(), (0, 0));
@@ -650,7 +656,13 @@ fn owned_products_metadata_token_checks_before_read_or_copy() {
         })
         .unwrap();
     assert_eq!(reserved, expected);
-    assert_eq!(retained, value);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(retained),
+            &(value)
+        ),
+        Ok(true)
+    );
     for checks in 0..5 {
         let cancelled = ExecutionControl::cancel_after_checks(checks);
         let error = loan
@@ -680,7 +692,13 @@ fn owned_products_metadata_token_checks_before_read_or_copy() {
             .is_err()
     );
     drop(loan);
-    assert_eq!(retained, value);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(retained),
+            &(value)
+        ),
+        Ok(true)
+    );
 }
 
 #[test]
@@ -725,7 +743,13 @@ declarations.end"#).unwrap();
                 .unwrap()
                 .0
         };
-        assert_eq!(value, NormalizedValue::I64(-257));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(NormalizedValue::I64(-257))
+            ),
+            Ok(true)
+        );
         assert_eq!(products.created(), 1);
         assert_eq!(products.live(), (0, 0));
         assert_eq!(cells.live(), (0, 0));
@@ -746,7 +770,13 @@ fn owned_products_native_generic_cell_roundtrip() {
             .invoke(main, vec![NormalizedValue::I64(n)], None, &control)
             .unwrap()
             .0;
-        assert_eq!(value, NormalizedValue::I64(n));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(NormalizedValue::I64(n))
+            ),
+            Ok(true)
+        );
         let value = NormalizedReferenceInterpreter::new(
             &source,
             &program,
@@ -755,7 +785,13 @@ fn owned_products_native_generic_cell_roundtrip() {
         .invoke(main, vec![NormalizedValue::I64(n)], None, &control)
         .unwrap()
         .0;
-        assert_eq!(value, NormalizedValue::I64(n));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(NormalizedValue::I64(n))
+            ),
+            Ok(true)
+        );
     }
 }
 
@@ -803,7 +839,13 @@ declarations.end"#).unwrap();
                     .unwrap()
                     .0
             };
-            assert_eq!(value, NormalizedValue::I64(n));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(value),
+                    &(NormalizedValue::I64(n))
+                ),
+                Ok(true)
+            );
             assert_eq!(cells.live(), (0, 0));
             assert_eq!(products.live(), (0, 0));
         }
@@ -1058,11 +1100,14 @@ fn owned_products_exact_monomorphic_witness_selection() {
                 panic!("ordinary result");
             };
             assert_eq!(
-                fields.as_ref(),
-                &[
-                    (Name::new("alternate").unwrap(), NormalizedValue::I64(99)),
-                    (Name::new("scalar").unwrap(), NormalizedValue::I64(n))
-                ]
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    fields.as_slice(),
+                    &[
+                        (Name::new("alternate").unwrap(), NormalizedValue::I64(99)),
+                        (Name::new("scalar").unwrap(), NormalizedValue::I64(n))
+                    ][..]
+                ),
+                Ok(true)
             );
             assert_eq!(products.live(), (0, 0));
             assert_eq!(cells.live(), (0, 0));
@@ -1174,7 +1219,13 @@ fn owned_products_active_loan_cancellation_adapter_and_quota_cleanup() {
             } else if forge {
                 assert!(result.is_err());
             } else {
-                assert_eq!(result.unwrap(), NormalizedValue::I64(0));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(result.unwrap()),
+                        &(NormalizedValue::I64(0))
+                    ),
+                    Ok(true)
+                );
             }
             assert_eq!(products.live(), (0, 0));
             assert_eq!(buffers.live(), (0, 0));
@@ -1207,7 +1258,13 @@ fn owned_products_active_loan_cancellation_adapter_and_quota_cleanup() {
             (result, allocated, products.created())
         };
         let (result, total, count) = run(None);
-        assert_eq!(result.unwrap(), NormalizedValue::I64(0));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(result.unwrap()),
+                &(NormalizedValue::I64(0))
+            ),
+            Ok(true)
+        );
         assert_eq!(count, 2);
         let (mut low, mut high) = (1, total);
         while low < high {

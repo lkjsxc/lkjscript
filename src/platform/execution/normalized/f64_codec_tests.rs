@@ -3,6 +3,8 @@
 use super::super::{codec, data_codec, data_codec_reference};
 use super::*;
 use crate::platform::binary64::Binary64;
+use crate::platform::execution::normalized::child_storage::Values;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 use crate::platform::kernel::{FieldRecord, ModuleRecord, ParameterUse};
 use crate::platform::semantic_id::{FieldId, ModuleId};
 
@@ -212,10 +214,9 @@ fn f64_json_decimals_integer_boundaries_and_negative_zero_are_exact() {
         ("9223372036854775807", i64::MAX),
         ("9007199254740993", 9_007_199_254_740_993),
     ] {
-        assert_eq!(
-            codec::decode_typed(&fixture.program, token.as_bytes(), fixture.integer, limits)
-                .unwrap(),
-            NormalizedValue::I64(expected)
+        assert!(
+            matches!(codec::decode_typed(&fixture.program, token.as_bytes(), fixture.integer, limits)
+                .unwrap(), NormalizedValue::I64(actual) if actual == expected)
         );
         assert_eq!(
             codec::encode_typed(
@@ -302,11 +303,12 @@ fn f64_json_preflight_accepts_type_and_nonfinite_values_fail_before_payload_outp
             assert_eq!(error.class, crate::platform::DiagnosticClass::Semantic);
             let nested = NormalizedValue::Record(super::super::value::NormalizedRecord::Nominal {
                 layout: fixture.program.record_instances[&fixture.packet],
-                fields: Arc::new(vec![
+                fields: Values::try_new(vec![
                     NormalizedValue::I64(2),
                     NormalizedValue::list(vec![scalar(0x3ff0_0000_0000_0000), scalar(bits)])
                         .unwrap(),
-                ]),
+                ])
+                .unwrap(),
             });
             let error = codec::encode_typed(schema, &nested, fixture.packet, limits).unwrap_err();
             assert_eq!(error.code, "normalized_json_nonfinite");
@@ -371,14 +373,12 @@ fn f64_data_has_fixed_little_endian_scalar_bytes_and_predecessor_integer_bytes()
                 .unwrap(),
             expected
         );
-        assert_eq!(
-            data_codec::decode_typed(&fixture.program, &expected, fixture.integer).unwrap(),
-            value
+        assert!(
+            matches!(data_codec::decode_typed(&fixture.program, &expected, fixture.integer).unwrap(), NormalizedValue::I64(actual) if actual == integer)
         );
-        assert_eq!(
-            data_codec_reference::decode_typed(&fixture.reference, &expected, fixture.integer)
-                .unwrap(),
-            value
+        assert!(
+            matches!(data_codec_reference::decode_typed(&fixture.reference, &expected, fixture.integer)
+                .unwrap(), NormalizedValue::I64(actual) if actual == integer)
         );
     }
 }
@@ -388,7 +388,7 @@ fn f64_data_nested_nominal_list_roundtrips_and_strict_readers_reject_rehashed_fa
     let fixture = fixture();
     let value = NormalizedValue::Record(super::super::value::NormalizedRecord::Nominal {
         layout: fixture.program.record_instances[&fixture.packet],
-        fields: Arc::new(vec![
+        fields: Values::try_new(vec![
             NormalizedValue::I64(5),
             NormalizedValue::list(vec![
                 scalar(0x3ff4_0000_0000_0000),
@@ -398,7 +398,8 @@ fn f64_data_nested_nominal_list_roundtrips_and_strict_readers_reject_rehashed_fa
                 scalar(0x7ff8_0000_0000_0000),
             ])
             .unwrap(),
-        ]),
+        ])
+        .unwrap(),
     });
     let encoded = data_codec::encode_typed(&fixture.program, &value, fixture.packet).unwrap();
     let payload = [
@@ -413,12 +414,19 @@ fn f64_data_nested_nominal_list_roundtrips_and_strict_readers_reject_rehashed_fa
         encoded
     );
     assert_eq!(
-        data_codec::decode_typed(&fixture.program, &encoded, fixture.packet).unwrap(),
-        value
+        raw_value_equal(
+            &(data_codec::decode_typed(&fixture.program, &encoded, fixture.packet).unwrap()),
+            &(value)
+        ),
+        Ok(true)
     );
     assert_eq!(
-        data_codec_reference::decode_typed(&fixture.reference, &encoded, fixture.packet).unwrap(),
-        value
+        raw_value_equal(
+            &(data_codec_reference::decode_typed(&fixture.reference, &encoded, fixture.packet)
+                .unwrap()),
+            &(value)
+        ),
+        Ok(true)
     );
     for bits in [
         0x7ff0_0000_0000_0001u64,

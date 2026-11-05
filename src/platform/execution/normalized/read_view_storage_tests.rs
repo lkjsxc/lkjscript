@@ -358,10 +358,14 @@ impl Fixture {
         })
     }
 
+    fn selected_value(&self) -> NormalizedValue {
+        NormalizedValue::OwnedI64Cell(self.cell.borrow().expect("source read"))
+    }
+
     fn selected(&self) -> HeldRead {
         HeldRead {
             origin: self.admission.source.origin,
-            value: NormalizedValue::OwnedI64Cell(self.cell.borrow().expect("source read")),
+            value: self.selected_value(),
         }
     }
 
@@ -395,7 +399,7 @@ impl Fixture {
                     entry.field,
                     entry.ty,
                     self.admission.source.clone(),
-                    self.selected().value,
+                    self.selected_value(),
                     &self.admission,
                     control,
                 )?,
@@ -678,7 +682,13 @@ fn read_view_metadata_only_sharing_protects_source_without_exposing_it() {
     );
     let metadata = child.metadata(field(2), &f.admission, &f.control).unwrap();
     assert_eq!(metadata.ty(), metadata_field().ty);
-    assert_eq!(metadata.raw(&f.control).unwrap(), &NormalizedValue::I64(19));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(metadata.raw(&f.control).unwrap()),
+            &(&NormalizedValue::I64(19))
+        ),
+        Ok(true)
+    );
     drop(child);
     drop(view);
     assert!(!f.can_consume());
@@ -951,7 +961,7 @@ fn read_view_from_projected_owned_source_retains_descriptor_return_guards() {
             field(1),
             owned_field().ty,
             f.admission.source.clone(),
-            f.selected().value,
+            f.selected_value(),
             &f.admission,
             &f.control,
         )
@@ -1204,7 +1214,7 @@ fn read_view_partial_construction_and_complete_ancestor_packet_failures_release_
             field(1),
             owned_field().ty,
             f.admission.source.clone(),
-            f.selected().value,
+            f.selected_value(),
             &f.admission,
             &f.control,
         )
@@ -1243,7 +1253,7 @@ fn read_view_partial_construction_and_complete_ancestor_packet_failures_release_
             field(1),
             owned_field().ty,
             f.admission.source.clone(),
-            f.selected().value,
+            f.selected_value(),
             &f.admission,
             &f.control,
         )
@@ -1254,7 +1264,7 @@ fn read_view_partial_construction_and_complete_ancestor_packet_failures_release_
                 field(1),
                 owned_field().ty,
                 f.admission.source.clone(),
-                f.selected().value,
+                f.selected_value(),
                 &f.admission,
                 &f.control
             )
@@ -1542,7 +1552,7 @@ fn read_view_late_ancestor_growth_preserves_existing_packets_on_denial_and_cance
                         field(1),
                         owned_field().ty,
                         f.admission.source.clone(),
-                        f.selected().value,
+                        f.selected_value(),
                         &f.admission,
                         &f.control,
                     )
@@ -1604,7 +1614,7 @@ fn read_view_late_ancestor_growth_preserves_existing_packets_on_denial_and_cance
             field(1),
             owned_field().ty,
             f.admission.source.clone(),
-            f.selected().value,
+            f.selected_value(),
             &f.admission,
             &f.control,
         )

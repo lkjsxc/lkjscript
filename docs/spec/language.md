@@ -166,8 +166,9 @@ second item charge. A key converted from Text/Bytes retains its immutable payloa
 range of a byte view, without a second payload allocation. Existing payloads move into
 new entries; shared payloads, keys and subtrees
 incur no fresh deep-copy charge. Even transient rotation nodes remain cumulatively charged.
-Absent removal allocates no tree storage. The remaining map, owned-storage and schema limits,
-value depth 256 and checked single-allocation extents remain separate from cumulative work.
+Absent removal allocates no tree storage. Remaining map projection, owned-storage and schema
+depth guards, the 256-wrapper inline Box-spine admission boundary, and checked single-allocation
+extents remain separate from cumulative work.
 Ordinary raw-value admission no longer imposes a 1,000,000-item aggregate ceiling, and ordinary
 trusted execution omits cumulative quotas unless explicitly selected.
 
@@ -342,14 +343,19 @@ The closed current type surface is:
 There are no implicit coercions. `I64` arithmetic traps on overflow and division edge cases.
 Indexing and collection growth are checked. Text is valid UTF-8; portable identifier rules avoid
 normalization-dependent identity. Maps permit bool, i64, bytes, or text keys and iterate by a
-specified total order. The current runtime nesting boundary remains depth 256. Ordinary raw-value
-admission has no default aggregate collection-item ceiling; map, owned-storage, schema and external
-codec limits remain separately enforced pending their coupled capacity cuts.
+specified total order. Ordinary value admission retains a depth-256 limit for consecutive boxed
+Option/Result/Variant wrappers. Opaque Function/Record/List/Map ownership starts a new inline
+spine; their aggregate edges do not share a default nesting quota. Structural type admission and
+identity, owned-storage escape inspection, map projection and external codecs retain their own
+separate depth contracts. Ordinary raw-value admission has no default aggregate collection-item
+ceiling.
 
 Execution admits raw values before installing any local or operand. Admission checks exact
 types, nominal and prepared-program identities, resource provenance and containment with an
-iterative traversal, checking cancellation at every node. Depth remains 256. Aggregate collection
-admission follows the exact optional invocation policy. Allocation includes newly allocated checked
+iterative traversal, checking cancellation at every node. The inline boxed-spine bound protects
+remaining recursive raw Clone paths; it does not establish stack safety for every raw-value
+lifecycle operation. Aggregate collection admission follows the exact optional invocation policy.
+Allocation includes newly allocated checked
 metadata and remains cumulative; rejected admission installs no partial value.
 
 Each evaluator carries its own construction-controlled classification: affine-free, direct
@@ -631,10 +637,11 @@ parameters, or a concrete safe prefix, but cannot capture a bare unconstrained `
 
 Binding has precisely the effects of evaluating its callee and captures. A failed capture stops
 later evaluation and installs no callable. Earlier completed effects retain their actual visibility;
-only an enclosing transaction can roll back its staged work. Retention admission is bounded,
-iterative, cancellable at every visited node and before installation, and counted separately from
-input and raw-result admission. Environment edges count toward depth 256 and capture slots toward
-cumulative collection and allocation bounds. Internal reads and calls preserve checked values
+only an enclosing transaction can roll back its staged work. Retention admission is iterative,
+cancellable at every visited node and before installation, and counted separately from input and
+raw-result admission. Opaque callable-environment edges have no default depth quota. Capture slots
+count toward exactly selected cumulative collection and allocation policies; capture-type traversal
+and consecutive inline Box spines retain their separate depth-256 guards. Internal reads and calls preserve checked values
 without rescanning retained descendants or copying a captured collection's payload.
 
 Callable environments are runtime-only and have no semantic equality or serialization. Constants

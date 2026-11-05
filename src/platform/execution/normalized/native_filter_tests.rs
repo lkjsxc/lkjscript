@@ -1,6 +1,7 @@
 //! Binary-filter I/O, bounded child lifetimes, and independent BLAKE3 vectors.
 use super::*;
 use crate::platform::compiler::elf_x86_64;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 use std::io::{Read, Write};
 use std::process::{Command, Output, Stdio};
 
@@ -11,6 +12,26 @@ pub(super) fn execute_filter(
     chunk: usize,
 ) -> Output {
     execute_filter_controlled(image, input, arguments, chunk, FilterHostControl::Ordinary)
+}
+
+/// The caller selects the watchdog for a measured test workload. This does not
+/// alter the generated program's resource policy or the ordinary 10-second host
+/// control used by small binary-filter fixtures.
+pub(super) fn execute_filter_with_deadline(
+    image: &[u8],
+    input: &[u8],
+    arguments: &[&str],
+    chunk: usize,
+    deadline: std::time::Duration,
+) -> Output {
+    execute_filter_controlled_with_deadline(
+        image,
+        input,
+        arguments,
+        chunk,
+        FilterHostControl::Ordinary,
+        deadline,
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -26,6 +47,24 @@ fn execute_filter_controlled(
     arguments: &[&str],
     chunk: usize,
     control: FilterHostControl,
+) -> Output {
+    execute_filter_controlled_with_deadline(
+        image,
+        input,
+        arguments,
+        chunk,
+        control,
+        std::time::Duration::from_secs(10),
+    )
+}
+
+fn execute_filter_controlled_with_deadline(
+    image: &[u8],
+    input: &[u8],
+    arguments: &[&str],
+    chunk: usize,
+    control: FilterHostControl,
+    deadline: std::time::Duration,
 ) -> Output {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("compiler");
@@ -101,7 +140,7 @@ fn execute_filter_controlled(
             if let Some(status) = child.try_wait().unwrap() {
                 break status;
             }
-            if start.elapsed() > std::time::Duration::from_secs(10) {
+            if start.elapsed() >= deadline {
                 timed_out = true;
                 child.kill().unwrap();
                 break child.wait().unwrap();
@@ -114,7 +153,11 @@ fn execute_filter_controlled(
             stdout: out.join().unwrap(),
             stderr: err.join().unwrap(),
         };
-        assert!(!timed_out, "native filter timed out: {output:?}");
+        assert!(
+            !timed_out,
+            "native filter exceeded caller-selected deadline {deadline:?} after {:?}: {output:?}",
+            start.elapsed(),
+        );
         assert!(output.stdout.len() <= 32 * 1024 * 1024);
         assert!(output.stderr.len() <= 65536);
         output
@@ -237,7 +280,7 @@ fn native_elf_blake3_matches_independent_block_chunk_and_tree_vectors() {
             .invoke(declaration, values, None, &control)
             .unwrap()
             .0;
-        assert_eq!(vm, reference);
+        assert_eq!(raw_value_equal(&(vm), &(reference)), Ok(true));
         let super::super::value::NormalizedRecord::Structural { fields } = (match vm {
             NormalizedValue::Record(record) => record,
             _ => panic!("record"),

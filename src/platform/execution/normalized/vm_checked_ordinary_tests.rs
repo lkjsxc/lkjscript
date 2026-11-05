@@ -4,6 +4,7 @@
 use super::metadata_tests::fixture::{Fixture, token};
 use super::*;
 use crate::platform::execution::ExecutionFailureClass;
+use crate::platform::execution::normalized::child_storage::Values;
 use crate::platform::kernel::{
     DeclarationReference, FieldReference, ReadScopeArgument, TypeObject, encode_type_object,
 };
@@ -139,7 +140,13 @@ fn ordinary_evidence_keeps_exact_admission_and_immutable_aliases_without_raw_bou
         force_strict_ordinary_children(|| assert!(!exact(&f, &copy, f.payload)));
         assert!(exact(&f, &copy, f.payload));
         drop(value);
-        assert_eq!(copy.raw(), &f.raw(count));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(copy.raw()),
+                &(&f.raw(count))
+            ),
+            Ok(true)
+        );
         // A raw host output has no proof packet, even when it shares immutable
         // backing with a previously checked value. Every descendant is admitted.
         let returned = admit(&f, copy.into_raw(), f.payload, &Bindings::new(), false);
@@ -229,7 +236,13 @@ fn ordinary_evidence_is_invalidated_by_untyped_list_map_and_callable_transforms(
             .is_err()
     );
     assert!(exact(&f, &alias, f.payload));
-    assert_eq!(alias.raw(), &f.raw(3));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(alias.raw()),
+            &(&f.raw(3))
+        ),
+        Ok(true)
+    );
 
     let integer = add(&mut f, TypeForm::I64, true);
     let payload_ty = f.payload;
@@ -276,7 +289,13 @@ fn ordinary_evidence_is_invalidated_by_untyped_list_map_and_callable_transforms(
                 .is_err()
         );
         assert!(exact(&f, &retained, map_ty));
-        assert_eq!(retained.raw(), &NormalizedValue::Map(Default::default()));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(retained.raw()),
+                &(&NormalizedValue::Map(Default::default()))
+            ),
+            Ok(true)
+        );
     }
 
     let function = f
@@ -376,7 +395,7 @@ fn ordinary_evidence_distinguishes_same_shaped_nominal_layouts() {
         &f,
         NormalizedValue::Record(NormalizedRecord::Nominal {
             layout: types[0].1,
-            fields: Arc::new(vec![f.raw(8)]),
+            fields: Values::try_new(vec![f.raw(8)]).unwrap(),
         }),
         types[0].0,
         &Bindings::new(),
@@ -426,7 +445,13 @@ fn ordinary_evidence_is_minted_only_for_actual_parent_children_and_keeps_custody
     drop(extracted);
     assert_eq!(products.live(), (0, 0));
     assert_eq!(cells.live(), (0, 0));
-    assert_eq!(child.raw(), &f.raw(32));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(child.raw()),
+            &(&f.raw(32))
+        ),
+        Ok(true)
+    );
 
     // Projection to an ordinary Option child must not accidentally retain the
     // parent's aggregate type certificate.
@@ -454,7 +479,13 @@ fn ordinary_evidence_is_minted_only_for_actual_parent_children_and_keeps_custody
     drop(read);
     drop(owner);
     assert_eq!(products.live(), (0, 0));
-    assert_eq!(independent.raw(), &f.raw(32));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(independent.raw()),
+            &(&f.raw(32))
+        ),
+        Ok(true)
+    );
 
     let owner = f.owner(2);
     let read = f.read(&owner);

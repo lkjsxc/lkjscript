@@ -1,4 +1,6 @@
-//! Depth-checked negative guards for ordinary value boundaries. These checks mint no
+//! Negative guards for ordinary value boundaries. The value graph is traversed
+//! iteratively without a callable-environment depth ceiling. Structural type
+//! traversal retains its separate existing depth contract. These checks mint no
 //! value/category/provenance certificate and never acquire a read-view lease.
 
 use super::super::value_schema::NormalizedValueSchema;
@@ -6,12 +8,12 @@ use super::{NormalizedRecord, NormalizedValue};
 use crate::platform::execution::{ExecutionControl, ExecutionError};
 use crate::platform::kernel::{TypeForm, TypeObjectDigest};
 
-struct Guard<'a> {
+struct TypeGuard<'a> {
     control: &'a ExecutionControl,
     ancestors: [Option<TypeObjectDigest>; 257],
 }
 
-impl Guard<'_> {
+impl TypeGuard<'_> {
     // Traversal borrows existing storage and allocates no worklist or child buffer.
     // The existing nesting bound limits host recursion. Width follows finite
     // child iteration rather than an admission-work counter.
@@ -22,73 +24,6 @@ impl Guard<'_> {
                 "normalized_value_depth",
                 "view escape inspection exceeds finite value depth 256",
             ));
-        }
-        Ok(())
-    }
-
-    fn value(&mut self, value: &NormalizedValue, depth: u16) -> Result<(), ExecutionError> {
-        self.enter(depth)?;
-        match value {
-            NormalizedValue::ReadView(_)
-            | NormalizedValue::RegionCap { .. }
-            | NormalizedValue::RegionPointer { .. } => return Err(escape()),
-            NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. }) => {
-                for child in fields.iter() {
-                    self.value(child, depth + 1)?;
-                }
-            }
-            NormalizedValue::Record(NormalizedRecord::Structural { fields }) => {
-                for (_, child) in fields.iter() {
-                    self.value(child, depth + 1)?;
-                }
-            }
-            NormalizedValue::List(values) => {
-                for child in values.iter() {
-                    self.value(child, depth + 1)?;
-                }
-            }
-            NormalizedValue::Map(values) => {
-                for (_, child) in values.iter() {
-                    self.value(child, depth + 1)?;
-                }
-            }
-            NormalizedValue::Variant { payload, .. } | NormalizedValue::Option(payload) => {
-                if let Some(child) = payload.as_deref() {
-                    self.value(child, depth + 1)?;
-                }
-            }
-            NormalizedValue::Result { value, .. } => self.value(value, depth + 1)?,
-            NormalizedValue::Function {
-                read_scope_arguments,
-                bound_arguments,
-                ..
-            } => {
-                // Ordinary first-class callable types have no scope/result-relation
-                // carrier. Retaining supplied scope actuals cannot grant that authority.
-                if !read_scope_arguments.is_empty() {
-                    return Err(escape());
-                }
-                if let Some(children) = bound_arguments {
-                    for child in children.iter() {
-                        self.value(child, depth + 1)?;
-                    }
-                }
-            }
-            // Opaque owner/resource storage is admitted independently by its consuming
-            // owner; this negative guard does not certify any hidden payload as ordinary.
-            NormalizedValue::OwnedSequence(_)
-            | NormalizedValue::OwnedChoice(_)
-            | NormalizedValue::OwnedProduct(_)
-            | NormalizedValue::OwnedI64Cell(_)
-            | NormalizedValue::ByteBuffer(_)
-            | NormalizedValue::Resource(_)
-            | NormalizedValue::Unit
-            | NormalizedValue::Bool(_)
-            | NormalizedValue::I64(_)
-            | NormalizedValue::F64(_)
-            | NormalizedValue::Bytes(_)
-            | NormalizedValue::Text(_)
-            | NormalizedValue::StaticText(_) => {}
         }
         Ok(())
     }
@@ -205,15 +140,115 @@ impl Guard<'_> {
     }
 }
 
+/// A unary Function/Record chain uses only the inline current reference.
+/// A branching frontier reserves borrowed references fallibly. No opaque owner
+/// is cloned, no value is published, and every logical occurrence is visited.
+struct ValuePending<'a> {
+    current: Option<&'a NormalizedValue>,
+    others: Vec<&'a NormalizedValue>,
+}
+
+impl<'a> ValuePending<'a> {
+    fn push(&mut self, value: &'a NormalizedValue) -> Result<(), ExecutionError> {
+        if let Some(previous) = self.current {
+            self.others.try_reserve(1).map_err(|_| {
+                ExecutionError::resource_static(
+                    "normalized_value_escape_allocation",
+                    "value escape inspection could not reserve its pending references",
+                )
+            })?;
+            self.others.push(previous);
+        }
+        self.current = Some(value);
+        Ok(())
+    }
+
+    fn pop(&mut self) -> Option<&'a NormalizedValue> {
+        self.current.take().or_else(|| self.others.pop())
+    }
+}
+
 pub(super) fn reject_read_view_value_escape(
     value: &NormalizedValue,
     control: &ExecutionControl,
 ) -> Result<(), ExecutionError> {
-    Guard {
-        control,
-        ancestors: [None; 257],
+    let mut pending = ValuePending {
+        current: Some(value),
+        others: Vec::new(),
+    };
+    while let Some(value) = pending.pop() {
+        control.check()?;
+        match value {
+            NormalizedValue::ReadView(_)
+            | NormalizedValue::RegionCap { .. }
+            | NormalizedValue::RegionPointer { .. } => return Err(escape()),
+            NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. }) => {
+                for child in fields.iter().rev() {
+                    control.check()?;
+                    pending.push(child)?;
+                }
+            }
+            NormalizedValue::Record(NormalizedRecord::Structural { fields }) => {
+                for (_, child) in fields.iter().rev() {
+                    control.check()?;
+                    pending.push(child)?;
+                }
+            }
+            NormalizedValue::List(values) => {
+                for child in values.iter().rev() {
+                    control.check()?;
+                    pending.push(child)?;
+                }
+            }
+            NormalizedValue::Map(values) => {
+                for (_, child) in values.iter().rev() {
+                    control.check()?;
+                    pending.push(child)?;
+                }
+            }
+            NormalizedValue::Variant { payload, .. } | NormalizedValue::Option(payload) => {
+                if let Some(child) = payload.as_deref() {
+                    control.check()?;
+                    pending.push(child)?;
+                }
+            }
+            NormalizedValue::Result { value, .. } => {
+                control.check()?;
+                pending.push(value)?;
+            }
+            NormalizedValue::Function {
+                read_scope_arguments,
+                bound_arguments,
+                ..
+            } => {
+                if !read_scope_arguments.is_empty() {
+                    return Err(escape());
+                }
+                if let Some(children) = bound_arguments {
+                    for child in children.iter().rev() {
+                        control.check()?;
+                        pending.push(child)?;
+                    }
+                }
+            }
+            // Hidden owner/resource payloads remain the responsibility of their
+            // consuming owner. This guard grants no ordinary-value certificate.
+            NormalizedValue::OwnedSequence(_)
+            | NormalizedValue::OwnedChoice(_)
+            | NormalizedValue::OwnedProduct(_)
+            | NormalizedValue::OwnedI64Cell(_)
+            | NormalizedValue::ByteBuffer(_)
+            | NormalizedValue::Resource(_)
+            | NormalizedValue::Unit
+            | NormalizedValue::Bool(_)
+            | NormalizedValue::I64(_)
+            | NormalizedValue::F64(_)
+            | NormalizedValue::Bytes(_)
+            | NormalizedValue::Text(_)
+            | NormalizedValue::StaticText(_) => {}
+        }
     }
-    .value(value, 0)
+    Ok(())
 }
 
 pub(in super::super) fn reject_read_view_type_escape<S: NormalizedValueSchema + ?Sized>(
@@ -221,7 +256,7 @@ pub(in super::super) fn reject_read_view_type_escape<S: NormalizedValueSchema + 
     ty: TypeObjectDigest,
     control: &ExecutionControl,
 ) -> Result<(), ExecutionError> {
-    Guard {
+    TypeGuard {
         control,
         ancestors: [None; 257],
     }

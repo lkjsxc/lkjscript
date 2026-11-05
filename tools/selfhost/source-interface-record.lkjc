@@ -42,11 +42,41 @@ declarations.begin
                 (call ci::eq (call source-table::kind (local graph) (local row)) (i64 9))
                 (bool false))))
           (let
-            (binding data (call source-table::data (local graph) (local row)))
+            (binding span
+              (call ci::add (call ci::u32 (local graph) (i64 92)) (call ci::mul (local row) (i64 8))))
+            (binding start (call ci::u32 (local graph) (local span)))
+            (binding length (call ci::u32 (local graph) (call ci::add (local span) (i64 4))))
             (in
-              (call ci::eq
-                (call ci::get (local data) (call source-link-ref::name-end (local data) (i64 56)))
-                (i64 2))))
+              (if
+                (call ci::both
+                  (call ci::lte (i64 32) (local length))
+                  (call source-read::range
+                    (local graph)
+                    (local start)
+                    (local length)
+                    (call ci::length (local graph))))
+                (let
+                  (binding end (call ci::sub (call ci::add (local start) (local length)) (i64 32)))
+                  (binding name
+                    (call source-read::name
+                      (local graph)
+                      (call ci::add (local start) (i64 56))
+                      (local end)))
+                  (in
+                    (if
+                      (call ci::eq (field (local name) (name code)) (i64 0))
+                      (if
+                        (call source-read::range
+                          (local graph)
+                          (field (local name) (name next))
+                          (i64 1)
+                          (local end))
+                        (call ci::eq
+                          (call ci::get (local graph) (field (local name) (name next)))
+                          (i64 2))
+                        (bool false))
+                      (bool false))))
+                (bool false))))
           (bool false))))
     (function create contains
       (visibility package)

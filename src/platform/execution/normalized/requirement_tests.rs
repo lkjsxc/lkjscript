@@ -399,8 +399,20 @@ fn requirement_vectors_remain_distinct_bounded_and_simultaneously_recursive() {
             NormalizedReferenceInterpreter::new(&snapshot, &program, Default::default())
                 .invoke_root_target(&Name::new("command").unwrap(), vec![], None, &control)
                 .unwrap();
-        assert_eq!(production.0, NormalizedValue::Unit);
-        assert_eq!(reference.0, NormalizedValue::Unit);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(production.0),
+                &(NormalizedValue::Unit)
+            ),
+            Ok(true)
+        );
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(reference.0),
+                &(NormalizedValue::Unit)
+            ),
+            Ok(true)
+        );
         assert_eq!(production.1.capability_calls, 0);
         assert_eq!(reference.1.capability_calls, 0);
         if count == 2 && !recursive {

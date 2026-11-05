@@ -1,13 +1,15 @@
 //! Exact admitted programs and invocation resources remain private across custody moves.
 use super::*;
+use crate::platform::execution::normalized::child_storage::Fields;
 use crate::platform::runtime::structured::StructuredExecutor;
 
 fn pair_value(right: i64) -> NormalizedValue {
     NormalizedValue::Record(super::super::super::value::NormalizedRecord::Structural {
-        fields: Arc::new(vec![
+        fields: Fields::try_new(vec![
             (Name::new("left").unwrap(), NormalizedValue::I64(0)),
             (Name::new("right").unwrap(), NormalizedValue::I64(right)),
-        ]),
+        ])
+        .unwrap(),
     })
 }
 
@@ -48,7 +50,13 @@ fn parallel_handoff_keeps_exact_programs_quotas_cancellation_and_reclamation_pri
         let probe = super::super::super::vm::ChildProbe::start(program.value_origin);
         let fresh = ExecutionControl::uncancelled();
         let (value, work) = vm.invoke(entry, vec![], None, &fresh).unwrap();
-        assert_eq!(value, expected);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(expected)
+            ),
+            Ok(true)
+        );
         assert!(!fresh.is_cancelled());
         assert_eq!(
             (
@@ -93,7 +101,13 @@ fn parallel_handoff_keeps_exact_programs_quotas_cancellation_and_reclamation_pri
                 .invoke(entry, vec![], None, &ExecutionControl::uncancelled())
                 .unwrap()
                 .0;
-        assert_eq!(reference, expected);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(reference),
+                &(expected)
+            ),
+            Ok(true)
+        );
         drop(vm);
         assert_eq!(Arc::strong_count(program), 1);
     }

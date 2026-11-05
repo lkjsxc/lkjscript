@@ -344,7 +344,13 @@ fn task_tail_chain_retains_one_ancestor_transaction_until_commit_or_reverse_clea
             assert_eq!(*trace.lock().unwrap(), expected, "{mode}/{reference}");
             if mode == "success" {
                 let (v, depth) = result.unwrap();
-                assert_eq!(v, NormalizedValue::Unit);
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(v),
+                        &(NormalizedValue::Unit)
+                    ),
+                    Ok(true)
+                );
                 assert!(depth <= 3);
             } else {
                 let error = result.unwrap_err();

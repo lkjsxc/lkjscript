@@ -19,7 +19,7 @@ effects, constrained type parameters and test summaries reject at export.
 
 All scalar fields are little-endian; IDs and digests are raw bytes. Magic is
 `LKJCI001`, the u32 profile at offset 8 is exactly 7, and the u32 emission selector
-at offset 112 is exactly 1. Mode 0 retains profile 6. Each mode rejects every
+at offset 112 is exactly 1. Mode 0 uses profile 8. Each mode rejects every
 other profile; there is no previous-profile reader.
 
 Transport counts, offsets and lengths occupy eight bytes. The selfhost reader
@@ -241,7 +241,7 @@ arguments. Type and reference indices are zero-based. There are no independent
 | 1 | 8 | 9 | Port span16 followed by port rows32 |
 | 11 | 19 | 11 | Component index, port presence, port index, command runner zero; four u64 words |
 
-External names are the 28 primitives supported by the ELF input profile.
+External names are the 31 primitives supported by the ELF input profile.
 Component ports contain four u64 fields: port index, function-type index,
 function-implementation tag zero and declaration index. Components have no
 requirements; targets have no routes. All indices, enum values and presence tags
@@ -263,10 +263,14 @@ pre-tail IR tags are:
 | 9 | Drop | No operands |
 | 10 / 11 | Conditional / unconditional jump | A strictly forward instruction index |
 | 12 | Call | A declaration index, B argument count; extras are type indices |
+| 13 | FunctionValue | A declaration index; B zero; extras are ordered supplied type indices |
+| 14 | Invoke | A remaining argument count; B zero; no extras |
 | 15 | Structural record | Extras are structural-name indices |
 | 17 | Structural field | A structural-name index |
 | 18 | List | A type index, B item count |
 | 27 | Return | No operands; only the last instruction |
+| 28 / 29 | Bind / BeginBind | A prefix argument count; B zero; no extras |
+| 30 | Capture | A zero-based prefix position; B zero; no extras |
 
 Unused operands and immediate bytes are zero. Projected canonical tag 10 is
 `JumpIfFalse`; it is not Mode-0 tag 10's tail-call operation. The canonical IR
@@ -274,8 +278,14 @@ still represents type, local, reference, branch, argument and item fields as
 u32. Their widened projection fields must fit that exact type before canonical
 emission, rather than being truncated. Vector/table extents follow actual input
 bounds independently of their elements' semantic index types. Unsupported
-opcodes reject even in untaken code. Shape admission checks bounds and layout,
-not abstract stack execution or correspondence with the raw source graph.
+opcodes reject even in untaken code. FunctionValue uses the current canonical
+empty requirement/effect/read-scope vectors and supplied type-index sequence;
+it has no Call argument-count field. BeginBind and Capture retain their original
+PCs, including BeginBind followed by Bind for an empty prefix. This is support
+for existing canonical instructions, not a new Mode-1 encoding or schema epoch.
+Shape admission checks bounds and layout, not abstract stack execution or
+correspondence with the raw source graph. Strict loading and source-driven oracle
+controls independently establish those semantic/provenance obligations.
 
 ## Current artifact construction and validation
 
@@ -363,12 +373,14 @@ storage packs and loaders retain their separate admission contracts. Those cuts
 require their own progressive decoding,
 checked allocation, lifecycle and complete caller proofs.
 
-Mode 0 remains profile 6 with its existing wide framing and explicit policy.
+The current Mode 0 profile is 8, with its own callable descriptors, wide framing
+and unchanged exact explicit-policy metric. Mode 1 remains profile 7.
 `LKJSG002`, canonical unit/map/pack/`.lkja` bytes and schema epoch 1 are unchanged
 by this private transport cut. The native runtime's former 256 MiB per-value
 quota was removed in the preceding capacity cut; checked signed-I64 extents,
-physical host limits and its process-lifetime bump-allocation behavior remain.
-No bounded-RSS or phase-local reclamation claim follows from wider projection.
+physical host limits and context-owned bump allocation remain. The independent
+LKJPH001 invocation interface can reclaim scratch and retained output contexts.
+No bounded-RSS or reclamation claim follows merely from wider projection.
 
 The Rust exporter checks complete extents before reserving the measured output
 with `try_reserve_exact`. Measurement and fill share the same emission path,

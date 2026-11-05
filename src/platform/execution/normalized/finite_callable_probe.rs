@@ -1,6 +1,7 @@
 //! Deterministic, disjoint adapters for the publicly authored finite callable witness.
 //! This observer creates no graph meaning and never opens a live deployment or data store.
 use super::capability::*;
+use super::child_storage::Values;
 use super::effect_probe::{execution, failure, require, select};
 use super::prepare::{NormalizedEntryPoint, NormalizedProgram};
 use super::reference::{NormalizedReferenceInterpreter, NormalizedReferenceRead};
@@ -127,15 +128,16 @@ impl NormalizedCapabilityTransaction for Transaction {
                 let values = state
                     .value
                     .as_ref()
-                    .map(|value| {
-                        NormalizedValue::Record(NormalizedRecord::Nominal {
+                    .map(|value| -> Result<_, ExecutionError> {
+                        Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
                             layout: self.script.entry,
-                            fields: Arc::new(vec![
+                            fields: Values::try_new(vec![
                                 NormalizedValue::bytes(vec![state.commits.len() as u8; 32]),
                                 NormalizedValue::bytes(value.clone()),
-                            ]),
-                        })
+                            ])?,
+                        }))
                     })
+                    .transpose()?
                     .into_iter()
                     .collect();
                 NormalizedValue::list(values)

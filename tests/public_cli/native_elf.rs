@@ -155,28 +155,28 @@ fn native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter() {
     ]);
     assert_eq!(accepted_head, std::fs::read(project.join("HEAD")).unwrap());
 
-    // Independently encode profile 6: a main function calls checked add(1, 41).
+    // Independently encode profile 8: a main function calls checked add(1, 41).
     // No exporter/code generator is used to construct this input.
-    // Header: 160 bytes; descriptors: 7 * 32; functions: 2 * 80; instructions: 4 * 64.
-    // The 96-byte blob contains four stack-state cells and two external-parameter cells.
-    let mut payload = vec![0u8; 896];
+    // Header160 + descriptors9*32 + functions2*80 + instructions4*64 = pool864.
+    // The pool has Function parameter metadata16 and value/state cells96.
+    let mut payload = vec![0u8; 976];
     payload[..8].copy_from_slice(b"LKJCI001");
     fn put(bytes: &mut [u8], at: usize, value: u64) {
         bytes[at..at + 8].copy_from_slice(&value.to_le_bytes());
     }
-    payload[8..12].copy_from_slice(&6u32.to_le_bytes());
+    payload[8..12].copy_from_slice(&8u32.to_le_bytes());
     // Policy tag @12 and allowance @32 remain zero: explicitly unmetered.
     for (at, value) in [
-        (16, 896),
+        (16, 976),
         (24, 2),
         (72, 160),
-        (80, 7),
-        (88, 384),
+        (80, 9),
+        (88, 448),
         (96, 2),
-        (104, 544),
+        (104, 608),
         (120, 4),
-        (128, 800),
-        (136, 96),
+        (128, 864),
+        (136, 112),
         (144, 0),
     ] {
         put(&mut payload, at, value);
@@ -185,24 +185,31 @@ fn native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter() {
         put(&mut payload, 160 + (ty - 1) * 32, ty as u64);
     }
     put(&mut payload, 360, 1); // List<I64>'s element type.
-    for (i, value) in [
-        0, 1, 0, 0, 0, 4, 0, 800, 0, 0, 0, 1, 2, 2, 4, 0, 1, 864, 0, 0,
-    ]
-    .into_iter()
-    .enumerate()
-    {
+    // Descriptor8 is () -> I64; descriptor9 is (I64, I64) -> I64.
+    // The empty signature records the current metadata cursor without advancing it.
+    for (i, value) in [9, 0, 864, 1, 9, 2, 864, 1].into_iter().enumerate() {
         put(&mut payload, 384 + i * 8, value);
     }
-    for (i, (tag, a, b, immediate, state, depth)) in [
-        (1, 0, 0, 1i64, 800, 0),
-        (1, 0, 0, 41, 800, 1),
-        (9, 1, 2, 0, 816, 2),
-        (11, 0, 0, 0, 848, 1),
+    put(&mut payload, 864, 1);
+    put(&mut payload, 872, 1);
+    for (i, value) in [
+        0, 1, 0, 0, 0, 4, 0, 880, 8, 0, 0, 1, 2, 2, 4, 0, 1, 944, 9, 0,
     ]
     .into_iter()
     .enumerate()
     {
-        let at = 544 + i * 64;
+        put(&mut payload, 448 + i * 8, value);
+    }
+    for (i, (tag, a, b, immediate, state, depth)) in [
+        (1, 0, 0, 1i64, 880, 0),
+        (1, 0, 0, 41, 880, 1),
+        (9, 1, 2, 0, 896, 2),
+        (11, 0, 0, 0, 928, 1),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let at = 608 + i * 64;
         put(&mut payload, at, tag);
         put(&mut payload, at + 8, a);
         put(&mut payload, at + 16, b);
@@ -210,9 +217,9 @@ fn native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter() {
         put(&mut payload, at + 48, state);
         put(&mut payload, at + 56, depth);
     }
-    for at in (800..896).step_by(16) {
+    for at in (880..976).step_by(16) {
         put(&mut payload, at, 1); // I64 type identity.
-        put(&mut payload, at + 8, 0); // Owned qualifier, separate from identity.
+        put(&mut payload, at + 8, 0); // Qualifier is a separate word.
     }
     let mut digest = blake3::Hasher::new();
     digest.update(&payload[..40]);

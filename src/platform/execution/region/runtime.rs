@@ -14,8 +14,9 @@ pub(crate) struct Identity {
     generation: u64,
 }
 
+/// Opaque raw-value carrier; identity and construction stay internal to the runtime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct Pointer {
+pub struct Pointer {
     identity: Identity,
     offset: u64,
 }
@@ -38,8 +39,9 @@ pub(crate) enum Access {
     Frozen,
 }
 
+/// Opaque raw-value carrier; only runtime arena operations establish live custody.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) struct Capability<Domain> {
+pub struct Capability<Domain> {
     identity: Identity,
     domain: Domain,
     access: Access,

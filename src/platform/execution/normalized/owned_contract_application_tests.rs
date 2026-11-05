@@ -1,6 +1,7 @@
 //! Complete owned contract applications keep structural results and cleanup exact.
 use super::super::{owned_i64_cell, owned_storage};
 use super::*;
+use crate::platform::execution::normalized::child_storage::Fields;
 
 const SOURCE: &str = r#"declarations.begin
 (units (module create worklist-runtime
@@ -165,7 +166,13 @@ fn owned_contract_application_structural_results_tail_forward_exact_arguments() 
                 &ExecutionControl::uncancelled(),
             )
             .unwrap();
-            assert_eq!(value, NormalizedValue::I64(count * (count - 1) / 2));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(value),
+                    &(NormalizedValue::I64(count * (count - 1) / 2))
+                ),
+                Ok(true)
+            );
             assert!(
                 depth < 16,
                 "reference={reference} count={count} depth={depth}"
@@ -222,7 +229,7 @@ fn owned_contract_application_failure_and_interruption_join_cleanup() {
                 &ExecutionControl::cancel_after_checks(checks),
             ) {
                 Ok((value, _, _)) => {
-                    assert_eq!(value, NormalizedValue::I64(6));
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(NormalizedValue::I64(6))), Ok(true));
                     completed += 1;
                 }
                 Err(error) => {
@@ -251,7 +258,13 @@ fn owned_contract_application_failure_and_interruption_join_cleanup() {
                 policy,
                 &ExecutionControl::uncancelled(),
             ) {
-                Ok((value, _, _)) => assert_eq!(value, NormalizedValue::I64(6)),
+                Ok((value, _, _)) => assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(value),
+                        &(NormalizedValue::I64(6))
+                    ),
+                    Ok(true)
+                ),
                 Err(error) => {
                     assert_eq!(
                         error.class,
@@ -273,10 +286,11 @@ fn owned_contract_application_parallel_children_keep_exact_bindings() {
     let program = prepare_snapshot(&source);
     let entry = declaration_named(&source, "parallel-main");
     let expected = NormalizedValue::Record(super::super::value::NormalizedRecord::Structural {
-        fields: Arc::new(vec![
+        fields: Fields::try_new(vec![
             (Name::new("left").unwrap(), NormalizedValue::I64(136)),
             (Name::new("right").unwrap(), NormalizedValue::I64(136)),
-        ]),
+        ])
+        .unwrap(),
     });
     for reference in [false, true] {
         let cells = owned_i64_cell::StorageObservation::start();
@@ -306,7 +320,13 @@ fn owned_contract_application_parallel_children_keep_exact_bindings() {
                 .unwrap()
                 .0
         };
-        assert_eq!(actual, expected);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(actual),
+                &(expected)
+            ),
+            Ok(true)
+        );
         assert_eq!(cells.live(), (0, 0));
         assert_eq!(composites.live(), (0, 0));
     }

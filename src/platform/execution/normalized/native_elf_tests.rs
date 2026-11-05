@@ -1,8 +1,12 @@
 //! Direct process execution agrees with separately checked bytecode and canonical syntax.
 use super::*;
 use crate::platform::compiler::{egraph_opt, elf_x86_64};
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 use std::os::unix::fs::PermissionsExt;
 use std::process::{Command, Output, Stdio};
+
+#[path = "native_closure_tests.rs"]
+mod callable;
 
 fn execute(bytes: &[u8], arguments: &[i64]) -> Output {
     let directory = tempfile::tempdir().unwrap();
@@ -146,7 +150,7 @@ fn native_elf_compiler_byte_operations_preserve_octets_text_ranges_and_traps() {
             assert!(output.stderr.is_empty());
             assert_eq!(output.stdout, expected.as_bytes(), "{name} {arguments:?}");
             let vm = vm.unwrap().0;
-            assert_eq!(vm, reference.unwrap().0);
+            assert_eq!(raw_value_equal(&vm, &reference.unwrap().0), Ok(true));
             assert_eq!(
                 encode_typed(
                     &program,
@@ -221,7 +225,7 @@ fn native_elf_executes_runtime_arguments_recursion_closures_and_structured_json(
         let (reference, _) = NormalizedReferenceInterpreter::new(&source, &program, policy)
             .invoke(declaration, values, None, &control)
             .unwrap();
-        assert_eq!(vm, reference, "{name}");
+        assert_eq!(raw_value_equal(&vm, &reference), Ok(true), "{name}");
         let encoded = encode_typed(
             &program,
             &vm,
@@ -311,7 +315,8 @@ fn native_egraph_plan_is_bounded_and_preserves_exact_vm_quota_boundaries() {
     let after = NormalizedVm::for_test(&program, policy)
         .invoke(declaration, vec![], None, &control)
         .unwrap();
-    assert_eq!(before, after);
+    assert_eq!(raw_value_equal(&before.0, &after.0), Ok(true));
+    assert_eq!(before.1, after.1);
     for (steps, allocation, succeeds) in [
         (before.1.instructions, before.1.allocated_bytes, true),
         (before.1.instructions - 1, before.1.allocated_bytes, false),
@@ -393,8 +398,20 @@ fn native_egraph_fuses_exact_standard_map_fold_only_after_trap_free_proof() {
             assert_eq!(output.stderr, b"normalized_integer_overflow\n");
         } else {
             assert!(output.status.success(), "{name}: {output:?}");
-            assert_eq!(vm.unwrap().0, NormalizedValue::I64(42));
-            assert_eq!(reference.unwrap().0, NormalizedValue::I64(42));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(vm.unwrap().0),
+                    &(NormalizedValue::I64(42))
+                ),
+                Ok(true)
+            );
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(reference.unwrap().0),
+                    &(NormalizedValue::I64(42))
+                ),
+                Ok(true)
+            );
             assert_eq!(output.stdout, b"42");
         }
     }
@@ -470,6 +487,12 @@ fn native_elf_compiles_beyond_former_function_and_instruction_inventories() {
         .invoke(declaration, vec![], None, &control)
         .unwrap()
         .0;
-    assert_eq!(vm, NormalizedValue::I64(4097));
-    assert_eq!(reference, vm);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(vm),
+            &(NormalizedValue::I64(4097))
+        ),
+        Ok(true)
+    );
+    assert_eq!(raw_value_equal(&reference, &vm), Ok(true));
 }

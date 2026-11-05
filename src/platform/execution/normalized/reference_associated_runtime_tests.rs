@@ -145,7 +145,13 @@ fn reference_associated_runtime_reads_distinct_witness_outputs_and_releases_sour
                 read_application(state, &fixture, selected, ty)
             })
             .unwrap();
-        assert_eq!(value, NormalizedValue::I64(expected));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(NormalizedValue::I64(expected))
+            ),
+            Ok(true)
+        );
         assert_eq!(observed.live_call_frames_after, 0);
         assert_eq!(observed.live_control_frames_after, 0);
         assert_eq!(observed.live_type_scopes_after, 0);
@@ -341,7 +347,13 @@ fn reference_associated_runtime_rechecks_selected_mapping_template_before_dispat
             read_application(state, &fixture, 0, fixture.cell)
         });
         if mutation == 0 {
-            assert_eq!(result.unwrap().0, NormalizedValue::I64(41));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(result.unwrap().0),
+                    &(NormalizedValue::I64(41))
+                ),
+                Ok(true)
+            );
         } else {
             let error = result.unwrap_err();
             assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
@@ -486,5 +498,11 @@ fn reference_associated_runtime_retains_uncalled_ordinary_generic_witness_path()
             CheckedValue::primitive(&state.schema, NormalizedValue::I64(41))
         })
         .unwrap();
-    assert_eq!(value, NormalizedValue::I64(41));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(value),
+            &(NormalizedValue::I64(41))
+        ),
+        Ok(true)
+    );
 }

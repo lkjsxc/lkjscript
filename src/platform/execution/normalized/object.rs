@@ -1,6 +1,7 @@
 //! Exact Artifact 15 object-storage codec over the representation-neutral object engine.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
+use super::child_storage::FieldsBuilder;
 use super::prepare::{NormalizedOperation, NormalizedProgram, NormalizedRequirement};
 use super::resource::NormalizedResourceScope;
 use super::value::{NormalizedRecord, NormalizedValue};
@@ -239,20 +240,19 @@ impl NormalizedCapabilityAdapter for NormalizedObjectStorageAdapter {
                         "prepared object put-new lost its exact byte-stream capability slot",
                     )
                 })?;
+                // Validate prepared result ownership before publication starts.
+                let codec = self.put_receipt.as_ref().ok_or_else(|| {
+                    object_runtime(
+                        "normalized_object_put_codec",
+                        "put-new has no prepared exact receipt codec",
+                    )
+                })?;
                 let receipt =
                     self.engine
                         .put_new(key, content_type, control, possible, |control| {
                             resources.read_byte_stream(stream_requirement, *stream, control)
                         })?;
-                self.put_receipt
-                    .as_ref()
-                    .ok_or_else(|| {
-                        object_runtime(
-                            "normalized_object_put_codec",
-                            "put-new has no prepared exact receipt codec",
-                        )
-                    })
-                    .map(|codec| codec.encode_put(receipt))
+                codec.encode_put(receipt).map_err(completed_effect_error)
             }
             ObjectOperation::Get => {
                 let [NormalizedValue::Text(key), NormalizedValue::I64(maximum)] =
@@ -299,7 +299,7 @@ impl NormalizedCapabilityAdapter for NormalizedObjectStorageAdapter {
                             "head has no prepared exact receipt codec",
                         )
                     })
-                    .map(|codec| codec.encode_head(receipt))
+                    .and_then(|codec| codec.encode_head(receipt))
             }
             ObjectOperation::ReconcilePut => {
                 let [NormalizedValue::Text(key)] = arguments.as_slice() else {
@@ -316,7 +316,7 @@ impl NormalizedCapabilityAdapter for NormalizedObjectStorageAdapter {
                     receipts
                         .into_iter()
                         .map(|receipt| codec.encode_put(receipt))
-                        .collect(),
+                        .collect::<Result<Vec<_>, _>>()?,
                 )?)
             }
             ObjectOperation::Delete => {
@@ -343,26 +343,21 @@ impl StructuralCodec<PutField> {
         Self::prepare(program, &fields, &expected, "object put receipt")
     }
 
-    fn encode_put(&self, receipt: ObjectPutReceipt) -> NormalizedValue {
-        NormalizedValue::Record(NormalizedRecord::Structural {
-            fields: Arc::new(
-                self.fields
-                    .iter()
-                    .map(|(name, field)| {
-                        let value = match field {
-                            PutField::Blake3 => NormalizedValue::text(receipt.blake3.clone()),
-                            PutField::CleanupPending => {
-                                NormalizedValue::Bool(receipt.cleanup_pending)
-                            }
-                            PutField::Key => NormalizedValue::text(receipt.key.clone()),
-                            PutField::Size => NormalizedValue::I64(receipt.size),
-                            PutField::Version => NormalizedValue::text(receipt.version.clone()),
-                        };
-                        (name.clone(), value)
-                    })
-                    .collect(),
-            ),
-        })
+    fn encode_put(&self, receipt: ObjectPutReceipt) -> Result<NormalizedValue, ExecutionError> {
+        let mut fields = FieldsBuilder::with_capacity(self.fields.len())?;
+        for (name, field) in self.fields.iter() {
+            let value = match field {
+                PutField::Blake3 => NormalizedValue::text(receipt.blake3.clone()),
+                PutField::CleanupPending => NormalizedValue::Bool(receipt.cleanup_pending),
+                PutField::Key => NormalizedValue::text(receipt.key.clone()),
+                PutField::Size => NormalizedValue::I64(receipt.size),
+                PutField::Version => NormalizedValue::text(receipt.version.clone()),
+            };
+            fields.try_push((name.clone(), value))?;
+        }
+        Ok(NormalizedValue::Record(NormalizedRecord::Structural {
+            fields: fields.finish()?,
+        }))
     }
 }
 
@@ -382,26 +377,23 @@ impl StructuralCodec<HeadField> {
         Self::prepare(program, &fields, &expected, "object head receipt")
     }
 
-    fn encode_head(&self, receipt: ObjectHeadReceipt) -> NormalizedValue {
-        NormalizedValue::Record(NormalizedRecord::Structural {
-            fields: Arc::new(
-                self.fields
-                    .iter()
-                    .map(|(name, field)| {
-                        let value = match field {
-                            HeadField::Etag => NormalizedValue::text(receipt.etag.clone()),
-                            HeadField::Key => NormalizedValue::text(receipt.key.clone()),
-                            HeadField::ModifiedMilliseconds => {
-                                NormalizedValue::I64(receipt.modified_milliseconds)
-                            }
-                            HeadField::Size => NormalizedValue::I64(receipt.size),
-                            HeadField::Version => NormalizedValue::text(receipt.version.clone()),
-                        };
-                        (name.clone(), value)
-                    })
-                    .collect(),
-            ),
-        })
+    fn encode_head(&self, receipt: ObjectHeadReceipt) -> Result<NormalizedValue, ExecutionError> {
+        let mut fields = FieldsBuilder::with_capacity(self.fields.len())?;
+        for (name, field) in self.fields.iter() {
+            let value = match field {
+                HeadField::Etag => NormalizedValue::text(receipt.etag.clone()),
+                HeadField::Key => NormalizedValue::text(receipt.key.clone()),
+                HeadField::ModifiedMilliseconds => {
+                    NormalizedValue::I64(receipt.modified_milliseconds)
+                }
+                HeadField::Size => NormalizedValue::I64(receipt.size),
+                HeadField::Version => NormalizedValue::text(receipt.version.clone()),
+            };
+            fields.try_push((name.clone(), value))?;
+        }
+        Ok(NormalizedValue::Record(NormalizedRecord::Structural {
+            fields: fields.finish()?,
+        }))
     }
 }
 
@@ -604,6 +596,14 @@ fn bounded_read(value: i64, policy: &NormalizedCallPolicy) -> Result<usize, Exec
         ));
     }
     Ok(maximum)
+}
+
+/// An effect already completed; result construction cannot report no visibility.
+fn completed_effect_error(mut error: ExecutionError) -> ExecutionError {
+    error.class = ExecutionFailureClass::PossibleVisibility;
+    error.possibly_visible = true;
+    error.retryable = false;
+    error
 }
 
 fn object_argument(message: impl Into<String>) -> ExecutionError {

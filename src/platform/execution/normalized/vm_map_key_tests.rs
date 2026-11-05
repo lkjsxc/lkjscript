@@ -76,12 +76,24 @@ fn checked_map_keys_preserve_payload_identity_in_both_evaluators() {
             };
             let (stored, value) = updated.iter().next().unwrap();
             assert_eq!(payload(&stored.to_value()).as_ptr(), address);
-            assert_eq!(value, &NormalizedValue::I64(99));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(value),
+                    &(&NormalizedValue::I64(99))
+                ),
+                Ok(true)
+            );
             assert_eq!(replaced.work.maps.key_bytes_copied, 0);
             let NormalizedValue::Map(original) = &retained else {
                 unreachable!()
             };
-            assert_eq!(original.get(&key), Some(&NormalizedValue::I64(17)));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(original.get(&key)),
+                    &(Some(&NormalizedValue::I64(17)))
+                ),
+                Ok(true)
+            );
         }
     }
 }
@@ -118,7 +130,13 @@ fn checked_map_key_aliases_keep_logical_admission_but_not_copy_charges() {
                     &control,
                     None,
                 );
-                assert_eq!(lookup.value.unwrap(), NormalizedValue::I64(17));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(lookup.value.unwrap()),
+                        &(NormalizedValue::I64(17))
+                    ),
+                    Ok(true)
+                );
                 assert_eq!(lookup.work.maps.key_bytes_copied, 0);
                 let distinct = if ty == text {
                     NormalizedValue::text(String::from_utf8(payload(&input).to_vec()).unwrap())
@@ -137,7 +155,13 @@ fn checked_map_key_aliases_keep_logical_admission_but_not_copy_charges() {
                     &control,
                     None,
                 );
-                assert_eq!(unshared.value.unwrap(), NormalizedValue::I64(17));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(unshared.value.unwrap()),
+                        &(NormalizedValue::I64(17))
+                    ),
+                    Ok(true)
+                );
                 assert_eq!(
                     (lookup.bytes, lookup.items),
                     (unshared.bytes, unshared.items)

@@ -1,5 +1,6 @@
 //! Language child execution, exact outcomes, aggregate budgets and joined cleanup.
 use super::*;
+use crate::platform::execution::normalized::child_storage::Fields;
 
 #[path = "parallel_owned_result_tests.rs"]
 mod owned_results;
@@ -74,7 +75,13 @@ fn parallel_nested_language_scopes_share_quotas_and_preserve_depth_limits() {
             &ExecutionControl::uncancelled(),
         )
         .unwrap();
-    assert_eq!(value, NormalizedValue::I64(-137));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(value),
+            &(NormalizedValue::I64(-137))
+        ),
+        Ok(true)
+    );
     assert_eq!(work.parallel_scopes, 3);
     assert!(work.maximum_call_depth >= 4);
     let quota = NormalizedRunPolicy {
@@ -134,7 +141,7 @@ fn parallel_nested_language_scopes_share_quotas_and_preserve_depth_limits() {
             );
             assert!(
                 matches!(
-                    error.code.as_str(),
+                    error.code.as_ref(),
                     "normalized_call_depth"
                         | "normalized_reference_call_depth"
                         | "normalized_parallel_depth"
@@ -153,14 +160,17 @@ fn expected(value: NormalizedValue) {
         panic!("expected pair");
     };
     assert_eq!(
-        fields
-            .iter()
-            .map(|(name, value)| (name.as_str(), value.clone()))
-            .collect::<Vec<_>>(),
-        vec![
-            ("left", NormalizedValue::I64(0)),
-            ("right", NormalizedValue::I64(-137))
-        ]
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(fields
+                .iter()
+                .map(|(name, value)| (name.as_str(), value.clone()))
+                .collect::<Vec<_>>()),
+            &(vec![
+                ("left", NormalizedValue::I64(0)),
+                ("right", NormalizedValue::I64(-137))
+            ])
+        ),
+        Ok(true)
     );
 }
 
@@ -234,16 +244,20 @@ fn parallel_reuses_owned_executor_without_retaining_program_or_cancelled_control
             )
             .unwrap();
         assert_eq!(
-            value,
-            NormalizedValue::Record(super::super::value::NormalizedRecord::Structural {
-                fields: Arc::new(vec![
-                    (Name::new("left").unwrap(), NormalizedValue::I64(0)),
-                    (
-                        Name::new("right").unwrap(),
-                        NormalizedValue::I64(expected_right)
-                    ),
-                ]),
-            },)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(NormalizedValue::Record(super::super::value::NormalizedRecord::Structural {
+                    fields: Fields::try_new(vec![
+                        (Name::new("left").unwrap(), NormalizedValue::I64(0)),
+                        (
+                            Name::new("right").unwrap(),
+                            NormalizedValue::I64(expected_right)
+                        ),
+                    ])
+                    .unwrap(),
+                },))
+            ),
+            Ok(true)
         );
         assert_eq!(
             (
@@ -307,7 +321,13 @@ fn parallel_nested_inline_scopes_share_invocation_budget_and_reclaim_owners() {
         )
     };
     let (value, work) = run(NormalizedRunPolicy::foreground()).unwrap();
-    assert_eq!(value, NormalizedValue::I64(-137));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(value),
+            &(NormalizedValue::I64(-137))
+        ),
+        Ok(true)
+    );
     assert_eq!(
         (
             work.parallel_scopes,
@@ -327,7 +347,13 @@ fn parallel_nested_inline_scopes_share_invocation_budget_and_reclaim_owners() {
         crate::platform::execution::ExecutionFailureClass::Resource
     );
     assert_eq!(cells.live(), (0, 0));
-    assert_eq!(run(NormalizedRunPolicy::foreground()).unwrap().0, value);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(run(NormalizedRunPolicy::foreground()).unwrap().0),
+            &(value)
+        ),
+        Ok(true)
+    );
     assert_eq!(executor.shutdown().unwrap().remaining_workers, 0);
 }
 
@@ -422,7 +448,13 @@ declarations.end
             let (value, work) = vm
                 .invoke(entry, vec![], None, &ExecutionControl::uncancelled())
                 .unwrap();
-            assert_eq!(value, expected);
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(value),
+                    &(expected)
+                ),
+                Ok(true)
+            );
             assert_eq!(work.parallel_scopes, 3);
             assert_eq!(
                 work.parallel_worker_dispatches + work.parallel_inline_fallbacks,

@@ -315,8 +315,11 @@ fn owned_sequence_evaluators_reject_every_malformed_pop_shape_before_source_cons
                 let (healthy, _, _) =
                     run_clean(reference, &original, Arc::clone(&schema), &program, name);
                 assert_eq!(
-                    healthy.unwrap(),
-                    NormalizedValue::I64(expected),
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(healthy.unwrap()),
+                        &(NormalizedValue::I64(expected))
+                    ),
+                    Ok(true),
                     "{fault:?}"
                 );
             }
@@ -350,7 +353,13 @@ fn owned_sequence_evaluators_reject_counterfeit_pop_result_operand_before_source
             );
             let (healthy, _, _) =
                 run_clean(reference, &original, Arc::clone(&schema), &program, name);
-            assert_eq!(healthy.unwrap(), NormalizedValue::I64(expected));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(healthy.unwrap()),
+                    &(NormalizedValue::I64(expected))
+                ),
+                Ok(true)
+            );
         }
     }
 }

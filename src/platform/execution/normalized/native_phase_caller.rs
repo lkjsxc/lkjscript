@@ -25,6 +25,7 @@ pub(super) enum Mode {
     ObserverLeak,
     AllocationFree,
     RuntimeReject,
+    AllocationIdentity,
 }
 #[derive(Default)]
 struct Code {
@@ -351,7 +352,26 @@ pub(super) fn wrap(
     a.immediate(CX, 64);
     a.raw(&[0xfc, 0xf3, 0x48, 0xab]);
     a.frame(100, 0, write, fatal)?;
-    if mode == Mode::RuntimeReject {
+    if mode == Mode::AllocationIdentity {
+        // Repeat a generic pure binary filter while earlier output stays live.
+        // Use the same immutable input so this also admits non-identity filters.
+        a.invoke(&table, 0, payload, bytes, false, fatal);
+        a.frame(0, 0, write, fatal)?;
+        a.invoke(&table, 160, payload, bytes, false, fatal);
+        a.frame(1, 160, write, fatal)?;
+        a.frame(2, 0, write, fatal)?;
+        a.release(&table, 160, fatal);
+        a.frame(3, 160, write, fatal)?;
+        a.invoke(&table, 160, payload, bytes, false, fatal);
+        a.frame(8, 160, write, fatal)?;
+        a.frame(9, 0, write, fatal)?;
+        a.release(&table, 0, fatal);
+        a.frame(30, 0, write, fatal)?;
+        a.frame(31, 160, write, fatal)?;
+        a.release(&table, 160, fatal);
+        a.frame(10, 160, write, fatal)?;
+        a.frame(11, 0, write, fatal)?;
+    } else if mode == Mode::RuntimeReject {
         a.invoke(&table, 160, payload, bytes, false, fatal);
         a.frame(24, 160, write, fatal)?;
         a.invoke(

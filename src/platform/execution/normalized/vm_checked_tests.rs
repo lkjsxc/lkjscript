@@ -10,6 +10,7 @@ use super::super::super::{
 };
 use super::*;
 use crate::platform::compiler::load_artifact;
+use crate::platform::execution::normalized::child_storage::Captures;
 use crate::platform::kernel::{KernelSnapshot, TypeObject, encode_type_object};
 use crate::platform::publication::GraphRepository;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -163,7 +164,13 @@ fn boundary_reader<'a>(
 }
 
 #[test]
-fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
+fn raw_bound_callables_require_exact_environments_without_opaque_depth_ceiling()
+-> Result<(), String> {
+    use crate::platform::execution::normalized::child_storage::Captures;
+
+    fn captured(values: Vec<NormalizedValue>) -> Result<Captures, String> {
+        Captures::try_new(values).map_err(|error| error.to_string())
+    }
     let (mut program, mut snapshot) = fixture();
     let mut schema = NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
     let integer = internal_type(&mut program, &mut schema, TypeForm::I64);
@@ -217,15 +224,17 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
         .map(|(index, function)| (FunctionIndex(u32::try_from(index).unwrap(), program.value_origin), function.declaration)).unwrap()
     };
     let (length, length_declaration) = find("core.list.length");
-    let length_closure = |ty, elements| NormalizedValue::Function {
-        read_scope_arguments: Arc::from([]),
-        requirement_arguments: std::sync::Arc::from([]),
-        effect_arguments: Arc::from([]),
-        function: length,
-        type_arguments: Arc::from([ty]),
-        bound_arguments: Some(Arc::new(vec![
-            NormalizedValue::list(elements).expect("bounded raw list"),
-        ])),
+    let length_closure = |ty, elements| -> Result<NormalizedValue, String> {
+        Ok(NormalizedValue::Function {
+            read_scope_arguments: Arc::from([]),
+            requirement_arguments: std::sync::Arc::from([]),
+            effect_arguments: Arc::from([]),
+            function: length,
+            type_arguments: Arc::from([ty]),
+            bound_arguments: Some(captured(vec![
+                NormalizedValue::list(elements).expect("bounded raw list"),
+            ])?),
+        })
     };
     let (affine_index, affine_variant) = program
         .variants
@@ -303,16 +312,17 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
         })
         .map(|(index, _)| FunctionIndex(u32::try_from(index).unwrap(), program.value_origin))
         .unwrap();
-    let leaf = || NormalizedValue::Function {
-        read_scope_arguments: Arc::from([]),
-        requirement_arguments: std::sync::Arc::from([]),
-        effect_arguments: Arc::from([]),
-        function: add,
-        type_arguments: Arc::from([]),
-        bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(3)])),
+    let leaf = || -> Result<NormalizedValue, String> {
+        Ok(NormalizedValue::Function {
+            read_scope_arguments: Arc::from([]),
+            requirement_arguments: std::sync::Arc::from([]),
+            effect_arguments: Arc::from([]),
+            function: add,
+            type_arguments: Arc::from([]),
+            bound_arguments: Some(captured(vec![NormalizedValue::I64(3)])?),
+        })
     };
-    let nested = |count| {
-        let mut value = leaf();
+    let nest_from = |count, mut value| -> Result<NormalizedValue, String> {
         for _ in 0..count {
             value = NormalizedValue::Function {
                 read_scope_arguments: Arc::from([]),
@@ -320,11 +330,12 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 effect_arguments: Arc::from([]),
                 function: helper,
                 type_arguments: Arc::from([integer, integer, integer]),
-                bound_arguments: Some(Arc::new(vec![value, leaf()])),
+                bound_arguments: Some(captured(vec![value, leaf()?])?),
             };
         }
-        value
+        Ok(value)
     };
+    let nested = |count| -> Result<NormalizedValue, String> { nest_from(count, leaf()?) };
     let reference_reader = boundary_reader(&snapshot, &schema);
     let invoke = |reference: bool, ty, value, policy, control: &ExecutionControl| {
         let arguments = vec![NormalizedValue::list(vec![value]).expect("bounded raw list")];
@@ -408,18 +419,18 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 },
             ),
         ] {
-            assert_eq!(
+            assert!(matches!(
                 invoke(
                     reference,
                     thunk,
-                    length_closure(ty, vec![raw]),
+                    length_closure(ty, vec![raw])?,
                     Default::default(),
                     &control
                 )
                 .0
                 .unwrap(),
                 NormalizedValue::I64(1)
-            );
+            ));
         }
         let mut hidden = vec![NormalizedValue::I64(1); 128];
         hidden.push(NormalizedValue::Resource(handle));
@@ -432,7 +443,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                         success: true,
                         value: Box::new(NormalizedValue::I64(1)),
                     }],
-                ),
+                )?,
             ),
             (
                 "absent-affine-variant",
@@ -446,13 +457,13 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                         case: u32::try_from(absent_case).unwrap(),
                         payload: None,
                     }],
-                ),
+                )?,
             ),
             (
                 "empty-list-affine-variant",
-                length_closure(affine_type, vec![]),
+                length_closure(affine_type, vec![])?,
             ),
-            ("hidden-last-resource", length_closure(integer, hidden)),
+            ("hidden-last-resource", length_closure(integer, hidden)?),
         ] {
             let rejected = invoke(reference, thunk, raw, Default::default(), &control);
             assert_eq!(
@@ -473,8 +484,8 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 "foreign ingress cannot acquire or release unrelated authority"
             );
         }
-        let good = invoke(reference, unary, leaf(), Default::default(), &control);
-        assert_eq!(good.0.unwrap(), NormalizedValue::I64(1));
+        let good = invoke(reference, unary, leaf()?, Default::default(), &control);
+        assert!(matches!(good.0.unwrap(), NormalizedValue::I64(1)));
         assert!(good.1.capture_admission_nodes > 0);
         assert_eq!(good.1.internal_guard_descendant_visits, 0);
         let malformed = [
@@ -487,7 +498,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                     effect_arguments: Arc::from([]),
                     function: add,
                     type_arguments: Arc::from([]),
-                    bound_arguments: Some(Arc::new(vec![NormalizedValue::Bool(true)])),
+                    bound_arguments: Some(captured(vec![NormalizedValue::Bool(true)])?),
                 },
             ),
             (
@@ -499,7 +510,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                     effect_arguments: Arc::from([]),
                     function: add,
                     type_arguments: Arc::from([]),
-                    bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(0); 3])),
+                    bound_arguments: Some(captured(vec![NormalizedValue::I64(0); 3])?),
                 },
             ),
             (
@@ -511,7 +522,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                     effect_arguments: Arc::from([]),
                     function: add,
                     type_arguments: Arc::from([]),
-                    bound_arguments: Some(Arc::new(vec![])),
+                    bound_arguments: Some(captured(vec![])?),
                 },
             ),
             (
@@ -523,10 +534,10 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                     effect_arguments: Arc::from([]),
                     function: add,
                     type_arguments: Arc::from([integer]),
-                    bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(3)])),
+                    bound_arguments: Some(captured(vec![NormalizedValue::I64(3)])?),
                 },
             ),
-            ("wrong-suffix", wrong_suffix, leaf()),
+            ("wrong-suffix", wrong_suffix, leaf()?),
             (
                 "absent-target",
                 unary,
@@ -548,11 +559,18 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                     effect_arguments: Arc::from([]),
                     function: FunctionIndex(add.0, ValueOrigin::default()),
                     type_arguments: Arc::from([]),
-                    bound_arguments: Some(Arc::new(vec![NormalizedValue::I64(3)])),
+                    bound_arguments: Some(captured(vec![NormalizedValue::I64(3)])?),
                 },
             ),
         ];
         for (name, ty, value) in malformed {
+            // wrong-suffix varies the expected boundary type; the other cases
+            // corrupt the raw value itself and remain invalid deep in a prefix.
+            let buried = if name == "wrong-suffix" {
+                None
+            } else {
+                Some(nest_from(1_024, value.clone())?)
+            };
             let error = invoke(reference, ty, value, Default::default(), &control)
                 .0
                 .unwrap_err();
@@ -565,38 +583,39 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
                 },
                 "{name}"
             );
+            if let Some(value) = buried {
+                let result = invoke(reference, unary, value, Default::default(), &control);
+                let Err(error) = result.0 else {
+                    return Err(format!("buried {name} was accepted, reference {reference}"));
+                };
+                assert_eq!(
+                    error.code,
+                    if reference {
+                        "normalized_reference_value_admission"
+                    } else {
+                        "normalized_value_admission"
+                    },
+                    "buried {name}"
+                );
+                assert!(result.1.capture_admission_nodes > 1_024);
+            }
         }
-        for (depth, accepted) in [(254, true), (255, false), (10_000, false)] {
+        for depth in [0, 255, 256, 257, 10_000] {
             let result = invoke(
                 reference,
                 unary,
-                nested(depth),
+                nested(depth)?,
                 Default::default(),
                 &control,
             )
             .0;
-            assert_eq!(
-                result.is_ok(),
-                accepted,
-                "nested environment {depth}, reference {reference}"
+            assert!(
+                matches!(result, Ok(NormalizedValue::I64(1))),
+                "nested environment {depth}, reference {reference}: {result:?}"
             );
-            if let Err(error) = result {
-                // Complete negative view inspection precedes captured environment
-                // admission; the same depth-256 boundary applies to both engines.
-                assert_eq!(
-                    error.class,
-                    crate::platform::execution::ExecutionFailureClass::Resource
-                );
-                assert_eq!(error.code, "normalized_value_depth");
-                assert!(
-                    error
-                        .message
-                        .contains("view escape inspection exceeds finite value depth 256")
-                );
-            }
         }
-        let measured = invoke(reference, unary, nested(8), Default::default(), &control);
-        assert_eq!(measured.0.unwrap(), NormalizedValue::I64(1));
+        let measured = invoke(reference, unary, nested(8)?, Default::default(), &control);
+        assert!(matches!(measured.0.unwrap(), NormalizedValue::I64(1)));
         for (bytes, items, accepted) in [
             (measured.2, measured.3, true),
             (measured.2 - 1, measured.3, false),
@@ -605,7 +624,7 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
             let result = invoke(
                 reference,
                 unary,
-                nested(8),
+                nested(8)?,
                 super::super::NormalizedRunPolicy {
                     maximum_allocated_bytes: Some(bytes),
                     maximum_collection_items: Some(items),
@@ -625,27 +644,28 @@ fn raw_bound_callables_require_exact_environments_and_bounded_admission() {
         let cancelled = invoke(
             reference,
             unary,
-            nested(128),
+            nested(128)?,
             Default::default(),
             &ExecutionControl::cancel_after_capture_nodes(3),
         );
         assert_eq!(cancelled.0.unwrap_err().code, "execution_cancelled");
         assert!(cancelled.1.capture_admission_nodes > 0);
         assert_eq!(cancelled.1.capture_admission_nodes, 3);
-        assert_eq!(
-            invoke(reference, unary, leaf(), Default::default(), &control)
+        assert!(matches!(
+            invoke(reference, unary, leaf()?, Default::default(), &control)
                 .0
                 .unwrap(),
             NormalizedValue::I64(1)
-        );
+        ));
         println!(
             "{}",
             serde_json::json!({"case":"bound-environment-admission", "reference":reference,
-            "exact_fit_depth":256,"one_over_depth":257,"disposed_raw_environment_depth":10002,
+            "accepted_opaque_depths":[0,255,256,257,10000],"disposed_raw_environment_depth":10002,
             "exact_fit_bytes":measured.2,"exact_fit_items":measured.3,"work":measured.1,
             "cancelled_work":cancelled.1,"cleanup_owned":0})
         );
     }
+    Ok(())
 }
 
 #[test]
@@ -833,8 +853,11 @@ fn checked_construction_and_slow_canonical_oracle_discriminate_affine_empty_case
         .expect("option proof")
         .expect("some");
     assert_eq!(
-        child.list_get(31).expect("list proof").raw(),
-        &NormalizedValue::I64(31)
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(child.list_get(31).expect("list proof").raw()),
+            &(&NormalizedValue::I64(31))
+        ),
+        Ok(true)
     );
     assert_eq!(work.internal_guard_descendant_visits, 0);
 
@@ -1100,19 +1123,24 @@ fn raw_tail_element_and_host_results_reject_in_both_tiers_before_downstream_work
         assert_eq!(host.calls.load(Ordering::Relaxed), 1);
     }
     assert_eq!(
-        super::super::NormalizedVm::for_test(
-            &program,
-            super::super::NormalizedRunPolicy::default()
-        )
-        .invoke_entry(
-            entry,
-            vec![NormalizedValue::list(vec![NormalizedValue::I64(1)]).expect("bounded raw list")],
-            None,
-            &control
-        )
-        .unwrap()
-        .0,
-        NormalizedValue::I64(1)
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(super::super::NormalizedVm::for_test(
+                &program,
+                super::super::NormalizedRunPolicy::default()
+            )
+            .invoke_entry(
+                entry,
+                vec![
+                    NormalizedValue::list(vec![NormalizedValue::I64(1)]).expect("bounded raw list")
+                ],
+                None,
+                &control
+            )
+            .unwrap()
+            .0),
+            &(NormalizedValue::I64(1))
+        ),
+        Ok(true)
     );
 }
 
@@ -1197,10 +1225,13 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
             ..Default::default()
         };
         assert_eq!(
-            invoke(reference, integer, list(8), policy, &control)
-                .0
-                .unwrap(),
-            NormalizedValue::I64(8)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke(reference, integer, list(8), policy, &control)
+                    .0
+                    .unwrap()),
+                &(NormalizedValue::I64(8))
+            ),
+            Ok(true)
         );
         assert_eq!(
             invoke(reference, integer, list(9), policy, &control)
@@ -1230,6 +1261,11 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
                 );
             }
         }
+        // The shared List handle ends the inline Box spine. Complete negative
+        // value inspection is iterative, so the outer aggregate no longer
+        // consumes one of the 256 permitted consecutive inline wrappers.
+        // A separate recursive nominal control reaches the 257-wrapper refusal
+        // without first exceeding structural type-identity depth.
         for depth in [255, 256] {
             let mut value = NormalizedValue::I64(1);
             for _ in 0..depth {
@@ -1242,21 +1278,11 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
                 Default::default(),
                 &control,
             );
-            if depth == 255 {
-                assert_eq!(result.0.unwrap(), NormalizedValue::I64(1));
-            } else {
-                let error = result.0.unwrap_err();
-                assert_eq!(
-                    error.class,
-                    crate::platform::execution::ExecutionFailureClass::Resource
-                );
-                assert_eq!(error.code, "normalized_value_depth");
-                assert!(
-                    error
-                        .message
-                        .contains("view escape inspection exceeds finite value depth 256")
-                );
-            }
+            assert!(
+                matches!(result.0, Ok(NormalizedValue::I64(1))),
+                "inline depth {depth}, reference {reference}: {:?}",
+                result.0
+            );
         }
         // Check-count cancellation covers the earlier complete negative guard.
         // It cannot stand in for a deterministic partial input-admission probe.
@@ -1283,13 +1309,16 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
         assert_eq!(work.raw_result_admission_nodes, 0);
         println!(
             "{}",
-            serde_json::json!({"case":"admission-cancellation", "reference": reference, "work": work, "cleanup_owned":0, "exact_fit_items":8, "one_over_items":9, "exact_fit_bytes":allocated, "exact_fit_depth":256, "one_over_depth":257})
+            serde_json::json!({"case":"admission-cancellation", "reference": reference, "work": work, "cleanup_owned":0, "exact_fit_items":8, "one_over_items":9, "exact_fit_bytes":allocated, "accepted_inline_depths":[255,256], "outer_list_resets_inline_depth":true})
         );
         assert_eq!(
-            invoke(reference, integer, list(1), Default::default(), &control)
-                .0
-                .unwrap(),
-            NormalizedValue::I64(1)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke(reference, integer, list(1), Default::default(), &control)
+                    .0
+                    .unwrap()),
+                &(NormalizedValue::I64(1))
+            ),
+            Ok(true)
         );
     }
 }
@@ -1353,7 +1382,13 @@ fn corrupt_production_layout_class_is_caught_by_canonical_reference_and_oracle()
             &ExecutionControl::uncancelled(),
         )
         .expect("corrupt classification makes the wrong decision");
-    assert_eq!(production.0, NormalizedValue::I64(1));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(production.0),
+            &(NormalizedValue::I64(1))
+        ),
+        Ok(true)
+    );
     let reference = NormalizedReferenceInterpreter::new(&snapshot, &program, Default::default())
         .invoke_instantiated(
             declaration,
@@ -1499,8 +1534,20 @@ fn independent_oracle_covers_scalar_and_nominal_constructors_and_foreign_callbac
         )
         .invoke_instantiated(declaration, &[ty], vec![raw], &control)
         .unwrap();
-        assert_eq!(production.0, NormalizedValue::I64(1));
-        assert_eq!(production.0, reference.0);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(production.0),
+                &(NormalizedValue::I64(1))
+            ),
+            Ok(true)
+        );
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(production.0),
+                &(reference.0)
+            ),
+            Ok(true)
+        );
         assert_eq!(
             production.1.value_work.internal_guard_descendant_visits
                 + reference.1.value_work.internal_guard_descendant_visits,
@@ -1654,7 +1701,9 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
         effect_arguments: Arc::from([]),
         function: length,
         type_arguments: Arc::from([secret]),
-        bound_arguments: Some(Arc::new(vec![NormalizedValue::list(vec![]).unwrap()])),
+        bound_arguments: Some(
+            Captures::try_new(vec![NormalizedValue::list(vec![]).unwrap()]).unwrap(),
+        ),
     };
     let invoke = |reference: bool, ty, value, policy, control: &ExecutionControl| {
         if reference {
@@ -1925,7 +1974,13 @@ fn raw_lists_cross_former_length_and_radix_limits_with_exact_vm_and_reference_po
                 invoke(reference, raw.clone(), maximum);
             assert!(!items_saturated && !bytes_saturated && !work.lists.saturated);
             if admitted {
-                assert_eq!(result.unwrap(), NormalizedValue::I64(COUNT as i64));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(result.unwrap()),
+                        &(NormalizedValue::I64(COUNT as i64))
+                    ),
+                    Ok(true)
+                );
                 assert_eq!(work.input_admission_nodes, COUNT as u64 + 1);
                 assert_eq!(items, COUNT as u64);
             } else {
@@ -1978,8 +2033,11 @@ fn raw_lists_cross_former_length_and_radix_limits_with_exact_vm_and_reference_po
         assert!(!saturated && !work.lists.saturated);
         assert_eq!(values.len(), COUNT);
         assert_eq!(
-            values.get(COUNT - 1),
-            Some(&NormalizedValue::I64(COUNT as i64 - 1))
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(values.get(COUNT - 1)),
+                &(Some(&NormalizedValue::I64(COUNT as i64 - 1)))
+            ),
+            Ok(true)
         );
         println!(
             "{}",

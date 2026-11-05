@@ -2,6 +2,8 @@
 
 use super::*;
 use crate::platform::binary64::Binary64;
+use crate::platform::execution::normalized::child_storage::{Fields, Values};
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 use crate::platform::execution::normalized::value::{NormalizedRecord, RecordLayoutIndex};
 
 fn scalar(bits: u64) -> NormalizedValue {
@@ -225,7 +227,10 @@ fn f64_arithmetic_matches_independent_fixed_bits_and_detects_a_fault() {
             name,
             inputs.into_iter().map(scalar).collect(),
         ) {
-            assert_eq!(actual, scalar(expected), "{name}");
+            assert!(
+                matches!(&actual, NormalizedValue::F64(value) if value.bits() == expected),
+                "{name}"
+            );
         }
     }
     let declaration = declaration_named(&snapshot, "sqrt");
@@ -244,9 +249,8 @@ fn f64_arithmetic_matches_independent_fixed_bits_and_detects_a_fault() {
         )
         .unwrap()
         .0;
-    assert_ne!(
-        actual,
-        scalar(0x3ff6_a09e_667f_3bcd),
+    assert!(
+        !matches!(&actual, NormalizedValue::F64(value) if value.bits() == 0x3ff6_a09e_667f_3bcd),
         "wrong arithmetic dispatch must fail the independent sqrt(2) expectation"
     );
 }
@@ -257,10 +261,11 @@ fn f64_conversion_parsing_formatting_and_predicates_are_explicit() {
     let program = prepare_snapshot(&snapshot);
     let record = |valid, value| {
         NormalizedValue::Record(NormalizedRecord::Structural {
-            fields: Arc::new(vec![
+            fields: Fields::try_new(vec![
                 (Name::new("valid").unwrap(), NormalizedValue::Bool(valid)),
                 (Name::new("value").unwrap(), value),
-            ]),
+            ])
+            .unwrap(),
         })
     };
     for (number, expected) in [
@@ -275,7 +280,7 @@ fn f64_conversion_parsing_formatting_and_predicates_are_explicit() {
             "from-i64",
             vec![NormalizedValue::I64(number)],
         ) {
-            assert_eq!(actual, scalar(expected));
+            assert!(matches!(&actual, NormalizedValue::F64(value) if value.bits() == expected));
         }
     }
     for (bits, valid, expected) in [
@@ -288,7 +293,13 @@ fn f64_conversion_parsing_formatting_and_predicates_are_explicit() {
         (0xbffc_0000_0000_0000, true, -1),
     ] {
         for actual in evaluate(&snapshot, &program, "to-i64-result", vec![scalar(bits)]) {
-            assert_eq!(actual, record(valid, NormalizedValue::I64(expected)));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(actual),
+                    &(record(valid, NormalizedValue::I64(expected)))
+                ),
+                Ok(true)
+            );
         }
     }
     for (text, bits) in [
@@ -310,7 +321,11 @@ fn f64_conversion_parsing_formatting_and_predicates_are_explicit() {
             "parse-result",
             vec![NormalizedValue::text(text)],
         ) {
-            assert_eq!(actual, record(true, scalar(bits)), "{text}");
+            assert_eq!(
+                raw_value_equal(&(actual), &(record(true, scalar(bits)))),
+                Ok(true),
+                "{text}"
+            );
         }
     }
     for text in [
@@ -322,7 +337,11 @@ fn f64_conversion_parsing_formatting_and_predicates_are_explicit() {
             "parse-result",
             vec![NormalizedValue::text(text)],
         ) {
-            assert_eq!(actual, record(false, scalar(0)), "{text}");
+            assert_eq!(
+                raw_value_equal(&(actual), &(record(false, scalar(0)))),
+                Ok(true),
+                "{text}"
+            );
         }
     }
     for (bits, expected) in [
@@ -332,7 +351,13 @@ fn f64_conversion_parsing_formatting_and_predicates_are_explicit() {
         (0xfff0_0000_0000_0000, "-inf"),
     ] {
         for actual in evaluate(&snapshot, &program, "to-text", vec![scalar(bits)]) {
-            assert_eq!(actual, NormalizedValue::text(expected));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(actual),
+                    &(NormalizedValue::text(expected))
+                ),
+                Ok(true)
+            );
         }
     }
     for (name, arguments, expected) in [
@@ -362,7 +387,14 @@ fn f64_conversion_parsing_formatting_and_predicates_are_explicit() {
         ("is-nan", vec![scalar(0x7ff0_0000_0000_0000)], false),
     ] {
         for actual in evaluate(&snapshot, &program, name, arguments) {
-            assert_eq!(actual, NormalizedValue::Bool(expected), "{name}");
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(actual),
+                    &(NormalizedValue::Bool(expected))
+                ),
+                Ok(true),
+                "{name}"
+            );
         }
     }
 }
@@ -374,10 +406,10 @@ fn f64_numeric_equality_and_observation_remain_distinct_recursively() {
     let list = NormalizedValue::list(vec![nan.clone()]).unwrap();
     let nominal = NormalizedValue::Record(NormalizedRecord::Nominal {
         layout: RecordLayoutIndex(0, origin),
-        fields: Arc::new(vec![nan.clone()]),
+        fields: Values::try_new(vec![nan.clone()]).unwrap(),
     });
     for value in [nan, list, nominal] {
-        assert_eq!(value, value.clone());
+        assert_eq!(raw_value_equal(&(value), &(value.clone())), Ok(true));
         assert!(!super::super::vm::normalized_equal(&value, &value).unwrap());
         assert!(!super::super::reference::reference_equal(&value, &value).unwrap());
         assert!(super::super::vm::normalized_observation_equal(&value, &value).unwrap());
@@ -410,10 +442,14 @@ fn f64_literals_generics_bound_captures_and_graph_observation_use_ordinary_paths
     let snapshot = fixture();
     let program = prepare_snapshot(&snapshot);
     for actual in evaluate(&snapshot, &program, "literal", vec![]) {
-        assert_eq!(actual, scalar(0x8000_0000_0000_0000));
+        assert!(
+            matches!(&actual, NormalizedValue::F64(value) if value.bits() == 0x8000_0000_0000_0000)
+        );
     }
     for actual in evaluate(&snapshot, &program, "generic", vec![]) {
-        assert_eq!(actual, scalar(0x3ff4_0000_0000_0000));
+        assert!(
+            matches!(&actual, NormalizedValue::F64(value) if value.bits() == 0x3ff4_0000_0000_0000)
+        );
     }
     let captures = evaluate(
         &snapshot,
@@ -428,7 +464,9 @@ fn f64_literals_generics_bound_captures_and_graph_observation_use_ordinary_paths
             "apply",
             vec![capture.clone(), scalar(0x3ff8_0000_0000_0000)],
         ) {
-            assert_eq!(actual, scalar(0x4000_0000_0000_0000));
+            assert!(
+                matches!(&actual, NormalizedValue::F64(value) if value.bits() == 0x4000_0000_0000_0000)
+            );
         }
     }
     for boxed in evaluate(&snapshot, &program, "box", vec![]) {
@@ -438,7 +476,13 @@ fn f64_literals_generics_bound_captures_and_graph_observation_use_ordinary_paths
             "equal-box",
             vec![boxed.clone(), boxed.clone()],
         ) {
-            assert_eq!(equal, NormalizedValue::Bool(false));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(equal),
+                    &(NormalizedValue::Bool(false))
+                ),
+                Ok(true)
+            );
         }
         assert!(!super::super::vm::normalized_equal(&boxed, &boxed).unwrap());
         assert!(!super::super::reference::reference_equal(&boxed, &boxed).unwrap());
@@ -453,12 +497,24 @@ fn f64_literals_generics_bound_captures_and_graph_observation_use_ordinary_paths
         (scalar(0), scalar(0x8000_0000_0000_0000), true),
     ] {
         for equal in evaluate(&snapshot, &program, "equal-f64", vec![left, right]) {
-            assert_eq!(equal, NormalizedValue::Bool(expected));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(equal),
+                    &(NormalizedValue::Bool(expected))
+                ),
+                Ok(true)
+            );
         }
     }
     let list = NormalizedValue::list(vec![scalar(0x7ff8_0000_0000_0000)]).unwrap();
     for equal in evaluate(&snapshot, &program, "equal-list", vec![list.clone(), list]) {
-        assert_eq!(equal, NormalizedValue::Bool(false));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(equal),
+                &(NormalizedValue::Bool(false))
+            ),
+            Ok(true)
+        );
     }
     let control = ExecutionControl::uncancelled();
     let ignored = declaration_named(&snapshot, "ignore");

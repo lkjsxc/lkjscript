@@ -78,7 +78,7 @@ fn map_entries_quota_refusal_cancellation_and_recovery_leave_no_partial_result()
                     &ExecutionControl::cancel_after_checks(checks),
                 );
                 if let Ok(value) = observed.value {
-                    assert_eq!(&value, complete.value.as_ref().unwrap());
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(&value), &(complete.value.as_ref().unwrap())), Ok(true));
                     finished = true;
                     break;
                 }
@@ -98,19 +98,29 @@ fn map_entries_quota_refusal_cancellation_and_recovery_leave_no_partial_result()
                 );
             }
             assert_eq!(
-                run(
-                    NormalizedRunPolicy::foreground(),
-                    &ExecutionControl::uncancelled()
-                )
-                .value
-                .unwrap(),
-                complete.value.unwrap()
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(run(
+                        NormalizedRunPolicy::foreground(),
+                        &ExecutionControl::uncancelled()
+                    )
+                    .value
+                    .unwrap()),
+                    &(complete.value.unwrap())
+                ),
+                Ok(true)
             );
             let NormalizedValue::Map(retained) = original else {
                 unreachable!()
             };
             assert_eq!(retained.len(), count as usize);
-            assert!(retained.iter().all(|(_, value)| value == &child));
+            for (_, value) in retained.iter() {
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        value, &child
+                    ),
+                    Ok(true)
+                );
+            }
         }
     }
 }
@@ -145,7 +155,10 @@ fn map_entries_pre_cancelled_invocation_rejects_before_observation_in_both_evalu
     assert_eq!(result.unwrap_err().code, "execution_cancelled");
     assert!(reference.into_inner().unwrap().is_none());
     assert_eq!(
-        raw,
-        map([(NormalizedMapKey::I64(11), NormalizedValue::I64(17))])
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(raw),
+            &(map([(NormalizedMapKey::I64(11), NormalizedValue::I64(17))]))
+        ),
+        Ok(true)
     );
 }

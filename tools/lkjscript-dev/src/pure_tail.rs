@@ -2664,12 +2664,22 @@ fn read_source_receipt(path: &Path, verifier: &Path) -> Result<Receipt, DevError
                     && case["case"] == "deep-raw-rejection-stack-safe-disposal"
                     && case["raw_depth"] == 100_001
                     && case["host_calls"] == 0
-                    && case["failure"]["class"] == "resource"
-                    && case["failure"]["code"] == "normalized_value_depth"
-                    && case["failure"]["message"].as_str().is_some_and(|message| {
-                        message.contains("view escape inspection exceeds finite value depth 256")
-                    })
-                    && case["observation"]["value_work"]["input_admission_nodes"] == 0
+                    && case["cancelled"] == false
+                    && case["failure"]["class"] == "infrastructure"
+                    && case["failure"]["code"]
+                        == if tier == "production" {
+                            "normalized_value_admission"
+                        } else {
+                            "normalized_reference_value_admission"
+                        }
+                    && case["failure"]["message"]
+                        == if tier == "production" {
+                            "invocation input value admission: raw value disagrees with its exact type or authority; supply a value for the selected boundary"
+                        } else {
+                            "invocation input reference value admission: raw value fails its exact type or authority boundary; provide a correctly typed value"
+                        }
+                    && case["observation"]["value_work"]["input_admission_nodes"] == 2
+                    && case["observation"]["value_work"]["raw_result_admission_nodes"] == 0
                     && case["observation"]["external_calls"] == 0
                     && case["observation"]["capability_calls"] == 0
                     && case["shallow_failure"]["class"] == "infrastructure"

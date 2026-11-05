@@ -161,8 +161,11 @@ fn round_trip(fixture: &str, expected: i64) {
             panic!("saved fields");
         };
         assert_eq!(
-            invoke("region-load", vec![digest.clone(), root.clone()]).unwrap(),
-            NormalizedValue::I64(expected)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke("region-load", vec![digest.clone(), root.clone()]).unwrap()),
+                &(NormalizedValue::I64(expected))
+            ),
+            Ok(true)
         );
         let before = store.current_revision().unwrap();
         assert_eq!(
@@ -192,7 +195,13 @@ fn round_trip(fixture: &str, expected: i64) {
             &ExecutionControl::uncancelled(),
         )
         .unwrap();
-        assert_eq!(*digest, NormalizedValue::bytes(actual.bytes()));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                digest,
+                &(NormalizedValue::bytes(actual.bytes()))
+            ),
+            Ok(true)
+        );
         let aligned = crate::platform::execution::region::persistence::RegionImage::from_bytes(
             &image.value,
             actual,

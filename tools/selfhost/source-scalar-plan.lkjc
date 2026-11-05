@@ -452,38 +452,128 @@ declarations.begin
                 (call ci::add (local index) (i64 1)) (local count) (call ci::add (local sum) (local child-count)))))))))
 )
     (function create expression-count
-      (visibility private) (effect pure)
-      (parameter create graph (type Bytes)) (parameter create rows (type Bytes))
-      (parameter create data (type Bytes)) (returns I64)
-      (body (let (binding op (call ci::get (local data) (i64 37)))
-        (in (if (call ci::lt (local op) (i64 6)) (i64 1)
-          (if (call ci::eq (local op) (i64 7))
-            (call item-counts (local graph) (local rows) (local data) (i64 38) (i64 3) (i64 9) (i64 2))
-            (if (call ci::eq (local op) (i64 8))
-              (let
-                (binding bindings (call source-table::array (local data) (i64 38)))
-                (binding body (call reference-count (local graph) (local rows) (local data)
-                  (call source-table::skip (local data) (i64 38) (i64 17)) (i64 9)))
-                (in (if (call ci::eq (local body) (i64 0)) (i64 0)
-                  (call item-counts (local graph) (local rows) (local data)
-                    (field (local bindings) (name next)) (field (local bindings) (name value)) (i64 8) (local body)))))
-              (if (call ci::eq (local op) (i64 9))
-                (let
-                  (binding items (call source-table::array (local data) (i64 38)))
-                  (binding length (field (local items) (name value)))
-                  (in (if (call ci::eq (local length) (i64 0)) (i64 -19)
-                    (if (call ci::lt (call source-scalar-pack::node-capacity (i64 1)) (call ci::sub (local length) (i64 1)))
-                      (i64 -13)
-                      (call item-counts (local graph) (local rows) (local data)
-                        (field (local items) (name next)) (local length) (i64 9) (call ci::sub (local length) (i64 1)))))))
-                (if (call ci::either (call ci::eq (local op) (i64 10))
-                      (call ci::either (call ci::eq (local op) (i64 13)) (call ci::eq (local op) (i64 16))))
-                  (call aggregate-count (local graph) (local rows) (local data) (i64 0)
-                    (field (call source-table::array (local data) (call source-scalar-cursor::items (local data))) (name value))
-                    (i64 1))
-                  (if (call ci::eq (local op) (i64 15))
-                    (call with-step (call reference-count (local graph) (local rows) (local data) (i64 38) (i64 9)))
-                    (i64 -13)))))))))))
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create rows (type Bytes))
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (let
+          (binding op (call ci::get (local data) (i64 37)))
+          (in
+            (if
+              (call ci::either (call ci::lt (local op) (i64 6)) (call ci::eq (local op) (i64 11)))
+              (i64 1)
+              (if
+                (call ci::eq (local op) (i64 7))
+                (call item-counts
+                  (local graph)
+                  (local rows)
+                  (local data)
+                  (i64 38)
+                  (i64 3)
+                  (i64 9)
+                  (i64 2))
+                (if
+                  (call ci::eq (local op) (i64 8))
+                  (let
+                    (binding bindings (call source-table::array (local data) (i64 38)))
+                    (binding body
+                      (call reference-count
+                        (local graph)
+                        (local rows)
+                        (local data)
+                        (call source-table::skip (local data) (i64 38) (i64 17))
+                        (i64 9)))
+                    (in
+                      (if
+                        (call ci::eq (local body) (i64 0))
+                        (i64 0)
+                        (call item-counts
+                          (local graph)
+                          (local rows)
+                          (local data)
+                          (field (local bindings) (name next))
+                          (field (local bindings) (name value))
+                          (i64 8)
+                          (local body)))))
+                  (if
+                    (call ci::eq (local op) (i64 9))
+                    (let
+                      (binding items (call source-table::array (local data) (i64 38)))
+                      (binding length (field (local items) (name value)))
+                      (in
+                        (if
+                          (call ci::eq (local length) (i64 0))
+                          (i64 -19)
+                          (if
+                            (call ci::lt
+                              (call source-scalar-pack::node-capacity (i64 1))
+                              (call ci::sub (local length) (i64 1)))
+                            (i64 -13)
+                            (call item-counts
+                              (local graph)
+                              (local rows)
+                              (local data)
+                              (field (local items) (name next))
+                              (local length)
+                              (i64 9)
+                              (call ci::sub (local length) (i64 1)))))))
+                    (if
+                      (call ci::either
+                        (call ci::eq (local op) (i64 12))
+                        (call ci::eq (local op) (i64 21)))
+                      (let
+                        (binding count (call source-scalar-cursor::item-count (local data)))
+                        (binding capacity (call source-scalar-pack::node-capacity (i64 1)))
+                        (in
+                          (if
+                            (call ci::eq (local op) (i64 21))
+                            (if
+                              (call ci::lt (call ci::sub (local capacity) (i64 1)) (local count))
+                              (i64 -13)
+                              (call aggregate-count
+                                (local graph)
+                                (local rows)
+                                (local data)
+                                (i64 0)
+                                (local count)
+                                (call ci::add (local count) (i64 1))))
+                            (call aggregate-count
+                              (local graph)
+                              (local rows)
+                              (local data)
+                              (i64 0)
+                              (local count)
+                              (i64 1)))))
+                      (if
+                        (call ci::either
+                          (call ci::eq (local op) (i64 10))
+                          (call ci::either
+                            (call ci::eq (local op) (i64 13))
+                            (call ci::eq (local op) (i64 16))))
+                        (call aggregate-count
+                          (local graph)
+                          (local rows)
+                          (local data)
+                          (i64 0)
+                          (field
+                            (call source-table::array
+                              (local data)
+                              (call source-scalar-cursor::items (local data)))
+                            (name value))
+                          (i64 1))
+                        (if
+                          (call ci::eq (local op) (i64 15))
+                          (call with-step
+                            (call reference-count
+                              (local graph)
+                              (local rows)
+                              (local data)
+                              (i64 38)
+                              (i64 9)))
+                          (i64 -13))))))))))))
     (function create owner-count
       (visibility private)
       (effect pure)

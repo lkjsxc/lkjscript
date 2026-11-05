@@ -238,13 +238,16 @@ fn borrowed_task_effects_and_methods_preserve_grants_reads_and_original_owner() 
                 .map(|(name, value)| (name.as_str(), value.clone()))
                 .collect::<BTreeMap<_, _>>();
             assert_eq!(
-                actual,
-                BTreeMap::from([
-                    ("before", NormalizedValue::I64(137)),
-                    ("recorded", NormalizedValue::I64(257)),
-                    ("after", NormalizedValue::I64(137)),
-                    ("original", NormalizedValue::I64(137)),
-                ])
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(actual),
+                    &(BTreeMap::from([
+                        ("before", NormalizedValue::I64(137)),
+                        ("recorded", NormalizedValue::I64(257)),
+                        ("after", NormalizedValue::I64(137)),
+                        ("original", NormalizedValue::I64(137)),
+                    ]))
+                ),
+                Ok(true)
             );
             assert_eq!(adapter.inner.calls.load(Ordering::SeqCst), 1);
             clean(&adapter);
@@ -324,7 +327,13 @@ fn borrowed_task_effect_failures_end_loans_without_replay_or_foreign_authority()
                     &ExecutionControl::uncancelled(),
                 )
                 .unwrap();
-                assert_eq!(healthy, NormalizedValue::I64(137));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(healthy),
+                        &(NormalizedValue::I64(137))
+                    ),
+                    Ok(true)
+                );
                 assert_eq!(adapter.inner.calls.load(Ordering::SeqCst), expected_calls);
                 clean(&adapter);
             }

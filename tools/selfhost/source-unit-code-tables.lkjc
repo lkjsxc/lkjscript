@@ -174,20 +174,24 @@ declarations.begin
           (binding op (call ci::get (local data) (i64 37)))
           (in
             (if
-              (call ci::eq (local op) (i64 10))
+              (call ci::either (call ci::eq (local op) (i64 10)) (call ci::eq (local op) (i64 11)))
               (call call (local data) (local pool))
               (if
                 (call ci::eq (local op) (i64 13))
                 (call record (local data) (local pool))
                 (if
                   (call ci::eq (local op) (i64 15))
-                  (call single (call source-unit-tables::name (local pool) (i64 7) (local data) (i64 56)))
+                  (call single
+                    (call source-unit-tables::name (local pool) (i64 7) (local data) (i64 56)))
                   (if
                     (call ci::eq (local op) (i64 16))
                     (call single (call source-unit-tables::type (local pool) (local data) (i64 38)))
                     (if
-                      (call ci::either (call ci::eq (local op) (i64 3)) (call ci::eq (local op) (i64 4)))
-                      (call single (call source-unit-tables::name (local pool) (i64 9) (local data) (i64 39)))
+                      (call ci::either
+                        (call ci::eq (local op) (i64 3))
+                        (call ci::eq (local op) (i64 4)))
+                      (call single
+                        (call source-unit-tables::name (local pool) (i64 9) (local data) (i64 39)))
                       (record structural
                         (field code (i64 0))
                         (field index (i64 0))

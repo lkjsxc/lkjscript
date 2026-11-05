@@ -55,11 +55,29 @@ fn current_standard_executes_every_authored_expected_test_in_both_evaluators() {
         let (actual, expected) = vm.invoke_test(declaration, None, &control).unwrap();
         let (reference_actual, reference_expected) =
             reference.invoke_test(declaration, None, &control).unwrap();
-        assert_eq!(actual.0, expected.0, "production {declaration:?}");
         assert_eq!(
-            reference_actual.0, reference_expected.0,
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(actual.0),
+                &(expected.0)
+            ),
+            Ok(true),
+            "production {declaration:?}"
+        );
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(reference_actual.0),
+                &(reference_expected.0)
+            ),
+            Ok(true),
             "reference {declaration:?}"
         );
-        assert_eq!(actual.0, reference_actual.0, "differential {declaration:?}");
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(actual.0),
+                &(reference_actual.0)
+            ),
+            Ok(true),
+            "differential {declaration:?}"
+        );
     }
 }

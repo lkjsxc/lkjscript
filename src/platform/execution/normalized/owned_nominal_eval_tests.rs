@@ -3,6 +3,7 @@ use super::super::owned_i64_cell::StorageObservation as Cells;
 use super::super::owned_product::StorageObservation as Products;
 use super::super::value::NormalizedRecord;
 use super::*;
+use crate::platform::execution::normalized::child_storage::Fields;
 
 const SOURCE: &str = r#"declarations.begin
 (units (module create owning-records
@@ -104,11 +105,12 @@ declarations.end"#;
 
 fn expected(n: i64) -> NormalizedValue {
     NormalizedValue::Record(NormalizedRecord::Structural {
-        fields: Arc::new(vec![
+        fields: Fields::try_new(vec![
             (Name::new("direct").unwrap(), NormalizedValue::I64(n)),
             (Name::new("payload").unwrap(), NormalizedValue::I64(n)),
             (Name::new("stamp").unwrap(), NormalizedValue::I64(73)),
-        ]),
+        ])
+        .unwrap(),
     })
 }
 
@@ -147,7 +149,14 @@ fn native_nominal_pack_borrow_unpack_preserves_one_envelope_and_child_identity()
                     .unwrap()
                     .0
             };
-            assert_eq!(result, expected(n), "reference={reference}");
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(result),
+                    &(expected(n))
+                ),
+                Ok(true),
+                "reference={reference}"
+            );
             assert_eq!(
                 products.created(),
                 1,
@@ -194,7 +203,13 @@ fn native_empty_and_ordinary_only_nominals_keep_affine_custody() {
                 .unwrap()
                 .0
         };
-        assert_eq!(result, NormalizedValue::I64(97));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(result),
+                &(NormalizedValue::I64(97))
+            ),
+            Ok(true)
+        );
         assert_eq!(products.created(), 2);
         assert_eq!(products.live(), (0, 0));
     }
@@ -235,7 +250,14 @@ fn nominal_task_movement_and_scoped_sharing_preserve_backing_allocations() {
                         .unwrap()
                         .0
                 };
-                assert_eq!(result, expected(n), "{name} reference={reference}");
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(result),
+                        &(expected(n))
+                    ),
+                    Ok(true),
+                    "{name} reference={reference}"
+                );
                 // A mixed parallel result has its one structural envelope;
                 // moving/sharing the nominal owner adds no envelope.
                 assert_eq!(products.created(), envelopes);
@@ -278,7 +300,7 @@ fn nominal_task_cancellation_and_quota_failures_join_custody() {
                     &ExecutionControl::cancel_after_checks(checks),
                 ) {
                     Ok(value) => {
-                        assert_eq!(value, expected(-257));
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(expected(-257))), Ok(true));
                         completed += 1;
                     }
                     Err(error) => {
@@ -308,7 +330,7 @@ fn nominal_task_cancellation_and_quota_failures_join_custody() {
                     &ExecutionControl::uncancelled(),
                 ) {
                     Ok(value) => {
-                        assert_eq!(value, expected(-257));
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(expected(-257))), Ok(true));
                         completed += 1;
                     }
                     Err(error) => {

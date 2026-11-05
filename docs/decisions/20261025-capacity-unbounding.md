@@ -1,6 +1,6 @@
 # Capacity removal: boundary census and integration ledger
 
-Updated 2026-11-02 (Asia/Tokyo).
+Updated 2026-11-03 (Asia/Tokyo).
 
 ## Current accepted boundary and next batch
 
@@ -17,9 +17,33 @@ The [active-source decision](20261101-active-source-self-compilation.md)
 remains the historical Milestone A record. The
 [native phase decision](20261101-native-phase-reclamation.md) establishes
 separately owned scratch/output contexts and repeated compiler invocation.
-Full `P_self` support and the remaining capacity families are not implied by
-either seal. The next closed-callable source/runtime batch is still unadopted
-and awaiting actual compiler feedback; [status](../status.md) records that boundary.
+Full P_self support and the remaining capacity families are not implied by
+either seal.
+
+The closed-callable candidate combines source admission/lowering, current-only
+Mode-0 profile 8, migrated ordinary-value ownership, independent iterative semantic
+comparison and separate fallible raw structural observation. Its current public
+adoption/readback, complete proposal replay and inventory cover 69,148 owners,
+123 modules, 89 types and 1,199 callables at revision
+`rev_73e5ce5ee1420bcf6a84ac1237d5874447d4affa7d007e4e294e29a1e306c981`.
+
+Renewed maintained-source C2 = C3 and Ahost = A1 = A2 = A3 passed in the
+four-control focused receipt `3347a6c87e5526e0075763cb52e0a745a8e4d387ac86afa19362fcc2312fd57e`, with formatting,
+Clippy, strict loading, source mutation and final unchanged-repository recheck.
+The separate repaired runtime receipt `f30ead3cc099615f43c6b66aa9fbd1c6f9221c900e3e1ea78c83a681f6c6e6e8` passes
+935/0/2 plus formatting/Clippy on its own original executable. The paired pure-tail
+preflight and a new complete staged-tree seal remain pending. Test/probe/spec
+reconciliation changes neither authoritative graph meaning nor ordinary policy.
+The [batch decision](20261101-closed-pure-callables-profile8.md) owns the historical
+attempts, repair rationale, exact seven-file guards and distinct executable bindings.
+
+The prior pinned 8193-prefix evidence retains its explicit 32 GiB process policy
+and original compiler/request identities. Its timing and sampled memory are not
+current-graph remeasurements. Earlier compaction and CLI/discovery records retain
+their own source bindings. Mode 1 stays profile 7 and canonical schema epoch 1
+is unchanged. Development-tool candidate/verifier limits remain 256/384 MiB per
+executable. The renewed fixed point does not remove canonical unit/object bounds,
+structural lifecycle limits or repository-wide storage/runtime ceilings.
 
 | Coupled family | Candidate result / remaining dependency |
 | --- | --- |
@@ -28,9 +52,11 @@ and awaiting actual compiler feedback; [status](../status.md) records that bound
 | Independent canonical-reference preparation | Removed implicit aggregate work/entry/metadata limits across schema, types, read views, associated proofs and dependency binding. Exact optional policies and saturation remain separate. The identical complete compiler tx that hit the old reference proof allowance is now publicly accepted and replayed. |
 | Byte movement and native scalar traffic | Added three closed bulk/word intrinsics through both evaluators and both backends before compiler adoption; immutable scalar pooling lets the pinned artifact request complete under the same 24 GiB process policy where the prior allocator failed. This is not phase reclamation or a semantic integer cap. |
 | Native invocation scratch lifetime | Accepted Milestone C: LKJPH001 handles own separate scratch/output slab chains, promote complete surviving results, reclaim scratch and release retained outputs. Repeated compiler invocation, cancellation/failure/retry and independent mapping controls passed through Rust-produced and self-produced compilers under the exact phase seal. Lexical Regions and finer subpass lifetimes remain separate. |
-| Canonical unit / manifest / cache path | Still pending: per-unit byte/item limits, storage envelopes, metadata/preparation limits and narrow host IR identities must be removed through their complete consumers. Large aggregate artifacts do not prove large-unit admission. |
+| Closed pure callable environments and transfer | Public adoption/readback, complete replay and F_active inventory are current: 69,148 owners; 123 modules, 89 types and 1,199 callables. Renewed whole-source equations, all four explicit focused controls and the separate 935/0/2 normalized runtime preflight passed with distinct original executable bindings. Paired pure-tail preflight, new frozen-tree full acceptance and integration remain pending. Full Tier 2 and general native stack freedom are not established. |
+| Canonical unit / manifest / cache path | Still pending: per-unit byte/item limits, storage envelopes, metadata/preparation limits and narrow host IR identities require complete consumer changes. The 8193-prefix crossing now passes source compilation, strict loading and four-engine execution: 65,544-byte prefix, 4,710,463-byte aggregate artifact, six units, largest 212,455 bytes. It crosses a physical prefix target while remaining below the 4 MiB storage and 8 MiB unit codec ceilings. |
 | Source/object envelopes | Still pending: u32 carrier extents and Owner/Type/root/history/blob domain limits plus child/text policies. New profile 3 binds original provenance but does not widen these independent coordinates. |
-| Recursive lifecycle and native frames | Still pending: validation, lowering, codecs, clone/comparison/hash/debug and destruction must become stack safe together before depth guards disappear. Native CALL stack growth remains distinct. |
+| Recursive lifecycle and native frames | Migrated opaque cleanup, shallow owner clones and independent semantic comparison have scoped passing controls. Opaque Function/Record/List/Map edges reset the remaining consecutive Box-spine guard; a canonical recursive Variant control separately proves 256-edge admission, 257-edge refusal and cancellation/retry. Structural type/AST/identity, recursive owned-storage escape, codecs and other raw lifecycle paths retain their own bounds. Default call/value-stack policies, broader reference routes and native CALL growth are unchanged. Full lifecycle freedom is not established. |
+| Future nominal owned-record layout preparation | Still pending: `kernel/owned_record.rs::LayoutBudget::default` selects a 64 MiB cumulative metadata ceiling; `validate_type_depth` rejects depth greater than 256, including derived layouts. Resolve the complete layout/lifecycle path while preserving semantic representation-cycle rejection. |
 | Map key/value and catalog/GC topology | Still pending: overflow/page contracts, reachability and transport, hierarchy/manifest scaling, pack counts and exact layout versus passive totals. Physical split/compaction targets may remain. |
 | Package/data/queue/HTTP/dev-tool policies | Continue dependency-closed audits; this compiler batch does not claim repository-wide quota removal. |
 
@@ -102,6 +128,14 @@ complete only when its listed downstream dependencies and verification are compl
 
 | Enforcer / symbols | Callers and serialized path | Category and coupled disposition | State / verification |
 | --- | --- | --- | --- |
+| Closed callable source E1/E2/E3, `compiler/selfhost_input.rs`, selfhost `types/flow/callable`, both native backends | Complete source inventory -> exact semantic signatures -> Mode-0 profile 8 or canonical Mode-1 profile 7 -> strict loading/execution | 1/2/3/5/6. One current private layout; exact copyable captures, residual signatures, custody and caller policy; no profile-6 reader | Current public adoption/readback/replay/profile and all 12 source controls passed, including 8193 captures in both modes, strict artifact parity and execution. Renewed maintained-source fixed points and seal remain pending. Historical profile-6 records below retain their identities. |
+| Rust `compiler/selfhost_artifact_input.rs` callable instruction export | Canonical FunctionValue/BeginBind/Capture/Bind/Invoke -> current Mode-1 profile 7 -> independent artifact consumers | 3/5. Preserve exact instruction rows and PCs; no schema epoch or wire-profile change | Current source canonical artifact/behavior parity controls passed. This Rust owner does not modify the compiler proposal graph; renewed all-generation fixed points remain pending. |
+| Normalized `child_storage`, `structural_equality` and migrated RawValue/RawArguments/RawValues owners | Ordinary callable/record environments; collection payloads; guarded rejection/cancellation cleanup | 1/2/3/5/6. Fallible construction, shallow opaque handles, reserved-link iterative release and shared fallible raw structural comparison of callable metadata/captures; keep modeled charges separate from physical headers | Focused runtime controls passed, including post-effect result-owner refusal/recovery. Migrated paths are covered; general raw Clone/drop and repository allocation freedom remain open. No measured performance claim for these runtime ownership/comparison paths. |
+| `vm_semantic_equality` and `reference_semantic_equality` | Admitted finite recursive ordinary values -> core.value.equal; graph-test observation mode over the same comparable domain | 1/2/5/6. Independent borrowed-occurrence/cursor walkers preserve full comparability checks, finite progress and cancellation. Fallible scratch is separate from modeled charges; reference unary Map cursors may remain pending | All five semantic lifecycle controls passed within the 47 runtime tests. Semantic relative-pointer equality compares exact type/full coordinates; Function values and capabilities remain incomparable. No normalized slice-value claim or whole-lifecycle seal. |
+| `reference_continuations`, shared reference activation and argument/Bind admission | Canonical owners -> selected pure expression closure -> checked heap continuations/activations -> result/custody validation | 2/3/5/6. Preserve exact invocation proof, consume/borrow handling, lexical cleanup, tail/depth and modeled charges; fallible actual scratch is separate | Four driver controls passed: small-stack depth 2048, exact/one-short depth and tail reuse, frontier refusal/retry and 22 shallow legacy-derived accounting cases. The original broader selection remains 30/1/0; the fifth driver control, corrected cancellation/retry, passed separately 1/0/0 in 395.640507465s including a 6m34s rebuild. Broader routes retain the previous evaluator; default frame/value-stack policies are unchanged. |
+| Source callable/parameter materialization, signature buffers and artifact child-membership inventory | Six source modules -> unchanged raw graph/profile boundaries -> Mode 0 ELF and Mode 1 canonical artifact | 2/3/5/6. Retain exact semantic/custody/order and independently checked membership; no new intrinsic or request certificate. Preserve explicit 32 GiB policy | Three direct-helper and all full source fixture controls passed. Identical 8193 requests: Mode 0 same ELF, observed elapsed 36.471 to 31.505s and highest sampled VmPeak 29,401,140 to 9,117,068 KiB; Mode 1 changes allocation refusal to exact Rust artifact with 5,503,472 KiB sampled VmPeak. No comparable completed Mode-1 speedup ratio. Receipts bind same policy/machine/observer; timing is observational and samples are not exact peaks, allocator/copy traffic or arena ownership. Renewed maintained-source fixed points/seal remain pending. |
+| `NormalizedValue` boxed Option/Result/Variant spines; `owned_storage::StorageEscapeCheck` | Naked raw Clone/direct drop; specialized owned-storage escape admission | 1/2/5/6. Close complete recursive lifecycle and admission dependencies before removing guards | Still pending. NormalizedValue has derived Clone and no custom Drop. StorageEscapeCheck recursively traverses Function/Record/List/Map, rejects depth greater than 256 and retains its admission-item limit. Type/AST/identity recursion, JSON/data codec guards, unchanged call/value-stack defaults, broader reference routes and native CALL stacks remain separate. |
+| `kernel/owned_record.rs::{MAXIMUM_LAYOUT_METADATA_BYTES, LayoutBudget, validate_type_depth}` | Nominal owned-record layout preparation, including derived owned layouts | 1/3/5/6. Remove the default cumulative metadata/depth ceilings through the complete layout lifecycle; retain checked representation arithmetic, actual allocation failure and semantic cycle rejection | Still pending: default metadata allowance is 64 MiB and `reserve_bytes` rejects its excess; depth greater than `contract::MAXIMUM_TYPE_DEPTH` (256) is rejected. Separate from the already removed metadata-admission clamps and this closed-callable batch. |
 | `compiler/selfhost_input.rs`, selfhost `input/types/custody/flow/profile/values` | Mode0 producer, verifier, certificates, machine emitter, source-scalar pack | 1/3. Dynamic descriptor directory; wide independent type identity and custody qualifier; wide rows/offsets; clean profile cut | Applied profile6 producer/proposals: 160-byte header, dynamic32-byte descriptors,80-byte functions,64-byte instructions,16-byte identity/qualifier cells. Publicly adopted. Focused Mode0 C2=C3, maintained proposal equivalence and native closure measurement passed; included in the accepted Phase 1 staged tree |
 | selfhost `machine/asm/elf`, `source-scalar-{plan,state,emit,pack}` | Local/stack state, sentinel, ABI frames, emitted branches | 1/3/5. Replace local128 sentinel and fixed slots together; checked wide frame addresses and deterministic wide control flow | Applied with profile6: owner-count sentinel, variable code layout, checked 64-bit R11 transfers/frame addresses. Publicly adopted. Tier 1 native reproduction passed; the later active-source implementation established raw maintained-source self-compilation under its separate Milestone A seal |
 | `compiler/selfhost_artifact_input.rs`, selfhost `artifact-input/unit-wire/unit-map/artifact` | Mode1 profile7 projected fields to canonical .lkja | 1/3/4. Wide private input/pool/frame extents and optional exact u64 estimated-proof policy; retain hierarchical 256-way radix branching | Applied Profile7 widths and removal of projection-only guards. Twelve Rust producer controls, public adoption/readback, artifact28/replay1 and GC passed. The repaired exact tree passed native reproduction and all 29 fresh full gates, with zero reuse, and is integrated at 5e7e8d37. Canonical unit codec/indices and manifest/query limits remain separate; see the Profile7 decision |

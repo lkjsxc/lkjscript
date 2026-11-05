@@ -25,7 +25,7 @@ P_self profile and same-process reclamation retain their separate obligations.
 The current carrier has one package and no dependencies or external blobs.
 Recognized unsupported boundaries reject explicitly; importing a package's
 interface or prior validation witness cannot supply its missing source bodies.
-This carrier is separate from normalized LKJCI1: mode 0 uses profile 6 for ELF
+This carrier is separate from normalized LKJCI1: mode 0 uses profile 8 for ELF
 and mode 1 uses profile 7 for canonical artifacts. The existing Tier 1 paths use
 Rust admission and normalization. The source route derives both mode-0 and
 mode-1 inputs inside lkjscript from the complete raw carrier.
@@ -497,25 +497,27 @@ owners and targets. Target selection does not prune its source or unit closure.
 
 | Dimension | Current contract |
 | --- | --- |
-| Copyable values | Unit, Bool, I64, Text/StaticText, Bytes, List<I64>, and structural records over admitted copyable values |
+| Copyable values | Unit, Bool, I64, Text/StaticText, Bytes, List<I64>, closed pure Function values, and structural records over admitted copyable values |
 | Affine values | ByteBuffer, with exact consume moves and synchronous borrowed length reads |
 | Supplied descriptors | The corresponding compound descriptors, pure Function signatures, and the scoped TypeParameter/List<T> descriptors of the recognized list intrinsics |
 | Declarations | Modules; pure monomorphic Functions; exact active External implementations; Components with empty requirements; their signature, syntax and function-port owners; command Targets |
-| Expressions | Literals, structural Record and Field, List<I64>, Local, If, Let, nonempty Sequence and direct Call |
-| Generic calls | The closed I64 substitutions for the exact `core.list.length` and `core.list.get` signatures; no general generic function-body expansion |
+| Expressions | Literals, structural Record and Field, List<I64>, Local, If, Let, nonempty Sequence, direct Call, FunctionValue, prefix Bind and Invoke |
+| Generic calls and named values | The closed I64 substitutions for the exact `core.list.length` and `core.list.get` signatures; no general generic function-body expansion |
 | Entry signatures | Pure `() -> I64` or `(Bytes) -> {diagnostic: I64, image: Bytes}`, through a component function port with no runner arguments |
-| Remaining families | Nominal owned aggregates/choices and Match, arbitrary List<T>, first-class closures/Invoke, task/effect applications, explicit implementation witnesses/read views and lexical Regions remain separate extensions |
+| Remaining families | Nominal owned aggregates/choices and Match, arbitrary List<T>, task/effectful callables, resource/owned captures, general generic specialization, explicit implementation witnesses/read views and lexical Regions remain separate extensions |
 
-Pure Function descriptors describe signatures and ports; they do not admit
-function-valued expressions. Structural field descriptors retain exact names
-and child types. Source record evaluation preserves authored field order while
+Pure Function descriptors also type named values, callable parameters/results
+and callable fields. Their exposed parameters and result must be copyable in
+this profile. Supported ByteBuffer-consuming/borrowing declarations remain
+available through direct Call, but have no exposed callable signature. Structural
+field descriptors retain exact names and child types. Source record evaluation preserves authored field order while
 runtime layout uses canonical field order. Let annotations must agree with the
 initializer's type, If conditions are Bool, both branches agree, and Sequence
 checks every item before taking its last type. Declared signatures type direct
 and mutual recursion without expanding callees.
 
 External admission uses the complete implementation identifier, independently
-of the declaration name. The maintained `ci` declarations use these 24 exact
+of the declaration name. The maintained `ci` declarations use these 27 exact
 implementations. Parameters are unrestricted unless their mode is shown:
 
 | Implementation | Parameters | Result |
@@ -534,6 +536,9 @@ implementations. Parameters are unrestricted unless their mode is shown:
 | `core.bytes.blake3-derive-key` | Text, Bytes | Bytes |
 | `core.buffer.empty` | None | ByteBuffer |
 | `core.buffer.push` | I64, consume ByteBuffer | ByteBuffer |
+| `core.buffer.append-slice` | Bytes, I64 start, I64 end, consume ByteBuffer | ByteBuffer |
+| `core.buffer.append-i64-le` | I64, consume ByteBuffer | ByteBuffer |
+| `core.bytes.read-i64-le` | Bytes, I64 offset | I64 |
 | `core.buffer.length` | borrow ByteBuffer | I64 |
 | `core.buffer.freeze` | consume ByteBuffer | Bytes |
 | `core.buffer.discard` | consume ByteBuffer | Unit |
@@ -547,6 +552,52 @@ annotation or custody disagreements reject with 19. Task functions remain
 unsupported even with an empty effect row. Calls preserve eager left-to-right
 argument evaluation and current arithmetic trap order.
 
+### Closed pure Function values, Bind and Invoke
+
+The current canonical expression forms are FunctionValue 11, Invoke 12 and
+Bind 21; no schema tag or source-carrier field changes. Invoke and Bind resolve
+their callee expression and every ordered argument endpoint. Containment gives
+the callee position zero and arguments positions one onward. Every expression is
+checked even in an uncalled function, untaken branch or unselected target.
+
+FunctionValue resolves an exact supported declaration and its supplied closed
+type arguments. Only the existing I64 substitutions for the recognized list
+intrinsics are specialized. The private semantic type table preserves original
+source type identities; Text and StaticText are not interchangeable Function
+parameters or capture types.
+
+Bind evaluates the callee before the new prefix, in left-to-right source order.
+The prefix may be empty, partial or complete. It must fit the current signature
+and match its ordered parameter types exactly. The result is the unchanged
+result type with the exact remaining parameter suffix. Empty Bind retains its
+callee identity and creates no environment. Invoke requires the complete
+remaining argument count and exact types, and preserves captured values for
+subsequent invocation. Returned factory closures, higher-order parameters and
+results, and structural callable fields use the same rules.
+
+The supported exposed signature and every capture must be copyable: it cannot
+retain ByteBuffer ownership, a live borrow, capability custody, a task effect or
+an implementation/read-view witness. A callable may use ordinary owned
+ByteBuffer locals internally and must discharge the existing custody contract
+before returning. Source inference validates the whole finite owner/type
+inventory, then derives exact full and residual signatures; no signature or
+capture certificate is supplied in the request.
+
+A noncallable callee, wrong arity, exact-type disagreement or invalid capture in
+the supported family yields 19. A well-formed declaration outside the supported
+callable profile yields 13. Shape, endpoint, containment, namespace, binder and
+nominal-cycle failures retain diagnostics 12 and 14 through 18. Unsupported
+R/E applications and task callables remain 13. None of these checks depends on
+whether the expression will execute.
+
+A dynamically nested Fn0 environment may grow beyond 256 even while all exposed
+types remain shallow, for example by repeatedly binding a callable parameter
+to another Fn0. No default environment-depth or prefix-count ceiling belongs to
+this profile. VM/reference construction, validation, sharing, comparison,
+formatting and destruction must preserve that behavior across normal completion,
+rejection and cancellation. Their caller-selected work/allocation policies
+remain exact and separate from the compiler projection's admission metric.
+
 ### Affine custody and native lowering
 
 Owned ByteBuffer parameters consume custody. Ordinary owned locals require
@@ -559,24 +610,30 @@ or consumed. General borrowed helper functions remain outside this profile.
 Both If branches are admitted. Branch-balanced disposal removes owners retained
 on only one branch. Scope exit disposes remaining owners in reverse lexical
 order; returning an owner transfers it and disposes other live owners. Sequence
-discards owned intermediate results. A tail-position call is emitted as TailCall
+discards owned intermediate results. A tail-position direct or indirect call is emitted as TailCall or TailInvoke
 only when its transfer leaves no owned local live. Otherwise native lowering
-uses Call, required cleanup and Return. The generated backend independently
+uses Call or Invoke, required cleanup and Return. The generated backend independently
 checks the resulting flow certificates.
 
 The planner inventories all callables in canonical owner order, derives local
-slots and control flow, and writes current mode-0/profile-6 input. Primitive and
-structural-record runtime descriptors, type payloads, qualifier cells and every
-instruction state come from source admission and lowering. This internal format
+slots and control flow, and writes current mode-0/profile-8 input. Primitive,
+structural-record and pure Function runtime descriptors, full declaration
+signatures, Bind suffixes, type payloads, qualifier cells and every instruction
+state come from source admission and lowering. This internal format
 is passed through `elf::compile-elf`; no host-normalized IR is an input.
 
 Plan rows, trace headers and runtime state cells retain their checked u64 fields
 and signed-I64 byte-index extent. Dynamic record metadata is included in layout
-measurement before emission. Generated mode-0 policy is unbounded. Source u32
+measurement before emission. Function metadata is packed in the same descriptor
+order, and every eligible declaration receives its exact full signature even
+when uncalled. Canonical BeginBind/Capture positions become checked Pass rows
+in the native projection, preserving PCs. Generated mode-0 policy is unbounded. Source u32
 framing, canonical object bounds, canonical IR u32 identities and existing depth
 guards remain separate capacity work. Heap-backed evaluator frames and generated
 native CALL frames have different physical growth behavior; this profile does
-not claim general native stack unbounding or same-process reclamation.
+not claim general native stack unbounding. The independent LKJPH001 invocation
+boundary governs same-process scratch reclamation; closure environments remain
+private scratch values and cannot escape its public Bytes result boundary.
 
 ### Canonical artifact construction
 
@@ -585,12 +642,15 @@ source summary pass computes all seven owner-summary dimensions; canonical units
 use interface, implementation, type, effect, capability and validation-dependency
 dimensions. Unit lowering preserves original IDs, authored names and declared
 type descriptors. It follows canonical pre-tail instruction order, including
-ordinary Call and forward owned-Let Unit/StoreLocal cleanup. Native TailCall/Drop
-traces are not reinterpreted as canonical unit IR.
+ordinary Call/Invoke, FunctionValue, BeginBind/Capture/Bind and forward owned-Let
+Unit/StoreLocal cleanup. Empty Bind still emits BeginBind and Bind. Native
+TailCall/TailInvoke/Drop/Pass traces are not reinterpreted as canonical unit IR.
 
 The compiler independently projects the public interface, selects exact runtime
 owners and callable reference containment, and derives their required transitive
-Type closure. Valid unused supplied Types are admitted but do not become unrelated
+Type closure, including FunctionValue's exact supplied types and named behavior
+dependencies. Bind and Invoke retain their canonical callee/argument roles. Valid
+unused supplied Types are admitted but do not become unrelated
 artifact objects. It constructs PackageRevision from the original admitted
 RevisionCore, package identity, derived interface digest and empty dependencies.
 The source request contains no interface digest, witness, owner subset, compiler

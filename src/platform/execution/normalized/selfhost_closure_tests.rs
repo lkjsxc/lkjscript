@@ -1,5 +1,6 @@
 //! Independent programs and hostile control-flow certificates for the closure backend.
 use super::*;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 
 #[test]
 fn selfhost_closure_executes_calls_branches_recursion_and_lexical_locals() {
@@ -47,8 +48,14 @@ fn selfhost_closure_executes_calls_branches_recursion_and_lexical_locals() {
             assert_eq!(output.status.code(), Some(0), "{name}");
             assert_eq!(output.stdout, expected.to_string().as_bytes(), "{name}");
             assert!(output.stderr.is_empty());
-            assert_eq!(vm.unwrap().0, NormalizedValue::I64(expected));
-            assert_eq!(reference.unwrap().0, NormalizedValue::I64(expected));
+            assert_eq!(
+                raw_value_equal(&vm.unwrap().0, &NormalizedValue::I64(expected)),
+                Ok(true)
+            );
+            assert_eq!(
+                raw_value_equal(&reference.unwrap().0, &NormalizedValue::I64(expected),),
+                Ok(true),
+            );
         } else {
             assert_eq!(output.status.code(), Some(70));
             assert!(output.stdout.is_empty());
@@ -178,8 +185,10 @@ fn selfhost_closure_rejects_uninitialized_reads_types_and_inconsistent_edges() {
 fn selfhost_closure_calls_align_the_machine_stack_at_every_operand_depth() {
     // Replace only the selected callee with a tiny independently specified ABI
     // probe: return RSP & 15. It must see 8 at entry after the call's return address.
+    // Keep the result in use so depth zero also makes an ordinary call. A real
+    // tail transfer enters the graph body directly and bypasses this entry probe.
     for depth in 0..16 {
-        let mut body = "(call probe)".to_owned();
+        let mut body = "(call add (call probe) (i64 0))".to_owned();
         for _ in 0..depth {
             body = format!("(call add (i64 0) {body})");
         }
@@ -208,6 +217,20 @@ declarations.end"#)).unwrap();
                     && wide_at(&payload, nodes + first * input::NODE_BYTES) == 1
             })
             .unwrap();
+        let entry_row = declarations + wide_at(&payload, 144) as usize * input::FUNCTION_BYTES;
+        let entry_first = wide_at(&payload, entry_row + 32) as usize;
+        let entry_count = wide_at(&payload, entry_row + 40) as usize;
+        let probe_calls: Vec<_> = (entry_first..entry_first + entry_count)
+            .map(|node| nodes + node * input::NODE_BYTES)
+            .filter(|&at| {
+                matches!(wide_at(&payload, at), 9 | 10) && wide_at(&payload, at + 8) == probe as u64
+            })
+            .collect();
+        assert_eq!(probe_calls.len(), 1, "depth {depth}");
+        let probe_call = probe_calls[0];
+        assert_eq!(wide_at(&payload, probe_call), 9, "probe must make a Call");
+        assert_eq!(wide_at(&payload, probe_call + 16), 0);
+        assert_eq!(wide_at(&payload, probe_call + 56), depth as u64);
         // Read the source compiler's measured layout through an independently
         // admitted probe, rather than reconstructing its code-selection sizes.
         let layout = measured_layout(&payload);
@@ -298,8 +321,8 @@ fn selfhost_closure_executes_more_than_128_parameters_locals_and_stack_cells() {
     let reference = NormalizedReferenceInterpreter::new(&source, &program, policy)
         .invoke(declaration, vec![], None, &control)
         .unwrap();
-    assert_eq!(vm.0, NormalizedValue::I64(255));
-    assert_eq!(reference.0, vm.0);
+    assert_eq!(raw_value_equal(&vm.0, &NormalizedValue::I64(255)), Ok(true));
+    assert_eq!(raw_value_equal(&reference.0, &vm.0), Ok(true));
 }
 
 #[test]
@@ -381,10 +404,10 @@ fn selfhost_wide_address_encodings_preserve_signed_boundaries_and_flags() {
     let reference = NormalizedReferenceInterpreter::new(&source, &program, policy)
         .invoke(declaration, arguments, None, &control)
         .unwrap();
-    assert_eq!(vm.0, reference.0);
+    assert_eq!(raw_value_equal(&vm.0, &reference.0), Ok(true));
     let NormalizedValue::Record(NormalizedRecord::Structural { fields }) = vm.0 else {
         panic!("assembly output");
     };
     assert!(fields.iter().any(|(name, value)| name.as_str() == "image"
-        && value == &NormalizedValue::bytes(expected.as_slice())));
+        && matches!(value, NormalizedValue::Bytes(bytes) if bytes.as_ref() == expected.as_slice())));
 }

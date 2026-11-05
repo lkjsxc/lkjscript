@@ -82,6 +82,83 @@ declarations.begin
               (if (local tail) (i64 1) (i64 0)) (field (local current) (name state))))
           (call source-custody-machine::fail (field (local released) (name code)) (local row)
             (field (local current) (name state)) (field (local current) (name stack))))))))
+    (function create indirect-complete
+      (visibility package)
+      (effect pure)
+      (parameter create input
+        (type
+          (record
+            (graph Bytes)
+            (parents Bytes)
+            (types Bytes)
+            (mapping Bytes)
+            (facts Bytes)
+            (owner I64))))
+      (parameter create current
+        (type
+          (record
+            (code I64)
+            (row I64)
+            (enter Bool)
+            (mode I64)
+            (owned Bool)
+            (terminal Bool)
+            (state Bytes)
+            (stack Bytes)
+            (events Bytes))))
+      (returns
+        (record
+          (code I64)
+          (row I64)
+          (enter Bool)
+          (mode I64)
+          (owned Bool)
+          (terminal Bool)
+          (state Bytes)
+          (stack Bytes)
+          (events Bytes)))
+      (body
+        (let
+          (binding graph (field (local input) (name graph)))
+          (binding row (field (local current) (name row)))
+          (binding result
+            (call source-scalar-infer::fact (field (local input) (name facts)) (local row)))
+          (in
+            (if
+              (call source-value-types::value (field (local input) (name types)) (local result))
+              (let
+                (binding tail
+                  (call ci::both
+                    (call ci::eq
+                      (call tail-owner
+                        (local graph)
+                        (field (local input) (name parents))
+                        (local row))
+                      (field (local input) (name owner)))
+                    (call ci::both
+                      (call ci::eq
+                        (local result)
+                        (call source-custody-signature::result-type
+                          (local graph)
+                          (field (local input) (name mapping))
+                          (field (local input) (name owner))))
+                      (call source-custody-state::clear
+                        (field (local current) (name state))
+                        (i64 0)))))
+                (in
+                  (call source-custody-machine::finish
+                    (local row)
+                    (field (local current) (name mode))
+                    (bool false)
+                    (local tail)
+                    (field (local current) (name state))
+                    (field (local current) (name stack))
+                    (call source-custody-state::empty))))
+              (call source-custody-machine::fail
+                (i64 19)
+                (local row)
+                (field (local current) (name state))
+                (field (local current) (name stack))))))))
     (function create next
       (visibility package) (effect pure)
       (parameter create input (type (record (graph Bytes) (parents Bytes) (types Bytes)

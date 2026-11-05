@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::platform::execution::normalized;
+use crate::platform::execution::normalized::child_storage::{Captures, Values};
 use normalized::prepare::{NormalizedEntryPoint, NormalizedFunctionBody};
 use normalized::reference::NormalizedReferenceRead;
 use normalized::vm::{NormalizedRunPolicy, NormalizedVm};
@@ -246,7 +247,7 @@ fn maps_reject_final_children_foreign_origins_and_hidden_authority_before_callba
     let record_value = |origin| {
         NormalizedValue::Record(NormalizedRecord::Nominal {
             layout: RecordLayoutIndex(record_index as u32, origin),
-            fields: Arc::new(
+            fields: Values::try_new(
                 record
                     .fields
                     .iter()
@@ -255,7 +256,8 @@ fn maps_reject_final_children_foreign_origins_and_hidden_authority_before_callba
                         _ => NormalizedValue::bytes([3_u8]),
                     })
                     .collect(),
-            ),
+            )
+            .unwrap(),
         })
     };
     let (affine_index, affine) = program
@@ -393,7 +395,13 @@ fn maps_reject_final_children_foreign_origins_and_hidden_authority_before_callba
                 1,
                 "foreign map ingress cannot release another owner's lease"
             );
-            assert_eq!(&retained, raw);
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(&retained),
+                    &(raw)
+                ),
+                Ok(true)
+            );
             let projected = invoke(
                 &program,
                 &reader,
@@ -434,7 +442,13 @@ fn maps_reject_final_children_foreign_origins_and_hidden_authority_before_callba
                 &ExecutionControl::uncancelled(),
                 None,
             );
-            assert_eq!(result.value.unwrap(), NormalizedValue::I64(1));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(result.value.unwrap()),
+                    &(NormalizedValue::I64(1))
+                ),
+                Ok(true)
+            );
         }
     }
     scope.release_all();
@@ -463,7 +477,7 @@ fn retained_map_captures_are_readmitted_independently_and_host_results_are_compl
         type_arguments: Arc::from([integer, integer]),
         effect_arguments: Arc::from([]),
         requirement_arguments: Arc::from([]),
-        bound_arguments: Some(Arc::new(vec![captured])),
+        bound_arguments: Some(Captures::try_new(vec![captured]).unwrap()),
     };
     let original = integers(128);
     let NormalizedValue::Map(entries) = &original else {
@@ -492,7 +506,13 @@ fn retained_map_captures_are_readmitted_independently_and_host_results_are_compl
             &control,
             None,
         );
-        assert_eq!(good.value.unwrap(), NormalizedValue::I64(1));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(good.value.unwrap()),
+                &(NormalizedValue::I64(1))
+            ),
+            Ok(true)
+        );
         assert!(good.work.capture_admission_nodes >= 129);
         let host = ControlledMapHost::new(NormalizedValue::I64(1));
         let bad = invoke(
@@ -531,20 +551,23 @@ fn retained_map_captures_are_readmitted_independently_and_host_results_are_compl
         assert_eq!(result_host.calls.load(Ordering::Relaxed), 1);
         assert_eq!(result.work.raw_result_admission_nodes, 129);
         assert_eq!(
-            invoke(
-                &program,
-                &reader,
-                reference,
-                "core.map.length",
-                &[integer, integer],
-                vec![original.clone()],
-                Default::default(),
-                &control,
-                None
-            )
-            .value
-            .unwrap(),
-            NormalizedValue::I64(128)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke(
+                    &program,
+                    &reader,
+                    reference,
+                    "core.map.length",
+                    &[integer, integer],
+                    vec![original.clone()],
+                    Default::default(),
+                    &control,
+                    None
+                )
+                .value
+                .unwrap()),
+                &(NormalizedValue::I64(128))
+            ),
+            Ok(true)
         );
     }
 }
@@ -608,8 +631,11 @@ fn checked_map_updates_charge_only_reserved_paths_with_exact_fit_and_refusal() {
                 unreachable!()
             };
             assert_eq!(
-                changed.get(&NormalizedMapKey::I64(root_key)),
-                Some(&NormalizedValue::I64(77))
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(changed.get(&NormalizedMapKey::I64(root_key))),
+                    &(Some(&NormalizedValue::I64(77)))
+                ),
+                Ok(true)
             );
             for (limit, success) in [(result.bytes, true), (result.bytes - 1, false)] {
                 let checked = invoke(
@@ -696,8 +722,11 @@ fn checked_map_updates_charge_only_reserved_paths_with_exact_fit_and_refusal() {
                 unreachable!()
             };
             assert_eq!(
-                original.get(&NormalizedMapKey::I64(root_key)),
-                (count != 0).then_some(&NormalizedValue::I64(root_key))
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(original.get(&NormalizedMapKey::I64(root_key))),
+                    &((count != 0).then_some(&NormalizedValue::I64(root_key)))
+                ),
+                Ok(true)
             );
         }
     }
@@ -726,6 +755,10 @@ fn map_admission_keeps_depth_and_exact_aggregate_policies_in_foreground() {
             let reader = boundary_reader(&snapshot, &schema);
             for reference in [false, true] {
                 let control = ExecutionControl::uncancelled();
+                // Opaque Map storage breaks the remaining inline Box spine;
+                // both 255 and 256 consecutive Option wrappers are admitted.
+                // The recursive nominal ingress control independently reaches
+                // the boxed-spine refusal without an overdeep structural type.
                 for depth in [255, 256] {
                     let mut raw = NormalizedValue::I64(1);
                     for _ in 0..depth {
@@ -742,23 +775,14 @@ fn map_admission_keeps_depth_and_exact_aggregate_policies_in_foreground() {
                         &control,
                         None,
                     );
-                    if depth == 255 {
-                        assert_eq!(result.value.unwrap(), NormalizedValue::I64(1));
-                    } else {
-                        // This overdeep raw value reaches the same complete negative
-                        // view guard before either evaluator's type admission.
-                        let error = result.value.unwrap_err();
-                        assert_eq!(
-                            error.class,
-                            crate::platform::execution::ExecutionFailureClass::Resource
-                        );
-                        assert_eq!(error.code, "normalized_value_depth");
-                        assert!(
-                            error
-                                .message
-                                .contains("view escape inspection exceeds finite value depth 256")
-                        );
-                    }
+                    assert_eq!(
+                        crate::platform::execution::normalized::structural_equality::assertions::equal(
+                            &(result.value.unwrap()),
+                            &(NormalizedValue::I64(1)),
+                        ),
+                        Ok(true),
+                        "map payload Option spine {depth}, reference {reference}",
+                    );
                 }
                 // Physical aliases do not discount logical collection occurrences.
                 // The former one-million subtotal is not a foreground policy.
@@ -777,7 +801,7 @@ fn map_admission_keeps_depth_and_exact_aggregate_policies_in_foreground() {
                         &control,
                         None,
                     );
-                    assert_eq!(baseline.value.unwrap(), NormalizedValue::I64(1000));
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(baseline.value.unwrap()), &(NormalizedValue::I64(1000))), Ok(true));
                     let logical_items = 1000 + 1000 * children as u64;
                     assert!(baseline.items >= logical_items);
                     // Generic invocation storage is counted independently by each
@@ -799,7 +823,7 @@ fn map_admission_keeps_depth_and_exact_aggregate_policies_in_foreground() {
                             None,
                         );
                         if maximum >= baseline.items {
-                            assert_eq!(result.value.unwrap(), NormalizedValue::I64(1000));
+                            assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(result.value.unwrap()), &(NormalizedValue::I64(1000))), Ok(true));
                             assert_eq!(result.items, baseline.items);
                             assert_eq!(result.bytes, baseline.bytes);
                         } else {
@@ -838,8 +862,9 @@ fn map_admission_keeps_depth_and_exact_aggregate_policies_in_foreground() {
                 );
                 assert_eq!(cancelled.value.unwrap_err().code, "execution_cancelled");
                 assert_eq!(cancelled.calls, 0);
-                // Malformed raw maps may nest far beyond admitted depth. Rejection and
-                // remaining ownership disposal run on the same joined bounded thread.
+                // This deep raw map/Option graph has the wrong value type.
+                // Rejection and remaining ownership disposal run on the same
+                // joined bounded thread; opaque nesting is not a depth quota.
                 let mut raw = NormalizedValue::I64(1);
                 for _ in 0..10_000 {
                     raw = NormalizedValue::Option(Some(Box::new(map([(
@@ -861,8 +886,7 @@ fn map_admission_keeps_depth_and_exact_aggregate_policies_in_foreground() {
                 );
                 assert!(rejected.value.is_err());
                 assert_eq!(host.calls.load(Ordering::Relaxed), 0);
-                assert_eq!(
-                    invoke(
+                assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(invoke(
                         &program,
                         &reader,
                         reference,
@@ -874,9 +898,7 @@ fn map_admission_keeps_depth_and_exact_aggregate_policies_in_foreground() {
                         None
                     )
                     .value
-                    .unwrap(),
-                    NormalizedValue::I64(2)
-                );
+                    .unwrap()), &(NormalizedValue::I64(2))), Ok(true));
             }
         })
         .unwrap()
@@ -940,6 +962,9 @@ fn admitted_deep_maps_keep_semantic_and_observation_comparison_on_a_bounded_stac
             ];
             for (item, root, left, different) in cases {
                 let retained = left.clone();
+                let nested_left = map([(NormalizedMapKey::I64(0), left.clone())]);
+                let nested_retained = nested_left.clone();
+                let nested_different = map([(NormalizedMapKey::I64(0), different.clone())]);
                 for reference in [false, true] {
                     for value in [&left, &different] {
                         let admitted = invoke(
@@ -953,42 +978,43 @@ fn admitted_deep_maps_keep_semantic_and_observation_comparison_on_a_bounded_stac
                             &ExecutionControl::uncancelled(),
                             None,
                         );
-                        assert_eq!(admitted.value.unwrap(), NormalizedValue::I64(1));
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(admitted.value.unwrap()), &(NormalizedValue::I64(1))), Ok(true));
                     }
-                    let excessive = invoke(
-                        &program,
-                        &reader,
-                        reference,
-                        "core.map.length",
-                        &[integer, root],
-                        vec![map([(NormalizedMapKey::I64(0), left.clone())])],
-                        NormalizedRunPolicy::foreground(),
-                        &ExecutionControl::uncancelled(),
-                        None,
-                    );
-                    // The complete negative view guard precedes the evaluator's
-                    // raw-type admission. Its depth-256 refusal is now the first
-                    // boundary failure for this depth-257 value in both engines.
-                    let error = excessive.value.unwrap_err();
-                    assert_eq!(
-                        error.class,
-                        crate::platform::execution::ExecutionFailureClass::Resource
-                    );
-                    assert_eq!(error.code, "normalized_value_depth");
-                    assert!(
-                        error
-                            .message
-                            .contains("view escape inspection exceeds finite value depth 256")
-                    );
+                    // One more opaque Map shell does not extend a Box spine.
+                    // Both exact nested shapes must traverse full raw admission.
+                    for value in [&nested_left, &nested_different] {
+                        let admitted = invoke(
+                            &program,
+                            &reader,
+                            reference,
+                            "core.map.length",
+                            &[integer, root],
+                            vec![value.clone()],
+                            NormalizedRunPolicy::foreground(),
+                            &ExecutionControl::uncancelled(),
+                            None,
+                        );
+                        assert_eq!(
+                            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                                &(admitted.value.unwrap()),
+                                &(NormalizedValue::I64(1)),
+                            ),
+                            Ok(true),
+                        );
+                    }
                 }
-                // These exact shapes passed both independent depth-256 admissions.
+                // These exact shapes passed both independent raw admissions.
                 // Retained aliases and a differing deepest leaf exercise complete
-                // recursive comparison without codec or formatting recursion.
+                // semantic and observation comparison through opaque nesting.
                 for compare in comparisons {
                     assert!(compare(&left, &retained).unwrap());
                     assert!(!compare(&left, &different).unwrap());
                     assert!(!compare(&different, &left).unwrap());
                     assert!(compare(&retained, &left).unwrap());
+                    assert!(compare(&nested_left, &nested_retained).unwrap());
+                    assert!(!compare(&nested_left, &nested_different).unwrap());
+                    assert!(!compare(&nested_different, &nested_left).unwrap());
+                    assert!(compare(&nested_retained, &nested_left).unwrap());
                 }
             }
 
@@ -1313,7 +1339,7 @@ fn raw_map_hosts_release_unused_deep_fallbacks_and_cancelled_keys_iteratively() 
                             .map(|(value, _)| value)
                     };
                     if case == 0 {
-                        assert_eq!(result.unwrap(), NormalizedValue::I64(1));
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(result.unwrap()), &(NormalizedValue::I64(1))), Ok(true));
                     } else if case == 1 {
                         assert!(result.is_err());
                     } else {
@@ -1326,8 +1352,7 @@ fn raw_map_hosts_release_unused_deep_fallbacks_and_cancelled_keys_iteratively() 
                     );
                 }
                 assert_eq!(Arc::strong_count(&payload), 1);
-                assert_eq!(
-                    invoke(
+                assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(invoke(
                         &program,
                         &snapshot,
                         reference,
@@ -1343,9 +1368,7 @@ fn raw_map_hosts_release_unused_deep_fallbacks_and_cancelled_keys_iteratively() 
                         None
                     )
                     .value
-                    .unwrap(),
-                    NormalizedValue::I64(1)
-                );
+                    .unwrap()), &(NormalizedValue::I64(1))), Ok(true));
             }
         })
         .unwrap()
@@ -1580,7 +1603,7 @@ fn map_literals_keep_authored_evaluation_order_and_get_or_evaluates_present_fall
                 if trap_at.is_some() {
                     assert_eq!(result.unwrap_err().code, "map_order_probe");
                 } else {
-                    assert_eq!(result.unwrap(), expected);
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(result.unwrap()), &(expected)), Ok(true));
                 }
                 assert_eq!(
                     host.calls.into_inner().unwrap(),
@@ -1650,7 +1673,13 @@ fn checked_map_text_keys_and_boxed_projections_reserve_their_actual_owned_bytes(
             &control,
             None,
         );
-        assert_eq!(missing.value.unwrap(), payload);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(missing.value.unwrap()),
+                &(payload)
+            ),
+            Ok(true)
+        );
         assert_eq!(missing.work.maps.key_bytes_copied, 0);
         let projected = invoke(
             &program,
@@ -1663,7 +1692,13 @@ fn checked_map_text_keys_and_boxed_projections_reserve_their_actual_owned_bytes(
             &control,
             None,
         );
-        assert_eq!(projected.value.as_ref().unwrap(), &payload);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(projected.value.as_ref().unwrap()),
+                &(&payload)
+            ),
+            Ok(true)
+        );
         assert_eq!(
             projected.bytes - missing.bytes,
             boxes,
@@ -1717,20 +1752,23 @@ fn checked_map_text_keys_and_boxed_projections_reserve_their_actual_owned_bytes(
         );
         assert_eq!(replaced.work.maps.key_bytes_copied, 0);
         assert_eq!(
-            invoke(
-                &program,
-                &reader,
-                reference,
-                "core.map.get-or",
-                &[text, composite_type],
-                arguments(&text_key),
-                Default::default(),
-                &control,
-                None
-            )
-            .value
-            .unwrap(),
-            payload
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke(
+                    &program,
+                    &reader,
+                    reference,
+                    "core.map.get-or",
+                    &[text, composite_type],
+                    arguments(&text_key),
+                    Default::default(),
+                    &control,
+                    None
+                )
+                .value
+                .unwrap()),
+                &(payload)
+            ),
+            Ok(true)
         );
     }
 }

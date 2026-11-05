@@ -87,12 +87,14 @@ declarations.begin
               (i64 1)
               (local out))
             (if
-              (call ci::eq (call ci::get (local data) (i64 37)) (i64 10))
+              (call ci::either
+                (call ci::eq (call ci::get (local data) (i64 37)) (i64 10))
+                (call ci::eq (call ci::get (local data) (i64 37)) (i64 11)))
               (call source-summary-relations::row
                 (local source)
-                (i64 9)
+                (if (call ci::eq (call ci::get (local data) (i64 37)) (i64 11)) (i64 10) (i64 9))
                 (call source-table::owner (local graph) (local data) (i64 57) (i64 2))
-                (i64 10)
+                (if (call ci::eq (call ci::get (local data) (i64 37)) (i64 11)) (i64 11) (i64 10))
                 (i64 2)
                 (local out))
               (local out)))
@@ -112,7 +114,8 @@ declarations.begin
             (if
               (call ci::eq (local kind) (i64 9))
               (let
-                (binding at (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 2)))
+                (binding at
+                  (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 2)))
                 (binding ports
                   (call source-table::array
                     (local data)
@@ -144,7 +147,9 @@ declarations.begin
                       (local out)))
                   (in
                     (if
-                      (call ci::eq (call ci::get (local data) (call ci::add (local at) (i64 34))) (i64 0))
+                      (call ci::eq
+                        (call ci::get (local data) (call ci::add (local at) (i64 34)))
+                        (i64 0))
                       (local component)
                       (call source-summary-relations::row
                         (local source)

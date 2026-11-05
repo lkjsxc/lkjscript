@@ -1,5 +1,7 @@
 //! Byte construction and checked UTF-8 through two independently admitted evaluators.
 use super::*;
+use crate::platform::execution::normalized::child_storage::Fields;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 use crate::platform::execution::normalized::value::NormalizedRecord;
 
 fn fixture() -> crate::platform::kernel::KernelSnapshot {
@@ -42,7 +44,7 @@ declarations.end
 
 fn decoded(valid: bool, text: &str) -> NormalizedValue {
     NormalizedValue::Record(NormalizedRecord::Structural {
-        fields: std::sync::Arc::new(vec![
+        fields: Fields::try_new(vec![
             (
                 Name::new("valid".to_owned()).unwrap(),
                 NormalizedValue::Bool(valid),
@@ -51,7 +53,8 @@ fn decoded(valid: bool, text: &str) -> NormalizedValue {
                 Name::new("value".to_owned()).unwrap(),
                 NormalizedValue::text(text),
             ),
-        ]),
+        ])
+        .unwrap(),
     })
 }
 
@@ -83,9 +86,21 @@ fn bytes_construct_preserves_every_octet_and_persistent_list_alias() {
         .invoke(declaration, vec![argument.clone()], None, &control)
         .unwrap()
         .0;
-        assert_eq!(actual, NormalizedValue::bytes(expected.as_slice()));
-        assert_eq!(reference, NormalizedValue::bytes(expected.as_slice()));
-        assert_eq!(original, argument);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(actual),
+                &(NormalizedValue::bytes(expected.as_slice()))
+            ),
+            Ok(true)
+        );
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(reference),
+                &(NormalizedValue::bytes(expected.as_slice()))
+            ),
+            Ok(true)
+        );
+        assert_eq!(raw_value_equal(&(original), &(argument)), Ok(true));
     }
 }
 
@@ -145,8 +160,11 @@ fn bytes_decode_preserves_valid_scalars_bom_and_controls_and_rejects_whole_inval
         .invoke(declaration, arguments, None, &control)
         .unwrap()
         .0;
-        assert_eq!(actual, decoded(true, text));
-        assert_eq!(reference, decoded(true, text));
+        assert_eq!(raw_value_equal(&(actual), &(decoded(true, text))), Ok(true));
+        assert_eq!(
+            raw_value_equal(&(reference), &(decoded(true, text))),
+            Ok(true)
+        );
     }
     let invalid: &[&[u8]] = &[
         &[0x80],
@@ -180,8 +198,11 @@ fn bytes_decode_preserves_valid_scalars_bom_and_controls_and_rejects_whole_inval
         .invoke(declaration, arguments.clone(), None, &control)
         .unwrap()
         .0;
-        assert_eq!(actual, decoded(false, ""));
-        assert_eq!(reference, decoded(false, ""));
+        assert_eq!(raw_value_equal(&(actual), &(decoded(false, ""))), Ok(true));
+        assert_eq!(
+            raw_value_equal(&(reference), &(decoded(false, ""))),
+            Ok(true)
+        );
         assert_eq!(
             NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
                 .invoke(strict, arguments.clone(), None, &control)
@@ -287,8 +308,8 @@ fn bytes_conversion_explicit_core_hosts_agree_with_checked_paths() {
         .invoke(declaration, vec![input], None, &control)
         .unwrap()
         .0;
-        assert_eq!(actual, expected);
-        assert_eq!(reference, expected);
+        assert_eq!(raw_value_equal(&(actual), &(expected)), Ok(true));
+        assert_eq!(raw_value_equal(&(reference), &(expected)), Ok(true));
     }
 }
 
@@ -363,8 +384,11 @@ fn byte_conversions_reserve_scratch_and_retained_bytes_at_the_intrinsic() {
             reference,
         );
         assert_eq!(
-            result.unwrap(),
-            NormalizedValue::bytes(vec![65; length as usize])
+            raw_value_equal(
+                &(result.unwrap()),
+                &(NormalizedValue::bytes(vec![65; length as usize]))
+            ),
+            Ok(true)
         );
         assert_eq!(calls, 1);
         // An invalid first octet has the same input shape and stops just after
@@ -441,8 +465,17 @@ fn byte_conversions_utf8_output_allocation_is_not_a_decoding_failure() {
             &control,
             reference,
         );
-        assert_eq!(valid.unwrap(), decoded(true, &"A".repeat(length as usize)));
-        assert_eq!(invalid.unwrap(), decoded(false, ""));
+        assert_eq!(
+            raw_value_equal(
+                &(valid.unwrap()),
+                &(decoded(true, &"A".repeat(length as usize)))
+            ),
+            Ok(true)
+        );
+        assert_eq!(
+            raw_value_equal(&(invalid.unwrap()), &(decoded(false, ""))),
+            Ok(true)
+        );
         assert_eq!(
             total - invalid_total,
             length,

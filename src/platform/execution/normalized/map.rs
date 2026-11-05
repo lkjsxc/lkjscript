@@ -11,24 +11,34 @@
 //! Traversal and codecs see key order, never tree shape. Raw ingress is admitted
 //! independently by each evaluator; this carrier has no semantic certificate.
 
-use super::value::{NormalizedMapKey, NormalizedValue, RawValueWork, release_raw_value};
+use super::child_storage::{self, DropQueue, Pending, StorageFailure};
+use super::value::{NormalizedMapKey, NormalizedValue, release_raw_value};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
 use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use triomphe::Arc as PayloadArc;
 
 // An AVL tree of representable length has height below twice the address width.
 // This is a representation bound, not an independent finite value-admission rule.
 const MAXIMUM_HEIGHT: usize = 2 * usize::BITS as usize;
 type Link = Option<Arc<Node>>;
 
-struct Entry {
+pub(super) struct Entry {
     key: NormalizedMapKey,
-    value: NormalizedValue,
+    pub(super) value: NormalizedValue,
+    pub(super) next_cleanup: Option<Pending>,
+}
+
+// Exact pre-change finite evaluator charge. Private retirement metadata and
+// the different reference-count implementation do not change that metric.
+struct MeteredEntry {
+    _key: NormalizedMapKey,
+    _value: NormalizedValue,
 }
 
 struct Node {
-    entry: Arc<Entry>,
+    entry: PayloadArc<Entry>,
     left: Link,
     right: Link,
     height: usize,
@@ -118,9 +128,9 @@ fn visit() {
     observe(|work| work.node_visits = work.node_visits.saturating_add(1));
 }
 
-fn share(entry: &Arc<Entry>) -> Arc<Entry> {
+fn share(entry: &PayloadArc<Entry>) -> PayloadArc<Entry> {
     observe(|work| work.entry_handle_copies = work.entry_handle_copies.saturating_add(1));
-    Arc::clone(entry)
+    PayloadArc::clone(entry)
 }
 
 /// Empty maps have no heap storage. The inline header belongs to the value slot.
@@ -155,24 +165,25 @@ fn node_bytes() -> u64 {
 }
 
 fn entry_bytes() -> u64 {
-    (std::mem::size_of::<Entry>() + 2 * std::mem::size_of::<usize>()) as u64
+    (std::mem::size_of::<MeteredEntry>() + 2 * std::mem::size_of::<usize>()) as u64
 }
 
 fn entry(
     value: Entry,
     reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
-) -> Result<Arc<Entry>, ExecutionError> {
+) -> Result<PayloadArc<Entry>, ExecutionError> {
     // Entry already owns the raw payload, including on refused reservation.
     reserve(Charge {
         slots: 0,
         bytes: entry_bytes(),
     })?;
+    let value = PayloadArc::try_new(value).map_err(|_| StorageFailure::Allocation)?;
     observe(|work| work.entry_handles_allocated = work.entry_handles_allocated.saturating_add(1));
-    Ok(Arc::new(value))
+    Ok(value)
 }
 
 fn node(
-    entry: Arc<Entry>,
+    entry: PayloadArc<Entry>,
     left: Link,
     right: Link,
     reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
@@ -196,7 +207,7 @@ fn node(
 }
 
 fn balance(
-    entry: Arc<Entry>,
+    entry: PayloadArc<Entry>,
     left: Link,
     right: Link,
     reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
@@ -248,7 +259,7 @@ fn balance(
 
 fn insert(
     root: &Link,
-    added: Arc<Entry>,
+    added: PayloadArc<Entry>,
     reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
 ) -> Result<Arc<Node>, ExecutionError> {
     let Some(root) = root else {
@@ -271,7 +282,7 @@ fn insert(
 fn remove_first(
     root: &Arc<Node>,
     reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
-) -> Result<(Arc<Entry>, Link), ExecutionError> {
+) -> Result<(PayloadArc<Entry>, Link), ExecutionError> {
     visit();
     let Some(left) = &root.left else {
         return Ok((share(&root.entry), root.right.clone()));
@@ -331,7 +342,14 @@ fn sorted(
     let left_count = count / 2;
     let left = sorted(entries, left_count, reserve)?;
     let (key, value) = entries.0.next().ok_or_else(shape_error)?;
-    let entry = entry(Entry { key, value }, reserve)?;
+    let entry = entry(
+        Entry {
+            key,
+            value,
+            next_cleanup: None,
+        },
+        reserve,
+    )?;
     let right = sorted(entries, count - left_count - 1, reserve)?;
     node(entry, left, right, reserve).map(Some)
 }
@@ -403,7 +421,11 @@ impl Map {
         maximum_length: u64,
         reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
-        let added = Entry { key, value };
+        let added = Entry {
+            key,
+            value,
+            next_cleanup: None,
+        };
         reserve(Charge::default())?;
         let length = self.inserted_length(&added.key, maximum_length)?;
         let added = entry(added, reserve)?;
@@ -428,6 +450,7 @@ impl Map {
         let mut added = Entry {
             key: NormalizedMapKey::Bool(false),
             value,
+            next_cleanup: None,
         };
         reserve(Charge::default())?;
         let length = self.inserted_length(key, maximum_length)?;
@@ -436,10 +459,11 @@ impl Map {
             bytes: entry_bytes(),
         })?;
         added.key = key.clone();
+        let added = PayloadArc::try_new(added).map_err(|_| StorageFailure::Allocation)?;
         observe(|work| {
             work.entry_handles_allocated = work.entry_handles_allocated.saturating_add(1);
         });
-        let root = insert(&self.root, Arc::new(added), reserve)?;
+        let root = insert(&self.root, added, reserve)?;
         reserve(Charge::default())?;
         Ok(Self {
             length,
@@ -502,7 +526,7 @@ impl Map {
             .ok_or_else(storage_error)
     }
 
-    pub(super) fn drain_unique(&mut self, values: &mut RawValueWork) {
+    pub(super) fn drain_unique(&mut self, values: &mut DropQueue) {
         // A depth-first binary walk holds at most one sibling per AVL level.
         // Retiring an update path must not allocate a temporary node Vec.
         let mut pending: [Link; MAXIMUM_HEIGHT] = std::array::from_fn(|_| None);
@@ -516,9 +540,7 @@ impl Map {
                     pending[depth] = Some(child);
                     depth += 1;
                 }
-                if let Some(mut entry) = Arc::into_inner(node.entry) {
-                    values.push(std::mem::replace(&mut entry.value, NormalizedValue::Unit));
-                }
+                values.enqueue_entry(node.entry);
             }
         }
     }
@@ -526,39 +548,26 @@ impl Map {
 
 impl Drop for Entry {
     fn drop(&mut self) {
-        if !matches!(self.value, NormalizedValue::Unit) {
-            release_raw_value(std::mem::replace(&mut self.value, NormalizedValue::Unit));
-        }
+        child_storage::release_entry(self);
     }
 }
 
 impl Drop for Map {
     fn drop(&mut self) {
-        let mut values = RawValueWork::default();
+        let mut values = DropQueue::default();
         self.drain_unique(&mut values);
-        values.release();
+        values.drain();
     }
 }
 
 impl std::fmt::Debug for Map {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.debug_map().entries(self.iter()).finish()
+        formatter
+            .debug_struct("Map")
+            .field("len", &self.length)
+            .finish()
     }
 }
-
-impl PartialEq for Map {
-    fn eq(&self, other: &Self) -> bool {
-        if self.length != other.length {
-            return false;
-        }
-        // Borrow the bounded cursor buffers across recursive payload comparison.
-        // Moving them through Iterator::eq duplicates both buffers in debug frames.
-        let mut left = self.iter();
-        let mut right = other.iter();
-        (&mut left).eq(&mut right)
-    }
-}
-impl Eq for Map {}
 
 struct Cursor<'a> {
     stack: [Option<&'a Node>; MAXIMUM_HEIGHT],

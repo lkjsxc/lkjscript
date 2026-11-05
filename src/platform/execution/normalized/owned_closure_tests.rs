@@ -30,18 +30,28 @@ fn owned_closure_reference_derives_composites_inside_witness_generic_bodies() {
     let entry = declaration_named(&source, "composite-main");
     let control = ExecutionControl::uncancelled();
     assert_eq!(
-        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
-            .invoke(entry, vec![], None, &control)
-            .unwrap()
-            .0,
-        NormalizedValue::I64(7)
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
+                .invoke(entry, vec![], None, &control)
+                .unwrap()
+                .0),
+            &(NormalizedValue::I64(7))
+        ),
+        Ok(true)
     );
     assert_eq!(
-        NormalizedReferenceInterpreter::new(&source, &program, NormalizedRunPolicy::foreground())
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(NormalizedReferenceInterpreter::new(
+                &source,
+                &program,
+                NormalizedRunPolicy::foreground()
+            )
             .invoke(entry, vec![], None, &control)
             .unwrap()
-            .0,
-        NormalizedValue::I64(7)
+            .0),
+            &(NormalizedValue::I64(7))
+        ),
+        Ok(true)
     );
 }
 
@@ -56,18 +66,28 @@ fn owned_closure_recursive_nominal_method_types_are_closed_first_order_data() {
     let entry = declaration_named(&source, "recursive-data-main");
     let control = ExecutionControl::uncancelled();
     assert_eq!(
-        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
-            .invoke(entry, vec![], None, &control)
-            .unwrap()
-            .0,
-        NormalizedValue::I64(128)
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
+                .invoke(entry, vec![], None, &control)
+                .unwrap()
+                .0),
+            &(NormalizedValue::I64(128))
+        ),
+        Ok(true)
     );
     assert_eq!(
-        NormalizedReferenceInterpreter::new(&source, &program, NormalizedRunPolicy::foreground())
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(NormalizedReferenceInterpreter::new(
+                &source,
+                &program,
+                NormalizedRunPolicy::foreground()
+            )
             .invoke(entry, vec![], None, &control)
             .unwrap()
-            .0,
-        NormalizedValue::I64(128)
+            .0),
+            &(NormalizedValue::I64(128))
+        ),
+        Ok(true)
     );
 }
 
@@ -214,11 +234,18 @@ fn owned_closure_reference_checks_unused_ordered_contract_arguments_after_admiss
     );
     let control = ExecutionControl::uncancelled();
     assert_eq!(
-        NormalizedReferenceInterpreter::new(&source, &program, NormalizedRunPolicy::foreground())
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(NormalizedReferenceInterpreter::new(
+                &source,
+                &program,
+                NormalizedRunPolicy::foreground()
+            )
             .invoke(entry, vec![], None, &control)
             .unwrap()
-            .0,
-        NormalizedValue::I64(99)
+            .0),
+            &(NormalizedValue::I64(99))
+        ),
+        Ok(true)
     );
     for fault in [
         "missing",
@@ -410,7 +437,12 @@ declarations.end"#,
     let cells = super::super::owned_i64_cell::StorageObservation::start();
     let products = super::super::owned_storage::StorageObservation::start();
     assert_eq!(
-        NormalizedReferenceInterpreter::new(&source, &program, NormalizedRunPolicy::foreground())
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(NormalizedReferenceInterpreter::new(
+                &source,
+                &program,
+                NormalizedRunPolicy::foreground()
+            )
             .invoke(
                 declaration_named(&source, "main"),
                 vec![],
@@ -418,8 +450,10 @@ declarations.end"#,
                 &ExecutionControl::uncancelled()
             )
             .unwrap()
-            .0,
-        NormalizedValue::I64(11),
+            .0),
+            &(NormalizedValue::I64(11))
+        ),
+        Ok(true)
     );
     assert_eq!(cells.live(), (0, 0));
     assert_eq!(products.live(), (0, 0));

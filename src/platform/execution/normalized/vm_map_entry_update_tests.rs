@@ -73,11 +73,8 @@ fn map_entries_path_updates_preserve_every_retained_version_in_distinct_shapes()
                             panic!("entry")
                         };
                         assert_eq!(fields.len(), 2);
-                        assert_eq!(
-                            fields[0],
-                            (Name::new("key").unwrap(), NormalizedValue::I64(*key))
-                        );
-                        assert_eq!(&fields[1], &(Name::new("value").unwrap(), value.clone()));
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(fields[0]), &(Name::new("key").unwrap(), NormalizedValue::I64(*key))), Ok(true));
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(&fields[1]), &(&(Name::new("value").unwrap(), value.clone()))), Ok(true));
                     }
                     if !reference {
                         // Complete negative view inspection, raw map admission and

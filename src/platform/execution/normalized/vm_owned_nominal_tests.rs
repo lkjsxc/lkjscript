@@ -116,7 +116,13 @@ fn nominal_record_uses_one_envelope_and_preserves_children_through_unpack_repack
         panic!("cell");
     };
     assert_eq!(cell.allocation_identity(), child_identity);
-    assert_eq!(values[1], f.raw(1024));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(values[1]),
+            &(f.raw(1024))
+        ),
+        Ok(true)
+    );
     products.assert_transfers_preserve_allocations();
     drop(values);
     assert_eq!(products.live(), (0, 0));
@@ -149,7 +155,13 @@ fn nominal_metadata_projection_is_bounded_and_rejects_same_shape_foreign_identit
             assert_eq!(work.since().node_visits, 0);
             assert_eq!(projected.class, Class::Free);
             assert!(projected.borrow.is_none());
-            assert_eq!(projected.raw(), &f.raw(count));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(projected.raw()),
+                    &(&f.raw(count))
+                ),
+                Ok(true)
+            );
             assert_eq!(projected.ordinary_type, Some(f.payload));
         }
         assert_eq!(products.created(), before);
@@ -199,7 +211,13 @@ fn nominal_metadata_projection_is_bounded_and_rejects_same_shape_foreign_identit
         drop(owner);
         assert_eq!(products.live(), (0, 0));
         assert_eq!(cells.live(), (0, 0));
-        assert_eq!(retained.raw(), &f.raw(count));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(retained.raw()),
+                &(&f.raw(count))
+            ),
+            Ok(true)
+        );
     }
 }
 
@@ -342,7 +360,13 @@ fn nominal_projection_reserves_inline_spines_and_cancellation_retains_owner() {
         ) {
             Ok(value) => {
                 completed = true;
-                assert_eq!(value.raw(), &f.raw(1024));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(value.raw()),
+                        &(&f.raw(1024))
+                    ),
+                    Ok(true)
+                );
             }
             Err(error) => {
                 cancelled = true;

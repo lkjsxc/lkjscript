@@ -1,5 +1,6 @@
 //! Effect applications exercise both execution owners through strictly loaded artifacts.
 use super::*;
+use crate::platform::execution::normalized::child_storage::Captures;
 use crate::platform::kernel::{
     EffectParameterRecord, EffectParameterReference, EffectRow, FieldRecord, FieldReference,
     FieldSelector, ParameterUse, RecordExpressionField, TypeParameterConstraints,
@@ -944,7 +945,13 @@ fn recursive_effect_permutation_and_union_close_by_finite_set_identity() {
                 )
                 .map(|r| r.0)
         };
-        assert_eq!(result.unwrap(), NormalizedValue::Unit);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(result.unwrap()),
+                &(NormalizedValue::Unit)
+            ),
+            Ok(true)
+        );
         assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
     let mut renamed = snapshot.clone();
@@ -1178,7 +1185,7 @@ fn task_descriptor_raw_boundaries_reject_kind_row_origin_arity_and_retained_reso
         function,
         type_arguments: types.into(),
         effect_arguments: effects.into(),
-        bound_arguments: prefix.map(Arc::new),
+        bound_arguments: prefix.map(Captures::try_new).transpose().unwrap(),
     };
     let valid = make(index, vec![], vec![], Some(vec![NormalizedValue::Unit]));
     let scope = super::super::resource::NormalizedResourceScope::new().unwrap();
@@ -1453,7 +1460,13 @@ fn empty_and_inactive_task_containers_are_transient_but_not_serializable() {
                 .invoke(discard, values, None, &ExecutionControl::uncancelled())
                 .map(|r| r.0)
         };
-        assert_eq!(result.unwrap(), NormalizedValue::Unit);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(result.unwrap()),
+                &(NormalizedValue::Unit)
+            ),
+            Ok(true)
+        );
     }
     for (ty, value, json) in [
         (list, empty, serde_json::json!([])),
@@ -1594,7 +1607,7 @@ fn shared_grant_allowance(direct: bool) {
             .unwrap(),
         type_arguments: Arc::from([]),
         effect_arguments: Arc::from([]),
-        bound_arguments: Some(Arc::new(vec![NormalizedValue::Unit])),
+        bound_arguments: Some(Captures::try_new(vec![NormalizedValue::Unit]).unwrap()),
     };
     let schema = super::super::NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
     // Canonical rejection and the two raw activation probes independently narrow the allowance.
@@ -1793,7 +1806,7 @@ fn an_empty_task_row_requires_task_context_in_both_evaluators() {
             .unwrap(),
         type_arguments: Arc::from([]),
         effect_arguments: Arc::from([]),
-        bound_arguments: Some(Arc::new(vec![NormalizedValue::Unit])),
+        bound_arguments: Some(Captures::try_new(vec![NormalizedValue::Unit]).unwrap()),
     };
     assert!(
         NormalizedVm::for_test(&program, NormalizedRunPolicy::default())

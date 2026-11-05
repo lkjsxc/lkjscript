@@ -1516,7 +1516,7 @@ impl ReferenceState<'_> {
                     }
                     Ok(checked)
                 })
-                .collect::<Result<Vec<_>, _>>()?;
+                .collect::<Result<Vec<_>, ExecutionError>>()?;
             let DeclarationPayload::Function(function) = state.declaration(declaration)?.payload
             else {
                 return Err(reference_type_error("missing canonical child task"));

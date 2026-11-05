@@ -1,8 +1,10 @@
 //! Reference-owned value proofs. Only canonical schemas and owner reads establish eligibility.
 
+use super::super::child_storage::{Captures, Fields, StorageFailure, reserve};
 use super::super::value::{RawValue, ValueOrigin};
 use super::*;
 use std::collections::BTreeSet;
+use triomphe::Arc as BindingOwner;
 
 #[cfg(test)]
 #[path = "reference_read_view_checked_tests.rs"]
@@ -119,6 +121,19 @@ fn enqueue_custody(node: Option<Arc<AncestorCustody>>, pending: &mut Option<Arc<
             drop(node);
         }
     }
+}
+
+// A suspended Bind owns its existing prefix and exact capture admission context.
+// Expressions are evaluated by either reference route in the same authored order.
+pub(super) struct PendingBind {
+    callee: Value,
+    storage: Option<PendingBindStorage>,
+}
+
+struct PendingBindStorage {
+    signature: ReferenceSignature,
+    bindings: BindingOwner<ReferenceBindings>,
+    prefix: super::super::child_storage::ValuesBuilder,
 }
 
 type Invocation = (
@@ -1021,12 +1036,16 @@ impl ReferenceState<'_> {
                 }
                 NormalizedRecord::Nominal {
                     layout,
-                    fields: Arc::new(
-                        fields
-                            .into_iter()
-                            .map(|(_, value)| value.release())
-                            .collect(),
-                    ),
+                    fields: {
+                        let mut storage =
+                            super::super::child_storage::ValuesBuilder::with_capacity(
+                                fields.len(),
+                            )?;
+                        for (_, value) in fields {
+                            storage.try_push(value.release())?;
+                        }
+                        storage.finish()?
+                    },
                 }
             }
             None => {
@@ -1036,12 +1055,16 @@ impl ReferenceState<'_> {
                     ));
                 }
                 NormalizedRecord::Structural {
-                    fields: Arc::new(
-                        fields
-                            .into_iter()
-                            .map(|(name, value)| (name, value.release()))
-                            .collect(),
-                    ),
+                    fields: {
+                        let mut storage =
+                            super::super::child_storage::FieldsBuilder::with_capacity(
+                                fields.len(),
+                            )?;
+                        for (name, value) in fields {
+                            storage.try_push((name, value.release()))?;
+                        }
+                        storage.finish()?
+                    },
                 }
             }
         };
@@ -1181,7 +1204,7 @@ impl ReferenceState<'_> {
             ),
         ];
         let datum = NormalizedValue::Record(NormalizedRecord::Structural {
-            fields: Arc::new(fields),
+            fields: Fields::try_new(fields)?,
         });
         self.control.check()?;
         Ok(Value {
@@ -1260,7 +1283,7 @@ type ReferenceVisit<'a> = (
     TypeObjectDigest,
     u16,
     bool,
-    Arc<ReferenceBindings>,
+    BindingOwner<ReferenceBindings>,
     bool,
 );
 
@@ -1291,15 +1314,18 @@ impl ReferenceState<'_> {
             }
             Err(mut error) => {
                 super::super::value::release_raw_value(datum);
-                error.message = format!(
-                    "{} reference value admission: {}",
-                    if input {
-                        "invocation input"
-                    } else {
-                        "raw result"
-                    },
-                    error.message
-                );
+                if matches!(&error.message, std::borrow::Cow::Owned(_)) {
+                    error.message = format!(
+                        "{} reference value admission: {}",
+                        if input {
+                            "invocation input"
+                        } else {
+                            "raw result"
+                        },
+                        error.message
+                    )
+                    .into();
+                }
                 Err(error)
             }
         }
@@ -1319,12 +1345,12 @@ impl ReferenceState<'_> {
             .reject_read_view_escape(expected, self.control)?;
         self.charge_reference_bindings(bindings.len())?;
         self.charge_allocation(std::mem::size_of::<ReferenceVisit<'_>>() as u64)?;
-        let bindings = Arc::new(bindings.clone());
-        self.inspect_reference_values(
-            vec![(datum, expected, 0, true, bindings, false)],
-            authority,
-            input,
-        )
+        let bindings =
+            BindingOwner::try_new(bindings.clone()).map_err(|_| StorageFailure::Allocation)?;
+        let mut visits = Vec::new();
+        reserve(&mut visits, 1)?;
+        visits.push((datum, expected, 0, true, bindings, false));
+        self.inspect_reference_values(visits, authority, input)
     }
 
     fn inspect_reference_values(
@@ -1336,7 +1362,7 @@ impl ReferenceState<'_> {
         let mut ownership = None;
         // The raw-admission subtotal is passive, with independent exactness.
         let mut admission_bytes = (0_u64, false);
-        let mut capture_types = BTreeSet::new();
+        let mut capture_types = Vec::new();
         while let Some((node, mut expected, depth, owner_position, bindings, captured)) =
             visits.pop()
         {
@@ -1359,7 +1385,7 @@ impl ReferenceState<'_> {
             if depth > 256 {
                 return Err(reference_resource(
                     "normalized_reference_value_depth",
-                    "reference input exceeds depth 256; reduce its nesting",
+                    "reference inline Option/Result/Variant spine exceeds depth 256",
                 ));
             }
             let node_ownership = self.raw_ownership(node)?;
@@ -1405,7 +1431,18 @@ impl ReferenceState<'_> {
                     reject("raw boundary names an unknown type; use accepted canonical meaning")
                 })?
                 .form;
-            let next_depth = depth + 1;
+            // Opaque carriers are shallow-cloned. Only a consecutive Box
+            // spine retains the remaining recursive Clone guard.
+            let next_depth = if matches!(
+                node,
+                NormalizedValue::Option(_)
+                    | NormalizedValue::Result { .. }
+                    | NormalizedValue::Variant { .. }
+            ) {
+                depth + 1
+            } else {
+                0
+            };
             match ty {
                 TypeForm::Unit if matches!(node, NormalizedValue::Unit) => {}
                 TypeForm::Bool if matches!(node, NormalizedValue::Bool(_)) => {}
@@ -1437,12 +1474,13 @@ impl ReferenceState<'_> {
                             )?;
                             for (child, field) in fields.iter().zip(definition.fields.iter()).rev()
                             {
+                                reserve(&mut visits, 1)?;
                                 visits.push((
                                     child,
                                     field.ty,
                                     next_depth,
                                     false,
-                                    Arc::clone(&bindings),
+                                    BindingOwner::clone(&bindings),
                                     captured,
                                 ));
                             }
@@ -1474,6 +1512,7 @@ impl ReferenceState<'_> {
                                                 | TypeForm::CapabilityResource { .. }
                                         )
                                     });
+                                    reserve(&mut visits, 1)?;
                                     visits.push((
                                         payload,
                                         ty,
@@ -1481,7 +1520,7 @@ impl ReferenceState<'_> {
                                         owner_position
                                             && node_ownership == Ownership::AffineVariant
                                             && direct,
-                                        Arc::clone(&bindings),
+                                        BindingOwner::clone(&bindings),
                                         captured,
                                     ));
                                 }
@@ -1526,12 +1565,13 @@ impl ReferenceState<'_> {
                             &mut admission_bytes,
                             name.as_str().len() as u64,
                         )?;
+                        reserve(&mut visits, 1)?;
                         visits.push((
                             child,
                             field.ty,
                             next_depth,
                             false,
-                            Arc::clone(&bindings),
+                            BindingOwner::clone(&bindings),
                             captured,
                         ));
                     }
@@ -1550,12 +1590,13 @@ impl ReferenceState<'_> {
                     self.charge_admission_bytes(&mut admission_bytes, items.metadata_bytes()?)?;
                     for child in items.iter().rev() {
                         self.control.check()?;
+                        reserve(&mut visits, 1)?;
                         visits.push((
                             child,
                             *item,
                             next_depth,
                             false,
-                            Arc::clone(&bindings),
+                            BindingOwner::clone(&bindings),
                             captured,
                         ));
                     }
@@ -1572,12 +1613,13 @@ impl ReferenceState<'_> {
                             1,
                             std::mem::size_of::<NormalizedValue>(),
                         )?;
+                        reserve(&mut visits, 1)?;
                         visits.push((
                             child,
                             *item,
                             next_depth,
                             false,
-                            Arc::clone(&bindings),
+                            BindingOwner::clone(&bindings),
                             captured,
                         ));
                     }
@@ -1593,12 +1635,13 @@ impl ReferenceState<'_> {
                         1,
                         std::mem::size_of::<NormalizedValue>(),
                     )?;
+                    reserve(&mut visits, 1)?;
                     visits.push((
                         value,
                         if *success { *ok } else { *error },
                         next_depth,
                         false,
-                        Arc::clone(&bindings),
+                        BindingOwner::clone(&bindings),
                         captured,
                     ));
                 }
@@ -1645,12 +1688,13 @@ impl ReferenceState<'_> {
                             &mut admission_bytes,
                             reference_map_key_bytes(key),
                         )?;
+                        reserve(&mut visits, 1)?;
                         visits.push((
                             child,
                             *value,
                             next_depth,
                             false,
-                            Arc::clone(&bindings),
+                            BindingOwner::clone(&bindings),
                             captured,
                         ));
                     }
@@ -1752,8 +1796,6 @@ impl ReferenceState<'_> {
                         || bound_arguments
                             .as_ref()
                             .is_some_and(|prefix| prefix.is_empty())
-                        || bound_arguments.as_ref().map_or(0, |prefix| prefix.len())
-                            > crate::platform::kernel::contract::MAXIMUM_CHILDREN
                         || signature
                             .parameters
                             .len()
@@ -1783,7 +1825,7 @@ impl ReferenceState<'_> {
                         .zip(type_arguments.iter())
                     {
                         if constraint.requires_capture_safe() {
-                            self.check_capture_type(*ty, &BTreeMap::new(), &mut BTreeSet::new())?;
+                            self.check_capture_type(*ty, &BTreeMap::new(), &mut Vec::new())?;
                         }
                         if constraint.requires_transfer() && !schema.transferable_types.contains(ty)
                         {
@@ -1798,14 +1840,15 @@ impl ReferenceState<'_> {
                         }
                     }
                     self.charge_reference_bindings(type_arguments.len())?;
-                    let actual_bindings = Arc::new(
+                    let actual_bindings = BindingOwner::try_new(
                         signature
                             .type_parameters
                             .iter()
                             .copied()
                             .zip(type_arguments.iter().copied())
                             .collect::<ReferenceBindings>(),
-                    );
+                    )
+                    .map_err(|_| StorageFailure::Allocation)?;
                     for (actual, expected) in signature
                         .parameters
                         .iter()
@@ -1837,12 +1880,13 @@ impl ReferenceState<'_> {
                         for (value, parameter) in
                             prefix.iter().zip(signature.parameters.iter()).rev()
                         {
+                            reserve(&mut visits, 1)?;
                             visits.push((
                                 value,
                                 parameter.ty,
                                 next_depth,
                                 false,
-                                Arc::clone(&actual_bindings),
+                                BindingOwner::clone(&actual_bindings),
                                 true,
                             ));
                         }
@@ -1988,7 +2032,7 @@ impl ReferenceState<'_> {
                 ));
             }
             if constraint.requires_capture_safe() {
-                self.check_capture_type(*ty, &BTreeMap::new(), &mut BTreeSet::new())?;
+                self.check_capture_type(*ty, &BTreeMap::new(), &mut Vec::new())?;
             }
             if constraint.requires_transfer() && !self.schema.transferable_types.contains(ty) {
                 return Err(reject("type argument is not canonical transferable data"));
@@ -2052,6 +2096,19 @@ impl ReferenceState<'_> {
         arguments: Vec<ExpressionId>,
         locals: &mut BTreeMap<LocalValueReference, Value>,
     ) -> Result<Value, ExecutionError> {
+        let mut pending = self.begin_bind(callee, arguments.len())?;
+        for expression in arguments {
+            let value = self.evaluate(expression, locals)?;
+            self.append_bind_capture(&mut pending, value)?;
+        }
+        self.finish_bind(pending)
+    }
+
+    pub(super) fn begin_bind(
+        &mut self,
+        callee: Value,
+        additional: usize,
+    ) -> Result<PendingBind, ExecutionError> {
         self.control.check()?;
         if callee.ownership(&self.schema, &mut self.observation.value_work)? != Ownership::Ordinary
         {
@@ -2087,62 +2144,97 @@ impl ReferenceState<'_> {
                 "binding requires the exact canonical callable signature",
             ));
         }
-        let retained = bound_arguments.as_deref().map_or(&[][..], Vec::as_slice);
-        let total = arguments
-            .len()
+        let retained = bound_arguments.as_ref().map_or(&[][..], Captures::as_slice);
+        let total = additional
             .checked_add(retained.len())
-            .filter(|count| {
-                *count <= signature.parameters.len()
-                    && *count <= crate::platform::kernel::contract::MAXIMUM_CHILDREN
-            })
+            .filter(|count| *count <= signature.parameters.len())
             .ok_or_else(|| {
                 reject("binding prefix exceeds the canonical target's remaining parameters")
             })?;
-        if arguments.is_empty() {
-            self.control.check()?;
-            return Ok(callee);
+        if additional == 0 {
+            return Ok(PendingBind {
+                callee,
+                storage: None,
+            });
         }
         self.charge_items(total, std::mem::size_of::<NormalizedValue>())?;
         self.charge_allocation(
             (std::mem::size_of::<Vec<NormalizedValue>>() + 2 * std::mem::size_of::<usize>()) as u64,
         )?;
         self.charge_reference_bindings(type_arguments.len())?;
-        let bindings = Arc::new(
+        let bindings = BindingOwner::try_new(
             signature
                 .type_parameters
                 .iter()
                 .copied()
                 .zip(type_arguments.iter().copied())
                 .collect::<ReferenceBindings>(),
-        );
-        let mut prefix = Vec::with_capacity(total);
-        prefix.extend(retained.iter().cloned());
-        for expression in arguments {
-            let value = self.evaluate(expression, locals)?;
-            if value.ownership(&self.schema, &mut self.observation.value_work)?
-                != Ownership::Ordinary
-            {
-                return Err(reject("capture contains affine ownership"));
-            }
-            let parameter = signature
-                .parameters
-                .get(prefix.len())
-                .ok_or_else(|| reject("capture escaped its canonical prefix"))?;
-            self.charge_allocation(std::mem::size_of::<ReferenceVisit<'_>>() as u64)?;
-            self.inspect_reference_values(
-                vec![(
-                    value.raw(),
-                    parameter.ty,
-                    1,
-                    false,
-                    Arc::clone(&bindings),
-                    true,
-                )],
-                None,
-                false,
-            )?;
-            prefix.push(value.release());
+        )
+        .map_err(|_| StorageFailure::Allocation)?;
+        let mut prefix = super::super::child_storage::ValuesBuilder::with_capacity(total)?;
+        for value in retained {
+            prefix.try_push(value.clone())?;
         }
+        Ok(PendingBind {
+            callee,
+            storage: Some(PendingBindStorage {
+                signature,
+                bindings,
+                prefix,
+            }),
+        })
+    }
+
+    pub(super) fn append_bind_capture(
+        &mut self,
+        pending: &mut PendingBind,
+        value: Value,
+    ) -> Result<(), ExecutionError> {
+        let storage = pending
+            .storage
+            .as_mut()
+            .ok_or_else(|| reject("capture cannot extend an empty binding operation"))?;
+        if value.ownership(&self.schema, &mut self.observation.value_work)? != Ownership::Ordinary {
+            return Err(reject("capture contains affine ownership"));
+        }
+        let parameter = storage
+            .signature
+            .parameters
+            .get(storage.prefix.len())
+            .ok_or_else(|| reject("capture escaped its canonical prefix"))?;
+        self.charge_allocation(std::mem::size_of::<ReferenceVisit<'_>>() as u64)?;
+        let mut visits = Vec::new();
+        reserve(&mut visits, 1)?;
+        visits.push((
+            value.raw(),
+            parameter.ty,
+            0,
+            false,
+            BindingOwner::clone(&storage.bindings),
+            true,
+        ));
+        self.inspect_reference_values(visits, None, false)?;
+        storage.prefix.try_push(value.release())?;
+        Ok(())
+    }
+
+    pub(super) fn finish_bind(&mut self, pending: PendingBind) -> Result<Value, ExecutionError> {
+        let PendingBind { callee, storage } = pending;
+        let Some(storage) = storage else {
+            self.control.check()?;
+            return Ok(callee);
+        };
+        let NormalizedValue::Function {
+            function,
+            type_arguments,
+            effect_arguments,
+            requirement_arguments,
+            read_scope_arguments,
+            ..
+        } = callee.raw()
+        else {
+            return Err(reference_type_error("admitted Bind lost its callable"));
+        };
         self.control.check()?;
         Ok(Value {
             datum: NormalizedValue::Function {
@@ -2151,7 +2243,7 @@ impl ReferenceState<'_> {
                 effect_arguments: Arc::clone(effect_arguments),
                 requirement_arguments: Arc::clone(requirement_arguments),
                 read_scope_arguments: Arc::clone(read_scope_arguments),
-                bound_arguments: Some(Arc::new(prefix)),
+                bound_arguments: Some(Captures::from_values(storage.prefix.finish()?)),
             },
             preparation: self.schema.value_origin,
             ownership: Ownership::Ordinary,
@@ -2199,16 +2291,12 @@ impl ReferenceState<'_> {
                 arguments,
             ));
         };
-        let total = prefix
-            .len()
-            .checked_add(arguments.len())
-            .filter(|total| *total <= crate::platform::kernel::contract::MAXIMUM_CHILDREN)
-            .ok_or_else(|| {
-                reference_resource(
-                    "normalized_reference_collection_items",
-                    "complete callable arguments exceed the child bound",
-                )
-            })?;
+        let total = prefix.len().checked_add(arguments.len()).ok_or_else(|| {
+            reference_resource(
+                "normalized_reference_collection_items",
+                "complete callable argument extent overflowed",
+            )
+        })?;
         self.charge_allocation(
             total
                 .checked_mul(std::mem::size_of::<Value>())
@@ -2219,7 +2307,8 @@ impl ReferenceState<'_> {
                     )
                 })? as u64,
         )?;
-        let mut complete = Vec::with_capacity(total);
+        let mut complete = Vec::new();
+        reserve(&mut complete, total)?;
         for child in prefix.iter() {
             complete.push(Value {
                 datum: child.clone(),
@@ -2265,11 +2354,13 @@ impl ReferenceState<'_> {
         &mut self,
         root: TypeObjectDigest,
         bindings: &ReferenceBindings,
-        checked: &mut BTreeSet<TypeObjectDigest>,
+        checked: &mut Vec<TypeObjectDigest>,
     ) -> Result<(), ExecutionError> {
         self.charge_allocation(std::mem::size_of::<(TypeObjectDigest, u16)>() as u64)?;
         let schema = Arc::clone(&self.schema);
-        let mut types = vec![(root, 0_u16)];
+        let mut types = Vec::new();
+        reserve(&mut types, 1)?;
+        types.push((root, 0_u16));
         while let Some((mut ty, depth)) = types.pop() {
             self.control.check()?;
             self.observation.value_work.capture_admission_nodes = self
@@ -2295,13 +2386,15 @@ impl ReferenceState<'_> {
             let identity = schema
                 .instantiated_identity(ty, bindings, 0)
                 .ok_or_else(|| reject("capture type cannot be resolved from canonical bindings"))?;
-            if checked.contains(&identity) {
-                continue;
-            }
+            let insertion = match checked.binary_search(&identity) {
+                Ok(_) => continue,
+                Err(insertion) => insertion,
+            };
             self.charge_allocation(
                 (std::mem::size_of::<TypeObjectDigest>() + 3 * std::mem::size_of::<usize>()) as u64,
             )?;
-            checked.insert(identity);
+            reserve(checked, 1)?;
+            checked.insert(insertion, identity);
             let form = &schema
                 .types
                 .get(&ty)
@@ -2309,6 +2402,7 @@ impl ReferenceState<'_> {
                 .form;
             let mut append = |child| -> Result<(), ExecutionError> {
                 self.charge_allocation(std::mem::size_of::<(TypeObjectDigest, u16)>() as u64)?;
+                reserve(&mut types, 1)?;
                 types.push((child, depth + 1));
                 Ok(())
             };

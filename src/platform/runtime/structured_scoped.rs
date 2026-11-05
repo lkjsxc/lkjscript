@@ -69,7 +69,7 @@ impl StructuredExecutorHandle {
             started: false,
         };
         let work = Mutex::new(Some(right));
-        let invoke = || {
+        let invoke = || -> Result<R, ExecutionError> {
             let work = lock(&work).take().ok_or_else(worker_failure)?;
             Ok(work())
         };

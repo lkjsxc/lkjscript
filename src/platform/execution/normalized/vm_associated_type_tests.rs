@@ -419,7 +419,13 @@ fn associated_runtime_shared_instruction_body_uses_each_active_function_applicat
                 &ExecutionControl::uncancelled(),
             )
             .unwrap();
-        assert_eq!(result.0, NormalizedValue::I64(7));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(result.0),
+                &(NormalizedValue::I64(7))
+            ),
+            Ok(true)
+        );
         let observation = observations.into_inner().unwrap().unwrap();
         assert_eq!(observation.live_call_frames_after, 0);
         assert_eq!(observation.live_operands_after, 0);

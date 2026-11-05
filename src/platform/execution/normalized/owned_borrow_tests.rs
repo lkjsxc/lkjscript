@@ -273,7 +273,13 @@ fn assert_record(value: NormalizedValue, expected: &[(&str, i64)]) {
         .iter()
         .map(|(name, value)| (Name::new(*name).unwrap(), NormalizedValue::I64(*value)))
         .collect::<Vec<_>>();
-    assert_eq!(fields.as_slice(), expected.as_slice());
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(fields.as_slice()),
+            &(expected.as_slice())
+        ),
+        Ok(true)
+    );
 }
 
 #[test]
@@ -333,7 +339,13 @@ fn owned_borrow_native_products_choices_and_recursive_borrowed_sources() {
                 NormalizedRunPolicy::foreground(),
                 &ExecutionControl::uncancelled(),
             );
-            assert_eq!(result.unwrap(), NormalizedValue::bytes(vec![n as u8]));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(result.unwrap()),
+                    &(NormalizedValue::bytes(vec![n as u8]))
+                ),
+                Ok(true)
+            );
         }
         let (result, _) = run_clean(
             reference,
@@ -376,7 +388,13 @@ fn owned_borrow_nested_trap_cancellation_and_quota_release_loans_before_owners()
             NormalizedRunPolicy::foreground(),
             &ExecutionControl::uncancelled(),
         );
-        assert_eq!(success.unwrap(), NormalizedValue::I64(73));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(success.unwrap()),
+                &(NormalizedValue::I64(73))
+            ),
+            Ok(true)
+        );
         let mut cancelled = 0;
         let mut complete = 0;
         for checks in (0..8192).chain([32768]) {
@@ -391,7 +409,7 @@ fn owned_borrow_nested_trap_cancellation_and_quota_release_loans_before_owners()
             );
             match result {
                 Ok(value) => {
-                    assert_eq!(value, NormalizedValue::I64(73));
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(NormalizedValue::I64(73))), Ok(true));
                     complete += 1;
                     break;
                 }
@@ -436,7 +454,7 @@ fn owned_borrow_nested_trap_cancellation_and_quota_release_loans_before_owners()
             );
             match result {
                 Ok(value) => {
-                    assert_eq!(value, NormalizedValue::I64(73));
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(NormalizedValue::I64(73))), Ok(true));
                     complete += 1;
                 }
                 Err(error) => {
@@ -561,7 +579,13 @@ fn owned_borrow_host_failures_and_unwind_preserve_nested_cleanup_order() {
                 }
             }));
             match fault {
-                Fault::None => assert_eq!(result.unwrap().unwrap(), NormalizedValue::I64(73)),
+                Fault::None => assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(result.unwrap().unwrap()),
+                        &(NormalizedValue::I64(73))
+                    ),
+                    Ok(true)
+                ),
                 Fault::Panic => assert!(result.is_err()),
                 Fault::Cancel => assert_eq!(
                     result.unwrap().unwrap_err().class,
@@ -640,7 +664,13 @@ fn owned_borrow_vm_retains_borrowed_source_frame_on_counterfeit_tail_call() {
         NormalizedRunPolicy::foreground(),
         &ExecutionControl::uncancelled(),
     );
-    assert_eq!(result.unwrap(), NormalizedValue::I64(137));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(result.unwrap()),
+            &(NormalizedValue::I64(137))
+        ),
+        Ok(true)
+    );
     assert!(
         work.depth >= 3,
         "lexical source, helper and owner frames remain live: {work:?}"
@@ -828,7 +858,13 @@ declarations.end"#;
             NormalizedRunPolicy::foreground(),
             &ExecutionControl::uncancelled(),
         );
-        assert_eq!(result.unwrap(), NormalizedValue::Unit);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(result.unwrap()),
+                &(NormalizedValue::Unit)
+            ),
+            Ok(true)
+        );
     }
     let transfer = declaration_named(&accepted, "transfer");
     let function = Arc::make_mut(&mut program.functions)

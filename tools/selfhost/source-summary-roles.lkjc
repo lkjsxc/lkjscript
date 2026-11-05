@@ -9,14 +9,24 @@ declarations.begin
       (returns (record (code I64) (role I64) (subrole I64) (ordinal I64) (mode I64)))
       (body
         (if
-          (call ci::eq (local operation) (i64 7))
+          (call ci::either
+            (call ci::eq (local operation) (i64 12))
+            (call ci::eq (local operation) (i64 21)))
           (if
-            (call ci::lt (local position) (i64 3))
+            (call ci::lt (i64 -1) (local position))
             (record structural
               (field code (i64 0))
               (field role (i64 15))
-              (field subrole (local position))
-              (field ordinal (i64 0))
+              (field subrole
+                (if
+                  (call ci::eq (local operation) (i64 12))
+                  (if (call ci::eq (local position) (i64 0)) (i64 6) (i64 7))
+                  (if (call ci::eq (local position) (i64 0)) (i64 18) (i64 19))))
+              (field ordinal
+                (if
+                  (call ci::eq (local position) (i64 0))
+                  (i64 0)
+                  (call ci::sub (local position) (i64 1))))
               (field mode (i64 2)))
             (record structural
               (field code (i64 15))
@@ -25,59 +35,75 @@ declarations.begin
               (field ordinal (i64 0))
               (field mode (i64 0))))
           (if
-            (call ci::eq (local operation) (i64 8))
-            (record structural
-              (field code (i64 0))
-              (field role (i64 15))
-              (field subrole (i64 3))
-              (field ordinal (i64 0))
-              (field mode (i64 2)))
+            (call ci::eq (local operation) (i64 7))
             (if
-              (call ci::eq (local operation) (i64 9))
+              (call ci::lt (local position) (i64 3))
               (record structural
                 (field code (i64 0))
                 (field role (i64 15))
-                (field subrole (i64 4))
-                (field ordinal (local position))
+                (field subrole (local position))
+                (field ordinal (i64 0))
+                (field mode (i64 2)))
+              (record structural
+                (field code (i64 15))
+                (field role (i64 0))
+                (field subrole (i64 0))
+                (field ordinal (i64 0))
+                (field mode (i64 0))))
+            (if
+              (call ci::eq (local operation) (i64 8))
+              (record structural
+                (field code (i64 0))
+                (field role (i64 15))
+                (field subrole (i64 3))
+                (field ordinal (i64 0))
                 (field mode (i64 2)))
               (if
-                (call ci::eq (local operation) (i64 10))
+                (call ci::eq (local operation) (i64 9))
                 (record structural
                   (field code (i64 0))
                   (field role (i64 15))
-                  (field subrole (i64 5))
+                  (field subrole (i64 4))
                   (field ordinal (local position))
                   (field mode (i64 2)))
                 (if
-                  (call ci::eq (local operation) (i64 13))
+                  (call ci::eq (local operation) (i64 10))
                   (record structural
                     (field code (i64 0))
                     (field role (i64 15))
-                    (field subrole (i64 8))
+                    (field subrole (i64 5))
                     (field ordinal (local position))
                     (field mode (i64 2)))
                   (if
-                    (call ci::eq (local operation) (i64 15))
+                    (call ci::eq (local operation) (i64 13))
                     (record structural
                       (field code (i64 0))
                       (field role (i64 15))
-                      (field subrole (i64 10))
-                      (field ordinal (i64 0))
+                      (field subrole (i64 8))
+                      (field ordinal (local position))
                       (field mode (i64 2)))
                     (if
-                      (call ci::eq (local operation) (i64 16))
+                      (call ci::eq (local operation) (i64 15))
                       (record structural
                         (field code (i64 0))
                         (field role (i64 15))
-                        (field subrole (i64 11))
-                        (field ordinal (local position))
-                        (field mode (i64 2)))
-                      (record structural
-                        (field code (i64 13))
-                        (field role (i64 0))
-                        (field subrole (i64 0))
+                        (field subrole (i64 10))
                         (field ordinal (i64 0))
-                        (field mode (i64 0))))))))))))
+                        (field mode (i64 2)))
+                      (if
+                        (call ci::eq (local operation) (i64 16))
+                        (record structural
+                          (field code (i64 0))
+                          (field role (i64 15))
+                          (field subrole (i64 11))
+                          (field ordinal (local position))
+                          (field mode (i64 2)))
+                        (record structural
+                          (field code (i64 13))
+                          (field role (i64 0))
+                          (field subrole (i64 0))
+                          (field ordinal (i64 0))
+                          (field mode (i64 0)))))))))))))
     (function create select
       (visibility package)
       (effect pure)

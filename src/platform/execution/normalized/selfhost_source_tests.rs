@@ -1,5 +1,6 @@
 //! Source decoding is tested independently of semantic graph admission.
 use super::*;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 use crate::platform::kernel::{self, KernelSnapshot, TypeObjectDigest};
 
 fn probes(module: &str) -> &'static (KernelSnapshot, NormalizedProgram) {
@@ -140,7 +141,11 @@ fn invoke(module: &str, name: &str, arguments: Vec<NormalizedValue>) -> Normaliz
             reference.1.allocated_bytes
         );
     }
-    assert_eq!(vm.0, reference.0, "{module}::{name}");
+    assert_eq!(
+        raw_value_equal(&vm.0, &reference.0),
+        Ok(true),
+        "{module}::{name}"
+    );
     assert_eq!(vm.1.live_call_frames_after, 0);
     assert_eq!(reference.1.live_call_frames_after, 0);
     vm.0
@@ -180,17 +185,40 @@ fn probe_module(name: &str) -> &'static str {
     }
 }
 
-fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
+// Whole authoritative graphs outgrew the small-fixture 10-second watchdog.
+// This is an explicit verification deadline, shared by both native producers;
+// it neither grants a compiler resource allowance nor weakens output assertions.
+fn source_reader_native_output(
+    producer: &str,
+    name: &str,
+    image: &[u8],
+    bytes: &[u8],
+) -> std::process::Output {
+    let deadline = std::time::Duration::from_secs(600);
+    eprintln!(
+        "selfhost source native reader producer={producer} entry={name} executable_sha256={} input_sha256={} input_bytes={} host_deadline_seconds={} environment=empty stdin_chunk_bytes=127",
+        crate::platform::semantic_id::encode_hex(&Sha256::digest(image)),
+        crate::platform::semantic_id::encode_hex(&Sha256::digest(bytes)),
+        bytes.len(),
+        deadline.as_secs(),
+    );
+    let start = std::time::Instant::now();
+    let output =
+        native_filter_tests::execute_filter_with_deadline(image, bytes, &[], 127, deadline);
+    eprintln!(
+        "selfhost source native reader producer={producer} entry={name} filter_call_elapsed_ms={} exit={:?} stdout_bytes={} stderr_bytes={}",
+        start.elapsed().as_millis(),
+        output.status.code(),
+        output.stdout.len(),
+        output.stderr.len(),
+    );
+    output
+}
+
+fn native_reader_image(name: &str) -> Vec<u8> {
     let module = probe_module(name);
-    let value = invoke(module, name, vec![NormalizedValue::bytes(bytes)]);
-    let NormalizedValue::I64(code) = field(&value, "diagnostic") else {
-        panic!("code")
-    };
-    let NormalizedValue::Bytes(image) = field(&value, "image") else {
-        panic!("image")
-    };
     static IMAGES: OnceLock<std::sync::Mutex<BTreeMap<String, Vec<u8>>>> = OnceLock::new();
-    let native = IMAGES
+    IMAGES
         .get_or_init(Default::default)
         .lock()
         .unwrap()
@@ -210,8 +238,20 @@ fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
             );
             image
         })
-        .clone();
-    let output = native_filter_tests::execute_filter(&native, bytes, &[], 127);
+        .clone()
+}
+
+fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
+    let module = probe_module(name);
+    let value = invoke(module, name, vec![NormalizedValue::bytes(bytes)]);
+    let NormalizedValue::I64(code) = field(&value, "diagnostic") else {
+        panic!("code")
+    };
+    let NormalizedValue::Bytes(image) = field(&value, "image") else {
+        panic!("image")
+    };
+    let native = native_reader_image(name);
+    let output = source_reader_native_output("rust-native", name, &native, bytes);
     assert_eq!(
         output.status.code(),
         Some(if *code == 0 { 0 } else { 65 }),
@@ -279,7 +319,7 @@ fn emitted_result_bytes(name: &str, bytes: &[u8], code: i64, expected: &[u8]) {
             image
         })
         .clone();
-    let output = native_filter_tests::execute_filter(&image, bytes, &[], 127);
+    let output = source_reader_native_output("self-produced-native", name, &image, bytes);
     assert_eq!(
         output.status.code(),
         Some(if code == 0 { 0 } else { 65 }),
@@ -366,11 +406,20 @@ fn selfhost_source_integers_decode_values_canonically_on_three_engines() {
                 NormalizedValue::I64(bytes.len() as i64),
             ],
         );
-        assert_eq!(field(&decoded, "value"), &NormalizedValue::I64(value));
-        assert_eq!(field(&decoded, "code"), &NormalizedValue::I64(0));
         assert_eq!(
-            field(&decoded, "next"),
-            &NormalizedValue::I64(bytes.len() as i64)
+            raw_value_equal(field(&decoded, "value"), &NormalizedValue::I64(value),),
+            Ok(true),
+        );
+        assert_eq!(
+            raw_value_equal(field(&decoded, "code"), &NormalizedValue::I64(0)),
+            Ok(true)
+        );
+        assert_eq!(
+            raw_value_equal(
+                field(&decoded, "next"),
+                &NormalizedValue::I64(bytes.len() as i64),
+            ),
+            Ok(true),
         );
         let mut expected = (bytes.len() as u32).to_le_bytes().to_vec();
         expected.extend_from_slice(&bytes);
@@ -405,8 +454,11 @@ fn selfhost_source_integers_decode_values_canonically_on_three_engines() {
             ],
         );
         assert_eq!(
-            field(&decoded, "value"),
-            &NormalizedValue::I64(value as i64)
+            raw_value_equal(
+                field(&decoded, "value"),
+                &NormalizedValue::I64(value as i64),
+            ),
+            Ok(true),
         );
         let expected = [(bytes.len() as u32).to_le_bytes().to_vec(), bytes.clone()].concat();
         assert_eq!(result("read-unsigned", &bytes), (0, expected));
@@ -814,17 +866,24 @@ fn selfhost_source_owners_reject_mismatched_headers_and_noncanonical_expressions
         vec![3, 2],
         vec![5, 5],
         vec![9, 0],
+        vec![11],
+        vec![12],
         vec![13, 0, 0, 0],
+        vec![21],
     ] {
         reject_owner(owner, &[head.clone(), operation].concat());
     }
-    for operation in [17, 18, 19, 21, 23, 24, 38, 51] {
+    for operation in [17, 18, 19, 23, 24, 38, 51] {
         let bytes = object_envelope(
             b"LKJOWNER",
             "lkjscript.kernel.owner-envelope",
             &[head.clone(), vec![operation]].concat(),
         );
-        assert_eq!(result("read-owner", &bytes), (13, vec![]));
+        assert_eq!(
+            result("read-owner", &bytes),
+            (13, vec![]),
+            "unsupported operation {operation}"
+        );
     }
     let unit = object_envelope(
         b"LKJOWNER",
@@ -921,5 +980,23 @@ fn selfhost_source_proof_policy_preserves_zero_maximum_and_saturated_observation
         expected.push(u8::from(saturated));
         assert_eq!(result("read-work", &bytes), (0, expected.clone()));
         emitted_result_bytes("read-work", &bytes, 0, &expected);
+    }
+}
+
+#[test]
+fn selfhost_source_native_readers_admit_complete_current_graph_with_explicit_deadline() {
+    let (source, _) = compiler();
+    let bytes = graph::packet(source);
+    assert_eq!(
+        &bytes[48..80],
+        kernel::semantic_state_digest(source).unwrap().bytes(),
+    );
+    for name in ["read-syntax", "read-nominal"] {
+        let native = native_reader_image(name);
+        let output = source_reader_native_output("rust-native", name, &native, &bytes);
+        assert_eq!(output.status.code(), Some(0), "{name}: {:?}", output.stderr);
+        assert_eq!(output.stdout, bytes[48..80], "{name}");
+        assert!(output.stderr.is_empty(), "{name}: {:?}", output.stderr);
+        emitted_result(name, &bytes, 0);
     }
 }

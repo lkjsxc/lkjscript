@@ -15,7 +15,13 @@ fn owned_generics_cell_scalar_extremes() {
         let (actual, work) = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(d, vec![NormalizedValue::I64(n)], None, &control)
             .unwrap();
-        assert_eq!(actual, NormalizedValue::I64(n));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(actual),
+                &(NormalizedValue::I64(n))
+            ),
+            Ok(true)
+        );
         assert_eq!(work.live_call_frames_after, 0);
         assert_eq!(cell_storage.live(), (0, 0));
         let (actual, work) = NormalizedReferenceInterpreter::new(
@@ -25,7 +31,13 @@ fn owned_generics_cell_scalar_extremes() {
         )
         .invoke(d, vec![NormalizedValue::I64(n)], None, &control)
         .unwrap();
-        assert_eq!(actual, NormalizedValue::I64(n));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(actual),
+                &(NormalizedValue::I64(n))
+            ),
+            Ok(true)
+        );
         assert_eq!(work.live_call_frames_after, 0);
     }
 }
@@ -72,30 +84,36 @@ declarations.end
         let d = declaration_named(&source, name);
         let argument = || vec![NormalizedValue::list(vec![NormalizedValue::I64(1)]).unwrap()];
         assert_eq!(
-            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
-                .invoke_entry(
-                    super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
-                        program.function(d).unwrap(),
-                        Arc::from([i64_type])
-                    ),
-                    argument(),
-                    None,
-                    &control
-                )
-                .unwrap()
-                .0,
-            expected
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
+                    .invoke_entry(
+                        super::super::prepare::NormalizedEntryPoint::InstantiatedFunction(
+                            program.function(d).unwrap(),
+                            Arc::from([i64_type])
+                        ),
+                        argument(),
+                        None,
+                        &control
+                    )
+                    .unwrap()
+                    .0),
+                &(expected)
+            ),
+            Ok(true)
         );
         assert_eq!(
-            NormalizedReferenceInterpreter::new(
-                &source,
-                &program,
-                NormalizedRunPolicy::foreground()
-            )
-            .invoke_instantiated(d, &[i64_type], argument(), &control)
-            .unwrap()
-            .0,
-            expected
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(NormalizedReferenceInterpreter::new(
+                    &source,
+                    &program,
+                    NormalizedRunPolicy::foreground()
+                )
+                .invoke_instantiated(d, &[i64_type], argument(), &control)
+                .unwrap()
+                .0),
+                &(expected)
+            ),
+            Ok(true)
         );
     }
 }
@@ -116,37 +134,53 @@ fn owned_witness_cell_selects_exact_same_self_implementation() {
     let alternate = declaration_named(&source, "alternate");
     for n in [128, i64::MIN, i64::MAX] {
         assert_eq!(
-            NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
-                .invoke(main, vec![NormalizedValue::I64(n)], None, &control)
-                .unwrap()
-                .0,
-            NormalizedValue::I64(n)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
+                    .invoke(main, vec![NormalizedValue::I64(n)], None, &control)
+                    .unwrap()
+                    .0),
+                &(NormalizedValue::I64(n))
+            ),
+            Ok(true)
         );
         assert_eq!(
-            NormalizedReferenceInterpreter::new(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(NormalizedReferenceInterpreter::new(
+                    &source,
+                    &program,
+                    NormalizedRunPolicy::foreground()
+                )
+                .invoke(main, vec![NormalizedValue::I64(n)], None, &control)
+                .unwrap()
+                .0),
+                &(NormalizedValue::I64(n))
+            ),
+            Ok(true)
+        );
+    }
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
+                .invoke(alternate, vec![], None, &control)
+                .unwrap()
+                .0),
+            &(NormalizedValue::I64(99))
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(NormalizedReferenceInterpreter::new(
                 &source,
                 &program,
                 NormalizedRunPolicy::foreground()
             )
-            .invoke(main, vec![NormalizedValue::I64(n)], None, &control)
-            .unwrap()
-            .0,
-            NormalizedValue::I64(n)
-        );
-    }
-    assert_eq!(
-        NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
             .invoke(alternate, vec![], None, &control)
             .unwrap()
-            .0,
-        NormalizedValue::I64(99)
-    );
-    assert_eq!(
-        NormalizedReferenceInterpreter::new(&source, &program, NormalizedRunPolicy::foreground())
-            .invoke(alternate, vec![], None, &control)
-            .unwrap()
-            .0,
-        NormalizedValue::I64(99)
+            .0),
+            &(NormalizedValue::I64(99))
+        ),
+        Ok(true)
     );
 }
 
@@ -183,7 +217,13 @@ fn owned_witness_deep_tail_forwarding_restores_exact_selection() {
                 .unwrap();
             (value, work.maximum_call_depth, work.tail_transfers)
         };
-        assert_eq!(value, NormalizedValue::I64(i64::MIN));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(NormalizedValue::I64(i64::MIN))
+            ),
+            Ok(true)
+        );
         assert!(depth < 16, "reference={reference} depth={depth}");
         assert!(
             transfers >= 16384,
@@ -232,8 +272,20 @@ declarations.end"#)).unwrap();
         )
         .invoke_instantiated(d, &[ty], args(), &control);
         if accepted {
-            assert_eq!(actual.unwrap().0, NormalizedValue::I64(3));
-            assert_eq!(reference.unwrap().0, NormalizedValue::I64(3));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(actual.unwrap().0),
+                    &(NormalizedValue::I64(3))
+                ),
+                Ok(true)
+            );
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(reference.unwrap().0),
+                    &(NormalizedValue::I64(3))
+                ),
+                Ok(true)
+            );
         } else {
             assert!(actual.is_err());
             assert!(reference.is_err());
@@ -434,7 +486,13 @@ declarations.end"#,
             };
             if case == 0 {
                 let (value, calls, live_frames) = actual.unwrap();
-                assert_eq!(value, NormalizedValue::I64(7));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(value),
+                        &(NormalizedValue::I64(7))
+                    ),
+                    Ok(true)
+                );
                 assert_eq!(calls, 1);
                 assert_eq!(live_frames, 0);
             } else {

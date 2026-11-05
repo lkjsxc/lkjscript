@@ -1,7 +1,15 @@
 declarations.begin
 (units
   (module create machine
-    (function create address
+    (function create directory-start (visibility package) (effect pure)
+    (parameter create data (type Bytes)) (parameter create layout (type Bytes))
+    (returns I64)
+    (body (if (call ci::eq (call ci::length (local layout)) (i64 0)) (i64 0) (call ci::sub (call data-start (local data) (local layout)) (call ci::mul (call ci::u64 (local data) (i64 96)) (i64 96))))))
+  (function create layout-data (visibility private) (effect pure)
+    (parameter create data (type Bytes)) (parameter create position (type I64)) (parameter create out (type ByteBuffer) (use consume))
+    (returns (record (code I64) (bytes Bytes)))
+    (body (if (call ci::lt (i64 9223372036850581496) (local position)) (call layout-failure (local out)) (let (binding aligned (call ci::mul (call ci::div (call ci::add (local position) (i64 7)) (i64 8)) (i64 8))) (binding count (call ci::u64 (local data) (i64 96))) (in (if (call ci::lt (call ci::div (call ci::sub (i64 9223372036850581503) (local aligned)) (i64 96)) (local count)) (call layout-failure (local out)) (let (binding pool (call ci::add (local aligned) (call ci::mul (local count) (i64 96)))) (in (if (call ci::lt (call ci::sub (i64 9223372036850581503) (local pool)) (call ci::u64 (local data) (i64 136))) (call layout-failure (local out)) (let (binding next (type ByteBuffer) (call ci::le (local pool) (i64 8) (local out))) (in (record structural (field code (i64 0)) (field bytes (call ci::freeze (local next)))))))))))))))
+  (function create address
       (visibility public)
       (effect pure)
       (parameter create data (type Bytes))
@@ -44,7 +52,7 @@ declarations.begin
           (i64 0)
           (call ci::u64 (local layout) (call ci::sub (call ci::length (local layout)) (i64 8))))))
     (function create instruction-address
-      (visibility private)
+      (visibility package)
       (effect pure)
       (parameter create data (type Bytes))
       (parameter create layout (type Bytes))
@@ -283,75 +291,11 @@ declarations.begin
                         (i64 200))
                       (local b)))))))
           (in (call end (local c))))))
-    (function create tail
-      (visibility private)
-      (effect pure)
-      (parameter create target (type I64))
-      (parameter create count (type I64))
-      (parameter create out (type ByteBuffer) (use consume))
-      (returns ByteBuffer)
-      (body
-        (let
-          (binding checked (type ByteBuffer) (call machine::wide-call (i64 51712) (local out)))
-          (binding a
-            (type ByteBuffer)
-            (if
-              (call ci::eq (local count) (i64 0))
-              (local checked)
-              (let
-                (binding b (type ByteBuffer) (call asm::imm (i64 1) (local count) (local checked)))
-                (binding c
-                  (type ByteBuffer)
-                  (call asm::lea (i64 7) (i64 5) (call ci::mul (local count) (i64 -8)) (local b)))
-                (binding loop (call ci::size (local c)))
-                (binding polled (type ByteBuffer) (call machine::wide-call (i64 51712) (local c)))
-                (binding d
-                  (type ByteBuffer)
-                  (call elf::raw
-                    (list I64
-                      (i64 88)
-                      (i64 72)
-                      (i64 137)
-                      (i64 7)
-                      (i64 72)
-                      (i64 131)
-                      (i64 199)
-                      (i64 8)
-                      (i64 72)
-                      (i64 255)
-                      (i64 201))
-                    (local polled)))
-                (in (call elf::condition (i64 133) (local loop) (local d))))))
-          (in (call elf::wide-jump (local target) (local a))))))
-    (function create invoke
-      (visibility private)
-      (effect pure)
-      (parameter create data (type Bytes))
-      (parameter create layout (type Bytes))
-      (parameter create f (type I64))
-      (parameter create at (type I64))
-      (parameter create tail (type Bool))
-      (parameter create out (type ByteBuffer) (use consume))
-      (returns ByteBuffer)
-      (body
-        (let
-          (binding target (call flow::field (local data) (local at) (i64 8)))
-          (binding count (call flow::field (local data) (local at) (i64 16)))
-          (in
-            (if
-              (call ci::both (local tail) (call ci::eq (local f) (local target)))
-              (call tail
-                (call instruction-address (local data) (local layout) (local f) (i64 0))
-                (local count)
-                (local out))
-              (let
-                (binding a
-                  (type ByteBuffer)
-                  (call wide-call (call address (local data) (local layout) (local target)) (local out)))
-                (binding b
-                  (type ByteBuffer)
-                  (call asm::group (i64 0) (i64 4) (call ci::mul (local count) (i64 8)) (local a)))
-                (in (if (local tail) (call end (local b)) (call ci::push (i64 80) (local b))))))))))
+
+    (function create invoke (visibility private) (effect pure)
+    (parameter create data (type Bytes)) (parameter create layout (type Bytes)) (parameter create f (type I64)) (parameter create at (type I64)) (parameter create tail (type Bool)) (parameter create out (type ByteBuffer) (use consume))
+    (returns ByteBuffer)
+    (body (let (binding target (call flow::field (local data) (local at) (i64 8))) (binding count (call flow::field (local data) (local at) (i64 16))) (in (if (call ci::both (local tail) (call ci::eq (call flow::field (local data) (call flow::declaration (local data) (local target)) (i64 48)) (i64 0))) (call callable::direct-tail (local data) (local layout) (local target) (local count) (local out)) (let (binding called (type ByteBuffer) (call wide-call (call address (local data) (local layout) (local target)) (local out))) (binding cleaned (type ByteBuffer) (call asm::group (i64 0) (i64 4) (call ci::mul (local count) (i64 8)) (local called))) (in (if (local tail) (call end (local cleaned)) (call ci::push (i64 80) (local cleaned))))))))))
     (function create scalar-instruction
       (visibility private)
       (effect pure)
@@ -477,7 +421,7 @@ declarations.begin
                     (type ByteBuffer)
                     (call asm::store (i64 5) (local offset) (i64 1) (local b)))
                   (in (call ci::push (i64 80) (local c))))
-                (call aggregate::instruction (local data) (local layout) (local at) (local out))))))))
+                (if (call ci::lt (i64 16) (local tag)) (call callable::instruction (local data) (local layout) (local at) (local out)) (call aggregate::instruction (local data) (local layout) (local at) (local out)))))))))
     (function create nodes
       (visibility private)
       (effect pure)
@@ -504,28 +448,10 @@ declarations.begin
                 (local f)
                 (call ci::add (local i) (i64 1))
                 (local a)))))))
-    (function create emit
-      (visibility public)
-      (effect pure)
-      (parameter create data (type Bytes))
-      (parameter create layout (type Bytes))
-      (parameter create f (type I64))
-      (parameter create out (type ByteBuffer) (use consume))
-      (returns Bytes)
-      (body
-        (if
-          (call ci::eq (local f) (call ci::u64 (local data) (i64 96)))
-          (let
-            (binding a
-              (type ByteBuffer)
-              (call ci::append (local data) (call ci::u64 (local data) (i64 128)) (local out)))
-            (in (call ci::freeze (local a))))
-          (let
-            (binding a (type ByteBuffer) (call function-header (local data) (local f) (local out)))
-            (binding b
-              (type ByteBuffer)
-              (call nodes (local data) (local layout) (local f) (i64 0) (local a)))
-            (in (call emit (local data) (local layout) (call ci::add (local f) (i64 1)) (local b)))))))
+    (function create emit (visibility public) (effect pure)
+    (parameter create data (type Bytes)) (parameter create layout (type Bytes)) (parameter create f (type I64)) (parameter create out (type ByteBuffer) (use consume))
+    (returns Bytes)
+    (body (if (call ci::eq (local f) (call ci::u64 (local data) (i64 96))) (let (binding aligned (type ByteBuffer) (call ci::pad (call directory-start (local data) (local layout)) (i64 0) (local out))) (binding directory (type ByteBuffer) (call callable::directory (local data) (local layout) (i64 0) (local aligned))) (binding complete (type ByteBuffer) (call ci::append (local data) (call ci::u64 (local data) (i64 128)) (local directory))) (in (call ci::freeze (local complete)))) (let (binding header (type ByteBuffer) (call function-header (local data) (local f) (local out))) (binding body (type ByteBuffer) (call nodes (local data) (local layout) (local f) (i64 0) (local header))) (in (call emit (local data) (local layout) (call ci::add (local f) (i64 1)) (local body)))))))
     (function create wide-call
       (visibility public)
       (effect pure)
@@ -651,53 +577,14 @@ declarations.begin
                       (call ci::add (local i) (i64 1))
                       (call ci::add (local position) (local size))
                       (local next))))))))))
-    (function create layout-functions
-      (visibility private)
-      (effect pure)
-      (parameter create data (type Bytes))
-      (parameter create f (type I64))
-      (parameter create position (type I64))
-      (parameter create out (type ByteBuffer) (use consume))
-      (returns (record (code I64) (bytes Bytes)))
-      (body
-        (if
-          (call ci::eq (local f) (call ci::u64 (local data) (i64 96)))
-          (if
-            (call ci::lt
-              (call ci::sub (i64 9223372036850581503) (local position))
-              (call ci::u64 (local data) (i64 136)))
-            (call layout-failure (local out))
-            (let
-              (binding next (type ByteBuffer) (call ci::le (local position) (i64 8) (local out)))
-              (in (record structural (field code (i64 0)) (field bytes (call ci::freeze (local next)))))))
-          (let
-            (binding scratch (type ByteBuffer) (call ci::empty))
-            (binding emitted
-              (type ByteBuffer)
-              (call function-header (local data) (local f) (local scratch)))
-            (binding size (call measured (local emitted)))
-            (in
-              (if
-                (call ci::lt (call ci::sub (i64 9223372036850581503) (local position)) (local size))
-                (call layout-failure (local out))
-                (let
-                  (binding next (type ByteBuffer) (call ci::le (local position) (i64 8) (local out)))
-                  (in
-                    (call layout-nodes
-                      (local data)
-                      (local f)
-                      (i64 0)
-                      (call ci::add (local position) (local size))
-                      (local next))))))))))
-    (function create layout
-      (visibility public)
-      (effect pure)
-      (parameter create data (type Bytes))
-      (returns (record (code I64) (bytes Bytes)))
-      (body
-        (let
-          (binding out (type ByteBuffer) (call ci::empty))
-          (in (call layout-functions (local data) (i64 0) (i64 65536) (local out))))))
+    (function create layout-functions (visibility private) (effect pure)
+    (parameter create data (type Bytes)) (parameter create f (type I64)) (parameter create position (type I64)) (parameter create out (type ByteBuffer) (use consume))
+    (returns (record (code I64) (bytes Bytes)))
+    (body (if (call ci::eq (local f) (call ci::u64 (local data) (i64 96))) (call layout-data (local data) (local position) (local out)) (let (binding scratch (type ByteBuffer) (call ci::empty)) (binding emitted (type ByteBuffer) (call function-header (local data) (local f) (local scratch))) (binding size (call measured (local emitted))) (in (if (call ci::lt (call ci::sub (i64 9223372036850581503) (local position)) (local size)) (call layout-failure (local out)) (let (binding next (type ByteBuffer) (call ci::le (local position) (i64 8) (local out))) (in (call layout-nodes (local data) (local f) (i64 0) (call ci::add (local position) (local size)) (local next))))))))))
+    (function create layout (visibility public) (effect pure)
+    (parameter create data (type Bytes))
+    (returns (record (code I64) (bytes Bytes)))
+    (body (let (binding out (type ByteBuffer) (call ci::empty)) (in (if (call ci::lt (call ci::div (i64 9223372036850581503) (i64 96)) (call ci::u64 (local data) (i64 96))) (call layout-failure (local out)) (call layout-functions (local data) (i64 0) (i64 65536) (local out)))))))
     (function create builtins
       (visibility public)
       (effect pure)

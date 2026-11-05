@@ -1,6 +1,7 @@
 //! Representation-neutral execution failure, policy, cancellation, and deadline controls.
 
 use serde::Serialize;
+use std::borrow::Cow;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
@@ -20,8 +21,8 @@ pub enum ExecutionFailureClass {
 #[serde(deny_unknown_fields)]
 pub struct ExecutionError {
     pub class: ExecutionFailureClass,
-    pub code: String,
-    pub message: String,
+    pub code: Cow<'static, str>,
+    pub message: Cow<'static, str>,
     pub retryable: bool,
     pub possibly_visible: bool,
 }
@@ -34,8 +35,8 @@ impl ExecutionError {
     ) -> Self {
         Self {
             class,
-            code: code.into(),
-            message: message.into(),
+            code: Cow::Owned(code.into()),
+            message: Cow::Owned(message.into()),
             retryable: false,
             possibly_visible: class == ExecutionFailureClass::PossibleVisibility,
         }
@@ -43,6 +44,17 @@ impl ExecutionError {
 
     pub fn resource(code: impl Into<String>, message: impl Into<String>) -> Self {
         Self::new(ExecutionFailureClass::Resource, code, message)
+    }
+
+    /// Fixed allocation-failure diagnostics require no owned message allocation.
+    pub(crate) fn resource_static(code: &'static str, message: &'static str) -> Self {
+        Self {
+            class: ExecutionFailureClass::Resource,
+            code: Cow::Borrowed(code),
+            message: Cow::Borrowed(message),
+            retryable: false,
+            possibly_visible: false,
+        }
     }
 }
 

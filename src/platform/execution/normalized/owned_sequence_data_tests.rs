@@ -74,7 +74,13 @@ fn data_sequence_scalar_storage_reuses_capacity_without_cell_allocations() {
     let capacity = sequence.storage.vector_capacity();
     for number in (0..4096).rev() {
         let (rest, value) = remove(sequence, origin, &control);
-        assert_eq!(value, Some(NormalizedValue::I64(number)));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(Some(NormalizedValue::I64(number)))
+            ),
+            Ok(true)
+        );
         sequence = rest;
         assert_eq!(sequence.storage.vector_identity(), vector);
         assert_eq!(sequence.storage.vector_capacity(), capacity);
@@ -91,11 +97,15 @@ fn data_sequence_scalar_storage_reuses_capacity_without_cell_allocations() {
         .unwrap();
     let read = sequence.borrow().unwrap();
     assert_eq!(
-        read.get(origin, 0, &control, &mut |_| panic!(
-            "scalar clone allocates no storage"
-        ))
-        .unwrap(),
-        NormalizedValue::I64(i64::MIN)
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(read
+                .get(origin, 0, &control, &mut |_| panic!(
+                    "scalar clone allocates no storage"
+                ))
+                .unwrap()),
+            &(NormalizedValue::I64(i64::MIN))
+        ),
+        Ok(true)
     );
     drop(read);
     assert_eq!(sequence.storage.vector_identity(), vector);
@@ -131,23 +141,50 @@ fn data_sequence_retained_read_survives_replace_pop_transfer_and_destruction() {
         )
         .unwrap();
     let (mut sequence, displaced) = unpack_pair(raw, origin, types()[2], &control);
-    assert_eq!(displaced, original);
-    assert_eq!(retained, original);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(displaced),
+            &(original)
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(retained),
+            &(original)
+        ),
+        Ok(true)
+    );
     sequence
         .adopt_transfer(origin, destination, |_| Ok(()))
         .unwrap();
     let read = sequence.borrow().unwrap();
     assert_eq!(
-        read.get(destination, 0, &control, &mut |_| Ok(())).unwrap(),
-        replacement
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(read.get(destination, 0, &control, &mut |_| Ok(())).unwrap()),
+            &(replacement)
+        ),
+        Ok(true)
     );
     assert!(read.get(origin, 0, &control, &mut |_| Ok(())).is_err());
     drop(read);
     let (rest, removed) = remove(sequence, destination, &control);
-    assert_eq!(removed, Some(replacement));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(removed),
+            &(Some(replacement))
+        ),
+        Ok(true)
+    );
     drop(rest);
     assert_eq!(composites.live(), (0, 0));
-    assert_eq!(retained, original);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(retained),
+            &(original)
+        ),
+        Ok(true)
+    );
 }
 
 #[test]
@@ -176,7 +213,13 @@ fn data_sequence_get_reserves_only_inline_sum_spine_and_checks_all_index_extreme
         charges,
         vec![3 * std::mem::size_of::<NormalizedValue>() as u64]
     );
-    assert_eq!(retained, raw);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(retained),
+            &(raw)
+        ),
+        Ok(true)
+    );
     for index in [i64::MIN, -1, 1, i64::MAX] {
         let error = read
             .get(origin, index, &control, &mut |_| {
@@ -221,7 +264,13 @@ fn raw_sequence_replace_invalidates_prior_admission_and_never_certifies_wrapper(
         types()[2],
         &control,
     );
-    assert_eq!(displaced, NormalizedValue::I64(13));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(displaced),
+            &(NormalizedValue::I64(13))
+        ),
+        Ok(true)
+    );
     assert_eq!(rest.admitted_program(), None);
     assert!(rest.validate_admission(program).is_err());
     let raw = rest

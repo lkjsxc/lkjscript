@@ -130,7 +130,7 @@ impl ImmutableObjectStore for AncestorStore<'_> {
         self.control.check().map_err(|error| StoreError {
             class: StoreErrorClass::Input,
             code: "change_refresh_history_cancelled",
-            message: error.message,
+            message: error.message.into_owned(),
         })?;
         let own = *self.admission.borrow();
         let other = *external;

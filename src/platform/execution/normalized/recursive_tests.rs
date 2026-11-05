@@ -712,3 +712,232 @@ fn independently_encoded_tree(snapshot: &KernelSnapshot, tree: TypeObjectDigest)
     output.extend_from_slice(&hash("lkjscript.data.typed-value-envelope.v1", &output));
     output
 }
+
+// A recursive nominal edge keeps the descriptor shallow while its raw value
+// has a real contiguous Box-backed spine. Option<T>^N would instead make the
+// type itself N edges deep and can hit type substitution before value admission.
+fn inline_variant_spine_fixture() -> (KernelSnapshot, TypeObjectDigest, DeclarationReference) {
+    let seed = b"raw-inline-variant-spine-boundary";
+    let mut snapshot = empty_normalized_snapshot(seed);
+    let package = snapshot.root.package_id;
+    let module = ModuleId::migrate(seed, 0);
+    let chain = DeclarationId::migrate(seed, 0);
+    let function = DeclarationId::migrate(seed, 1);
+    let input = ParameterId::migrate(seed, 0);
+    let body = ExpressionId::migrate(seed, 0);
+    let mut interner = TypeObjectInterner::default();
+    let unit = interner.intern(TypeForm::Unit).unwrap();
+    let chain_type = interner
+        .intern(TypeForm::Named {
+            declaration: DeclarationReference {
+                package,
+                declaration: chain,
+            },
+        })
+        .unwrap();
+    snapshot.owners.insert(
+        OwnerKey::Module(module),
+        OwnerRecord::Module(ModuleRecord {
+            header: OwnerHeader::new(OwnerKey::Module(module), OwnerKind::Module),
+            name: Name::new("inline-spine").unwrap(),
+        }),
+    );
+    let mut cases = [CaseId::migrate(seed, 0), CaseId::migrate(seed, 1)];
+    cases.sort();
+    for (case, (name, payload)) in cases
+        .iter()
+        .zip([("end", None), ("continue", Some(chain_type))])
+    {
+        snapshot.owners.insert(
+            OwnerKey::Case(*case),
+            OwnerRecord::Case(CaseRecord {
+                header: OwnerHeader::new(OwnerKey::Case(*case), OwnerKind::Case),
+                declaration: chain,
+                name: Name::new(name).unwrap(),
+                payload,
+            }),
+        );
+    }
+    snapshot.owners.insert(
+        OwnerKey::Declaration(chain),
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(chain), OwnerKind::Variant),
+            module,
+            name: Name::new("Chain").unwrap(),
+            visibility: DeclarationVisibility::Public,
+            payload: DeclarationPayload::Variant {
+                type_parameters: vec![],
+                cases: cases.to_vec(),
+            },
+        }),
+    );
+    snapshot.owners.insert(
+        OwnerKey::Expression(body),
+        OwnerRecord::Expression(ExpressionRecord::new(body, ExpressionOperation::Unit {}).unwrap()),
+    );
+    snapshot.owners.insert(
+        OwnerKey::Parameter(input),
+        OwnerRecord::Parameter(ParameterRecord {
+            header: OwnerHeader::new(OwnerKey::Parameter(input), OwnerKind::Parameter),
+            parent: ParameterParent::Function(function),
+            name: Name::new("input").unwrap(),
+            ty: chain_type,
+            use_mode: ParameterUse::Unrestricted,
+            resource_requirement: None,
+        }),
+    );
+    snapshot.owners.insert(
+        OwnerKey::Declaration(function),
+        OwnerRecord::Declaration(DeclarationRecord {
+            header: OwnerHeader::new(OwnerKey::Declaration(function), OwnerKind::PureFunction),
+            module,
+            name: Name::new("inspect").unwrap(),
+            visibility: DeclarationVisibility::Private,
+            payload: DeclarationPayload::Function(FunctionDeclaration {
+                read_scope_parameters: vec![],
+                read_scope_sources: vec![],
+                implementation_parameters: vec![],
+                requirement_parameters: vec![],
+                effect_parameters: vec![],
+                type_parameters: vec![],
+                parameters: vec![input],
+                result: CallableResult {
+                    ty: unit,
+                    relation: ResultRelation::Value,
+                },
+                effect: FunctionEffect::Pure,
+                body,
+            }),
+        }),
+    );
+    snapshot.types = interner.into_objects();
+    snapshot.root.owners = MapRoot::from_parts(
+        snapshot.root.owners.page(),
+        snapshot.owners.len() as u64,
+        snapshot.root.owners.content(),
+    );
+    (
+        snapshot,
+        chain_type,
+        DeclarationReference {
+            package,
+            declaration: function,
+        },
+    )
+}
+
+#[test]
+fn raw_recursive_variant_box_spines_preserve_depth_refusal_and_reuse() {
+    let (snapshot, chain_type, entry) = inline_variant_spine_fixture();
+    let program = prepare_snapshot(&snapshot);
+    let schema = reference_schema::NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
+    assert!(matches!(
+        snapshot.types[&chain_type].form,
+        TypeForm::Named { .. }
+    ));
+    assert!(program.ordinary_types.contains(&chain_type));
+    assert!(schema.ordinary_types.contains(&chain_type));
+    assert_eq!(program.variant_instances.len(), 1);
+    assert_eq!(schema.variant_instances.len(), 1);
+    let layout = program.variant_instances[&chain_type];
+    let raw = |depth| {
+        let mut value = NormalizedValue::Variant {
+            layout,
+            case: 0,
+            payload: None,
+        };
+        for _ in 0..depth {
+            value = NormalizedValue::Variant {
+                layout,
+                case: 1,
+                payload: Some(Box::new(value)),
+            };
+        }
+        value
+    };
+    let invoke = |reference: bool, depth, control: &ExecutionControl| {
+        if reference {
+            let sink = Mutex::new(None);
+            let result =
+                NormalizedReferenceInterpreter::new(&snapshot, &program, Default::default())
+                    .observing(&sink, &super::super::reference::CoreNormalizedReferenceHost)
+                    .invoke(entry, vec![raw(depth)], None, control)
+                    .map(|(value, _)| value);
+            let observed = sink.into_inner().unwrap().unwrap();
+            assert_eq!(
+                observed.live_call_frames_after
+                    + observed.live_control_frames_after
+                    + observed.live_local_scopes_after
+                    + observed.live_type_scopes_after
+                    + observed.live_transactions_after
+                    + observed.live_handles_after,
+                0
+            );
+            assert_eq!(observed.external_calls + observed.capability_calls, 0);
+            (result, observed.value_work)
+        } else {
+            let sink = Mutex::new(None);
+            let result = NormalizedVm::for_test(&program, Default::default())
+                .observing(&sink, &super::super::vm::CoreNormalizedHost)
+                .invoke(entry, vec![raw(depth)], None, control)
+                .map(|(value, _)| value);
+            let observed = sink.into_inner().unwrap().unwrap();
+            assert_eq!(
+                observed.live_call_frames_after
+                    + observed.live_locals_after
+                    + observed.live_type_bindings_after
+                    + observed.live_operands_after
+                    + observed.live_transactions_after
+                    + observed.live_handles_after,
+                0
+            );
+            assert_eq!(observed.external_calls + observed.capability_calls, 0);
+            (result, observed.value_work)
+        }
+    };
+    for reference in [false, true] {
+        let control = ExecutionControl::uncancelled();
+        for depth in [0, 255, 256] {
+            let (result, work) = invoke(reference, depth, &control);
+            assert!(matches!(result.unwrap(), NormalizedValue::Unit));
+            assert_eq!(work.input_admission_nodes, depth + 1);
+        }
+        let (result, work) = invoke(reference, 257, &control);
+        let error = result.unwrap_err();
+        assert_eq!(error.class, ExecutionFailureClass::Resource);
+        assert_eq!(
+            error.code,
+            if reference {
+                "normalized_reference_value_depth"
+            } else {
+                "normalized_value_depth"
+            }
+        );
+        assert_eq!(
+            error.message,
+            if reference {
+                "invocation input reference value admission: reference inline Option/Result/Variant spine exceeds depth 256"
+            } else {
+                "invocation input value admission: inline Option/Result/Variant spine exceeds depth 256"
+            }
+        );
+        assert_eq!(work.input_admission_nodes, 258);
+        assert_eq!(work.raw_result_admission_nodes, 0);
+        // Cancellation after real typed progress must also drain rejected raw
+        // ownership; a subsequent invocation reuses the same admitted program.
+        let (cancelled, work) = invoke(
+            reference,
+            256,
+            &ExecutionControl::cancel_after_input_nodes(37),
+        );
+        let error = cancelled.unwrap_err();
+        assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+        assert_eq!(error.code, "execution_cancelled");
+        assert_eq!(work.input_admission_nodes, 37);
+        assert_eq!(work.raw_result_admission_nodes, 0);
+        assert!(matches!(
+            invoke(reference, 1, &control).0.unwrap(),
+            NormalizedValue::Unit
+        ));
+    }
+}

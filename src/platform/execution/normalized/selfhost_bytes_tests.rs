@@ -1,5 +1,6 @@
 //! Independent execution of the compiler's byte and aggregate backend closure.
 use super::*;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 
 fn foreground(payload: &[u8]) -> (i64, Vec<u8>) {
     let (source, program) = compiler();
@@ -87,8 +88,14 @@ fn selfhost_byte_aggregates_preserve_field_order_nesting_and_list_bounds() {
                 assert_eq!(output.status.code(), Some(0), "{name}: {output:?}");
                 assert_eq!(output.stdout, value.to_string().as_bytes());
                 assert!(output.stderr.is_empty());
-                assert_eq!(vm.unwrap().0, NormalizedValue::I64(value));
-                assert_eq!(reference.unwrap().0, NormalizedValue::I64(value));
+                assert_eq!(
+                    raw_value_equal(&vm.unwrap().0, &NormalizedValue::I64(value)),
+                    Ok(true)
+                );
+                assert_eq!(
+                    raw_value_equal(&reference.unwrap().0, &NormalizedValue::I64(value),),
+                    Ok(true),
+                );
             }
             Err(trap) => {
                 assert_eq!(output.status.code(), Some(70), "{name}: {output:?}");
@@ -363,8 +370,14 @@ fn selfhost_byte_operations_preserve_independent_values_and_traps() {
             assert_eq!(output.status.code(), Some(0), "{name}: {output:?}");
             assert_eq!(output.stdout, expected.to_string().as_bytes(), "{name}");
             assert!(output.stderr.is_empty());
-            assert_eq!(vm.unwrap().0, NormalizedValue::I64(expected));
-            assert_eq!(reference.unwrap().0, NormalizedValue::I64(expected));
+            assert_eq!(
+                raw_value_equal(&vm.unwrap().0, &NormalizedValue::I64(expected)),
+                Ok(true)
+            );
+            assert_eq!(
+                raw_value_equal(&reference.unwrap().0, &NormalizedValue::I64(expected),),
+                Ok(true),
+            );
         } else if let Err(trap) = expected {
             assert_eq!(output.status.code(), Some(70), "{name}: {output:?}");
             assert!(output.stdout.is_empty());
@@ -530,18 +543,28 @@ fn selfhost_byte_backend_reproduces_its_complete_native_closure() {
         let control = ExecutionControl::uncancelled();
         let policy = NormalizedRunPolicy::foreground();
         assert_eq!(
-            NormalizedVm::for_test(&prepared, policy)
-                .invoke(entry, vec![], None, &control)
-                .unwrap()
-                .0,
-            NormalizedValue::I64(-91)
+            raw_value_equal(
+                &NormalizedVm::for_test(&prepared, policy)
+                    .invoke(entry, vec![], None, &control)
+                    .unwrap()
+                    .0,
+                &NormalizedValue::I64(-91),
+            ),
+            Ok(true),
         );
         assert_eq!(
-            NormalizedReferenceInterpreter::new(&independent_artifact_source, &prepared, policy)
+            raw_value_equal(
+                &NormalizedReferenceInterpreter::new(
+                    &independent_artifact_source,
+                    &prepared,
+                    policy
+                )
                 .invoke(entry, vec![], None, &control)
                 .unwrap()
                 .0,
-            NormalizedValue::I64(-91)
+                &NormalizedValue::I64(-91),
+            ),
+            Ok(true),
         );
     }
     let independent = input::arithmetic(&[(1, 6), (1, 7), (4, 0), (6, 0)]).unwrap();

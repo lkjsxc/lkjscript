@@ -1,10 +1,12 @@
 //! Signature-indexed structural HTTP boundary for normalized resident deployments.
 
 use super::capability::NormalizedAdapterKind;
+use super::child_storage::FieldsBuilder;
 use super::prepare::{NormalizedEntryPoint, NormalizedHttpRoute};
 use super::resident::NormalizedResidentDeployment;
 use super::resource::NormalizedResourceScope;
 use super::value::PortIndex;
+use super::value::RawValue;
 use super::value::{NormalizedMapKey, NormalizedRecord, NormalizedValue};
 use super::value_schema::NormalizedValueSchema;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -939,19 +941,20 @@ fn headers_value(headers: Vec<HttpHeader>) -> Result<NormalizedValue, ExecutionE
 fn structural<const N: usize>(
     fields: [(&'static str, NormalizedValue); N],
 ) -> Result<NormalizedValue, ExecutionError> {
-    let fields = fields
-        .into_iter()
-        .map(|(name, value)| {
-            Name::new(name).map(|name| (name, value)).map_err(|_| {
-                protocol_error(
-                    "normalized_http_static_field",
-                    "built-in HTTP field name is invalid",
-                )
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    // Guard every incoming child before the first fallible reservation.
+    let input = fields.map(|(name, value)| (name, RawValue::new(value)));
+    let mut fields = FieldsBuilder::with_capacity(N)?;
+    for (name, value) in input {
+        let name = Name::new(name).map_err(|_| {
+            protocol_error(
+                "normalized_http_static_field",
+                "built-in HTTP field name is invalid",
+            )
+        })?;
+        fields.try_push((name, value.into_raw()))?;
+    }
     Ok(NormalizedValue::Record(NormalizedRecord::Structural {
-        fields: Arc::new(fields),
+        fields: fields.finish()?,
     }))
 }
 
@@ -1139,7 +1142,13 @@ mod tests {
             "request",
         )
         .unwrap();
-        assert_eq!(fields[4].1, NormalizedValue::text(query));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(fields[4].1),
+                &(NormalizedValue::text(query))
+            ),
+            Ok(true)
+        );
         let NormalizedValue::Map(entries) = &fields[5].1 else {
             panic!("query parameters must use the runtime map carrier")
         };

@@ -1,5 +1,6 @@
 //! Physical byte ownership through native declarations and the actual VM.
 use super::*;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 
 fn fixture() -> crate::platform::kernel::KernelSnapshot {
     let temporary = tempfile::tempdir().unwrap();
@@ -78,7 +79,7 @@ fn bytes_concat_empty_operands_retain_the_nonempty_payload() {
             (retained.clone(), empty)
         };
         let result = concat(&program, declaration, left, right);
-        assert_eq!(result, retained);
+        assert_eq!(raw_value_equal(&(result), &(retained)), Ok(true));
         assert_eq!(
             pointer(&result),
             pointer(&retained),
@@ -111,7 +112,13 @@ fn bytes_concat_reuses_unique_buffer_capacity_after_growth() {
         three,
         NormalizedValue::bytes(vec![17]),
     );
-    assert_eq!(four, NormalizedValue::bytes(vec![0, 128, 255, 17]));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(four),
+            &(NormalizedValue::bytes(vec![0, 128, 255, 17]))
+        ),
+        Ok(true)
+    );
     assert_eq!(
         pointer(&four),
         original,
@@ -158,14 +165,23 @@ fn bytes_concat_vm_late_budget_exhaustion_cleans_owned_slots() {
     let (result, recovered) = NormalizedVm::for_test(&program, policy)
         .invoke(declaration, arguments.clone(), None, &control)
         .unwrap();
-    assert_eq!(result, NormalizedValue::bytes([0, 128, 255]));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(result),
+            &(NormalizedValue::bytes([0, 128, 255]))
+        ),
+        Ok(true)
+    );
     assert_eq!(recovered.allocated_bytes, complete.allocated_bytes);
     assert_eq!(
-        arguments,
-        vec![
-            NormalizedValue::bytes([0, 128]),
-            NormalizedValue::bytes([255])
-        ]
+        raw_value_equal(
+            &(arguments),
+            &(vec![
+                NormalizedValue::bytes([0, 128]),
+                NormalizedValue::bytes([255])
+            ])
+        ),
+        Ok(true)
     );
 }
 
@@ -228,11 +244,14 @@ fn bytes_concat_vm_reservation_sweep_distinguishes_payload_and_operand_failure()
     }
     assert!(before_copy > 0 && after_copy > 0);
     assert_eq!(
-        arguments,
-        vec![
-            NormalizedValue::bytes([0, 128]),
-            NormalizedValue::bytes([255])
-        ]
+        raw_value_equal(
+            &(arguments),
+            &(vec![
+                NormalizedValue::bytes([0, 128]),
+                NormalizedValue::bytes([255])
+            ])
+        ),
+        Ok(true)
     );
 }
 
@@ -260,9 +279,21 @@ fn bytes_concat_never_mutates_a_retained_prefix() {
         prefix.clone(),
         NormalizedValue::bytes(vec![17]),
     );
-    assert_eq!(prefix, NormalizedValue::bytes(vec![0, 128, 255]));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(prefix),
+            &(NormalizedValue::bytes(vec![0, 128, 255]))
+        ),
+        Ok(true)
+    );
     assert_eq!(pointer(&prefix), original);
-    assert_eq!(result, NormalizedValue::bytes(vec![0, 128, 255, 17]));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(result),
+            &(NormalizedValue::bytes(vec![0, 128, 255, 17]))
+        ),
+        Ok(true)
+    );
     assert_ne!(
         pointer(&result),
         original,
@@ -278,6 +309,12 @@ fn bytes_concat_never_mutates_a_retained_prefix() {
             )
             .unwrap()
             .0;
-    assert_eq!(reference, result);
-    assert_eq!(prefix, NormalizedValue::bytes(vec![0, 128, 255]));
+    assert_eq!(raw_value_equal(&(reference), &(result)), Ok(true));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(prefix),
+            &(NormalizedValue::bytes(vec![0, 128, 255]))
+        ),
+        Ok(true)
+    );
 }

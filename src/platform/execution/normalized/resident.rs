@@ -14,7 +14,7 @@ use crate::platform::runtime::{
 };
 use std::sync::Arc;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub(crate) struct NormalizedResidentInvocationReceipt {
     pub value: NormalizedValue,
     pub execution: NormalizedRunObservation,

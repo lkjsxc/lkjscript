@@ -4,6 +4,7 @@
 //! The maintained compiler is bootstrapped once per entry with the Rust backend;
 //! these controls do not establish maintained-compiler C2/C3 fixed points.
 use super::*;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 use crate::platform::kernel::ExpressionOperation as E;
 use crate::platform::semantic_id::{BindingId, DeclarationId, ExpressionId, PortId, TargetId};
 
@@ -826,8 +827,11 @@ fn selfhost_source_scalar_e2_checks_complete_carriers_in_vm_reference_and_native
             vec![NormalizedValue::bytes(case.carrier.as_slice())],
         );
         assert_eq!(
-            super::field(&value, "diagnostic"),
-            &NormalizedValue::I64(case.diagnostic),
+            raw_value_equal(
+                super::field(&value, "diagnostic"),
+                &NormalizedValue::I64(case.diagnostic),
+            ),
+            Ok(true),
             "case={}",
             case.name,
         );
@@ -856,12 +860,15 @@ fn selfhost_source_scalar_e2_checks_complete_carriers_in_vm_reference_and_native
         .unwrap();
     for case in [cases().first().unwrap(), negative] {
         assert_eq!(
-            super::invoke(
-                "source-scalar",
-                "validate",
-                vec![NormalizedValue::bytes(case.carrier.as_slice())],
+            raw_value_equal(
+                &super::invoke(
+                    "source-scalar",
+                    "validate",
+                    vec![NormalizedValue::bytes(case.carrier.as_slice())],
+                ),
+                &NormalizedValue::I64(case.diagnostic),
             ),
-            NormalizedValue::I64(case.diagnostic),
+            Ok(true),
             "case={}",
             case.name,
         );
@@ -890,7 +897,10 @@ fn selfhost_source_scalar_e3_compiles_selected_requests_and_executes_independent
                 "compile",
                 vec![NormalizedValue::bytes(case.request.as_slice())],
             );
-            assert_eq!(super::field(&value, "diagnostic"), &NormalizedValue::I64(0),);
+            assert_eq!(
+                raw_value_equal(super::field(&value, "diagnostic"), &NormalizedValue::I64(0),),
+                Ok(true),
+            );
             let NormalizedValue::Bytes(expected) = super::field(&value, "image") else {
                 panic!("source compiler image");
             };
@@ -902,7 +912,7 @@ fn selfhost_source_scalar_e3_compiles_selected_requests_and_executes_independent
             eprintln!(
                 "selfhost scalar execution case={} compiler_sha256={} carrier_sha256={} \
                  request_sha256={} selected_target={} \
-                 program_sha256={} target=linux-x86_64 output=ELF64 normalized_profile=6 \
+                 program_sha256={} target=linux-x86_64 output=ELF64 normalized_profile=8 \
                  arguments=[] environment=empty \
                  program_deadline_seconds=5 exit={:?} stdout_sha256={} elapsed_ms={}",
                 case.name,
@@ -1101,8 +1111,11 @@ fn assert_request_rejection(
         vec![NormalizedValue::bytes(request)],
     );
     assert_eq!(
-        super::field(&value, "diagnostic"),
-        &NormalizedValue::I64(diagnostic),
+        raw_value_equal(
+            super::field(&value, "diagnostic"),
+            &NormalizedValue::I64(diagnostic),
+        ),
+        Ok(true),
         "request control={name}",
     );
     let NormalizedValue::Bytes(image) = super::field(&value, "image") else {
@@ -1222,12 +1235,15 @@ fn check_request_controls(compiler: &NativeCompiler) {
     );
     let retired_carrier = graph::packet(&retired_source);
     assert_eq!(
-        super::invoke(
-            "source-scalar",
-            "validate",
-            vec![NormalizedValue::bytes(retired_carrier.as_slice())]
+        raw_value_equal(
+            &super::invoke(
+                "source-scalar",
+                "validate",
+                vec![NormalizedValue::bytes(retired_carrier.as_slice())]
+            ),
+            &NormalizedValue::I64(0),
         ),
-        NormalizedValue::I64(0),
+        Ok(true),
         "retirement control reaches target selection after complete E2",
     );
     assert_request_rejection(
@@ -1280,23 +1296,35 @@ fn assert_raw_scalar_e3_rejection(
     // The complete carrier is canonically encoded with recomputed commitments.
     // Passing the carrier validator excludes a digest/encoding rejection.
     assert_eq!(
-        super::invoke("source-graph", "validate", argument()),
-        NormalizedValue::I64(0),
+        raw_value_equal(
+            &super::invoke("source-graph", "validate", argument()),
+            &NormalizedValue::I64(0),
+        ),
+        Ok(true),
         "carrier validation case={name} carrier_sha256={carrier_sha256}",
     );
     assert_eq!(
-        super::invoke("source-links", "validate", argument()),
-        NormalizedValue::I64(links_diagnostic),
+        raw_value_equal(
+            &super::invoke("source-links", "validate", argument()),
+            &NormalizedValue::I64(links_diagnostic),
+        ),
+        Ok(true),
         "reference validation case={name} carrier_sha256={carrier_sha256}",
     );
     if links_diagnostic == 0 {
         // Both cycle owners have exactly one incoming containment edge. Prove
         // that parent-table construction succeeds before forest validation.
         let prepared = super::invoke("source-members", "prepare", argument());
-        assert_eq!(super::field(&prepared, "code"), &NormalizedValue::I64(0));
         assert_eq!(
-            super::invoke("source-scope", "validate", argument()),
-            NormalizedValue::I64(diagnostic),
+            raw_value_equal(super::field(&prepared, "code"), &NormalizedValue::I64(0),),
+            Ok(true),
+        );
+        assert_eq!(
+            raw_value_equal(
+                &super::invoke("source-scope", "validate", argument()),
+                &NormalizedValue::I64(diagnostic),
+            ),
+            Ok(true),
             "forest validation case={name} carrier_sha256={carrier_sha256}",
         );
     }
@@ -1309,8 +1337,11 @@ fn assert_raw_scalar_e3_rejection(
         vec![NormalizedValue::bytes(request.as_slice())],
     );
     assert_eq!(
-        super::field(&value, "diagnostic"),
-        &NormalizedValue::I64(diagnostic),
+        raw_value_equal(
+            super::field(&value, "diagnostic"),
+            &NormalizedValue::I64(diagnostic),
+        ),
+        Ok(true),
         "source compiler case={name} carrier_sha256={carrier_sha256}",
     );
     let NormalizedValue::Bytes(image) = super::field(&value, "image") else {
@@ -1428,6 +1459,6 @@ fn selfhost_source_scalar_e3_derives_wide_frames_without_host_projection() {
     let reference = NormalizedReferenceInterpreter::new(&source, &program, policy)
         .invoke(declaration, vec![], None, &control)
         .unwrap();
-    assert_eq!(vm.0, NormalizedValue::I64(255));
-    assert_eq!(reference.0, vm.0);
+    assert_eq!(raw_value_equal(&vm.0, &NormalizedValue::I64(255)), Ok(true));
+    assert_eq!(raw_value_equal(&reference.0, &vm.0), Ok(true));
 }

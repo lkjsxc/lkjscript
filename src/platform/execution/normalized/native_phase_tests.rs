@@ -218,6 +218,14 @@ struct Observation {
     owned: u64,
     snapshot: Snapshot,
 }
+#[derive(Debug, PartialEq, Eq)]
+struct AllocationObservation {
+    frame: u64,
+    attempts: [u64; 2],
+    output_slabs: [u64; 2],
+    output_bytes: [u64; 2],
+    output_roots_live: [bool; 2],
+}
 
 fn observe(pid: u32, mem: &File, frame: &Frame, baseline: u64) -> Check<Observation> {
     let snapshot = process_snapshot(pid)?;
@@ -482,6 +490,18 @@ fn verify(
     deadline: Duration,
     alternate: Option<(&[u8], &[u8])>,
 ) -> Check<()> {
+    verify_observed(label, image, request, expected, mode, deadline, alternate).map(|_| ())
+}
+
+fn verify_observed(
+    label: &str,
+    image: &[u8],
+    request: &[u8],
+    expected: &[u8],
+    mode: Mode,
+    deadline: Duration,
+    alternate: Option<(&[u8], &[u8])>,
+) -> Check<Vec<AllocationObservation>> {
     crate::release_container::inspect_static_elf_bytes(image)
         .map_err(|e| format!("{label}: production ELF: {e:?}"))?;
     let wrapper = caller::wrap(image, request, alternate.map(|(input, _)| input), mode)?;
@@ -539,8 +559,10 @@ fn verify(
         Mode::ObserverLeak => &[100, 0, 300],
         Mode::AllocationFree => &[100, 110, 7, 1, 10, 11],
         Mode::RuntimeReject => &[100, 24, 1, 10, 11],
+        Mode::AllocationIdentity => &[100, 0, 1, 2, 3, 8, 9, 30, 31, 10, 11],
     };
     let mut baseline = 0;
+    let mut allocations = Vec::new();
     let mut normal_attempts = 0;
     let mut cleanup_fault: Option<CleanupFault> = None;
     let mut preflight_handles: Option<Vec<u8>> = None;
@@ -629,9 +651,23 @@ fn verify(
             eprintln!(
                 "native phase observer control case={label} status=passed detected=forgotten-unmapped-slabs production_instructions=unchanged"
             );
-            return Ok(());
+            return Ok(allocations);
         }
         let observation = observation?;
+        if mode == Mode::AllocationIdentity {
+            // observe() already checked these handles against /proc/$pid/mem,
+            // walked every slab, rejected saturation, and compared exact maps.
+            allocations.push(AllocationObservation {
+                frame: *id,
+                attempts: observation.attempts,
+                output_slabs: [word(&frame.handles, 88)?, word(&frame.handles, 248)?],
+                output_bytes: [word(&frame.handles, 96)?, word(&frame.handles, 256)?],
+                output_roots_live: [
+                    word(&frame.handles, 120)? != 0,
+                    word(&frame.handles, 280)? != 0,
+                ],
+            });
+        }
         if *id == 0 && mode == Mode::Echo {
             preflight_handles = Some(frame.handles.clone());
         }
@@ -802,6 +838,70 @@ fn verify(
         sha256(expected),
         start.elapsed().as_millis()
     );
+    Ok(allocations)
+}
+
+/// Compare a matched pair whose only runtime source difference is Bind(0).
+///
+/// Each fixed-address ELF runs three invocations in its own long-lived process.
+/// These are actual native allocator attempts and independently checked owner
+/// mappings, not the evaluator's modeled cumulative allocation. The source
+/// fixtures must cover static and already-bound callables with the same nonempty
+/// Bind in both programs. Private callable pointer identity is separately checked
+/// by the emitted-helper native control; the public ABI exposes promoted results.
+pub(super) fn verify_empty_bind_identity_pair(
+    baseline: &[u8],
+    empty_bind: &[u8],
+    input: &[u8],
+    expected: &[u8],
+) -> Check<()> {
+    let ordinary = verify_observed(
+        "source-callable-identity-baseline",
+        baseline,
+        input,
+        expected,
+        Mode::AllocationIdentity,
+        FOCUSED_DEADLINE,
+        None,
+    )?;
+    let bound = verify_observed(
+        "source-callable-empty-bind-identity",
+        empty_bind,
+        input,
+        expected,
+        Mode::AllocationIdentity,
+        FOCUSED_DEADLINE,
+        None,
+    )?;
+    ensure(
+        ordinary.len() == 11 && bound.len() == 11,
+        "empty Bind allocation comparison missed invocation/release observations",
+    )?;
+    for frame in [0, 1, 8] {
+        let invocation = ordinary
+            .iter()
+            .find(|observation| observation.frame == frame)
+            .ok_or("empty Bind baseline invocation observation absent")?;
+        let owner = usize::from(frame != 0);
+        ensure(
+            invocation.attempts[owner] > 0 && invocation.output_roots_live[owner],
+            "empty Bind baseline did not reach observed allocation and output promotion",
+        )?;
+    }
+    ensure(
+        ordinary == bound,
+        &format!(
+            "empty Bind changed native allocation attempts or owned output mappings: baseline={ordinary:?}; empty_bind={bound:?}"
+        ),
+    )?;
+    eprintln!(
+        "native empty Bind pair verified baseline_sha256={} empty_bind_sha256={} input_sha256={} expected_sha256={} processes=2 invocations_per_process=3 observations_per_process={} allocator_attempts=equal saturation=absent independent_owner_maps=equal final_release=passed",
+        sha256(baseline),
+        sha256(empty_bind),
+        sha256(input),
+        sha256(expected),
+        ordinary.len(),
+    );
     Ok(())
 }
 
@@ -907,6 +1007,71 @@ fn native_elf_phase_cancels_allocation_free_tail_loop_and_retries() -> Check<()>
         verify(
             label,
             image,
+            &[],
+            success,
+            Mode::AllocationFree,
+            Duration::from_secs(10),
+            Some((success, success)),
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn native_elf_phase_cancels_allocation_free_tail_invokes_and_retries() -> Check<()> {
+    // Authored source mutations exercise both ordinary and zero-arity graph
+    // transfer; FunctionValue has a static empty prefix in both cases.
+    let one_argument = LOOP_FIXTURE.replace(
+        "(call spin (local input))",
+        "(invoke (function-value spin) (local input))",
+    );
+    let zero_arguments = LOOP_FIXTURE
+        .replace(
+            "spin (visibility private) (effect pure)\n      (parameter create input (type Bytes))",
+            "spin (visibility private) (effect pure)",
+        )
+        .replace(
+            "(call spin (local input))",
+            "(invoke (function-value spin))",
+        );
+    for (label, source_text) in [
+        ("Rust-indirect-allocation-free", one_argument),
+        ("Rust-zero-arity-indirect-allocation-free", zero_arguments),
+    ] {
+        ensure(
+            source_text.matches("(invoke (function-value spin)").count() == 2,
+            "indirect-loop fixture did not replace both source calls",
+        )?;
+        let source = super::byte_buffer_tests::author_only(&source_text)?;
+        let case = super::case_from_snapshot(&source)?;
+        let host = host_oracle(&case)?;
+        let spin = host
+            .program
+            .function(function_named(&case.source, "phase-controls", "spin")?)
+            .ok_or("indirect-loop function absent")?;
+        if label.contains("zero-arity") {
+            let spin = &host.program.functions[spin.0 as usize];
+            ensure(
+                spin.parameter_count == 0,
+                "zero-arity loop retained a parameter",
+            )?;
+            ensure(
+                matches!(
+                    &spin.body,
+                    crate::platform::execution::normalized::prepare::NormalizedFunctionBody::Code(code)
+                        if code.local_count == 0
+                ),
+                "zero-arity loop unexpectedly retains local slots",
+            )?;
+        }
+        let native = native_image(
+            &host.program,
+            function_named(&case.source, "phase-controls", "entry")?,
+        )?;
+        let success = b"resumed";
+        verify(
+            label,
+            &native,
             &[],
             success,
             Mode::AllocationFree,

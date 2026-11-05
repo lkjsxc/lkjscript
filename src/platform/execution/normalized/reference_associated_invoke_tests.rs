@@ -212,7 +212,13 @@ fn healthy(
     tail: bool,
 ) {
     let (value, observation) = run(case, &case.fixture.source, Arc::clone(schema)).unwrap();
-    assert_eq!(value, NormalizedValue::I64(17));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(value),
+            &(NormalizedValue::I64(17))
+        ),
+        Ok(true)
+    );
     assert_eq!(observation.calls, 2);
     assert_eq!(observation.tail_transfers, u64::from(tail));
     assert_eq!(observation.live_call_frames_after, 0);
@@ -485,7 +491,13 @@ fn reference_associated_invocations_preserve_shared_work_cancel_and_package_boun
             CheckedValue::primitive(&state.schema, NormalizedValue::I64(17))
         });
         if remaining == 3 {
-            assert_eq!(result.unwrap().0, NormalizedValue::I64(17));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(result.unwrap().0),
+                    &(NormalizedValue::I64(17))
+                ),
+                Ok(true)
+            );
         } else {
             let error = result.unwrap_err();
             assert_eq!(error.class, ExecutionFailureClass::Resource);
@@ -656,7 +668,13 @@ fn reference_associated_invocations_reject_raw_operation_routes_before_children(
             Arc::clone(&external_schema),
         )
         .unwrap();
-        assert_eq!(value, NormalizedValue::I64(59));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(NormalizedValue::I64(59))
+            ),
+            Ok(true)
+        );
         assert_eq!(observed.calls, 2);
         assert_eq!(observed.external_calls, 1);
         assert_eq!(observed.live_call_frames_after, 0);
@@ -681,7 +699,13 @@ fn reference_associated_invocations_reject_raw_operation_routes_before_children(
             state.call_declaration(external, &[], &[], &[], arguments)
         })
         .unwrap();
-        assert_eq!(value, NormalizedValue::I64(59));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(NormalizedValue::I64(59))
+            ),
+            Ok(true)
+        );
         assert_eq!(observed.external_calls, 1);
     }
 }
@@ -809,7 +833,13 @@ fn reference_associated_invocation_seals_bind_route_scope_proof_and_retention_bu
             CheckedValue::primitive(&state.schema, NormalizedValue::I64(17))
         });
         if remaining == 4 {
-            assert_eq!(result.unwrap().0, NormalizedValue::I64(17));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(result.unwrap().0),
+                    &(NormalizedValue::I64(17))
+                ),
+                Ok(true)
+            );
         } else {
             let error = result.unwrap_err();
             assert_eq!(error.class, ExecutionFailureClass::Resource);
@@ -1237,7 +1267,13 @@ fn reference_scope_frames_reuse_one_admitted_parameter_inventory_without_weakeni
             state.call_declaration(case.caller, &[], &[], &[], vec![])
         })
         .unwrap();
-    assert_eq!(value, NormalizedValue::I64(17));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(value),
+            &(NormalizedValue::I64(17))
+        ),
+        Ok(true)
+    );
 
     let control = ExecutionControl::uncancelled();
     let error = interpreter

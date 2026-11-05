@@ -90,11 +90,19 @@ declarations.begin
         (let
           (binding tag (call kind (local types) (local identity)))
           (in
-            (call ci::either
-              (call ci::both (call ci::lt (i64 0) (local tag)) (call ci::lt (local tag) (i64 6)))
+            (if
               (call ci::either
-                (call ci::either (call ci::eq (local tag) (i64 7)) (call ci::eq (local tag) (i64 8)))
-                (call ci::eq (local tag) (i64 10))))))))
+                (call ci::both (call ci::lt (i64 0) (local tag)) (call ci::lt (local tag) (i64 6)))
+                (call ci::either
+                  (call ci::either
+                    (call ci::eq (local tag) (i64 7))
+                    (call ci::eq (local tag) (i64 8)))
+                  (call ci::eq (local tag) (i64 10))))
+              (bool true)
+              (if
+                (call ci::eq (local tag) (i64 11))
+                (call function-copyable (local types) (local identity))
+                (bool false)))))))
     (function create function-count
       (visibility package)
       (effect pure)
@@ -126,6 +134,59 @@ declarations.begin
           (local types)
           (local identity)
           (call function-count (local types) (local identity)))))
+    (function create flat-copyable
+      (visibility private)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (returns Bool)
+      (body
+        (let
+          (binding tag (call kind (local types) (local identity)))
+          (in
+            (call ci::either
+              (call ci::both (call ci::lt (i64 0) (local tag)) (call ci::lt (local tag) (i64 6)))
+              (call ci::either
+                (call ci::either
+                  (call ci::eq (local tag) (i64 7))
+                  (call ci::eq (local tag) (i64 8)))
+                (call ci::either
+                  (call ci::eq (local tag) (i64 10))
+                  (call ci::eq (local tag) (i64 11)))))))))
+    (function create function-copyable-parameters
+      (visibility private)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (parameter create index (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local index) (call function-count (local types) (local identity)))
+          (bool true)
+          (if
+            (call flat-copyable
+              (local types)
+              (call function-parameter (local types) (local identity) (local index)))
+            (call function-copyable-parameters
+              (local types)
+              (local identity)
+              (call ci::add (local index) (i64 1)))
+            (bool false)))))
+    (function create function-copyable
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (call kind (local types) (local identity)) (i64 11))
+          (if
+            (call flat-copyable (local types) (call function-result (local types) (local identity)))
+            (call function-copyable-parameters (local types) (local identity) (i64 0))
+            (bool false))
+          (bool false))))
     (function create record-count
       (visibility package)
       (effect pure)
@@ -318,6 +379,48 @@ declarations.begin
                         (i64 0)
                         (call ci::freeze (local e))
                         (call ci::add (call ci::length (local types)) (i64 1))))))))))))
+    (function create function-suffix
+      (visibility package)
+      (effect pure)
+      (parameter create types (type Bytes))
+      (parameter create identity (type I64))
+      (parameter create prefix (type I64))
+      (returns (record (code I64) (types Bytes) (identity I64)))
+      (body
+        (if
+          (call ci::eq (call kind (local types) (local identity)) (i64 11))
+          (if
+            (call function-copyable (local types) (local identity))
+            (let
+              (binding count (call function-count (local types) (local identity)))
+              (in
+                (if
+                  (call ci::both
+                    (call ci::lt (i64 -1) (local prefix))
+                    (call ci::lte (local prefix) (local count)))
+                  (if
+                    (call ci::eq (local prefix) (i64 0))
+                    (call outcome (i64 0) (local types) (local identity))
+                    (let
+                      (binding a (type ByteBuffer) (call ci::empty))
+                      (binding b
+                        (type ByteBuffer)
+                        (call ci::le (call ci::sub (local count) (local prefix)) (i64 8) (local a)))
+                      (binding c
+                        (type ByteBuffer)
+                        (call ci::append-slice
+                          (local types)
+                          (call ci::add
+                            (call payload (local identity))
+                            (call ci::mul (call ci::add (local prefix) (i64 1)) (i64 8)))
+                          (call ci::add
+                            (call payload (local identity))
+                            (call ci::u64 (local types) (call ci::add (local identity) (i64 7))))
+                          (local b)))
+                      (in (call intern (local types) (i64 11) (call ci::freeze (local c))))))
+                  (call outcome (i64 19) (local types) (i64 0)))))
+            (call outcome (i64 13) (local types) (i64 0)))
+          (call outcome (i64 19) (local types) (i64 0)))))
     (function create initial
       (visibility private)
       (effect pure)

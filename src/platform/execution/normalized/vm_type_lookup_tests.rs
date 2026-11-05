@@ -677,8 +677,20 @@ fn application_ordinary_lookup_keeps_control_bounds_and_modeled_vm_accounting() 
     let (actual, counts) = invoke(&program, NormalizedRunPolicy::default()).unwrap();
     let (scanned, scanned_counts) =
         invoke(&scanned_program, NormalizedRunPolicy::default()).unwrap();
-    assert_eq!(actual, NormalizedValue::Unit);
-    assert_eq!(actual, scanned);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(actual),
+            &(NormalizedValue::Unit)
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(actual),
+            &(scanned)
+        ),
+        Ok(true)
+    );
     assert_eq!(counts, scanned_counts);
     let policy = NormalizedRunPolicy {
         instruction_steps: Some(counts.instructions - 1),

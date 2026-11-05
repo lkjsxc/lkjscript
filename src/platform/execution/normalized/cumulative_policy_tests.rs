@@ -70,10 +70,7 @@ fn cumulative_policy_boundaries_are_exact_in_vm_and_reference() {
                 let (result, calls) = run(policy);
                 if maximum.is_none_or(|maximum| maximum >= exact) {
                     let (value, work, flags) = result.unwrap();
-                    assert_eq!(
-                        value, expected,
-                        "reference={reference} dimension={dimension} maximum={maximum:?}"
-                    );
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(expected)), Ok(true), "reference={reference} dimension={dimension} maximum={maximum:?}");
                     assert_eq!(work, measured);
                     assert_eq!(flags, [false; 4]);
                     assert_eq!(calls, baseline_calls);
@@ -129,8 +126,20 @@ fn zero_collection_and_capability_policies_admit_pure_scalar_work() {
         NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
             .invoke(declaration, vec![], None, &control)
             .unwrap();
-    assert_eq!(vm, NormalizedValue::I64(7));
-    assert_eq!(reference, vm);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(vm),
+            &(NormalizedValue::I64(7))
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(reference),
+            &(vm)
+        ),
+        Ok(true)
+    );
     assert_eq!((vm_work.collection_items, vm_work.capability_calls), (0, 0));
     assert_eq!(
         (

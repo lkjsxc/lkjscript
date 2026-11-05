@@ -17,8 +17,9 @@ pub(crate) enum NormalizedResourceKind {
     QueueLease,
 }
 
+/// Opaque raw-value carrier; resource scopes retain all construction and authority checks.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(crate) struct NormalizedResourceHandle {
+pub struct NormalizedResourceHandle {
     scope: NormalizedResourceScopeId,
     slot: u64,
     kind: NormalizedResourceKind,

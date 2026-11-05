@@ -5,6 +5,7 @@
 use super::super::value::{FunctionIndex, NormalizedRecord, RecordLayoutIndex, ValueOrigin};
 use super::*;
 use crate::platform::execution::ExecutionControl;
+use crate::platform::execution::normalized::child_storage::{Captures, Values};
 use std::collections::BTreeSet;
 
 const TEST_LIMIT: u64 = 1_000_000;
@@ -19,6 +20,31 @@ fn key(value: i64) -> NormalizedMapKey {
 
 fn value(value: i64) -> NormalizedValue {
     NormalizedValue::I64(value)
+}
+
+// Compare both complete ordered streams, including keys and exhaustion. A raw
+// comparison allocation/cancellation error remains an Err and fails the test.
+fn assert_raw_iter_equal<
+    T: crate::platform::execution::normalized::structural_equality::assertions::StructuralTestValue,
+>(
+    left: impl IntoIterator<Item = T>,
+    right: impl IntoIterator<Item = T>,
+) {
+    let mut left = left.into_iter();
+    let mut right = right.into_iter();
+    loop {
+        let (left, right) = (left.next(), right.next());
+        assert_eq!(left.is_some(), right.is_some());
+        match (left, right) {
+            (Some(left), Some(right)) => assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &left, &right
+                ),
+                Ok(true)
+            ),
+            _ => break,
+        }
+    }
 }
 
 #[test]
@@ -92,27 +118,63 @@ fn agrees(map: &Map, expected: &BTreeMap<NormalizedMapKey, NormalizedValue>) {
     assert_eq!(map.len(), expected.len());
     assert_eq!(map.is_empty(), expected.is_empty());
     assert_eq!(shape(&map.root, None, None).1, expected.len());
-    assert!(map.iter().eq(expected.iter()));
-    assert!(map.iter().rev().eq(expected.iter().rev()));
+    assert_raw_iter_equal(map.iter(), expected.iter());
+    assert_raw_iter_equal(map.iter().rev(), expected.iter().rev());
     assert!(map.keys().eq(expected.keys()));
-    assert!(map.values().eq(expected.values()));
+    assert_raw_iter_equal(map.values(), expected.values());
     let mut actual = map.iter();
     let mut oracle = expected.iter();
     let mut forward = true;
     while oracle.len() != 0 {
         assert_eq!(actual.len(), oracle.len());
         if forward {
-            assert_eq!(actual.next(), oracle.next());
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(actual.next()),
+                    &(oracle.next())
+                ),
+                Ok(true)
+            );
         } else {
-            assert_eq!(actual.next_back(), oracle.next_back());
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(actual.next_back()),
+                    &(oracle.next_back())
+                ),
+                Ok(true)
+            );
         }
         forward = !forward;
     }
-    assert_eq!(actual.next(), None);
-    assert_eq!(actual.next_back(), None);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(actual.next()),
+            &(None)
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(actual.next_back()),
+            &(None)
+        ),
+        Ok(true)
+    );
     for (key, value) in expected {
-        assert_eq!(map.get(key), Some(value));
-        assert_eq!(map.get_key_value(key), Some((key, value)));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(map.get(key)),
+                &(Some(value))
+            ),
+            Ok(true)
+        );
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(map.get_key_value(key)),
+                &(Some((key, value)))
+            ),
+            Ok(true)
+        );
         assert!(map.contains_key(key));
     }
 }
@@ -215,21 +277,33 @@ fn persistent_map_bulk_order_and_all_key_kinds_are_canonical() {
             .insert(key.clone(), value.clone(), 10, &mut free)
             .unwrap();
     }
-    assert!(
-        bulk.iter()
-            .eq(ordered.iter().map(|(key, value)| (key, value)))
-    );
+    assert_raw_iter_equal(bulk.iter(), ordered.iter().map(|(key, value)| (key, value)));
     agrees(&bulk, &entries);
     agrees(&incremental, &entries);
-    assert_eq!(bulk, incremental);
-    assert_ne!(bulk, Map::default());
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(bulk),
+            &(incremental)
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(bulk),
+            &(Map::default())
+        ),
+        Ok(false)
+    );
     assert_eq!(
         NormalizedMapKey::from_value(NormalizedValue::static_text("a")),
         Some(NormalizedMapKey::Text(Arc::from("a")))
     );
     assert_eq!(
-        Map::from_items(BTreeMap::new(), 0, &mut free).unwrap(),
-        Map::default()
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(Map::from_items(BTreeMap::new(), 0, &mut free).unwrap()),
+            &(Map::default())
+        ),
+        Ok(true)
     );
     assert!(Map::from_items(entries, 9, &mut free).is_err());
 }
@@ -241,7 +315,7 @@ fn physical(map: &Map) -> (BTreeSet<usize>, BTreeSet<usize>) {
     let mut pending = Vec::from_iter(map.root.as_ref());
     while let Some(node) = pending.pop() {
         assert!(nodes.insert(Arc::as_ptr(node) as usize));
-        assert!(entries.insert(Arc::as_ptr(&node.entry) as usize));
+        assert!(entries.insert(triomphe::Arc::as_ptr(&node.entry) as usize));
         pending.extend(node.left.as_ref());
         pending.extend(node.right.as_ref());
     }
@@ -260,7 +334,7 @@ fn retains_untouched_payloads(before: &Map, after: &Map, edited: &NormalizedMapK
 fn composite(n: i64, origin: ValueOrigin) -> NormalizedValue {
     let mut value = NormalizedValue::Record(NormalizedRecord::Nominal {
         layout: RecordLayoutIndex(7, origin),
-        fields: Arc::new(vec![
+        fields: Values::try_new(vec![
             NormalizedValue::list(vec![
                 NormalizedValue::bytes(vec![n as u8; 1024]),
                 NormalizedValue::Result {
@@ -275,9 +349,10 @@ fn composite(n: i64, origin: ValueOrigin) -> NormalizedValue {
                 type_arguments: Arc::from([]),
                 effect_arguments: Arc::from([]),
                 requirement_arguments: Arc::from([]),
-                bound_arguments: Some(Arc::new(vec![value(n)])),
+                bound_arguments: Some(Captures::try_new(vec![value(n)]).unwrap()),
             },
-        ]),
+        ])
+        .unwrap(),
     });
     for _ in 0..24 {
         value = NormalizedValue::Option(Some(Box::new(value)));
@@ -337,7 +412,13 @@ fn persistent_map_retained_composites_share_entries_subtrees_and_owned_buffers()
                 &mut free,
             )
             .unwrap();
-            assert_eq!(rebuilt, map);
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(rebuilt),
+                    &(map)
+                ),
+                Ok(true)
+            );
             assert!(!retains_untouched_payloads(&map, &rebuilt, &key(-1)));
             let rebuilt_physical = physical(&rebuilt);
             assert_eq!(
@@ -386,7 +467,12 @@ fn independent_storage_schedule(nodes: u64, entries: u64) -> Charge {
         + std::mem::size_of::<NormalizedValue>()) as u64
         + 2 * word;
     assert_eq!(std::mem::size_of::<Node>() as u64 + 2 * word, node_bytes);
-    assert_eq!(std::mem::size_of::<Entry>() as u64 + 2 * word, entry_bytes);
+    // Explicit policy charges retain the documented logical layout; the
+    // private retirement link is not a claim about physical allocator bytes.
+    assert_eq!(
+        std::mem::size_of::<MeteredEntry>() as u64 + 2 * word,
+        entry_bytes
+    );
     Charge {
         slots: nodes,
         bytes: nodes * node_bytes + entries * entry_bytes,
@@ -454,7 +540,13 @@ fn persistent_map_accounting_matches_independent_exact_fit_schedule() {
         // The accepted entry allocation remains cumulative even though the next
         // node reservation refused and no successful map was exposed.
         assert_eq!(charged, independent_storage_schedule(0, 1));
-        assert_eq!(map, before);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(map),
+                &(before)
+            ),
+            Ok(true)
+        );
     }
     let mut charges = Vec::new();
     let removed = map
@@ -498,7 +590,13 @@ fn persistent_map_accounting_matches_independent_exact_fit_schedule() {
         .unwrap();
     assert_eq!(total(&charges), independent_storage_schedule(1, 1));
     assert_eq!(before.since().key_bytes_copied, 0);
-    assert_eq!(borrowed_map.get(&borrowed), Some(&value(1)));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(borrowed_map.get(&borrowed)),
+            &(Some(&value(1)))
+        ),
+        Ok(true)
+    );
 }
 
 #[test]
@@ -648,7 +746,7 @@ fn deep_raw(depth: usize, payload: &Arc<[u8]>) -> NormalizedValue {
             },
             _ => NormalizedValue::Record(NormalizedRecord::Nominal {
                 layout: RecordLayoutIndex(3, ValueOrigin::default()),
-                fields: Arc::new(vec![value]),
+                fields: Values::try_new(vec![value]).unwrap(),
             }),
         };
     }
@@ -675,7 +773,13 @@ fn persistent_map_deep_rejected_raw_values_and_partial_trees_dispose_iteratively
             ));
             drop(map);
             drop(changed);
-            assert_eq!(retained.get(&key(1)), Some(&value(1)));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(retained.get(&key(1))),
+                    &(Some(&value(1)))
+                ),
+                Ok(true)
+            );
             drop(retained);
             assert_eq!(Arc::strong_count(&payload), 1);
             // Every construction boundary, including final cancellation after a full
@@ -711,8 +815,20 @@ fn persistent_map_deep_rejected_raw_values_and_partial_trees_dispose_iteratively
                     .is_err()
                 );
                 assert_eq!(Arc::strong_count(&payload), 1);
-                assert_eq!(base.get(&key(0)), Some(&value(0)));
-                assert_eq!(base.get(&key(1)), Some(&value(1)));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(base.get(&key(0))),
+                        &(Some(&value(0)))
+                    ),
+                    Ok(true)
+                );
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(base.get(&key(1))),
+                        &(Some(&value(1)))
+                    ),
+                    Ok(true)
+                );
             }
             assert!(
                 Map::default()
@@ -751,7 +867,13 @@ fn persistent_map_updates_have_logarithmic_storage_work() {
                     Ok(())
                 })
                 .unwrap();
-            assert_eq!(previous.get(&key(n)), None);
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(previous.get(&key(n))),
+                    &(None)
+                ),
+                Ok(true)
+            );
         }
         let candidate_ns = started.elapsed().as_nanos();
         agrees(&candidate, &baseline);
@@ -809,8 +931,20 @@ fn persistent_map_observation_saturation_neither_authorizes_nor_exhausts_storage
         })
         .is_err()
     );
-    assert_eq!(map.get(&selected), Some(&value(17)));
-    assert_eq!(retained, map);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(map.get(&selected)),
+            &(Some(&value(17)))
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(retained),
+            &(map)
+        ),
+        Ok(true)
+    );
     assert_eq!(Work::current(), saturated);
 }
 
@@ -845,14 +979,42 @@ fn persistent_map_equality_keeps_admitted_nested_payloads_on_a_bounded_stack() {
                 .unwrap();
             // Equal logical depth-256 values have different root shapes and separately
             // constructed descendants. Each root retains two aliases of its child.
-            assert!(original == independently_built);
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &original,
+                    &independently_built
+                ),
+                Ok(true)
+            );
             let changed = original
                 .insert(key(1), nested(8), TEST_LIMIT, &mut free)
                 .unwrap();
-            assert!(original != changed);
-            assert!(changed != independently_built);
-            assert!(alias == independently_built);
-            assert!(alias == original);
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &original, &changed
+                ),
+                Ok(false)
+            );
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &changed,
+                    &independently_built
+                ),
+                Ok(false)
+            );
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &alias,
+                    &independently_built
+                ),
+                Ok(true)
+            );
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &alias, &original
+                ),
+                Ok(true)
+            );
         })
         .unwrap()
         .join()
@@ -860,52 +1022,58 @@ fn persistent_map_equality_keeps_admitted_nested_payloads_on_a_bounded_stack() {
 }
 
 #[test]
-fn persistent_map_retirement_uses_inline_or_preexisting_owned_storage() {
+fn persistent_map_retirement_uses_reserved_links_and_keeps_shared_children() -> Result<(), String> {
+    use super::super::child_storage::{Captures, DropQueue, Values};
+
     std::thread::Builder::new()
         .stack_size(2 * 1024 * 1024)
-        .spawn(|| {
-            let mut scalars = Map::from_items(
-                (0..4096).map(|n| (key(n), value(n))).collect(),
+        .spawn(|| -> Result<(), String> {
+            let payload: Arc<[u8]> = Arc::from([19_u8; 17]);
+            let bytes = || NormalizedValue::Bytes(Arc::clone(&payload).into());
+            let mut queue = DropQueue::default();
+
+            let mut wide = Map::from_items(
+                (0..4_096).map(|index| (key(index), bytes())).collect(),
                 TEST_LIMIT,
                 &mut free,
             )
-            .unwrap();
-            let mut work = RawValueWork::default();
-            scalars.drain_unique(&mut work);
-            assert_eq!(work.scratch_storage().1, 0);
-            work.release();
-            assert_eq!(work.scratch_storage().1, 0);
+            .map_err(|error| format!("{error:?}"))?;
+            assert_eq!(Arc::strong_count(&payload), 4_097);
+            wide.drain_unique(&mut queue);
+            queue.drain();
+            assert!(wide.is_empty());
+            assert_eq!(Arc::strong_count(&payload), 1);
 
-            // This crosses the list's maximum branch height, independently checking
-            // its fixed traversal stack when a map owns a large terminal payload.
-            let list = NormalizedValue::list((0..65_536).map(value).collect()).unwrap();
+            // The terminal list crosses physical branch boundaries. Every leaf
+            // reference must be released, independent of passive work counters.
+            let list = NormalizedValue::list((0..65_536).map(|_| bytes()).collect())
+                .map_err(|error| format!("{error:?}"))?;
             let mut owner = Map::default()
                 .insert(key(0), list, TEST_LIMIT, &mut free)
-                .unwrap();
-            owner.drain_unique(&mut work);
-            work.release();
-            assert_eq!(work.scratch_storage().1, 0);
+                .map_err(|error| format!("{error:?}"))?;
+            owner.drain_unique(&mut queue);
+            queue.drain();
+            assert_eq!(Arc::strong_count(&payload), 1);
 
-            let payload: Arc<[u8]> = Arc::from([19_u8; 17]);
-            let mut unary = NormalizedValue::Bytes(Arc::clone(&payload).into());
+            let mut unary = bytes();
             for _ in 0..20_000 {
                 unary = NormalizedValue::Option(Some(Box::new(unary)));
             }
             let mut owner = Map::default()
                 .insert(key(0), unary, TEST_LIMIT, &mut free)
-                .unwrap();
-            owner.drain_unique(&mut work);
-            work.release();
-            assert_eq!(work.scratch_storage().1, 0);
+                .map_err(|error| format!("{error:?}"))?;
+            owner.drain_unique(&mut queue);
+            queue.drain();
             assert_eq!(Arc::strong_count(&payload), 1);
 
             let origin = ValueOrigin::default();
             for shared in [
-                NormalizedValue::list(vec![value(7)]).unwrap(),
-                NormalizedValue::map(BTreeMap::from([(key(0), value(7))])).unwrap(),
+                NormalizedValue::list(vec![value(7)]).map_err(|error| format!("{error:?}"))?,
+                NormalizedValue::map(BTreeMap::from([(key(0), value(7))]))
+                    .map_err(|error| format!("{error:?}"))?,
                 NormalizedValue::Record(NormalizedRecord::Nominal {
                     layout: RecordLayoutIndex(0, origin),
-                    fields: Arc::new(vec![value(7)]),
+                    fields: Values::try_new(vec![value(7)]).map_err(|error| error.to_string())?,
                 }),
                 NormalizedValue::Function {
                     read_scope_arguments: Arc::from([]),
@@ -913,17 +1081,17 @@ fn persistent_map_retirement_uses_inline_or_preexisting_owned_storage() {
                     type_arguments: Arc::from([]),
                     effect_arguments: Arc::from([]),
                     requirement_arguments: Arc::from([]),
-                    bound_arguments: Some(Arc::new(vec![value(7)])),
+                    bound_arguments: Some(
+                        Captures::try_new(vec![value(7)]).map_err(|error| error.to_string())?,
+                    ),
                 },
             ] {
                 let retained = shared.clone();
                 let mut owner = Map::default()
                     .insert(key(0), shared, TEST_LIMIT, &mut free)
-                    .unwrap();
-                owner.drain_unique(&mut work);
-                assert_eq!(work.scratch_storage().1, 0);
-                work.release();
-                assert_eq!(work.scratch_storage().1, 0);
+                    .map_err(|error| format!("{error:?}"))?;
+                owner.drain_unique(&mut queue);
+                queue.drain();
                 let retained_child = match &retained {
                     NormalizedValue::List(values) => values.get(0),
                     NormalizedValue::Map(values) => values.get(&key(0)),
@@ -934,83 +1102,89 @@ fn persistent_map_retirement_uses_inline_or_preexisting_owned_storage() {
                         bound_arguments: Some(values),
                         ..
                     } => values.first(),
-                    _ => unreachable!(),
+                    _ => return Err("retained collection changed its shape".into()),
                 };
-                assert_eq!(retained_child, Some(&value(7)));
+                assert!(matches!(retained_child, Some(NormalizedValue::I64(7))));
             }
 
-            // A unique nominal record supplies its own already allocated child Vec.
-            // The disposal owner adopts that exact buffer, including its capacity.
-            let fields = (0..1024).map(value).collect::<Vec<_>>();
-            let original_storage = (fields.as_ptr(), fields.capacity());
+            // Positional fields use their reserved private retirement link.
+            let fields = Values::try_new((0..1_024).map(|_| bytes()).collect())
+                .map_err(|error| error.to_string())?;
             let mut owner = Map::default()
                 .insert(
                     key(0),
                     NormalizedValue::Record(NormalizedRecord::Nominal {
                         layout: RecordLayoutIndex(0, origin),
-                        fields: Arc::new(fields),
+                        fields,
                     }),
                     TEST_LIMIT,
                     &mut free,
                 )
-                .unwrap();
-            owner.drain_unique(&mut work);
-            work.release();
-            assert_eq!(work.scratch_storage(), original_storage);
+                .map_err(|error| format!("{error:?}"))?;
+            assert_eq!(Arc::strong_count(&payload), 1_025);
+            owner.drain_unique(&mut queue);
+            queue.drain();
+            assert_eq!(Arc::strong_count(&payload), 1);
+            Ok(())
         })
-        .unwrap()
+        .map_err(|error| error.to_string())?
         .join()
-        .unwrap();
+        .map_err(|_| "reserved map retirement worker panicked".to_owned())?
 }
 
 #[test]
-fn persistent_map_branching_raw_cleanup_bounds_scratch_by_released_children() {
+fn persistent_map_branching_raw_cleanup_releases_children_and_preserves_failed_base()
+-> Result<(), String> {
+    use super::super::child_storage::DropQueue;
+
     std::thread::Builder::new()
         .stack_size(2 * 1024 * 1024)
-        .spawn(|| {
+        .spawn(|| -> Result<(), String> {
             let payload: Arc<[u8]> = Arc::from([31_u8; 17]);
-            let build = || {
+            let build = || -> Result<NormalizedValue, String> {
                 let mut raw = NormalizedValue::Bytes(Arc::clone(&payload).into());
-                for _ in 0..2048 {
+                for _ in 0..2_048 {
                     let sibling = NormalizedValue::list(vec![NormalizedValue::Bytes(
                         Arc::clone(&payload).into(),
                     )])
-                    .unwrap();
+                    .map_err(|error| format!("{error:?}"))?;
                     raw = NormalizedValue::Map(
                         Map::from_items(
                             BTreeMap::from([(key(0), raw), (key(1), sibling)]),
                             TEST_LIMIT,
                             &mut free,
                         )
-                        .unwrap(),
+                        .map_err(|error| format!("{error:?}"))?,
                     );
                 }
-                raw
+                Ok(raw)
             };
-            let mut work = RawValueWork::default();
-            work.push(build());
-            work.release();
-            // One still-unreleased sibling per level forms the frontier. Inspect
-            // the actual Vec capacity, independently of all carrier observations.
-            let capacity = work.scratch_storage().1;
-            assert!(capacity >= 2048);
-            assert!(capacity < 2 * 2048 + 4);
+            let mut queue = DropQueue::default();
+            queue.push_value(build()?);
+            queue.drain();
             assert_eq!(Arc::strong_count(&payload), 1);
 
             let base = Map::from_items(BTreeMap::from([(key(0), value(7))]), TEST_LIMIT, &mut free)
-                .unwrap();
+                .map_err(|error| format!("{error:?}"))?;
             let retained = base.clone();
             assert!(
-                base.insert(key(1), build(), TEST_LIMIT, &mut |_| Err(storage_error()))
+                base.insert(key(1), build()?, TEST_LIMIT, &mut |_| Err(storage_error()))
                     .is_err()
             );
             assert_eq!(Arc::strong_count(&payload), 1);
-            assert_eq!(retained.get(&key(0)), Some(&value(7)));
-            assert!(retained == base);
+            for survivor in [&base, &retained] {
+                assert_eq!(survivor.len(), 1);
+                assert!(matches!(
+                    survivor.get(&key(0)),
+                    Some(NormalizedValue::I64(7))
+                ));
+                assert!(survivor.get(&key(1)).is_none());
+            }
+            Ok(())
         })
-        .unwrap()
+        .map_err(|error| error.to_string())?
         .join()
-        .unwrap();
+        .map_err(|_| "branching map retirement worker panicked".to_owned())?
 }
 
 #[test]
@@ -1046,17 +1220,29 @@ fn cursor_restart_preserves_exact_mixed_traversal_without_storage_work() {
                     assert_eq!(actual.len(), oracle.len());
                     assert_eq!(actual.size_hint(), oracle.size_hint());
                     if forward {
-                        assert_eq!(actual.next(), oracle.next());
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(actual.next()), &(oracle.next())), Ok(true));
                     } else {
-                        assert_eq!(actual.next_back(), oracle.next_back());
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(actual.next_back()), &(oracle.next_back())), Ok(true));
                     }
                     forward = !forward;
                 }
                 assert_eq!(actual.len(), 0);
-                assert_eq!(actual.next(), None);
-                assert_eq!(actual.next_back(), None);
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(actual.next()),
+                        &(None)
+                    ),
+                    Ok(true)
+                );
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(actual.next_back()),
+                        &(None)
+                    ),
+                    Ok(true)
+                );
                 actual.restart(after);
-                assert!((&mut actual).eq(expected.iter()));
+                assert_raw_iter_equal(&mut actual, expected.iter());
             }
         }
     }

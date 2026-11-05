@@ -1,4 +1,5 @@
 use super::*;
+use crate::platform::execution::normalized::child_storage::Fields;
 use crate::platform::kernel::{StructuralTypeField, encode_type_object};
 
 fn insert(types: &mut BTreeMap<TypeObjectDigest, TypeObject>, form: TypeForm) -> TypeObjectDigest {
@@ -77,7 +78,7 @@ fn region_deep_layout_codec_and_failure_teardown_use_no_recursive_host_stack() {
             },
         );
         value = NormalizedValue::Record(NormalizedRecord::Structural {
-            fields: Arc::new(vec![(Name::new("next").unwrap(), value)]),
+            fields: Fields::try_new(vec![(Name::new("next").unwrap(), value)]).unwrap(),
         });
     }
     let value = RawValue::new(value);

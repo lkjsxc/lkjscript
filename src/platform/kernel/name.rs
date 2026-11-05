@@ -20,6 +20,15 @@ impl Name {
         Ok(Self(value))
     }
 
+    /// Copy an already validated name with an explicit allocation failure.
+    /// Its bytes are unchanged, so the original validation remains sufficient.
+    pub(crate) fn try_clone(&self) -> Result<Self, std::collections::TryReserveError> {
+        let mut value = String::new();
+        value.try_reserve_exact(self.0.len())?;
+        value.push_str(&self.0);
+        Ok(Self(value))
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }

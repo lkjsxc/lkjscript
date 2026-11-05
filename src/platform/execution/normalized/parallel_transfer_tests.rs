@@ -1,5 +1,6 @@
 //! Generic group construction with an intermediate mixed pair and exact custody.
 use super::*;
+use crate::platform::execution::normalized::child_storage::Fields;
 use crate::platform::execution::normalized::{
     byte_buffer::StorageObservation as Buffers, owned_product::StorageObservation as Products,
     prepare::NormalizedEntryPoint, value::NormalizedRecord,
@@ -90,13 +91,14 @@ fn values(name: &str) -> NormalizedValue {
 
 fn expected(name: &str, n: i64) -> NormalizedValue {
     NormalizedValue::Record(NormalizedRecord::Structural {
-        fields: Arc::new(vec![
+        fields: Fields::try_new(vec![
             (
                 Name::new("scalar").unwrap(),
                 NormalizedValue::I64(if name == "integer-case" { n } else { 1 }),
             ),
             (Name::new("values").unwrap(), values(name)),
-        ]),
+        ])
+        .unwrap(),
     })
 }
 
@@ -168,7 +170,13 @@ fn parallel_transfer_generic_intermediate_pair_is_prepared_for_each_concrete_app
                     assert_eq!(work.live_handles_after, 0);
                     value
                 };
-                assert_eq!(result, expected(name, n));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(result),
+                        &(expected(name, n))
+                    ),
+                    Ok(true)
+                );
                 assert_eq!(cells.created(), usize::from(name == "integer-case"));
                 assert_eq!(buffers.created(), usize::from(name == "text-case"));
                 assert_eq!(products.created(), 1);
@@ -223,17 +231,34 @@ fn parallel_transfer_generic_pair_reservations_have_exact_quota_and_joined_clean
             &ExecutionControl::uncancelled(),
         )
         .unwrap();
-        assert_eq!(value, expected("integer-case", -137));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(expected("integer-case", -137))
+            ),
+            Ok(true)
+        );
         let exact = NormalizedRunPolicy {
             instruction_steps: Some(steps),
             maximum_allocated_bytes: Some(bytes),
             maximum_collection_items: Some(items),
             ..NormalizedRunPolicy::foreground()
         };
-        assert_eq!(
-            run(exact, &ExecutionControl::uncancelled()).unwrap(),
-            (value.clone(), steps, bytes, items)
-        );
+        {
+            let (exact_value, exact_steps, exact_bytes, exact_items) =
+                run(exact, &ExecutionControl::uncancelled()).unwrap();
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &exact_value,
+                    &(value)
+                ),
+                Ok(true)
+            );
+            assert_eq!(
+                (exact_steps, exact_bytes, exact_items),
+                (steps, bytes, items)
+            );
+        };
         for policy in [
             NormalizedRunPolicy {
                 instruction_steps: Some(steps - 1),
@@ -260,7 +285,7 @@ fn parallel_transfer_generic_pair_reservations_have_exact_quota_and_joined_clean
         for checks in [0, 16, 64, 128, 256, 512, 1_024, 4_096, 32_768] {
             match run(exact, &ExecutionControl::cancel_after_checks(checks)) {
                 Ok((actual, ..)) => {
-                    assert_eq!(actual, value);
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(actual), &(value)), Ok(true));
                     completed += 1;
                 }
                 Err(error) => {
@@ -338,13 +363,17 @@ declarations.end"#;
                     .0
             };
             assert_eq!(
-                actual,
-                NormalizedValue::Record(NormalizedRecord::Structural {
-                    fields: Arc::new(vec![
-                        (Name::new("left").unwrap(), NormalizedValue::I64(n)),
-                        (Name::new("right").unwrap(), NormalizedValue::I64(99)),
-                    ]),
-                })
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(actual),
+                    &(NormalizedValue::Record(NormalizedRecord::Structural {
+                        fields: Fields::try_new(vec![
+                            (Name::new("left").unwrap(), NormalizedValue::I64(n)),
+                            (Name::new("right").unwrap(), NormalizedValue::I64(99)),
+                        ])
+                        .unwrap(),
+                    }))
+                ),
+                Ok(true)
             );
             assert_eq!(cells.created(), 2);
             assert_eq!(products.created(), 1);
@@ -406,7 +435,13 @@ declarations.end"#;
                     .map(|(value, _)| value)
             };
             if allowed {
-                assert_eq!(actual.unwrap(), NormalizedValue::Unit);
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(actual.unwrap()),
+                        &(NormalizedValue::Unit)
+                    ),
+                    Ok(true)
+                );
             } else {
                 assert!(
                     actual.is_err(),

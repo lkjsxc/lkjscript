@@ -145,7 +145,15 @@ declarations.begin
       (parameter create facts (type Bytes))
       (parameter create event
         (type
-          (record (row I64) (enter Bool) (tag I64) (a I64) (b I64) (value I64) (anchor I64) (extra I64))))
+          (record
+            (row I64)
+            (enter Bool)
+            (tag I64)
+            (a I64)
+            (b I64)
+            (value I64)
+            (anchor I64)
+            (extra I64))))
       (parameter create operands (type Bytes))
       (parameter create parents (type Bytes))
       (parameter create locals (type Bytes))
@@ -164,20 +172,39 @@ declarations.begin
           (binding a
             (type ByteBuffer)
             (call ci::le (field (local event) (name tag)) (i64 8) (local out)))
-          (binding b (type ByteBuffer) (call ci::le (field (local event) (name a)) (i64 8) (local a)))
-          (binding c (type ByteBuffer) (call ci::le (field (local event) (name b)) (i64 8) (local b)))
-          (binding d (type ByteBuffer) (call ci::le (i64 0) (i64 8) (local c)))
+          (binding b
+            (type ByteBuffer)
+            (call ci::le (field (local event) (name a)) (i64 8) (local a)))
+          (binding c
+            (type ByteBuffer)
+            (call ci::le (field (local event) (name b)) (i64 8) (local b)))
+          (binding d
+            (type ByteBuffer)
+            (call ci::le
+              (if
+                (call ci::eq (field (local event) (name tag)) (i64 18))
+                (field (local event) (name value))
+                (i64 0))
+              (i64 8)
+              (local c)))
           (binding e
             (type ByteBuffer)
             (call ci::append
-              (call source-scalar-pack::signed (field (local event) (name value)))
+              (call source-scalar-pack::signed
+                (if
+                  (call ci::eq (field (local event) (name tag)) (i64 18))
+                  (i64 0)
+                  (field (local event) (name value))))
               (i64 0)
               (local d)))
           (binding reserved (type ByteBuffer) (call ci::le (i64 0) (i64 8) (local e)))
           (binding f (type ByteBuffer) (call ci::le (i64 0) (i64 8) (local reserved)))
           (binding g
             (type ByteBuffer)
-            (call ci::le (call ci::div (call ci::length (local operands)) (i64 16)) (i64 8) (local f)))
+            (call ci::le
+              (call ci::div (call ci::length (local operands)) (i64 16))
+              (i64 8)
+              (local f)))
           (binding with-payload
             (type ByteBuffer)
             (call payload
@@ -216,7 +243,7 @@ declarations.begin
           (field code (local code))
           (field count (local count))
           (field rows (local rows)))))
-    (function create cleanup
+    (function create cleanup-owned
       (visibility private)
       (effect pure)
       (parameter create graph (type Bytes))
@@ -236,9 +263,11 @@ declarations.begin
       (returns (record (code I64) (count I64) (rows Bytes)))
       (body
         (let
-          (binding owner (call source-scalar-plan::function-owner (local functions) (local function)))
+          (binding owner
+            (call source-scalar-plan::function-owner (local functions) (local function)))
           (binding count (call source-scalar-plan::local-count (local functions) (local function)))
-          (binding parameters (call source-scalar-plan::parameter-count (local functions) (local function)))
+          (binding parameters
+            (call source-scalar-plan::parameter-count (local functions) (local function)))
           (binding block
             (call source-custody-drop::block
               (local graph)
@@ -274,8 +303,11 @@ declarations.begin
                       (i64 6))
                     (let
                       (binding remaining
-                        (call ci::sub (local limit) (call ci::length (field (local block) (name rows)))))
-                      (binding available (call ci::sub (local nodes) (field (local block) (name count))))
+                        (call ci::sub
+                          (local limit)
+                          (call ci::length (field (local block) (name rows)))))
+                      (binding available
+                        (call ci::sub (local nodes) (field (local block) (name count))))
                       (binding tail
                         (call source-custody-drop::block
                           (local graph)
@@ -298,17 +330,27 @@ declarations.begin
                           (if
                             (call ci::lt (field (local tail) (name count)) (i64 0))
                             (call cleanup-result
-                              (i64 19) (field (local block) (name count)) (field (local block) (name rows)))
+                              (i64 19)
+                              (field (local block) (name count))
+                              (field (local block) (name rows)))
                             (if
                               (call ci::either
-                                (call ci::lt (local remaining) (call ci::length (field (local tail) (name rows))))
+                                (call ci::lt
+                                  (local remaining)
+                                  (call ci::length (field (local tail) (name rows))))
                                 (call ci::lt (local available) (field (local tail) (name count))))
                               (call cleanup-result
-                                (i64 13) (field (local block) (name count)) (field (local block) (name rows)))
+                                (i64 13)
+                                (field (local block) (name count))
+                                (field (local block) (name rows)))
                               (call cleanup-result
                                 (i64 0)
-                                (call ci::add (field (local block) (name count)) (field (local tail) (name count)))
-                                (call ci::concat (field (local block) (name rows)) (field (local tail) (name rows))))))
+                                (call ci::add
+                                  (field (local block) (name count))
+                                  (field (local tail) (name count)))
+                                (call ci::concat
+                                  (field (local block) (name rows))
+                                  (field (local tail) (name rows))))))
                           (call cleanup-result
                             (field (local tail) (name code))
                             (field (local block) (name count))
@@ -318,6 +360,176 @@ declarations.begin
                 (field (local block) (name code))
                 (i64 0)
                 (call ci::text-bytes (text ""))))))))
+    (function create cleanup
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create plan (type Bytes))
+      (parameter create functions (type Bytes))
+      (parameter create locals (type Bytes))
+      (parameter create evidence (type Bytes))
+      (parameter create entries (type Bytes))
+      (parameter create directory (type Bytes))
+      (parameter create function (type I64))
+      (parameter create start (type I64))
+      (parameter create row (type I64))
+      (parameter create limit (type I64))
+      (parameter create nodes (type I64))
+      (returns (record (code I64) (count I64) (rows Bytes)))
+      (body
+        (let
+          (binding block
+            (call cleanup-owned
+              (local graph)
+              (local facts)
+              (local parents)
+              (local plan)
+              (local functions)
+              (local locals)
+              (local evidence)
+              (local entries)
+              (local directory)
+              (local function)
+              (local start)
+              (local row)
+              (local limit)
+              (local nodes)))
+          (in
+            (if
+              (call ci::eq (field (local block) (name code)) (i64 0))
+              (let
+                (binding parent (call source-table::parent (local parents) (local row)))
+                (in
+                  (if
+                    (call ci::eq (call source-table::kind (local graph) (local parent)) (i64 17))
+                    (if
+                      (call ci::eq
+                        (call ci::get
+                          (call source-table::data (local graph) (local parent))
+                          (i64 37))
+                        (i64 21))
+                      (let
+                        (binding owner
+                          (call source-scalar-plan::function-owner
+                            (local functions)
+                            (local function)))
+                        (binding count
+                          (call source-scalar-plan::local-count (local functions) (local function)))
+                        (binding parameters
+                          (call source-scalar-plan::parameter-count
+                            (local functions)
+                            (local function)))
+                        (binding completed
+                          (call ci::add
+                            (call source-table::column (local parents) (local row) (i64 8))
+                            (i64 1)))
+                        (binding state
+                          (call source-custody-index::find
+                            (local evidence)
+                            (local entries)
+                            (local directory)
+                            (local row)
+                            (i64 16)
+                            (i64 -1)
+                            (i64 -1)))
+                        (in
+                          (if
+                            (call ci::lt (local state) (i64 0))
+                            (call cleanup-result
+                              (i64 19)
+                              (field (local block) (name count))
+                              (field (local block) (name rows)))
+                            (let
+                              (binding operands
+                                (call source-scalar-state::operands
+                                  (local graph)
+                                  (local parents)
+                                  (local facts)
+                                  (local evidence)
+                                  (local entries)
+                                  (local directory)
+                                  (local parent)
+                                  (local owner)
+                                  (i64 21)
+                                  (local completed)))
+                              (in
+                                (if
+                                  (call ci::eq (field (local operands) (name code)) (i64 0))
+                                  (let
+                                    (binding size
+                                      (call node-size
+                                        (local count)
+                                        (call ci::length (field (local operands) (name bytes)))
+                                        (i64 0)))
+                                    (in
+                                      (if
+                                        (call ci::either
+                                          (call ci::lt (local size) (i64 0))
+                                          (call ci::either
+                                            (call ci::lt
+                                              (call ci::sub
+                                                (local nodes)
+                                                (field (local block) (name count)))
+                                              (i64 1))
+                                            (call ci::lt
+                                              (call ci::sub
+                                                (local limit)
+                                                (call ci::length (field (local block) (name rows))))
+                                              (local size))))
+                                        (call cleanup-result
+                                          (i64 13)
+                                          (field (local block) (name count))
+                                          (field (local block) (name rows)))
+                                        (let
+                                          (binding out (type ByteBuffer) (call ci::empty))
+                                          (binding prefix
+                                            (type ByteBuffer)
+                                            (call ci::append
+                                              (field (local block) (name rows))
+                                              (i64 0)
+                                              (local out)))
+                                          (binding finished
+                                            (type ByteBuffer)
+                                            (call node
+                                              (local graph)
+                                              (local facts)
+                                              (record structural
+                                                (field row (local row))
+                                                (field enter (bool false))
+                                                (field tag (i64 21))
+                                                (field a (i64 0))
+                                                (field b (i64 0))
+                                                (field value (i64 0))
+                                                (field anchor (local parent))
+                                                (field extra (local completed)))
+                                              (field (local operands) (name bytes))
+                                              (local parents)
+                                              (local locals)
+                                              (local start)
+                                              (local count)
+                                              (local parameters)
+                                              (local owner)
+                                              (local evidence)
+                                              (local state)
+                                              (i64 -1)
+                                              (i64 0)
+                                              (local prefix)))
+                                          (in
+                                            (call cleanup-result
+                                              (i64 0)
+                                              (call ci::add
+                                                (field (local block) (name count))
+                                                (i64 1))
+                                              (call ci::freeze (local finished))))))))
+                                  (call cleanup-result
+                                    (field (local operands) (name code))
+                                    (field (local block) (name count))
+                                    (field (local block) (name rows)))))))))
+                      (local block))
+                    (local block))))
+              (local block))))))
     (function create walk
       (visibility private)
       (effect pure)

@@ -137,8 +137,11 @@ fn owned_choice_token_preserves_one_owner_and_rejects_foreign_or_borrowed_select
     let inert = choice.clone();
     assert!(inert.validate(origin, false).is_err());
     assert_eq!(
-        choice.select(origin, ty, &control).unwrap(),
-        (0, NormalizedValue::Unit)
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(choice.select(origin, ty, &control).unwrap()),
+            &(0, NormalizedValue::Unit)
+        ),
+        Ok(true)
     );
     assert_eq!(composites.live(), (0, 0));
 }

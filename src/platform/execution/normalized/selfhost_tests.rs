@@ -3,6 +3,7 @@
 use super::super::value::NormalizedRecord;
 use super::*;
 use crate::platform::compiler::selfhost_input as input;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 use sha2::{Digest, Sha256};
 use std::process::{Command, Output, Stdio};
 use std::sync::OnceLock;
@@ -15,6 +16,8 @@ mod artifact;
 mod bytes;
 #[path = "selfhost_closure_tests.rs"]
 mod closure;
+#[path = "selfhost_input_profile_tests.rs"]
+mod input_profile;
 #[path = "selfhost_source_tests.rs"]
 mod source;
 
@@ -28,7 +31,7 @@ fn selfhost_normalized_byte_inventory_exports_current_compiler() {
         .unwrap()
         .0 as usize;
     let payload = input::export(program, entry).unwrap();
-    assert_eq!(u32_at(&payload, 8), 6);
+    assert_eq!(u32_at(&payload, 8), 8);
     eprintln!(
         "selfhost byte inventory functions={} nodes={} input_bytes={} types={}",
         wide_at(&payload, 96),
@@ -61,8 +64,8 @@ fn selfhost_normalized_byte_inventory_exports_current_compiler() {
     let reference = NormalizedReferenceInterpreter::new(source, program, policy)
         .invoke(validator, values, None, &control)
         .unwrap();
-    assert_eq!(vm.0, NormalizedValue::I64(0));
-    assert_eq!(reference.0, vm.0);
+    assert_eq!(raw_value_equal(&vm.0, &NormalizedValue::I64(0)), Ok(true));
+    assert_eq!(raw_value_equal(&reference.0, &vm.0), Ok(true));
     eprintln!(
         "selfhost full normalized input admitted vm_steps={} ref_expressions={}",
         vm.1.instructions, reference.1.expressions
@@ -246,9 +249,10 @@ fn compile_with_policy(
     let (reference, reference_work) = NormalizedReferenceInterpreter::new(source, program, policy)
         .invoke(declaration, values, None, &control)
         .unwrap();
-    assert!(
-        vm == reference,
-        "compiler engines must emit identical bytes"
+    assert_eq!(
+        raw_value_equal(&vm, &reference,),
+        Ok(true),
+        "compiler engines must emit identical bytes",
     );
     assert_eq!(vm_work.live_call_frames_after, 0);
     assert_eq!(reference_work.live_call_frames_after, 0);
@@ -360,14 +364,14 @@ fn measured_layout(bytes: &[u8]) -> Vec<u8> {
     let oracle = NormalizedReferenceInterpreter::new(source, program, policy)
         .invoke(reference, values, None, &control)
         .unwrap();
-    assert_eq!(vm.0, oracle.0);
+    assert_eq!(raw_value_equal(&vm.0, &oracle.0), Ok(true));
     let NormalizedValue::Record(NormalizedRecord::Structural { fields }) = vm.0 else {
         panic!("layout result")
     };
     assert!(
-        fields
-            .iter()
-            .any(|(name, value)| name.as_str() == "code" && value == &NormalizedValue::I64(0))
+        fields.iter().any(
+            |(name, value)| name.as_str() == "code" && matches!(value, NormalizedValue::I64(0))
+        )
     );
     fields
         .iter()
@@ -527,7 +531,7 @@ fn selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines() 
         assert_eq!(code, 0, "{name}");
         let output = execute(&image, &[]);
         eprintln!(
-            "selfhost profile=6 tier=backend case={name} input_sha256={} elf_sha256={} elf_bytes={} exit={:?}",
+            "selfhost profile=8 tier=backend case={name} input_sha256={} elf_sha256={} elf_bytes={} exit={:?}",
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&bytes)),
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&image)),
             image.len(),
@@ -567,10 +571,22 @@ fn selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines() 
             assert_eq!(output.stdout, expected.as_bytes(), "{name}");
             assert!(output.stderr.is_empty(), "{name}");
             let value = NormalizedValue::I64(expected.parse().unwrap());
-            assert_eq!(vm.unwrap().0, value, "{name}");
-            assert_eq!(reference.unwrap().0, value, "{name}");
-            assert_eq!(artifact_vm.unwrap().0, value, "{name}");
-            assert_eq!(artifact_reference.unwrap().0, value, "{name}");
+            assert_eq!(raw_value_equal(&vm.unwrap().0, &value), Ok(true), "{name}");
+            assert_eq!(
+                raw_value_equal(&reference.unwrap().0, &value),
+                Ok(true),
+                "{name}"
+            );
+            assert_eq!(
+                raw_value_equal(&artifact_vm.unwrap().0, &value),
+                Ok(true),
+                "{name}"
+            );
+            assert_eq!(
+                raw_value_equal(&artifact_reference.unwrap().0, &value),
+                Ok(true),
+                "{name}"
+            );
         } else {
             assert_eq!(output.status.code(), Some(70), "{name}");
             assert!(output.stdout.is_empty(), "{name}");
@@ -622,7 +638,11 @@ fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
         (declarations + 40, 1, 5),
         (declarations + 48, 29, 5),
         (declarations + 56, 0, 5),
-        (declarations + 64, 1, 5),
+        (
+            declarations + 64,
+            wide_at(&valid, declarations + input::FUNCTION_BYTES + 64),
+            8,
+        ),
         (declarations + 72, 1, 5),
         (nodes, 99, 7),
         (nodes + 8, 1, 7),
@@ -646,7 +666,15 @@ fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
             "wide field {offset}={value}"
         );
     }
-    for (offset, value, expected) in [(0, 0, 1), (8, 4, 2), (12, 2, 5), (112, 1, 2), (112, 2, 2)] {
+    for (offset, value, expected) in [
+        (0, 0, 1),
+        (8, 4, 2),
+        (8, 6, 2),
+        (12, 2, 5),
+        (112, 1, 2),
+        (112, 2, 2),
+        (116, 1, 2),
+    ] {
         let mut changed = valid.clone();
         changed[offset] = value;
         input::rechecksum(&mut changed);
@@ -742,7 +770,7 @@ fn selfhost_compiler_accepts_more_than_historical_node_limit_without_default_all
     assert_eq!(output.stdout, b"16384");
     assert!(output.stderr.is_empty());
     eprintln!(
-        "selfhost current profile=6 nodes={node_count} input_bytes={} elf_bytes={} compiler_padding=bounded-runtime-only",
+        "selfhost current profile=8 nodes={node_count} input_bytes={} elf_bytes={} compiler_padding=bounded-runtime-only",
         bytes.len(),
         image.len()
     );
@@ -767,16 +795,17 @@ fn selfhost_compiler_rejects_hash_consistent_wide_extents_outside_input() {
 }
 
 #[test]
-fn selfhost_exporter_rejects_unsupported_complete_function_bodies() {
+fn selfhost_exporter_enforces_current_entry_and_complete_body_profile() {
     let source =
         byte_buffer_tests::author_only(include_str!("../../../../tests/fixtures/native-elf.lkjc"))
             .unwrap();
     let program = prepare_snapshot(&source);
+    // Parameterized command entries, nominal layouts, list append and F64
+    // remain outside this private exporter profile.
     for name in [
         "arithmetic",
         "branch",
         "sum",
-        "captured",
         "collection",
         "nominal",
         "unsupported",
@@ -785,12 +814,38 @@ fn selfhost_exporter_rejects_unsupported_complete_function_bodies() {
             .function(declaration_named(&source, name))
             .unwrap()
             .0 as usize;
-        assert_eq!(
-            input::export(&program, index).unwrap_err().code,
-            "compiler_input_unsupported",
-            "{name}"
-        );
+        let Err(diagnostic) = input::export(&program, index) else {
+            panic!("{name} unexpectedly crossed the current exporter profile");
+        };
+        assert_eq!(diagnostic.code, "compiler_input_unsupported", "{name}");
     }
+
+    // The same historical fixture's closed Bind/Invoke body is supported by
+    // profile 8. Its independent literal result must survive all compiler routes.
+    let declaration = declaration_named(&source, "captured");
+    let policy = NormalizedRunPolicy::foreground();
+    let control = ExecutionControl::uncancelled();
+    let vm = NormalizedVm::for_test(&program, policy)
+        .invoke(declaration, vec![], None, &control)
+        .unwrap();
+    let reference = NormalizedReferenceInterpreter::new(&source, &program, policy)
+        .invoke(declaration, vec![], None, &control)
+        .unwrap();
+    assert_eq!(raw_value_equal(&vm.0, &NormalizedValue::I64(42)), Ok(true));
+    assert_eq!(
+        raw_value_equal(&reference.0, &NormalizedValue::I64(42)),
+        Ok(true)
+    );
+
+    let index = program.function(declaration).unwrap().0 as usize;
+    let bytes = input::export(&program, index).unwrap();
+    assert_eq!(&bytes[8..12], &8_u32.to_le_bytes());
+    let (code, image) = compile(&bytes);
+    assert_eq!(code, 0);
+    let output = execute(&image, &[]);
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"42");
+    assert!(output.stderr.is_empty());
 }
 
 #[test]

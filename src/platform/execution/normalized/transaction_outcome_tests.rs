@@ -487,10 +487,11 @@ fn transaction_outcome_canonical_alias_reentry_and_independent_store_visibility(
                 let contract = TransactionOutcomeContract::standard().unwrap();
                 let (case, reason) = selected_case(&program, &value);
                 assert_eq!(case, contract.aborted);
-                assert_eq!(
-                    selected_case(&program, reason.unwrap()),
-                    (contract.condition_failed, None)
-                );
+                {
+                    let (reason_case, reason_payload) = selected_case(&program, reason.unwrap());
+                    assert_eq!(reason_case, contract.condition_failed);
+                    assert!(reason_payload.is_none());
+                };
                 assert_eq!(
                     *trace.lock().unwrap(),
                     [
@@ -543,16 +544,16 @@ fn transaction_outcome_completed_choices_preserve_legacy_and_body_once() {
                         assert_eq!(error.code, "normalized_data_transaction_conflict");
                         assert!(error.retryable);
                     } else {
-                        assert_eq!(result.unwrap(), NormalizedValue::I64(41));
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(result.unwrap()), &(NormalizedValue::I64(41))), Ok(true));
                     }
                 } else {
                     let value = result.unwrap();
                     let (case, payload) = selected_case(&program, &value);
                     if completion == NormalizedTransactionCompletion::Committed {
-                        assert_eq!(
-                            (case, payload),
-                            (contract.committed, Some(&NormalizedValue::I64(42)))
-                        );
+                        {
+                            assert_eq!(case, contract.committed);
+                            assert!(matches!(payload, Some(NormalizedValue::I64(42))));
+                        };
                     } else {
                         assert_eq!(case, contract.aborted);
                         let (reason, payload) = selected_case(&program, payload.unwrap());
@@ -582,12 +583,19 @@ fn transaction_outcome_completed_choices_preserve_legacy_and_body_once() {
             )
             .unwrap();
             if expected {
-                assert_eq!(value, NormalizedValue::Unit);
-            } else {
                 assert_eq!(
-                    selected_case(&program, &value),
-                    (contract.committed, Some(&NormalizedValue::Bool(false)))
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(value),
+                        &(NormalizedValue::Unit)
+                    ),
+                    Ok(true)
                 );
+            } else {
+                {
+                    let (selected, payload) = selected_case(&program, &value);
+                    assert_eq!(selected, contract.committed);
+                    assert!(matches!(payload, Some(NormalizedValue::Bool(false))));
+                };
             }
             assert_eq!(*trace.lock().unwrap(), ["begin", "commit"]);
         }

@@ -1,6 +1,7 @@
 //! Exact aggregate limits include generic metadata and returned custody.
 use super::*;
 use crate::platform::execution::ExecutionFailureClass;
+use crate::platform::execution::normalized::child_storage::Fields;
 use crate::platform::execution::normalized::owned_product::StorageObservation as Products;
 
 #[test]
@@ -55,10 +56,21 @@ fn parallel_generic_application_shares_exact_quota_and_cleans_cancelled_owners()
             maximum_collection_items: Some(items),
             ..NormalizedRunPolicy::foreground()
         };
-        assert_eq!(
-            run(exact, &ExecutionControl::uncancelled()).unwrap(),
-            (value.clone(), steps, bytes, items)
-        );
+        {
+            let (exact_value, exact_steps, exact_bytes, exact_items) =
+                run(exact, &ExecutionControl::uncancelled()).unwrap();
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &exact_value,
+                    &(value)
+                ),
+                Ok(true)
+            );
+            assert_eq!(
+                (exact_steps, exact_bytes, exact_items),
+                (steps, bytes, items)
+            );
+        };
         for policy in [
             NormalizedRunPolicy {
                 instruction_steps: Some(steps - 1),
@@ -85,7 +97,7 @@ fn parallel_generic_application_shares_exact_quota_and_cleans_cancelled_owners()
         for checks in [0, 16, 32, 64, 128, 256, 512, 1_024, 4_096, 32_768] {
             match run(exact, &ExecutionControl::cancel_after_checks(checks)) {
                 Ok((actual, ..)) => {
-                    assert_eq!(actual, value);
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(actual), &(value)), Ok(true));
                     completed += 1;
                 }
                 Err(error) => {
@@ -142,10 +154,11 @@ declarations.end
     let record = |left, right| {
         NormalizedValue::Record(
             crate::platform::execution::normalized::value::NormalizedRecord::Structural {
-                fields: Arc::new(vec![
+                fields: Fields::try_new(vec![
                     (Name::new("left").unwrap(), left),
                     (Name::new("right").unwrap(), right),
-                ]),
+                ])
+                .unwrap(),
             },
         )
     };
@@ -186,7 +199,13 @@ declarations.end
                 assert_eq!(error.class, ExecutionFailureClass::Resource);
                 assert!(error.code.ends_with("call_depth"), "{error:?}");
             } else {
-                assert_eq!(result.unwrap(), (expected.clone(), 4));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(result.unwrap()),
+                        &(expected.clone(), 4)
+                    ),
+                    Ok(true)
+                );
             }
             assert_eq!(cells.created(), 1);
             assert_eq!(cells.live(), (0, 0));

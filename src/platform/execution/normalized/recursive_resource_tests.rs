@@ -404,7 +404,7 @@ fn recursive_resource_activations_join_success_failure_and_cancellation_in_both_
                     if fault == "none" {
                         let (value, depth) =
                             result.unwrap_or_else(|error| panic!("{label}: {error:?}"));
-                        assert_eq!(value, NormalizedValue::Unit, "{label}");
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(NormalizedValue::Unit)), Ok(true), "{label}");
                         assert!(depth <= 6, "{label}: {depth}");
                     } else {
                         let error = result.expect_err(&label);

@@ -3,6 +3,7 @@
 //! caller-selected TargetId. Independent Rust target preparation occurs AFTER
 //! source-driven compilation and is never supplied to that compiler.
 use super::*;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 
 #[path = "selfhost_source_custody_tests.rs"]
 mod custody;
@@ -308,10 +309,13 @@ fn selfhost_source_compound_e2_checks_complete_intrinsic_templates_and_calls() {
             vec![NormalizedValue::bytes(case.carrier.as_slice())],
         );
         assert_eq!(
-            super::super::field(&value, "diagnostic"),
-            &NormalizedValue::I64(case.diagnostic),
+            raw_value_equal(
+                super::super::field(&value, "diagnostic"),
+                &NormalizedValue::I64(case.diagnostic),
+            ),
+            Ok(true),
             "case={}",
-            case.name
+            case.name,
         );
         let NormalizedValue::Bytes(image) = super::super::field(&value, "image") else {
             panic!("compound inspector result");
@@ -356,8 +360,14 @@ fn assert_command_oracles(source: &KernelSnapshot, function: &str, expected: i64
         .invoke(entry, vec![], None, &control)
         .unwrap()
         .0;
-    assert_eq!(vm, NormalizedValue::I64(expected));
-    assert_eq!(reference, NormalizedValue::I64(expected));
+    assert_eq!(
+        raw_value_equal(&vm, &NormalizedValue::I64(expected)),
+        Ok(true)
+    );
+    assert_eq!(
+        raw_value_equal(&reference, &NormalizedValue::I64(expected)),
+        Ok(true)
+    );
     let host = crate::platform::compiler::elf_x86_64::compile_function(
         &program,
         program.function(entry).unwrap().0 as usize,
@@ -383,8 +393,11 @@ fn selfhost_source_compound_e3_executes_inferred_records_and_source_mutations() 
         vec![NormalizedValue::bytes(baseline.request.as_slice())],
     );
     assert_eq!(
-        super::super::field(&value, "diagnostic"),
-        &NormalizedValue::I64(0)
+        raw_value_equal(
+            super::super::field(&value, "diagnostic"),
+            &NormalizedValue::I64(0),
+        ),
+        Ok(true),
     );
     let NormalizedValue::Bytes(expected_image) = super::super::field(&value, "image") else {
         panic!("compound source compiler image");
@@ -458,8 +471,11 @@ fn selfhost_source_compound_e3_reuses_tail_frames_through_lexical_contexts() {
     let reference = NormalizedReferenceInterpreter::new(source, &program, policy)
         .invoke(entry, vec![], None, &control)
         .unwrap();
-    assert_eq!(vm.0, NormalizedValue::I64(42));
-    assert_eq!(reference.0, NormalizedValue::I64(42));
+    assert_eq!(raw_value_equal(&vm.0, &NormalizedValue::I64(42)), Ok(true));
+    assert_eq!(
+        raw_value_equal(&reference.0, &NormalizedValue::I64(42)),
+        Ok(true)
+    );
     assert!(
         vm.1.maximum_call_depth <= 8,
         "VM depth={}",
@@ -517,8 +533,11 @@ fn selfhost_source_compound_e3_binary_entry_matches_independent_bytes_and_hashes
             .0;
         for value in [vm, reference] {
             assert_eq!(
-                super::super::field(&value, "diagnostic"),
-                &NormalizedValue::I64(0)
+                raw_value_equal(
+                    super::super::field(&value, "diagnostic"),
+                    &NormalizedValue::I64(0),
+                ),
+                Ok(true),
             );
             let NormalizedValue::Bytes(bytes) = super::super::field(&value, "image") else {
                 panic!("compound binary result");

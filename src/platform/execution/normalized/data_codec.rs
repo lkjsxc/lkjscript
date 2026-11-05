@@ -1,5 +1,6 @@
 //! Canonical exact typed application-value encoding.
 
+use super::child_storage::{FieldsBuilder, StorageFailure, ValuesBuilder};
 use super::prepare::{NormalizedProgram, NormalizedRecordLayout, NormalizedVariantLayout};
 use super::value::{NormalizedMapKey, NormalizedRecord, NormalizedValue};
 use super::value_schema::NormalizedValueSchema;
@@ -8,7 +9,6 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionControl;
 use crate::platform::kernel::{DeclarationReference, TypeForm, TypeObjectDigest};
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 
 const VALUE_MAGIC: &[u8; 8] = b"LKJDVAL1";
 const VALUE_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
@@ -393,15 +393,18 @@ fn decode_value_charged(
             Ok(NormalizedValue::text(value))
         }
         TypeForm::StructuralRecord { fields } => {
-            let mut output = Vec::with_capacity(fields.len());
+            let mut output =
+                FieldsBuilder::with_capacity(fields.len()).map_err(child_storage_error)?;
             for field in fields {
-                output.push((
-                    field.name.clone(),
-                    decode_value(program, field.ty, cursor, state, depth + 1)?,
-                ));
+                output
+                    .try_push((
+                        field.name.clone(),
+                        decode_value(program, field.ty, cursor, state, depth + 1)?,
+                    ))
+                    .map_err(child_storage_error)?;
             }
             Ok(NormalizedValue::Record(NormalizedRecord::Structural {
-                fields: Arc::new(output),
+                fields: output.finish().map_err(child_storage_error)?,
             }))
         }
         TypeForm::Named { .. } | TypeForm::Applied { .. } => {
@@ -488,13 +491,16 @@ fn decode_named(
         if record.owned {
             return Err(unsupported("owned nominal record"));
         }
-        let mut fields = Vec::with_capacity(record.fields.len());
+        let mut fields =
+            ValuesBuilder::with_capacity(record.fields.len()).map_err(child_storage_error)?;
         for field in record.fields.iter() {
-            fields.push(decode_value(program, field.ty, cursor, state, depth + 1)?);
+            fields
+                .try_push(decode_value(program, field.ty, cursor, state, depth + 1)?)
+                .map_err(child_storage_error)?;
         }
         return Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
             layout,
-            fields: Arc::new(fields),
+            fields: fields.finish().map_err(child_storage_error)?,
         }));
     }
     if let Some((layout, variant)) = variant_layout(program, ty) {
@@ -940,4 +946,9 @@ fn codec_error(
     message: impl Into<String>,
 ) -> Diagnostic {
     Diagnostic::new(class, code, message)
+}
+
+fn child_storage_error(error: StorageFailure) -> Diagnostic {
+    let error: crate::platform::execution::ExecutionError = error.into();
+    Diagnostic::new(DiagnosticClass::Resource, error.code, error.message)
 }

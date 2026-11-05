@@ -44,7 +44,13 @@ fn borrowed_metadata_sum_spine_reserves_before_cloning_and_failure_keeps_custody
         )
         .unwrap();
     assert_eq!(requests, vec![expected]);
-    assert_eq!(selected.raw(), &f.raw(64));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(selected.raw()),
+            &(&f.raw(64))
+        ),
+        Ok(true)
+    );
     drop(read);
     token(&owner).validate(f.domain, true).unwrap();
 }
@@ -68,7 +74,13 @@ fn borrowed_metadata_cancellation_at_each_check_leaves_no_new_loan_or_partial_va
         match result {
             Ok(selected) => {
                 successes += 1;
-                assert_eq!(selected.raw(), &f.raw(16));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(selected.raw()),
+                        &(&f.raw(16))
+                    ),
+                    Ok(true)
+                );
             }
             Err(error) => {
                 failures += 1;
@@ -81,7 +93,13 @@ fn borrowed_metadata_cancellation_at_each_check_leaves_no_new_loan_or_partial_va
         token(&owner)
             .validate_admission(f.program.value_origin)
             .unwrap();
-        assert_eq!(f.project(&read).unwrap().raw(), &f.raw(16));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(f.project(&read).unwrap().raw()),
+                &(&f.raw(16))
+            ),
+            Ok(true)
+        );
     }
     assert!(failures >= 10 && successes > 0);
     assert_eq!(owners.created(), 0);

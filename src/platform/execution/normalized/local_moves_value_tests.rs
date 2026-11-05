@@ -92,7 +92,13 @@ fn payload_addresses(mut value: &NormalizedValue) -> Vec<*const NormalizedValue>
         addresses.push(&**child as *const NormalizedValue);
         value = child;
     }
-    assert_eq!(*value, NormalizedValue::I64(42));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            value,
+            &(NormalizedValue::I64(42))
+        ),
+        Ok(true)
+    );
     addresses
 }
 
@@ -137,7 +143,13 @@ fn terminal_move_preserves_owned_box_and_matches_canonical_and_copying_execution
                     &ExecutionControl::uncancelled(),
                 )
                 .unwrap();
-        assert_eq!(actual, nested(&program, 64));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(actual),
+                &(nested(&program, 64))
+            ),
+            Ok(true)
+        );
         let result_addresses = payload_addresses(&actual);
         assert_eq!(result_addresses.len(), addresses.len());
         assert!(
@@ -168,7 +180,13 @@ fn terminal_move_preserves_owned_box_and_matches_canonical_and_copying_execution
         )
         .unwrap()
         .0;
-        assert_eq!(actual, reference);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(actual),
+                &(reference)
+            ),
+            Ok(true)
+        );
     }
 }
 
@@ -189,7 +207,13 @@ fn branch_terminal_moves_preserve_both_paths_payload_identity() {
                     &ExecutionControl::uncancelled(),
                 )
                 .unwrap();
-        assert_eq!(actual, nested(&program, 64));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(actual),
+                &(nested(&program, 64))
+            ),
+            Ok(true)
+        );
         assert_eq!(payload_addresses(&actual), addresses, "branch {flag}");
         assert_eq!(observation.value_work.local_value_moves, 2);
         assert_eq!(observation.value_work.local_value_copies, 0);
@@ -207,7 +231,13 @@ fn branch_terminal_moves_preserve_both_paths_payload_identity() {
         )
         .unwrap()
         .0;
-        assert_eq!(actual, reference);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(actual),
+                &(reference)
+            ),
+            Ok(true)
+        );
     }
 }
 
@@ -249,7 +279,13 @@ fn cancellation_joins_moved_frames_and_the_same_program_remains_reusable() {
         )
         .unwrap()
         .0;
-    assert_eq!(actual, nested(&program, 32));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(actual),
+            &(nested(&program, 32))
+        ),
+        Ok(true)
+    );
 }
 
 #[test]

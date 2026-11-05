@@ -152,7 +152,7 @@ mod tests {
         .expect("exact secret verifier");
         let control = ExecutionControl::uncancelled();
         let resources = NormalizedResourceScope::new().expect("resource scope");
-        assert_eq!(
+        assert!(matches!(
             adapter
                 .call(
                     &policy(interface, requirement, operation),
@@ -162,8 +162,8 @@ mod tests {
                 )
                 .expect("matching secret candidate"),
             NormalizedValue::Bool(true)
-        );
-        assert_eq!(
+        ));
+        assert!(matches!(
             adapter
                 .call(
                     &policy(interface, requirement, operation),
@@ -173,7 +173,7 @@ mod tests {
                 )
                 .expect("different secret candidate"),
             NormalizedValue::Bool(false)
-        );
+        ));
         assert_eq!(
             adapter
                 .call(

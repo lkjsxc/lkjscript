@@ -1,7 +1,6 @@
 //! Public foreground command admission and real data visibility after numeric output failure.
 
 use super::*;
-use crate::platform::binary64::Binary64;
 use crate::platform::data::{DataKey, DataKeyPart, DataLimits, DataStore};
 use crate::platform::deployment::{AdapterDescriptor, DeploymentGrant};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
@@ -430,12 +429,10 @@ async fn f64_committed_data_survives_foreground_and_builtin_json_failure_without
     else {
         panic!("nominal stored F64 value")
     };
-    assert_eq!(
+    assert!(matches!(
         fields.as_slice(),
-        &[NormalizedValue::F64(
-            Binary64::from_bits(0x8000_0000_0000_0000).unwrap()
-        )]
-    );
+        [NormalizedValue::F64(value)] if value.bits() == 0x8000_0000_0000_0000
+    ));
     drop(transaction);
     drop(store);
     let read = fixture.descriptor("f64-read", false);

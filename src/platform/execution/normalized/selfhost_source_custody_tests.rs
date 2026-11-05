@@ -2,6 +2,7 @@
 //! Requests contain only a complete source carrier and caller-selected TargetId.
 //! Host preparation is an independent oracle after source-driven compilation.
 use super::*;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 
 #[path = "selfhost_source_custody_evidence_tests.rs"]
 mod evidence;
@@ -299,10 +300,13 @@ fn selfhost_source_custody_e2_checks_unused_and_untaken_ownership() {
             vec![NormalizedValue::bytes(case.carrier.as_slice())],
         );
         assert_eq!(
-            super::super::super::field(&value, "diagnostic"),
-            &NormalizedValue::I64(case.diagnostic),
+            raw_value_equal(
+                super::super::super::field(&value, "diagnostic"),
+                &NormalizedValue::I64(case.diagnostic),
+            ),
+            Ok(true),
             "{}",
-            case.name
+            case.name,
         );
         let NormalizedValue::Bytes(image) = super::super::super::field(&value, "image") else {
             panic!("custody inspector bytes");
@@ -400,7 +404,7 @@ fn selfhost_source_custody_e3_transfers_owned_tail_arguments() {
             let (value, observed) = NormalizedReferenceInterpreter::new(source, &program, policy)
                 .invoke(entry, vec![], None, &control)
                 .unwrap();
-            assert_eq!(value, NormalizedValue::I64(42));
+            assert_eq!(raw_value_equal(&value, &NormalizedValue::I64(42)), Ok(true));
             assert!(observed.maximum_call_depth <= 16);
             assert!(observed.tail_transfers >= 16383);
             assert_eq!(observed.live_call_frames_after, 0);
@@ -408,7 +412,7 @@ fn selfhost_source_custody_e3_transfers_owned_tail_arguments() {
             let (value, observed) = NormalizedVm::for_test(&program, policy)
                 .invoke(entry, vec![], None, &control)
                 .unwrap();
-            assert_eq!(value, NormalizedValue::I64(42));
+            assert_eq!(raw_value_equal(&value, &NormalizedValue::I64(42)), Ok(true));
             assert!(observed.maximum_call_depth <= 16);
             assert!(observed.tail_transfers >= 16383);
             assert_eq!(observed.live_call_frames_after, 0);
@@ -475,8 +479,11 @@ fn selfhost_source_custody_e3_preserves_returned_owners_and_both_branch_values()
                     .0
             };
             assert_eq!(
-                super::super::super::field(&value, "diagnostic"),
-                &NormalizedValue::I64(0)
+                raw_value_equal(
+                    super::super::super::field(&value, "diagnostic"),
+                    &NormalizedValue::I64(0),
+                ),
+                Ok(true),
             );
             let NormalizedValue::Bytes(bytes) = super::super::super::field(&value, "image") else {
                 panic!("custody binary result");
@@ -501,7 +508,7 @@ fn selfhost_source_custody_e3_preserves_returned_owners_and_both_branch_values()
 
 #[test]
 fn selfhost_source_custody_e2_keeps_mixed_borrow_helpers_explicitly_unsupported() {
-    // This is independently valid source. Profile6 cannot express the exact
+    // This is independently valid source. Profile8 cannot express the exact
     // provenance needed to move an unrelated owner after a borrowed operand.
     let source = byte_buffer_tests::author_only(include_str!(
         "../../../../tests/fixtures/selfhost-source-custody-mixed.lkjc"
@@ -516,8 +523,11 @@ fn selfhost_source_custody_e2_keeps_mixed_borrow_helpers_explicitly_unsupported(
         vec![NormalizedValue::bytes(case.carrier.as_slice())],
     );
     assert_eq!(
-        super::super::super::field(&value, "diagnostic"),
-        &NormalizedValue::I64(13)
+        raw_value_equal(
+            super::super::super::field(&value, "diagnostic"),
+            &NormalizedValue::I64(13),
+        ),
+        Ok(true),
     );
     assert!(run_filter(native_inspector(), &case, &case.carrier, "LKJSG002").is_empty());
     assert!(run_filter(native_compiler(), &case, &case.request, "LKJSRQ01/profile2").is_empty());

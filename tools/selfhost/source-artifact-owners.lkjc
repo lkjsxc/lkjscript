@@ -41,21 +41,20 @@ declarations.begin
       (parameter create left (type I64))
       (returns Bool)
       (body
-        (if
-          (call ci::eq (local left) (i64 0))
-          (bool false)
-          (let
-            (binding parameter
-              (call source-custody-signature::parameter (local graph) (local row) (local index)))
-            (in
-              (if
-                (call ci::eq (call source-custody-signature::mode (local graph) (local parameter)) (i64 0))
-                (call nonunrestricted
-                  (local graph)
-                  (local row)
-                  (call ci::add (local index) (i64 1))
-                  (call ci::sub (local left) (i64 1)))
-                (bool true)))))))
+        (let
+          (binding data (call source-table::data (local graph) (local row)))
+          (binding at
+            (call source-scalar-profile::parameters-data
+              (call source-table::kind (local graph) (local row))
+              (local data)))
+          (in
+            (call nonunrestricted-window
+              (local graph)
+              (local row)
+              (local data)
+              (local at)
+              (local index)
+              (local left))))))
     (function create memory-result
       (visibility package)
       (effect pure)
@@ -164,5 +163,433 @@ declarations.begin
               (local graph)
               (call ci::add (local at) (i64 18))
               (call ci::add (local at) (i64 50))
-              (local c))))))))
+              (local c))))))
+    (function create nonunrestricted-window
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create row (type I64))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create index (type I64))
+      (parameter create left (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local left) (i64 0))
+          (bool false)
+          (let
+            (binding parameter
+              (call source-scalar-cursor::array-child
+                (local graph)
+                (local data)
+                (local at)
+                (local index)
+                (i64 7)))
+            (in
+              (if
+                (call ci::eq
+                  (call source-custody-signature::mode (local graph) (local parameter))
+                  (i64 0))
+                (call nonunrestricted-window
+                  (local graph)
+                  (local row)
+                  (local data)
+                  (local at)
+                  (call ci::add (local index) (i64 1))
+                  (call ci::sub (local left) (i64 1)))
+                (bool true)))))))
+    (function create members-failed
+      (visibility private)
+      (effect pure)
+      (parameter create code (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (let
+          (binding discarded (call ci::discard (local out)))
+          (in
+            (record structural (field code (local code)) (field rows (call ci::text-bytes (text ""))))))))
+    (function create member-array
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create owner (type I64))
+      (parameter create kind (type I64))
+      (parameter create domain (type I64))
+      (parameter create data (type Bytes))
+      (parameter create cursor (type I64))
+      (parameter create left (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (if
+          (call ci::eq (local left) (i64 0))
+          (record structural (field code (i64 0)) (field rows (call ci::freeze (local out))))
+          (if
+            (call ci::eq
+              (call ci::get (local data) (local cursor))
+              (if (call ci::eq (local domain) (i64 3)) (i64 17) (local domain)))
+            (let
+              (binding child
+                (call source-table::owner (local graph) (local data) (local cursor) (local domain)))
+              (in
+                (if
+                  (call ci::lt (local child) (i64 0))
+                  (call members-failed (i64 14) (local out))
+                  (if
+                    (call ci::eq (call source-table::kind (local graph) (local child)) (local kind))
+                    (let
+                      (binding record (call source-table::data (local graph) (local child)))
+                      (binding declared-at (if (call ci::eq (local kind) (i64 15)) (i64 40) (i64 39)))
+                      (binding declared-namespace
+                        (call ci::eq (call ci::get (local record) (local declared-at)) (i64 3)))
+                      (binding declared
+                        (if
+                          (local declared-namespace)
+                          (call source-table::owner
+                            (local graph)
+                            (local record)
+                            (local declared-at)
+                            (i64 2))
+                          (i64 -1)))
+                      (binding parent-at (call ci::mul (local child) (i64 12)))
+                      (in
+                        (if
+                          (call ci::lt (local declared) (i64 0))
+                          (call members-failed
+                            (if (local declared-namespace) (i64 14) (i64 12))
+                            (local out))
+                          (if
+                            (call ci::both
+                              (call ci::eq (local declared) (local owner))
+                              (call ci::both
+                                (call ci::eq
+                                  (call ci::u32 (local parents) (local parent-at))
+                                  (local child))
+                                (call ci::eq
+                                  (call source-table::parent (local parents) (local child))
+                                  (local owner))))
+                            (if
+                              (call source-unit-tables::room (call ci::size (local out)) (i64 24))
+                              (let
+                                (binding a
+                                  (type ByteBuffer)
+                                  (call ci::le (local child) (i64 8) (local out)))
+                                (binding b
+                                  (type ByteBuffer)
+                                  (call ci::le (local owner) (i64 8) (local a)))
+                                (binding c
+                                  (type ByteBuffer)
+                                  (call ci::le (local kind) (i64 8) (local b)))
+                                (in
+                                  (call member-array
+                                    (local graph)
+                                    (local parents)
+                                    (local owner)
+                                    (local kind)
+                                    (local domain)
+                                    (local data)
+                                    (call ci::add (local cursor) (i64 17))
+                                    (call ci::sub (local left) (i64 1))
+                                    (local c))))
+                              (call members-failed (i64 3) (local out)))
+                            (call members-failed (i64 15) (local out))))))
+                    (call members-failed (i64 14) (local out))))))
+            (call members-failed (i64 12) (local out))))))
+    (function create member-owner
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create owner (type I64))
+      (parameter create kind (type I64))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (let
+          (binding data (call source-table::data (local graph) (local owner)))
+          (in
+            (if
+              (call ci::eq (local kind) (i64 9))
+              (let
+                (binding array
+                  (call source-table::array
+                    (local data)
+                    (call source-table::skip
+                      (local data)
+                      (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 2))
+                      (i64 17))))
+                (binding empty (type ByteBuffer) (call ci::empty))
+                (in
+                  (call member-array
+                    (local graph)
+                    (local parents)
+                    (local owner)
+                    (i64 19)
+                    (i64 11)
+                    (local data)
+                    (field (local array) (name next))
+                    (field (local array) (name value))
+                    (local empty))))
+              (let
+                (binding types-at
+                  (if
+                    (call ci::eq (local kind) (i64 5))
+                    (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 2))
+                    (field (call source-scalar-profile::function-parts-data (local data)) (name types))))
+                (binding types
+                  (let
+                    (binding array (call source-table::array (local data) (local types-at)))
+                    (binding empty (type ByteBuffer) (call ci::empty))
+                    (in
+                      (call member-array
+                        (local graph)
+                        (local parents)
+                        (local owner)
+                        (i64 11)
+                        (i64 3)
+                        (local data)
+                        (field (local array) (name next))
+                        (field (local array) (name value))
+                        (local empty)))))
+                (in
+                  (if
+                    (call ci::eq (field (local types) (name code)) (i64 0))
+                    (let
+                      (binding parameters-at
+                        (call source-scalar-profile::parameters-data (local kind) (local data)))
+                      (binding parameters
+                        (let
+                          (binding array (call source-table::array (local data) (local parameters-at)))
+                          (binding empty (type ByteBuffer) (call ci::empty))
+                          (in
+                            (call member-array
+                              (local graph)
+                              (local parents)
+                              (local owner)
+                              (i64 15)
+                              (i64 7)
+                              (local data)
+                              (field (local array) (name next))
+                              (field (local array) (name value))
+                              (local empty)))))
+                      (in
+                        (if
+                          (call ci::eq (field (local parameters) (name code)) (i64 0))
+                          (if
+                            (call source-unit-tables::room
+                              (call ci::length (field (local types) (name rows)))
+                              (call ci::length (field (local parameters) (name rows))))
+                            (record structural
+                              (field code (i64 0))
+                              (field rows
+                                (call ci::concat
+                                  (field (local types) (name rows))
+                                  (field (local parameters) (name rows)))))
+                            (record structural
+                              (field code (i64 3))
+                              (field rows (call ci::text-bytes (text "")))))
+                          (local parameters))))
+                    (local types)))))))))
+    (function create members-walk
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create row (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (record structural (field code (i64 0)) (field rows (call ci::freeze (local out))))
+          (let
+            (binding kind (call source-table::kind (local graph) (local row)))
+            (in
+              (if
+                (call ci::either
+                  (call ci::eq (local kind) (i64 5))
+                  (call ci::either
+                    (call ci::eq (local kind) (i64 6))
+                    (call ci::eq (local kind) (i64 9))))
+                (let
+                  (binding members
+                    (call member-owner (local graph) (local parents) (local row) (local kind)))
+                  (in
+                    (if
+                      (call ci::eq (field (local members) (name code)) (i64 0))
+                      (if
+                        (call source-unit-tables::room
+                          (call ci::size (local out))
+                          (call ci::length (field (local members) (name rows))))
+                        (let
+                          (binding next
+                            (type ByteBuffer)
+                            (call wire::range
+                              (field (local members) (name rows))
+                              (i64 0)
+                              (call ci::length (field (local members) (name rows)))
+                              (local out)))
+                          (in
+                            (call members-walk
+                              (local graph)
+                              (local parents)
+                              (call ci::add (local row) (i64 1))
+                              (local next))))
+                        (call members-failed (i64 3) (local out)))
+                      (call members-failed (field (local members) (name code)) (local out)))))
+                (call members-walk
+                  (local graph)
+                  (local parents)
+                  (call ci::add (local row) (i64 1))
+                  (local out))))))))
+    (function create members-distinct
+      (visibility private)
+      (effect pure)
+      (parameter create rows (type Bytes))
+      (parameter create at (type I64))
+      (parameter create previous (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local at) (call ci::length (local rows)))
+          (i64 0)
+          (let
+            (binding child (call ci::u64 (local rows) (local at)))
+            (in
+              (if
+                (call ci::lt (local previous) (local child))
+                (call members-distinct (local rows) (call ci::add (local at) (i64 24)) (local child))
+                (i64 15)))))))
+    (function create members
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (if
+          (call ci::eq
+            (call ci::length (local parents))
+            (call source-unit-tables::mul (call source-table::count (local graph)) (i64 12)))
+          (let
+            (binding empty (type ByteBuffer) (call ci::empty))
+            (binding inventory (call members-walk (local graph) (local parents) (i64 0) (local empty)))
+            (in
+              (if
+                (call ci::eq (field (local inventory) (name code)) (i64 0))
+                (let
+                  (binding rows
+                    (call source-summary-order::sort
+                      (field (local inventory) (name rows))
+                      (i64 24)
+                      (i64 3)))
+                  (binding code (call members-distinct (local rows) (i64 0) (i64 -1)))
+                  (in
+                    (if
+                      (call ci::eq (local code) (i64 0))
+                      (record structural (field code (i64 0)) (field rows (local rows)))
+                      (record structural
+                        (field code (local code))
+                        (field rows (call ci::text-bytes (text "")))))))
+                (local inventory))))
+          (record structural (field code (i64 3)) (field rows (call ci::text-bytes (text "")))))))
+    (function create classifications-walk
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create members (type Bytes))
+      (parameter create row (type I64))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (if
+          (call ci::eq (local row) (call source-table::count (local graph)))
+          (if
+            (call ci::eq (local at) (call ci::length (local members)))
+            (record structural (field code (i64 0)) (field rows (call ci::freeze (local out))))
+            (call members-failed (i64 15) (local out)))
+          (let
+            (binding remaining (call ci::lt (local at) (call ci::length (local members))))
+            (binding child
+              (if
+                (local remaining)
+                (call ci::u64 (local members) (local at))
+                (call source-table::count (local graph))))
+            (binding kind (call source-table::kind (local graph) (local row)))
+            (binding present (call ci::eq (local child) (local row)))
+            (in
+              (if
+                (call ci::lt (local child) (local row))
+                (call members-failed (i64 15) (local out))
+                (if
+                  (if
+                    (local present)
+                    (call ci::both
+                      (call ci::either
+                        (call ci::eq (local kind) (i64 11))
+                        (call ci::either
+                          (call ci::eq (local kind) (i64 15))
+                          (call ci::eq (local kind) (i64 19))))
+                      (call ci::both
+                        (call ci::eq
+                          (call ci::u64 (local members) (call ci::add (local at) (i64 16)))
+                          (local kind))
+                        (call ci::eq
+                          (call ci::u64 (local members) (call ci::add (local at) (i64 8)))
+                          (call source-table::parent (local parents) (local row)))))
+                    (bool true))
+                  (let
+                    (binding included
+                      (if
+                        (call ci::either
+                          (call ci::eq (local kind) (i64 11))
+                          (call ci::either
+                            (call ci::eq (local kind) (i64 15))
+                            (call ci::eq (local kind) (i64 19))))
+                        (local present)
+                        (call runtime (local graph) (local parents) (local row))))
+                    (in
+                      (if
+                        (call source-unit-tables::room (call ci::size (local out)) (i64 1))
+                        (let
+                          (binding next
+                            (type ByteBuffer)
+                            (call ci::push (if (local included) (i64 1) (i64 0)) (local out)))
+                          (in
+                            (call classifications-walk
+                              (local graph)
+                              (local parents)
+                              (local members)
+                              (call ci::add (local row) (i64 1))
+                              (if (local present) (call ci::add (local at) (i64 24)) (local at))
+                              (local next))))
+                        (call members-failed (i64 3) (local out)))))
+                  (call members-failed (i64 15) (local out)))))))))
+    (function create classifications
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (returns (record (code I64) (rows Bytes)))
+      (body
+        (let
+          (binding members (call members (local graph) (local parents)))
+          (in
+            (if
+              (call ci::eq (field (local members) (name code)) (i64 0))
+              (let
+                (binding empty (type ByteBuffer) (call ci::empty))
+                (in
+                  (call classifications-walk
+                    (local graph)
+                    (local parents)
+                    (field (local members) (name rows))
+                    (i64 0)
+                    (i64 0)
+                    (local empty))))
+              (local members))))))))
 declarations.end

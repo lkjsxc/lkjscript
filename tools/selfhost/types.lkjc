@@ -33,8 +33,90 @@ declarations.begin
         (call ci::both
           (call ci::both
             (call ci::lt (i64 0) (local ty))
-            (call ci::lt (local ty) (call ci::add (call ci::u64 (local data) (i64 80)) (i64 1))))
+            (call ci::lte (local ty) (call ci::u64 (local data) (i64 80))))
           (if (local borrow) (call ci::eq (local ty) (i64 6)) (bool true)))))
+    (function create record
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call valid (local data) (local ty) (bool false))
+          (call ci::eq (call ci::u64 (local data) (call row (local data) (local ty))) (i64 8))
+          (bool false))))
+    (function create callable
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call valid (local data) (local ty) (bool false))
+          (call ci::eq (call ci::u64 (local data) (call row (local data) (local ty))) (i64 9))
+          (bool false))))
+    (function create arity
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (returns I64)
+      (body (call ci::u64 (local data) (call ci::add (call row (local data) (local ty)) (i64 8)))))
+    (function create parameter
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (parameter create i (type I64))
+      (returns I64)
+      (body
+        (call ci::u64
+          (local data)
+          (call ci::add
+            (call ci::u64 (local data) (call ci::add (call row (local data) (local ty)) (i64 16)))
+            (call ci::mul (local i) (i64 8))))))
+    (function create result
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (returns I64)
+      (body (call ci::u64 (local data) (call ci::add (call row (local data) (local ty)) (i64 24)))))
+    (function create copyable
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call valid (local data) (local ty) (bool false))
+          (if
+            (call ci::eq (local ty) (i64 6))
+            (bool false)
+            (if
+              (call ci::lt (local ty) (i64 8))
+              (bool true)
+              (call ci::either
+                (call record (local data) (local ty))
+                (call callable (local data) (local ty)))))
+          (bool false))))
+    (function create earlier-copyable
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create owner (type I64))
+      (parameter create child (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::both
+            (call ci::lt (i64 0) (local child))
+            (call ci::lt (local child) (local owner)))
+          (call copyable (local data) (local child))
+          (bool false))))
     (function create values
       (visibility public)
       (effect pure)
@@ -197,56 +279,127 @@ declarations.begin
           (local blob)
           (let
             (binding at (call field (local data) (local ty) (local i)))
-            (binding child (call ci::u64 (local data) (local at)))
-            (binding n (call ci::u64 (local data) (call ci::add (local at) (i64 16))))
             (in
-              (if
-                (call ci::both
-                  (call ci::lt (i64 0) (local child))
-                  (call ci::both
-                    (call ci::lt (local child) (local ty))
-                    (if (call ci::eq (local child) (i64 6)) (bool false) (bool true))))
-                (if
-                  (call ci::both
-                    (call ci::eq
-                      (call ci::u64 (local data) (call ci::add (local at) (i64 8)))
-                      (local blob))
-                    (call ci::both
-                      (call ci::eq
-                        (call ci::u64 (local data) (call ci::add (local at) (i64 24)))
-                        (i64 0))
+              (let
+                (binding child (call ci::u64 (local data) (local at)))
+                (binding n (call ci::u64 (local data) (call ci::add (local at) (i64 16))))
+                (in
+                  (if
+                    (call earlier-copyable (local data) (local ty) (local child))
+                    (if
                       (call ci::both
-                        (call ci::lt (i64 0) (local n))
-                        (call ci::extent (local data) (local blob) (local n) (i64 1)))))
-                  (let
-                    (binding end (call ci::add (local blob) (local n)))
-                    (in
-                      (if
-                        (call utf8 (local data) (local blob) (local end))
-                        (if
+                        (call ci::eq
+                          (call ci::u64 (local data) (call ci::add (local at) (i64 8)))
+                          (local blob))
+                        (call ci::both
+                          (call ci::eq
+                            (call ci::u64 (local data) (call ci::add (local at) (i64 24)))
+                            (i64 0))
+                          (call ci::both
+                            (call ci::lt (i64 0) (local n))
+                            (call ci::extent (local data) (local blob) (local n) (i64 1)))))
+                      (let
+                        (binding end (call ci::add (local blob) (local n)))
+                        (in
                           (if
-                            (call ci::eq (local i) (i64 0))
-                            (bool true)
-                            (call less
-                              (local data)
-                              (local previous)
-                              (local length)
-                              (local blob)
-                              (local n)
-                              (i64 0)))
-                          (call fields
-                            (local data)
-                            (local ty)
-                            (local count)
-                            (call ci::add (local i) (i64 1))
-                            (local end)
-                            (local blob)
-                            (local n))
+                            (call utf8 (local data) (local blob) (local end))
+                            (if
+                              (if
+                                (call ci::eq (local i) (i64 0))
+                                (bool true)
+                                (call less
+                                  (local data)
+                                  (local previous)
+                                  (local length)
+                                  (local blob)
+                                  (local n)
+                                  (i64 0)))
+                              (call fields
+                                (local data)
+                                (local ty)
+                                (local count)
+                                (call ci::add (local i) (i64 1))
+                                (local end)
+                                (local blob)
+                                (local n))
+                              (i64 -1))
+                            (i64 -1))))
+                      (i64 -1))
+                    (i64 -1)))))))))
+    (function create function-parameters
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (parameter create count (type I64))
+      (parameter create i (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::eq (local i) (local count))
+          (bool true)
+          (if
+            (call earlier-copyable
+              (local data)
+              (local ty)
+              (call parameter (local data) (local ty) (local i)))
+            (call function-parameters
+              (local data)
+              (local ty)
+              (local count)
+              (call ci::add (local i) (i64 1)))
+            (bool false)))))
+    (function create compound-end
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (parameter create blob (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding at (call row (local data) (local ty)))
+          (in
+            (let
+              (binding kind (call ci::u64 (local data) (local at)))
+              (binding count (call ci::u64 (local data) (call ci::add (local at) (i64 8))))
+              (binding last (call ci::u64 (local data) (call ci::add (local at) (i64 24))))
+              (in
+                (if
+                  (call ci::eq
+                    (call ci::u64 (local data) (call ci::add (local at) (i64 16)))
+                    (local blob))
+                  (if
+                    (call ci::eq (local kind) (i64 8))
+                    (if
+                      (call ci::eq (local last) (i64 0))
+                      (if
+                        (call ci::extent (local data) (local blob) (local count) (i64 32))
+                        (call fields
+                          (local data)
+                          (local ty)
+                          (local count)
+                          (i64 0)
+                          (call ci::add (local blob) (call ci::mul (local count) (i64 32)))
+                          (i64 0)
+                          (i64 0))
+                        (i64 -1))
+                      (i64 -1))
+                    (if
+                      (call ci::eq (local kind) (i64 9))
+                      (if
+                        (call earlier-copyable (local data) (local ty) (local last))
+                        (if
+                          (call ci::extent (local data) (local blob) (local count) (i64 8))
+                          (if
+                            (call function-parameters (local data) (local ty) (local count) (i64 0))
+                            (call ci::add (local blob) (call ci::mul (local count) (i64 8)))
+                            (i64 -1))
                           (i64 -1))
-                        (i64 -1))))
-                  (i64 -1))
-                (i64 -1)))))))
-    (function create records
+                        (i64 -1))
+                      (i64 -1)))
+                  (i64 -1))))))))
+    (function create compounds
       (visibility private)
       (effect pure)
       (parameter create data (type Bytes))
@@ -255,40 +408,15 @@ declarations.begin
       (returns I64)
       (body
         (if
-          (call ci::eq (local ty) (call ci::add (call ci::u64 (local data) (i64 80)) (i64 1)))
+          (call ci::lt (call ci::u64 (local data) (i64 80)) (local ty))
           (local blob)
           (let
-            (binding at (call row (local data) (local ty)))
-            (binding count (call ci::u64 (local data) (call ci::add (local at) (i64 8))))
+            (binding next (call compound-end (local data) (local ty) (local blob)))
             (in
               (if
-                (call ci::both
-                  (call ci::eq (call ci::u64 (local data) (local at)) (i64 8))
-                  (call ci::both
-                    (call ci::eq
-                      (call ci::u64 (local data) (call ci::add (local at) (i64 16)))
-                      (local blob))
-                    (call ci::eq (call ci::u64 (local data) (call ci::add (local at) (i64 24))) (i64 0))))
-                (if
-                  (call ci::extent (local data) (local blob) (local count) (i64 32))
-                  (let
-                    (binding end (call ci::add (local blob) (call ci::mul (local count) (i64 32))))
-                    (binding next
-                      (call fields
-                        (local data)
-                        (local ty)
-                        (local count)
-                        (i64 0)
-                        (local end)
-                        (i64 0)
-                        (i64 0)))
-                    (in
-                      (if
-                        (call ci::lt (local next) (i64 0))
-                        (i64 -1)
-                        (call records (local data) (call ci::add (local ty) (i64 1)) (local next)))))
-                  (i64 -1))
-                (i64 -1)))))))
+                (call ci::lt (local next) (i64 0))
+                (i64 -1)
+                (call compounds (local data) (call ci::add (local ty) (i64 1)) (local next))))))))
     (function create validate
       (visibility public)
       (effect pure)
@@ -333,7 +461,7 @@ declarations.begin
                 (i64 0)
                 (i64 0))
               (i64 0))
-            (call records (local data) (i64 8) (local blob))
+            (call compounds (local data) (i64 8) (local blob))
             (i64 -1)))))
     (function create compiler-result
       (visibility public)
@@ -343,9 +471,7 @@ declarations.begin
       (returns Bool)
       (body
         (if
-          (call ci::both
-            (call ci::lt (i64 7) (local ty))
-            (call valid (local data) (local ty) (bool false)))
+          (call record (local data) (local ty))
           (if
             (call ci::eq
               (call ci::u64 (local data) (call ci::add (call row (local data) (local ty)) (i64 8)))
@@ -353,30 +479,32 @@ declarations.begin
             (let
               (binding a (call field (local data) (local ty) (i64 0)))
               (binding b (call field (local data) (local ty) (i64 1)))
-              (binding an (call ci::u64 (local data) (call ci::add (local a) (i64 8))))
-              (binding bn (call ci::u64 (local data) (call ci::add (local b) (i64 8))))
               (in
-                (call ci::both
-                  (call ci::both
-                    (call ci::eq (call ci::u64 (local data) (local a)) (i64 1))
-                    (call ci::eq (call ci::u64 (local data) (local b)) (i64 5)))
-                  (call ci::both
-                    (call ci::same
-                      (call ci::slice
-                        (local data)
-                        (local an)
-                        (call ci::add
-                          (local an)
-                          (call ci::u64 (local data) (call ci::add (local a) (i64 16)))))
-                      (call ci::text-bytes (text "diagnostic")))
-                    (call ci::same
-                      (call ci::slice
-                        (local data)
-                        (local bn)
-                        (call ci::add
-                          (local bn)
-                          (call ci::u64 (local data) (call ci::add (local b) (i64 16)))))
-                      (call ci::text-bytes (text "image")))))))
+                (let
+                  (binding an (call ci::u64 (local data) (call ci::add (local a) (i64 8))))
+                  (binding bn (call ci::u64 (local data) (call ci::add (local b) (i64 8))))
+                  (in
+                    (call ci::both
+                      (call ci::both
+                        (call ci::eq (call ci::u64 (local data) (local a)) (i64 1))
+                        (call ci::eq (call ci::u64 (local data) (local b)) (i64 5)))
+                      (call ci::both
+                        (call ci::same
+                          (call ci::slice
+                            (local data)
+                            (local an)
+                            (call ci::add
+                              (local an)
+                              (call ci::u64 (local data) (call ci::add (local a) (i64 16)))))
+                          (call ci::text-bytes (text "diagnostic")))
+                        (call ci::same
+                          (call ci::slice
+                            (local data)
+                            (local bn)
+                            (call ci::add
+                              (local bn)
+                              (call ci::u64 (local data) (call ci::add (local b) (i64 16)))))
+                          (call ci::text-bytes (text "image")))))))))
             (bool false))
           (bool false))))
     (function create identity

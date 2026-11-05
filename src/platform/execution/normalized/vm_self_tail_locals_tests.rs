@@ -1,5 +1,7 @@
 //! Actual local-buffer reuse, admission/cancellation, and conservative fallbacks.
 use super::*;
+use crate::platform::execution::normalized::child_storage::Values;
+use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 use crate::platform::execution::normalized::{owned_i64_cell::OwnedI64Cell, value::ValueOrigin};
 use crate::platform::kernel::{OwnerKey, OwnerRecord};
 use crate::platform::publication::GraphRepository;
@@ -355,7 +357,8 @@ fn self_tail_locals_reuse_preserves_scalar_callable_and_owned_results() -> TestR
         let (old_value, old) = invoke(&program, count, vec![NormalizedValue::I64(n)], true)?;
         let (new_value, new) = invoke(&program, count, vec![NormalizedValue::I64(n)], false)?;
         require(
-            old_value == NormalizedValue::I64(0) && new_value == NormalizedValue::I64(0),
+            matches!(&old_value, NormalizedValue::I64(0))
+                && matches!(&new_value, NormalizedValue::I64(0)),
             "count differs from its independent scalar answer",
         )?;
         require(
@@ -405,7 +408,8 @@ fn self_tail_locals_reuse_preserves_scalar_callable_and_owned_results() -> TestR
     let (old_value, old) = run_callback(true)?;
     let (new_value, new) = run_callback(false)?;
     require(
-        old_value == NormalizedValue::I64(12) && new_value == NormalizedValue::I64(12),
+        matches!(&old_value, NormalizedValue::I64(12))
+            && matches!(&new_value, NormalizedValue::I64(12)),
         "sealed ordinary Function callback was not invoked correctly",
     )?;
     let saved = 32 * callback_code.local_count as u64 * size_of::<Option<CheckedValue>>() as u64;
@@ -427,7 +431,8 @@ fn self_tail_locals_reuse_preserves_scalar_callable_and_owned_results() -> TestR
     let (old_value, old) = invoke(&program, owned, vec![NormalizedValue::I64(32)], true)?;
     let (new_value, new) = invoke(&program, owned, vec![NormalizedValue::I64(32)], false)?;
     require(
-        old_value == NormalizedValue::I64(137) && new_value == NormalizedValue::I64(137),
+        matches!(&old_value, NormalizedValue::I64(137))
+            && matches!(&new_value, NormalizedValue::I64(137)),
         "fresh Owned result differs from its independently extracted scalar",
     )?;
     require(
@@ -440,7 +445,8 @@ fn self_tail_locals_reuse_preserves_scalar_callable_and_owned_results() -> TestR
         let (old_value, old) = invoke(&program, even, vec![NormalizedValue::I64(n)], true)?;
         let (new_value, new) = invoke(&program, even, vec![NormalizedValue::I64(n)], false)?;
         require(
-            old_value == NormalizedValue::Bool(n % 2 == 0) && old_value == new_value,
+            matches!(&old_value, NormalizedValue::Bool(value) if *value == (n % 2 == 0))
+                && matches!(&new_value, NormalizedValue::Bool(value) if *value == (n % 2 == 0)),
             "mutual tail result differs from independent parity",
         )?;
         require(
@@ -637,12 +643,13 @@ fn self_tail_locals_charge_real_growth_and_cancel_before_retiring_old_frame() ->
             old.invocation_identity,
             old.locals.as_ptr(),
         ) == state
-            && old
-                .locals
-                .first()
-                .and_then(Option::as_ref)
-                .map(CheckedValue::raw)
-                == Some(&NormalizedValue::I64(3)),
+            && matches!(
+                old.locals
+                    .first()
+                    .and_then(Option::as_ref)
+                    .map(CheckedValue::raw),
+                Some(NormalizedValue::I64(3))
+            ),
         "cancellation destroyed the outgoing activation",
     )?;
     require(
@@ -879,7 +886,7 @@ fn call_argument_reuse_preserves_results_traps_quotas_and_complete_observations(
             let (before_value, before_work) = before?;
             let (after_value, after_work) = after?;
             require(
-                before_value == after_value,
+                raw_value_equal(&before_value, &after_value)?,
                 "argument storage changed result or refusal",
             )?;
             require(
@@ -897,9 +904,10 @@ fn call_argument_reuse_preserves_results_traps_quotas_and_complete_observations(
             )?;
             if fuel.is_none() {
                 match &expected {
-                    Ok(expected) => {
-                        require(after_value? == *expected, "independent result differs")?
-                    }
+                    Ok(expected) => require(
+                        raw_value_equal(&after_value?, expected)?,
+                        "independent result differs",
+                    )?,
                     Err(code) => require(
                         after_value.err().is_some_and(|error| error.code == *code),
                         "independent trap differs",
@@ -951,7 +959,7 @@ fn call_argument_buffer_reuses_actual_storage_and_preserves_stack_boundaries() -
         previous = Some(storage);
         machine.call(add, Arc::from([]), arguments)?;
         require(
-            machine.pop()?.into_raw() == NormalizedValue::I64(13),
+            matches!(machine.pop()?.into_raw(), NormalizedValue::I64(13)),
             "argument order changed",
         )?;
         require(
@@ -964,7 +972,7 @@ fn call_argument_buffer_reuses_actual_storage_and_preserves_stack_boundaries() -
         "argument transport crossed its stack boundary",
     )?;
     require(
-        machine.pop()?.into_raw() == NormalizedValue::I64(111),
+        matches!(machine.pop()?.into_raw(), NormalizedValue::I64(111)),
         "refused pop altered the retained operand",
     )?;
     machine.push(CheckedValue::scalar(
@@ -999,7 +1007,7 @@ fn call_argument_storage_cost_control() -> TestResult {
         let elapsed = started.elapsed();
         let (value, work) = result?;
         require(
-            value == NormalizedValue::I64(0),
+            matches!(value, NormalizedValue::I64(0)),
             "cost control independent result differs",
         )?;
         observations.push(work.clone());
@@ -1180,7 +1188,7 @@ fn checked_owned_child_instruction_refuses_wrong_list_nominal_and_generic_proofs
                 .ok_or_else(|| failure("missing genuine nominal layout"))?;
             NormalizedValue::Record(NormalizedRecord::Nominal {
                 layout,
-                fields: Arc::new(vec![NormalizedValue::I64(37)]),
+                fields: Values::try_new(vec![NormalizedValue::I64(37)])?,
             })
         };
         let mut outcomes = Vec::new();
@@ -1376,7 +1384,7 @@ fn checked_owned_children_preserve_nested_data_reference_results_quotas_and_clea
                 strict,
             )?;
             require(
-                result? == expected,
+                raw_value_equal(&result?, &expected)?,
                 "checked child changed independent nested result",
             )?;
             require(
@@ -1442,7 +1450,7 @@ fn checked_owned_children_preserve_nested_data_reference_results_quotas_and_clea
             &ExecutionControl::uncancelled(),
         )?;
         require(
-            reference.0 == expected,
+            raw_value_equal(&reference.0, &expected)?,
             "independent source reference differs",
         )?;
     }
@@ -1468,12 +1476,11 @@ fn checked_owned_children_nested_cost_control() -> TestResult {
             )?;
             let elapsed = started.elapsed();
             require(
-                result?
-                    == NormalizedValue::I64(if name == "nested-product-loop" {
-                        0
-                    } else {
-                        256
-                    }),
+                matches!(
+                    result?,
+                    NormalizedValue::I64(value)
+                        if value == (if name == "nested-product-loop" { 0 } else { 256 })
+                ),
                 "nested cost independent answer differs",
             )?;
             if let Some(before) = &before {

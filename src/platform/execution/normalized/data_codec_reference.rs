@@ -4,6 +4,7 @@
 //! The reference evaluator uses it so differential execution can detect changes in envelope,
 //! layout, ordering, and value behavior.
 
+use super::child_storage::{FieldsBuilder, StorageFailure, ValuesBuilder};
 use super::prepare::{NormalizedRecordLayout, NormalizedVariantLayout};
 use super::value::{
     NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex,
@@ -14,7 +15,6 @@ use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionControl;
 use crate::platform::kernel::{DeclarationReference, TypeForm, TypeObjectDigest};
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
 
 const MAGIC: &[u8; 8] = b"LKJDVAL1";
 const VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
@@ -613,15 +613,18 @@ fn read_reserved_value(
                 })
         }
         TypeForm::StructuralRecord { fields } => {
-            let mut values = Vec::with_capacity(fields.len());
+            let mut values =
+                FieldsBuilder::with_capacity(fields.len()).map_err(child_storage_error)?;
             for field in fields {
-                values.push((
-                    field.name.clone(),
-                    read_value(program, field.ty, input, budget, depth + 1)?,
-                ));
+                values
+                    .try_push((
+                        field.name.clone(),
+                        read_value(program, field.ty, input, budget, depth + 1)?,
+                    ))
+                    .map_err(child_storage_error)?;
             }
             Ok(NormalizedValue::Record(NormalizedRecord::Structural {
-                fields: Arc::new(values),
+                fields: values.finish().map_err(child_storage_error)?,
             }))
         }
         TypeForm::Named { .. } | TypeForm::Applied { .. } => {
@@ -704,13 +707,16 @@ fn read_nominal(
         if record.owned {
             return Err(unsupported("OwnedRecord"));
         }
-        let mut fields = Vec::with_capacity(record.fields.len());
+        let mut fields =
+            ValuesBuilder::with_capacity(record.fields.len()).map_err(child_storage_error)?;
         for field in record.fields.iter() {
-            fields.push(read_value(program, field.ty, input, budget, depth + 1)?);
+            fields
+                .try_push(read_value(program, field.ty, input, budget, depth + 1)?)
+                .map_err(child_storage_error)?;
         }
         return Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
             layout,
-            fields: Arc::new(fields),
+            fields: fields.finish().map_err(child_storage_error)?,
         }));
     }
     if let Some((layout, variant)) = find_variant(program, ty) {
@@ -1164,4 +1170,9 @@ fn missing_named_layout() -> Diagnostic {
         "normalized_data_named_layout",
         "named typed data value has no prepared record or variant layout",
     )
+}
+
+fn child_storage_error(error: StorageFailure) -> Diagnostic {
+    let error: crate::platform::execution::ExecutionError = error.into();
+    Diagnostic::new(DiagnosticClass::Resource, error.code, error.message)
 }

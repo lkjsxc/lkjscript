@@ -238,7 +238,13 @@ fn owned_task_raw_ingress_egress_and_traps_release_before_reuse() {
         let error = run(fail, vec![]).unwrap_err();
         assert_eq!(error.code, "normalized_buffer_index");
         assert_eq!(observed.live(), (0, 0));
-        assert_eq!(run(good, vec![]).unwrap(), NormalizedValue::Unit);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(run(good, vec![]).unwrap()),
+                &(NormalizedValue::Unit)
+            ),
+            Ok(true)
+        );
         assert_eq!(observed.live(), (0, 0));
     }
 }

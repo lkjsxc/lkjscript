@@ -65,10 +65,13 @@ fn owned_field_projection_retains_parent_and_child_allocation_identity() {
     assert!(owner.validate(origin, true).is_err());
     // Reading a sibling after projection proves no product mutex is retained.
     assert_eq!(
-        parent
-            .read_metadata(origin, 1, &control, &mut |_| Ok(()))
-            .unwrap(),
-        NormalizedValue::I64(-41)
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(parent
+                .read_metadata(origin, 1, &control, &mut |_| Ok(()))
+                .unwrap()),
+            &(NormalizedValue::I64(-41))
+        ),
+        Ok(true)
     );
     let reborrow = child.borrow().unwrap();
     drop(reborrow);
@@ -132,16 +135,22 @@ fn nested_projection_and_sibling_reads_finish_without_retaining_storage_locks() 
         };
         assert_eq!(cell_read.read().unwrap(), 137);
         assert_eq!(
-            inner_read
-                .read_metadata(origin, 1, &control, &mut |_| Ok(()))
-                .unwrap(),
-            NormalizedValue::I64(19)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(inner_read
+                    .read_metadata(origin, 1, &control, &mut |_| Ok(()))
+                    .unwrap()),
+                &(NormalizedValue::I64(19))
+            ),
+            Ok(true)
         );
         assert_eq!(
-            outer_read
-                .read_metadata(origin, 1, &control, &mut |_| Ok(()))
-                .unwrap(),
-            NormalizedValue::I64(23)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(outer_read
+                    .read_metadata(origin, 1, &control, &mut |_| Ok(()))
+                    .unwrap()),
+                &(NormalizedValue::I64(23))
+            ),
+            Ok(true)
         );
         assert!(outer.validate(origin, true).is_err());
         drop(cell_read);
@@ -185,8 +194,11 @@ fn borrowed_choice_copies_ordinary_payload_and_cleans_projection_refusal() {
         .borrow_payload(origin, &control, &mut |_| Ok(()))
         .unwrap();
     assert_eq!(
-        child,
-        NormalizedValue::Option(Some(Box::new(NormalizedValue::I64(73))))
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(child),
+            &(NormalizedValue::Option(Some(Box::new(NormalizedValue::I64(73)))))
+        ),
+        Ok(true)
     );
     assert!(owner.validate(origin, true).is_err());
     control.cancel();
@@ -199,7 +211,13 @@ fn borrowed_choice_copies_ordinary_payload_and_cleans_projection_refusal() {
     let (case, payload) = owner
         .select(origin, ty, &ExecutionControl::uncancelled())
         .unwrap();
-    assert_eq!((case, payload), (1, child));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(case, payload),
+            &(1, child)
+        ),
+        Ok(true)
+    );
     products.assert_owners_released_after_loans();
     assert_eq!(products.live(), (0, 0));
 }

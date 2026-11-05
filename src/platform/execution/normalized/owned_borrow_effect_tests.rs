@@ -147,7 +147,13 @@ fn owned_borrow_completed_authorized_effect_is_retained_after_later_trap() {
         )
         .unwrap()
         .0;
-    assert_eq!(healthy, NormalizedValue::I64(137));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(healthy),
+            &(NormalizedValue::I64(137))
+        ),
+        Ok(true)
+    );
     assert_eq!(adapter.inner.calls.load(Ordering::SeqCst), 1);
     assert_eq!(adapter.products.live(), (0, 0));
     assert_eq!(adapter.cells.live(), (0, 0));

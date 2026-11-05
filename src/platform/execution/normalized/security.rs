@@ -365,7 +365,7 @@ mod tests {
             vec![42],
         )
         .expect("exact deterministic clock");
-        assert_eq!(
+        assert!(matches!(
             clock
                 .call(
                     &policy(
@@ -381,7 +381,7 @@ mod tests {
                 )
                 .expect("deterministic clock value"),
             NormalizedValue::I64(42)
-        );
+        ));
 
         let (random_interface, random_requirement, random_operation) = bindings(1);
         let random = NormalizedSecurityAdapter::deterministic_random(
@@ -403,7 +403,7 @@ mod tests {
                 },
             )]),
         );
-        assert_eq!(
+        assert!(matches!(
             random
                 .call(
                     &random_policy,
@@ -412,8 +412,8 @@ mod tests {
                     &control,
                 )
                 .expect("bounded deterministic bytes"),
-            NormalizedValue::bytes(vec![7; 4])
-        );
+            NormalizedValue::Bytes(bytes) if matches!(bytes.as_ref(), [7, 7, 7, 7])
+        ));
 
         let (identifier_interface, identifier_requirement, identifier_operation) = bindings(2);
         let identifier = NormalizedSecurityAdapter::deterministic_identifier(

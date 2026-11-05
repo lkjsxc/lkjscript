@@ -219,7 +219,13 @@ fn borrowed_result_packets_forward_nested_custody_and_preserve_original_owner() 
         NormalizedRunPolicy::foreground(),
         &ExecutionControl::uncancelled(),
     );
-    assert_eq!(result.unwrap(), NormalizedValue::I64(274));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(result.unwrap()),
+            &(NormalizedValue::I64(274))
+        ),
+        Ok(true)
+    );
     let observation = observation.unwrap();
     assert!(observation.maximum_call_depth >= 3);
     assert_eq!(observation.tail_transfers, 0);
@@ -250,7 +256,13 @@ fn borrowed_result_choice_ordinary_payload_moves_before_retained_root_return() {
             NormalizedRunPolicy::foreground(),
             &ExecutionControl::uncancelled(),
         );
-        assert_eq!(result.unwrap(), NormalizedValue::I64(expected));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(result.unwrap()),
+                &(NormalizedValue::I64(expected))
+            ),
+            Ok(true)
+        );
     }
 }
 
@@ -266,7 +278,13 @@ fn borrowed_result_packets_cancel_exhaust_and_trap_without_residual_loans() {
         policy,
         &ExecutionControl::uncancelled(),
     );
-    assert_eq!(result.unwrap(), NormalizedValue::I64(274));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(result.unwrap()),
+            &(NormalizedValue::I64(274))
+        ),
+        Ok(true)
+    );
     let baseline = observation.unwrap();
     let (result, _) = run_clean(
         &program,
@@ -288,7 +306,13 @@ fn borrowed_result_packets_cancel_exhaust_and_trap_without_residual_loans() {
         );
         match result {
             Ok(value) => {
-                assert_eq!(value, NormalizedValue::I64(274));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(value),
+                        &(NormalizedValue::I64(274))
+                    ),
+                    Ok(true)
+                );
                 complete = true;
                 break;
             }
@@ -326,7 +350,13 @@ fn borrowed_result_packets_cancel_exhaust_and_trap_without_residual_loans() {
         policy,
         &ExecutionControl::uncancelled(),
     );
-    assert_eq!(result.unwrap(), NormalizedValue::I64(274));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(result.unwrap()),
+            &(NormalizedValue::I64(274))
+        ),
+        Ok(true)
+    );
 }
 
 #[test]
@@ -394,7 +424,13 @@ fn borrowed_result_failed_adoption_packet_owns_cleanup_after_callee_is_gone() {
         NormalizedRunPolicy::foreground(),
         &ExecutionControl::uncancelled(),
     );
-    assert_eq!(healthy.unwrap(), NormalizedValue::I64(274));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(healthy.unwrap()),
+            &(NormalizedValue::I64(274))
+        ),
+        Ok(true)
+    );
 }
 
 #[test]
@@ -430,8 +466,11 @@ fn borrowed_result_reservation_failures_leave_custody_at_each_exact_stage() {
             &ExecutionControl::uncancelled(),
         );
         assert_eq!(
-            healthy.unwrap(),
-            NormalizedValue::I64(274),
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(healthy.unwrap()),
+                &(NormalizedValue::I64(274))
+            ),
+            Ok(true),
             "after {stage:?}"
         );
     }
@@ -454,7 +493,10 @@ impl NormalizedHost for PanicHost<'_> {
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
         if implementation.as_str() == "core.i64.add"
-            && arguments == [NormalizedValue::I64(137), NormalizedValue::I64(23)]
+            && matches!(
+                arguments.as_slice(),
+                [NormalizedValue::I64(137), NormalizedValue::I64(23)]
+            )
         {
             let (owners, loans) = self.products.live();
             assert_eq!(owners, 2, "both selected product ancestors remain live");
@@ -518,5 +560,11 @@ fn borrowed_result_host_unwind_destroys_adopted_packet_before_owning_ancestors()
         NormalizedRunPolicy::foreground(),
         &ExecutionControl::uncancelled(),
     );
-    assert_eq!(healthy.unwrap(), NormalizedValue::I64(274));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(healthy.unwrap()),
+            &(NormalizedValue::I64(274))
+        ),
+        Ok(true)
+    );
 }

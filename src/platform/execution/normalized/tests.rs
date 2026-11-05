@@ -25,6 +25,9 @@ mod region_types_tests;
 #[path = "recursive_tests.rs"]
 mod recursive_tests;
 
+#[path = "semantic_equality_lifecycle_tests.rs"]
+mod semantic_equality_lifecycle_tests;
+
 #[path = "associated_serial_artifact_tests.rs"]
 pub(in crate::platform) mod associated_serial_artifact_tests;
 
@@ -153,6 +156,7 @@ use super::deployment::{
     NormalizedPreparedDeployment,
 };
 use super::http::NormalizedHttpApplication;
+use crate::platform::execution::normalized::child_storage::Values;
 
 use super::prepare::{NormalizedFunctionBody, NormalizedInstruction, NormalizedProgram};
 use super::reference::{
@@ -484,7 +488,7 @@ fn nominal_phantom_identity_origin_properties_codecs_and_alias_fault_are_indepen
     let value = |program: &NormalizedProgram, ty| {
         NormalizedValue::Record(super::value::NormalizedRecord::Nominal {
             layout: program.record_instances[&ty],
-            fields: Arc::new(vec![NormalizedValue::I64(7)]),
+            fields: Values::try_new(vec![NormalizedValue::I64(7)]).unwrap(),
         })
     };
     let first = value(&program, applications[0]);
@@ -2899,8 +2903,11 @@ fn normalized_json_codec_uses_exact_runtime_layouts_and_bounds() {
         .find_map(|(digest, object)| matches!(object.form, TypeForm::Unit).then_some(*digest))
         .expect("unit type");
     assert_eq!(
-        decode_typed(&program, b"null", unit, JsonLimits::default()).unwrap(),
-        NormalizedValue::Unit
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(decode_typed(&program, b"null", unit, JsonLimits::default()).unwrap()),
+            &(NormalizedValue::Unit)
+        ),
+        Ok(true)
     );
     assert_eq!(
         encode_typed(
@@ -3373,7 +3380,13 @@ async fn normalized_resident_reuses_the_bounded_execution_kernel() {
         program.root_revision
     );
     let receipt = resident.invoke(Vec::new()).await.expect("resident invoke");
-    assert_eq!(receipt.value, NormalizedValue::Unit);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(receipt.value),
+            &(NormalizedValue::Unit)
+        ),
+        Ok(true)
+    );
     assert!(receipt.execution.instructions > 0);
     assert_eq!(receipt.task_id, 1);
     assert_eq!(resident.observe().completed, 1);
@@ -3450,7 +3463,13 @@ async fn normalized_worker_uses_shared_structured_topology() {
                     &ExecutionControl::uncancelled(),
                 )
                 .expect("independent worker callable entry");
-        assert_eq!(reference.0, NormalizedValue::Bool(false));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(reference.0),
+                &(NormalizedValue::Bool(false))
+            ),
+            Ok(true)
+        );
         let program = Arc::new(program);
         let deployment = NormalizedPreparedDeployment::prepare(
             &program,
@@ -4171,8 +4190,11 @@ fn exact_byte_stream_grant_executes_in_task_scopes_in_both_tiers() {
         )
         .expect("dense stream read-all");
     assert_eq!(
-        production.0,
-        NormalizedValue::bytes(b"streamed bytes".to_vec())
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(production.0),
+            &(NormalizedValue::bytes(b"streamed bytes".to_vec()))
+        ),
+        Ok(true)
     );
     assert_eq!(production_scope.live_resources(), 0);
     assert_eq!(deployment.live_streams(), 0);
@@ -4199,7 +4221,13 @@ fn exact_byte_stream_grant_executes_in_task_scopes_in_both_tiers() {
         &control,
     )
     .expect("reference stream read-all");
-    assert_eq!(reference.0, production.0);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(reference.0),
+            &(production.0)
+        ),
+        Ok(true)
+    );
     assert_eq!(reference_scope.live_resources(), 0);
     assert_eq!(deployment.live_streams(), 0);
 
@@ -4242,10 +4270,33 @@ async fn normalized_reference_runner_uses_revision_pinned_owner_reads() {
 
     assert_eq!(receipt.revision, Some(view.revision()));
     assert_eq!(receipt.result_json, b"null");
+    // Keep the established read inventory as a same-binary control. The
+    // complete-body continuation selector additionally reads this fixture's
+    // Let expression, Binding record, Unit initializer and Local body once.
+    // The scoped test guard ends before any async lifecycle work below.
+    let legacy = {
+        let _legacy = super::reference::continuations::force_legacy_route();
+        run_pure_command(
+            &view,
+            &program,
+            &Name::new("pure").unwrap(),
+            b"[]",
+            NormalizedCommandPolicy::default(),
+            &control,
+        )
+        .expect("revision-pinned legacy-route read inventory")
+    };
+    assert_eq!(legacy.revision, receipt.revision);
+    assert_eq!(legacy.result_json, receipt.result_json);
     assert_eq!(
-        receipt.reference.canonical_owner_reads,
+        legacy.reference.canonical_owner_reads,
         snapshot.owners.len() as u64 + 11,
         "one independent layout inventory, one invocation admission read, one borrowed-result entry-mode admission read, seven execution owner reads, and two current Let binding reads for view inventory and classification"
+    );
+    assert_eq!(
+        receipt.reference.canonical_owner_reads,
+        legacy.reference.canonical_owner_reads + 4,
+        "closed-pure continuation selection adds three canonical expression reads and one Let binding read"
     );
     assert!(receipt.reference.canonical_map_pages_read > 0);
     assert!(
@@ -4339,7 +4390,13 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
             &control,
         )
         .expect("pure dense invocation");
-    assert_eq!(pure, NormalizedValue::Unit);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(pure),
+            &(NormalizedValue::Unit)
+        ),
+        Ok(true)
+    );
     assert!(pure_observation.instructions > 0);
     assert_eq!(pure_observation.capability_calls, 0);
 
@@ -4356,14 +4413,32 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
             &control,
         )
         .expect("direct external dense invocation");
-    assert_eq!(external, NormalizedValue::Option(None));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(external),
+            &(NormalizedValue::Option(None))
+        ),
+        Ok(true)
+    );
     assert_eq!(external_observation.external_calls, 1);
 
     let (actual, expected) = vm
         .invoke_test(declaration_named(&snapshot, "caller_test"), None, &control)
         .expect("graph-owned dense test");
-    assert_eq!(actual.0, NormalizedValue::Unit);
-    assert_eq!(actual.0, expected.0);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(actual.0),
+            &(NormalizedValue::Unit)
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(actual.0),
+            &(expected.0)
+        ),
+        Ok(true)
+    );
 
     let (capabilities, calls) = bind_fixture_capability(&program, 1);
     let (result, observation) = vm
@@ -4374,7 +4449,13 @@ fn dense_vm_executes_pure_external_test_and_capability_paths() {
             &control,
         )
         .expect("effectful dense target");
-    assert_eq!(result, NormalizedValue::Unit);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(result),
+            &(NormalizedValue::Unit)
+        ),
+        Ok(true)
+    );
     assert_eq!(calls.load(Ordering::Relaxed), 1);
     assert_eq!(observation.capability_calls, 1);
     assert_eq!(observation.calls, 2);
@@ -4681,7 +4762,13 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     let reference_pure = reference
         .invoke(pure, Vec::new(), None, &control)
         .expect("canonical pure execution");
-    assert_eq!(vm_pure.0, reference_pure.0);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(vm_pure.0),
+            &(reference_pure.0)
+        ),
+        Ok(true)
+    );
     assert_eq!(
         reference_pure.1.production_tier,
         "graph14_reference_records_10"
@@ -4694,8 +4781,20 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     let reference_test = reference
         .invoke_test(test, None, &control)
         .expect("canonical test execution");
-    assert_eq!(vm_test.0.0, reference_test.0.0);
-    assert_eq!(vm_test.1.0, reference_test.1.0);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(vm_test.0.0),
+            &(reference_test.0.0)
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(vm_test.1.0),
+            &(reference_test.1.0)
+        ),
+        Ok(true)
+    );
 
     let (capabilities, calls) = bind_fixture_capability(&program, 1);
     let target = Name::new("command").unwrap();
@@ -4705,7 +4804,13 @@ fn canonical_reference_and_dense_vm_agree_on_fixture_execution() {
     let reference_task = reference
         .invoke_root_target(&target, Vec::new(), Some(&capabilities), &control)
         .expect("canonical task execution");
-    assert_eq!(vm_task.0, reference_task.0);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(vm_task.0),
+            &(reference_task.0)
+        ),
+        Ok(true)
+    );
     assert_eq!(vm_task.1.capability_calls, 1);
     assert_eq!(reference_task.1.capability_calls, 1);
     assert_eq!(calls.load(Ordering::Relaxed), 2);
@@ -4726,8 +4831,20 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
     let reference = NormalizedReferenceInterpreter::from_reader(&view, &program, policy)
         .invoke(caller, Vec::new(), None, &control)
         .expect("canonical linked dependency call");
-    assert_eq!(production.0, NormalizedValue::Unit);
-    assert_eq!(production.0, reference.0);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(production.0),
+            &(NormalizedValue::Unit)
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(production.0),
+            &(reference.0)
+        ),
+        Ok(true)
+    );
     assert_eq!(reference.1.calls, 2);
     assert_eq!(reference.1.maximum_call_depth, 1);
     assert_eq!(reference.1.tail_transfers, 1);
@@ -4741,7 +4858,13 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
     let direct_dependency = NormalizedReferenceInterpreter::from_reader(&view, &program, policy)
         .invoke(source, Vec::new(), None, &control)
         .expect("direct exact linked dependency body");
-    assert_eq!(direct_dependency.0, NormalizedValue::Unit);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(direct_dependency.0),
+            &(NormalizedValue::Unit)
+        ),
+        Ok(true)
+    );
 
     let absent_package = DeclarationReference {
         package: crate::platform::kernel::PackageId::migrate(
@@ -4765,8 +4888,20 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
     let reference_bounded = NormalizedReferenceInterpreter::from_reader(&view, &program, bounded)
         .invoke(caller, Vec::new(), None, &control)
         .expect("reference linked tail call replaces its caller");
-    assert_eq!(production_bounded.0, NormalizedValue::Unit);
-    assert_eq!(production_bounded.0, reference_bounded.0);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(production_bounded.0),
+            &(NormalizedValue::Unit)
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(production_bounded.0),
+            &(reference_bounded.0)
+        ),
+        Ok(true)
+    );
 
     // Safe fault sensitivity: compiled call selection and units are unavailable to the oracle.
     // The independent canonical dependency call remains evaluable, while production cannot run.
@@ -4779,7 +4914,13 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
     let independent = NormalizedReferenceInterpreter::from_reader(&view, &absent_compiler, policy)
         .invoke(caller, Vec::new(), None, &control)
         .expect("canonical dependency evaluation cannot consult compiled resolution");
-    assert_eq!(independent.0, NormalizedValue::Unit);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(independent.0),
+            &(NormalizedValue::Unit)
+        ),
+        Ok(true)
+    );
     assert!(
         NormalizedVm::for_test(&absent_compiler, policy)
             .invoke(caller, Vec::new(), None, &control)
@@ -4975,8 +5116,20 @@ fn pure_tail_preparation_executes_the_current_maintained_standard_artifact() {
                 &ExecutionControl::uncancelled(),
             )
             .expect("independent canonical fold");
-        assert_eq!(production.0, NormalizedValue::I64(n * (n + 1) / 2));
-        assert_eq!(production.0, reference.0);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(production.0),
+                &(NormalizedValue::I64(n * (n + 1) / 2))
+            ),
+            Ok(true)
+        );
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(production.0),
+                &(reference.0)
+            ),
+            Ok(true)
+        );
         assert!(production.1.maximum_call_depth <= 8 && reference.1.maximum_call_depth <= 8);
         assert!(production.1.tail_transfers >= n as u64 && reference.1.tail_transfers >= n as u64);
         assert_eq!(production.1.value_work.internal_guard_descendant_visits, 0);
@@ -5004,8 +5157,20 @@ fn pure_tail_preparation_executes_the_current_maintained_standard_artifact() {
                     )
             })
             .expect("independent forced rescan keeps arithmetic");
-            assert_eq!(forced.0, production.0);
-            assert_eq!(forced_reference.0, reference.0);
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(forced.0),
+                    &(production.0)
+                ),
+                Ok(true)
+            );
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(forced_reference.0),
+                    &(reference.0)
+                ),
+                Ok(true)
+            );
             assert!(forced.1.value_work.internal_guard_descendant_visits > 256 * 256);
             assert!(
                 forced_reference
@@ -5113,7 +5278,13 @@ fn canonical_reference_layout_target_and_test_inventory_ignore_compiler_selectio
         .invoke_root_target(&Name::new("pure").unwrap(), Vec::new(), None, &control)
         .expect("canonical root selection without compiled tables")
         .0;
-    assert_eq!(actual, expected);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(actual),
+            &(expected)
+        ),
+        Ok(true)
+    );
     assert_eq!(
         run_graph_tests(&snapshot, &program, None, policy, &control)
             .expect_err("omitted compiler tests must not become a successful empty test run")
@@ -5152,8 +5323,20 @@ fn every_graph9_expression_form_executes_equally_in_both_tiers() {
         .invoke(caller, Vec::new(), Some(&capabilities), &control)
         .expect("all-form canonical execution");
 
-    assert_eq!(vm_result.0, NormalizedValue::Unit);
-    assert_eq!(vm_result.0, reference_result.0);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(vm_result.0),
+            &(NormalizedValue::Unit)
+        ),
+        Ok(true)
+    );
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(vm_result.0),
+            &(reference_result.0)
+        ),
+        Ok(true)
+    );
     assert_eq!(vm_result.1.capability_calls, 2);
     assert_eq!(reference_result.1.capability_calls, 2);
     assert!(vm_result.1.collection_items >= 4);
@@ -5416,7 +5599,13 @@ fn default_optional_quotas_preserve_independent_grants_and_cancellation_in_both_
             2,
             &control,
         );
-        assert_eq!(ordinary.0.unwrap(), explicit.0.unwrap());
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(ordinary.0.unwrap()),
+                &(explicit.0.unwrap())
+            ),
+            Ok(true)
+        );
         assert_eq!((ordinary.1, explicit.1), (1, 1));
         for dimension in 0..4 {
             let mut policy = NormalizedRunPolicy::foreground();
@@ -5639,7 +5828,16 @@ fn declaration_rename_and_move_do_not_change_dense_runtime_dispatch() {
     let after_result = NormalizedVm::for_test(&after, NormalizedRunPolicy::default())
         .invoke_root_target(&target, Vec::new(), Some(&after_capabilities), &control)
         .expect("renamed and moved dense target");
-    assert_eq!(before_result, after_result);
+    {
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &before_result.0,
+                &after_result.0
+            ),
+            Ok(true)
+        );
+        assert_eq!(before_result.1, after_result.1);
+    };
 }
 
 #[test]
@@ -5971,7 +6169,7 @@ type.argument parent=@items index=0 type=i64"#)
                     } else {
                         run()
                     };
-                    assert_eq!(value, NormalizedValue::I64(n as i64));
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(NormalizedValue::I64(n as i64))), Ok(true));
                     assert!(frames <= 8);
                     if !fault {
                         assert_eq!(work.internal_guard_descendant_visits, 0);

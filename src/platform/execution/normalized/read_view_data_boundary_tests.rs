@@ -11,6 +11,7 @@ use super::super::value_schema::NormalizedValueSchema;
 use super::super::{codec, data_codec, data_codec_reference};
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::execution::normalized::child_storage::{Fields, Values};
 use crate::platform::execution::{ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel::{PackageId, ReadScopeArgument, ReadScopeBinder, ReadScopeReference};
 use crate::platform::semantic_id::{
@@ -136,7 +137,7 @@ fn phantom_actuals_and_inactive_variant_payloads_cannot_escape() {
     program.record_instances.insert(phantom, index);
     let value = NormalizedValue::Record(NormalizedRecord::Nominal {
         layout: index,
-        fields: Arc::new(vec![NormalizedValue::I64(17)]),
+        fields: Values::try_new(vec![NormalizedValue::I64(17)]).unwrap(),
     });
     rejects_all_codecs(&program, &value, phantom);
 
@@ -329,10 +330,11 @@ fn raw_nested_view_and_scoped_callable_refuse_before_schema_callbacks() {
     let (cell, scope_owner, view) = raw_view(&program, ty);
     let source_origin = view.source().origin;
     let value = NormalizedValue::Record(NormalizedRecord::Structural {
-        fields: Arc::new(vec![(
+        fields: Fields::try_new(vec![(
             Name::new("hidden").unwrap(),
             NormalizedValue::Option(Some(Box::new(NormalizedValue::ReadView(view)))),
-        )]),
+        )])
+        .unwrap(),
     });
     let schema = CountingSchema {
         program: &program,
@@ -404,7 +406,13 @@ fn owned_storage_refuses_nested_views_before_reserve_or_mutation() {
     assert_eq!(reservations.get(), before);
     owner.validate_admission(program.value_origin).unwrap();
     let fields = owner.unpack(origin, unit, &control).unwrap();
-    assert_eq!(fields, vec![NormalizedValue::I64(7)]);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(fields),
+            &(vec![NormalizedValue::I64(7)])
+        ),
+        Ok(true)
+    );
 }
 
 #[test]

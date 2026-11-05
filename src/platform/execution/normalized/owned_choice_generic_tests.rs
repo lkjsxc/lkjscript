@@ -37,12 +37,15 @@ fn owned_choice_closed_self_witnesses_recursive_transfer_and_reborrow() {
                     panic!("ordinary choice witness result");
                 };
                 assert_eq!(
-                    fields.as_ref(),
-                    &[
-                        (Name::new("alternate").unwrap(), NormalizedValue::I64(99)),
-                        (Name::new("scalar").unwrap(), NormalizedValue::I64(n)),
-                        (Name::new("skipped").unwrap(), NormalizedValue::I64(7)),
-                    ]
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        fields.as_slice(),
+                        &[
+                            (Name::new("alternate").unwrap(), NormalizedValue::I64(99)),
+                            (Name::new("scalar").unwrap(), NormalizedValue::I64(n)),
+                            (Name::new("skipped").unwrap(), NormalizedValue::I64(7)),
+                        ][..]
+                    ),
+                    Ok(true)
                 );
                 assert_eq!(composites.live(), (0, 0));
                 assert_eq!(cells.live(), (0, 0));
@@ -117,7 +120,14 @@ fn owned_choice_generics_preserve_nested_allocations_and_independent_arm_scope()
                     .unwrap()
                     .0
             };
-            assert_eq!(&result, expected, "{name} reference={reference}");
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(&result),
+                    &(expected)
+                ),
+                Ok(true),
+                "{name} reference={reference}"
+            );
             assert_eq!(cells.live(), (0, 0));
             assert_eq!(bytes.live(), (0, 0));
             assert_eq!(composites.live(), (0, 0));
@@ -201,9 +211,21 @@ fn owned_choice_quota_failure_releases_nested_payloads_in_both_engines() {
             (result, allocated, composites.created())
         };
         let (success, total, created) = run(None);
-        assert_eq!(success.unwrap(), NormalizedValue::Unit);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(success.unwrap()),
+                &(NormalizedValue::Unit)
+            ),
+            Ok(true)
+        );
         assert_eq!(created, 3);
-        assert_eq!(run(Some(total)).0.unwrap(), NormalizedValue::Unit);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(run(Some(total)).0.unwrap()),
+                &(NormalizedValue::Unit)
+            ),
+            Ok(true)
+        );
         let mut stages = std::collections::BTreeSet::new();
         // Sweep every charged byte: failures before, during and after each composite.
         for limit in 1..total {

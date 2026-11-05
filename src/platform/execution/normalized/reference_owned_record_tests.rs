@@ -1,5 +1,6 @@
 //! The canonical oracle must admit nominal custody without kernel/compiler proof reuse.
 use super::*;
+use crate::platform::execution::normalized::child_storage::Values;
 use crate::platform::kernel::{FieldReference, StructuralTypeField};
 
 const SOURCE: &str = r#"declarations.begin
@@ -270,7 +271,7 @@ fn canonical_owned_record_empty_layout_cannot_cross_typed_data_boundaries() {
     let index = schema.record_instances[&ty];
     let value = NormalizedValue::Record(NormalizedRecord::Nominal {
         layout: RecordLayoutIndex(index as u32, schema.value_origin()),
-        fields: Arc::new(Vec::new()),
+        fields: Values::try_new(Vec::new()).unwrap(),
     });
     assert!(super::super::data_codec_reference::encode_typed(&schema, &value, ty).is_err());
     let mut falsely_ordinary = schema.clone();

@@ -217,7 +217,13 @@ fn assert_task_tail_context(context: &str) {
         };
         if terminal {
             let (value, depth) = result.unwrap_or_else(|e| panic!("{context}/{reference}: {e:?}"));
-            assert_eq!(value, NormalizedValue::I64(33_558_528));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(value),
+                    &(NormalizedValue::I64(33_558_528))
+                ),
+                Ok(true)
+            );
             assert!(depth <= 2, "{context}/{reference}: {depth}");
         } else {
             let error = result.unwrap_err();
@@ -273,10 +279,13 @@ fn task_control_oracle_detects_disabled_production_transfers() {
         "normalized_call_depth"
     );
     assert_eq!(
-        NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
-            .invoke(entry, args, None, &control)
-            .unwrap()
-            .0,
-        NormalizedValue::I64(33_558_528)
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
+                .invoke(entry, args, None, &control)
+                .unwrap()
+                .0),
+            &(NormalizedValue::I64(33_558_528))
+        ),
+        Ok(true)
     );
 }

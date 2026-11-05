@@ -48,7 +48,7 @@ image and compiler-format bounds remain unchanged by this transport contract.
 
 The initial native instruction set covers Unit, Bool, I64, text constants,
 structural and nominal records, lists, fields, branches, ordinary and generic
-calls, bound function values, invocation and self tail recursion. It includes
+calls, bound function values, invocation and graph tail transfer. It includes
 checked I64 arithmetic/comparisons/conversion, boolean operations and list
 length/get/append. Immutable byte intermediates support length/get/equality,
 construction from octet lists or raw UTF-8 text, copying, slicing and concatenation.
@@ -103,6 +103,30 @@ Native execution does not implement the VM's configurable work/allocation quotas
 Every direct and indirect call aligns the machine stack to 16 bytes. A saved
 argument-base pointer keeps language stack arguments independent of alignment
 padding; nested probes verify alignment and argument preservation at 16 depths.
+
+Callable values use immutable target metadata and a flat captured prefix. An
+empty Bind evaluates its callee, checkpoints, and retains that same value without
+an environment allocation. Nonempty binding checks complete prefix/layout
+extents before allocation, preserves previous captures and appends the newly
+evaluated arguments in source order. The complete outgoing argument window is
+reserved before ordinary Invoke calls copying or cancellation helpers.
+
+Eligible graph TailCall/TailInvoke reuses RBP and the original caller return
+record. Explicit argument slots move with memmove ordering before any immutable
+captured prefix is installed. Target nonparameter locals start empty, and the
+saved BX/R12/R13 slots plus R14/R15 phase state retain their contracts. A live
+owned local takes ordinary Call/Invoke and its retained cleanup/Return
+continuation. Consumed/moved locals are cleared before ownership scans; borrowed
+parameters are distinguished from owned locals. Registered external targets
+retain their ordinary argument ABI and bounded terminal call fallback.
+
+Every graph tail transfer checkpoints even at zero arity with zero locals.
+Tail transfer prevents accumulating activations; ordinary non-tail recursion and
+very wide native frames remain subject to physical OS stack availability.
+Native private metadata is compiler-constructed, not an arbitrary-pointer
+sandbox. The [profile-8 contract](selfhosting.md#closed-pure-callable-transfer)
+defines the selfhost projection separately from this Rust backend's private
+callable representation.
 
 The deterministic algebraic pass is a separate native lowering plan over pure
 normalized expression trees. It leaves the admitted program and metered bytecode

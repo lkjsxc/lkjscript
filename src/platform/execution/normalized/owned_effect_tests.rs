@@ -199,13 +199,16 @@ fn expected(value: NormalizedValue) {
         .map(|(name, value)| (name.as_str(), value.clone()))
         .collect::<BTreeMap<_, _>>();
     assert_eq!(
-        actual,
-        BTreeMap::from([
-            ("scalar", NormalizedValue::I64(43)),
-            ("rebound", NormalizedValue::I64(43)),
-            ("alternate", NormalizedValue::I64(100)),
-            ("bytes", NormalizedValue::bytes(vec![73, 2])),
-        ])
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(actual),
+            &(BTreeMap::from([
+                ("scalar", NormalizedValue::I64(43)),
+                ("rebound", NormalizedValue::I64(43)),
+                ("alternate", NormalizedValue::I64(100)),
+                ("bytes", NormalizedValue::bytes(vec![73, 2])),
+            ]))
+        ),
+        Ok(true)
     );
 }
 

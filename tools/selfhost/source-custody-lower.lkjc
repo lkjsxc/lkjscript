@@ -43,30 +43,89 @@ declarations.begin
     (body (if (call ci::eq (call source-table::kind (local graph) (local row)) (i64 15))
       (if (call ci::eq (call source-custody-signature::mode (local graph) (local row)) (i64 1))
         (i64 1) (i64 0)) (i64 0))))
-  (function create instruction (visibility package) (effect pure)
-    (parameter create facts (type Bytes)) (parameter create evidence (type Bytes))
-    (parameter create entries (type Bytes)) (parameter create directory (type Bytes))
-    (parameter create tag (type I64)) (parameter create b (type I64))
-    (parameter create anchor (type I64)) (parameter create row (type I64))
-    (returns (record (code I64) (tag I64) (b I64) (state I64) (forced I64) (live I64)))
-    (body (let (binding state (call selected (local evidence) (local entries) (local directory)
-      (local tag) (local anchor) (local row)))
-      (in (if (call ci::lt (local state) (i64 0))
-        (call result (i64 19) (local tag) (local b) (i64 0) (i64 -1) (i64 0))
-        (if (call ci::both (call ci::eq (local tag) (i64 4))
-              (call ci::eq (call source-scalar-infer::fact (local facts) (local anchor)) (i64 6)))
-          (let (binding moved (call source-custody-index::find
-            (local evidence) (local entries) (local directory) (local anchor) (i64 3) (i64 -1) (i64 -1)))
-            (in (if (call ci::lt (local moved) (i64 0))
-              (let (binding borrowed (call qualifier (local evidence) (local entries) (local directory) (local anchor)))
-                (in (call result (if (call ci::eq (local borrowed) (i64 1)) (i64 0) (i64 19))
-                  (i64 4) (local borrowed) (local state) (i64 -1) (i64 0))))
-              (call result (i64 0) (i64 16) (i64 0) (local state) (i64 -1) (i64 0)))))
-          (call result (i64 0)
-            (if (call ci::eq (local tag) (i64 10))
-              (if (call ci::eq (call ci::u64 (local evidence) (call ci::add (local state) (i64 24))) (i64 1))
-                (i64 10) (i64 9)) (local tag))
-            (local b) (local state)
-            (if (call ci::eq (local tag) (i64 5)) (local anchor) (i64 -1)) (i64 0))))))))
+  (function create instruction
+      (visibility package)
+      (effect pure)
+      (parameter create facts (type Bytes))
+      (parameter create evidence (type Bytes))
+      (parameter create entries (type Bytes))
+      (parameter create directory (type Bytes))
+      (parameter create tag (type I64))
+      (parameter create b (type I64))
+      (parameter create anchor (type I64))
+      (parameter create row (type I64))
+      (returns (record (code I64) (tag I64) (b I64) (state I64) (forced I64) (live I64)))
+      (body
+        (let
+          (binding state
+            (call selected
+              (local evidence)
+              (local entries)
+              (local directory)
+              (local tag)
+              (local anchor)
+              (local row)))
+          (in
+            (if
+              (call ci::lt (local state) (i64 0))
+              (call result (i64 19) (local tag) (local b) (i64 0) (i64 -1) (i64 0))
+              (if
+                (call ci::both
+                  (call ci::eq (local tag) (i64 4))
+                  (call ci::eq
+                    (call source-scalar-infer::fact (local facts) (local anchor))
+                    (i64 6)))
+                (let
+                  (binding moved
+                    (call source-custody-index::find
+                      (local evidence)
+                      (local entries)
+                      (local directory)
+                      (local anchor)
+                      (i64 3)
+                      (i64 -1)
+                      (i64 -1)))
+                  (in
+                    (if
+                      (call ci::lt (local moved) (i64 0))
+                      (let
+                        (binding borrowed
+                          (call qualifier
+                            (local evidence)
+                            (local entries)
+                            (local directory)
+                            (local anchor)))
+                        (in
+                          (call result
+                            (if (call ci::eq (local borrowed) (i64 1)) (i64 0) (i64 19))
+                            (i64 4)
+                            (local borrowed)
+                            (local state)
+                            (i64 -1)
+                            (i64 0))))
+                      (call result (i64 0) (i64 16) (i64 0) (local state) (i64 -1) (i64 0)))))
+                (call result
+                  (i64 0)
+                  (if
+                    (call ci::eq (local tag) (i64 10))
+                    (if
+                      (call ci::eq
+                        (call ci::u64 (local evidence) (call ci::add (local state) (i64 24)))
+                        (i64 1))
+                      (i64 10)
+                      (i64 9))
+                    (if
+                      (call ci::eq (local tag) (i64 20))
+                      (if
+                        (call ci::eq
+                          (call ci::u64 (local evidence) (call ci::add (local state) (i64 24)))
+                          (i64 2))
+                        (i64 20)
+                        (i64 19))
+                      (local tag)))
+                  (local b)
+                  (local state)
+                  (if (call ci::eq (local tag) (i64 5)) (local anchor) (i64 -1))
+                  (i64 0))))))))
 ))
 declarations.end

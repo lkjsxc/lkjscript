@@ -25,20 +25,29 @@ fn region_planner_witness_traverses_cycles_and_shares_frozen_stages() {
     let (reference, _) = NormalizedReferenceInterpreter::new(&source, &program, policy)
         .invoke(declaration, vec![], None, &control)
         .unwrap();
-    assert_eq!(vm, reference);
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(vm),
+            &(reference)
+        ),
+        Ok(true)
+    );
     let NormalizedValue::Record(super::super::value::NormalizedRecord::Structural { fields }) = vm
     else {
         panic!("pair");
     };
     assert_eq!(
-        fields
-            .iter()
-            .map(|(name, value)| (name.as_str(), value.clone()))
-            .collect::<Vec<_>>(),
-        vec![
-            ("left", NormalizedValue::I64(2)),
-            ("right", NormalizedValue::I64(2))
-        ]
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(fields
+                .iter()
+                .map(|(name, value)| (name.as_str(), value.clone()))
+                .collect::<Vec<_>>()),
+            &(vec![
+                ("left", NormalizedValue::I64(2)),
+                ("right", NormalizedValue::I64(2))
+            ])
+        ),
+        Ok(true)
     );
     assert_eq!(observation.parallel_scopes, 1);
 }
@@ -61,21 +70,30 @@ fn region_frozen_parallel_reads_share_the_lexical_arena() {
         let (reference, _) = NormalizedReferenceInterpreter::new(&source, &program, policy)
             .invoke(declaration, vec![], None, &ExecutionControl::uncancelled())
             .unwrap_or_else(|error| panic!("reference {name}: {error:?}"));
-        assert_eq!(vm, reference);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(vm),
+                &(reference)
+            ),
+            Ok(true)
+        );
         let NormalizedValue::Record(super::super::value::NormalizedRecord::Structural { fields }) =
             vm
         else {
             panic!("pair");
         };
         assert_eq!(
-            fields
-                .iter()
-                .map(|(name, value)| (name.as_str(), value.clone()))
-                .collect::<Vec<_>>(),
-            vec![
-                ("left", NormalizedValue::I64(left)),
-                ("right", NormalizedValue::I64(right))
-            ]
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(fields
+                    .iter()
+                    .map(|(name, value)| (name.as_str(), value.clone()))
+                    .collect::<Vec<_>>()),
+                &(vec![
+                    ("left", NormalizedValue::I64(left)),
+                    ("right", NormalizedValue::I64(right))
+                ])
+            ),
+            Ok(true)
         );
         assert_eq!(observation.parallel_scopes, 1);
         assert_eq!(
@@ -102,8 +120,20 @@ fn region_expressions_execute_from_public_authoring_in_both_evaluators() {
             .invoke(declaration, vec![], None, &control)
             .unwrap()
             .0;
-        assert_eq!(vm, NormalizedValue::I64(expected));
-        assert_eq!(reference, vm);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(vm),
+                &(NormalizedValue::I64(expected))
+            ),
+            Ok(true)
+        );
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(reference),
+                &(vm)
+            ),
+            Ok(true)
+        );
     }
 }
 

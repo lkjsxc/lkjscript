@@ -1,6 +1,7 @@
 //! Applied schemes retain concrete callable identity through forwarding and custody.
 use super::super::{byte_buffer, owned_i64_cell, owned_storage};
 use super::*;
+use crate::platform::execution::normalized::child_storage::Fields;
 
 const SOURCE: &str = r#"declarations.begin
 (units (module create schemes
@@ -303,14 +304,15 @@ fn invoke(
 
 fn expected(n: i64) -> NormalizedValue {
     NormalizedValue::Record(super::super::value::NormalizedRecord::Structural {
-        fields: Arc::new(vec![
+        fields: Fields::try_new(vec![
             (
                 Name::new("bytes").unwrap(),
                 NormalizedValue::bytes(vec![255]),
             ),
             (Name::new("scalar").unwrap(), NormalizedValue::I64(n)),
             (Name::new("view").unwrap(), NormalizedValue::I64(1)),
-        ]),
+        ])
+        .unwrap(),
     })
 }
 
@@ -324,17 +326,20 @@ fn applied_schemes_forward_scopes_map_generic_reads_and_return_parallel_owners()
             let buffers = byte_buffer::StorageObservation::start();
             let composites = owned_storage::StorageObservation::start();
             assert_eq!(
-                invoke(
-                    reference,
-                    &source,
-                    &program,
-                    "scheme-main",
-                    vec![NormalizedValue::I64(n)],
-                    NormalizedRunPolicy::foreground(),
-                    &ExecutionControl::uncancelled()
-                )
-                .unwrap(),
-                expected(n)
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(invoke(
+                        reference,
+                        &source,
+                        &program,
+                        "scheme-main",
+                        vec![NormalizedValue::I64(n)],
+                        NormalizedRunPolicy::foreground(),
+                        &ExecutionControl::uncancelled()
+                    )
+                    .unwrap()),
+                    &(expected(n))
+                ),
+                Ok(true)
             );
             assert_eq!(cells.created(), 1);
             assert_eq!(buffers.created(), 1);
@@ -372,17 +377,20 @@ fn applied_schemes_forward_scopes_map_generic_reads_and_return_parallel_owners()
     );
     for reference in [false, true] {
         assert_eq!(
-            invoke(
-                reference,
-                &source,
-                &program,
-                "scheme-main",
-                vec![NormalizedValue::I64(19)],
-                NormalizedRunPolicy::foreground(),
-                &ExecutionControl::uncancelled()
-            )
-            .unwrap(),
-            expected(19)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke(
+                    reference,
+                    &source,
+                    &program,
+                    "scheme-main",
+                    vec![NormalizedValue::I64(19)],
+                    NormalizedRunPolicy::foreground(),
+                    &ExecutionControl::uncancelled()
+                )
+                .unwrap()),
+                &(expected(19))
+            ),
+            Ok(true)
         );
     }
 }
@@ -423,7 +431,7 @@ fn applied_schemes_release_loans_and_owners_on_trap_cancellation_and_quota_refus
                 &ExecutionControl::cancel_after_checks(checks),
             ) {
                 Ok(value) => {
-                    assert_eq!(value, expected(41));
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(expected(41))), Ok(true));
                     completed += 1;
                 }
                 Err(error) => {
@@ -463,17 +471,20 @@ fn applied_schemes_release_loans_and_owners_on_trap_cancellation_and_quota_refus
             assert_eq!(composites.live(), (0, 0));
         }
         assert_eq!(
-            invoke(
-                reference,
-                &source,
-                &program,
-                "scheme-main",
-                vec![NormalizedValue::I64(41)],
-                NormalizedRunPolicy::foreground(),
-                &ExecutionControl::uncancelled()
-            )
-            .unwrap(),
-            expected(41)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke(
+                    reference,
+                    &source,
+                    &program,
+                    "scheme-main",
+                    vec![NormalizedValue::I64(41)],
+                    NormalizedRunPolicy::foreground(),
+                    &ExecutionControl::uncancelled()
+                )
+                .unwrap()),
+                &(expected(41))
+            ),
+            Ok(true)
         );
     }
 }
@@ -585,25 +596,29 @@ fn applied_scheme_phantom_arguments_keep_distinct_identity_at_equal_self_and_cal
     ));
     assert_ne!(applications[0].callsites, applications[1].callsites);
     let expected = NormalizedValue::Record(super::super::value::NormalizedRecord::Structural {
-        fields: Arc::new(vec![
+        fields: Fields::try_new(vec![
             (Name::new("first").unwrap(), NormalizedValue::I64(23)),
             (Name::new("second").unwrap(), NormalizedValue::I64(41)),
-        ]),
+        ])
+        .unwrap(),
     });
     for reference in [false, true] {
         let cells = owned_i64_cell::StorageObservation::start();
         assert_eq!(
-            invoke(
-                reference,
-                &source,
-                &program,
-                "phantom-main",
-                vec![],
-                NormalizedRunPolicy::foreground(),
-                &ExecutionControl::uncancelled()
-            )
-            .unwrap(),
-            expected
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke(
+                    reference,
+                    &source,
+                    &program,
+                    "phantom-main",
+                    vec![],
+                    NormalizedRunPolicy::foreground(),
+                    &ExecutionControl::uncancelled()
+                )
+                .unwrap()),
+                &(expected)
+            ),
+            Ok(true)
         );
         assert_eq!(cells.created(), 2);
         assert_eq!(cells.live(), (0, 0));
@@ -657,40 +672,47 @@ fn prerequisite_dags_preserve_dispatch_share_code_and_compose_reads_and_parallel
     assert!(Arc::ptr_eq(&ac.instructions, &bc.instructions));
     assert_ne!(applications[0].callsites, applications[1].callsites);
     let answer = NormalizedValue::Record(super::super::value::NormalizedRecord::Structural {
-        fields: Arc::new(vec![
+        fields: Fields::try_new(vec![
             (Name::new("first").unwrap(), NormalizedValue::I64(23)),
             (Name::new("second").unwrap(), NormalizedValue::I64(42)),
-        ]),
+        ])
+        .unwrap(),
     });
     for reference in [false, true] {
         let cells = owned_i64_cell::StorageObservation::start();
         let buffers = byte_buffer::StorageObservation::start();
         let composites = owned_storage::StorageObservation::start();
         assert_eq!(
-            invoke(
-                reference,
-                &source,
-                &program,
-                "prerequisite-main",
-                Vec::new(),
-                NormalizedRunPolicy::foreground(),
-                &ExecutionControl::uncancelled()
-            )
-            .unwrap(),
-            answer
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke(
+                    reference,
+                    &source,
+                    &program,
+                    "prerequisite-main",
+                    Vec::new(),
+                    NormalizedRunPolicy::foreground(),
+                    &ExecutionControl::uncancelled()
+                )
+                .unwrap()),
+                &(answer)
+            ),
+            Ok(true)
         );
         assert_eq!(
-            invoke(
-                reference,
-                &source,
-                &program,
-                "scheme-main",
-                vec![NormalizedValue::I64(37)],
-                NormalizedRunPolicy::foreground(),
-                &ExecutionControl::uncancelled()
-            )
-            .unwrap(),
-            expected(37)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke(
+                    reference,
+                    &source,
+                    &program,
+                    "scheme-main",
+                    vec![NormalizedValue::I64(37)],
+                    NormalizedRunPolicy::foreground(),
+                    &ExecutionControl::uncancelled()
+                )
+                .unwrap()),
+                &(expected(37))
+            ),
+            Ok(true)
         );
         assert_eq!(cells.live(), (0, 0));
         assert_eq!(buffers.live(), (0, 0));
@@ -733,7 +755,7 @@ fn prerequisite_reads_clean_up_on_trap_cancellation_and_allocation_refusal() {
                 &ExecutionControl::cancel_after_checks(checks),
             ) {
                 Ok(value) => {
-                    assert_eq!(value, expected(41));
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(expected(41))), Ok(true));
                     completed += 1;
                 }
                 Err(error) => {
@@ -773,17 +795,20 @@ fn prerequisite_reads_clean_up_on_trap_cancellation_and_allocation_refusal() {
             assert_eq!(composites.live(), (0, 0));
         }
         assert_eq!(
-            invoke(
-                reference,
-                &source,
-                &program,
-                "scheme-main",
-                vec![NormalizedValue::I64(41)],
-                NormalizedRunPolicy::foreground(),
-                &ExecutionControl::uncancelled()
-            )
-            .unwrap(),
-            expected(41)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke(
+                    reference,
+                    &source,
+                    &program,
+                    "scheme-main",
+                    vec![NormalizedValue::I64(41)],
+                    NormalizedRunPolicy::foreground(),
+                    &ExecutionControl::uncancelled()
+                )
+                .unwrap()),
+                &(expected(41))
+            ),
+            Ok(true)
         );
     }
 }
@@ -882,22 +907,31 @@ fn duplicated_prerequisite_edges_preserve_exact_shared_dag_dispatch() {
     let (value, work) = NormalizedVm::for_test(&program, NormalizedRunPolicy::foreground())
         .invoke(entry, Vec::new(), None, &ExecutionControl::uncancelled())
         .unwrap();
-    assert_eq!(value, NormalizedValue::I64(17));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(value),
+            &(NormalizedValue::I64(17))
+        ),
+        Ok(true)
+    );
     assert!(work.instructions < 4096);
     assert!(work.allocated_bytes < 2 * 1024 * 1024);
     assert_eq!(cells.live(), (0, 0));
     assert_eq!(
-        invoke(
-            true,
-            &source,
-            &program,
-            "dag-main",
-            Vec::new(),
-            NormalizedRunPolicy::foreground(),
-            &ExecutionControl::uncancelled()
-        )
-        .unwrap(),
-        NormalizedValue::I64(17)
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(invoke(
+                true,
+                &source,
+                &program,
+                "dag-main",
+                Vec::new(),
+                NormalizedRunPolicy::foreground(),
+                &ExecutionControl::uncancelled()
+            )
+            .unwrap()),
+            &(NormalizedValue::I64(17))
+        ),
+        Ok(true)
     );
     assert_eq!(cells.live(), (0, 0));
 }

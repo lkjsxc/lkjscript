@@ -1,6 +1,7 @@
 //! Ordinary metadata crosses exact storage witnesses without acquiring owner custody.
 use super::super::owned_storage;
 use super::*;
+use crate::platform::execution::normalized::child_storage::{Fields, Values};
 
 pub(crate) const SOURCE: &str = r#"declarations.begin
 (units (module create mixed-storage
@@ -82,12 +83,13 @@ pub(crate) fn prepared_mixed() -> NormalizedProgram {
 
 fn record(fields: &[(&str, NormalizedValue)]) -> NormalizedValue {
     NormalizedValue::Record(super::super::value::NormalizedRecord::Structural {
-        fields: Arc::new(
+        fields: Fields::try_new(
             fields
                 .iter()
                 .map(|(name, value)| (Name::new(*name).unwrap(), value.clone()))
                 .collect(),
-        ),
+        )
+        .unwrap(),
     })
 }
 
@@ -159,15 +161,18 @@ fn mixed_storage_witnesses_preserve_retained_and_displaced_data_across_joined_ca
     for reference in [false, true] {
         let storage = owned_storage::StorageObservation::start();
         assert_eq!(
-            invoke(
-                reference,
-                &source,
-                &program,
-                NormalizedRunPolicy::foreground(),
-                &ExecutionControl::uncancelled()
-            )
-            .unwrap(),
-            expected()
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke(
+                    reference,
+                    &source,
+                    &program,
+                    NormalizedRunPolicy::foreground(),
+                    &ExecutionControl::uncancelled()
+                )
+                .unwrap()),
+                &(expected())
+            ),
+            Ok(true)
         );
         assert_eq!(storage.live(), (0, 0));
     }
@@ -187,7 +192,13 @@ fn mixed_storage_witnesses_join_cleanup_after_refusal_and_cancellation() {
                 NormalizedRunPolicy::foreground(),
                 &ExecutionControl::cancel_after_checks(checks),
             ) {
-                Ok(value) => assert_eq!(value, expected()),
+                Ok(value) => assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(value),
+                        &(expected())
+                    ),
+                    Ok(true)
+                ),
                 Err(error) => assert_eq!(
                     error.class,
                     crate::platform::execution::ExecutionFailureClass::Cancelled
@@ -206,7 +217,13 @@ fn mixed_storage_witnesses_join_cleanup_after_refusal_and_cancellation() {
                 },
                 &ExecutionControl::uncancelled(),
             ) {
-                Ok(value) => assert_eq!(value, expected()),
+                Ok(value) => assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(value),
+                        &(expected())
+                    ),
+                    Ok(true)
+                ),
                 Err(error) => assert_eq!(
                     error.class,
                     crate::platform::execution::ExecutionFailureClass::Resource
@@ -215,15 +232,18 @@ fn mixed_storage_witnesses_join_cleanup_after_refusal_and_cancellation() {
             assert_eq!(storage.live(), (0, 0));
         }
         assert_eq!(
-            invoke(
-                reference,
-                &source,
-                &program,
-                NormalizedRunPolicy::foreground(),
-                &ExecutionControl::uncancelled()
-            )
-            .unwrap(),
-            expected()
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(invoke(
+                    reference,
+                    &source,
+                    &program,
+                    NormalizedRunPolicy::foreground(),
+                    &ExecutionControl::uncancelled()
+                )
+                .unwrap()),
+                &(expected())
+            ),
+            Ok(true)
         );
         assert_eq!(storage.live(), (0, 0));
     }
@@ -270,7 +290,7 @@ fn mixed_storage_reads_retain_nested_and_nominal_ordinary_values_after_storage_d
                         u32::try_from(index).unwrap(),
                         program.value_origin,
                     ),
-                    fields: Arc::new(vec![values]),
+                    fields: Values::try_new(vec![values]).unwrap(),
                 })
             } else {
                 values
@@ -297,15 +317,18 @@ fn mixed_storage_reads_retain_nested_and_nominal_ordinary_values_after_storage_d
         for reference in [false, true] {
             let storage = owned_storage::StorageObservation::start();
             assert_eq!(
-                invoke(
-                    reference,
-                    &source,
-                    &program,
-                    NormalizedRunPolicy::foreground(),
-                    &ExecutionControl::uncancelled()
-                )
-                .unwrap(),
-                expected
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(invoke(
+                        reference,
+                        &source,
+                        &program,
+                        NormalizedRunPolicy::foreground(),
+                        &ExecutionControl::uncancelled()
+                    )
+                    .unwrap()),
+                    &(expected)
+                ),
+                Ok(true)
             );
             assert_eq!(storage.live(), (0, 0));
         }

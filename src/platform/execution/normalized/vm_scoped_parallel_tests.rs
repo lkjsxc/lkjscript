@@ -148,7 +148,13 @@ fn scoped_parallel_children_overlap_while_reading_one_guarded_source() {
     assert_eq!(observation.parallel_scopes, 1);
     assert_eq!(observation.parallel_worker_dispatches, 1);
     // Two child reads plus draining the original owner after joining.
-    assert_eq!(value, NormalizedValue::I64(137 * 3));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(value),
+            &(NormalizedValue::I64(137 * 3))
+        ),
+        Ok(true)
+    );
     assert_eq!(cells.created(), 1);
     assert_eq!(products.created(), 2);
     assert_eq!(cells.live(), (0, 0));
@@ -218,8 +224,11 @@ fn scoped_parallel_reads_retain_ancestors_through_tails_and_nested_groups() {
                 )
                 .unwrap();
             assert_eq!(
-                result.0,
-                NormalizedValue::I64(137 * ((1 << (depth + 1)) + 1))
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(result.0),
+                    &(NormalizedValue::I64(137 * ((1 << (depth + 1)) + 1)))
+                ),
+                Ok(true)
             );
             assert_eq!(result.1.parallel_scopes, (1 << (depth + 1)) - 1);
             assert!(result.1.tail_transfers > 0);
@@ -269,7 +278,13 @@ fn scoped_parallel_failure_finishes_lending_before_worker_reuse() {
             &ExecutionControl::uncancelled(),
         )
         .unwrap();
-    assert_eq!(healthy.0, NormalizedValue::I64(137 * 9));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(healthy.0),
+            &(NormalizedValue::I64(137 * 9))
+        ),
+        Ok(true)
+    );
     assert_eq!(products.live(), (0, 0));
     assert_eq!(cells.live(), (0, 0));
     products.assert_owners_released_after_loans();
@@ -346,7 +361,13 @@ fn scoped_parallel_quota_and_cancellation_release_every_read_before_owners() {
                     cancelled_after_fork = true;
                 }
             }
-            Ok(result) => assert_eq!(result.0, NormalizedValue::I64(137 * 9)),
+            Ok(result) => assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(result.0),
+                    &(NormalizedValue::I64(137 * 9))
+                ),
+                Ok(true)
+            ),
         }
         assert_eq!(products.live(), (0, 0));
         assert_eq!(cells.live(), (0, 0));

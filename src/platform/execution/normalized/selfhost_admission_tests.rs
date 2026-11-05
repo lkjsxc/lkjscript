@@ -1,4 +1,4 @@
-//! Raw profile-6 certificates are hostile input, even when their digest is valid.
+//! Raw profile-8 certificates are hostile input, even when their digest is valid.
 use super::*;
 use input::ValueType;
 
@@ -409,8 +409,9 @@ fn selfhost_admission_separates_wide_descriptor_identity_from_buffer_borrows() {
         ..input::Function::default()
     }];
     let bytes = input::encode_records(&functions, &records, 0).unwrap();
-    assert_eq!(wide_at(&bytes, 80), 7 + RECORDS as u64);
-    assert_eq!(wide_at(&bytes, 88), (160 + (7 + RECORDS) * 32) as u64);
+    // The eligible root also has its exact () -> I64 callable descriptor.
+    assert_eq!(wide_at(&bytes, 80), 8 + RECORDS as u64);
+    assert_eq!(wide_at(&bytes, 88), (160 + (8 + RECORDS) * 32) as u64);
     let (code, image) = compile(&bytes);
     assert_eq!(code, 0);
     let output = execute(&image, &[]);
@@ -505,7 +506,9 @@ fn selfhost_admission_checks_every_function_above_historical_1024_rows() {
     assert_eq!(output.status.code(), Some(0), "{output:?}");
     assert_eq!(output.stdout, b"42");
     assert!(output.stderr.is_empty());
-    // The last uncalled function still reaches semantic instruction admission.
-    functions[1024].nodes[0].tag = 17;
+    // The last uncalled function still reaches instruction-form admission.
+    // Tag 0 is reserved. Profile-8 tag 17 is FunctionValue and would instead
+    // fail the unchanged successor's I64 stack certificate with diagnostic 8.
+    functions[1024].nodes[0].tag = 0;
     assert_eq!(compile(&input::encode(&functions, 0).unwrap()), (7, vec![]));
 }

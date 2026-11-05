@@ -33,16 +33,19 @@ fn expected(value: NormalizedValue, n: i64, accepted: bool) {
         .map(|(name, value)| (name.as_str(), value.clone()))
         .collect::<BTreeMap<_, _>>();
     assert_eq!(
-        actual,
-        BTreeMap::from([
-            ("value", NormalizedValue::I64(n)),
-            (
-                "alternate",
-                NormalizedValue::I64(if accepted { 99 } else { n })
-            ),
-            ("bytes", NormalizedValue::I64(1)),
-            ("product", NormalizedValue::I64(n)),
-        ])
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(actual),
+            &(BTreeMap::from([
+                ("value", NormalizedValue::I64(n)),
+                (
+                    "alternate",
+                    NormalizedValue::I64(if accepted { 99 } else { n })
+                ),
+                ("bytes", NormalizedValue::I64(1)),
+                ("product", NormalizedValue::I64(n)),
+            ]))
+        ),
+        Ok(true)
     );
 }
 

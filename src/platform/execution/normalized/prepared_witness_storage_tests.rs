@@ -81,8 +81,11 @@ fn concrete_witness_storage_matched_depths_preserve_exact_dispatch() {
                 .invoke(declaration, Vec::new(), None, &control)
                 .unwrap();
         assert_eq!(
-            value,
-            crate::platform::execution::normalized::value::NormalizedValue::I64(17)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(crate::platform::execution::normalized::value::NormalizedValue::I64(17))
+            ),
+            Ok(true)
         );
         assert_eq!(
             (work.live_call_frames_after, work.live_handles_after),
@@ -95,8 +98,11 @@ fn concrete_witness_storage_matched_depths_preserve_exact_dispatch() {
             .invoke(declaration, Vec::new(), None, &control)
             .unwrap();
         assert_eq!(
-            value,
-            crate::platform::execution::normalized::value::NormalizedValue::I64(17)
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(crate::platform::execution::normalized::value::NormalizedValue::I64(17))
+            ),
+            Ok(true)
         );
         assert_eq!(
             (work.live_call_frames_after, work.live_handles_after),

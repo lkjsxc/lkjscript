@@ -346,9 +346,10 @@ impl NormalizedReferenceSchema {
         schema.source_admission_saturated = after_composed.saturated;
         super::reference_types::complete(&mut schema, &inputs, control).map_err(|mut error| {
             if error.code == "kernel_associated_reference_capacity"
-                && error.message.contains("reference_flow phase=")
+                && let std::borrow::Cow::Owned(message) = &mut error.message
+                && message.contains("reference_flow phase=")
             {
-                error.message.push_str(&format!(
+                message.push_str(&format!(
                     "; reference_source_admission packages={} after_local_full={} after_dependency_correspondence={} after_composed={} observation_saturated={}",
                     inputs.len(), after_local_full.consumed, after_dependency_correspondence.consumed, after_composed.consumed, after_composed.saturated,
                 ));

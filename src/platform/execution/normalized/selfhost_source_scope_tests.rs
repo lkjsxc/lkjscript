@@ -54,51 +54,6 @@ fn expression(source: &mut KernelSnapshot, id: ExpressionId) -> &mut kernel::Exp
     record
 }
 
-fn emitted_result(bytes: &[u8], code: i64) {
-    static IMAGE: OnceLock<Vec<u8>> = OnceLock::new();
-    let image = IMAGE.get_or_init(|| {
-        let (_, program) = probes("source-scope-probe");
-        let target = program
-            .function(function("source-scope-probe", "read-syntax"))
-            .unwrap()
-            .0 as usize;
-        let input = input::export(program, target).unwrap();
-        let (source, compiler) = compiler();
-        let (code, image) =
-            compile_with_policy(source, compiler, &input, NormalizedRunPolicy::foreground());
-        assert_eq!(code, 0);
-        eprintln!(
-            "selfhost source syntax self-produced native bytes={} sha256={}",
-            image.len(),
-            crate::platform::semantic_id::encode_hex(&Sha256::digest(&image))
-        );
-        image
-    });
-    let output = native_filter_tests::execute_filter(image, bytes, &[], 127);
-    assert_eq!(
-        output.status.code(),
-        Some(if code == 0 { 0 } else { 65 }),
-        "self-produced source validator: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(
-        output.stdout,
-        if code == 0 {
-            bytes[48..80].to_vec()
-        } else {
-            vec![]
-        }
-    );
-    assert_eq!(
-        output.stderr,
-        if code == 0 {
-            vec![]
-        } else {
-            format!("compiler_rejected:{code}\n").into_bytes()
-        }
-    );
-}
-
 fn rebind_owner_inventory(source: &mut KernelSnapshot) {
     // A neutral map commitment keeps the independent oracle's flat inventory
     // coherent. No graph validation, filtering or normalization occurs here.
@@ -159,7 +114,7 @@ fn expect(source: &KernelSnapshot, code: i64) {
             }
         )
     );
-    emitted_result(&bytes, code);
+    super::emitted_result("read-syntax", &bytes, code);
 }
 
 #[test]
@@ -612,7 +567,7 @@ fn selfhost_source_scope_work_refusal_is_distinct_and_exact_bound_passes() {
     let mut malformed = bytes;
     malformed[0] ^= 1;
     assert_eq!(result("read-syntax", &malformed), (12, vec![]));
-    emitted_result(&malformed, 12);
+    super::emitted_result("read-syntax", &malformed, 12);
 }
 
 #[test]

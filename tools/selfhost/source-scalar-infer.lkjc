@@ -158,6 +158,169 @@ declarations.begin
                       (local function))
                     (local checked))))
               (i64 -19))))))
+    (function create callable-arguments
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create signature (type I64))
+      (parameter create at (type I64))
+      (parameter create index (type I64))
+      (parameter create remaining (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local remaining) (i64 0))
+          (i64 1)
+          (let
+            (binding actual
+              (call reference-fact
+                (local graph)
+                (local types)
+                (local mapping)
+                (local facts)
+                (local data)
+                (local at)
+                (i64 9)))
+            (in
+              (if
+                (call ci::eq (local actual) (i64 0))
+                (i64 0)
+                (if
+                  (call source-value-types::value (local types) (local actual))
+                  (if
+                    (call ci::eq
+                      (local actual)
+                      (call source-value-types::function-parameter
+                        (local types)
+                        (local signature)
+                        (local index)))
+                    (call callable-arguments
+                      (local graph)
+                      (local types)
+                      (local mapping)
+                      (local facts)
+                      (local data)
+                      (local signature)
+                      (call ci::add (local at) (i64 17))
+                      (call ci::add (local index) (i64 1))
+                      (call ci::sub (local remaining) (i64 1)))
+                    (i64 -19))
+                  (i64 -19))))))))
+    (function create function-fact
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create data (type Bytes))
+      (returns (record (code I64) (identity I64) (types Bytes)))
+      (body
+        (let
+          (binding named
+            (call source-scalar-profile::named-signature
+              (local graph)
+              (local types)
+              (local mapping)
+              (call source-table::owner (local graph) (local data) (i64 57) (i64 2))))
+          (in
+            (if
+              (call ci::eq (field (local named) (name code)) (i64 0))
+              (if
+                (call ci::lt (i64 0) (field (local named) (name identity)))
+                (call outcome
+                  (field (local named) (name types))
+                  (field (local named) (name identity)))
+                (call outcome (local types) (i64 -13)))
+              (call outcome
+                (field (local named) (name types))
+                (call ci::sub (i64 0) (field (local named) (name code)))))))))
+    (function create callable-fact
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes))
+      (parameter create facts (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create bind (type Bool))
+      (returns (record (code I64) (identity I64) (types Bytes)))
+      (body
+        (let
+          (binding signature
+            (call reference-fact
+              (local graph)
+              (local types)
+              (local mapping)
+              (local facts)
+              (local data)
+              (i64 38)
+              (i64 9)))
+          (in
+            (if
+              (call ci::eq (local signature) (i64 0))
+              (call outcome (local types) (i64 0))
+              (if
+                (call ci::eq
+                  (call source-value-types::kind (local types) (local signature))
+                  (i64 11))
+                (if
+                  (call source-value-types::function-copyable (local types) (local signature))
+                  (let
+                    (binding arguments (call source-table::array (local data) (i64 55)))
+                    (binding count
+                      (call source-value-types::function-count (local types) (local signature)))
+                    (in
+                      (if
+                        (if
+                          (local bind)
+                          (call ci::lte (field (local arguments) (name value)) (local count))
+                          (call ci::eq (field (local arguments) (name value)) (local count)))
+                        (let
+                          (binding checked
+                            (call callable-arguments
+                              (local graph)
+                              (local types)
+                              (local mapping)
+                              (local facts)
+                              (local data)
+                              (local signature)
+                              (field (local arguments) (name next))
+                              (i64 0)
+                              (field (local arguments) (name value))))
+                          (in
+                            (if
+                              (call ci::eq (local checked) (i64 1))
+                              (if
+                                (local bind)
+                                (let
+                                  (binding suffix
+                                    (call source-value-types::function-suffix
+                                      (local types)
+                                      (local signature)
+                                      (field (local arguments) (name value))))
+                                  (in
+                                    (if
+                                      (call ci::eq (field (local suffix) (name code)) (i64 0))
+                                      (call outcome
+                                        (field (local suffix) (name types))
+                                        (field (local suffix) (name identity)))
+                                      (call outcome
+                                        (field (local suffix) (name types))
+                                        (call ci::sub (i64 0) (field (local suffix) (name code)))))))
+                                (call outcome
+                                  (local types)
+                                  (call source-value-types::function-result
+                                    (local types)
+                                    (local signature))))
+                              (call outcome (local types) (local checked)))))
+                        (call outcome (local types) (i64 -19)))))
+                  (call outcome (local types) (i64 -13)))
+                (call outcome (local types) (i64 -19))))))))
     (function create if-fact
       (visibility private)
       (effect pure)
@@ -540,17 +703,36 @@ declarations.begin
           (binding op (call ci::get (local data) (i64 37)))
           (in
             (if
-              (call ci::eq (local op) (i64 13))
-              (call record-fact (local graph) (local types) (local facts) (local data))
-              (call outcome
+              (call ci::eq (local op) (i64 11))
+              (call function-fact
+                (local graph)
                 (local types)
-                (call copyable-fact
+                (local mapping)
+                (local facts)
+                (local data))
+              (if
+                (call ci::either
+                  (call ci::eq (local op) (i64 12))
+                  (call ci::eq (local op) (i64 21)))
+                (call callable-fact
                   (local graph)
                   (local types)
                   (local mapping)
                   (local facts)
                   (local data)
-                  (local op))))))))
+                  (call ci::eq (local op) (i64 21)))
+                (if
+                  (call ci::eq (local op) (i64 13))
+                  (call record-fact (local graph) (local types) (local facts) (local data))
+                  (call outcome
+                    (local types)
+                    (call copyable-fact
+                      (local graph)
+                      (local types)
+                      (local mapping)
+                      (local facts)
+                      (local data)
+                      (local op))))))))))
     (function create binding-fact
       (visibility private)
       (effect pure)

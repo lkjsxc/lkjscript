@@ -68,7 +68,13 @@ fn owned_choice_both_cases_preserve_result_and_release_storage() {
                         .unwrap()
                         .0
                 };
-                assert_eq!(actual, NormalizedValue::I64(n));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(actual),
+                        &(NormalizedValue::I64(n))
+                    ),
+                    Ok(true)
+                );
                 assert_eq!(composites.live(), (0, 0));
                 assert_eq!(cells.live(), (0, 0));
                 composites.assert_transfers_preserve_allocations();
@@ -90,7 +96,13 @@ fn owned_choice_both_cases_preserve_result_and_release_storage() {
                 .unwrap()
                 .0
         };
-        assert_eq!(actual, NormalizedValue::Unit);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(actual),
+                &(NormalizedValue::Unit)
+            ),
+            Ok(true)
+        );
         assert_eq!(composites.live(), (0, 0));
         assert_eq!(cells.live(), (0, 0));
     }
@@ -217,7 +229,7 @@ fn owned_choice_selected_arm_failure_cleans_up_and_does_not_poison_reused_execut
                             }
                         );
                     } else {
-                        assert_eq!(result.unwrap(), NormalizedValue::I64(n));
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(result.unwrap()), &(NormalizedValue::I64(n))), Ok(true));
                     }
                     assert_eq!(cells.live(), (0, 0));
                     assert_eq!(composites.live(), (0, 0));

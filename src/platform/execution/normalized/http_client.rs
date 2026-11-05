@@ -1,17 +1,18 @@
 //! Exact Graph 10 binding for the deployment-owned outbound HTTP client.
 
 use super::capability::{NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter};
+use super::child_storage::FieldsBuilder;
 use super::resource::NormalizedResourceScope;
+use super::value::RawValue;
 use super::value::{NormalizedRecord, NormalizedValue};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::http::HttpHeader;
-use crate::platform::http_client::HttpClient;
+use crate::platform::http_client::{HttpClient, HttpClientResponse};
 use crate::platform::kernel::{
     DeclarationReference, ExternalVisibility, Idempotency, Name, OperationReference,
 };
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub(crate) struct NormalizedHttpClientAdapter {
@@ -87,26 +88,30 @@ impl NormalizedCapabilityAdapter for NormalizedHttpClientAdapter {
             .map(decode_header)
             .collect::<Result<Vec<_>, _>>()?;
         let response = self.client.get(headers, control)?;
-        let headers = response
-            .headers
-            .into_iter()
-            .map(|header| {
-                structural_record([
-                    ("name", NormalizedValue::text(header.name)),
-                    ("value", NormalizedValue::bytes(header.value)),
-                ])
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        structural_record([
-            ("body", NormalizedValue::bytes(response.body)),
-            ("headers", NormalizedValue::list(headers)?),
-            ("status", NormalizedValue::I64(i64::from(response.status))),
-        ])
+        encode_response(response).map_err(completed_effect_error)
     }
 
     fn shutdown(&self) -> Result<(), ExecutionError> {
         self.client.shutdown()
     }
+}
+
+fn encode_response(response: HttpClientResponse) -> Result<NormalizedValue, ExecutionError> {
+    let headers = response
+        .headers
+        .into_iter()
+        .map(|header| {
+            structural_record([
+                ("name", NormalizedValue::text(header.name)),
+                ("value", NormalizedValue::bytes(header.value)),
+            ])
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    structural_record([
+        ("body", NormalizedValue::bytes(response.body)),
+        ("headers", NormalizedValue::list(headers)?),
+        ("status", NormalizedValue::I64(i64::from(response.status))),
+    ])
 }
 
 fn decode_header(value: &NormalizedValue) -> Result<HttpHeader, ExecutionError> {
@@ -138,21 +143,30 @@ fn decode_header(value: &NormalizedValue) -> Result<HttpHeader, ExecutionError> 
 fn structural_record<const N: usize>(
     fields: [(&str, NormalizedValue); N],
 ) -> Result<NormalizedValue, ExecutionError> {
-    let mut fields = fields
-        .into_iter()
-        .map(|(name, value)| {
-            Name::new(name).map(|name| (name, value)).map_err(|_| {
-                http_client_runtime(
-                    "normalized_http_client_shape",
-                    "HTTP client adapter could not construct its exact result shape",
-                )
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    fields.sort_by(|left, right| left.0.cmp(&right.0));
+    // Guard every incoming child before the first fallible reservation.
+    let input = fields.map(|(name, value)| (name, RawValue::new(value)));
+    let mut fields = FieldsBuilder::with_capacity(N)?;
+    for (name, value) in input {
+        let name = Name::new(name).map_err(|_| {
+            http_client_runtime(
+                "normalized_http_client_shape",
+                "HTTP client adapter could not construct its exact result shape",
+            )
+        })?;
+        fields.try_push((name, value.into_raw()))?;
+    }
+    fields.sort_by_name()?;
     Ok(NormalizedValue::Record(NormalizedRecord::Structural {
-        fields: Arc::new(fields),
+        fields: fields.finish()?,
     }))
+}
+
+/// An effect already completed; result construction cannot report no visibility.
+fn completed_effect_error(mut error: ExecutionError) -> ExecutionError {
+    error.class = ExecutionFailureClass::PossibleVisibility;
+    error.possibly_visible = true;
+    error.retryable = false;
+    error
 }
 
 fn http_client_argument(message: &'static str) -> ExecutionError {

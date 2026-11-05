@@ -1,11 +1,13 @@
 //! Structured ownership for graph-defined state machines over bounded WebSocket sessions.
 
 use super::capability::NormalizedAdapterKind;
+use super::child_storage::FieldsBuilder;
 use super::prepare::{
     NormalizedProgram, NormalizedRecordLayout, NormalizedTarget, NormalizedVariantLayout,
 };
 use super::resident::NormalizedResidentDeployment;
 use super::resource::NormalizedResourceScope;
+use super::value::RawValue;
 use super::value::{
     NormalizedMapKey, NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex,
 };
@@ -2248,20 +2250,21 @@ fn decode_headers(
 fn structural<const N: usize>(
     fields: [(&'static str, NormalizedValue); N],
 ) -> Result<NormalizedValue, ExecutionError> {
-    let mut fields = fields
-        .into_iter()
-        .map(|(name, value)| {
-            Name::new(name).map(|name| (name, value)).map_err(|_| {
-                session_execution(
-                    "session_static_field",
-                    "built-in session field name is invalid",
-                )
-            })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    fields.sort_by(|left, right| left.0.cmp(&right.0));
+    // Guard every incoming child before the first fallible reservation.
+    let input = fields.map(|(name, value)| (name, RawValue::new(value)));
+    let mut fields = FieldsBuilder::with_capacity(N)?;
+    for (name, value) in input {
+        let name = Name::new(name).map_err(|_| {
+            session_execution(
+                "session_static_field",
+                "built-in session field name is invalid",
+            )
+        })?;
+        fields.try_push((name, value.into_raw()))?;
+    }
+    fields.sort_by_name()?;
     Ok(NormalizedValue::Record(NormalizedRecord::Structural {
-        fields: Arc::new(fields),
+        fields: fields.finish()?,
     }))
 }
 

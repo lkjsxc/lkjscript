@@ -4,7 +4,7 @@ use super::super::super::{
     owned_product::StorageObservation as Products,
 };
 use super::*;
-use std::sync::Arc;
+use crate::platform::execution::normalized::child_storage::Fields;
 
 fn composed_source() -> crate::platform::kernel::KernelSnapshot {
     byte_buffer_tests::author_only(
@@ -26,7 +26,7 @@ fn record(fields: Vec<(&str, NormalizedValue)>) -> NormalizedValue {
         .collect::<Vec<_>>();
     fields.sort_by(|(left, _), (right, _)| left.cmp(right));
     NormalizedValue::Record(super::super::super::value::NormalizedRecord::Structural {
-        fields: Arc::new(fields),
+        fields: Fields::try_new(fields).unwrap(),
     })
 }
 
@@ -127,7 +127,13 @@ fn exercise_results(source: crate::platform::kernel::KernelSnapshot) {
                     assert_eq!(observation.live_handles_after, 0);
                     value
                 };
-                assert_eq!(value, expected(n, accepted));
+                assert_eq!(
+                    crate::platform::execution::normalized::structural_equality::assertions::equal(
+                        &(value),
+                        &(expected(n, accepted))
+                    ),
+                    Ok(true)
+                );
                 products.assert_transfers_preserve_allocations();
                 assert_eq!(
                     (buffers.live(), cells.live(), products.live()),
@@ -180,17 +186,33 @@ fn parallel_owned_result_wrapper_and_nested_children_charge_one_invocation_quota
             result
         };
         let (value, steps, bytes, items) = run(NormalizedRunPolicy::foreground()).unwrap();
-        assert_eq!(value, expected(-137, false));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(expected(-137, false))
+            ),
+            Ok(true)
+        );
         let exact = NormalizedRunPolicy {
             instruction_steps: Some(steps),
             maximum_allocated_bytes: Some(bytes),
             maximum_collection_items: Some(items),
             ..NormalizedRunPolicy::foreground()
         };
-        assert_eq!(
-            run(exact).unwrap(),
-            (expected(-137, false), steps, bytes, items)
-        );
+        {
+            let (exact_value, exact_steps, exact_bytes, exact_items) = run(exact).unwrap();
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &exact_value,
+                    &(expected(-137, false))
+                ),
+                Ok(true)
+            );
+            assert_eq!(
+                (exact_steps, exact_bytes, exact_items),
+                (steps, bytes, items)
+            );
+        };
         for policy in [
             NormalizedRunPolicy {
                 instruction_steps: Some(steps - 1),
@@ -243,7 +265,7 @@ fn parallel_owned_result_cancellation_joins_and_releases_every_parent_created_ow
             match result {
                 Ok(value) => {
                     completed += 1;
-                    assert_eq!(value, expected(-137, false));
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(expected(-137, false))), Ok(true));
                 }
                 Err(error) => {
                     failed += 1;
@@ -401,7 +423,13 @@ declarations.end"#,
                 .unwrap()
                 .0
         };
-        assert_eq!(value, NormalizedValue::I64(41));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(value),
+                &(NormalizedValue::I64(41))
+            ),
+            Ok(true)
+        );
         assert_eq!(cells.created(), 2);
         assert_eq!((cells.live(), products.live()), ((0, 0), (0, 0)));
     }

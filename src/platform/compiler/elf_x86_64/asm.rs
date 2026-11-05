@@ -256,7 +256,7 @@ impl Asm {
         self.bytes(&[0xb8 + (dst as u8 & 7)]);
         self.absolute(label);
     }
-    fn jump_register(&mut self, reg: R) {
+    pub fn jump_register(&mut self, reg: R) {
         self.rex(true, R::Ax, reg);
         self.bytes(&[0xff, 0xe0 | (reg as u8 & 7)]);
     }

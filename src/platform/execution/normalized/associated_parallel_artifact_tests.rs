@@ -6,6 +6,7 @@ use super::super::vm::NormalizedRunObservation;
 use super::*;
 use crate::platform::compiler::{CompilationPayload, CompilationUnit};
 use crate::platform::control::decode_compact_change;
+use crate::platform::execution::normalized::child_storage::Fields;
 use crate::platform::normalized_lifecycle::PackageReference;
 use crate::platform::publication::ExportedPackageTransport;
 use crate::platform::runtime::structured::{StructuredExecutor, StructuredExecutorHandle};
@@ -488,12 +489,12 @@ fn expected(mirrored: bool) -> NormalizedValue {
         (-257, -257, 4, 9)
     };
     NormalizedValue::Record(NormalizedRecord::Structural {
-        fields: Arc::new(vec![
+        fields: Fields::try_new(vec![
             (Name::new("left").unwrap(), NormalizedValue::I64(left)),
             (
                 Name::new("observed").unwrap(),
                 NormalizedValue::Record(NormalizedRecord::Structural {
-                    fields: Arc::new(vec![
+                    fields: Fields::try_new(vec![
                         (
                             Name::new("left").unwrap(),
                             NormalizedValue::I64(observed_left),
@@ -502,14 +503,16 @@ fn expected(mirrored: bool) -> NormalizedValue {
                             Name::new("right").unwrap(),
                             NormalizedValue::I64(observed_right),
                         ),
-                    ]),
+                    ])
+                    .unwrap(),
                 }),
             ),
             (
                 Name::new("right").unwrap(),
                 NormalizedValue::bytes(vec![0, 255, 128, last]),
             ),
-        ]),
+        ])
+        .unwrap(),
     })
 }
 
@@ -529,7 +532,13 @@ fn healthy(
         policy,
         &ExecutionControl::uncancelled(),
     );
-    assert_eq!(result.unwrap(), expected(mirrored));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(result.unwrap()),
+            &(expected(mirrored))
+        ),
+        Ok(true)
+    );
     let observation = observation.expect("healthy invocation records its complete execution");
     observation.clean();
     if let Observation::Reference(o) = &observation {

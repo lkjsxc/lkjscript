@@ -87,9 +87,9 @@ pub(super) fn verify_stages(
                     .map(|r| r.0);
             for result in [vm, reference] {
                 if let Some(expected) = expected {
-                    equal(
-                        result.map_err(|error| format!("{label}: evaluator: {error:?}"))?,
-                        NormalizedValue::I64(expected),
+                    equal_value(
+                        &result.map_err(|error| format!("{label}: evaluator: {error:?}"))?,
+                        &NormalizedValue::I64(expected),
                         &label,
                     )?;
                 } else {
@@ -101,7 +101,7 @@ pub(super) fn verify_stages(
                         crate::platform::execution::ExecutionFailureClass::Trap,
                         &label,
                     )?;
-                    equal(error.code.as_str(), "normalized_bytes_range", &label)?;
+                    equal(error.code.as_ref(), "normalized_bytes_range", &label)?;
                 }
             }
             for (engine, image) in [

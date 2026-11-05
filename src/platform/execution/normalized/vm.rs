@@ -30,6 +30,8 @@ use std::sync::Arc;
 mod checked;
 #[path = "vm_region.rs"]
 mod region;
+#[path = "vm_semantic_equality.rs"]
+pub(super) mod semantic_equality;
 use checked::{BorrowResultTarget, BorrowSource, Class, Value as CheckedValue};
 #[path = "vm_intrinsics.rs"]
 mod checked_intrinsics;
@@ -3299,15 +3301,12 @@ impl Machine<'_> {
             return Err(type_error("invoke callee is not a function"));
         };
         let prefix = bound_arguments.as_ref().map_or(0, |prefix| prefix.len());
-        let total = prefix
-            .checked_add(arguments.len())
-            .filter(|total| *total <= crate::platform::kernel::contract::MAXIMUM_CHILDREN)
-            .ok_or_else(|| {
-                resource_error(
-                    "normalized_collection_items",
-                    "complete callable arguments exceed the child bound",
-                )
-            })?;
+        let total = prefix.checked_add(arguments.len()).ok_or_else(|| {
+            resource_error(
+                "normalized_collection_items",
+                "complete callable argument extent overflowed",
+            )
+        })?;
         if prefix != 0 {
             let slots = prefix
                 .checked_add(total)
@@ -3324,6 +3323,7 @@ impl Machine<'_> {
         if prefix == 0 {
             return Ok((function, types, arguments));
         }
+        super::child_storage::reserve(&mut complete, arguments.len())?;
         complete.extend(arguments);
         Ok((function, types, complete))
     }
@@ -4242,7 +4242,9 @@ impl Machine<'_> {
                     "nominal record construction does not cover its exact layout",
                 ));
             }
-            let mut slots = (0..field_count).map(|_| None).collect::<Vec<_>>();
+            let mut slots = Vec::new();
+            super::child_storage::reserve(&mut slots, field_count)?;
+            slots.resize_with(field_count, || None);
             for (selector, value) in fields.iter().zip(values) {
                 let NormalizedFieldSelector::Nominal {
                     layout: field_layout,
@@ -4275,43 +4277,49 @@ impl Machine<'_> {
                     ));
                 }
             }
-            let slots = slots
-                .into_iter()
-                .map(|slot| {
-                    slot.ok_or_else(|| {
-                        runtime_error(
-                            "normalized_record_field_missing",
-                            "nominal record omits one dense field offset",
-                        )
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let fields = self.program.records[layout.0 as usize]
+            let mut named = Vec::new();
+            super::child_storage::reserve(&mut named, field_count)?;
+            for (field, slot) in self.program.records[layout.0 as usize]
                 .fields
                 .iter()
-                .map(|field| field.name.clone())
                 .zip(slots)
-                .collect();
+            {
+                self.control.check()?;
+                let value = slot.ok_or_else(|| {
+                    runtime_error(
+                        "normalized_record_field_missing",
+                        "nominal record omits one dense field offset",
+                    )
+                })?;
+                let name = field
+                    .name
+                    .try_clone()
+                    .map_err(|_| super::child_storage::StorageFailure::Allocation)?;
+                named.push((name, value));
+            }
             CheckedValue::record(
                 self.program,
                 Some(layout),
-                fields,
+                named,
                 &mut self.observation.value_work,
             )
         } else {
-            let mut structural = fields
-                .iter()
-                .cloned()
-                .zip(values)
-                .map(|(selector, value)| match selector {
-                    NormalizedFieldSelector::Structural(name) => Ok((name, value)),
-                    NormalizedFieldSelector::Nominal { .. } => Err(runtime_error(
+            let mut structural = Vec::new();
+            super::child_storage::reserve(&mut structural, values.len())?;
+            for (selector, value) in fields.iter().zip(values) {
+                self.control.check()?;
+                let NormalizedFieldSelector::Structural(name) = selector else {
+                    return Err(runtime_error(
                         "normalized_structural_field_kind",
                         "structural record contains a nominal field selector",
-                    )),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            structural.sort_by(|left, right| left.0.cmp(&right.0));
+                    ));
+                };
+                let name = name
+                    .try_clone()
+                    .map_err(|_| super::child_storage::StorageFailure::Allocation)?;
+                structural.push((name, value));
+            }
+            super::child_storage::sort_named(&mut structural)?;
             if structural.windows(2).any(|pair| pair[0].0 == pair[1].0) {
                 return Err(runtime_error(
                     "normalized_structural_field_duplicate",
@@ -5450,7 +5458,9 @@ fn call_core_intrinsic_borrowed(
             let [left, right] = arguments else {
                 return Err(type_error("value equality received a foreign arity"));
             };
-            Ok(NormalizedValue::Bool(normalized_equal(left, right)?))
+            Ok(NormalizedValue::Bool(normalized_equal_with_control(
+                left, right, control,
+            )?))
         }
         "core.list.length" => {
             let [NormalizedValue::List(values)] = arguments else {
@@ -5541,22 +5551,25 @@ fn normalized_length(length: usize) -> Result<i64, ExecutionError> {
 fn normalized_structural_record<const N: usize>(
     fields: [(&str, NormalizedValue); N],
 ) -> Result<NormalizedValue, ExecutionError> {
-    let mut fields = fields
-        .into_iter()
-        .map(|(name, value)| {
-            Name::new(name.to_owned())
-                .map(|name| (name, value))
-                .map_err(|_| {
-                    runtime_error(
-                        "normalized_intrinsic_field",
-                        "intrinsic field name is invalid",
-                    )
-                })
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    fields.sort_by(|left, right| left.0.cmp(&right.0));
+    // Arm every raw child before a name/payload reservation can fail.
+    let input = fields.map(|(name, value)| (name, super::value::RawValue::new(value)));
+    let mut fields = super::child_storage::FieldsBuilder::with_capacity(N)?;
+    for (name, value) in input {
+        let mut text = String::new();
+        text.try_reserve_exact(name.len())
+            .map_err(|_| super::child_storage::StorageFailure::Allocation)?;
+        text.push_str(name);
+        let name = Name::new(text).map_err(|_| {
+            runtime_error(
+                "normalized_intrinsic_field",
+                "intrinsic field name is invalid",
+            )
+        })?;
+        fields.try_push((name, value.into_raw()))?;
+    }
+    fields.sort_by_name()?;
     Ok(NormalizedValue::Record(NormalizedRecord::Structural {
-        fields: Arc::new(fields),
+        fields: fields.finish()?,
     }))
 }
 
@@ -5649,7 +5662,8 @@ fn normalized_map_intrinsic(
                 "normalized_map_storage",
             )?,
         })?;
-        let mut entries = Vec::with_capacity(values.len());
+        let mut entries = Vec::new();
+        super::child_storage::reserve(&mut entries, values.len())?;
         for (key, value) in values.iter() {
             reserve(super::map::Charge {
                 slots: 2,
@@ -5662,19 +5676,17 @@ fn normalized_map_intrinsic(
                 slots: 0,
                 bytes: super::value::projected_value_bytes(value)?,
             })?;
+            let mut fields = super::child_storage::FieldsBuilder::with_capacity(2)?;
+            fields.try_push((
+                Name::new("key".to_owned()).map_err(|_| type_error("invalid map entry field"))?,
+                key.to_value(),
+            ))?;
+            fields.try_push((
+                Name::new("value".to_owned()).map_err(|_| type_error("invalid map entry field"))?,
+                value.clone(),
+            ))?;
             entries.push(NormalizedValue::Record(NormalizedRecord::Structural {
-                fields: Arc::new(vec![
-                    (
-                        Name::new("key".to_owned())
-                            .map_err(|_| type_error("invalid map entry field"))?,
-                        key.to_value(),
-                    ),
-                    (
-                        Name::new("value".to_owned())
-                            .map_err(|_| type_error("invalid map entry field"))?,
-                        value.clone(),
-                    ),
-                ]),
+                fields: fields.finish()?,
             }));
         }
         return super::list::List::from_items(entries, None, &mut |charge| {
@@ -5750,190 +5762,36 @@ fn normalized_json_error(error: crate::platform::diagnostic::Diagnostic) -> Exec
     )
 }
 
+#[cfg(test)]
 pub(crate) fn normalized_equal(
     left: &NormalizedValue,
     right: &NormalizedValue,
 ) -> Result<bool, ExecutionError> {
-    normalized_compare(left, right, false)
+    normalized_equal_with_control(left, right, &ExecutionControl::uncancelled())
 }
 
+pub(crate) fn normalized_equal_with_control(
+    left: &NormalizedValue,
+    right: &NormalizedValue,
+    control: &ExecutionControl,
+) -> Result<bool, ExecutionError> {
+    semantic_equality::compare(left, right, false, control)
+}
+
+#[cfg(test)]
 pub(crate) fn normalized_observation_equal(
     left: &NormalizedValue,
     right: &NormalizedValue,
 ) -> Result<bool, ExecutionError> {
-    normalized_compare(left, right, true)
+    normalized_observation_equal_with_control(left, right, &ExecutionControl::uncancelled())
 }
 
-fn normalized_compare(
+pub(crate) fn normalized_observation_equal_with_control(
     left: &NormalizedValue,
     right: &NormalizedValue,
-    observation: bool,
+    control: &ExecutionControl,
 ) -> Result<bool, ExecutionError> {
-    match (left, right) {
-        (NormalizedValue::Unit, NormalizedValue::Unit) => Ok(true),
-        (NormalizedValue::Bool(left), NormalizedValue::Bool(right)) => Ok(left == right),
-        (NormalizedValue::I64(left), NormalizedValue::I64(right)) => Ok(left == right),
-        (NormalizedValue::F64(left), NormalizedValue::F64(right)) => Ok(if observation {
-            left.bits() == right.bits()
-        } else {
-            left.to_float() == right.to_float()
-        }),
-        (NormalizedValue::Bytes(left), NormalizedValue::Bytes(right)) => Ok(left == right),
-        (NormalizedValue::Text(left), NormalizedValue::Text(right))
-        | (NormalizedValue::StaticText(left), NormalizedValue::StaticText(right)) => {
-            Ok(left == right)
-        }
-        (
-            NormalizedValue::Record(NormalizedRecord::Nominal {
-                layout: left_layout,
-                fields: left,
-            }),
-            NormalizedValue::Record(NormalizedRecord::Nominal {
-                layout: right_layout,
-                fields: right,
-            }),
-        ) => Ok(equal_sequences(left, right, observation)? && left_layout == right_layout),
-        (
-            NormalizedValue::Record(NormalizedRecord::Structural { fields: left }),
-            NormalizedValue::Record(NormalizedRecord::Structural { fields: right }),
-        ) => {
-            let mut equal = left.len() == right.len();
-            for index in 0..left.len().max(right.len()) {
-                equal &= match (left.get(index), right.get(index)) {
-                    (Some((a, left)), Some((b, right))) => {
-                        normalized_compare(left, right, observation)? && a == b
-                    }
-                    (Some((_, value)), None) | (None, Some((_, value))) => {
-                        normalized_compare(value, value, observation)?;
-                        false
-                    }
-                    (None, None) => false,
-                };
-            }
-            Ok(equal)
-        }
-        (
-            NormalizedValue::Variant {
-                layout: left_layout,
-                case: left_case,
-                payload: left,
-            },
-            NormalizedValue::Variant {
-                layout: right_layout,
-                case: right_case,
-                payload: right,
-            },
-        ) => Ok(
-            equal_optional(left.as_deref(), right.as_deref(), observation)?
-                && left_layout == right_layout
-                && left_case == right_case,
-        ),
-        (NormalizedValue::Option(left), NormalizedValue::Option(right)) => {
-            equal_optional(left.as_deref(), right.as_deref(), observation)
-        }
-        (
-            NormalizedValue::Result {
-                success: left_case,
-                value: left,
-            },
-            NormalizedValue::Result {
-                success: right_case,
-                value: right,
-            },
-        ) => Ok(normalized_compare(left, right, observation)? && left_case == right_case),
-        (NormalizedValue::List(left), NormalizedValue::List(right)) => {
-            let mut equal = left.len() == right.len();
-            let mut left = left.iter();
-            let mut right = right.iter();
-            loop {
-                let pair = (left.next(), right.next());
-                if pair == (None, None) {
-                    break;
-                }
-                equal &= equal_optional(pair.0, pair.1, observation)?;
-            }
-            Ok(equal)
-        }
-        (NormalizedValue::Map(left), NormalizedValue::Map(right)) => {
-            normalized_map_compare(left, right, observation)
-        }
-        _ if left.memory_form().is_some() || right.memory_form().is_some() => Err(trap_error(
-            "normalized_value_not_comparable",
-            "owned memory does not support semantic equality",
-        )),
-        (NormalizedValue::ReadView(_), _) | (_, NormalizedValue::ReadView(_)) => Err(trap_error(
-            "normalized_value_not_comparable",
-            "read views do not support semantic equality",
-        )),
-        (NormalizedValue::Function { .. }, _) | (_, NormalizedValue::Function { .. }) => {
-            Err(trap_error(
-                "normalized_value_not_comparable",
-                "functions do not support semantic equality",
-            ))
-        }
-        (NormalizedValue::Resource(_), _) | (_, NormalizedValue::Resource(_)) => Err(trap_error(
-            "normalized_value_not_comparable",
-            "live resources do not support semantic equality",
-        )),
-        _ => {
-            normalized_compare(left, left, observation)?;
-            normalized_compare(right, right, observation)?;
-            Ok(false)
-        }
-    }
-}
-
-// The neutral cursor has bounded inline traversal storage. Keep that storage out
-// of every recursive scalar/list/variant frame, and borrow it instead of moving
-// another complete cursor into the loop. Unequal maps still admit every child.
-#[inline(never)]
-fn normalized_map_compare(
-    left: &super::map::Map,
-    right: &super::map::Map,
-    observation: bool,
-) -> Result<bool, ExecutionError> {
-    let mut equal = left.len() == right.len();
-    let mut cursor = left.iter();
-    for (key, value) in &mut cursor {
-        equal &= equal_optional(Some(value), right.get(key), observation)?;
-    }
-    // Assignment from right.iter() reserves another full inline buffer in debug
-    // frames, even though the first walk has ended. Restart the existing storage.
-    cursor.restart(right);
-    for (key, value) in &mut cursor {
-        if !left.contains_key(key) {
-            normalized_compare(value, value, observation)?;
-            equal = false;
-        }
-    }
-    Ok(equal)
-}
-
-fn equal_optional(
-    left: Option<&NormalizedValue>,
-    right: Option<&NormalizedValue>,
-    observation: bool,
-) -> Result<bool, ExecutionError> {
-    match (left, right) {
-        (None, None) => Ok(true),
-        (Some(left), Some(right)) => normalized_compare(left, right, observation),
-        (Some(value), None) | (None, Some(value)) => {
-            normalized_compare(value, value, observation)?;
-            Ok(false)
-        }
-    }
-}
-
-fn equal_sequences(
-    left: &[NormalizedValue],
-    right: &[NormalizedValue],
-    observation: bool,
-) -> Result<bool, ExecutionError> {
-    let mut equal = left.len() == right.len();
-    for index in 0..left.len().max(right.len()) {
-        equal &= equal_optional(left.get(index), right.get(index), observation)?;
-    }
-    Ok(equal)
+    semantic_equality::compare(left, right, true, control)
 }
 
 fn binary_f64(

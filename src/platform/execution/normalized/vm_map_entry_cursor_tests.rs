@@ -75,7 +75,13 @@ fn map_entry_cursor_reserves_owned_spines_and_releases_interrupted_clones() {
         assert_eq!(requests, [0, expected, 0]);
         assert_eq!(Arc::strong_count(&key), 3);
         assert_eq!(Arc::strong_count(&payload), 3);
-        assert_eq!(selected_key.raw(), &NormalizedValue::Text(key.clone()));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(selected_key.raw()),
+                &(&NormalizedValue::Text(key.clone()))
+            ),
+            Ok(true)
+        );
         assert_eq!(selected.class(&program, &mut work).unwrap(), Class::Free);
         assert!(selected.class(&foreign, &mut work).is_err());
         assert!(cursor.next(&mut |_| Ok(())).unwrap().is_none());

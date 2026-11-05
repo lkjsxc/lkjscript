@@ -137,7 +137,7 @@ fn owned_generic_lexical_drop_live_loan_cancellation_and_adapter_ingress() {
                 } else if forge {
                     assert!(result.is_err());
                 } else {
-                    assert_eq!(result.unwrap(), NormalizedValue::I64(0));
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(result.unwrap()), &(NormalizedValue::I64(0))), Ok(true));
                 }
                 assert_eq!(cell.live(), (0, 0));
                 assert_eq!(buffer.live(), (0, 0));
@@ -193,7 +193,7 @@ fn owned_generic_traps_cancellation_and_quota_cleanup() {
                     &ExecutionControl::cancel_after_checks(checks),
                 ) {
                     Ok(value) => {
-                        assert_eq!(value, NormalizedValue::I64(0));
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(NormalizedValue::I64(0))), Ok(true));
                         completed += 1;
                     }
                     Err(e) => {
@@ -217,7 +217,7 @@ fn owned_generic_traps_cancellation_and_quota_cleanup() {
                 };
                 match run("loan", policy, &ExecutionControl::uncancelled()) {
                     Ok(value) => {
-                        assert_eq!(value, NormalizedValue::I64(0));
+                        assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(NormalizedValue::I64(0))), Ok(true));
                         completed += 1;
                     }
                     Err(e) => {

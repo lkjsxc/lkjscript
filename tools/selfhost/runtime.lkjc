@@ -34,7 +34,7 @@ declarations.begin
                         (if
                           (call ci::eq (local i) (i64 8))
                           (text "normalized_list_index\n")
-                          (text "native_input\n"))))))))))))
+                          (if (call ci::eq (local i) (i64 9)) (text "native_input\n") (text "normalized_function_value\n")))))))))))))
     (function create traps
       (visibility private)
       (effect pure)
@@ -43,7 +43,7 @@ declarations.begin
       (returns ByteBuffer)
       (body
         (if
-          (call ci::eq (local i) (i64 10))
+          (call ci::eq (local i) (i64 11))
           (local out)
           (let
             (binding start (call ci::add (i64 24576) (call ci::mul (local i) (i64 256))))
@@ -96,7 +96,7 @@ declarations.begin
           (binding f (type ByteBuffer) (call hash::emit (local e)))
           (binding ff (call ci::eq (call ci::size (local f)) (i64 24576)))
           (binding g (type ByteBuffer) (call traps (i64 0) (local f)))
-          (binding gg (call ci::eq (call ci::size (local g)) (i64 27136)))
+          (binding gg (call ci::eq (call ci::size (local g)) (i64 27392)))
           (in
             (if
               (call ci::both
@@ -106,6 +106,6 @@ declarations.begin
                   (call ci::both
                     (call ci::both (local dd) (local ee))
                     (call ci::both (local ff) (local gg)))))
-              (call phase::emit (local data) (local layout) (call machine::builtins (i64 1) (local g)))
+              (call phase::emit (local data) (local layout) (call callable-code::emit (local g)))
               (call machine::layout-failure (local g)))))))))
 declarations.end

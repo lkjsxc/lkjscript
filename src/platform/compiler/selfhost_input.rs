@@ -22,7 +22,7 @@ fn unsupported() -> Diagnostic {
         DiagnosticClass::Source,
         "compiler_input_unsupported",
         format!(
-            "LKJCI1 profile 6 requires a closed pure byte/aggregate function closure with forward branches (exporter precondition at {})",
+            "LKJCI1 profile 8 requires a closed pure byte/aggregate/callable function closure with forward branches (exporter precondition at {})",
             std::panic::Location::caller()
         ),
     )
@@ -80,40 +80,119 @@ pub(crate) struct Record {
     pub fields: Vec<(String, u64)>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct FunctionType {
+    pub parameters: Vec<u64>,
+    pub result: u64,
+}
+
+/// Current mixed descriptor table. The seven primitive identities precede it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum Descriptor {
+    Record(Record),
+    Function(FunctionType),
+}
+
 #[derive(Default)]
 struct Types {
-    records: Vec<Record>,
+    descriptors: Vec<Descriptor>,
     known: BTreeMap<TypeObjectDigest, u64>,
 }
 
+/// Compound identities are copyable by induction over checked construction.
+/// The raw fixture encoder deliberately does not validate descriptor contents.
+fn copyable_identity(identity: u64, compounds: usize) -> bool {
+    matches!(identity, 1..=5 | 7)
+        || usize::try_from(identity)
+            .ok()
+            .and_then(|identity| identity.checked_sub(8))
+            .is_some_and(|index| index < compounds)
+}
+
 impl Types {
+    fn descriptor(&self, identity: u64) -> Option<&Descriptor> {
+        self.descriptors
+            .get(usize::try_from(identity).ok()?.checked_sub(8)?)
+    }
+
+    fn fields(&self, identity: u64) -> Result<&[(String, u64)], Diagnostic> {
+        match self.descriptor(identity) {
+            Some(Descriptor::Record(record)) => Ok(&record.fields),
+            _ => Err(unsupported()),
+        }
+    }
+
+    fn callable(&self, identity: u64) -> Result<&FunctionType, Diagnostic> {
+        match self.descriptor(identity) {
+            Some(Descriptor::Function(function)) => Ok(function),
+            _ => Err(unsupported()),
+        }
+    }
+
+    fn intern(&mut self, descriptor: Descriptor) -> Result<u64, Diagnostic> {
+        if let Some(index) = self.descriptors.iter().position(|d| d == &descriptor) {
+            return input_word(index)?.checked_add(8).ok_or_else(unsupported);
+        }
+        let identity = input_word(self.descriptors.len())?
+            .checked_add(8)
+            .ok_or_else(unsupported)?;
+        self.descriptors.try_reserve(1).map_err(|_| allocation())?;
+        self.descriptors.push(descriptor);
+        Ok(identity)
+    }
+
     fn record(&mut self, mut fields: Vec<(String, u64)>) -> Result<u64, Diagnostic> {
         fields.sort();
-        if fields.iter().any(|(name, ty)| name.is_empty() || *ty == 6)
+        if fields
+            .iter()
+            .any(|(name, ty)| name.is_empty() || !copyable_identity(*ty, self.descriptors.len()))
             || fields.windows(2).any(|w| w[0].0 == w[1].0)
         {
             return Err(unsupported());
         }
-        let record = Record { fields };
-        if let Some(index) = self.records.iter().position(|r| r == &record) {
-            return input_word(index)?.checked_add(8).ok_or_else(unsupported);
+        self.intern(Descriptor::Record(Record { fields }))
+    }
+
+    fn function(&mut self, parameters: Vec<u64>, result: u64) -> Result<u64, Diagnostic> {
+        if !copyable_identity(result, self.descriptors.len())
+            || parameters
+                .iter()
+                .any(|ty| !copyable_identity(*ty, self.descriptors.len()))
+        {
+            return Err(unsupported());
         }
-        let ty = input_word(self.records.len())?
-            .checked_add(8)
-            .ok_or_else(unsupported)?;
-        self.records.try_reserve(1).map_err(|_| allocation())?;
-        self.records.push(record);
-        Ok(ty)
+        self.intern(Descriptor::Function(FunctionType { parameters, result }))
+    }
+
+    fn full_signature(&mut self, function: &Function) -> Result<u64, Diagnostic> {
+        let count = usize::try_from(function.parameters).map_err(|_| unsupported())?;
+        let parameters = function.locals.get(..count).ok_or_else(unsupported)?;
+        if !copyable_identity(function.result, self.descriptors.len())
+            || parameters
+                .iter()
+                .any(|ty| ty.borrowed || !copyable_identity(ty.identity, self.descriptors.len()))
+        {
+            return Ok(0);
+        }
+        let mut identities = Vec::new();
+        identities
+            .try_reserve_exact(count)
+            .map_err(|_| allocation())?;
+        identities.extend(parameters.iter().map(|ty| ty.identity));
+        self.function(identities, function.result)
     }
 
     // Explicit enter/exit frames make the complete descriptor walk stack safe.
-    // The active set is a semantic cycle check, independent of traversal depth.
+    // Every child is settled before its parent is interned. The active set
+    // rejects semantic cycles independently of traversal depth.
     fn code(
         &mut self,
         program: &NormalizedProgram,
         root: TypeObjectDigest,
     ) -> Result<u64, Diagnostic> {
-        let mut pending = vec![(root, false)];
+        let mut pending = Vec::new();
+        pending.try_reserve(1).map_err(|_| allocation())?;
+        pending.push((root, false));
         let mut active = BTreeSet::new();
         while let Some((ty, exit)) = pending.pop() {
             if self.known.contains_key(&ty) {
@@ -124,24 +203,35 @@ impl Types {
                 if !active.insert(ty) {
                     return Err(unsupported());
                 }
-                pending.try_reserve(1).map_err(|_| allocation())?;
-                pending.push((ty, true));
-                let children: Vec<_> = match form {
-                    TypeForm::List { item } => vec![*item],
-                    TypeForm::StructuralRecord { fields } => fields.iter().map(|f| f.ty).collect(),
+                let children = match form {
+                    TypeForm::List { .. } => 1,
+                    TypeForm::StructuralRecord { fields } => fields.len(),
+                    TypeForm::Function { parameters, .. } => {
+                        parameters.len().checked_add(1).ok_or_else(unsupported)?
+                    }
                     TypeForm::I64
                     | TypeForm::Bool
                     | TypeForm::Unit
                     | TypeForm::Text
+                    | TypeForm::StaticText
                     | TypeForm::Bytes
-                    | TypeForm::ByteBuffer => vec![],
+                    | TypeForm::ByteBuffer => 0,
                     _ => return Err(unsupported()),
                 };
                 pending
-                    .try_reserve(children.len())
+                    .try_reserve(children.checked_add(1).ok_or_else(unsupported)?)
                     .map_err(|_| allocation())?;
-                for child in children.into_iter().rev() {
-                    pending.push((child, false));
+                pending.push((ty, true));
+                match form {
+                    TypeForm::List { item } => pending.push((*item, false)),
+                    TypeForm::StructuralRecord { fields } => {
+                        pending.extend(fields.iter().rev().map(|field| (field.ty, false)));
+                    }
+                    TypeForm::Function { parameters, result } => {
+                        pending.push((*result, false));
+                        pending.extend(parameters.iter().rev().map(|ty| (*ty, false)));
+                    }
+                    _ => {}
                 }
                 continue;
             }
@@ -149,7 +239,7 @@ impl Types {
                 TypeForm::I64 => 1,
                 TypeForm::Bool => 2,
                 TypeForm::Unit => 3,
-                TypeForm::Text => 4,
+                TypeForm::Text | TypeForm::StaticText => 4,
                 TypeForm::Bytes => 5,
                 TypeForm::ByteBuffer => 6,
                 TypeForm::List { item } if self.known.get(item) == Some(&1) => 7,
@@ -165,6 +255,16 @@ impl Types {
                         ));
                     }
                     self.record(mapped)?
+                }
+                TypeForm::Function { parameters, result } => {
+                    let mut mapped = Vec::new();
+                    mapped
+                        .try_reserve_exact(parameters.len())
+                        .map_err(|_| allocation())?;
+                    for parameter in parameters {
+                        mapped.push(*self.known.get(parameter).ok_or_else(unsupported)?);
+                    }
+                    self.function(mapped, *self.known.get(result).ok_or_else(unsupported)?)?
                 }
                 _ => return Err(unsupported()),
             };
@@ -234,7 +334,9 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
     let mut pending = vec![(entry, Vec::new())];
     while let Some((index, arguments)) = pending.pop() {
         let function = program.functions.get(index).ok_or_else(unsupported)?;
-        if function.type_parameters.len() != arguments.len()
+        if usize::try_from(function.parameter_count).map_err(|_| unsupported())?
+            != function.parameters.len()
+            || function.type_parameters.len() != arguments.len()
             || (!function.type_arguments.is_empty()
                 && function.type_arguments.as_ref() != arguments)
         {
@@ -289,15 +391,22 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                     function,
                     type_arguments,
                     ..
+                }
+                | I::FunctionValue {
+                    function,
+                    type_arguments,
+                    ..
                 } = instruction
                 {
-                    pending.push((
-                        function.0 as usize,
-                        type_arguments
-                            .iter()
-                            .map(|ty| resolve(*ty))
-                            .collect::<Result<Vec<_>, _>>()?,
-                    ));
+                    let mut closed = Vec::new();
+                    closed
+                        .try_reserve_exact(type_arguments.len())
+                        .map_err(|_| allocation())?;
+                    for ty in type_arguments.iter() {
+                        closed.push(resolve(*ty)?);
+                    }
+                    pending.try_reserve(1).map_err(|_| allocation())?;
+                    pending.push((function.0 as usize, closed));
                 }
             }
         }
@@ -328,6 +437,15 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
             external: 0,
             nodes: vec![],
         });
+    }
+    // Every eligible declaration has a signature, whether or not a particular
+    // instruction takes its value. IDs remain stable as later suffixes are interned.
+    let mut callable_signatures = Vec::new();
+    callable_signatures
+        .try_reserve_exact(functions.len())
+        .map_err(|_| allocation())?;
+    for function in &functions {
+        callable_signatures.push(types.full_signature(function)?);
     }
     let signatures = functions.clone();
     for (dense, &index) in reachable.iter().enumerate() {
@@ -425,7 +543,7 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                                 shape.push((name.as_str().to_owned(), ty.identity));
                             }
                             let ty = types.record(shape.clone())?;
-                            let canonical = &types.records[ty as usize - 8].fields;
+                            let canonical = types.fields(ty)?;
                             for field in &shape {
                                 let member = input_word(
                                     canonical
@@ -447,21 +565,12 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                                 return Err(unsupported());
                             }
                             let ty = ty.identity;
-                            let record = types
-                                .records
-                                .get(
-                                    usize::try_from(ty)
-                                        .map_err(|_| unsupported())?
-                                        .checked_sub(8)
-                                        .ok_or_else(unsupported)?,
-                                )
-                                .ok_or_else(unsupported)?;
-                            let index = record
-                                .fields
+                            let fields = types.fields(ty)?;
+                            let index = fields
                                 .iter()
                                 .position(|(field, _)| field == name.as_str())
                                 .ok_or_else(unsupported)?;
-                            after.stack.push(ValueType::owned(record.fields[index].1));
+                            after.stack.push(ValueType::owned(fields[index].1));
                             node.tag = 15;
                             node.a = ty;
                             node.b = input_word(index)?;
@@ -612,6 +721,101 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                                 successors.clear();
                             }
                         }
+                        I::FunctionValue {
+                            function: target,
+                            requirement_arguments,
+                            effect_arguments,
+                            read_scope_arguments,
+                            ..
+                        } => {
+                            if !requirement_arguments.is_empty()
+                                || !effect_arguments.is_empty()
+                                || !read_scope_arguments.is_empty()
+                            {
+                                return Err(unsupported());
+                            }
+                            let callee =
+                                *indices.get(&(target.0 as usize)).ok_or_else(unsupported)?;
+                            let signature = *callable_signatures
+                                .get(usize::try_from(callee).map_err(|_| unsupported())?)
+                                .filter(|&&signature| signature != 0)
+                                .ok_or_else(unsupported)?;
+                            after.stack.try_reserve(1).map_err(|_| allocation())?;
+                            after.stack.push(ValueType::owned(signature));
+                            node.tag = 17;
+                            node.a = callee;
+                        }
+                        I::BeginBind { .. } | I::Capture { .. } => {
+                            // Canonical markers remain in Mode 1. Mode 0 proves the
+                            // complete capture tuple at Bind; one Pass per marker
+                            // preserves every canonical instruction position.
+                            node.tag = 21;
+                        }
+                        I::Bind { arguments }
+                        | I::Invoke { arguments }
+                        | I::TailInvoke { arguments } => {
+                            let count = usize::try_from(*arguments).map_err(|_| unsupported())?;
+                            let consumed = count.checked_add(1).ok_or_else(unsupported)?;
+                            let start = after
+                                .stack
+                                .len()
+                                .checked_sub(consumed)
+                                .ok_or_else(unsupported)?;
+                            let callee = after.stack[start];
+                            if callee.borrowed {
+                                return Err(unsupported());
+                            }
+                            let signature = types.callable(callee.identity)?;
+                            let bind = matches!(instruction, I::Bind { .. });
+                            if (bind && count > signature.parameters.len())
+                                || (!bind && count != signature.parameters.len())
+                                || after.stack[start + 1..]
+                                    .iter()
+                                    .zip(&signature.parameters)
+                                    .any(|(actual, expected)| {
+                                        *actual != ValueType::owned(*expected)
+                                    })
+                            {
+                                return Err(unsupported());
+                            }
+                            let result = signature.result;
+                            node.a = callee.identity;
+                            node.b = u64::from(*arguments);
+                            let pushed = if bind {
+                                node.tag = 18;
+                                node.c = if count == 0 {
+                                    callee.identity
+                                } else {
+                                    let suffix = &signature.parameters[count..];
+                                    let mut remaining = Vec::new();
+                                    remaining
+                                        .try_reserve_exact(suffix.len())
+                                        .map_err(|_| allocation())?;
+                                    remaining.extend_from_slice(suffix);
+                                    types.function(remaining, result)?
+                                };
+                                node.c
+                            } else {
+                                // A TailInvoke hint cannot bypass lexical disposal.
+                                // Its normalized continuation already owns cleanup.
+                                node.tag = if matches!(instruction, I::TailInvoke { .. })
+                                    && !live_buffers(function, &after)
+                                {
+                                    20
+                                } else {
+                                    19
+                                };
+                                if node.tag == 20 {
+                                    if start != 0 || result != function.result {
+                                        return Err(unsupported());
+                                    }
+                                    successors.clear();
+                                }
+                                result
+                            };
+                            after.stack.truncate(start);
+                            after.stack.push(ValueType::owned(pushed));
+                        }
                         I::Return => {
                             node.tag = 11;
                             if after.stack != [ValueType::owned(function.result)]
@@ -660,14 +864,17 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
     let root_function = &functions[root as usize];
     let filter = root_function.parameters == 1
         && root_function.locals.first() == Some(&ValueType::owned(5))
-        && types
-            .records
-            .get((root_function.result as usize).wrapping_sub(8))
-            .is_some_and(|r| r.fields == [("diagnostic".to_owned(), 1), ("image".to_owned(), 5)]);
+        && types.fields(root_function.result).is_ok_and(|fields| {
+            fields.len() == 2
+                && fields[0].0 == "diagnostic"
+                && fields[0].1 == 1
+                && fields[1].0 == "image"
+                && fields[1].1 == 5
+        });
     if !filter && (root_function.parameters != 0 || root_function.result != 1) {
         return Err(unsupported());
     }
-    encode_records(&functions, &types.records, root)
+    encode_descriptors(&functions, &types.descriptors, root)
 }
 
 fn live_buffers(function: &Function, state: &State) -> bool {
@@ -701,9 +908,37 @@ fn input_word(value: usize) -> Result<u64, Diagnostic> {
     u64::try_from(value).map_err(|_| unsupported())
 }
 
+/// Raw test-fixture writer. Malformed semantic rows remain encodable so their
+/// consumer controls reach the intended validation layer. Only profile 8 is emitted.
 pub(crate) fn encode_records(
     functions: &[Function],
     records: &[Record],
+    entry: u64,
+) -> Result<Vec<u8>, Diagnostic> {
+    encode_layout(functions, records, &[], entry)
+}
+
+/// Mixed current descriptors, including pure callable signatures. This is also
+/// intentionally a fixture writer; checked normalized export constructs its
+/// descriptors through Types before reaching this physical encoder.
+pub(crate) fn encode_descriptors(
+    functions: &[Function],
+    descriptors: &[Descriptor],
+    entry: u64,
+) -> Result<Vec<u8>, Diagnostic> {
+    encode_layout(functions, &[], descriptors, entry)
+}
+
+#[derive(Clone, Copy)]
+enum DescriptorRef<'a> {
+    Record(&'a Record),
+    Function(&'a FunctionType),
+}
+
+fn encode_layout(
+    functions: &[Function],
+    records: &[Record],
+    descriptors: &[Descriptor],
     entry: u64,
 ) -> Result<Vec<u8>, Diagnostic> {
     let count = functions.len();
@@ -718,7 +953,90 @@ pub(crate) fn encode_records(
     if node_count == 0 {
         return Err(unsupported());
     }
-    let types = records.len().checked_add(7).ok_or_else(unsupported)?;
+
+    // Derive exact full signatures for every eligible row, including rows
+    // never referenced by FunctionValue. Existing exact descriptors are reused.
+    // Keeping IDs separately preserves the deliberately small raw fixture API.
+    let original_count = records
+        .len()
+        .checked_add(descriptors.len())
+        .ok_or_else(unsupported)?;
+    let mut additional = Vec::<FunctionType>::new();
+    let mut rows = Vec::new();
+    rows.try_reserve_exact(original_count)
+        .map_err(|_| allocation())?;
+    rows.extend(records.iter().map(DescriptorRef::Record));
+    rows.extend(descriptors.iter().map(|descriptor| match descriptor {
+        Descriptor::Record(record) => DescriptorRef::Record(record),
+        Descriptor::Function(function) => DescriptorRef::Function(function),
+    }));
+    let mut signature_ids = Vec::new();
+    signature_ids
+        .try_reserve_exact(count)
+        .map_err(|_| allocation())?;
+    for function in functions {
+        let parameters = usize::try_from(function.parameters)
+            .ok()
+            .and_then(|count| function.locals.get(..count));
+        let Some(parameters) = parameters else {
+            // The consumer, rather than this fixture writer, diagnoses the row.
+            signature_ids.push(0);
+            continue;
+        };
+        if !copyable_identity(function.result, original_count)
+            || parameters
+                .iter()
+                .any(|ty| ty.borrowed || !copyable_identity(ty.identity, original_count))
+        {
+            signature_ids.push(0);
+            continue;
+        }
+        let matches = |signature: &FunctionType| {
+            signature.result == function.result
+                && signature.parameters.len() == parameters.len()
+                && signature
+                    .parameters
+                    .iter()
+                    .zip(parameters)
+                    .all(|(expected, actual)| *expected == actual.identity)
+        };
+        let existing = rows.iter().position(|descriptor| match descriptor {
+            DescriptorRef::Function(signature) => matches(signature),
+            DescriptorRef::Record(_) => false,
+        });
+        let identity = if let Some(index) = existing {
+            input_word(index)?.checked_add(8).ok_or_else(unsupported)?
+        } else if let Some(index) = additional.iter().position(matches) {
+            input_word(original_count.checked_add(index).ok_or_else(unsupported)?)?
+                .checked_add(8)
+                .ok_or_else(unsupported)?
+        } else {
+            let mut identities = Vec::new();
+            identities
+                .try_reserve_exact(parameters.len())
+                .map_err(|_| allocation())?;
+            identities.extend(parameters.iter().map(|ty| ty.identity));
+            let identity = input_word(
+                original_count
+                    .checked_add(additional.len())
+                    .ok_or_else(unsupported)?,
+            )?
+            .checked_add(8)
+            .ok_or_else(unsupported)?;
+            additional.try_reserve(1).map_err(|_| allocation())?;
+            additional.push(FunctionType {
+                parameters: identities,
+                result: function.result,
+            });
+            identity
+        };
+        signature_ids.push(identity);
+    }
+    rows.try_reserve(additional.len())
+        .map_err(|_| allocation())?;
+    rows.extend(additional.iter().map(DescriptorRef::Function));
+
+    let types = rows.len().checked_add(7).ok_or_else(unsupported)?;
     let declarations = checked_input_end(
         DESCRIPTORS,
         types
@@ -737,17 +1055,31 @@ pub(crate) fn encode_records(
     // Check the complete physical extent before allocation. These are host
     // representation boundaries, never configurable quotas or default policies.
     let mut length = blob_offset;
-    for record in records {
-        length = checked_input_end(
-            length,
-            record
-                .fields
-                .len()
-                .checked_mul(32)
-                .ok_or_else(unsupported)?,
-        )?;
-        for (name, _) in &record.fields {
-            length = checked_input_end(length, name.len())?;
+    for descriptor in &rows {
+        match descriptor {
+            DescriptorRef::Record(record) => {
+                length = checked_input_end(
+                    length,
+                    record
+                        .fields
+                        .len()
+                        .checked_mul(32)
+                        .ok_or_else(unsupported)?,
+                )?;
+                for (name, _) in &record.fields {
+                    length = checked_input_end(length, name.len())?;
+                }
+            }
+            DescriptorRef::Function(function) => {
+                length = checked_input_end(
+                    length,
+                    function
+                        .parameters
+                        .len()
+                        .checked_mul(8)
+                        .ok_or_else(unsupported)?,
+                )?;
+            }
         }
     }
     for function in functions {
@@ -778,20 +1110,33 @@ pub(crate) fn encode_records(
     let mut bytes = Vec::new();
     bytes.try_reserve_exact(length).map_err(|_| allocation())?;
     bytes.resize(blob_offset, 0);
-    for (i, record) in records.iter().enumerate() {
+    for (i, descriptor) in rows.iter().enumerate() {
         let row = DESCRIPTORS + (7 + i) * DESCRIPTOR_BYTES;
         let offset = bytes.len();
-        word(&mut bytes, row, 8);
-        word(&mut bytes, row + 8, input_word(record.fields.len())?);
-        word(&mut bytes, row + 16, input_word(offset)?);
-        bytes.resize(offset + record.fields.len() * 32, 0);
-        for (f, (name, ty)) in record.fields.iter().enumerate() {
-            let field = offset + f * 32;
-            let name_offset = bytes.len();
-            word(&mut bytes, field, *ty);
-            word(&mut bytes, field + 8, input_word(name_offset)?);
-            word(&mut bytes, field + 16, input_word(name.len())?);
-            bytes.extend_from_slice(name.as_bytes());
+        match descriptor {
+            DescriptorRef::Record(record) => {
+                word(&mut bytes, row, 8);
+                word(&mut bytes, row + 8, input_word(record.fields.len())?);
+                word(&mut bytes, row + 16, input_word(offset)?);
+                bytes.resize(offset + record.fields.len() * 32, 0);
+                for (f, (name, ty)) in record.fields.iter().enumerate() {
+                    let field = offset + f * 32;
+                    let name_offset = bytes.len();
+                    word(&mut bytes, field, *ty);
+                    word(&mut bytes, field + 8, input_word(name_offset)?);
+                    word(&mut bytes, field + 16, input_word(name.len())?);
+                    bytes.extend_from_slice(name.as_bytes());
+                }
+            }
+            DescriptorRef::Function(function) => {
+                word(&mut bytes, row, 9);
+                word(&mut bytes, row + 8, input_word(function.parameters.len())?);
+                word(&mut bytes, row + 16, input_word(offset)?);
+                word(&mut bytes, row + 24, function.result);
+                for parameter in &function.parameters {
+                    bytes.extend_from_slice(&parameter.to_le_bytes());
+                }
+            }
         }
     }
     let mut node_index = 0;
@@ -807,7 +1152,7 @@ pub(crate) fn encode_records(
             input_word(function.nodes.len())?,
             function.external,
             input_word(local_offset)?,
-            0,
+            signature_ids[index],
             0,
         ]
         .into_iter()
@@ -842,7 +1187,8 @@ pub(crate) fn encode_records(
         return Err(unsupported());
     }
     bytes[..8].copy_from_slice(b"LKJCI001");
-    bytes[8..12].copy_from_slice(&6u32.to_le_bytes());
+    // Profile is u32; @12 remains the independent u32 optional-policy tag.
+    bytes[8..12].copy_from_slice(&8u32.to_le_bytes());
     // @12 tag 0 + @32 zero allowance means explicitly unbounded.
     word(&mut bytes, 16, input_word(length)?);
     word(&mut bytes, 24, input_word(count)?);
@@ -895,7 +1241,7 @@ pub(crate) fn rechecksum(bytes: &mut [u8]) {
 }
 
 /// Small independent test builder. Arithmetic operation IDs are test notation,
-/// not a second wire reader; only profile 6 is emitted.
+/// not a second wire reader; only profile 8 is emitted.
 pub(crate) fn arithmetic(operations: &[(u32, i64)]) -> Result<Vec<u8>, Diagnostic> {
     let mut root = Function {
         result: 1,

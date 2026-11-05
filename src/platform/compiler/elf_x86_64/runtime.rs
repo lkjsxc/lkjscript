@@ -27,6 +27,7 @@ pub(super) struct Runtime {
     pub input: Label,
     pub capacity: Label,
     pub argument: Label,
+    pub callable: Label,
 }
 
 pub(super) fn data(a: &mut Asm, pool: &mut Vec<(Label, Vec<u8>)>, bytes: &[u8]) -> Label {
@@ -81,6 +82,7 @@ impl Runtime {
             input: a.label(),
             capacity: a.label(),
             argument: a.label(),
+            callable: a.label(),
         }
     }
 
@@ -383,6 +385,7 @@ impl Runtime {
             (self.capacity, "native_allocation", 70),
             (self.argument, "native_argument", 64),
             (self.input, "native_input", 65),
+            (self.callable, "native_callable_shape", 70),
         ] {
             let message = format!("{code}\n");
             let message_label = data(a, pool, message.as_bytes());

@@ -4,6 +4,7 @@ use super::capability::{
     NormalizedAdapterKind, NormalizedCallPolicy, NormalizedCapabilityAdapter,
     NormalizedCapabilityTransaction, NormalizedTransactionCompletion, NormalizedTransactionPolicy,
 };
+use super::child_storage::ValuesBuilder;
 use super::prepare::{NormalizedOperation, NormalizedProgram, NormalizedRequirement};
 use super::resource::NormalizedResourceScope;
 use super::value::{NormalizedRecord, NormalizedValue, RecordLayoutIndex, VariantLayoutIndex};
@@ -375,7 +376,7 @@ impl NormalizedDataAdapter {
                     schema
                         .into_iter()
                         .map(|schema| codec.encode_schema(schema))
-                        .collect(),
+                        .collect::<Result<Vec<_>, _>>()?,
                 )?)
             }
             DataOperation::SchemaSet => {
@@ -407,7 +408,7 @@ impl NormalizedDataAdapter {
                     entry
                         .into_iter()
                         .map(|entry| codec.encode_entry(entry))
-                        .collect(),
+                        .collect::<Result<Vec<_>, _>>()?,
                 )?)
             }
             DataOperation::Scan => {
@@ -1049,18 +1050,16 @@ impl RecordCodec {
         &self,
         mut values: BTreeMap<&'static str, NormalizedValue>,
     ) -> Result<NormalizedValue, ExecutionError> {
-        let fields = self
-            .fields
-            .iter()
-            .map(|name| {
-                values.remove(name.as_str()).ok_or_else(|| {
-                    data_runtime(
-                        "normalized_data_record_encode",
-                        "data record codec omitted an exact field",
-                    )
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut fields = ValuesBuilder::with_capacity(self.fields.len())?;
+        for name in self.fields.iter() {
+            let value = values.remove(name.as_str()).ok_or_else(|| {
+                data_runtime(
+                    "normalized_data_record_encode",
+                    "data record codec omitted an exact field",
+                )
+            })?;
+            fields.try_push(value)?;
+        }
         if !values.is_empty() {
             return Err(data_runtime(
                 "normalized_data_record_encode",
@@ -1069,7 +1068,7 @@ impl RecordCodec {
         }
         Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
             layout: self.layout,
-            fields: Arc::new(fields),
+            fields: fields.finish()?,
         }))
     }
 
@@ -1087,15 +1086,14 @@ impl RecordCodec {
         })
     }
 
-    fn encode_schema(&self, schema: DataSchema) -> NormalizedValue {
+    fn encode_schema(&self, schema: DataSchema) -> Result<NormalizedValue, ExecutionError> {
         self.encode_fields(BTreeMap::from([
             ("digest", NormalizedValue::bytes(schema.digest)),
             ("identity", NormalizedValue::text(schema.identity)),
         ]))
-        .unwrap_or(NormalizedValue::Unit)
     }
 
-    fn encode_entry(&self, entry: DataEntry) -> NormalizedValue {
+    fn encode_entry(&self, entry: DataEntry) -> Result<NormalizedValue, ExecutionError> {
         self.encode_fields(BTreeMap::from([
             (
                 "revision",
@@ -1103,7 +1101,6 @@ impl RecordCodec {
             ),
             ("value", NormalizedValue::bytes(entry.value)),
         ]))
-        .unwrap_or(NormalizedValue::Unit)
     }
 
     fn encode_scan_item(

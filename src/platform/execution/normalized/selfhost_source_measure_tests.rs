@@ -108,7 +108,7 @@ fn selfhost_source_measure_maintained_native_closure() {
     let word = |bytes: &[u8], at| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
     let policy_tag = word(&mode1, 12);
     let allowance = wide_at(&mode1, 32);
-    assert_eq!(word(&mode0, 8), 6);
+    assert_eq!(word(&mode0, 8), 8);
     assert_eq!(word(&mode1, 8), 7);
     assert_eq!(policy_tag, 0);
     assert_eq!(allowance, 0);

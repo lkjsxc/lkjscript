@@ -7,7 +7,8 @@
 //! through field lookup. Existing checked-value ancestor packets must be flattened into
 //! `SourceLoans`/retained descriptor leases before entering this boundary.
 
-use super::value::{MAXIMUM_ADMISSION_ITEMS, NormalizedValue, ValueOrigin};
+use super::child_storage::{self, DropQueue, Pending};
+use super::value::{MAXIMUM_ADMISSION_ITEMS, NormalizedValue, RawValue, ValueOrigin};
 use crate::platform::execution::{ExecutionControl, ExecutionError};
 use crate::platform::kernel::{ReadScopeArgument, TypeObjectDigest};
 use crate::platform::semantic_id::{BindingId, FieldId};
@@ -89,6 +90,12 @@ pub(super) struct ViewTarget {
 pub(super) struct HeldRead {
     pub origin: ValueOrigin,
     pub value: NormalizedValue,
+}
+
+impl Drop for HeldRead {
+    fn drop(&mut self) {
+        child_storage::release_root(std::mem::replace(&mut self.value, NormalizedValue::Unit));
+    }
 }
 
 /// Passive source custody. Only the trusted admission callback can inspect this packet;
@@ -404,12 +411,28 @@ impl CustodyOnly {
     }
 }
 
-struct ReadyCleanup {
+pub(super) struct ReadyCleanup {
     fields: Vec<StoredField>,
     custody: Option<CustodyOnly>,
-    next: Option<Box<ReadyCleanup>>,
+    pub(super) next: Option<Pending>,
     #[cfg(test)]
     finalized: Option<Arc<std::sync::atomic::AtomicUsize>>,
+}
+
+// Preserve the old finite evaluator charge. The intrusive cleanup link is
+// implementation metadata; this metric does not assert actual allocator traffic.
+struct MeteredReadyCleanup {
+    _fields: Vec<StoredField>,
+    _custody: Option<CustodyOnly>,
+    _next: Option<Box<()>>,
+    #[cfg(test)]
+    _finalized: Option<Arc<std::sync::atomic::AtomicUsize>>,
+}
+
+impl Drop for ReadyCleanup {
+    fn drop(&mut self) {
+        child_storage::release_ready(self);
+    }
 }
 
 struct State {
@@ -491,7 +514,7 @@ impl Lease {
             }
         };
         if let Some(ready) = ready {
-            work.enqueue(ready);
+            work.enqueue_view(ready);
         }
         // A remaining physical Arc shell is empty if the last semantic lease just closed.
     }
@@ -547,49 +570,31 @@ impl Guard {
     }
 }
 
-#[derive(Default)]
-struct Cleanup {
-    head: Option<Box<ReadyCleanup>>,
-}
+type Cleanup = DropQueue;
 
-impl Cleanup {
-    fn enqueue(&mut self, mut node: Box<ReadyCleanup>) {
-        debug_assert!(node.next.is_none());
-        node.next = self.head.take();
-        self.head = Some(node);
-    }
-
-    fn drain(&mut self) {
-        while let Some(mut node) = self.head.take() {
-            self.head = node.next.take();
-            // Take the intrusive link before any drop. Every dynamic descriptor/provenance
-            // edge becomes inert and queues its ready node; no nested lease Drop traverses it.
-            for mut field in node.fields.drain(..) {
-                if let StoredValue::View(guard) = &mut field.value {
-                    guard.release_into(self);
-                }
-                // Owned fields can only hold Read-mode tokens, whose Drop releases a loan.
-                // Ordinary metadata was fully admitted by the evaluator before publication.
-            }
-            if let Some(mut custody) = node.custody.take() {
-                for mut link in custody.links.drain(..) {
-                    link.release_into(self);
-                }
-                custody.reads.clear();
-                // The root packet is flat, contains only Read tokens, and never runs user code.
-                drop(custody);
-            }
-            #[cfg(test)]
-            if let Some(finalized) = node.finalized.take() {
-                finalized.fetch_add(1, Ordering::Relaxed);
-            }
+/// The caller has detached the intrusive link before entering this node. Child
+/// values and final descriptor leases join its queue instead of starting nested
+/// drains across storage families.
+pub(super) fn drain_ready(node: &mut ReadyCleanup, work: &mut DropQueue) {
+    for field in node.fields.drain(..) {
+        match field.value {
+            StoredValue::Metadata(value) => work.push_shared_value(value),
+            StoredValue::Owned(value) => work.push_value(value),
+            StoredValue::View(mut guard) => guard.release_into(work),
         }
     }
-}
-
-impl Drop for Cleanup {
-    fn drop(&mut self) {
-        self.drain();
+    if let Some(mut custody) = node.custody.take() {
+        for mut link in custody.links.drain(..) {
+            link.release_into(work);
+        }
+        custody.reads.clear();
+        // The root packet is flat, contains only Read tokens, and never runs
+        // user code. Reads release loans without revoking payload ownership.
+        drop(custody);
+    }
+    #[cfg(test)]
+    if let Some(finalized) = node.finalized.take() {
+        finalized.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -599,7 +604,7 @@ impl Drop for PendingCleanup {
     fn drop(&mut self) {
         if let Some(ready) = self.0.take() {
             let mut work = Cleanup::default();
-            work.enqueue(ready);
+            work.enqueue_view(ready);
             work.drain();
         }
     }
@@ -698,7 +703,7 @@ impl ViewBuilder {
         bounded_items(guards)?;
         let fields = reserved_vec(construction.fields, control, reserve)?;
         let links = reserved_vec(guards, control, reserve)?;
-        charge_box::<ReadyCleanup>(control, reserve)?;
+        charge_box::<MeteredReadyCleanup>(control, reserve)?;
         let ready = Box::new(ReadyCleanup {
             fields,
             custody: Some(CustodyOnly {
@@ -758,11 +763,12 @@ impl ViewBuilder {
         control: &ExecutionControl,
         reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<(), ExecutionError> {
+        let value = RawValue::new(value);
         self.field_slot(field, control)?;
         // Complete nested metadata/category validation remains the evaluator's obligation.
-        if value.memory_form().is_some()
+        if value.as_raw().memory_form().is_some()
             || matches!(
-                value,
+                value.as_raw(),
                 NormalizedValue::Function { .. } | NormalizedValue::Resource(_)
             )
         {
@@ -775,7 +781,7 @@ impl ViewBuilder {
                 input: FieldAdmission::Metadata {
                     field,
                     ty,
-                    value: &value,
+                    value: value.as_raw(),
                 },
             },
             control,
@@ -792,7 +798,7 @@ impl ViewBuilder {
                     source: None,
                     kind: FieldKind::Metadata,
                 },
-                value: StoredValue::Metadata(Arc::new(value)),
+                value: StoredValue::Metadata(Arc::new(value.into_raw())),
             });
         Ok(())
     }
@@ -806,12 +812,13 @@ impl ViewBuilder {
         admission: &impl ReadViewAdmission,
         control: &ExecutionControl,
     ) -> Result<(), ExecutionError> {
+        let value = RawValue::new(value);
         self.field_slot(field, control)?;
         let construction = self.construction()?;
         if source.program != construction.identity.program {
             return Err(reject());
         }
-        validate_read(&value, source.origin, Some(source.program), control)?;
+        validate_read(value.as_raw(), source.origin, Some(source.program), control)?;
         admit(
             admission,
             AdmissionRequest::Field {
@@ -820,7 +827,7 @@ impl ViewBuilder {
                     field,
                     ty,
                     source: &source,
-                    value: &value,
+                    value: value.as_raw(),
                 },
             },
             control,
@@ -836,7 +843,7 @@ impl ViewBuilder {
                     source: Some(source),
                     kind: FieldKind::OwnedReference,
                 },
-                value: StoredValue::Owned(value),
+                value: StoredValue::Owned(value.into_raw()),
             });
         Ok(())
     }
@@ -1082,7 +1089,7 @@ impl Drop for ViewBuilder {
     fn drop(&mut self) {
         if let Some(ready) = self.ready.take() {
             let mut work = Cleanup::default();
-            work.enqueue(ready);
+            work.enqueue_view(ready);
             work.drain();
         }
     }
@@ -1173,6 +1180,13 @@ impl PartialEq for ReadView {
 impl Eq for ReadView {}
 
 impl ReadView {
+    pub(super) fn release_into(&mut self, work: &mut DropQueue) {
+        self.lease.release_into(work);
+        if let Some(mut provenance) = self.provenance.take() {
+            provenance.release_into(work);
+        }
+    }
+
     pub(super) fn reserve_descriptor(
         control: &ExecutionControl,
         reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
@@ -1348,7 +1362,7 @@ impl ReadView {
         )?;
         self.validate(control)?;
         Ok(MetadataRead {
-            value,
+            value: Some(value),
             guard: self.guard(control)?,
             ty: descriptor.ty,
         })
@@ -1457,7 +1471,7 @@ impl ReadView {
         // projection from a projection queues earlier provenance cells instead of dropping
         // an arbitrarily deep per-handle guard chain recursively.
         let mut links = reserved_vec(1, control, reserve)?;
-        charge_box::<ReadyCleanup>(control, reserve)?;
+        charge_box::<MeteredReadyCleanup>(control, reserve)?;
         charge::<Backing>(1, control, reserve)?;
         let scope = target.scope.reborrow(control)?;
         let reservation = ReadView::reserve_descriptor(control, reserve)?;
@@ -1542,7 +1556,7 @@ impl ReadView {
 /// is an evaluator operation with its existing complete admission/allocation accounting;
 /// storage does not perform an uncharged recursive `NormalizedValue::clone`.
 pub(super) struct MetadataRead {
-    value: Arc<NormalizedValue>,
+    value: Option<Arc<NormalizedValue>>,
     guard: Guard,
     ty: TypeObjectDigest,
 }
@@ -1556,7 +1570,7 @@ impl MetadataRead {
         control: &ExecutionControl,
     ) -> Result<&NormalizedValue, ExecutionError> {
         self.guard.validate(control)?;
-        Ok(&self.value)
+        self.value.as_deref().ok_or_else(reject)
     }
 }
 
@@ -1565,6 +1579,12 @@ impl Drop for MetadataRead {
         let mut work = Cleanup::default();
         self.guard.release_into(&mut work);
         work.drain();
+        // The final reader can be the last metadata Arc after backing cleanup.
+        // Extract that value through the same nonrecursive raw release path.
+        if let Some(value) = self.value.take() {
+            work.push_shared_value(value);
+            work.drain();
+        }
     }
 }
 
@@ -1798,3 +1818,7 @@ fn capacity() -> ExecutionError {
         "read-view custody or descriptor storage capacity was exhausted",
     )
 }
+
+#[cfg(test)]
+#[path = "read_view_lifecycle_tests.rs"]
+mod lifecycle_tests;

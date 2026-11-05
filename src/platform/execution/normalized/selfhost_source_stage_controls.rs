@@ -99,7 +99,12 @@ pub(super) fn verify(left_name: &str, left: &[u8], right_name: &str, right: &[u8
         names.len()
     );
     binary_controls(left_name, left, right_name, right)?;
-    super::bulk::verify_stages(left_name, left, right_name, right)
+    super::bulk::verify_stages(left_name, left, right_name, right)?;
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        super::callable::verify_stages(left_name, left, right_name, right)?;
+    }
+    Ok(())
 }
 
 fn binary_controls(left_name: &str, left: &[u8], right_name: &str, right: &[u8]) -> Check<()> {

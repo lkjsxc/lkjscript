@@ -601,7 +601,10 @@ fn compare_units(
 fn compare_language_engines(name: &str, request: &[u8], expected: &[u8]) -> Check<()> {
     // Existing helper runs the VM and independent canonical reference interpreter.
     let value = super::super::invoke("source-unit", name, vec![NormalizedValue::bytes(request)]);
-    if super::super::field(&value, "diagnostic") != &NormalizedValue::I64(0) {
+    if !matches!(
+        super::super::field(&value, "diagnostic"),
+        NormalizedValue::I64(0)
+    ) {
         return Err(format!("language engines rejected source-unit::{name}"));
     }
     let NormalizedValue::Bytes(bytes) = super::super::field(&value, "image") else {

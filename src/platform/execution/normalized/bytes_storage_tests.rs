@@ -48,7 +48,13 @@ fn byte_storage_representation_does_not_change_key_order_or_retained_values() {
     assert_eq!(map.insert(canonical, 23), Some(17));
     let result = run(prefix, [17].into(), 100, 100).0.unwrap();
     assert_eq!(result.as_ref(), &[0, 128, 255, 17]);
-    assert_eq!(key.to_value(), NormalizedValue::bytes([0, 128, 255]));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(key.to_value()),
+            &(NormalizedValue::bytes([0, 128, 255]))
+        ),
+        Ok(true)
+    );
     assert_eq!(
         map.get(&NormalizedMapKey::Bytes([0, 128, 255].into())),
         Some(&23)

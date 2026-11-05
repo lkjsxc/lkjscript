@@ -18,7 +18,7 @@ See the [self-hosting contract](../../docs/spec/selfhosting.md) and
 
 | Entry path | Current input | Work performed inside lkjscript |
 | --- | --- | --- |
-| Normalized backend | `LKJCI1` mode 0/profile 6 | Admit the backend projection and emit standalone ELF |
+| Normalized backend | `LKJCI1` mode 0/profile 8 | Admit the backend projection and emit standalone ELF |
 | Normalized backend | `LKJCI1` mode 1/profile 7 | Admit the backend projection and construct a canonical artifact |
 | Raw-source compiler | `LKJSRQ01` profile 2 around complete `LKJSG002` profile 3 | Admit source meaning and custody, resolve the requested target, lower it and emit the selected ELF/artifact output |
 
@@ -61,22 +61,30 @@ including uncalled functions, untaken branches and unselected targets.
 Despite their historical `source-scalar-*` names, the active compiler modules
 support the maintained compiler's compound feature closure: Text/StaticText,
 Bytes, affine ByteBuffer, List<I64>, structural records/fields and pure function
-types, alongside Unit, Bool and I64. Closed generic substitutions used by I64
-list operations are admitted explicitly. Expression admission and lowering
-cover lexical locals, Let, Sequence, If, lists, records, fields, direct calls,
-recursion and the exact active intrinsic signatures. Target selection supports
+types, alongside Unit, Bool and I64. Closed pure FunctionValue, prefix Bind and
+Invoke support factory closures, higher-order parameters/results and callable
+record fields. Exposed signatures and captures are copyable; direct ByteBuffer
+operations retain their existing custody contract. Closed generic substitutions
+used by I64 list operations are admitted explicitly. Expression admission and
+lowering also cover lexical locals, Let, Sequence, If, lists, records, fields,
+direct calls, recursion and the exact active intrinsic signatures. Target selection supports
 pure `() -> I64` commands and the pure binary-filter signature
 `(Bytes) -> {diagnostic: I64, image: Bytes}`.
 
 ByteBuffer custody checks consumption, synchronous borrow qualification,
 branch-balanced disposal, reverse lexical cleanup and returned-owner transfer.
-A live owned local prevents unsafe tail transfer; lowering uses call, cleanup
-and return instead. Complete semantic and custody admission precedes emission.
+A live owned local prevents unsafe tail transfer; lowering uses Call or Invoke,
+cleanup and Return instead. Empty Bind keeps the evaluated callee without
+allocating an environment. Graph tail transfers preserve the original return
+record and copy overlapping explicit arguments before captured prefixes. Complete semantic and custody admission precedes emission.
 Unsupported forms reject explicitly rather than bypassing their semantics.
 
 The `source-scalar-plan`, cursor/state/trace/emit helpers and packing modules
-build typed backend input inside lkjscript. Source artifact construction includes
-canonical units, summaries, interfaces, maps and provenance. Closed bulk-byte
+build typed profile-8 backend input inside lkjscript. Its mixed record/Function
+descriptors and exact declaration/residual signatures are private projections.
+Source artifact construction keeps canonical FunctionValue/BeginBind/Capture/
+Bind/Invoke and includes canonical units, summaries, interfaces, maps and
+provenance. Mode 1 stays profile 7; the canonical schema epoch is unchanged. Closed bulk-byte
 intrinsics avoid per-octet temporary values and are supported by both evaluators
 and both native compiler paths. Capability support must precede adoption of a
 new feature into the maintained compiler. Refresh the active-source inventory

@@ -27,6 +27,7 @@ sha256sum src/platform/compiler/selfhost_input.rs \
   tests/fixtures/selfhost-source-interface.lkjc \
   tests/fixtures/selfhost-source-interface-probes.lkjc \
   src/platform/execution/normalized/selfhost_source_artifact_tests.rs \
+  src/platform/execution/normalized/selfhost_source_allocation_tests.rs \
   src/platform/execution/normalized/native_phase_tests.rs \
   src/platform/execution/normalized/native_phase_caller.rs \
   src/platform/execution/normalized/selfhost_source_stage_controls.rs \
@@ -36,6 +37,22 @@ sha256sum src/platform/compiler/selfhost_input.rs \
   tests/fixtures/selfhost-source-artifact.lkjc \
   tests/support/selfhost_proposals.rs \
   src/platform/execution/normalized/selfhost_tests.rs \
+  src/platform/execution/normalized/vm.rs \
+  src/platform/execution/normalized/reference.rs \
+  src/platform/execution/normalized/reference_checked.rs \
+  src/platform/execution/normalized/reference_continuations.rs \
+  src/platform/execution/normalized/runner.rs \
+  src/platform/execution/normalized/vm_semantic_equality.rs \
+  src/platform/execution/normalized/reference_semantic_equality.rs \
+  src/platform/execution/normalized/semantic_equality_lifecycle_tests.rs \
+  src/platform/execution/normalized/selfhost_input_profile_tests.rs \
+  src/platform/execution/normalized/selfhost_callable_admission_tests.rs \
+  tests/fixtures/selfhost-callable-projection.lkjc \
+  src/platform/execution/normalized/selfhost_source_callable_tests.rs \
+  src/platform/execution/normalized/selfhost_source_callable_stack_tests.rs \
+  tests/fixtures/selfhost-source-callable.lkjc \
+  src/platform/execution/normalized/native_closure_tests.rs \
+  tests/fixtures/native-closures.lkjc \
   src/platform/execution/normalized/selfhost_bytes_tests.rs \
   src/platform/execution/normalized/selfhost_admission_tests.rs \
   src/platform/execution/normalized/selfhost_artifact_tests.rs \

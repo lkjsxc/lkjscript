@@ -287,7 +287,7 @@ mod tests {
         else {
             panic!("password hash result type")
         };
-        assert_eq!(
+        assert!(matches!(
             adapter
                 .call(
                     &policy(interface, requirement, operations.verify, "verify"),
@@ -300,8 +300,8 @@ mod tests {
                 )
                 .expect("password verification"),
             NormalizedValue::Bool(true)
-        );
-        assert_eq!(
+        ));
+        assert!(matches!(
             adapter
                 .call(
                     &policy(interface, requirement, operations.verify, "verify"),
@@ -314,8 +314,8 @@ mod tests {
                 )
                 .expect("password mismatch"),
             NormalizedValue::Bool(false)
-        );
-        assert_eq!(
+        ));
+        assert!(matches!(
             adapter
                 .call(
                     &policy(
@@ -330,7 +330,7 @@ mod tests {
                 )
                 .expect("current password parameters"),
             NormalizedValue::Bool(false)
-        );
+        ));
     }
 
     #[test]

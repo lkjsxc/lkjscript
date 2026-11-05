@@ -98,7 +98,13 @@ fn consuming_extraction_moves_large_payload_and_checks_child_custody_without_des
             assert_eq!(payload.class, Class::Free);
             assert_eq!(payload.ordinary_type, Some(f.payload));
             assert!(payload.borrow.is_none());
-            assert_eq!(payload.raw(), &f.raw(count));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(payload.raw()),
+                    &(&f.raw(count))
+                ),
+                Ok(true)
+            );
             assert_eq!(child.class, Class::Memory);
             let NormalizedValue::OwnedI64Cell(cell) = child.raw() else {
                 panic!("checked child")
@@ -117,7 +123,13 @@ fn consuming_extraction_moves_large_payload_and_checks_child_custody_without_des
             assert_eq!(products.live(), (0, 0));
             assert_eq!(cells.live(), (0, 0));
             // The immutable result outlives both the original owner and sibling.
-            assert_eq!(payload.raw(), &f.raw(count));
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(payload.raw()),
+                    &(&f.raw(count))
+                ),
+                Ok(true)
+            );
         }
         products.assert_transfers_preserve_allocations();
     }
@@ -139,7 +151,13 @@ fn consuming_extraction_partial_drop_releases_unreturned_owners_and_retains_no_l
     assert_eq!(cells.live(), (1, 0));
     drop(extraction);
     assert_eq!(cells.live(), (0, 0));
-    assert_eq!(payload.raw(), &f.raw(1024));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(payload.raw()),
+            &(&f.raw(1024))
+        ),
+        Ok(true)
+    );
     assert!(payload.borrow.is_none());
 }
 
@@ -285,7 +303,13 @@ fn consuming_extraction_rejects_interrupted_transfer_and_accepts_completed_custo
         .unwrap();
     drop(extraction);
     drop(child);
-    assert_eq!(payload.raw(), &f.raw(2));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(payload.raw()),
+            &(&f.raw(2))
+        ),
+        Ok(true)
+    );
     assert_eq!(products.live(), (0, 0));
     assert_eq!(cells.live(), (0, 0));
 }
@@ -478,7 +502,13 @@ fn consuming_extraction_uses_exact_nominal_identity_and_declaration_field_order(
         })
         .unwrap()
         .unwrap();
-    assert_eq!(payload.raw(), &f.raw(1024));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(payload.raw()),
+            &(&f.raw(1024))
+        ),
+        Ok(true)
+    );
     drop(extraction);
     drop(cell);
     assert!(payload.borrow.is_none());
@@ -653,7 +683,13 @@ fn consuming_extraction_preserves_independent_owned_child_custody_checks() {
         drop(extraction);
         drop(loan);
         drop(guard);
-        assert_eq!(payload.raw(), &f.raw(2));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(payload.raw()),
+                &(&f.raw(2))
+            ),
+            Ok(true)
+        );
         assert_eq!(products.live(), (0, 0));
         assert_eq!(cells.live(), (0, 0));
     }
@@ -679,7 +715,13 @@ fn consuming_extraction_lost_ordinary_eligibility_uses_the_independent_admission
         .unwrap()
         .unwrap();
     assert_eq!(admissions, 1);
-    assert_eq!(payload.raw(), &f.raw(2));
+    assert_eq!(
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(payload.raw()),
+            &(&f.raw(2))
+        ),
+        Ok(true)
+    );
 }
 
 #[test]

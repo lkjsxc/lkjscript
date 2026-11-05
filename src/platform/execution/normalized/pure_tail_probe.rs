@@ -28,6 +28,24 @@ use std::sync::{Arc, Mutex};
 
 const STACK_BYTES: usize = 2_097_152;
 
+// These probe expectations admit only their exact scalar variant. They never
+// invoke general raw-value equality or confer runtime admission authority.
+#[derive(Clone, Copy)]
+enum ExpectedScalar {
+    Integer(i64),
+    Boolean(bool),
+}
+
+impl ExpectedScalar {
+    fn accepts(self, value: &NormalizedValue) -> bool {
+        match (self, value) {
+            (Self::Integer(expected), NormalizedValue::I64(actual)) => *actual == expected,
+            (Self::Boolean(expected), NormalizedValue::Bool(actual)) => *actual == expected,
+            _ => false,
+        }
+    }
+}
+
 /// Inject cancellation into the publicly authored task's pure helper after a staged write.
 /// This executes production effects once and reads no project authority.
 pub(crate) fn observe_transaction(path: &Path, function: &str) -> Result<Value, Diagnostic> {
@@ -89,7 +107,7 @@ pub(crate) fn observe_transaction(path: &Path, function: &str) -> Result<Value, 
         let recovery = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() }, resident.executor()).observing_checked(&recovery_sink)
             .invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), vec![raw_list((1..=8192).map(NormalizedValue::I64).collect())?, NormalizedValue::Text(Arc::from("after-cancel")), NormalizedValue::I64(1), NormalizedValue::I64(0)], Some(resident.deployment().capabilities()), &ExecutionControl::uncancelled())
             .map_err(|error| failure(&format!("healthy task after cancellation: {}", error.code)))?;
-        require(matches!(&recovery.0, NormalizedValue::List(items) if items.len() == 8192 && items.iter().enumerate().all(|(index, value)| *value == NormalizedValue::I64(index as i64 + 1))) && recovery.1.live_transactions_after == 0, "healthy task failed after cancellation")?;
+        require(matches!(&recovery.0, NormalizedValue::List(items) if items.len() == 8192 && items.iter().enumerate().all(|(index, value)| matches!(value, NormalizedValue::I64(item) if *item == index as i64 + 1))) && recovery.1.live_transactions_after == 0, "healthy task failed after cancellation")?;
         Ok(json!({"classification":"fresh passed","failure":error,"observation":observation,"recovery_observation":recovery.1,"recovery_length":8192,"recovery_sum":33_558_528,"host_calls":host.calls.load(Ordering::Relaxed),"mapper_items":mapper_items,"stack_bytes":STACK_BYTES,"cleanup_complete":true,"effects_replayed":false}))
     }).map_err(|error| failure(&format!("transaction probe thread: {error}")))?;
     worker
@@ -171,7 +189,7 @@ pub(crate) fn observe_recursive(project: &Path) -> Result<Value, Diagnostic> {
                 for (target,expected) in [("scale-sum",sum),("scale-mapped-sum",3*sum+5*count)] {
                     let started=std::time::Instant::now();
                     let (result,mut observation)=invocation(&prepared,reference,target,vec![NormalizedValue::I64(1),NormalizedValue::I64(count)],NormalizedRunPolicy::default(),u64::MAX)?;
-                    require(result.is_ok_and(|value|value==NormalizedValue::I64(expected)),"recursive expected scale result differs")?;
+                    require(result.is_ok_and(|value|matches!(value, NormalizedValue::I64(actual) if actual == expected)),"recursive expected scale result differs")?;
                     observation["steady_nanoseconds"]=json!(started.elapsed().as_nanos());
                     observation["leaves"]=json!(count);
                     observation["expected"]=json!(expected);
@@ -185,7 +203,7 @@ pub(crate) fn observe_recursive(project: &Path) -> Result<Value, Diagnostic> {
                     } else {
                         NormalizedVm::new(&prepared.program,NormalizedRunPolicy::default(), &executor.handle()).invoke_root_target(&name,arguments,None,&ExecutionControl::uncancelled()).map(|result|result.0)
                     }.map_err(|error|failure(&format!("recursive observation-disabled execution: {}", error.code)))?;
-                    require(unobserved==NormalizedValue::I64(expected),"recursive observation-disabled result differs")?;
+                    require(matches!(unobserved, NormalizedValue::I64(actual) if actual == expected),"recursive observation-disabled result differs")?;
                     observation["observation_sink_disabled_nanoseconds"]=json!(started.elapsed().as_nanos());
                     observations.push(observation);
                 }
@@ -554,7 +572,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             policy,
             u64::MAX,
         )?;
-        require(result.is_ok_and(|value| matches!(value, NormalizedValue::List(ref items) if items.len() == 1057 && items.iter().enumerate().all(|(i,v)| *v == NormalizedValue::I64(3 * i as i64 + 5)))), "mapping fixed sequence failed before budget probes")?;
+        require(result.is_ok_and(|value| matches!(value, NormalizedValue::List(ref items) if items.len() == 1057 && items.iter().enumerate().all(|(i,v)| matches!(v, NormalizedValue::I64(actual) if *actual == 3 * i as i64 + 5)))), "mapping fixed sequence failed before budget probes")?;
         let items = measured["observation"]["collection_items"]
             .as_u64()
             .ok_or_else(|| failure("list item charge absent"))?;
@@ -618,7 +636,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
         observed["failure"] = json!(error);
         cases.push(observed);
         require(
-            matches!(&arguments[0], NormalizedValue::List(items) if items.iter().enumerate().all(|(i,v)| *v == NormalizedValue::I64(i as i64))),
+            matches!(&arguments[0], NormalizedValue::List(items) if items.len() == 1057 && items.iter().enumerate().all(|(i,v)| matches!(v, NormalizedValue::I64(actual) if *actual == i as i64))),
             "failed mapping changed an old alias",
         )?;
         require(
@@ -634,8 +652,9 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             let (result, mut observed) =
                 invocation(&prepared, reference, target, vec![], policy, u64::MAX)?;
             require(
-                result.is_ok_and(|value| value == NormalizedValue::I64(expected))
-                    && observed["host_calls"] == calls,
+                result.is_ok_and(
+                    |value| matches!(value, NormalizedValue::I64(actual) if actual == expected),
+                ) && observed["host_calls"] == calls,
                 "binding executed its target early or evaluated a capture more than once",
             )?;
             observed["case"] = json!("binding-evaluation-order-and-count");
@@ -658,7 +677,9 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                     u64::MAX,
                 )?;
                 require(
-                    result.is_ok_and(|value| value == NormalizedValue::I64(n as i64)),
+                    result.is_ok_and(
+                        |value| matches!(value, NormalizedValue::I64(actual) if actual == n as i64),
+                    ),
                     "bound tail forwarding lost its retained list",
                 )?;
                 let frames = observed["observation"]["maximum_call_depth"].clone();
@@ -795,6 +816,10 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
         observed["case"] = json!("input-admission-cancellation");
         observed["failure"] = json!(error);
         cases.push(observed);
+        // The complete read-view escape guard traverses raw ownership iteratively.
+        // This deliberately wrong List<I64> child then fails typed admission at
+        // node two; rejecting it must still dispose all 100,000 boxed wrappers
+        // without recursing through their raw destructor on this worker stack.
         let mut raw = NormalizedValue::I64(1);
         for _ in 0..100_000 {
             raw = NormalizedValue::Option(Some(Box::new(raw)));
@@ -811,24 +836,34 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             .err()
             .ok_or_else(|| failure("deep malformed ingress escaped"))?;
         require(
-            error.class == crate::platform::execution::ExecutionFailureClass::Resource
-                && error.code == "normalized_value_depth"
-                && error
-                    .message
-                    .contains("view escape inspection exceeds finite value depth 256"),
+            error.class == crate::platform::execution::ExecutionFailureClass::Infrastructure
+                && error.code
+                    == if reference {
+                        "normalized_reference_value_admission"
+                    } else {
+                        "normalized_value_admission"
+                    }
+                && error.message
+                    == if reference {
+                        "invocation input reference value admission: raw value fails its exact type or authority boundary; provide a correctly typed value"
+                    } else {
+                        "invocation input value admission: raw value disagrees with its exact type or authority; supply a value for the selected boundary"
+                    },
             &format!(
-                "deep ingress has wrong structural failure (reference={reference}): {:?}/{}: {}",
+                "deep ingress has wrong typed failure (reference={reference}): {:?}/{}: {}",
                 error.class, error.code, error.message,
             ),
         )?;
         require(
             observed["host_calls"] == 0
-                && observed["observation"]["value_work"]["input_admission_nodes"] == 0
+                && observed["cancelled"] == false
+                && observed["observation"]["value_work"]["input_admission_nodes"] == 2
+                && observed["observation"]["value_work"]["raw_result_admission_nodes"] == 0
                 && observed["observation"]["external_calls"] == 0
                 && observed["observation"]["capability_calls"] == 0,
-            "deep structural rejection reached typed admission or effects",
+            "deep typed rejection has wrong admission progress or reached effects",
         )?;
-        // Preserve an independent typed-shape refusal below the structural depth bound.
+        // Preserve the same exact typed-shape refusal for a single boxed wrapper.
         let (shallow, shallow_observed) = invocation(
             &prepared,
             reference,
@@ -882,7 +917,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             match result {
                 Ok(value) => {
                     require(
-                        success && value == NormalizedValue::I64(8),
+                        success && matches!(value, NormalizedValue::I64(8)),
                         "raw aggregate exact-fit admission has wrong success or length",
                     )?;
                     observed["value"] = json!(8);
@@ -936,7 +971,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                 u64::MAX,
             )?;
             require(
-                result.is_ok_and(|value| value == NormalizedValue::I64(n * (n + 1) / 2)),
+                result.is_ok_and(|value| matches!(value, NormalizedValue::I64(actual) if actual == n * (n + 1) / 2)),
                 "bounded-stack fold fixed result failed",
             )?;
             let obs = &observation["observation"];
@@ -960,17 +995,17 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             (
                 "count",
                 vec![NormalizedValue::I64(8192)],
-                NormalizedValue::I64(0),
+                ExpectedScalar::Integer(0),
             ),
             (
                 "even",
                 vec![NormalizedValue::I64(8192)],
-                NormalizedValue::Bool(true),
+                ExpectedScalar::Boolean(true),
             ),
             (
                 "even",
                 vec![NormalizedValue::I64(8191)],
-                NormalizedValue::Bool(false),
+                ExpectedScalar::Boolean(false),
             ),
             (
                 "generic-i64",
@@ -979,7 +1014,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                     NormalizedValue::I64(-17),
                     NormalizedValue::Bool(true),
                 ],
-                NormalizedValue::I64(-17),
+                ExpectedScalar::Integer(-17),
             ),
             (
                 "generic-bool",
@@ -988,14 +1023,14 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                     NormalizedValue::Bool(true),
                     NormalizedValue::I64(-17),
                 ],
-                NormalizedValue::Bool(true),
+                ExpectedScalar::Boolean(true),
             ),
-            ("unselected-trap", vec![], NormalizedValue::I64(7)),
+            ("unselected-trap", vec![], ExpectedScalar::Integer(7)),
         ] {
             let (result, observation) =
                 invocation(&prepared, reference, name, args, policy, u64::MAX)?;
             require(
-                result.is_ok_and(|value| value == expected),
+                result.is_ok_and(|value| expected.accepts(&value)),
                 "bounded-stack positive fixture failed",
             )?;
             cases.push(observation);
@@ -1206,7 +1241,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             u64::MAX,
         )?;
         require(
-            result.is_ok_and(|value| value == NormalizedValue::I64(0)),
+            result.is_ok_and(|value| matches!(value, NormalizedValue::I64(0))),
             "fresh healthy invocation failed after exhaustion/cancellation",
         )?;
         cases.push(observation);
@@ -1234,7 +1269,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
         let value = result
             .map_err(|error| failure(&format!("wrong-prefix fault trapped: {}", error.code)))?;
         require(
-            value == NormalizedValue::I64(if reference { 9 } else { 11 }),
+            matches!(value, NormalizedValue::I64(actual) if actual == if reference { 9 } else { 11 }),
             "wrong-prefix fixed expectation did not discriminate production from canonical meaning",
         )?;
         observed["fault"] = json!("wrong-bound-prefix-fixed-expectation");
@@ -1297,7 +1332,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
         u64::MAX,
     )?;
     require(
-        result.is_ok_and(|value| value == NormalizedValue::I64(0)),
+        result.is_ok_and(|value| matches!(value, NormalizedValue::I64(0))),
         "reference read production dispatch fault",
     )?;
     fault["fault"] = json!("canonical-reference-independent-of-dispatch");

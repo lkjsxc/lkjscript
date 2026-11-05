@@ -208,7 +208,13 @@ fn assert_bytes(
             json
         );
         let decoded = codec::decode_typed(schema, json, ty, JsonLimits::default()).unwrap();
-        assert_eq!(&decoded, value);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(&decoded),
+                &(value)
+            ),
+            Ok(true)
+        );
     }
     assert_eq!(
         data_codec::encode_typed(&fixture.program, value, ty).unwrap(),
@@ -219,12 +225,18 @@ fn assert_bytes(
         data
     );
     assert_eq!(
-        &data_codec::decode_typed(&fixture.program, data, ty).unwrap(),
-        value
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(&data_codec::decode_typed(&fixture.program, data, ty).unwrap()),
+            &(value)
+        ),
+        Ok(true)
     );
     assert_eq!(
-        &data_codec_reference::decode_typed(&fixture.reference, data, ty).unwrap(),
-        value
+        crate::platform::execution::normalized::structural_equality::assertions::equal(
+            &(&data_codec_reference::decode_typed(&fixture.reference, data, ty).unwrap()),
+            &(value)
+        ),
+        Ok(true)
     );
 }
 
@@ -662,7 +674,13 @@ fn json_text_storage_rejects_before_serializing_the_value_tree() {
             let error = codec::encode_value(schema, &value, ty, limits).unwrap_err();
             assert_eq!(error.class, DiagnosticClass::Resource);
             assert_eq!(error.code, "normalized_json_output_bytes");
-            assert_eq!(value, retained);
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(value),
+                    &(retained)
+                ),
+                Ok(true)
+            );
             assert_eq!(
                 codec::encode_typed(schema, &retained, ty, JsonLimits::default()).unwrap(),
                 json
@@ -761,7 +779,7 @@ fn map_codec_cancellation_including_bulk_construction_leaves_healthy_subsequent_
         for checks in 0..256 {
             match decode(&ExecutionControl::cancel_after_checks(checks)) {
                 Ok(value) => {
-                    assert_eq!(value, retained);
+                    assert_eq!(crate::platform::execution::normalized::structural_equality::assertions::equal(&(value), &(retained)), Ok(true));
                     successful = true;
                     break;
                 }
@@ -776,7 +794,13 @@ fn map_codec_cancellation_including_bulk_construction_leaves_healthy_subsequent_
             successful && refused > 8,
             "boundary={boundary}, refused={refused}"
         );
-        assert_eq!(decode(&ExecutionControl::uncancelled()).unwrap(), retained);
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(decode(&ExecutionControl::uncancelled()).unwrap()),
+                &(retained)
+            ),
+            Ok(true)
+        );
         assert_bytes(&fixture, &retained, ty, json, &data);
     }
 }

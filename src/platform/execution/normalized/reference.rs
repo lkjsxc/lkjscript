@@ -35,8 +35,12 @@ use std::sync::Arc;
 
 #[path = "reference_checked.rs"]
 mod checked;
+#[path = "reference_continuations.rs"]
+pub(super) mod continuations;
 #[path = "reference_region.rs"]
 mod region;
+#[path = "reference_semantic_equality.rs"]
+pub(super) mod semantic_equality;
 use checked::{Ownership, Value as CheckedValue};
 #[path = "reference_associated_runtime.rs"]
 mod associated_runtime;
@@ -969,6 +973,40 @@ struct AdmittedGraphCall {
     allowance: Option<EffectRow>,
     arguments: Vec<CheckedValue>,
     read_scopes: read_views::ScopeFrame,
+}
+
+// Entry and exit own the same canonical scope stack on both execution routes.
+// This record contains no recursive activation or continuation links.
+struct GraphActivation {
+    function: FunctionDeclaration,
+    locals: BTreeMap<LocalValueReference, CheckedValue>,
+    lexical: Vec<LocalValueReference>,
+    result_borrow: Option<ParameterId>,
+    lexical_loan_scopes: usize,
+    previous_demand: bool,
+    previous_read_demand: Vec<LocalValueReference>,
+}
+
+type ActivationDispatch = std::ops::ControlFlow<CheckedValue, AdmittedGraphCall>;
+
+struct ResolvedCall {
+    types: Vec<TypeObjectDigest>,
+    effects: Vec<EffectRow>,
+    requirements: Vec<RequirementOperand>,
+    scopes: Vec<ReadScopeArgument>,
+    previous_package: PackageId,
+}
+
+impl ResolvedCall {
+    fn application(&self) -> ReferenceApplication<'_> {
+        ReferenceApplication {
+            types: &self.types,
+            effects: &self.effects,
+            requirements: &self.requirements,
+            implementations: &[],
+            scopes: &self.scopes,
+        }
+    }
 }
 
 impl ReferenceState<'_> {
@@ -2157,13 +2195,11 @@ impl ReferenceState<'_> {
         )
     }
 
-    fn call_declaration_on_route(
+    fn begin_declaration_call(
         &mut self,
         reference: DeclarationReference,
         application: ReferenceApplication<'_>,
-        arguments: Vec<CheckedValue>,
-        route: ReferenceCallRoute<'_>,
-    ) -> Result<CheckedValue, ExecutionError> {
+    ) -> Result<ResolvedCall, ExecutionError> {
         let ReferenceApplication {
             types: type_arguments,
             effects: effect_arguments,
@@ -2190,31 +2226,40 @@ impl ReferenceState<'_> {
             .max(self.call_depth.saturating_add(self.ancestor_depth));
         let previous_package = self.active_package;
         self.active_package = reference.package;
-        let mut step = self.call_activation(
-            reference,
-            ReferenceApplication {
-                types: &type_arguments,
-                effects: &effect_arguments,
-                requirements: &requirement_arguments,
-                implementations: &[],
-                scopes: &scopes,
-            },
-            arguments,
-            route,
-        );
+        Ok(ResolvedCall {
+            types: type_arguments,
+            effects: effect_arguments,
+            requirements: requirement_arguments,
+            scopes,
+            previous_package,
+        })
+    }
+
+    fn end_declaration_call(&mut self, previous_package: PackageId) {
+        self.active_package = previous_package;
+        self.call_depth -= 1;
+    }
+
+    fn call_declaration_on_route(
+        &mut self,
+        reference: DeclarationReference,
+        application: ReferenceApplication<'_>,
+        arguments: Vec<CheckedValue>,
+        route: ReferenceCallRoute<'_>,
+    ) -> Result<CheckedValue, ExecutionError> {
+        let application = self.begin_declaration_call(reference, application)?;
+        let mut step = self.call_activation(reference, application.application(), arguments, route);
         let result = loop {
             match step {
                 Ok(ReferenceStep::Break(value)) => break Ok(value),
                 Ok(ReferenceStep::Continue(target)) => {
-                    // The outgoing canonical scope admitted this exact application. All its
-                    // lexical/native frames have unwound; never reauthorize against an ancestor.
+                    // Already admitted in the outgoing canonical scope.
                     step = self.enter_graph_call(*target, true);
                 }
                 Err(error) => break Err(error),
             }
         };
-        self.active_package = previous_package;
-        self.call_depth -= 1;
+        self.end_declaration_call(application.previous_package);
         result
     }
 
@@ -2225,6 +2270,19 @@ impl ReferenceState<'_> {
         arguments: Vec<CheckedValue>,
         route: ReferenceCallRoute<'_>,
     ) -> Result<ReferenceStep, ExecutionError> {
+        match self.prepare_activation(reference, application, arguments, route)? {
+            ActivationDispatch::Break(value) => Ok(ReferenceStep::Break(value)),
+            ActivationDispatch::Continue(target) => self.enter_graph_call(target, false),
+        }
+    }
+
+    fn prepare_activation(
+        &mut self,
+        reference: DeclarationReference,
+        application: ReferenceApplication<'_>,
+        arguments: Vec<CheckedValue>,
+        route: ReferenceCallRoute<'_>,
+    ) -> Result<ActivationDispatch, ExecutionError> {
         let ReferenceApplication {
             types: type_arguments,
             effects: effect_arguments,
@@ -2250,7 +2308,7 @@ impl ReferenceState<'_> {
                         },
                         route,
                     )?;
-                    self.enter_graph_call(target, false)
+                    Ok(ActivationDispatch::Continue(target))
                 }
                 DeclarationPayload::External(external) => {
                     // The external route must obey the same exact call-site
@@ -2348,7 +2406,7 @@ impl ReferenceState<'_> {
                                 arguments,
                             )?
                         };
-                        Ok(ReferenceStep::Break(value))
+                        Ok(ActivationDispatch::Break(value))
                     }
                 }
                 DeclarationPayload::Constant { value, .. } => {
@@ -2361,7 +2419,7 @@ impl ReferenceState<'_> {
                         self.local_counts.push(0);
                         let result = self
                             .evaluate(value, &mut BTreeMap::new())
-                            .map(ReferenceStep::Break);
+                            .map(ActivationDispatch::Break);
                         self.local_counts.pop();
                         result
                     } else {
@@ -2725,10 +2783,46 @@ impl ReferenceState<'_> {
         target: AdmittedGraphCall,
         tail: bool,
     ) -> Result<ReferenceStep, ExecutionError> {
+        if continuations::eligible(&target) {
+            return continuations::run(self, target, tail);
+        }
+        self.enter_graph_call_recursive(target, tail)
+    }
+
+    // Task, witness, borrowed-result and symbolic read-scope routes retain their
+    // existing execution boundary. Selected closed pure calls use the driver above.
+    fn enter_graph_call_recursive(
+        &mut self,
+        target: AdmittedGraphCall,
+        tail: bool,
+    ) -> Result<ReferenceStep, ExecutionError> {
+        let mut activation = self.begin_graph_activation(target, tail, false)?;
+        let result = if activation.result_borrow.is_some() {
+            self.evaluate_in_context(activation.function.body, &mut activation.locals, true)
+                .map(ReferenceStep::Break)
+        } else {
+            self.evaluate_tail(activation.function.body, &mut activation.locals)
+        };
+        self.finish_graph_activation(activation, result)
+    }
+
+    fn begin_graph_activation(
+        &mut self,
+        target: AdmittedGraphCall,
+        tail: bool,
+        track_lexical: bool,
+    ) -> Result<GraphActivation, ExecutionError> {
         self.count_call(target.arguments.len())?;
         self.charge_allocation(std::mem::size_of::<read_views::ScopeFrame>() as u64)?;
         let result_borrow = target.function.result.relation.source().copied();
-        let mut locals = target
+        let mut lexical = Vec::new();
+        if track_lexical {
+            for parameter in target.read_scopes.parameter_ids() {
+                continuations::reserve(&mut lexical, self.control)?;
+                lexical.push(LocalValueReference::FunctionParameter(*parameter));
+            }
+        }
+        let locals = target
             .read_scopes
             .parameter_ids()
             .iter()
@@ -2745,6 +2839,15 @@ impl ReferenceState<'_> {
             })
             .collect::<BTreeMap<_, _>>();
         self.control.check()?;
+        continuations::reserve(&mut self.implementation_scopes, self.control)?;
+        continuations::reserve(&mut self.associated_applications, self.control)?;
+        continuations::reserve(&mut self.read_scope_frames, self.control)?;
+        continuations::reserve(&mut self.type_scopes, self.control)?;
+        continuations::reserve(&mut self.effect_scopes, self.control)?;
+        continuations::reserve(&mut self.requirement_scopes, self.control)?;
+        continuations::reserve(&mut self.allowances, self.control)?;
+        continuations::reserve(&mut self.local_counts, self.control)?;
+        continuations::reserve(&mut self.borrow_result_sources, self.control)?;
         self.active_package = target.declaration.package;
         self.implementation_scopes
             .push((target.declaration, target.implementations));
@@ -2771,15 +2874,26 @@ impl ReferenceState<'_> {
         self.borrow_result_sources.push(result_borrow);
         let previous_demand = std::mem::replace(&mut self.borrow_result_demand, false);
         let previous_read_demand = std::mem::take(&mut self.read_source_demand);
-        let result = if result_borrow.is_some() {
-            self.evaluate_in_context(target.function.body, &mut locals, true)
-                .map(ReferenceStep::Break)
-        } else {
-            self.evaluate_tail(target.function.body, &mut locals)
-        };
+        Ok(GraphActivation {
+            function: target.function,
+            locals,
+            lexical,
+            result_borrow,
+            lexical_loan_scopes,
+            previous_demand,
+            previous_read_demand,
+        })
+    }
+
+    fn finish_graph_activation(
+        &mut self,
+        mut activation: GraphActivation,
+        result: Result<ReferenceStep, ExecutionError>,
+    ) -> Result<ReferenceStep, ExecutionError> {
         let result = result.and_then(|mut step| {
             if let ReferenceStep::Break(value) = &mut step {
-                if let ResultRelation::ViewFrom { source, scope } = target.function.result.relation
+                if let ResultRelation::ViewFrom { source, scope } =
+                    activation.function.result.relation
                 {
                     let source = LocalValueReference::FunctionParameter(source);
                     let NormalizedValue::ReadView(view) = value.raw() else {
@@ -2791,7 +2905,7 @@ impl ReferenceState<'_> {
                         reference_type_error("view return lacks its admitted invocation")
                     })?;
                     let actual = frame.resolve(scope)?;
-                    let parent = locals.get(&source).ok_or_else(|| {
+                    let parent = activation.locals.get(&source).ok_or_else(|| {
                         reference_type_error("selected view-return source is no longer live")
                     })?;
                     let expected_anchor = parent.source_anchor().ok_or_else(|| {
@@ -2802,7 +2916,7 @@ impl ReferenceState<'_> {
                     })?;
                     if value.is_view_borrowed()
                         || value.provenance() != Some(source)
-                        || view.identity().ty != target.function.result.ty
+                        || view.identity().ty != activation.function.result.ty
                         || view.scope()?.key() != actual
                         || !view.scope()?.same_live_scope(frame.scope(actual)?)
                         || anchor.program != expected_anchor.program
@@ -2825,7 +2939,7 @@ impl ReferenceState<'_> {
                 }
                 let memory_form = direct_memory_type(
                     &self.schema,
-                    target.function.result.ty,
+                    activation.function.result.ty,
                     self.type_scopes
                         .last()
                         .ok_or_else(|| reference_type_error("missing type scope"))?,
@@ -2835,7 +2949,7 @@ impl ReferenceState<'_> {
                 let result_template = match self
                     .schema
                     .types
-                    .get(&target.function.result.ty)
+                    .get(&activation.function.result.ty)
                     .map(|t| &t.form)
                 {
                     Some(TypeForm::TypeParameter { parameter }) => self
@@ -2843,8 +2957,8 @@ impl ReferenceState<'_> {
                         .last()
                         .and_then(|scope| scope.get(parameter))
                         .copied()
-                        .unwrap_or(target.function.result.ty),
-                    _ => target.function.result.ty,
+                        .unwrap_or(activation.function.result.ty),
+                    _ => activation.function.result.ty,
                 };
                 let declared_region = matches!(
                     self.schema.types.get(&result_template).map(|t| &t.form),
@@ -2854,7 +2968,7 @@ impl ReferenceState<'_> {
                     let expected_type = self
                         .schema
                         .substitute_type(
-                            target.function.result.ty,
+                            activation.function.result.ty,
                             self.type_scopes.last().ok_or_else(|| {
                                 reference_type_error("missing region result application")
                             })?,
@@ -2867,7 +2981,7 @@ impl ReferenceState<'_> {
                         ));
                     };
                     if *ty != expected_type
-                        || result_borrow.is_some()
+                        || activation.result_borrow.is_some()
                         || !matches!(
                             self.schema.types.get(&expected_type).map(|t| &t.form),
                             Some(TypeForm::RegionCap { .. })
@@ -2893,7 +3007,7 @@ impl ReferenceState<'_> {
                             "memory result representation mismatch",
                         ));
                     }
-                    if let Some(source) = result_borrow {
+                    if let Some(source) = activation.result_borrow {
                         let source = LocalValueReference::FunctionParameter(source);
                         if !value.raw().memory_is_borrowed() || value.provenance() != Some(source) {
                             return Err(reference_type_error(
@@ -2901,7 +3015,7 @@ impl ReferenceState<'_> {
                             ));
                         }
                         value.raw().memory_validate(self.memory_domain, false)?;
-                        let parent = locals.get(&source).ok_or_else(|| {
+                        let parent = activation.locals.get(&source).ok_or_else(|| {
                             reference_type_error(
                                 "borrowed result source parameter is no longer live",
                             )
@@ -2909,7 +3023,7 @@ impl ReferenceState<'_> {
                         self.charge_allocation(CheckedValue::parent_storage_bytes() as u64)?;
                         value.reserve_parent(parent)?;
                         value.retain_parent(|| {
-                            locals.remove(&source).ok_or_else(|| {
+                            activation.locals.remove(&source).ok_or_else(|| {
                                 reference_type_error(
                                     "borrowed result source custody was already transferred",
                                 )
@@ -2922,10 +3036,20 @@ impl ReferenceState<'_> {
             }
             Ok(step)
         });
+        self.close_graph_activation(activation);
+        result
+    }
+
+    fn close_graph_activation(&mut self, mut activation: GraphActivation) {
+        // Selected continuation activations retain authored lexical order;
+        // returned/moved owners have already left their exact slots.
+        while let Some(local) = activation.lexical.pop() {
+            activation.locals.remove(&local);
+        }
         self.local_counts.pop();
         self.borrow_result_sources.pop();
-        self.borrow_result_demand = previous_demand;
-        self.read_source_demand = previous_read_demand;
+        self.borrow_result_demand = activation.previous_demand;
+        self.read_source_demand = activation.previous_read_demand;
         self.implementation_scopes.pop();
         self.associated_applications.pop();
         self.read_scope_frames.pop();
@@ -2933,8 +3057,7 @@ impl ReferenceState<'_> {
         self.effect_scopes.pop();
         self.requirement_scopes.pop();
         self.allowances.pop();
-        self.lexical_loan_scopes = lexical_loan_scopes;
-        result
+        self.lexical_loan_scopes = activation.lexical_loan_scopes;
     }
 
     fn validate_call_resources(
@@ -4516,7 +4639,8 @@ impl ReferenceState<'_> {
                 fields,
                 type_arguments,
             } => {
-                let mut values = Vec::with_capacity(fields.len());
+                let mut values = Vec::new();
+                super::child_storage::reserve(&mut values, fields.len())?;
                 for field in &fields {
                     values.push(self.evaluate(field.value, locals)?);
                 }
@@ -4723,13 +4847,11 @@ impl ReferenceState<'_> {
         Ok(values)
     }
 
-    fn evaluate_with_use(
+    fn argument_local(
         &mut self,
         expression: ExpressionId,
-        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
-        use_mode: ParameterUse,
-    ) -> Result<CheckedValue, ExecutionError> {
-        let local = match self.owner(OwnerKey::Expression(expression))? {
+    ) -> Result<Option<LocalValueReference>, ExecutionError> {
+        Ok(match self.owner(OwnerKey::Expression(expression))? {
             Some(OwnerRecord::Expression(record)) => match record.operation {
                 ExpressionOperation::Local { value } => Some(value),
                 _ => None,
@@ -4746,74 +4868,98 @@ impl ReferenceState<'_> {
                     "exact expression is missing from canonical authority",
                 ));
             }
-        };
-        let mut value = if let Some(local) = local {
-            if let Some(value) = locals.get(&local)
-                && let NormalizedValue::RegionCap { ty, token } = value.raw()
-            {
-                self.regions.validate(
-                    token,
+        })
+    }
+
+    fn local_argument_with_use(
+        &mut self,
+        local: LocalValueReference,
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+        use_mode: ParameterUse,
+    ) -> Result<CheckedValue, ExecutionError> {
+        if let Some(value) = locals.get(&local)
+            && let NormalizedValue::RegionCap { ty, token } = value.raw()
+        {
+            self.regions
+                .validate(token, self.memory_domain, use_mode == ParameterUse::Consume)?;
+            if use_mode == ParameterUse::Borrow {
+                return CheckedValue::region(
+                    &self.schema,
+                    self.regions,
                     self.memory_domain,
-                    use_mode == ParameterUse::Consume,
-                )?;
-                if use_mode == ParameterUse::Borrow {
-                    return CheckedValue::region(
-                        &self.schema,
-                        self.regions,
-                        self.memory_domain,
-                        *ty,
-                        NormalizedValue::RegionCap {
-                            ty: *ty,
-                            token: self.regions.borrow(
-                                token,
-                                self.memory_domain,
-                                self.memory_domain,
-                            )?,
-                        },
-                        self.control,
-                    );
-                }
+                    *ty,
+                    NormalizedValue::RegionCap {
+                        ty: *ty,
+                        token: self.regions.borrow(
+                            token,
+                            self.memory_domain,
+                            self.memory_domain,
+                        )?,
+                    },
+                    self.control,
+                );
             }
-            if use_mode == ParameterUse::Borrow
-                && locals
+        }
+        if use_mode == ParameterUse::Borrow
+            && locals
+                .get(&local)
+                .is_some_and(|value| matches!(value.raw(), NormalizedValue::ReadView(_)))
+        {
+            return self.borrow_view_argument(local, &locals[&local]);
+        }
+        let value = match use_mode {
+            ParameterUse::Consume => {
+                if locals
                     .get(&local)
-                    .is_some_and(|value| matches!(value.raw(), NormalizedValue::ReadView(_)))
-            {
-                return self.borrow_view_argument(local, &locals[&local]);
-            }
-            match use_mode {
-                ParameterUse::Consume => {
-                    if locals
-                        .get(&local)
-                        .is_some_and(CheckedValue::is_view_borrowed)
-                    {
-                        return Err(reference_type_error(
-                            "borrowed read-view handle cannot be consumed",
-                        ));
-                    }
-                    // Invalid consuming syntax must leave its source in custody
-                    // until all lexical child scopes release their loans.
-                    if let Some(value) = locals.get(&local)
-                        && value.raw().memory_form().is_some()
-                    {
-                        value.raw().memory_validate(self.memory_domain, true)?;
-                    }
-                    locals.remove(&local)
+                    .is_some_and(CheckedValue::is_view_borrowed)
+                {
+                    return Err(reference_type_error(
+                        "borrowed read-view handle cannot be consumed",
+                    ));
                 }
-                ParameterUse::Unrestricted | ParameterUse::Borrow => locals
-                    .get(&local)
-                    .map(|value| value.duplicate(use_mode))
-                    .transpose()?,
+                // Invalid consuming syntax must leave its source in custody
+                // until all lexical child scopes release their loans.
+                if let Some(value) = locals.get(&local)
+                    && value.raw().memory_form().is_some()
+                {
+                    value.raw().memory_validate(self.memory_domain, true)?;
+                }
+                locals.remove(&local)
             }
-            .ok_or_else(|| {
-                reference_error(
-                    "normalized_reference_local_missing",
-                    "canonical local reference is absent, consumed, or outside its exact scope",
-                )
-            })?
+            ParameterUse::Unrestricted | ParameterUse::Borrow => locals
+                .get(&local)
+                .map(|value| value.duplicate(use_mode))
+                .transpose()?,
+        }
+        .ok_or_else(|| {
+            reference_error(
+                "normalized_reference_local_missing",
+                "canonical local reference is absent, consumed, or outside its exact scope",
+            )
+        })?;
+        self.finish_argument_use(value, Some(local), use_mode)
+    }
+
+    fn evaluate_with_use(
+        &mut self,
+        expression: ExpressionId,
+        locals: &mut BTreeMap<LocalValueReference, CheckedValue>,
+        use_mode: ParameterUse,
+    ) -> Result<CheckedValue, ExecutionError> {
+        if let Some(local) = self.argument_local(expression)? {
+            self.local_argument_with_use(local, locals, use_mode)
         } else {
-            self.evaluate(expression, locals)?
-        };
+            let value = self.evaluate(expression, locals)?;
+            self.finish_argument_use(value, None, use_mode)
+        }
+    }
+
+    fn finish_argument_use(
+        &mut self,
+        mut value: CheckedValue,
+        local: Option<LocalValueReference>,
+        use_mode: ParameterUse,
+    ) -> Result<CheckedValue, ExecutionError> {
         let ownership = value.ownership(&self.schema, &mut self.observation.value_work)?;
         let valid = match use_mode {
             ParameterUse::Unrestricted => {
@@ -5223,7 +5369,9 @@ impl ReferenceState<'_> {
         if let Some(declaration) = nominal_type {
             let layout = self.record_layout(declaration, arguments)?;
             let field_count = self.schema.records[layout.0 as usize].fields.len();
-            let mut slots = (0..field_count).map(|_| None).collect::<Vec<_>>();
+            let mut slots = Vec::new();
+            super::child_storage::reserve(&mut slots, field_count)?;
+            slots.resize_with(field_count, || None);
             for (selector, value) in selectors.into_iter().zip(values) {
                 let FieldSelector::Nominal(field) = selector else {
                     return Err(reference_error(
@@ -5251,37 +5399,41 @@ impl ReferenceState<'_> {
                     ));
                 }
             }
-            let fields = slots
-                .into_iter()
-                .map(|field| {
-                    field.ok_or_else(|| {
-                        reference_error(
-                            "normalized_reference_record_field_missing",
-                            "nominal record omits one exact field",
-                        )
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let fields = self.schema.records[layout.0 as usize]
+            let mut fields = Vec::new();
+            super::child_storage::reserve(&mut fields, field_count)?;
+            for (field, slot) in self.schema.records[layout.0 as usize]
                 .fields
                 .iter()
-                .map(|field| field.name.clone())
-                .zip(fields)
-                .collect();
+                .zip(slots)
+            {
+                self.control.check()?;
+                let value = slot.ok_or_else(|| {
+                    reference_error(
+                        "normalized_reference_record_field_missing",
+                        "nominal record omits one exact field",
+                    )
+                })?;
+                let name = field
+                    .name
+                    .try_clone()
+                    .map_err(|_| super::child_storage::StorageFailure::Allocation)?;
+                fields.push((name, value));
+            }
             self.record_value(Some(layout), fields)
         } else {
-            let mut fields = selectors
-                .into_iter()
-                .zip(values)
-                .map(|(selector, value)| match selector {
-                    FieldSelector::Structural(name) => Ok((name, value)),
-                    FieldSelector::Nominal(_) => Err(reference_error(
+            let mut fields = Vec::new();
+            super::child_storage::reserve(&mut fields, values.len())?;
+            for (selector, value) in selectors.into_iter().zip(values) {
+                self.control.check()?;
+                let FieldSelector::Structural(name) = selector else {
+                    return Err(reference_error(
                         "normalized_reference_structural_field_kind",
                         "structural record contains a nominal field selector",
-                    )),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            fields.sort_by(|left, right| left.0.cmp(&right.0));
+                    ));
+                };
+                fields.push((name, value));
+            }
+            super::child_storage::sort_named(&mut fields)?;
             if fields.windows(2).any(|pair| pair[0].0 == pair[1].0) {
                 return Err(reference_error(
                     "normalized_reference_structural_field_duplicate",
@@ -6425,7 +6577,9 @@ fn reference_intrinsic(
                     "value equality received a foreign arity",
                 ));
             };
-            Ok(NormalizedValue::Bool(reference_equal(left, right)?))
+            Ok(NormalizedValue::Bool(reference_equal_with_control(
+                left, right, control,
+            )?))
         }
         "core.list.length" => {
             let [NormalizedValue::List(values)] = arguments.as_slice() else {
@@ -6523,19 +6677,35 @@ fn reference_length(length: usize) -> Result<i64, ExecutionError> {
 fn reference_structural_record(
     fields: Vec<(&str, NormalizedValue)>,
 ) -> Result<NormalizedValue, ExecutionError> {
-    let mut output = Vec::with_capacity(fields.len());
-    for (name, value) in fields {
-        let name = Name::new(name.to_owned()).map_err(|_| {
+    struct Inputs<'a>(std::vec::IntoIter<(&'a str, NormalizedValue)>);
+    impl Drop for Inputs<'_> {
+        fn drop(&mut self) {
+            let mut pending = super::child_storage::DropQueue::default();
+            for (_, value) in self.0.by_ref() {
+                pending.push_value(value);
+            }
+            pending.drain();
+        }
+    }
+    let mut input = Inputs(fields.into_iter());
+    let mut output = super::child_storage::FieldsBuilder::with_capacity(input.0.len())?;
+    for (name, value) in input.0.by_ref() {
+        let value = super::value::RawValue::new(value);
+        let mut text = String::new();
+        text.try_reserve_exact(name.len())
+            .map_err(|_| super::child_storage::StorageFailure::Allocation)?;
+        text.push_str(name);
+        let name = Name::new(text).map_err(|_| {
             reference_error(
                 "reference_intrinsic_field",
                 "intrinsic field name is invalid",
             )
         })?;
-        output.push((name, value));
+        output.try_push((name, value.into_raw()))?;
     }
-    output.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+    output.sort_by_name()?;
     Ok(NormalizedValue::Record(NormalizedRecord::Structural {
-        fields: Arc::new(output),
+        fields: output.finish()?,
     }))
 }
 
@@ -6824,240 +6994,36 @@ fn reference_json_error(error: crate::platform::diagnostic::Diagnostic) -> Execu
     ExecutionError::new(class, error.code, "typed JSON operation failed")
 }
 
+pub(crate) fn reference_equal_with_control(
+    left: &NormalizedValue,
+    right: &NormalizedValue,
+    control: &ExecutionControl,
+) -> Result<bool, ExecutionError> {
+    semantic_equality::compare(left, right, false, control)
+}
+
+pub(crate) fn reference_observation_equal_with_control(
+    left: &NormalizedValue,
+    right: &NormalizedValue,
+    control: &ExecutionControl,
+) -> Result<bool, ExecutionError> {
+    semantic_equality::compare(left, right, true, control)
+}
+
+#[cfg(test)]
 pub(crate) fn reference_equal(
     left: &NormalizedValue,
     right: &NormalizedValue,
 ) -> Result<bool, ExecutionError> {
-    reference_compare(left, right, false)
+    reference_equal_with_control(left, right, &ExecutionControl::uncancelled())
 }
 
+#[cfg(test)]
 pub(crate) fn reference_observation_equal(
     left: &NormalizedValue,
     right: &NormalizedValue,
 ) -> Result<bool, ExecutionError> {
-    reference_compare(left, right, true)
-}
-
-fn reference_compare(
-    left: &NormalizedValue,
-    right: &NormalizedValue,
-    observation: bool,
-) -> Result<bool, ExecutionError> {
-    match (left, right) {
-        (NormalizedValue::Unit, NormalizedValue::Unit) => Ok(true),
-        (NormalizedValue::Bool(left), NormalizedValue::Bool(right)) => Ok(left == right),
-        (NormalizedValue::I64(left), NormalizedValue::I64(right)) => Ok(left == right),
-        (NormalizedValue::F64(left), NormalizedValue::F64(right)) => {
-            if observation {
-                Ok(left.bits() == right.bits())
-            } else {
-                Ok(left.to_float() == right.to_float())
-            }
-        }
-        (NormalizedValue::Bytes(left), NormalizedValue::Bytes(right)) => Ok(left == right),
-        (NormalizedValue::Text(left), NormalizedValue::Text(right))
-        | (NormalizedValue::StaticText(left), NormalizedValue::StaticText(right)) => {
-            Ok(left == right)
-        }
-        (
-            NormalizedValue::Record(NormalizedRecord::Nominal {
-                layout: left_layout,
-                fields: left,
-            }),
-            NormalizedValue::Record(NormalizedRecord::Nominal {
-                layout: right_layout,
-                fields: right,
-            }),
-        ) => {
-            let contents = reference_equal_sequence(left, right, observation)?;
-            Ok(left_layout == right_layout && contents)
-        }
-        (
-            NormalizedValue::Record(NormalizedRecord::Structural { fields: left }),
-            NormalizedValue::Record(NormalizedRecord::Structural { fields: right }),
-        ) => {
-            let mut equal = left.len() == right.len();
-            for ((left_name, left), (right_name, right)) in left.iter().zip(right.iter()) {
-                let values = reference_compare(left, right, observation)?;
-                equal &= left_name == right_name && values;
-            }
-            for (_, value) in left
-                .iter()
-                .skip(right.len())
-                .chain(right.iter().skip(left.len()))
-            {
-                reference_compare(value, value, observation)?;
-            }
-            Ok(equal)
-        }
-        (
-            NormalizedValue::Variant {
-                layout: left_layout,
-                case: left_case,
-                payload: left,
-            },
-            NormalizedValue::Variant {
-                layout: right_layout,
-                case: right_case,
-                payload: right,
-            },
-        ) => {
-            let payloads =
-                reference_optional_equality(left.as_deref(), right.as_deref(), observation)?;
-            Ok(left_layout == right_layout && left_case == right_case && payloads)
-        }
-        (NormalizedValue::Option(left), NormalizedValue::Option(right)) => {
-            reference_optional_equality(left.as_deref(), right.as_deref(), observation)
-        }
-        (
-            NormalizedValue::Result {
-                success: left_case,
-                value: left,
-            },
-            NormalizedValue::Result {
-                success: right_case,
-                value: right,
-            },
-        ) => {
-            let contents = reference_compare(left, right, observation)?;
-            Ok(left_case == right_case && contents)
-        }
-        (NormalizedValue::List(left), NormalizedValue::List(right)) => {
-            reference_list_compare(left, right, observation)
-        }
-        (NormalizedValue::Map(left), NormalizedValue::Map(right)) => {
-            reference_map_compare(left, right, observation)
-        }
-        (NormalizedValue::ReadView(_), _) | (_, NormalizedValue::ReadView(_)) => {
-            Err(reference_trap(
-                "normalized_reference_value_not_comparable",
-                "read-view handles do not support semantic equality",
-            ))
-        }
-        (NormalizedValue::Function { .. }, _) | (_, NormalizedValue::Function { .. }) => {
-            Err(reference_trap(
-                "normalized_reference_value_not_comparable",
-                "functions do not support semantic equality",
-            ))
-        }
-        (NormalizedValue::Resource(_), _) | (_, NormalizedValue::Resource(_)) => {
-            Err(reference_trap(
-                "normalized_reference_value_not_comparable",
-                "live resources do not support semantic equality",
-            ))
-        }
-        (
-            NormalizedValue::ByteBuffer(_)
-            | NormalizedValue::OwnedI64Cell(_)
-            | NormalizedValue::OwnedProduct(_)
-            | NormalizedValue::OwnedChoice(_)
-            | NormalizedValue::OwnedSequence(_),
-            _,
-        )
-        | (
-            _,
-            NormalizedValue::ByteBuffer(_)
-            | NormalizedValue::OwnedI64Cell(_)
-            | NormalizedValue::OwnedProduct(_)
-            | NormalizedValue::OwnedChoice(_)
-            | NormalizedValue::OwnedSequence(_),
-        ) => Err(reference_trap(
-            "normalized_reference_value_not_comparable",
-            "owned memory does not support semantic equality",
-        )),
-        _ => {
-            reference_compare(left, left, observation)?;
-            reference_compare(right, right, observation)?;
-            Ok(false)
-        }
-    }
-}
-
-// List adapters also carry traversal storage. Keep it outside nested map frames,
-// while checking every unmatched tail value for comparability as before.
-#[inline(never)]
-fn reference_list_compare(
-    left: &super::list::List,
-    right: &super::list::List,
-    observation: bool,
-) -> Result<bool, ExecutionError> {
-    let mut equal = left.len() == right.len();
-    for (left, right) in left.iter().zip(right.iter()) {
-        equal &= reference_compare(left, right, observation)?;
-    }
-    for value in left
-        .iter()
-        .skip(right.len())
-        .chain(right.iter().skip(left.len()))
-    {
-        reference_compare(value, value, observation)?;
-    }
-    Ok(equal)
-}
-
-// This evaluator independently preserves complete comparability checks even
-// after an unequal prefix. Outline only the cursor storage, not its validator.
-#[inline(never)]
-fn reference_map_compare(
-    left: &super::map::Map,
-    right: &super::map::Map,
-    observation: bool,
-) -> Result<bool, ExecutionError> {
-    let mut equal = left.len() == right.len();
-    let mut cursor = left.iter();
-    for (key, value) in &mut cursor {
-        let values = match right.get(key) {
-            Some(other) => reference_compare(value, other, observation)?,
-            None => {
-                reference_compare(value, value, observation)?;
-                false
-            }
-        };
-        equal &= values;
-    }
-    // Assignment from right.iter() reserves another full inline buffer in debug
-    // frames, even though the first walk has ended. Restart the existing storage.
-    cursor.restart(right);
-    for (key, value) in &mut cursor {
-        if !left.contains_key(key) {
-            reference_compare(value, value, observation)?;
-            equal = false;
-        }
-    }
-    Ok(equal)
-}
-
-fn reference_optional_equality(
-    left: Option<&NormalizedValue>,
-    right: Option<&NormalizedValue>,
-    observation: bool,
-) -> Result<bool, ExecutionError> {
-    if let (Some(left), Some(right)) = (left, right) {
-        return reference_compare(left, right, observation);
-    }
-    for value in left.into_iter().chain(right) {
-        reference_compare(value, value, observation)?;
-    }
-    Ok(left.is_none() && right.is_none())
-}
-
-fn reference_equal_sequence(
-    left: &[NormalizedValue],
-    right: &[NormalizedValue],
-    observation: bool,
-) -> Result<bool, ExecutionError> {
-    let mut equal = left.len() == right.len();
-    for (left, right) in left.iter().zip(right.iter()) {
-        equal &= reference_compare(left, right, observation)?;
-    }
-    for value in left
-        .iter()
-        .skip(right.len())
-        .chain(right.iter().skip(left.len()))
-    {
-        reference_compare(value, value, observation)?;
-    }
-    Ok(equal)
+    reference_observation_equal_with_control(left, right, &ExecutionControl::uncancelled())
 }
 
 fn reference_f64_pair(arguments: &[NormalizedValue]) -> Result<(f64, f64), ExecutionError> {

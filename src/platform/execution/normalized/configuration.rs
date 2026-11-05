@@ -244,7 +244,13 @@ mod tests {
                 &ExecutionControl::uncancelled(),
             )
             .expect("exact configuration text read");
-        assert_eq!(result, NormalizedValue::text("Journal"));
+        assert_eq!(
+            crate::platform::execution::normalized::structural_equality::assertions::equal(
+                &(result),
+                &(NormalizedValue::text("Journal"))
+            ),
+            Ok(true)
+        );
 
         let dynamic = adapter
             .call(
