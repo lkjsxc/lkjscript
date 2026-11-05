@@ -1,26 +1,83 @@
 # Closed pure callables, profile 8 and runtime child ownership
 
-Status: renewed whole-source fixed point, four explicit controls and the repaired normalized runtime preflight passed; the paired pure-tail preflight, new full staged-tree acceptance and integration remain pending.
+Status: accepted and integrated on main. Full `P_self` support, Tier 2 Milestone B,
+remains open; this batch extends the already accepted Milestones A and C.
 
-Updated 2026-11-03 (Asia/Tokyo).
+Updated 2026-11-05 (Asia/Tokyo).
 
-Milestones A and C are already accepted. Their seals establish the earlier
-maintained-source fixed point and same-process native phase reclamation. This
-decision extends the supported source semantics and changes a private backend
-projection. Public graph adoption/readback, complete proposal replay and the
-refreshed active-profile inventory have passed for the snapshot recorded below.
-The source refinements have a second public adoption/readback binding below;
-its complete replay/profile and selected source-driven behavioral family passed,
-including the 8193-prefix crossing under the unchanged explicit 32 GiB allowance.
-The reference cancellation-control correction passed its separate focused
-invocation. Earlier CLI/discovery preparation and public compaction passed with complete
-transport equality and unchanged graph HEAD. Both failed staged-tree attempts,
-the third-adoption repair and the later test-only profile correction are recorded
-below with their distinct source and evidence bindings. Renewed fixed point and
-the repaired runtime preflight subsequently passed. The paired pure-tail preflight,
-fresh staged-tree acceptance and mainline integration remain pending.
-Full `P_self` support, Milestone B, is not established
-by this batch.
+## Acceptance and mainline delivery
+
+The implementation is commit `8526ed77f65df2fad3fa4aeb28802bf2878ac927`,
+whose tree is exactly `3de3468119bc7b98916d66a0e71ea9b9fd514f7c`.
+Verification used base HEAD `298a5556c7f3b80bf576b10af4f2ff39a95694b1`
+with that staged tree. The implementation was committed without post-seal edits,
+fast-forwarded into main and pushed on 2026-11-05 (Asia/Tokyo); an independent
+remote-ref read confirmed the same commit. This acceptance record is a subsequent
+documentation update and does not relabel its tree as the tested implementation.
+
+The paired pure-tail preflight completed on 2026-11-03T05:38:17.745Z:
+bootstrap and the declared pure-tail execution both passed. Round 3 then passed
+its own bootstrap, leased verifier-identity bridge, the literal
+`RUST_TEST_THREADS=8 bash tools/selfhost/verify.sh`, all four named controls,
+the full checker and release target on the unchanged tree.
+
+The first full-check invocation used `--retain-archive`, whose implementation
+copied the gate verifier into `.artifacts`, contrary to the repository's no-copy
+rule. The recorded operation remains a historical pass, with that procedural
+deviation explicit. The compact repair inherited only the seven valid preceding
+operations, rechecked their original evidence and verifier identity, then freshly
+ran default compact full acceptance and `release target`. It completed on
+2026-11-03T20:14:28.836Z with **29 fresh passed gates, zero reused and zero unrun**,
+including `pure_tail`. The historical archived full/release operations are
+excluded from repaired acceptance; no failed result or proof scope was relabeled.
+
+| Accepted operation | Outcome | Recorded command interval |
+| --- | --- | ---: |
+| Pure-tail preflight | Passed after its own exact-tree bootstrap | 61.145s |
+| Literal selfhost script | 226/0/9, 12/0/0 and 26/0/0; 264 passed, 0 failed, 9 ignored | 4990.121s |
+| Maintained native closure | 1/0/0 | 60.817s |
+| Complete owner/type inventory | 1/0/0 | 41.695s |
+| Explicit 8193-prefix crossing | 1/0/0, unchanged explicit 32 GiB allowance | 140.046s |
+| Whole maintained raw-source fixed point | 1/0/0; final unchanged-repository check passed | 1733.195s |
+| Repaired compact full check | 29 fresh passed gates | 4497.702s |
+| Repaired release target | Passed with original-verifier identity checked under lease | 0.366s |
+
+These intervals describe their complete commands, not isolated compiler phases.
+The named controls use the repaired original Cargo-selected library-test image
+already recorded below. The literal script owns its target lease and input hashes;
+it supplies no separate selected-executable digest. The later full-check proofs
+retain their own executable identities.
+
+The final fixed-point log proves `C2 = C3` and `Ahost = A1 = A2 = A3`
+for the complete adopted carrier recorded below, together with strict artifact
+loading, independent behavior, source-mutation sensitivity, semantic/custody
+rejection controls and same-process reclamation. Its terminal marker is
+`fixed_point_component_passed=true original_repository_unchanged=true`.
+Full `P_self` support remains false in that evidence.
+
+All paths in the following table are relative to `.artifacts/capacity-unbounding/`.
+The repaired receipt retains the exact inherited-operation references and complete
+source, graph, verifier and output bindings.
+
+| Receipt | SHA-256 |
+| --- | --- |
+| `next-closures-20261101/seal-repair-2/sealed-pure-tail-1/receipt.json` | `94651c299e4b2a3ffad6d564a8ba637fe8fca04fc7ad201dffd22309a096d7b8` |
+| `seal-closed-callables-20261102-round3/receipt.json` | `ee0a92e8be741c03b83e7a9cd4d454e5ce4d0dc06cbd9753f3a670ded77d191b` |
+| `seal-closed-callables-20261102-round3-compact-repair-1/receipt.json` | `641362d57a1657800de9e454ee4dcf0c604d02793c75818d598dc4888244d857` |
+| `seal-closed-callables-20261102-round3-compact-repair-1/full-receipt.json` | `fed24119a2096e8999abf4c080779d1ff287849dd6b03910f96a72d17e2af837` |
+| `reconcile-closed-callables-20261105/receipt.json` | `7b9d8f6b2223fa1cc664e35d3f89c6ff5152b049e6cdf9ea6cb1eeea70eb6608` |
+
+The 2026-11-05 reconciliation rechecked all 2,349 tracked files
+(402,721,698 raw bytes) against stage-zero Git blob identities and executable
+modes, with no hidden index flags, untracked inputs or unstaged changes.
+It rehashed 58 bound evidence files and confirmed the unchanged public graph
+HEAD and original bootstrap verifier. It executed no compiler tests or gates;
+the historical executions above retain their original dates and scopes.
+
+Public graph adoption/readback, complete proposal replay and the refreshed
+`F_active` inventory remain bound to the recorded snapshot. Earlier failed
+attempts and scoped preflights below retain their historical outcomes.
+No release archive or production deployment was published.
 
 ## Problem and decision
 
@@ -752,14 +809,14 @@ to `449edfff00b4459f9dd45c1cfd4ff91a7be00ad8010263186a2a07c34a6b6790`.
 Compiler proposals, graph meaning, format contracts and resource policies are
 unchanged by that edit. Its focused retry under
 `.artifacts/capacity-unbounding/next-closures-20261101/seal-repair-2/focused-1/`
-subsequently passed, as bound below. The next staged-tree attempt has no completed
-seal or assigned tested-tree claim here.
+subsequently passed, as bound below. At that checkpoint no subsequent staged-tree
+seal had completed; the later accepted tree is recorded above.
 
 The separately named owner/type inventory, explicit 8193 crossing, raw-source
 fixed-point control, all 29 fresh full gates and `release target` remained
-unexecuted by the round-2 driver. Final acceptance requires a newly frozen tree
-including the correction and completed documentation; the historical failed
-`d17316f7` tree and earlier focused passes cannot supply that seal.
+unexecuted by the round-2 driver. Final acceptance therefore required the newly
+frozen tree containing the correction and completed documentation; the historical
+failed `d17316f7` tree and earlier focused passes do not supply the later seal.
 
 ## Renewed fixed point and normalized-runtime preflight
 
@@ -867,18 +924,16 @@ source HEAD `298a5556c7f3b80bf576b10af4f2ff39a95694b1`; that historical tree did
 unstaged repairs. The measurement owner is separately guarded at
 `449edfff00b4459f9dd45c1cfd4ff91a7be00ad8010263186a2a07c34a6b6790`, and public graph HEAD remains
 `34cacbea820335d87be8e019ef83b309452bbf425abe3b9e977dd7744706bcf9`. Receipt source snapshots bind the exact changed
-working files. A new final staged tree will be assigned only after documentation
-and all candidate inputs are complete.
+working files. Documentation and all candidate inputs were then frozen for the
+exact tree accepted above.
 
-The repaired pure-tail proof has **not yet executed its declared preflight**.
-Complete the final documentation and freeze, then bootstrap that exact tree for
-the preflight. The unchanged full seal, including its own bootstrap, must still
-run the literal selfhost script, all four named controls, all 29 fresh full gates
-and release target on the same quiescent tree. Neither this
-935/0/2 selection nor the renewed fixed point supplies that full seal or mainline
-integration. Full P_self support and repository-wide unbounding remain open.
+At this historical runtime-preflight checkpoint the paired pure-tail execution
+and full seal were still outstanding. They subsequently passed as recorded in
+[acceptance](#acceptance-and-mainline-delivery). The 935/0/2 selection and earlier
+renewed fixed point retain their narrower scopes; neither is presented as that
+later full seal. Full P_self support and repository-wide unbounding remain open.
 
-## Remaining work and acceptance
+## Remaining work and accepted obligations
 
 Nominal owned records/choices and Match, explicit owned witnesses and source-tied
 read views, lexical Regions, arbitrary lists and general generic/effectful
@@ -901,7 +956,8 @@ metadata ceiling: `kernel/owned_record.rs::LayoutBudget::default` selects
 limits remain in the capacity ledger for a coupled layout/lifecycle batch;
 ordinary representation-cycle rejection remains a separate semantic requirement.
 
-Acceptance must establish the following on the assembled candidate:
+The accepted batch was required to establish the following obligations on its
+exact tree. These remain requirements for subsequent compiler changes:
 
 1. Preserve the focused prerequisites recorded above in final acceptance.
    Their finite-policy and failure controls distinguish injected storage refusal
@@ -927,9 +983,8 @@ Acceptance must establish the following on the assembled candidate:
    every fresh full gate and `release target`. Commit and integrate that exact
    verified tree, recording terminal receipt digests without post-seal edits.
 
-Renewed maintained-source fixed points have passed for the exact focused inputs.
-The paired pure-tail preflight and expanded candidate's full seal/mainline
-integration remain pending. Final acceptance must bind the adopted graph above to complete requests,
-executable/artifact digests, exact tested Git tree and terminal receipts. Earlier
-A/C seals, public adoption and the focused receipts cannot supply that expanded
-final acceptance.
+The expanded closed pure callable batch now has the exact-tree acceptance and
+mainline integration recorded above. Its complete requests, compiler/artifact
+identities and terminal receipts remain distinct from the earlier A/C seals and
+focused preflights. The remaining semantic families and capacity boundaries are
+future work; this acceptance does not claim full Tier 2 Milestone B closure.
