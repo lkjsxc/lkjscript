@@ -283,7 +283,14 @@ declarations.begin
           (binding al
             (type ByteBuffer)
             (call ci::append (call ci::text-bytes (text "native_argument\n")) (i64 0) (local ak)))
-          (in (call ci::pad (i64 5120) (i64 0) (local al))))))
+          (in (let
+            (binding to-shape (type ByteBuffer) (call ci::pad (i64 4800) (i64 0) (local al)))
+            (binding shape-trap (type ByteBuffer) (call trap (i64 4928)
+              (call ci::length (call ci::text-bytes (text "native_nominal_shape\n"))) (i64 70) (local to-shape)))
+            (binding to-message (type ByteBuffer) (call ci::pad (i64 4928) (i64 0) (local shape-trap)))
+            (binding message (type ByteBuffer) (call ci::append
+              (call ci::text-bytes (text "native_nominal_shape\n")) (i64 0) (local to-message)))
+            (in (call ci::pad (i64 5120) (i64 0) (local message))))))))
     (function create compile-elf
       (visibility public)
       (effect pure)

@@ -38,6 +38,16 @@ mod bulk;
 #[path = "selfhost_source_callable_tests.rs"]
 mod callable;
 
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "selfhost_source_nominal_values_tests.rs"]
+mod nominal_values;
+
+#[path = "selfhost_source_unit_index_tests.rs"]
+mod unit_index;
+
+#[path = "selfhost_source_label_measurement_tests.rs"]
+mod label_measurement;
+
 #[path = "native_phase_tests.rs"]
 mod phase;
 use artifact_support::{RepositoryCopy, run_filter, run_scalar};
@@ -504,7 +514,9 @@ fn strict_artifact(
         .filter_map(|(owner, record)| {
             matches!(
                 record.kind(),
-                OwnerKind::External
+                OwnerKind::Record
+                    | OwnerKind::Variant
+                    | OwnerKind::External
                     | OwnerKind::PureFunction
                     | OwnerKind::Component
                     | OwnerKind::Target
@@ -1445,7 +1457,12 @@ fn stage_behavior_controls(c2: &[u8], c3: &[u8]) -> Check<()> {
     }
     reject_requests("C2-layer-negatives", c2, &case, WHOLE_SOURCE_DEADLINE)?;
     reject_requests("C3-layer-negatives", c3, &case, WHOLE_SOURCE_DEADLINE)?;
-    stage_controls::verify("C2", c2, "C3", c3)
+    stage_controls::verify("C2", c2, "C3", c3)?;
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        nominal_values::verify_stages("C2", c2, "C3", c3)?;
+    }
+    Ok(())
 }
 
 fn maintained_fixed_point(case: &InputCase) -> Check<()> {

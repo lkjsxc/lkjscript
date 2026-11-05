@@ -65,7 +65,9 @@ declarations.begin
               (call ci::lt (i64 1152921504606846975) (local count))
               (i64 -1)
               (call ci::mul (local count) (i64 8)))
-            (i64 0)))))
+            (if (call ci::eq (local tag) (i64 23))
+              (if (call ci::lt (i64 288230376151711743) (local count)) (i64 -1)
+                (call ci::mul (local count) (i64 32))) (i64 0))))))
     (function create node-size
       (visibility package)
       (effect pure)
@@ -116,9 +118,11 @@ declarations.begin
       (visibility private)
       (effect pure)
       (parameter create graph (type Bytes))
+      (parameter create plan (type Bytes))
       (parameter create tag (type I64))
       (parameter create anchor (type I64))
       (parameter create count (type I64))
+      (parameter create pc (type I64))
       (parameter create out (type ByteBuffer) (use consume))
       (returns ByteBuffer)
       (body
@@ -137,12 +141,15 @@ declarations.begin
           (if
             (call ci::eq (local tag) (i64 14))
             (call field-map (i64 0) (local count) (local out))
-            (local out)))))
+            (if (call ci::eq (local tag) (i64 23))
+              (call source-scalar-nominal::payload (local graph) (local plan) (local anchor) (local pc) (local out))
+              (local out))))))
     (function create node
       (visibility package)
       (effect pure)
       (parameter create graph (type Bytes))
       (parameter create facts (type Bytes))
+      (parameter create plan (type Bytes))
       (parameter create event
         (type
           (record
@@ -182,7 +189,8 @@ declarations.begin
             (type ByteBuffer)
             (call ci::le
               (if
-                (call ci::eq (field (local event) (name tag)) (i64 18))
+                (call ci::either (call ci::eq (field (local event) (name tag)) (i64 18))
+                  (call ci::eq (field (local event) (name tag)) (i64 22)))
                 (field (local event) (name value))
                 (i64 0))
               (i64 8)
@@ -192,7 +200,9 @@ declarations.begin
             (call ci::append
               (call source-scalar-pack::signed
                 (if
-                  (call ci::eq (field (local event) (name tag)) (i64 18))
+                  (call ci::either (call ci::eq (field (local event) (name tag)) (i64 18))
+                    (call ci::either (call ci::eq (field (local event) (name tag)) (i64 22))
+                      (call ci::eq (field (local event) (name tag)) (i64 23))))
                   (i64 0)
                   (field (local event) (name value))))
               (i64 0)
@@ -208,14 +218,14 @@ declarations.begin
           (binding with-payload
             (type ByteBuffer)
             (call payload
-              (local graph)
+              (local graph) (local plan)
               (field (local event) (name tag))
               (field (local event) (name anchor))
-              (field (local event) (name b))
+              (field (local event) (name b)) (field (local event) (name value))
               (local g)))
           (binding h
             (type ByteBuffer)
-            (call source-scalar-state::flags
+            (call source-scalar-state::flags (local graph)
               (local parents)
               (local locals)
               (local start)
@@ -406,9 +416,7 @@ declarations.begin
                     (call ci::eq (call source-table::kind (local graph) (local parent)) (i64 17))
                     (if
                       (call ci::eq
-                        (call ci::get
-                          (call source-table::data (local graph) (local parent))
-                          (i64 37))
+                        (call ci::get (local graph) (call ci::add (call source-table::start (local graph) (local parent)) (i64 37)))
                         (i64 21))
                       (let
                         (binding owner
@@ -494,7 +502,7 @@ declarations.begin
                                             (type ByteBuffer)
                                             (call node
                                               (local graph)
-                                              (local facts)
+                                              (local facts) (local plan)
                                               (record structural
                                                 (field row (local row))
                                                 (field enter (bool false))
@@ -540,6 +548,7 @@ declarations.begin
       (parameter create functions (type Bytes))
       (parameter create locals (type Bytes))
       (parameter create fields (type Bytes))
+      (parameter create matches (type Bytes))
       (parameter create evidence (type Bytes))
       (parameter create entries (type Bytes))
       (parameter create directory (type Bytes))
@@ -555,7 +564,9 @@ declarations.begin
       (body
         (if
           (call ci::eq (local function) (call source-scalar-plan::function-count (local functions)))
-          (record structural (field code (i64 0)) (field rows (call ci::freeze (local out))))
+          (if (call ci::eq (call ci::length (local matches)) (i64 0))
+            (record structural (field code (i64 0)) (field rows (call ci::freeze (local out))))
+            (call rejected (i64 19) (local out)))
           (let
             (binding owner (call source-scalar-plan::function-owner (local functions) (local function)))
             (binding count (call source-scalar-plan::local-count (local functions) (local function)))
@@ -593,7 +604,7 @@ declarations.begin
                             (local plan)
                             (local functions)
                             (local locals)
-                            (local fields)
+                            (local fields) (local matches)
                             (local evidence)
                             (local entries)
                             (local directory)
@@ -623,7 +634,7 @@ declarations.begin
                                 (local plan)
                                 (local functions)
                                 (local locals)
-                                (local fields)
+                                (local fields) (local matches)
                                 (local evidence)
                                 (local entries)
                                 (local directory)
@@ -691,7 +702,7 @@ declarations.begin
                                         (local plan)
                                         (local functions)
                                         (local locals)
-                                        (local fields)
+                                        (local fields) (local matches)
                                         (local evidence)
                                         (local entries)
                                         (local directory)
@@ -711,12 +722,14 @@ declarations.begin
                         (local parents)
                         (local facts)
                         (local plan)
-                        (local fields)
+                        (local fields) (local matches)
                         (local row)
                         (local enter)
                         (local pc)))
                     (in
-                      (if
+                      (if (call ci::lt (field (local event) (name tag)) (i64 0))
+                        (call rejected (i64 19) (local out))
+                        (if
                         (call ci::eq (field (local event) (name tag)) (i64 0))
                         (call walk
                           (local graph)
@@ -725,7 +738,8 @@ declarations.begin
                           (local plan)
                           (local functions)
                           (local locals)
-                          (local fields)
+                          (local fields) (call source-scalar-nominal::context-close (local matches)
+                            (field (local event) (name row)) (field (local event) (name enter)))
                           (local evidence)
                           (local entries)
                           (local directory)
@@ -742,6 +756,12 @@ declarations.begin
                             (local pc)
                             (call source-scalar-plan::node-count (local plan) (local owner)))
                           (let
+                            (binding context (call source-scalar-nominal::context-transition
+                              (local graph) (local plan) (local parents) (local matches)
+                              (field (local event) (name tag)) (field (local event) (name anchor))
+                              (field (local event) (name a)) (local pc)))
+                            (in (if (call ci::eq (field (local context) (name code)) (i64 0))
+                              (let
                             (binding lowered
                               (call source-custody-lower::instruction
                                 (local facts)
@@ -761,7 +781,7 @@ declarations.begin
                                       (field row (field (local event) (name row)))
                                       (field enter (field (local event) (name enter)))
                                       (field tag (field (local lowered) (name tag)))
-                                      (field a (field (local event) (name a)))
+                                      (field a (field (local context) (name target)))
                                       (field b (field (local lowered) (name b)))
                                       (field value (field (local event) (name value)))
                                       (field anchor (field (local event) (name anchor)))
@@ -806,7 +826,7 @@ declarations.begin
                                                     (type ByteBuffer)
                                                     (call node
                                                       (local graph)
-                                                      (local facts)
+                                                      (local facts) (local plan)
                                                       (local event)
                                                       (field (local operands) (name bytes))
                                                       (local parents)
@@ -841,7 +861,7 @@ declarations.begin
                                                           (local plan)
                                                           (local functions)
                                                           (local locals)
-                                                          (local fields)
+                                                          (local fields) (field (local context) (name frames))
                                                           (local evidence)
                                                           (local entries)
                                                           (local directory)
@@ -861,7 +881,7 @@ declarations.begin
                                                         (local plan)
                                                         (local functions)
                                                         (local locals)
-                                                        (local fields)
+                                                        (local fields) (field (local context) (name frames))
                                                         (local evidence)
                                                         (local entries)
                                                         (local directory)
@@ -877,7 +897,8 @@ declarations.begin
                                             (field (local operands) (name code))
                                             (local out)))))))
                                 (call rejected (field (local lowered) (name code)) (local out)))))
-                          (call failure (local out)))))))))))))
+                              (call rejected (field (local context) (name code)) (local out)))))
+                          (call failure (local out))))))))))))))
     (function create encode
       (visibility package)
       (effect pure)
@@ -905,7 +926,7 @@ declarations.begin
               (local plan)
               (local functions)
               (local locals)
-              (local fields)
+              (local fields) (call ci::text-bytes (text ""))
               (local evidence)
               (local entries)
               (local directory)

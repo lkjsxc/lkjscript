@@ -10,7 +10,7 @@ use crate::platform::kernel::{FunctionEffect, OwnerKey, OwnerKind, ParameterUse,
 use crate::platform::package::RunnerKind;
 use crate::platform::storage::object::ObjectKey;
 
-pub(crate) const ARTIFACT_PROFILE: u32 = 7;
+pub(crate) const ARTIFACT_PROFILE: u32 = 8;
 const HEADER_BYTES: usize = 160;
 const UNIT_DIRECTORY_ROW_BYTES: usize = 16;
 const SOURCE_OBJECT_ROW_BYTES: usize = 56;
@@ -323,24 +323,85 @@ impl Projection {
                 I::BeginBind { arguments } => (29, u64::from(*arguments), 0),
                 I::Capture { index } => (30, u64::from(*index), 0),
                 I::Record {
-                    nominal_type: None,
+                    nominal_type,
                     type_arguments,
                     fields,
                 } if type_arguments.is_empty() => {
+                    if nominal_type.is_some() && fields.is_empty() {
+                        return Err(unsupported("empty ordinary nominal record construction"));
+                    }
                     self.fixed(
                         projection_extent(n, 32, 1)?,
                         origin,
                         fields.iter().map(|field| match field {
-                            CompiledFieldSelector::Structural(index) => {
-                                Ok(u64::from(*index).to_le_bytes())
+                            CompiledFieldSelector::Structural(index) if nominal_type.is_none() => {
+                                let mut bytes = [0; 16];
+                                bytes[..8].copy_from_slice(&1_u64.to_le_bytes());
+                                bytes[8..].copy_from_slice(&u64::from(*index).to_le_bytes());
+                                Ok(bytes)
                             }
-                            _ => Err(unsupported("nominal record field")),
+                            CompiledFieldSelector::Nominal(index) if nominal_type.is_some() => {
+                                let mut bytes = [0; 16];
+                                bytes[8..].copy_from_slice(&u64::from(*index).to_le_bytes());
+                                Ok(bytes)
+                            }
+                            _ => Err(unsupported(
+                                "record selector disagrees with nominal presence",
+                            )),
                         }),
                     )?;
-                    (15, 0, 0)
+                    (
+                        15,
+                        u64::from(nominal_type.is_some()),
+                        u64::from(nominal_type.unwrap_or(0)),
+                    )
                 }
-                I::Field(CompiledFieldSelector::Structural(index)) => (17, u64::from(*index), 0),
+                I::Variant {
+                    case,
+                    type_arguments,
+                    has_payload,
+                } if type_arguments.is_empty() => {
+                    self.numbers(projection_extent(n, 32, 1)?, origin, type_arguments)?;
+                    (16, u64::from(*case), u64::from(*has_payload))
+                }
+                I::Field(CompiledFieldSelector::Nominal(index)) => (17, 0, u64::from(*index)),
+                I::Field(CompiledFieldSelector::Structural(index)) => (17, 1, u64::from(*index)),
                 I::List { item_type, items } => (18, u64::from(*item_type), u64::from(*items)),
+                I::SwitchVariant(jumps) => {
+                    if jumps.is_empty() {
+                        return Err(unsupported("empty variant dispatch"));
+                    }
+                    self.fixed(
+                        projection_extent(n, 32, 1)?,
+                        origin,
+                        jumps.iter().map(|jump| {
+                            if jump.target as usize <= i
+                                || jump.target as usize >= code.instructions.len()
+                                || jump.binding_local.is_some_and(|local| {
+                                    local < code.parameter_count || local >= code.local_count
+                                })
+                            {
+                                return Err(unsupported(
+                                    "variant dispatch target or payload local",
+                                ));
+                            }
+                            let mut bytes = [0; 32];
+                            for (at, value) in [
+                                u64::from(jump.case),
+                                u64::from(jump.target),
+                                u64::from(jump.binding_local.is_some()),
+                                u64::from(jump.binding_local.unwrap_or(0)),
+                            ]
+                            .into_iter()
+                            .enumerate()
+                            {
+                                bytes[at * 8..at * 8 + 8].copy_from_slice(&value.to_le_bytes());
+                            }
+                            Ok(bytes)
+                        }),
+                    )?;
+                    (20, 0, 0)
+                }
                 I::Return => (27, 0, 0),
                 _ => {
                     return Err(unsupported(&format!(
@@ -381,6 +442,8 @@ fn project_unit(p: &mut Projection, unit: &CompilationUnit) -> Result<(), Diagno
         _ => return Err(unsupported("unit owner")),
     };
     let kind: u32 = match source.kind {
+        OwnerKind::Record => 1,
+        OwnerKind::Variant => 2,
         OwnerKind::External => 4,
         OwnerKind::PureFunction => 5,
         OwnerKind::Component => 8,
@@ -458,6 +521,45 @@ fn project_unit(p: &mut Projection, unit: &CompilationUnit) -> Result<(), Diagno
         }),
     )?;
     let (tag, payload): (u32, usize) = match &unit.payload {
+        CompilationPayload::Record {
+            type_parameters,
+            type_parameter_constraints,
+            fields,
+        } if type_parameters.is_empty() && type_parameter_constraints.is_empty() => {
+            if fields.is_empty() {
+                return Err(unsupported("empty ordinary nominal record declaration"));
+            }
+            let at = p.reserve(16)?;
+            let rows = p.rows(fields.len(), 16)?;
+            p.relative(at, origin, rows)?;
+            p.field(at, 8, fields.len())?;
+            for (index, field) in fields.iter().enumerate() {
+                let row = projection_extent(rows, index, 16)?;
+                p.word(row, field.field)?;
+                p.field(row, 8, field.ty)?;
+            }
+            (3, at)
+        }
+        CompilationPayload::Variant {
+            type_parameters,
+            type_parameter_constraints,
+            cases,
+        } if type_parameters.is_empty() && type_parameter_constraints.is_empty() => {
+            if cases.is_empty() {
+                return Err(unsupported("empty ordinary nominal variant declaration"));
+            }
+            let at = p.reserve(16)?;
+            let rows = p.rows(cases.len(), 24)?;
+            p.relative(at, origin, rows)?;
+            p.field(at, 8, cases.len())?;
+            for (index, case) in cases.iter().enumerate() {
+                let row = projection_extent(rows, index, 24)?;
+                p.word(row, case.case)?;
+                p.field(row, 8, u64::from(case.payload.is_some()))?;
+                p.field(row, 16, case.payload.unwrap_or(0))?;
+            }
+            (4, at)
+        }
         CompilationPayload::External {
             signature,
             implementation,
@@ -644,7 +746,7 @@ fn project_bundle(
     Ok(())
 }
 
-/// Current profile-7 projection of one host-admitted package closure.
+/// Current profile-8 projection of one host-admitted package closure.
 /// The compiler validates framing, unit layout and object identity. Source semantic
 /// admission and correspondence to canonical unit IR remain a Tier 1 host boundary.
 pub(crate) fn bundle(artifact: &super::LoadedArtifact) -> Result<Vec<u8>, Diagnostic> {
@@ -1010,7 +1112,7 @@ mod tests {
         ] {
             append_words(&mut expected, &row);
         }
-        append_words(&mut expected, &[0, index, 0, index]);
+        append_words(&mut expected, &[0, index, 1, 0, 1, index]);
         assert_eq!(actual, expected);
         Ok(())
     }
@@ -1079,6 +1181,227 @@ mod tests {
         }
         append_words(&mut expected, &[0, maximum]);
         assert_eq!(actual, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn selfhost_artifact_nominal_code_matches_independent_tagged_rows() -> Result<(), Diagnostic> {
+        use super::super::unit::CompiledVariantJump;
+        // A wire representation control, deliberately not a typed stack program.
+        // Case table indices are nonmonotone; projection must retain vector order.
+        let code = CompiledCode {
+            parameter_count: 1,
+            local_count: 4,
+            instructions: vec![
+                I::Record {
+                    nominal_type: Some(0),
+                    type_arguments: vec![],
+                    fields: vec![
+                        CompiledFieldSelector::Nominal(1),
+                        CompiledFieldSelector::Nominal(0),
+                    ],
+                },
+                I::Field(CompiledFieldSelector::Nominal(0)),
+                I::Field(CompiledFieldSelector::Structural(0)),
+                I::Variant {
+                    case: 5,
+                    type_arguments: vec![],
+                    has_payload: false,
+                },
+                I::Unit,
+                I::Variant {
+                    case: 1,
+                    type_arguments: vec![],
+                    has_payload: true,
+                },
+                I::SwitchVariant(vec![
+                    CompiledVariantJump {
+                        case: 5,
+                        target: 7,
+                        binding_local: None,
+                    },
+                    CompiledVariantJump {
+                        case: 1,
+                        target: 9,
+                        binding_local: Some(3),
+                    },
+                ]),
+                I::I64(7),
+                I::Jump(10),
+                I::I64(11),
+                I::Return,
+            ],
+        };
+        let actual = filled(|p| {
+            p.reserve(17)?;
+            p.code(17, &code)?;
+            Ok(())
+        })?;
+        let mut expected = vec![0; 17];
+        append_words(&mut expected, &[1, 4, 32, 11]);
+        for row in [
+            [15, 1, 0, 0, 560, 2],
+            [17, 0, 0, 0, 0, 0],
+            [17, 1, 0, 0, 0, 0],
+            [16, 5, 0, 0, 592, 0],
+            [2, 0, 0, 0, 0, 0],
+            [16, 1, 1, 0, 592, 0],
+            [20, 0, 0, 0, 592, 2],
+            [4, 0, 0, 7, 0, 0],
+            [11, 10, 0, 0, 0, 0],
+            [4, 0, 0, 11, 0, 0],
+            [27, 0, 0, 0, 0, 0],
+        ] {
+            append_words(&mut expected, &row);
+        }
+        append_words(&mut expected, &[0, 1, 0, 0, 5, 7, 0, 0, 1, 9, 1, 3]);
+        assert_eq!(actual, expected);
+        Ok(())
+    }
+
+    #[test]
+    fn selfhost_artifact_nominal_declarations_preserve_member_order_and_optional_zero()
+    -> Result<(), Diagnostic> {
+        use super::super::unit::{CompiledCaseLayout, CompiledFieldLayout};
+        use crate::platform::kernel::{
+            CaseReference, FieldReference, TypeForm, TypeObject, encode_type_object,
+        };
+        use crate::platform::semantic_id::{CaseId, FieldId};
+        let unit_type = encode_type_object(&TypeObject::new(TypeForm::Unit)?)?.0;
+        let mut record = component(1)?;
+        record.source.kind = OwnerKind::Record;
+        record.tables.fields = (0..2)
+            .map(|ordinal| FieldReference {
+                package: record.source.package,
+                field: FieldId::migrate(b"nominal-projection", ordinal),
+            })
+            .collect();
+        record.tables.types = vec![unit_type];
+        record.payload = CompilationPayload::Record {
+            type_parameters: vec![],
+            type_parameter_constraints: vec![],
+            fields: vec![
+                CompiledFieldLayout { field: 1, ty: 0 },
+                CompiledFieldLayout { field: 0, ty: 0 },
+            ],
+        };
+        let projected = unit(&record)?;
+        assert_eq!(&projected[..12], &[1, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0]);
+        assert_eq!(read_word(&projected, 248), 0);
+        assert_eq!(&projected[256..260], &3_u32.to_le_bytes());
+        assert_eq!(read_word(&projected, 264), 528);
+        let mut expected = Vec::new();
+        append_words(&mut expected, &[544, 2, 1, 0, 0, 0]);
+        assert_eq!(&projected[528..], expected.as_slice());
+
+        let mut variant = component(2)?;
+        variant.source.kind = OwnerKind::Variant;
+        variant.tables.cases = (0..3)
+            .map(|ordinal| CaseReference {
+                package: variant.source.package,
+                case: CaseId::migrate(b"nominal-projection", ordinal),
+            })
+            .collect();
+        variant.tables.types = vec![unit_type];
+        variant.payload = CompilationPayload::Variant {
+            type_parameters: vec![],
+            type_parameter_constraints: vec![],
+            cases: vec![
+                CompiledCaseLayout {
+                    case: 2,
+                    payload: None,
+                },
+                CompiledCaseLayout {
+                    case: 0,
+                    payload: Some(0),
+                },
+                CompiledCaseLayout {
+                    case: 1,
+                    payload: Some(0),
+                },
+            ],
+        };
+        let projected = unit(&variant)?;
+        assert_eq!(&projected[..12], &[1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0]);
+        assert_eq!(read_word(&projected, 248), 0);
+        assert_eq!(&projected[256..260], &4_u32.to_le_bytes());
+        assert_eq!(read_word(&projected, 264), 560);
+        let mut expected = Vec::new();
+        append_words(&mut expected, &[576, 3, 2, 0, 0, 0, 1, 0, 1, 1, 0]);
+        assert_eq!(&projected[560..], expected.as_slice());
+        Ok(())
+    }
+
+    #[test]
+    fn selfhost_artifact_nominal_projection_rejects_unrepresented_fields() -> Result<(), Diagnostic>
+    {
+        use super::super::unit::CompiledVariantJump;
+        for instruction in [
+            I::Record {
+                nominal_type: Some(0),
+                type_arguments: vec![],
+                fields: vec![],
+            },
+            I::Record {
+                nominal_type: Some(0),
+                type_arguments: vec![0],
+                fields: vec![CompiledFieldSelector::Nominal(0)],
+            },
+            I::Record {
+                nominal_type: Some(0),
+                type_arguments: vec![],
+                fields: vec![CompiledFieldSelector::Structural(0)],
+            },
+            I::Record {
+                nominal_type: None,
+                type_arguments: vec![],
+                fields: vec![CompiledFieldSelector::Nominal(0)],
+            },
+            I::Variant {
+                case: 0,
+                type_arguments: vec![0],
+                has_payload: false,
+            },
+            I::SwitchVariant(vec![]),
+            I::SwitchVariant(vec![CompiledVariantJump {
+                case: 0,
+                target: 0,
+                binding_local: None,
+            }]),
+            I::SwitchVariant(vec![CompiledVariantJump {
+                case: 0,
+                target: 2,
+                binding_local: None,
+            }]),
+            I::SwitchVariant(vec![CompiledVariantJump {
+                case: 0,
+                target: 1,
+                binding_local: Some(0),
+            }]),
+        ] {
+            let code = CompiledCode {
+                parameter_count: 1,
+                local_count: 1,
+                instructions: vec![instruction, I::Return],
+            };
+            assert!(Projection::default().code(0, &code).is_err());
+        }
+        let mut record = component(1)?;
+        record.source.kind = OwnerKind::Record;
+        record.payload = CompilationPayload::Record {
+            type_parameters: vec![],
+            type_parameter_constraints: vec![],
+            fields: vec![],
+        };
+        assert!(unit(&record).is_err());
+        let mut variant = component(2)?;
+        variant.source.kind = OwnerKind::Variant;
+        variant.payload = CompilationPayload::Variant {
+            type_parameters: vec![],
+            type_parameter_constraints: vec![],
+            cases: vec![],
+        };
+        assert!(unit(&variant).is_err());
         Ok(())
     }
 
@@ -1215,7 +1538,7 @@ mod tests {
     }
 
     #[test]
-    fn selfhost_artifact_input_bundle_header_directory_and_metadata_match_profile_seven()
+    fn selfhost_artifact_input_bundle_header_directory_and_metadata_match_profile_eight()
     -> Result<(), Diagnostic> {
         let units = [component(1)?, component(2)?];
         let package = package(units[0].source.owner);
@@ -1227,7 +1550,7 @@ mod tests {
             let bytes = filled(|p| project_bundle(p, &package, &units, &source, allowance))?;
             assert_eq!(bytes.len(), 1_515);
             assert_eq!(&bytes[..8], b"LKJCI001");
-            assert_eq!(&bytes[8..12], &7_u32.to_le_bytes());
+            assert_eq!(&bytes[8..12], &8_u32.to_le_bytes());
             assert_eq!(
                 &bytes[12..16],
                 &u32::from(allowance.is_some()).to_le_bytes()
@@ -1350,7 +1673,7 @@ mod tests {
         assert_eq!(read_word(&projected, 569 + 16), 601);
         assert_eq!(read_word(&projected, 601 + 48 + 32), 889);
         assert_eq!(read_word(&projected, 601 + 2 * 48 + 32), 897);
-        assert_eq!(projected.len(), 905);
+        assert_eq!(projected.len(), 913);
         Ok(())
     }
 

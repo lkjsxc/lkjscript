@@ -287,7 +287,7 @@ impl<'a> Ir<'a> {
     fn new(bytes: &'a [u8]) -> Self {
         assert!(bytes.len() >= 160);
         assert_eq!(&bytes[..8], b"LKJCI001");
-        assert_eq!(u32::from_le_bytes(bytes[8..12].try_into().unwrap()), 8);
+        assert_eq!(u32::from_le_bytes(bytes[8..12].try_into().unwrap()), 9);
         assert_eq!(u32::from_le_bytes(bytes[12..16].try_into().unwrap()), 0);
         assert_eq!(size_word(bytes, 16), bytes.len());
         let mut committed = bytes[..40].to_vec();

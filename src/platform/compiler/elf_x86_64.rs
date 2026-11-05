@@ -28,6 +28,9 @@ mod runtime;
 mod scalar_pool_tests;
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod stack_tests;
+#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+mod variant_tests;
+mod variants;
 use asm::{Asm, Label, R::*, *};
 use runtime::Runtime;
 
@@ -147,6 +150,7 @@ pub(crate) fn compile_function(
     program: &NormalizedProgram,
     entry: usize,
 ) -> Result<(Vec<u8>, usize, usize)> {
+    let mut variant_admission = variants::Admission::new(program);
     let mut reachable = Vec::new();
     let mut scheduled = Vec::new();
     reserve(&mut scheduled, program.functions.len())?;
@@ -173,7 +177,8 @@ pub(crate) fn compile_function(
             ));
         }
         if let NormalizedFunctionBody::Code(code) = &function.body {
-            for instruction in code.instructions.iter() {
+            for (ip, instruction) in code.instructions.iter().enumerate() {
+                variant_admission.instruction(code, ip, instruction)?;
                 if let I::Call { function, .. }
                 | I::TailCall { function, .. }
                 | I::FunctionValue { function, .. } = instruction
@@ -400,6 +405,11 @@ fn admit_result(
                     .ok_or_else(|| {
                         unsupported("native result requires a concrete record layout")
                     })?;
+                if record.owned {
+                    return Err(unsupported(
+                        "native result must not contain OwnedRecord values",
+                    ));
+                }
                 reserve(&mut pending, record.fields.len())?;
                 pending.extend(record.fields.iter().map(|field| field.ty));
             }
@@ -417,6 +427,11 @@ fn admit_result(
                     .ok_or_else(|| {
                         unsupported("native result requires a concrete record application")
                     })?;
+                if record.owned {
+                    return Err(unsupported(
+                        "native result must not contain OwnedRecord values",
+                    ));
+                }
                 reserve(&mut pending, record.fields.len())?;
                 pending.extend(record.fields.iter().map(|field| field.ty));
             }
@@ -717,6 +732,13 @@ impl Emitter<'_> {
                 self.a.group_wide(0, Sp, layout_extent(fields.len(), 8, 0)?);
                 self.a.push(Ax);
             }
+            I::Variant {
+                layout,
+                case,
+                has_payload,
+                ..
+            } => self.variant(layout.0, *case, *has_payload),
+            I::SwitchVariant(jumps) => self.switch_variant(jumps, labels)?,
             I::Field(field) => {
                 let name = match field {
                     NormalizedFieldSelector::Structural(name) => name.clone(),

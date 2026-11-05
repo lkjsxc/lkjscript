@@ -403,85 +403,99 @@ declarations.begin
           (binding a (type ByteBuffer) (call wire::unsigned (local tag) (local out)))
           (in
             (if
-              (call ci::eq (local tag) (i64 4))
-              (call wire::signed
-                (call integer (local data) (call ci::add (local at) (i64 24)))
-                (local a))
+              (call ci::eq (local tag) (i64 16))
+              (let
+                (binding b (type ByteBuffer) (call wire::unsigned (local x) (local a)))
+                (binding c (type ByteBuffer) (call ci::push (i64 0) (local b)))
+                (in (call ci::push (local y) (local c))))
               (if
-                (call ci::eq (local tag) (i64 7))
+                (call ci::eq (local tag) (i64 20))
                 (let
-                  (binding wire-temp-17 (type ByteBuffer) (call wire::unsigned (local x) (local a)))
-                  (in (call wire::unsigned (local y) (local wire-temp-17))))
+                  (binding b (type ByteBuffer) (call wire::unsigned (local count) (local a)))
+                  (in
+                    (call jumps
+                      (local data)
+                      (local extra)
+                      (call ci::add (local extra) (call ci::mul (local count) (i64 32)))
+                      (local b))))
                 (if
-                  (call ci::either
-                    (call ci::eq (local tag) (i64 12))
-                    (call ci::eq (local tag) (i64 13)))
-                  (let
-                    (binding b (type ByteBuffer) (call ci::le (i64 0) (i64 2) (local a)))
-                    (binding c (type ByteBuffer) (call wire::unsigned (local x) (local b)))
-                    (binding d
-                      (type ByteBuffer)
-                      (let
-                        (binding wire-temp-18
-                          (call ci::add (local extra) (call ci::mul (local count) (i64 8))))
-                        (binding wire-temp-19 (i64 0))
-                        (binding wire-temp-20
-                          (type ByteBuffer)
-                          (call wire::unsigned (local count) (local c)))
-                        (in
-                          (call numbers
-                            (local data)
-                            (local extra)
-                            (local wire-temp-18)
-                            (local wire-temp-19)
-                            (local wire-temp-20)))))
-                    (binding e
-                      (type ByteBuffer)
-                      (if
-                        (call ci::eq (local tag) (i64 12))
-                        (call wire::unsigned (local y) (local d))
-                        (local d)))
-                    (in (call ci::push (i64 0) (local e))))
+                  (call ci::eq (local tag) (i64 4))
+                  (call wire::signed
+                    (call integer (local data) (call ci::add (local at) (i64 24)))
+                    (local a))
                   (if
-                    (call ci::eq (local tag) (i64 15))
+                    (call ci::eq (local tag) (i64 7))
                     (let
-                      (binding wire-temp-22
-                        (call ci::add (local extra) (call ci::mul (local count) (i64 8))))
-                      (binding wire-temp-23 (i64 1))
-                      (binding wire-temp-24
-                        (type ByteBuffer)
-                        (let
-                          (binding wire-temp-21
-                            (type ByteBuffer)
-                            (call ci::le (i64 0) (i64 2) (local a)))
-                          (in (call wire::unsigned (local count) (local wire-temp-21)))))
-                      (in
-                        (call numbers
-                          (local data)
-                          (local extra)
-                          (local wire-temp-22)
-                          (local wire-temp-23)
-                          (local wire-temp-24))))
+                      (binding wire-temp-17 (type ByteBuffer) (call wire::unsigned (local x) (local a)))
+                      (in (call wire::unsigned (local y) (local wire-temp-17))))
                     (if
-                      (call ci::eq (local tag) (i64 17))
+                      (call ci::either
+                        (call ci::eq (local tag) (i64 12))
+                        (call ci::eq (local tag) (i64 13)))
                       (let
-                        (binding wire-temp-25 (type ByteBuffer) (call ci::push (i64 1) (local a)))
-                        (in (call wire::unsigned (local x) (local wire-temp-25))))
+                        (binding b (type ByteBuffer) (call ci::le (i64 0) (i64 2) (local a)))
+                        (binding c (type ByteBuffer) (call wire::unsigned (local x) (local b)))
+                        (binding d
+                          (type ByteBuffer)
+                          (let
+                            (binding wire-temp-18
+                              (call ci::add (local extra) (call ci::mul (local count) (i64 8))))
+                            (binding wire-temp-19 (i64 0))
+                            (binding wire-temp-20
+                              (type ByteBuffer)
+                              (call wire::unsigned (local count) (local c)))
+                            (in
+                              (call numbers
+                                (local data)
+                                (local extra)
+                                (local wire-temp-18)
+                                (local wire-temp-19)
+                                (local wire-temp-20)))))
+                        (binding e
+                          (type ByteBuffer)
+                          (if
+                            (call ci::eq (local tag) (i64 12))
+                            (call wire::unsigned (local y) (local d))
+                            (local d)))
+                        (in (call ci::push (i64 0) (local e))))
                       (if
-                        (call ci::eq (local tag) (i64 18))
+                        (call ci::eq (local tag) (i64 15))
                         (let
-                          (binding wire-temp-26
+                          (binding b (type ByteBuffer) (call ci::push (local x) (local a)))
+                          (binding c
                             (type ByteBuffer)
-                            (call wire::unsigned (local x) (local a)))
-                          (in (call wire::unsigned (local y) (local wire-temp-26))))
+                            (if
+                              (call ci::eq (local x) (i64 1))
+                              (call wire::unsigned (local y) (local b))
+                              (local b)))
+                          (binding d (type ByteBuffer) (call ci::push (i64 0) (local c)))
+                          (binding e (type ByteBuffer) (call wire::unsigned (local count) (local d)))
+                          (in
+                            (call selectors
+                              (local data)
+                              (local extra)
+                              (call ci::add (local extra) (call ci::mul (local count) (i64 16)))
+                              (local e))))
                         (if
-                          (call ci::either
-                            (call ci::eq (local tag) (i64 2))
-                            (call ci::either
-                              (call ci::eq (local tag) (i64 9))
-                              (call ci::eq (local tag) (i64 27))))
-                          (local a)
-                          (call wire::unsigned (local x) (local a)))))))))))))
+                          (call ci::eq (local tag) (i64 17))
+                          (let
+                            (binding b (type ByteBuffer) (call wire::unsigned (local x) (local a)))
+                            (in (call wire::unsigned (local y) (local b))))
+                          (if
+                            (call ci::eq (local tag) (i64 18))
+                            (let
+                              (binding wire-temp-26
+                                (type ByteBuffer)
+                                (call wire::unsigned (local x) (local a)))
+                              (in (call wire::unsigned (local y) (local wire-temp-26))))
+                            (if
+                              (call ci::either
+                                (call ci::eq (local tag) (i64 2))
+                                (call ci::either
+                                  (call ci::eq (local tag) (i64 9))
+                                  (call ci::eq (local tag) (i64 27))))
+                              (local a)
+                              (call wire::unsigned (local x) (local a)))))))))))))))
     (function create instructions
       (visibility public)
       (effect pure)
@@ -564,59 +578,77 @@ declarations.begin
           (binding a (type ByteBuffer) (call wire::unsigned (local tag) (local out)))
           (in
             (if
-              (call ci::either (call ci::eq (local tag) (i64 6)) (call ci::eq (local tag) (i64 7)))
+              (call ci::either
+                (call ci::eq (local tag) (i64 3))
+                (call ci::either (call ci::eq (local tag) (i64 4)) (bool false)))
               (let
-                (binding b
-                  (type ByteBuffer)
-                  (call signature
-                    (local data)
-                    (call ci::field64 (local data) (local at) (i64 248))
-                    (local a)))
+                (binding offset (call ci::field64 (local data) (local payload) (i64 0)))
+                (binding count (call ci::field64 (local data) (local payload) (i64 8)))
+                (binding b (type ByteBuffer) (call ci::le (i64 0) (i64 2) (local a)))
+                (binding c (type ByteBuffer) (call wire::unsigned (local count) (local b)))
                 (in
-                  (if
-                    (call ci::eq (local tag) (i64 6))
-                    (call string (local data) (local payload) (local b))
-                    (call code (local data) (local payload) (local b)))))
-              (if
-                (call ci::eq (local tag) (i64 9))
-                (let
-                  (binding offset (call ci::field64 (local data) (local payload) (i64 0)))
-                  (binding count (call ci::field64 (local data) (local payload) (i64 8)))
-                  (binding b
-                    (type ByteBuffer)
-                    (let
-                      (binding wire-temp-27 (type ByteBuffer) (call ci::push (i64 0) (local a)))
-                      (in (call wire::unsigned (local count) (local wire-temp-27)))))
-                  (in
-                    (call ports
-                      (local data)
+                  (call nominal-members
+                    (local data)
+                    (local offset)
+                    (call ci::add
                       (local offset)
-                      (call ci::add (local offset) (call ci::mul (local count) (i64 32)))
-                      (local b))))
+                      (call ci::mul
+                        (local count)
+                        (if (call ci::eq (local tag) (i64 3)) (i64 16) (i64 24))))
+                    (local tag)
+                    (local c))))
+              (if
+                (call ci::either (call ci::eq (local tag) (i64 6)) (call ci::eq (local tag) (i64 7)))
                 (let
                   (binding b
                     (type ByteBuffer)
-                    (call wire::unsigned
-                      (call ci::field64 (local data) (local payload) (i64 0))
+                    (call signature
+                      (local data)
+                      (call ci::field64 (local data) (local at) (i64 248))
                       (local a)))
-                  (binding c
-                    (type ByteBuffer)
-                    (call ci::push
-                      (call ci::field64 (local data) (local payload) (i64 8))
-                      (local b)))
-                  (binding d
-                    (type ByteBuffer)
-                    (if
-                      (call ci::eq (call ci::field64 (local data) (local payload) (i64 8)) (i64 0))
-                      (local c)
-                      (call wire::unsigned
-                        (call ci::field64 (local data) (local payload) (i64 16))
-                        (local c))))
-                  (binding e (type ByteBuffer) (call ci::push (i64 0) (local d)))
                   (in
-                    (call wire::unsigned
-                      (call ci::field64 (local data) (local payload) (i64 24))
-                      (local e))))))))))
+                    (if
+                      (call ci::eq (local tag) (i64 6))
+                      (call string (local data) (local payload) (local b))
+                      (call code (local data) (local payload) (local b)))))
+                (if
+                  (call ci::eq (local tag) (i64 9))
+                  (let
+                    (binding offset (call ci::field64 (local data) (local payload) (i64 0)))
+                    (binding count (call ci::field64 (local data) (local payload) (i64 8)))
+                    (binding b
+                      (type ByteBuffer)
+                      (let
+                        (binding wire-temp-27 (type ByteBuffer) (call ci::push (i64 0) (local a)))
+                        (in (call wire::unsigned (local count) (local wire-temp-27)))))
+                    (in
+                      (call ports
+                        (local data)
+                        (local offset)
+                        (call ci::add (local offset) (call ci::mul (local count) (i64 32)))
+                        (local b))))
+                  (let
+                    (binding b
+                      (type ByteBuffer)
+                      (call wire::unsigned
+                        (call ci::field64 (local data) (local payload) (i64 0))
+                        (local a)))
+                    (binding c
+                      (type ByteBuffer)
+                      (call ci::push (call ci::field64 (local data) (local payload) (i64 8)) (local b)))
+                    (binding d
+                      (type ByteBuffer)
+                      (if
+                        (call ci::eq (call ci::field64 (local data) (local payload) (i64 8)) (i64 0))
+                        (local c)
+                        (call wire::unsigned
+                          (call ci::field64 (local data) (local payload) (i64 16))
+                          (local c))))
+                    (binding e (type ByteBuffer) (call ci::push (i64 0) (local d)))
+                    (in
+                      (call wire::unsigned
+                        (call ci::field64 (local data) (local payload) (i64 24))
+                        (local e)))))))))))
     (function create encode-unit
       (visibility public)
       (effect pure)
@@ -679,5 +711,93 @@ declarations.begin
             (record structural
               (field digest (call wire::digest (text "lkjscript.compiler-unit.v1") (local image)))
               (field image (local image))
-              (field key (local key)))))))))
+              (field key (local key)))))))
+    (function create selectors
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding a
+              (type ByteBuffer)
+              (call wire::unsigned (call ci::field64 (local data) (local at) (i64 0)) (local out)))
+            (binding b
+              (type ByteBuffer)
+              (call wire::unsigned (call ci::field64 (local data) (local at) (i64 8)) (local a)))
+            (in (call selectors (local data) (call ci::add (local at) (i64 16)) (local end) (local b)))))))
+    (function create jumps
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding a
+              (type ByteBuffer)
+              (call wire::unsigned (call ci::field64 (local data) (local at) (i64 0)) (local out)))
+            (binding b
+              (type ByteBuffer)
+              (call wire::unsigned (call ci::field64 (local data) (local at) (i64 8)) (local a)))
+            (binding c
+              (type ByteBuffer)
+              (call ci::push (call ci::field64 (local data) (local at) (i64 16)) (local b)))
+            (binding d
+              (type ByteBuffer)
+              (if
+                (call ci::eq (call ci::field64 (local data) (local at) (i64 16)) (i64 1))
+                (call wire::unsigned (call ci::field64 (local data) (local at) (i64 24)) (local c))
+                (local c)))
+            (in (call jumps (local data) (call ci::add (local at) (i64 32)) (local end) (local d)))))))
+    (function create nominal-members
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create tag (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (if
+          (call ci::eq (local at) (local end))
+          (local out)
+          (let
+            (binding a
+              (type ByteBuffer)
+              (call wire::unsigned (call ci::field64 (local data) (local at) (i64 0)) (local out)))
+            (binding b
+              (type ByteBuffer)
+              (if
+                (call ci::eq (local tag) (i64 4))
+                (call ci::push (call ci::field64 (local data) (local at) (i64 8)) (local a))
+                (local a)))
+            (binding c
+              (type ByteBuffer)
+              (if
+                (call ci::eq (local tag) (i64 3))
+                (call wire::unsigned (call ci::field64 (local data) (local at) (i64 8)) (local b))
+                (if
+                  (call ci::eq (call ci::field64 (local data) (local at) (i64 8)) (i64 1))
+                  (call wire::unsigned (call ci::field64 (local data) (local at) (i64 16)) (local b))
+                  (local b))))
+            (in
+              (call nominal-members
+                (local data)
+                (call ci::add (local at) (if (call ci::eq (local tag) (i64 3)) (i64 16) (i64 24)))
+                (local end)
+                (local tag)
+                (local c)))))))))
 declarations.end

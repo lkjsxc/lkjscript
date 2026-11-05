@@ -13,11 +13,11 @@ Public graph adoption/readback, complete proposal replay, refreshed inventory,
 raw-source `C2 = C3` and `Ahost = A1 = A2 = A3`, the pure-tail preflight,
 all 29 fresh full gates and `release target` passed for that implementation.
 Full `P_self` support remains open. No release archive or production deployment
-is published. This status update is later documentation, not a new implementation seal.
+is published. The candidate below has a separate acceptance obligation.
 
-## Supported capabilities
+## Accepted capabilities
 
-The source compiler covers the maintained scalar/compound closure, structural
+The accepted source compiler covers the maintained scalar/compound closure, structural
 records/fields, `List<I64>`, lexical control flow, direct recursion, closed I64
 list substitutions, exact intrinsic signatures and binary filters. ByteBuffer
 consumption, synchronous borrows, branch-balanced disposal, reverse lexical
@@ -38,7 +38,7 @@ graph activations and expression continuations on the heap, with exact custody,
 call-depth/tail accounting, cancellation and modeled allocation obligations.
 This does not make every reference route or generated native CALL stack unbounded.
 
-## Current authoritative source
+## Mainline compiler graph
 
 | Identity | Accepted implementation |
 | --- | --- |
@@ -47,13 +47,13 @@ This does not make every reference route or generated native CALL stack unbounde
 | Semantic state | `semantic_state_9f562cab…` |
 | Complete carrier | Profile 3; 21,549,935 bytes; exact bindings in the batch decision |
 
-Public readback covers all 69,148 owners across 17 pages. Current `F_active`
+The accepted readback covered all 69,148 owners across 17 pages. Its `F_active`
 contains 123 modules, 89 supplied types and 1,199 callables (1,172 pure and 27
 external), with 3,937 unrestricted, 329 consume and one borrow parameter, and all
 36 generic application sites. It includes 58,718 expressions, 47,263 retirements
 and 1,206 unit owners. Inventory is not a substitute for semantic/custody admission.
 
-Current contracts are `LKJSG002` profile 3, `LKJSRQ01` profile 2,
+The accepted implementation uses `LKJSG002` profile 3, `LKJSRQ01` profile 2,
 Mode-0 profile 8, Mode-1 profile 7 and canonical schema epoch 1.
 Profile 6 has no Mode-0 fallback; incompatible derived inputs require regeneration.
 
@@ -83,16 +83,35 @@ The 8193-prefix crossing retains its explicit 32 GiB process allowance.
 Its largest unit remains below the separate 4 MiB object and 8 MiB unit-codec
 ceilings; it does not establish those capacity removals.
 
-## Next work and remaining limits
+## Active candidate and remaining limits
 
-Select the next complete semantic or capacity slice from measured dependencies
-and the [capacity ledger](decisions/20261025-capacity-unbounding.md). Tier 2
-Milestone B remains the primary semantic closure gap.
+The [ordinary nominal candidate](decisions/20261103-closed-ordinary-nominal.md)
+extends both outputs with closed nongeneric acyclic copyable Record/Variant
+values and exhaustive Match, including all-arm ByteBuffer custody. Its private
+Mode-0/Mode-1 profiles are 9/8; the raw carrier, request and canonical schema
+identities are unchanged. Forest proof now detects complete rooting during each
+doubling pass, reducing required work for shallow forests while preserving exact
+finite allowances and cycle rejection. This is an algorithm change, not a new
+capacity-removal claim. Public adoption/readback passed at `rev_afe20e53…`: 80,845
+live owners in 135 modules, 96 supplied types, 59,447 retirements and all 17
+changed signatures. The active inventory contains 1,371 pure and 27 external
+callables. Its complete Profile-3 carrier is 26,107,644 bytes; the decision binds
+its digest and semantic state. Seventeen C0 native/producer controls passed.
 
-Ordinary nominal values/Match, nominal owned records, structural OwnedChoice,
-owned witnesses and source-tied read views, and lexical Regions remain future
-source families. General generic/effectful callables and arbitrary list element
-types are outside this batch. Consecutive boxed-spine Clone admission remains
+The same-binary 64-block helper pair reduced If/Jump VM instructions from 2,171,227
+to 447,208 while the straight control rose from 146,587 to 272,159. The decision
+retains both modeled-byte changes and single-run timings; this is a whole-batch
+helper comparison, with no isolated indexing or whole-compiler speed claim.
+Straight-path overhead is follow-up work after current capability acceptance.
+All 18 focused source/index/forest controls passed: raw nominal behavior and
+rejection, 257-case dispatch, proposal replay and complete active-profile checks.
+Renewed C2=C3 and Ahost=A1=A2=A3, the full frozen-tree seal and release-target
+verification remain pending; mainline still ends at the accepted callable batch.
+
+Tier 2 Milestone B remains open. OwnedRecord/OwnedChoice and affine
+deconstruction, owned witnesses and source-tied read views, lexical Regions,
+generic/recursive nominal values, general generic/effectful callables and
+arbitrary list element types remain separate source families. Consecutive boxed-spine Clone admission remains
 depth 256; structural type/AST/identity, owned-storage escape and codec paths keep
 their separate bounds. Default call/value-stack policies, broader reference routes
 and native CALL growth are unchanged. Owned-record layout preparation retains its

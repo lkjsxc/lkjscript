@@ -117,5 +117,41 @@ declarations.begin
         (call no-borrow
           (local data)
           (call flow::stack-cell (local data) (local f) (local at) (i64 0))
-          (call flow::field (local data) (local at) (i64 56)))))))
+          (call flow::field (local data) (local at) (i64 56)))))
+(function create payload
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create f (type I64))
+      (parameter create before (type I64))
+      (parameter create after (type I64))
+      (parameter create local (type I64))
+      (parameter create payload (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call ci::both
+            (call ci::lte (call flow::field (local data) (local f) (i64 16)) (local local))
+            (call ci::lt (local local) (call flow::field (local data) (local f) (i64 24))))
+          (let
+            (binding cell (call flow::local-cell (local data) (local f) (local local)))
+            (in
+              (if
+                (call ci::both
+                  (call ci::both
+                    (call ci::lt (i64 0) (local payload))
+                    (if (call ci::eq (local payload) (i64 6)) (bool false) (bool true)))
+                  (call ci::both
+                    (call ci::eq (call types::identity (local data) (local cell)) (local payload))
+                    (if (call types::borrowed (local data) (local cell)) (bool false) (bool true))))
+                (call ci::both
+                  (call ci::eq
+                    (call ci::get (local data) (call ci::add (local before) (local local)))
+                    (i64 0))
+                  (call ci::eq
+                    (call ci::get (local data) (call ci::add (local after) (local local)))
+                    (i64 1)))
+                (bool false))))
+          (bool false))))
+  ))
 declarations.end

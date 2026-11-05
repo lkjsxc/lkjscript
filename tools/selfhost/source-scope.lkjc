@@ -7,7 +7,7 @@ declarations.begin
       (parameter create rows (type Bytes))
       (parameter create target (type I64))
       (parameter create position (type I64))
-      (parameter create parameter (type Bool))
+      (parameter create kind (type I64))
       (parameter create current (type I64))
       (parameter create previous (type I64))
       (parameter create count (type I64))
@@ -41,18 +41,24 @@ declarations.begin
               (call ci::eq (local current) (local target))
               (if
                 (if
-                  (local parameter)
+                  (call ci::eq (local kind) (i64 0))
                   (bool true)
-                  (call ci::lt
-                    (local position)
-                    (call source-table::column (local rows) (local previous) (i64 8))))
+                  (if (call ci::eq (local kind) (i64 2))
+                    (call ci::lt
+                      (local position)
+                      (call source-table::column (local rows) (local previous) (i64 8)))
+                    (if (call ci::eq (local kind) (i64 3))
+                      (call ci::eq
+                        (call ci::add (local position) (i64 1))
+                        (call source-table::column (local rows) (local previous) (i64 8)))
+                      (bool false))))
                 (call source-budget::charge (local work) (i64 1))
                 (call source-budget::fail (local work) (i64 15)))
               (call visible
                 (local rows)
                 (local target)
                 (local position)
-                (local parameter)
+                (local kind)
                 (call source-table::parent (local rows) (local current))
                 (local current)
                 (local count)
@@ -87,25 +93,31 @@ declarations.begin
         (if
           (call ci::eq (call ci::get (local data) (i64 37)) (i64 5))
           (let
-            (binding parameter (call ci::lt (call ci::get (local data) (i64 38)) (i64 2)))
+            (binding kind (call ci::get (local data) (i64 38)))
+            (binding parameter (call ci::lt (local kind) (i64 2)))
             (binding target
-              (call source-table::owner
-                (local graph)
-                (local data)
-                (i64 39)
+              (call source-table::owner (local graph) (local data) (i64 39)
                 (if (local parameter) (i64 7) (i64 8))))
+            (binding accepted
+              (if (call ci::eq (local kind) (i64 0)) (bool true)
+                (if (call ci::either (call ci::eq (local kind) (i64 2)) (call ci::eq (local kind) (i64 3)))
+                  (let
+                    (binding start (call source-table::start (local graph) (local target)))
+                    (binding at (call source-link-ref::name-end (local graph) (call ci::add (local start) (i64 39))))
+                    (in
+                      (if (call ci::lt (i64 -1) (local at))
+                        (call ci::eq (call ci::get (local graph) (local at))
+                          (if (call ci::eq (local kind) (i64 2)) (i64 0) (i64 1)))
+                        (bool false))))
+                  (bool false))))
             (in
-              (if
-                (call ci::eq (call ci::get (local data) (i64 38)) (if (local parameter) (i64 0) (i64 2)))
+              (if (local accepted)
                 (call visible
                   (local rows)
                   (call source-table::parent (local rows) (local target))
                   (call source-table::column (local rows) (local target) (i64 8))
-                  (local parameter)
-                  (local row)
-                  (local row)
-                  (call source-table::count (local graph))
-                  (local work))
+                  (local kind) (local row) (local row)
+                  (call source-table::count (local graph)) (local work))
                 (call source-budget::fail (local work) (i64 15)))))
           (local work))))
     (function create walk

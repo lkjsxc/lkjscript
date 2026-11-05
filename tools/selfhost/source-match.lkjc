@@ -1,0 +1,119 @@
+declarations.begin
+(units
+  (module create source-match
+    (function create read-arms
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (parameter create count (type I64))
+      (parameter create previous (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (local count) (i64 0))
+          (local at)
+          (let
+            (binding case-end
+              (call source-read::reference (local data) (local at) (local end) (i64 5)))
+            (in
+              (if
+                (call ci::lt (i64 -1) (local case-end))
+                (if
+                  (if
+                    (call ci::eq (local previous) (i64 -1))
+                    (bool true)
+                    (call ci::lt
+                      (call source-index::compare
+                        (local data) (local previous) (local data) (local at) (i64 34) (i64 0))
+                      (i64 0)))
+                  (let
+                    (binding body-at
+                      (call source-read::optional
+                        (local data) (local case-end) (local end) (i64 8) (i64 17)))
+                    (in
+                      (if
+                        (call ci::lt (i64 -1) (local body-at))
+                        (let
+                          (binding next
+                            (call source-read::typed
+                              (local data) (local body-at) (local end) (i64 9) (i64 17)))
+                          (in
+                            (if
+                              (call ci::lt (i64 -1) (local next))
+                              (call read-arms
+                                (local data) (local next) (local end)
+                                (call ci::sub (local count) (i64 1)) (local at))
+                              (i64 -1))))
+                        (i64 -1))))
+                  (i64 -1))
+                (i64 -1)))))))
+    (function create read
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create end (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding count-at
+            (call source-read::typed (local data) (local at) (local end) (i64 9) (i64 17)))
+          (in
+            (if
+              (call ci::lt (i64 -1) (local count-at))
+              (let
+                (binding count
+                  (call source-read::unsigned (local data) (local count-at) (local end)))
+                (in
+                  (if
+                    (call ci::eq (field (local count) (name code)) (i64 0))
+                    (if
+                      (call ci::both
+                        (call ci::lt (i64 0) (field (local count) (name value)))
+                        (call ci::lt (field (local count) (name value)) (i64 100001)))
+                      (if
+                        (call source-read::items-fit
+                          (local data) (field (local count) (name next)) (local end)
+                          (field (local count) (name value)) (i64 52))
+                        (call read-arms
+                          (local data) (field (local count) (name next)) (local end)
+                          (field (local count) (name value)) (i64 -1))
+                        (i64 -1))
+                      (i64 -1))
+                    (i64 -1))))
+              (i64 -1))))))
+    (function create arms
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns (record (at I64) (count I64)))
+      (body
+        (let
+          (binding parsed (call source-table::array (local data) (i64 55)))
+          (in
+            (record structural
+              (field at (field (local parsed) (name next)))
+              (field count (field (local parsed) (name value))))))))
+    (function create arm-body-at
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create arm-at (type I64))
+      (returns I64)
+      (body
+        (call ci::add
+          (local arm-at)
+          (if
+            (call ci::eq (call ci::get (local data) (call ci::add (local arm-at) (i64 34))) (i64 0))
+            (i64 35)
+            (i64 52)))))
+    (function create arm-next
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create arm-at (type I64))
+      (returns I64)
+      (body (call ci::add (call arm-body-at (local data) (local arm-at)) (i64 17))))))
+declarations.end

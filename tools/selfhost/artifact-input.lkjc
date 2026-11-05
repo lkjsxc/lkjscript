@@ -334,58 +334,57 @@ declarations.begin
             (binding kind (call ci::u32 (local data) (call ci::add (local at) (i64 4))))
             (in
               (if
-                (if
-                  (if
+                (call ci::either
+                  (call ci::both
                     (call ci::eq (local owner) (i64 1))
-                    (if
-                      (if
-                        (call ci::eq (local kind) (i64 4))
-                        (bool true)
-                        (if
-                          (call ci::eq (local kind) (i64 5))
-                          (bool true)
-                          (if (call ci::eq (local kind) (i64 8)) (bool true) (bool false))))
-                      (bool true)
-                      (bool false))
-                    (bool false))
-                  (bool true)
-                  (if
-                    (if
+                    (call ci::both
+                      (call ci::either
+                        (call ci::eq (local kind) (i64 1))
+                        (call ci::either
+                          (call ci::eq (local kind) (i64 2))
+                          (call ci::either
+                            (call ci::eq (local kind) (i64 4))
+                            (call ci::either
+                              (call ci::eq (local kind) (i64 5))
+                              (call ci::either (call ci::eq (local kind) (i64 8)) (bool false))))))
+                      (bool true)))
+                  (call ci::either
+                    (call ci::both
                       (call ci::eq (local owner) (i64 2))
-                      (if
-                        (if (call ci::eq (local kind) (i64 10)) (bool true) (bool false))
-                        (bool true)
-                        (bool false))
-                      (bool false))
-                    (bool true)
-                    (if
-                      (if
-                        (call ci::eq (local owner) (i64 6))
-                        (if
-                          (if (call ci::eq (local kind) (i64 14)) (bool true) (bool false))
-                          (bool true)
-                          (bool false))
-                        (bool false))
-                      (bool true)
-                      (if
-                        (if
-                          (call ci::eq (local owner) (i64 10))
-                          (if
-                            (if (call ci::eq (local kind) (i64 18)) (bool true) (bool false))
-                            (bool true)
-                            (bool false))
-                          (bool false))
-                        (bool true)
-                        (if
-                          (if
-                            (call ci::eq (local owner) (i64 11))
-                            (if
-                              (if (call ci::eq (local kind) (i64 19)) (bool true) (bool false))
-                              (bool true)
-                              (bool false))
-                            (bool false))
-                          (bool true)
-                          (bool false))))))
+                      (call ci::both
+                        (call ci::either (call ci::eq (local kind) (i64 10)) (bool false))
+                        (bool true)))
+                    (call ci::either
+                      (call ci::both
+                        (call ci::eq (local owner) (i64 3))
+                        (call ci::both
+                          (call ci::either (call ci::eq (local kind) (i64 11)) (bool false))
+                          (bool true)))
+                      (call ci::either
+                        (call ci::both
+                          (call ci::eq (local owner) (i64 4))
+                          (call ci::both
+                            (call ci::either (call ci::eq (local kind) (i64 12)) (bool false))
+                            (bool true)))
+                        (call ci::either
+                          (call ci::both
+                            (call ci::eq (local owner) (i64 6))
+                            (call ci::both
+                              (call ci::either (call ci::eq (local kind) (i64 14)) (bool false))
+                              (bool true)))
+                          (call ci::either
+                            (call ci::both
+                              (call ci::eq (local owner) (i64 10))
+                              (call ci::both
+                                (call ci::either (call ci::eq (local kind) (i64 18)) (bool false))
+                                (bool true)))
+                            (call ci::either
+                              (call ci::both
+                                (call ci::eq (local owner) (i64 11))
+                                (call ci::both
+                                  (call ci::either (call ci::eq (local kind) (i64 19)) (bool false))
+                                  (bool true)))
+                              (bool false))))))))
                 (if
                   (if
                     (call artifact-check::zeros
@@ -544,7 +543,7 @@ declarations.begin
                   (call ci::slice (local data) (i64 0) (i64 8))
                   (call ci::text-bytes (text "LKJCI001")))
                 (if
-                  (call ci::eq (call ci::u32 (local data) (i64 8)) (i64 7))
+                  (call ci::eq (call ci::u32 (local data) (i64 8)) (i64 8))
                   (if
                     (if
                       (call ci::eq (call ci::u64 (local data) (i64 16)) (local length))

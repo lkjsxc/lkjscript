@@ -1880,7 +1880,7 @@ fn selfhost_source_callable_prefix_8193_unit_and_carrier_extent_probe() -> Check
     let profile = projection.get(8..12).ok_or("probe profile extent")?;
     equal(
         profile,
-        8_u32.to_le_bytes().as_slice(),
+        9_u32.to_le_bytes().as_slice(),
         "probe current Mode-0 profile",
     )?;
     let (units, maximum_unit) = unit_extents(&host);

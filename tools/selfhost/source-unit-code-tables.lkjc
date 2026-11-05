@@ -103,20 +103,30 @@ declarations.begin
             (field extra (local extra)))
           (let
             (binding selected
-              (call source-unit-tables::name
-                (local pool)
-                (i64 7)
-                (local data)
-                (call ci::add (local cursor) (i64 1))))
+              (if
+                (call ci::eq (call ci::get (local data) (local cursor)) (i64 0))
+                (call source-unit-tables::reference
+                  (local pool)
+                  (i64 1)
+                  (local data)
+                  (call ci::add (local cursor) (i64 1)))
+                (call source-unit-tables::name
+                  (local pool)
+                  (i64 7)
+                  (local data)
+                  (call ci::add (local cursor) (i64 1)))))
             (binding after
-              (call ci::add
-                (call source-link-ref::name-end (local data) (call ci::add (local cursor) (i64 1)))
-                (i64 17)))
+              (if
+                (call ci::eq (call ci::get (local data) (local cursor)) (i64 0))
+                (call ci::add (local cursor) (i64 52))
+                (call ci::add
+                  (call source-link-ref::name-end (local data) (call ci::add (local cursor) (i64 1)))
+                  (i64 17))))
             (in
               (if
                 (call ci::eq (field (local selected) (name code)) (i64 0))
                 (if
-                  (call source-unit-tables::room (call ci::length (local extra)) (i64 8))
+                  (call source-unit-tables::room (call ci::length (local extra)) (i64 16))
                   (call record-loop
                     (local data)
                     (local after)
@@ -124,7 +134,9 @@ declarations.begin
                     (field (local selected) (name pool))
                     (call ci::concat
                       (local extra)
-                      (call source-unit-tables::word (field (local selected) (name index)))))
+                      (call ci::concat
+                        (call source-unit-tables::word (call ci::get (local data) (local cursor)))
+                        (call source-unit-tables::word (field (local selected) (name index))))))
                   (record structural
                     (field code (i64 3))
                     (field index (i64 0))
@@ -143,15 +155,52 @@ declarations.begin
       (returns (record (code I64) (index I64) (pool Bytes) (extra Bytes)))
       (body
         (let
-          (binding items
-            (call source-table::array (local data) (call source-table::skip (local data) (i64 39) (i64 33))))
-          (in
-            (call record-loop
+          (binding presence (call ci::get (local data) (i64 38)))
+          (binding arguments
+            (call source-table::array
               (local data)
-              (field (local items) (name next))
-              (field (local items) (name value))
-              (local pool)
-              (call ci::text-bytes (text "")))))))
+              (if (call ci::eq (local presence) (i64 0)) (i64 39) (i64 73))))
+          (in
+            (if
+              (call ci::eq (field (local arguments) (name value)) (i64 0))
+              (let
+                (binding nominal
+                  (if
+                    (call ci::eq (local presence) (i64 1))
+                    (call source-unit-tables::reference (local pool) (i64 0) (local data) (i64 39))
+                    (record structural
+                      (field code (i64 0))
+                      (field index (i64 0))
+                      (field pool (local pool)))))
+                (binding items
+                  (call source-table::array (local data) (field (local arguments) (name next))))
+                (in
+                  (if
+                    (call ci::eq (field (local nominal) (name code)) (i64 0))
+                    (let
+                      (binding members
+                        (call record-loop
+                          (local data)
+                          (field (local items) (name next))
+                          (field (local items) (name value))
+                          (field (local nominal) (name pool))
+                          (call ci::text-bytes (text ""))))
+                      (in
+                        (record structural
+                          (field code (field (local members) (name code)))
+                          (field index (field (local nominal) (name index)))
+                          (field pool (field (local members) (name pool)))
+                          (field extra (field (local members) (name extra))))))
+                    (record structural
+                      (field code (field (local nominal) (name code)))
+                      (field index (i64 0))
+                      (field pool (local pool))
+                      (field extra (call ci::text-bytes (text "")))))))
+              (record structural
+                (field code (i64 13))
+                (field index (i64 0))
+                (field pool (local pool))
+                (field extra (call ci::text-bytes (text "")))))))))
     (function create single
       (visibility package)
       (effect pure)
@@ -174,29 +223,36 @@ declarations.begin
           (binding op (call ci::get (local data) (i64 37)))
           (in
             (if
-              (call ci::either (call ci::eq (local op) (i64 10)) (call ci::eq (local op) (i64 11)))
-              (call call (local data) (local pool))
+              (call ci::eq (local op) (i64 14))
+              (call variant (local data) (local pool))
               (if
-                (call ci::eq (local op) (i64 13))
-                (call record (local data) (local pool))
+                (call ci::either (call ci::eq (local op) (i64 10)) (call ci::eq (local op) (i64 11)))
+                (call call (local data) (local pool))
                 (if
-                  (call ci::eq (local op) (i64 15))
-                  (call single
-                    (call source-unit-tables::name (local pool) (i64 7) (local data) (i64 56)))
+                  (call ci::eq (local op) (i64 13))
+                  (call record (local data) (local pool))
                   (if
-                    (call ci::eq (local op) (i64 16))
-                    (call single (call source-unit-tables::type (local pool) (local data) (i64 38)))
+                    (call ci::eq (local op) (i64 15))
                     (if
-                      (call ci::either
-                        (call ci::eq (local op) (i64 3))
-                        (call ci::eq (local op) (i64 4)))
+                      (call ci::eq (call ci::get (local data) (i64 55)) (i64 0))
                       (call single
-                        (call source-unit-tables::name (local pool) (i64 9) (local data) (i64 39)))
-                      (record structural
-                        (field code (i64 0))
-                        (field index (i64 0))
-                        (field pool (local pool))
-                        (field extra (call ci::text-bytes (text "")))))))))))))
+                        (call source-unit-tables::reference (local pool) (i64 1) (local data) (i64 56)))
+                      (call single
+                        (call source-unit-tables::name (local pool) (i64 7) (local data) (i64 56))))
+                    (if
+                      (call ci::eq (local op) (i64 16))
+                      (call single (call source-unit-tables::type (local pool) (local data) (i64 38)))
+                      (if
+                        (call ci::either
+                          (call ci::eq (local op) (i64 3))
+                          (call ci::eq (local op) (i64 4)))
+                        (call single
+                          (call source-unit-tables::name (local pool) (i64 9) (local data) (i64 39)))
+                        (record structural
+                          (field code (i64 0))
+                          (field index (i64 0))
+                          (field pool (local pool))
+                          (field extra (call ci::text-bytes (text ""))))))))))))))
     (function create binding
       (visibility package)
       (effect pure)
@@ -288,7 +344,9 @@ declarations.begin
                             (i64 0))))
                       (if
                         (if
-                          (call ci::eq (local op) (i64 7))
+                          (call ci::either
+                            (call ci::eq (local op) (i64 7))
+                            (call ci::either (call ci::eq (local op) (i64 18)) (bool false)))
                           (call ci::lt (i64 0) (local position))
                           (if
                             (call ci::eq (local op) (i64 8))
@@ -327,5 +385,81 @@ declarations.begin
                     (call source-table::data (local graph) (local row))))
                 (i64 2)
                 (i64 0))
-              (local selected))))))))
+              (local selected))))))
+    (function create variant
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create pool (type Bytes))
+      (returns (record (code I64) (index I64) (pool Bytes) (extra Bytes)))
+      (body
+        (if
+          (call ci::eq (field (call source-table::array (local data) (i64 72)) (name value)) (i64 0))
+          (call single (call source-unit-tables::reference (local pool) (i64 2) (local data) (i64 38)))
+          (record structural
+            (field code (i64 13))
+            (field index (i64 0))
+            (field pool (local pool))
+            (field extra (call ci::text-bytes (text "")))))))
+    (function create items
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (call ci::get (local data) (i64 37)) (i64 13))
+          (call source-table::skip
+            (local data)
+            (if (call ci::eq (call ci::get (local data) (i64 38)) (i64 0)) (i64 39) (i64 73))
+            (i64 33))
+          (call source-scalar-cursor::items (local data)))))
+    (function create field-value-at
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (call ci::get (local data) (local at)) (i64 0))
+          (call ci::add (local at) (i64 35))
+          (call source-link-ref::name-end (local data) (call ci::add (local at) (i64 1))))))
+    (function create field-reference
+      (visibility private)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create index (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding value (call field-value-at (local data) (local at)))
+          (in
+            (if
+              (call ci::eq (local index) (i64 0))
+              (local value)
+              (call field-reference
+                (local data)
+                (call ci::add (local value) (i64 17))
+                (call ci::sub (local index) (i64 1))))))))
+    (function create item-child
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create index (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (call ci::get (local data) (i64 37)) (i64 13))
+          (call source-table::owner
+            (local graph)
+            (local data)
+            (call field-reference
+              (local data)
+              (field (call source-table::array (local data) (call items (local data))) (name next))
+              (local index))
+            (i64 9))
+          (call source-scalar-cursor::item-child (local graph) (local data) (local index)))))))
 declarations.end

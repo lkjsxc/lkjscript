@@ -3,6 +3,9 @@ use super::*;
 use crate::platform::execution::normalized::structural_equality::assertions::equal as raw_value_equal;
 use crate::platform::kernel::{self, KernelSnapshot, TypeObjectDigest};
 
+#[path = "selfhost_source_cache_measurement_tests.rs"]
+pub(super) mod cache_measurement;
+
 fn probes(module: &str) -> &'static (KernelSnapshot, NormalizedProgram) {
     static PROBES: [OnceLock<(KernelSnapshot, NormalizedProgram)>; 12] =
         [const { OnceLock::new() }; 12];
@@ -117,6 +120,7 @@ fn invoke(module: &str, name: &str, arguments: Vec<NormalizedValue>) -> Normaliz
             | "source-type-scope-probe"
             | "source-nominal-probe"
     ) && matches!(arguments.first(), Some(NormalizedValue::Bytes(bytes)) if bytes.len() > 1_048_576);
+    let measured_vm = cache_measurement::start_cpu();
     let start = std::time::Instant::now();
     let vm = NormalizedVm::for_test(program, policy)
         .invoke(declaration, arguments.clone(), None, &control)
@@ -129,6 +133,8 @@ fn invoke(module: &str, name: &str, arguments: Vec<NormalizedValue>) -> Normaliz
             vm.1.allocated_bytes
         );
     }
+    cache_measurement::finish("raw.vm", measured_vm);
+    let measured_reference = cache_measurement::start_cpu();
     let start = std::time::Instant::now();
     let reference = NormalizedReferenceInterpreter::new(source, program, policy)
         .invoke(declaration, arguments, None, &control)
@@ -141,6 +147,7 @@ fn invoke(module: &str, name: &str, arguments: Vec<NormalizedValue>) -> Normaliz
             reference.1.allocated_bytes
         );
     }
+    cache_measurement::finish("raw.reference", measured_reference);
     assert_eq!(
         raw_value_equal(&vm.0, &reference.0),
         Ok(true),
@@ -166,7 +173,7 @@ fn probe_module(name: &str) -> &'static str {
     match name {
         "read-owner" | "read-records" => "source-record-probe",
         "read-carrier" | "read-graph" => "source-graph-probe",
-        "read-syntax" | "read-syntax-budget" => "source-scope-probe",
+        "read-syntax" | "read-syntax-budget" | "read-forest" => "source-scope-probe",
         "read-map" => "source-map-probe",
         "read-state" => "source-state-probe",
         "read-revision" | "read-dependency" | "read-retirement" => "source-history-probe",
@@ -202,6 +209,7 @@ fn source_reader_native_output(
         bytes.len(),
         deadline.as_secs(),
     );
+    let measured = cache_measurement::start();
     let start = std::time::Instant::now();
     let output =
         native_filter_tests::execute_filter_with_deadline(image, bytes, &[], 127, deadline);
@@ -212,18 +220,32 @@ fn source_reader_native_output(
         output.stdout.len(),
         output.stderr.len(),
     );
+    cache_measurement::finish("reader.native-filter", measured);
+    cache_measurement::note("reader.native-result", || {
+        serde_json::json!({
+            "producer": producer,
+            "image_sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(image)),
+            "input_sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(bytes)),
+            "exit_code": output.status.code(),
+            "stdout_sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(&output.stdout)),
+            "stderr_sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(&output.stderr)),
+        })
+    });
     output
 }
 
 fn native_reader_image(name: &str) -> Vec<u8> {
     let module = probe_module(name);
     static IMAGES: OnceLock<std::sync::Mutex<BTreeMap<String, Vec<u8>>>> = OnceLock::new();
-    IMAGES
-        .get_or_init(Default::default)
-        .lock()
-        .unwrap()
+    let wait = cache_measurement::start();
+    let observing = wait.is_some();
+    let mut images = IMAGES.get_or_init(Default::default).lock().unwrap();
+    let held = cache_measurement::split("rust-native.map-wait", wait);
+    let hit = observing.then(|| images.contains_key(name));
+    let image = images
         .entry(name.to_owned())
         .or_insert_with(|| {
+            let build = cache_measurement::start();
             let (_, program) = probes(module);
             let image = crate::platform::compiler::elf_x86_64::compile_function(
                 program,
@@ -236,9 +258,20 @@ fn native_reader_image(name: &str) -> Vec<u8> {
                 image.len(),
                 crate::platform::semantic_id::encode_hex(&Sha256::digest(&image))
             );
+            cache_measurement::finish("rust-native.build", build);
             image
         })
-        .clone()
+        .clone();
+    drop(images);
+    cache_measurement::finish("rust-native.map-hold", held);
+    cache_measurement::note("rust-native.cache", || serde_json::json!({ "hit": hit }));
+    cache_measurement::note("rust-native.image", || {
+        serde_json::json!({
+            "bytes": image.len(),
+            "sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(&image)),
+        })
+    });
+    image
 }
 
 fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
@@ -284,15 +317,24 @@ fn emitted_result(name: &str, bytes: &[u8], code: i64) {
 fn emitted_result_bytes(name: &str, bytes: &[u8], code: i64, expected: &[u8]) {
     static IMAGES: OnceLock<std::sync::Mutex<BTreeMap<String, Vec<u8>>>> = OnceLock::new();
     let module = probe_module(name);
-    let image = IMAGES
-        .get_or_init(Default::default)
-        .lock()
-        .unwrap()
-        .entry(name.to_owned())
+    let wait = cache_measurement::start();
+    let observing = wait.is_some();
+    let mut images = IMAGES.get_or_init(Default::default).lock().unwrap();
+    let held = cache_measurement::split("self-produced.map-wait", wait);
+    let hit = observing.then(|| images.contains_key(name));
+    let image = images.entry(name.to_owned())
         .or_insert_with(|| {
+            let build = cache_measurement::start();
             let (_, program) = probes(module);
             let target = program.function(function(module, name)).unwrap().0 as usize;
+            let projected = cache_measurement::start();
             let input = input::export(program, target).unwrap();
+            cache_measurement::finish("self-produced.export", projected);
+            cache_measurement::note("self-produced.projection", || serde_json::json!({
+                "profile": u32::from_le_bytes(input[8..12].try_into().unwrap()),
+                "bytes": input.len(),
+                "sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(&input)),
+            }));
             let word = |at| u64::from_le_bytes(input[at..at + 8].try_into().unwrap());
             let maximum_locals = (0..word(96) as usize)
                 .map(|row| word(word(88) as usize + row * input::FUNCTION_BYTES + 24))
@@ -316,9 +358,19 @@ fn emitted_result_bytes(name: &str, bytes: &[u8], code: i64, expected: &[u8]) {
                 image.len(),
                 crate::platform::semantic_id::encode_hex(&Sha256::digest(&image))
             );
+            cache_measurement::finish("self-produced.build", build);
             image
         })
         .clone();
+    drop(images);
+    cache_measurement::finish("self-produced.map-hold", held);
+    cache_measurement::note("self-produced.cache", || serde_json::json!({ "hit": hit }));
+    cache_measurement::note("self-produced.image", || {
+        serde_json::json!({
+            "bytes": image.len(),
+            "sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(&image)),
+        })
+    });
     let output = source_reader_native_output("self-produced-native", name, &image, bytes);
     assert_eq!(
         output.status.code(),
@@ -869,11 +921,12 @@ fn selfhost_source_owners_reject_mismatched_headers_and_noncanonical_expressions
         vec![11],
         vec![12],
         vec![13, 0, 0, 0],
+        vec![18],
         vec![21],
     ] {
         reject_owner(owner, &[head.clone(), operation].concat());
     }
-    for operation in [17, 18, 19, 23, 24, 38, 51] {
+    for operation in [17, 19, 23, 24, 38, 51] {
         let bytes = object_envelope(
             b"LKJOWNER",
             "lkjscript.kernel.owner-envelope",

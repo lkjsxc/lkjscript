@@ -151,7 +151,12 @@ declarations.begin
           (binding b5 (type ByteBuffer) (call ci::le (i64 0) (i64 8) (local b4)))
           (binding b6
             (type ByteBuffer)
-            (call ci::le (call ci::div (call ci::length (local extra)) (i64 8)) (i64 8) (local b5)))
+            (call ci::le
+              (call ci::div
+                (call ci::length (local extra))
+                (call source-unit-code-pack::width (local tag)))
+              (i64 8)
+              (local b5)))
           (binding b7
             (type ByteBuffer)
             (call wire::range (local extra) (i64 0) (call ci::length (local extra)) (local b6)))

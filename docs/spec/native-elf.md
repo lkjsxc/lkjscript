@@ -48,7 +48,9 @@ image and compiler-format bounds remain unchanged by this transport contract.
 
 The initial native instruction set covers Unit, Bool, I64, text constants,
 structural and nominal records, lists, fields, branches, ordinary and generic
-calls, bound function values, invocation and graph tail transfer. It includes
+calls, bound function values, invocation and graph tail transfer. The ordinary
+nominal extension adds closed nongeneric acyclic copyable Variant construction
+and exhaustive Match inside the existing entry/result boundaries. It includes
 checked I64 arithmetic/comparisons/conversion, boolean operations and list
 length/get/append. Immutable byte intermediates support length/get/equality,
 construction from octet lists or raw UTF-8 text, copying, slicing and concatenation.
@@ -89,6 +91,28 @@ F64, other byte entry/results, region operations
 and other unsupported instructions produce
 `native_elf_unsupported` before output publication. There is no interpreter fallback.
 
+The ordinary Variant/Match backend subset requires the complete reachable
+nominal type closure to be copyable and acyclic, including payload types of
+unselected cases. Exact prepared origin and declaration/layout identity are
+checked; equal-shaped nominal definitions are not interchangeable. Constructors
+preserve payload absence versus present Unit. Match requires complete canonical
+case coverage, forward in-function arm targets and distinct fresh nonparameter
+payload locals. Only the selected arm initializes its binder. Ordinary Record
+evaluation preserves its admitted canonical selector order. Existing ByteBuffer
+cleanup and live-owner tail fallback apply around every arm.
+
+This extension does not admit OwnedRecord/OwnedChoice, resource or borrowed
+payloads, generic/recursive nominal values, witnesses or lexical Regions. Its
+internal nominal values do not change the public binary-filter signature: an
+equal-shaped nominal Reply cannot replace the structural protocol record. The
+Rust native Variant layout and the source-native nominal layout are private to
+their respective backends; neither is a public wire or phase ABI. Variant shape
+traps use the existing native rejection/phase recovery path, and surviving phase
+results remain governed by the unchanged structural Bytes-output contract. The
+[ordinary nominal decision proposal](../decisions/20261103-closed-ordinary-nominal.md)
+records the publicly adopted candidate, passed C0 and focused source controls,
+and pending renewed compiler-generation/frozen-tree acceptance.
+
 The safe first-party emitter writes the ELF64 header, an RX `PT_LOAD` segment,
 a non-executable stack declaration, native x86_64 code and relocation/data bytes
 into a fallibly grown `Vec<u8>` with checked contiguous representation extents.
@@ -124,7 +148,7 @@ Every graph tail transfer checkpoints even at zero arity with zero locals.
 Tail transfer prevents accumulating activations; ordinary non-tail recursion and
 very wide native frames remain subject to physical OS stack availability.
 Native private metadata is compiler-constructed, not an arbitrary-pointer
-sandbox. The [profile-8 contract](selfhosting.md#closed-pure-callable-transfer)
+sandbox. The [profile-9 contract](selfhosting.md#closed-ordinary-nominal-transfer)
 defines the selfhost projection separately from this Rust backend's private
 callable representation.
 

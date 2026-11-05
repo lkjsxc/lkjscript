@@ -18,6 +18,8 @@ mod bytes;
 mod closure;
 #[path = "selfhost_input_profile_tests.rs"]
 mod input_profile;
+#[path = "selfhost_nominal_admission_tests.rs"]
+mod nominal_admission;
 #[path = "selfhost_source_tests.rs"]
 mod source;
 
@@ -31,7 +33,7 @@ fn selfhost_normalized_byte_inventory_exports_current_compiler() {
         .unwrap()
         .0 as usize;
     let payload = input::export(program, entry).unwrap();
-    assert_eq!(u32_at(&payload, 8), 8);
+    assert_eq!(u32_at(&payload, 8), 9);
     eprintln!(
         "selfhost byte inventory functions={} nodes={} input_bytes={} types={}",
         wide_at(&payload, 96),
@@ -243,12 +245,30 @@ fn compile_with_policy(
     let declaration = declaration_named(source, "compile-elf");
     let values = vec![NormalizedValue::bytes(bytes)];
     let control = ExecutionControl::uncancelled();
+    let measured_vm = source::cache_measurement::start_cpu();
     let (vm, vm_work) = NormalizedVm::for_test(program, policy)
         .invoke(declaration, values.clone(), None, &control)
         .unwrap();
+    source::cache_measurement::finish("compiler.vm", measured_vm);
+    let measured_reference = source::cache_measurement::start_cpu();
     let (reference, reference_work) = NormalizedReferenceInterpreter::new(source, program, policy)
         .invoke(declaration, values, None, &control)
         .unwrap();
+    source::cache_measurement::finish("compiler.reference", measured_reference);
+    source::cache_measurement::note("compiler.work", || {
+        serde_json::json!({
+            "input_sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(bytes)),
+            "policy": format!("{policy:?}"),
+            "vm_instructions": vm_work.instructions.to_string(),
+            "vm_instructions_saturated": vm_work.instructions_saturated,
+            "vm_modeled_allocation": vm_work.allocated_bytes.to_string(),
+            "vm_modeled_allocation_saturated": vm_work.allocated_bytes_saturated,
+            "reference_expressions": reference_work.expressions.to_string(),
+            "reference_expressions_saturated": reference_work.expressions_saturated,
+            "reference_modeled_allocation": reference_work.allocated_bytes.to_string(),
+            "reference_modeled_allocation_saturated": reference_work.allocated_bytes_saturated,
+        })
+    });
     assert_eq!(
         raw_value_equal(&vm, &reference,),
         Ok(true),
@@ -286,16 +306,26 @@ fn compile_with_policy(
         panic!("image");
     };
     let index = program.function(declaration).unwrap().0 as usize;
+    let measured_c0 = source::cache_measurement::start_cpu();
     let compiler_image = crate::platform::compiler::elf_x86_64::compile_function(program, index)
         .unwrap()
         .0;
+    source::cache_measurement::finish("compiler.c0-image", measured_c0);
+    source::cache_measurement::note("compiler.c1-image", || {
+        serde_json::json!({
+            "bytes": compiler_image.len(),
+            "sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(&compiler_image)),
+        })
+    });
     eprintln!(
         "selfhost stage=C1 tier=backend compiler_sha256={} compiler_bytes={} input_sha256={}",
         crate::platform::semantic_id::encode_hex(&Sha256::digest(&compiler_image)),
         compiler_image.len(),
         crate::platform::semantic_id::encode_hex(&Sha256::digest(bytes)),
     );
+    let measured_c1 = source::cache_measurement::start_cpu();
     let native = native_filter_tests::execute_filter(&compiler_image, bytes, &[], 127);
+    source::cache_measurement::finish("compiler.c1-execute", measured_c1);
     assert!(
         native.stdout == image.as_ref(),
         "native compiler output differs: exit={:?} stderr={} expected_bytes={} actual_bytes={} expected_sha256={} actual_sha256={}",
@@ -316,6 +346,16 @@ fn compile_with_policy(
             format!("compiler_rejected:{code}\n").as_bytes()
         );
     }
+    source::cache_measurement::note("compiler.result", || {
+        serde_json::json!({
+            "diagnostic": code,
+            "image_sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(image.as_ref())),
+            "image_bytes": image.len(),
+            "c1_exit_code": native.status.code(),
+            "c1_stdout_sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(&native.stdout)),
+            "c1_stderr_sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(&native.stderr)),
+        })
+    });
     (*code, image.to_vec())
 }
 
@@ -531,7 +571,7 @@ fn selfhost_compiler_emits_runtime_arithmetic_and_exact_traps_on_both_engines() 
         assert_eq!(code, 0, "{name}");
         let output = execute(&image, &[]);
         eprintln!(
-            "selfhost profile=8 tier=backend case={name} input_sha256={} elf_sha256={} elf_bytes={} exit={:?}",
+            "selfhost profile=9 tier=backend case={name} input_sha256={} elf_sha256={} elf_bytes={} exit={:?}",
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&bytes)),
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&image)),
             image.len(),
@@ -670,6 +710,7 @@ fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
         (0, 0, 1),
         (8, 4, 2),
         (8, 6, 2),
+        (8, 8, 2),
         (12, 2, 5),
         (112, 1, 2),
         (112, 2, 2),
@@ -685,7 +726,7 @@ fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
         );
     }
     let mut artifact_mode = valid.clone();
-    artifact_mode[8..12].copy_from_slice(&7_u32.to_le_bytes());
+    artifact_mode[8..12].copy_from_slice(&8_u32.to_le_bytes());
     artifact_mode[112..116].copy_from_slice(&1_u32.to_le_bytes());
     input::rechecksum(&mut artifact_mode);
     assert_eq!(
@@ -770,7 +811,7 @@ fn selfhost_compiler_accepts_more_than_historical_node_limit_without_default_all
     assert_eq!(output.stdout, b"16384");
     assert!(output.stderr.is_empty());
     eprintln!(
-        "selfhost current profile=8 nodes={node_count} input_bytes={} elf_bytes={} compiler_padding=bounded-runtime-only",
+        "selfhost current profile=9 nodes={node_count} input_bytes={} elf_bytes={} compiler_padding=bounded-runtime-only",
         bytes.len(),
         image.len()
     );
@@ -800,7 +841,7 @@ fn selfhost_exporter_enforces_current_entry_and_complete_body_profile() {
         byte_buffer_tests::author_only(include_str!("../../../../tests/fixtures/native-elf.lkjc"))
             .unwrap();
     let program = prepare_snapshot(&source);
-    // Parameterized command entries, nominal layouts, list append and F64
+    // Parameterized command entries, generic nominal result entries, list append and F64
     // remain outside this private exporter profile.
     for name in [
         "arithmetic",
@@ -821,7 +862,7 @@ fn selfhost_exporter_enforces_current_entry_and_complete_body_profile() {
     }
 
     // The same historical fixture's closed Bind/Invoke body is supported by
-    // profile 8. Its independent literal result must survive all compiler routes.
+    // profile 9. Its independent literal result must survive all compiler routes.
     let declaration = declaration_named(&source, "captured");
     let policy = NormalizedRunPolicy::foreground();
     let control = ExecutionControl::uncancelled();
@@ -839,7 +880,7 @@ fn selfhost_exporter_enforces_current_entry_and_complete_body_profile() {
 
     let index = program.function(declaration).unwrap().0 as usize;
     let bytes = input::export(&program, index).unwrap();
-    assert_eq!(&bytes[8..12], &8_u32.to_le_bytes());
+    assert_eq!(&bytes[8..12], &9_u32.to_le_bytes());
     let (code, image) = compile(&bytes);
     assert_eq!(code, 0);
     let output = execute(&image, &[]);

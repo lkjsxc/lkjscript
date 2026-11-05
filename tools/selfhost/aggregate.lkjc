@@ -13,15 +13,16 @@ declarations.begin
       (body
         (let
           (binding count (call flow::field (local data) (local at) (i64 16)))
+          (binding nominal (if (local record) (call nominal-code::record (local data) (local at)) (bool false)))
           (binding a
             (type ByteBuffer)
             (call asm::imm
               (i64 7)
-              (call ci::mul (call ci::add (local count) (i64 1)) (i64 8))
+              (call ci::mul (call ci::add (local count) (if (local nominal) (i64 3) (i64 1))) (i64 8))
               (local out)))
           (binding b (type ByteBuffer) (call machine::wide-call (i64 5120) (local a)))
           (binding c (type ByteBuffer) (call asm::imm (i64 9) (local count) (local b)))
-          (binding d (type ByteBuffer) (call asm::store (i64 0) (i64 0) (i64 9) (local c)))
+          (binding d (type ByteBuffer) (if (local nominal) (call nominal-code::record-header (local data) (local at) (local c)) (call asm::store (i64 0) (i64 0) (i64 9) (local c))))
           (binding e
             (type ByteBuffer)
             (if
@@ -60,7 +61,7 @@ declarations.begin
                 (in (call asm::load (i64 2) (i64 7) (i64 0) (local z))))
               (call asm::mov (i64 2) (i64 9) (local h))))
           (binding j (type ByteBuffer) (call asm::shift (bool true) (i64 4) (i64 2) (i64 3) (local i)))
-          (binding k (type ByteBuffer) (call asm::lea (i64 7) (i64 0) (i64 8) (local j)))
+          (binding k (type ByteBuffer) (call asm::lea (i64 7) (i64 0) (if (local nominal) (i64 24) (i64 8)) (local j)))
           (binding l (type ByteBuffer) (call asm::binary (bool true) (i64 1) (i64 7) (i64 2) (local k)))
           (binding m (type ByteBuffer) (call asm::store (i64 7) (i64 0) (i64 1) (local l)))
           (binding n
@@ -108,7 +109,7 @@ declarations.begin
                   (local at)
                   (call ci::eq (local tag) (i64 14))
                   (local out))
-                (let
+                (if (call nominal-code::record (local data) (local at)) (call nominal-code::field (local data) (local at) (local out)) (let
                   (binding a (type ByteBuffer) (call ci::push (i64 88) (local out)))
                   (binding b
                     (type ByteBuffer)
@@ -119,5 +120,5 @@ declarations.begin
                         (call ci::add (call flow::field (local data) (local at) (i64 16)) (i64 1))
                         (i64 8))
                       (local a)))
-                  (in (call ci::push (i64 80) (local b))))))))))))
+                  (in (call ci::push (i64 80) (local b)))))))))))))
 declarations.end

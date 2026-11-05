@@ -81,28 +81,13 @@ declarations.begin
       (returns I64)
       (body (call ci::u64 (local types) (call payload (local identity)))))
     (function create value
-      (visibility package)
-      (effect pure)
-      (parameter create types (type Bytes))
-      (parameter create identity (type I64))
+      (visibility package) (effect pure)
+      (parameter create types (type Bytes)) (parameter create identity (type I64))
       (returns Bool)
       (body
-        (let
-          (binding tag (call kind (local types) (local identity)))
-          (in
-            (if
-              (call ci::either
-                (call ci::both (call ci::lt (i64 0) (local tag)) (call ci::lt (local tag) (i64 6)))
-                (call ci::either
-                  (call ci::either
-                    (call ci::eq (local tag) (i64 7))
-                    (call ci::eq (local tag) (i64 8)))
-                  (call ci::eq (local tag) (i64 10))))
-              (bool true)
-              (if
-                (call ci::eq (local tag) (i64 11))
-                (call function-copyable (local types) (local identity))
-                (bool false)))))))
+        (if (call ci::eq (call kind (local types) (local identity)) (i64 11))
+          (call function-copyable (local types) (local identity))
+          (call flat-copyable (local types) (local identity)))))
     (function create function-count
       (visibility package)
       (effect pure)
@@ -135,24 +120,17 @@ declarations.begin
           (local identity)
           (call function-count (local types) (local identity)))))
     (function create flat-copyable
-      (visibility private)
-      (effect pure)
-      (parameter create types (type Bytes))
-      (parameter create identity (type I64))
+      (visibility private) (effect pure)
+      (parameter create types (type Bytes)) (parameter create identity (type I64))
       (returns Bool)
-      (body
-        (let
-          (binding tag (call kind (local types) (local identity)))
-          (in
+      (body (let (binding tag (call kind (local types) (local identity)))
+        (in (call ci::either
+          (call ci::both (call ci::lt (i64 0) (local tag)) (call ci::lt (local tag) (i64 6)))
+          (call ci::either
+            (call ci::either (call ci::eq (local tag) (i64 7)) (call ci::eq (local tag) (i64 8)))
             (call ci::either
-              (call ci::both (call ci::lt (i64 0) (local tag)) (call ci::lt (local tag) (i64 6)))
-              (call ci::either
-                (call ci::either
-                  (call ci::eq (local tag) (i64 7))
-                  (call ci::eq (local tag) (i64 8)))
-                (call ci::either
-                  (call ci::eq (local tag) (i64 10))
-                  (call ci::eq (local tag) (i64 11)))))))))
+              (call ci::either (call ci::eq (local tag) (i64 10)) (call ci::eq (local tag) (i64 11)))
+              (call source-nominal-layout::nominal (local types) (local identity)))))))))
     (function create function-copyable-parameters
       (visibility private)
       (effect pure)
@@ -621,6 +599,9 @@ declarations.begin
                         (local a)))
                     (in (call intern (local types) (i64 12) (call ci::freeze (local b)))))
                   (if
+                    (call ci::eq (local form) (i64 8))
+                    (call source-nominal-layout::intern (local graph) (local types) (local mapping) (local data) (i64 20))
+                    (if
                     (call ci::eq (local form) (i64 11))
                     (let
                       (binding child (call reference (local graph) (local mapping) (local data) (i64 20)))
@@ -643,7 +624,7 @@ declarations.begin
                         (call ci::eq (local form) (i64 10))
                         (call ci::eq (local form) (i64 16)))
                       (call composite (local graph) (local types) (local mapping) (local data) (local form))
-                      (call outcome (i64 13) (local types) (i64 0)))))))))))
+                      (call outcome (i64 13) (local types) (i64 0))))))))))))
     (function create pass
       (visibility private)
       (effect pure)
@@ -690,6 +671,17 @@ declarations.begin
                   (field types (local types))
                   (field mapping (call ci::freeze (local out)))
                   (field pending (local pending)))))))))
+    (function create pending-nominal
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes)) (parameter create mapping (type Bytes))
+      (parameter create row (type I64)) (returns Bool)
+      (body (if (call ci::eq (local row) (call source-type-table::count (local graph)))
+        (bool false)
+        (if (if (call ci::eq (call source (local mapping) (local row)) (i64 0))
+            (call ci::eq (call ci::get (call source-type-table::data (local graph) (local row)) (i64 19)) (i64 8))
+            (bool false))
+          (bool true)
+          (call pending-nominal (local graph) (local mapping) (call ci::add (local row) (i64 1)))))))
     (function create rounds
       (visibility private)
       (effect pure)
@@ -719,7 +711,10 @@ declarations.begin
                     (field (local next) (name mapping))
                     (field (local next) (name pending)))
                   (record structural
-                    (field code (i64 17))
+                    (field code
+                      (if (call pending-nominal (local graph) (field (local next) (name mapping)) (i64 0))
+                        (i64 13)
+                        (i64 17)))
                     (field types (local types))
                     (field mapping (local mapping)))))
               (record structural

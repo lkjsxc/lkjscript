@@ -18,8 +18,8 @@ See the [self-hosting contract](../../docs/spec/selfhosting.md) and
 
 | Entry path | Current input | Work performed inside lkjscript |
 | --- | --- | --- |
-| Normalized backend | `LKJCI1` mode 0/profile 8 | Admit the backend projection and emit standalone ELF |
-| Normalized backend | `LKJCI1` mode 1/profile 7 | Admit the backend projection and construct a canonical artifact |
+| Normalized backend | `LKJCI1` mode 0/profile 9 | Admit the backend projection and emit standalone ELF |
+| Normalized backend | `LKJCI1` mode 1/profile 8 | Admit the backend projection and construct a canonical artifact |
 | Raw-source compiler | `LKJSRQ01` profile 2 around complete `LKJSG002` profile 3 | Admit source meaning and custody, resolve the requested target, lower it and emit the selected ELF/artifact output |
 
 Each changed boundary has one current format. Predecessor selectors reject
@@ -61,7 +61,11 @@ including uncalled functions, untaken branches and unselected targets.
 Despite their historical `source-scalar-*` names, the active compiler modules
 support the maintained compiler's compound feature closure: Text/StaticText,
 Bytes, affine ByteBuffer, List<I64>, structural records/fields and pure function
-types, alongside Unit, Bool and I64. Closed pure FunctionValue, prefix Bind and
+types, alongside Unit, Bool and I64. The ordinary nominal extension specifies
+closed nongeneric acyclic copyable Record/Variant values and exhaustive Match.
+Exact qualified declarations distinguish equal-shaped types; every field and
+unselected case payload is admitted. MatchPayload binders are visible only in
+their own arm and require an exact annotation, including present Unit. Closed pure FunctionValue, prefix Bind and
 Invoke support factory closures, higher-order parameters/results and callable
 record fields. Exposed signatures and captures are copyable; direct ByteBuffer
 operations retain their existing custody contract. Closed generic substitutions
@@ -73,6 +77,8 @@ pure `() -> I64` commands and the pure binary-filter signature
 
 ByteBuffer custody checks consumption, synchronous borrow qualification,
 branch-balanced disposal, reverse lexical cleanup and returned-owner transfer.
+Match joins all arm states before deriving cleanup separately for each actual
+arm, so a later move also repairs every earlier arm that retains the owner.
 A live owned local prevents unsafe tail transfer; lowering uses Call or Invoke,
 cleanup and Return instead. Empty Bind keeps the evaluated callee without
 allocating an environment. Graph tail transfers preserve the original return
@@ -80,15 +86,26 @@ record and copy overlapping explicit arguments before captured prefixes. Complet
 Unsupported forms reject explicitly rather than bypassing their semantics.
 
 The `source-scalar-plan`, cursor/state/trace/emit helpers and packing modules
-build typed profile-8 backend input inside lkjscript. Its mixed record/Function
-descriptors and exact declaration/residual signatures are private projections.
+build typed profile-9 backend input inside lkjscript. Its structural/nominal/
+Function descriptors and exact declaration/residual signatures are private
+projections; dense Match ordinals do not replace source CaseReference identity.
 Source artifact construction keeps canonical FunctionValue/BeginBind/Capture/
-Bind/Invoke and includes canonical units, summaries, interfaces, maps and
-provenance. Mode 1 stays profile 7; the canonical schema epoch is unchanged. Closed bulk-byte
+Bind/Invoke and adds ordinary Record/Variant declaration units and canonical
+Variant/SwitchVariant, with exact member, type and summary dependencies. It
+preserves canonical field/case encounter order and does not add copyable-binder
+cleanup instructions. Mode 1 is profile 8; source profile 3, request profile 2
+and canonical schema epoch 1 are unchanged. Closed bulk-byte
 intrinsics avoid per-octet temporary values and are supported by both evaluators
 and both native compiler paths. Capability support must precede adoption of a
 new feature into the maintained compiler. Refresh the active-source inventory
 and raw-source fixed point after any closure expansion.
+
+The [ordinary nominal decision proposal](../../docs/decisions/20261103-closed-ordinary-nominal.md)
+binds the pending next-batch scope. Local drafts and these contracts are not
+public adoption or execution evidence. OwnedRecord/OwnedChoice, witnesses/read
+views, Regions, generic/recursive nominal values and full P_self remain outside
+this slice. The binary-filter reply remains the exact structural record, not
+a nominal record of the same shape.
 
 ## Native phase ownership
 

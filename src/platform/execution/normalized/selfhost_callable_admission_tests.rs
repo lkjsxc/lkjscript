@@ -115,7 +115,7 @@ fn reject(label: &str, base: &[u8], mutant: &[u8], diagnostic: i64) {
 }
 
 fn accept(bytes: &[u8], expected: i64) {
-    assert_eq!(u32::from_le_bytes(bytes[8..12].try_into().unwrap()), 8);
+    assert_eq!(u32::from_le_bytes(bytes[8..12].try_into().unwrap()), 9);
     check_descriptor_layer(bytes, wide_at(bytes, row(bytes, 0) + 56) as i64);
     let (diagnostic, image) = compile(bytes);
     assert_eq!(diagnostic, 0);

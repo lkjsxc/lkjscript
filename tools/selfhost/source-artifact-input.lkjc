@@ -86,7 +86,7 @@ declarations.begin
           (binding b
             (type ByteBuffer)
             (call ci::append (call ci::text-bytes (text "LKJCI001")) (i64 0) (local a)))
-          (binding c (type ByteBuffer) (call ci::le (i64 7) (i64 4) (local b)))
+          (binding c (type ByteBuffer) (call ci::le (i64 8) (i64 4) (local b)))
           (binding d (type ByteBuffer) (call ci::le (i64 0) (i64 4) (local c)))
           (binding e (type ByteBuffer) (call ci::le (local total) (i64 8) (local d)))
           (binding f (type ByteBuffer) (call ci::le (local count) (i64 8) (local e)))

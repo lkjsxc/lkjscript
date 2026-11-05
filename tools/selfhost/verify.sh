@@ -60,6 +60,7 @@ sha256sum src/platform/compiler/selfhost_input.rs \
   src/platform/execution/normalized/selfhost_artifact_order_tests.rs \
   src/platform/execution/normalized/selfhost_closure_tests.rs \
   src/platform/execution/normalized/selfhost_source_tests.rs \
+  src/platform/execution/normalized/selfhost_source_cache_measurement_tests.rs \
   src/platform/execution/normalized/selfhost_source_scalar_tests.rs \
   src/platform/execution/normalized/selfhost_source_compound_tests.rs \
   src/platform/execution/normalized/selfhost_source_custody_tests.rs \
@@ -114,6 +115,13 @@ sha256sum src/platform/compiler/selfhost_input.rs \
   tests/fixtures/selfhost-buffer-borrow-tail.lkjc \
   tests/fixtures/selfhost-forgotten-buffer.json \
   tests/fixtures/selfhost-unregistered-intrinsic.lkjc \
+  src/platform/compiler/selfhost_input/nominal_tests.rs \
+  src/platform/execution/normalized/mod.rs \
+  src/platform/execution/normalized/selfhost_nominal_admission_tests.rs \
+  src/platform/execution/normalized/selfhost_source_nominal_values_tests.rs \
+  src/platform/execution/normalized/selfhost_source_unit_index_tests.rs \
+  src/platform/execution/normalized/selfhost_source_label_measurement_tests.rs \
+  tests/fixtures/selfhost-source-nominal-values.lkjc \
   tests/fixtures/selfhost-untaken-unsupported.lkjc > .artifacts/selfhost/inputs.sha256
 rg --files tools/selfhost src/platform/compiler/elf_x86_64 \
   src/platform/compiler/elf_x86_64.rs \

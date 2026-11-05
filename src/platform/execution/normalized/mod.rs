@@ -79,6 +79,7 @@ pub(crate) use runner::{
     run_selected_graph_tests,
 };
 pub(crate) use session::NormalizedSessionApplication;
+pub(crate) use value_schema::NormalizedValueSchema;
 pub use vm::NormalizedRunObservation;
 pub(crate) use vm::NormalizedRunPolicy;
 pub(crate) use worker::NormalizedWorkerApplication;

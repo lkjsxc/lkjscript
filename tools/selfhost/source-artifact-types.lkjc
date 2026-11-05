@@ -90,38 +90,73 @@ declarations.begin
           (binding record (call source-table::data (local graph) (local row)))
           (in
             (if
-              (call ci::either (call ci::eq (local tag) (i64 5)) (call ci::eq (local tag) (i64 6)))
-              (call one
-                (local graph)
-                (local record)
-                (call source-custody-signature::result-at (local graph) (local row)))
+              (call ci::both
+                (local runtime)
+                (call ci::either
+                  (call ci::eq (local tag) (i64 12))
+                  (call ci::either (call ci::eq (local tag) (i64 13)) (bool false))))
+              (let
+                (binding member-type (call source-link-ref::name-end (local record) (i64 56)))
+                (in
+                  (if
+                    (call ci::eq (local tag) (i64 12))
+                    (call one (local graph) (local record) (local member-type))
+                    (if
+                      (call ci::eq (call ci::get (local record) (local member-type)) (i64 1))
+                      (call one (local graph) (local record) (call ci::add (local member-type) (i64 1)))
+                      (record structural
+                        (field code (i64 0))
+                        (field bytes (call ci::text-bytes (text ""))))))))
               (if
-                (call ci::both
-                  (local runtime)
-                  (call ci::either (call ci::eq (local tag) (i64 15)) (call ci::eq (local tag) (i64 19))))
+                (call ci::either (call ci::eq (local tag) (i64 5)) (call ci::eq (local tag) (i64 6)))
                 (call one
                   (local graph)
                   (local record)
-                  (call source-link-ref::name-end
-                    (local record)
-                    (if (call ci::eq (local tag) (i64 15)) (i64 57) (i64 56))))
+                  (call source-custody-signature::result-at (local graph) (local row)))
                 (if
-                  (local reference)
+                  (call ci::both
+                    (local runtime)
+                    (call ci::either
+                      (call ci::eq (local tag) (i64 15))
+                      (call ci::eq (local tag) (i64 19))))
+                  (call one
+                    (local graph)
+                    (local record)
+                    (call source-link-ref::name-end
+                      (local record)
+                      (if (call ci::eq (local tag) (i64 15)) (i64 57) (i64 56))))
                   (if
-                    (call ci::eq (local tag) (i64 16))
-                    (let
-                      (binding at
-                        (call ci::add (call source-link-ref::name-end (local record) (i64 39)) (i64 19)))
-                      (in
-                        (if
-                          (call ci::eq (call ci::get (local record) (local at)) (i64 1))
-                          (call one (local graph) (local record) (call ci::add (local at) (i64 1)))
-                          (record structural
-                            (field code (i64 0))
-                            (field bytes (call ci::text-bytes (text "")))))))
+                    (local reference)
                     (if
-                      (call ci::eq (local tag) (i64 17))
-                      (call expression (local graph) (local record))
-                      (record structural (field code (i64 0)) (field bytes (call ci::text-bytes (text ""))))))
-                  (record structural (field code (i64 0)) (field bytes (call ci::text-bytes (text "")))))))))))))
+                      (call ci::eq (local tag) (i64 16))
+                      (let
+                        (binding at
+                          (let
+                            (binding value-at
+                              (call ci::add
+                                (call source-link-ref::name-end (local record) (i64 39))
+                                (i64 1)))
+                            (in
+                              (call ci::add
+                                (local value-at)
+                                (if
+                                  (call ci::eq (call ci::get (local record) (local value-at)) (i64 0))
+                                  (i64 1)
+                                  (i64 18))))))
+                        (in
+                          (if
+                            (call ci::eq (call ci::get (local record) (local at)) (i64 1))
+                            (call one (local graph) (local record) (call ci::add (local at) (i64 1)))
+                            (record structural
+                              (field code (i64 0))
+                              (field bytes (call ci::text-bytes (text "")))))))
+                      (if
+                        (call ci::eq (local tag) (i64 17))
+                        (call expression (local graph) (local record))
+                        (record structural
+                          (field code (i64 0))
+                          (field bytes (call ci::text-bytes (text ""))))))
+                    (record structural
+                      (field code (i64 0))
+                      (field bytes (call ci::text-bytes (text ""))))))))))))))
 declarations.end

@@ -456,14 +456,18 @@ declarations.begin
       (effect pure)
       (parameter create data (type Bytes))
       (returns I64)
-      (body (call source-table::skip (local data) (i64 39) (i64 33))))
+      (body (call source-table::skip (local data)
+        (if (call ci::eq (call ci::get (local data) (i64 38)) (i64 1)) (i64 73) (i64 39))
+        (i64 33))))
     (function create record-value-at
       (visibility package)
       (effect pure)
       (parameter create data (type Bytes))
       (parameter create at (type I64))
       (returns I64)
-      (body (call source-link-ref::name-end (local data) (call ci::add (local at) (i64 1)))))
+      (body (if (call ci::eq (call ci::get (local data) (local at)) (i64 0))
+        (call ci::add (local at) (i64 35))
+        (call source-link-ref::name-end (local data) (call ci::add (local at) (i64 1))))))
     (function create record-payload
       (visibility private)
       (effect pure)
@@ -563,6 +567,8 @@ declarations.begin
       (parameter create data (type Bytes))
       (returns I64)
       (body
+        (if (call ci::eq (call ci::get (local data) (i64 55)) (i64 0))
+        (call source-nominal-infer::field-fact (local graph) (local types) (local facts) (local data))
         (let
           (binding identity
             (call fact (local facts) (call source-table::owner (local graph) (local data) (i64 38) (i64 9))))
@@ -587,7 +593,7 @@ declarations.begin
                       (call ci::lt (local index) (i64 0))
                       (i64 -19)
                       (call source-value-types::field-type (local types) (local identity) (local index)))))
-                (i64 -19)))))))
+                (i64 -19))))))))
     (function create list-items
       (visibility private)
       (effect pure)
@@ -723,8 +729,15 @@ declarations.begin
                   (call ci::eq (local op) (i64 21)))
                 (if
                   (call ci::eq (local op) (i64 13))
-                  (call record-fact (local graph) (local types) (local facts) (local data))
-                  (call outcome
+                  (if (call ci::eq (call ci::get (local data) (i64 38)) (i64 1))
+                    (call source-nominal-infer::record-fact (local graph) (local types) (local mapping) (local facts) (local data))
+                    (call record-fact (local graph) (local types) (local facts) (local data)))
+                  (if (call ci::eq (local op) (i64 14))
+                    (call source-nominal-infer::variant-fact (local graph) (local types) (local mapping) (local facts) (local data))
+                    (if (call ci::eq (local op) (i64 18))
+                      (call outcome (local types)
+                        (call source-nominal-infer::match-fact (local graph) (local types) (local mapping) (local facts) (local data)))
+                      (call outcome
                     (local types)
                     (call copyable-fact
                       (local graph)
@@ -732,8 +745,8 @@ declarations.begin
                       (local mapping)
                       (local facts)
                       (local data)
-                      (local op))))))))))
-    (function create binding-fact
+                      (local op))))))))))))
+    (function create let-binding-fact
       (visibility private)
       (effect pure)
       (parameter create graph (type Bytes))
@@ -774,6 +787,15 @@ declarations.begin
                         (call ci::add (local kind-at) (i64 20)))))
                   (local actual)
                   (i64 -19))))))))
+    (function create binding-fact
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes)) (parameter create types (type Bytes))
+      (parameter create mapping (type Bytes)) (parameter create facts (type Bytes))
+      (parameter create data (type Bytes)) (returns I64)
+      (body (if
+        (call ci::eq (call ci::get (local data) (call source-link-ref::name-end (local data) (i64 39))) (i64 1))
+        (call source-nominal-infer::binding-type (local graph) (local types) (local mapping) (local data))
+        (call let-binding-fact (local graph) (local types) (local mapping) (local facts) (local data)))))
     (function create seed
       (visibility private)
       (effect pure)

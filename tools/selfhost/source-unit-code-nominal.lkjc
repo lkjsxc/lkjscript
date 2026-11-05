@@ -1,0 +1,756 @@
+declarations.begin
+(units
+  (module create source-unit-code-nominal
+    (function create prepend
+      (visibility private)
+      (effect pure)
+      (parameter create prefix (type Bytes))
+      (parameter create state
+        (type
+          (record
+            (code I64)
+            (row I64)
+            (enter Bool)
+            (pool Bytes)
+            (slots Bytes)
+            (locals I64)
+            (pc I64)
+            (fragment Bytes))))
+      (returns
+        (record
+          (code I64)
+          (row I64)
+          (enter Bool)
+          (pool Bytes)
+          (slots Bytes)
+          (locals I64)
+          (pc I64)
+          (fragment Bytes)))
+      (body
+        (if
+          (call ci::eq (field (local state) (name code)) (i64 0))
+          (if
+            (call source-unit-tables::room
+              (call ci::length (local prefix))
+              (call ci::length (field (local state) (name fragment))))
+            (record structural
+              (field code (field (local state) (name code)))
+              (field row (field (local state) (name row)))
+              (field enter (field (local state) (name enter)))
+              (field pool (field (local state) (name pool)))
+              (field slots (field (local state) (name slots)))
+              (field locals (field (local state) (name locals)))
+              (field pc (field (local state) (name pc)))
+              (field fragment (call ci::concat (local prefix) (field (local state) (name fragment)))))
+            (record structural
+              (field code (i64 3))
+              (field row (field (local state) (name row)))
+              (field enter (field (local state) (name enter)))
+              (field pool (field (local state) (name pool)))
+              (field slots (field (local state) (name slots)))
+              (field locals (field (local state) (name locals)))
+              (field pc (field (local state) (name pc)))
+              (field fragment (call ci::text-bytes (text "")))))
+          (local state))))
+    (function create variant
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create state
+        (type
+          (record
+            (code I64)
+            (row I64)
+            (enter Bool)
+            (pool Bytes)
+            (slots Bytes)
+            (locals I64)
+            (pc I64)
+            (fragment Bytes))))
+      (parameter create row (type I64))
+      (returns
+        (record
+          (code I64)
+          (row I64)
+          (enter Bool)
+          (pool Bytes)
+          (slots Bytes)
+          (locals I64)
+          (pc I64)
+          (fragment Bytes)))
+      (body
+        (let
+          (binding plan
+            (call source-unit-code-tables::variant (local data) (field (local state) (name pool))))
+          (binding payload (call source-table::skip (local data) (i64 72) (i64 33)))
+          (in
+            (if
+              (call ci::eq (field (local plan) (name code)) (i64 0))
+              (call source-unit-code-events::instruction
+                (call source-unit-code-events::pool (local state) (field (local plan) (name pool)))
+                (local row)
+                (bool false)
+                (i64 16)
+                (field (local plan) (name index))
+                (call ci::get (local data) (local payload))
+                (i64 0)
+                (call ci::text-bytes (text "")))
+              (record structural
+                (field code (field (local plan) (name code)))
+                (field row (field (local state) (name row)))
+                (field enter (field (local state) (name enter)))
+                (field pool (field (local state) (name pool)))
+                (field slots (field (local state) (name slots)))
+                (field locals (field (local state) (name locals)))
+                (field pc (field (local state) (name pc)))
+                (field fragment (call ci::text-bytes (text "")))))))))
+    (function create variant-start
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create state
+        (type
+          (record
+            (code I64)
+            (row I64)
+            (enter Bool)
+            (pool Bytes)
+            (slots Bytes)
+            (locals I64)
+            (pc I64)
+            (fragment Bytes))))
+      (parameter create row (type I64))
+      (returns
+        (record
+          (code I64)
+          (row I64)
+          (enter Bool)
+          (pool Bytes)
+          (slots Bytes)
+          (locals I64)
+          (pc I64)
+          (fragment Bytes)))
+      (body
+        (let
+          (binding payload (call source-table::skip (local data) (i64 72) (i64 33)))
+          (in
+            (if
+              (call ci::eq (call ci::get (local data) (local payload)) (i64 0))
+              (call variant (local data) (local state) (local row))
+              (call source-unit-code-events::move
+                (local state)
+                (call source-table::owner
+                  (local graph)
+                  (local data)
+                  (call ci::add (local payload) (i64 1))
+                  (i64 9))
+                (bool true)))))))
+    (function create switch-extra
+      (visibility private)
+      (effect pure)
+      (parameter create count (type I64))
+      (parameter create index (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (if
+          (call ci::eq (local index) (local count))
+          (record structural (field code (i64 0)) (field bytes (call ci::freeze (local out))))
+          (if
+            (call source-unit-tables::room (call ci::size (local out)) (i64 32))
+            (let
+              (binding a (type ByteBuffer) (call ci::le (i64 0) (i64 8) (local out)))
+              (binding b (type ByteBuffer) (call ci::le (local index) (i64 8) (local a)))
+              (binding c (type ByteBuffer) (call ci::le (i64 0) (i64 8) (local b)))
+              (binding d (type ByteBuffer) (call ci::le (i64 0) (i64 8) (local c)))
+              (in (call switch-extra (local count) (call ci::add (local index) (i64 1)) (local d))))
+            (let
+              (binding discarded (call ci::discard (local out)))
+              (in
+                (record structural (field code (i64 3)) (field bytes (call ci::text-bytes (text ""))))))))))
+    (function create bind
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create at (type I64))
+      (parameter create state
+        (type
+          (record
+            (code I64)
+            (row I64)
+            (enter Bool)
+            (pool Bytes)
+            (slots Bytes)
+            (locals I64)
+            (pc I64)
+            (fragment Bytes))))
+      (returns
+        (record
+          (code I64)
+          (row I64)
+          (enter Bool)
+          (pool Bytes)
+          (slots Bytes)
+          (locals I64)
+          (pc I64)
+          (fragment Bytes)))
+      (body
+        (if
+          (call ci::eq (call ci::get (local data) (call ci::add (local at) (i64 34))) (i64 0))
+          (local state)
+          (if
+            (call ci::both
+              (call ci::lt (field (local state) (name locals)) (i64 4294967295))
+              (call source-unit-tables::room
+                (call ci::length (field (local state) (name slots)))
+                (i64 16)))
+            (let
+              (binding owner
+                (call source-table::owner
+                  (local graph)
+                  (local data)
+                  (call ci::add (local at) (i64 35))
+                  (i64 8)))
+              (binding empty (type ByteBuffer) (call ci::empty))
+              (binding a (type ByteBuffer) (call ci::le (local owner) (i64 8) (local empty)))
+              (binding b
+                (type ByteBuffer)
+                (call ci::le (field (local state) (name locals)) (i64 8) (local a)))
+              (binding slot (call ci::freeze (local b)))
+              (in
+                (record structural
+                  (field code (field (local state) (name code)))
+                  (field row (field (local state) (name row)))
+                  (field enter (field (local state) (name enter)))
+                  (field pool (field (local state) (name pool)))
+                  (field slots (call ci::concat (field (local state) (name slots)) (local slot)))
+                  (field locals (call ci::add (field (local state) (name locals)) (i64 1)))
+                  (field pc (field (local state) (name pc)))
+                  (field fragment (call ci::text-bytes (text ""))))))
+            (record structural
+              (field code (i64 3))
+              (field row (field (local state) (name row)))
+              (field enter (field (local state) (name enter)))
+              (field pool (field (local state) (name pool)))
+              (field slots (field (local state) (name slots)))
+              (field locals (field (local state) (name locals)))
+              (field pc (field (local state) (name pc)))
+              (field fragment (call ci::text-bytes (text ""))))))))
+    (function create arm-entry
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create data (type Bytes))
+      (parameter create state
+        (type
+          (record
+            (code I64)
+            (row I64)
+            (enter Bool)
+            (pool Bytes)
+            (slots Bytes)
+            (locals I64)
+            (pc I64)
+            (fragment Bytes))))
+      (parameter create parent (type I64))
+      (parameter create at (type I64))
+      (parameter create index (type I64))
+      (returns
+        (record
+          (code I64)
+          (row I64)
+          (enter Bool)
+          (pool Bytes)
+          (slots Bytes)
+          (locals I64)
+          (pc I64)
+          (fragment Bytes)))
+      (body
+        (let
+          (binding case
+            (call source-unit-tables::reference
+              (field (local state) (name pool))
+              (i64 2)
+              (local data)
+              (local at)))
+          (in
+            (if
+              (call ci::eq (field (local case) (name code)) (i64 0))
+              (let
+                (binding ready
+                  (call bind
+                    (local graph)
+                    (local data)
+                    (local at)
+                    (call source-unit-code-events::pool (local state) (field (local case) (name pool)))))
+                (in
+                  (if
+                    (call ci::eq (field (local ready) (name code)) (i64 0))
+                    (let
+                      (binding presence (call ci::get (local data) (call ci::add (local at) (i64 34))))
+                      (binding empty (type ByteBuffer) (call ci::empty))
+                      (binding a
+                        (type ByteBuffer)
+                        (call ci::le (field (local case) (name index)) (i64 8) (local empty)))
+                      (binding b (type ByteBuffer) (call ci::le (local presence) (i64 8) (local a)))
+                      (binding c
+                        (type ByteBuffer)
+                        (call ci::le
+                          (if
+                            (call ci::eq (local presence) (i64 1))
+                            (field (local state) (name locals))
+                            (i64 0))
+                          (i64 8)
+                          (local b)))
+                      (binding metadata (call ci::freeze (local c)))
+                      (in
+                        (call source-unit-code-events::outcome
+                          (local ready)
+                          (call source-table::owner
+                            (local graph)
+                            (local data)
+                            (call source-match::arm-body-at (local data) (local at))
+                            (i64 9))
+                          (bool true)
+                          (call source-unit-code-events::fragment
+                            (i64 0)
+                            (local parent)
+                            (local index)
+                            (field (local state) (name pc))
+                            (local metadata))
+                          (i64 0))))
+                    (local ready))))
+              (record structural
+                (field code (field (local case) (name code)))
+                (field row (field (local state) (name row)))
+                (field enter (field (local state) (name enter)))
+                (field pool (field (local state) (name pool)))
+                (field slots (field (local state) (name slots)))
+                (field locals (field (local state) (name locals)))
+                (field pc (field (local state) (name pc)))
+                (field fragment (call ci::text-bytes (text "")))))))))
+    (function create arms
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parent (type I64))
+      (returns (record (at I64) (count I64)))
+      (body
+        (let
+          (binding parsed
+            (call source-table::array
+              (local graph)
+              (call ci::add (call source-table::start (local graph) (local parent)) (i64 55))))
+          (in
+            (record structural
+              (field at (field (local parsed) (name next)))
+              (field count (field (local parsed) (name value))))))))
+    (function create column
+      (visibility private)
+      (effect pure)
+      (parameter create matches (type Bytes))
+      (parameter create column (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::both
+            (call ci::lte (i64 16) (call ci::length (local matches)))
+            (call ci::eq
+              (call ci::length (local matches))
+              (call ci::mul (call ci::div (call ci::length (local matches)) (i64 16)) (i64 16))))
+          (call ci::u64
+            (local matches)
+            (call ci::add (call ci::sub (call ci::length (local matches)) (i64 16)) (local column)))
+          (i64 -1))))
+    (function create owner-end
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parent (type I64))
+      (returns I64)
+      (body
+        (call ci::sub
+          (call ci::add
+            (call source-table::start (local graph) (local parent))
+            (call ci::u32
+              (local graph)
+              (call ci::add
+                (call ci::add
+                  (call ci::u32 (local graph) (i64 92))
+                  (call ci::mul (local parent) (i64 8)))
+                (i64 4))))
+          (i64 32))))
+    (function create current-arm
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create matches (type Bytes))
+      (parameter create parent (type I64))
+      (parameter create row (type I64))
+      (parameter create position (type I64))
+      (returns I64)
+      (body
+        (let
+          (binding arms (call arms (local graph) (local parent)))
+          (binding index (call ci::div (local position) (i64 2)))
+          (binding at (call column (local matches) (i64 8)))
+          (binding end (call owner-end (local graph) (local parent)))
+          (in
+            (if
+              (call ci::both
+                (call ci::lt (i64 0) (local position))
+                (call ci::both
+                  (call ci::eq (local position) (call ci::mul (local index) (i64 2)))
+                  (call ci::lte (local index) (field (local arms) (name count)))))
+              (if
+                (call ci::both
+                  (call ci::eq (call column (local matches) (i64 0)) (local parent))
+                  (call ci::both
+                    (call ci::lte (field (local arms) (name at)) (local at))
+                    (call ci::lte (local at) (local end))))
+                (if
+                  (call ci::lte (i64 52) (call ci::sub (local end) (local at)))
+                  (let
+                    (binding presence (call ci::get (local graph) (call ci::add (local at) (i64 34))))
+                    (in
+                      (if
+                        (call ci::both
+                          (call ci::lte (i64 0) (local presence))
+                          (call ci::lte (local presence) (i64 1)))
+                        (if
+                          (call ci::lte
+                            (call ci::add (i64 52) (call ci::mul (local presence) (i64 17)))
+                            (call ci::sub (local end) (local at)))
+                          (if
+                            (call ci::eq
+                              (call source-table::owner
+                                (local graph)
+                                (local graph)
+                                (call source-match::arm-body-at (local graph) (local at))
+                                (i64 9))
+                              (local row))
+                            (local at)
+                            (i64 -1))
+                          (i64 -1))
+                        (i64 -1))))
+                  (i64 -1))
+                (i64 -1))
+              (i64 -1))))))
+    (function create open
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create matches (type Bytes))
+      (parameter create parent (type I64))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (let
+          (binding arms (call arms (local graph) (local parent)))
+          (in
+            (if
+              (call ci::both
+                (call ci::lt (i64 0) (field (local arms) (name count)))
+                (call source-unit-tables::room (call ci::length (local matches)) (i64 16)))
+              (let
+                (binding empty (type ByteBuffer) (call ci::empty))
+                (binding copied
+                  (type ByteBuffer)
+                  (call ci::append-slice
+                    (local matches)
+                    (i64 0)
+                    (call ci::length (local matches))
+                    (local empty)))
+                (binding owner (type ByteBuffer) (call ci::le (local parent) (i64 8) (local copied)))
+                (binding complete
+                  (type ByteBuffer)
+                  (call ci::le (field (local arms) (name at)) (i64 8) (local owner)))
+                (in
+                  (record structural
+                    (field code (i64 0))
+                    (field bytes (call ci::freeze (local complete))))))
+              (record structural (field code (i64 3)) (field bytes (local matches))))))))
+    (function create advance
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create matches (type Bytes))
+      (parameter create parent (type I64))
+      (parameter create row (type I64))
+      (parameter create position (type I64))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (if
+          (call ci::eq (local position) (i64 0))
+          (call open (local graph) (local matches) (local parent))
+          (let
+            (binding at
+              (call current-arm
+                (local graph)
+                (local matches)
+                (local parent)
+                (local row)
+                (local position)))
+            (binding arms (call arms (local graph) (local parent)))
+            (in
+              (if
+                (call ci::lte (i64 0) (local at))
+                (if
+                  (call ci::lt
+                    (call ci::div (local position) (i64 2))
+                    (field (local arms) (name count)))
+                  (let
+                    (binding empty (type ByteBuffer) (call ci::empty))
+                    (binding copied
+                      (type ByteBuffer)
+                      (call ci::append-slice
+                        (local matches)
+                        (i64 0)
+                        (call ci::sub (call ci::length (local matches)) (i64 8))
+                        (local empty)))
+                    (binding complete
+                      (type ByteBuffer)
+                      (call ci::le
+                        (call source-match::arm-next (local graph) (local at))
+                        (i64 8)
+                        (local copied)))
+                    (in
+                      (record structural
+                        (field code (i64 0))
+                        (field bytes (call ci::freeze (local complete))))))
+                  (record structural
+                    (field code (i64 0))
+                    (field bytes
+                      (call ci::slice
+                        (local matches)
+                        (i64 0)
+                        (call ci::sub (call ci::length (local matches)) (i64 16))))))
+                (record structural (field code (i64 3)) (field bytes (local matches)))))))))
+    (function create context
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create parents (type Bytes))
+      (parameter create matches (type Bytes))
+      (parameter create root (type I64))
+      (parameter create state
+        (type
+          (record
+            (code I64)
+            (row I64)
+            (enter Bool)
+            (pool Bytes)
+            (slots Bytes)
+            (locals I64)
+            (pc I64)
+            (fragment Bytes))))
+      (returns (record (code I64) (bytes Bytes)))
+      (body
+        (if
+          (call ci::eq
+            (call ci::length (local matches))
+            (call ci::mul (call ci::div (call ci::length (local matches)) (i64 16)) (i64 16)))
+          (if
+            (field (local state) (name enter))
+            (record structural (field code (i64 0)) (field bytes (local matches)))
+            (if
+              (call ci::eq (field (local state) (name row)) (local root))
+              (if
+                (call ci::eq (call ci::length (local matches)) (i64 0))
+                (record structural (field code (i64 0)) (field bytes (local matches)))
+                (record structural (field code (i64 3)) (field bytes (local matches))))
+              (let
+                (binding parent
+                  (call source-table::parent (local parents) (field (local state) (name row))))
+                (in
+                  (if
+                    (call ci::eq (call source-table::kind (local graph) (local parent)) (i64 17))
+                    (if
+                      (call ci::eq
+                        (call ci::get
+                          (local graph)
+                          (call ci::add
+                            (call source-table::start (local graph) (local parent))
+                            (i64 37)))
+                        (i64 18))
+                      (call advance
+                        (local graph)
+                        (local matches)
+                        (local parent)
+                        (field (local state) (name row))
+                        (call source-table::column
+                          (local parents)
+                          (field (local state) (name row))
+                          (i64 8)))
+                      (record structural (field code (i64 0)) (field bytes (local matches))))
+                    (record structural (field code (i64 0)) (field bytes (local matches))))))))
+          (record structural (field code (i64 3)) (field bytes (local matches))))))
+    (function create after-value
+      (visibility private)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create state
+        (type
+          (record
+            (code I64)
+            (row I64)
+            (enter Bool)
+            (pool Bytes)
+            (slots Bytes)
+            (locals I64)
+            (pc I64)
+            (fragment Bytes))))
+      (parameter create parent (type I64))
+      (returns
+        (record
+          (code I64)
+          (row I64)
+          (enter Bool)
+          (pool Bytes)
+          (slots Bytes)
+          (locals I64)
+          (pc I64)
+          (fragment Bytes)))
+      (body
+        (let
+          (binding arms (call arms (local graph) (local parent)))
+          (in
+            (if
+              (call ci::lt (i64 0) (field (local arms) (name count)))
+              (let
+                (binding empty (type ByteBuffer) (call ci::empty))
+                (binding extra
+                  (call switch-extra (field (local arms) (name count)) (i64 0) (local empty)))
+                (in
+                  (if
+                    (call ci::eq (field (local extra) (name code)) (i64 0))
+                    (let
+                      (binding switch
+                        (call source-unit-code-events::instruction
+                          (local state)
+                          (local parent)
+                          (bool false)
+                          (i64 20)
+                          (local parent)
+                          (i64 0)
+                          (i64 0)
+                          (field (local extra) (name bytes))))
+                      (in
+                        (if
+                          (call ci::eq (field (local switch) (name code)) (i64 0))
+                          (call prepend
+                            (field (local switch) (name fragment))
+                            (call arm-entry
+                              (local graph)
+                              (local graph)
+                              (local switch)
+                              (local parent)
+                              (field (local arms) (name at))
+                              (i64 0)))
+                          (local switch))))
+                    (record structural
+                      (field code (field (local extra) (name code)))
+                      (field row (field (local state) (name row)))
+                      (field enter (field (local state) (name enter)))
+                      (field pool (field (local state) (name pool)))
+                      (field slots (field (local state) (name slots)))
+                      (field locals (field (local state) (name locals)))
+                      (field pc (field (local state) (name pc)))
+                      (field fragment (call ci::text-bytes (text "")))))))
+              (record structural
+                (field code (i64 3))
+                (field row (field (local state) (name row)))
+                (field enter (field (local state) (name enter)))
+                (field pool (field (local state) (name pool)))
+                (field slots (field (local state) (name slots)))
+                (field locals (field (local state) (name locals)))
+                (field pc (field (local state) (name pc)))
+                (field fragment (call ci::text-bytes (text "")))))))))
+    (function create after
+      (visibility package)
+      (effect pure)
+      (parameter create graph (type Bytes))
+      (parameter create matches (type Bytes))
+      (parameter create state
+        (type
+          (record
+            (code I64)
+            (row I64)
+            (enter Bool)
+            (pool Bytes)
+            (slots Bytes)
+            (locals I64)
+            (pc I64)
+            (fragment Bytes))))
+      (parameter create parent (type I64))
+      (parameter create position (type I64))
+      (returns
+        (record
+          (code I64)
+          (row I64)
+          (enter Bool)
+          (pool Bytes)
+          (slots Bytes)
+          (locals I64)
+          (pc I64)
+          (fragment Bytes)))
+      (body
+        (if
+          (call ci::eq (local position) (i64 0))
+          (call after-value (local graph) (local state) (local parent))
+          (let
+            (binding arms (call arms (local graph) (local parent)))
+            (binding next (call ci::div (local position) (i64 2)))
+            (binding at
+              (call current-arm
+                (local graph)
+                (local matches)
+                (local parent)
+                (field (local state) (name row))
+                (local position)))
+            (in
+              (if
+                (call ci::lte (i64 0) (local at))
+                (let
+                  (binding jump
+                    (call source-unit-code-events::instruction
+                      (local state)
+                      (local parent)
+                      (bool false)
+                      (i64 11)
+                      (local parent)
+                      (field (local arms) (name count))
+                      (i64 0)
+                      (call ci::text-bytes (text ""))))
+                  (in
+                    (if
+                      (call ci::eq (field (local jump) (name code)) (i64 0))
+                      (if
+                        (call ci::lt (local next) (field (local arms) (name count)))
+                        (call prepend
+                          (field (local jump) (name fragment))
+                          (call arm-entry
+                            (local graph)
+                            (local graph)
+                            (local jump)
+                            (local parent)
+                            (call source-match::arm-next (local graph) (local at))
+                            (local next)))
+                        (call prepend
+                          (field (local jump) (name fragment))
+                          (call source-unit-code-events::label
+                            (local jump)
+                            (local parent)
+                            (field (local arms) (name count)))))
+                      (local jump))))
+                (record structural
+                  (field code (i64 3))
+                  (field row (field (local state) (name row)))
+                  (field enter (field (local state) (name enter)))
+                  (field pool (field (local state) (name pool)))
+                  (field slots (field (local state) (name slots)))
+                  (field locals (field (local state) (name locals)))
+                  (field pc (field (local state) (name pc)))
+                  (field fragment (call ci::text-bytes (text ""))))))))))))
+declarations.end

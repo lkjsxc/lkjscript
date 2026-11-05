@@ -76,7 +76,7 @@ fn selfhost_profile8_producer_interns_named_closure_and_preserves_instruction_pc
     let (source, program) = fixture();
     let entry = named_index(source, program, "entry");
     let bytes = input::export(program, entry).unwrap();
-    assert_eq!(u32::from_le_bytes(bytes[8..12].try_into().unwrap()), 8);
+    assert_eq!(u32::from_le_bytes(bytes[8..12].try_into().unwrap()), 9);
     assert_eq!(wide_at(&bytes, 112), 0);
     let root = root_row(&bytes);
     assert_eq!(
@@ -396,7 +396,7 @@ fn selfhost_profile8_producer_keeps_wide_signatures_and_finite_policy_tags_exact
     assert_eq!(wide_at(&bytes, row(&bytes, 3) + 64), 0);
     for allowance in [None, Some(0), Some(u64::MAX)] {
         input::set_allowance(&mut bytes, allowance);
-        assert_eq!(u32::from_le_bytes(bytes[8..12].try_into().unwrap()), 8);
+        assert_eq!(u32::from_le_bytes(bytes[8..12].try_into().unwrap()), 9);
         assert_eq!(
             u32::from_le_bytes(bytes[12..16].try_into().unwrap()),
             u32::from(allowance.is_some())

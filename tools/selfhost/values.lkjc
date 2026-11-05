@@ -84,9 +84,7 @@ declarations.begin
                       (if (call types::borrowed (local data) (local cell)) (bool false) (bool true))
                       (call ci::eq
                         (call types::identity (local data) (local cell))
-                        (call ci::u64
-                          (local data)
-                          (call types::field (local data) (local ty) (local member))))))
+                        (call types::field-type (local data) (local ty) (local member)))))
                   (call fields
                     (local data)
                     (local ty)
@@ -226,9 +224,7 @@ declarations.begin
                             (local at)
                             (local i)
                             (i64 1)
-                            (call ci::u64
-                              (local data)
-                              (call types::field (local data) (local ty) (local field)))
+                            (call types::field-type (local data) (local ty) (local field))
                             (bool false)
                             (i64 -1))
                           (bool false))

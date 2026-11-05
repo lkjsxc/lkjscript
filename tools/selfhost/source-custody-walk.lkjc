@@ -218,8 +218,8 @@ declarations.begin
         (let
           (binding graph (field (local input) (name graph)))
           (binding row (field (local current) (name row)))
-          (binding data (call source-table::data (local graph) (local row)))
-          (binding op (call ci::get (local data) (i64 37)))
+          (binding start (call source-table::start (local graph) (local row)))
+          (binding op (call ci::get (local graph) (call ci::add (local start) (i64 37))))
           (in
             (if
               (call ci::lt (local op) (i64 5))
@@ -243,7 +243,7 @@ declarations.begin
                     (i64 0)
                     (i64 0)
                     (call source-custody-state::empty)
-                    (call source-table::owner (local graph) (local data) (i64 38) (i64 9))
+                    (call source-table::owner (local graph) (local graph) (call ci::add (local start) (i64 38)) (i64 9))
                     (i64 0)
                     (field (local current) (name state)))
                   (if
@@ -281,11 +281,15 @@ declarations.begin
                                   (call ci::eq (local op) (i64 15))
                                   (call ci::eq (local op) (i64 16))))
                               (call aggregate-next (local input) (local current) (i64 0))
-                              (call source-custody-machine::fail
+                              (if (call ci::eq (local op) (i64 14))
+                                (call source-custody-match::variant (local input) (local current))
+                                (if (call ci::eq (local op) (i64 18))
+                                  (call source-custody-match::enter (local input) (local current))
+                                  (call source-custody-machine::fail
                                 (i64 13)
                                 (local row)
                                 (field (local current) (name state))
-                                (field (local current) (name stack))))))))))))))))
+                                (field (local current) (name stack))))))))))))))))))
     (function create after-binding
       (visibility private) (effect pure)
       (parameter create input (type (record (graph Bytes) (parents Bytes) (types Bytes)
@@ -546,7 +550,13 @@ declarations.begin
                                 (local input)
                                 (call source-custody-machine::parent (local frame) (local current))
                                 (call ci::add (field (local frame) (name index)) (i64 1)))
-                              (call after-function (local current) (local frame)))))))))))))))
+                              (if (call ci::eq (local tag) (i64 11))
+                                (call source-custody-match::after-value (local input) (local current) (local frame))
+                                (if (call ci::eq (local tag) (i64 12))
+                                  (call source-custody-match::after-arm (local input) (local current) (local frame))
+                                  (if (call ci::eq (local tag) (i64 13))
+                                    (call source-custody-match::after-variant (local current) (local frame))
+                                    (call after-function (local current) (local frame))))))))))))))))))
     (function create step
       (visibility package) (effect pure)
       (parameter create input (type (record (graph Bytes) (parents Bytes) (types Bytes)

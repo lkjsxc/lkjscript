@@ -19,12 +19,7 @@ declarations.begin
                 (binding parent-kind (call source-table::kind (local graph) (local parent)))
                 (in
                   (if
-                    (if
-                      (call ci::eq (local tag) (i64 19))
-                      (call ci::eq (local parent-kind) (i64 9))
-                      (call ci::either
-                        (call ci::eq (local parent-kind) (i64 5))
-                        (call ci::eq (local parent-kind) (i64 6))))
+                    (call source-interface-record::parent-kind (local tag) (local parent-kind))
                     (call source-interface-record::listed
                       (local graph)
                       (local row)
@@ -99,12 +94,22 @@ declarations.begin
                   (call source-custody-signature::count (local graph) (local row))))
               (if
                 (call ci::either
-                  (call ci::eq (local tag) (i64 11))
+                  (call ci::either
+                    (call ci::eq (local tag) (i64 11))
+                    (call ci::either
+                      (call ci::eq (local tag) (i64 12))
+                      (call ci::either (call ci::eq (local tag) (i64 13)) (bool false))))
                   (call ci::either
                     (call ci::eq (local tag) (i64 15))
                     (call ci::either (call ci::eq (local tag) (i64 19)) (bool false))))
                 (call listed-child (local graph) (local parents) (local row) (local tag))
-                (call ci::either (call ci::eq (local tag) (i64 9)) (call ci::eq (local tag) (i64 20)))))))))
+                (call ci::either
+                  (call ci::either
+                    (call ci::eq (local tag) (i64 2))
+                    (call ci::either
+                      (call ci::eq (local tag) (i64 3))
+                      (call ci::either (call ci::eq (local tag) (i64 9)) (bool false))))
+                  (call ci::eq (local tag) (i64 20)))))))))
     (function create reference
       (visibility package)
       (effect pure)
@@ -335,7 +340,11 @@ declarations.begin
               (let
                 (binding types-at
                   (if
-                    (call ci::eq (local kind) (i64 5))
+                    (call ci::either
+                      (call ci::eq (local kind) (i64 2))
+                      (call ci::either
+                        (call ci::eq (local kind) (i64 3))
+                        (call ci::either (call ci::eq (local kind) (i64 5)) (bool false))))
                     (call ci::add (call source-link-ref::name-end (local data) (i64 56)) (i64 2))
                     (field (call source-scalar-profile::function-parts-data (local data)) (name types))))
                 (binding types
@@ -358,7 +367,12 @@ declarations.begin
                     (call ci::eq (field (local types) (name code)) (i64 0))
                     (let
                       (binding parameters-at
-                        (call source-scalar-profile::parameters-data (local kind) (local data)))
+                        (if
+                          (call ci::either
+                            (call ci::eq (local kind) (i64 2))
+                            (call ci::either (call ci::eq (local kind) (i64 3)) (bool false)))
+                          (call source-table::skip (local data) (local types-at) (i64 17))
+                          (call source-scalar-profile::parameters-data (local kind) (local data))))
                       (binding parameters
                         (let
                           (binding array (call source-table::array (local data) (local parameters-at)))
@@ -368,8 +382,14 @@ declarations.begin
                               (local graph)
                               (local parents)
                               (local owner)
-                              (i64 15)
-                              (i64 7)
+                              (if
+                                (call ci::eq (local kind) (i64 2))
+                                (i64 12)
+                                (if (call ci::eq (local kind) (i64 3)) (i64 13) (i64 15)))
+                              (if
+                                (call ci::eq (local kind) (i64 2))
+                                (i64 4)
+                                (if (call ci::eq (local kind) (i64 3)) (i64 5) (i64 7)))
                               (local data)
                               (field (local array) (name next))
                               (field (local array) (name value))
@@ -409,7 +429,11 @@ declarations.begin
             (in
               (if
                 (call ci::either
-                  (call ci::eq (local kind) (i64 5))
+                  (call ci::either
+                    (call ci::eq (local kind) (i64 2))
+                    (call ci::either
+                      (call ci::eq (local kind) (i64 3))
+                      (call ci::either (call ci::eq (local kind) (i64 5)) (bool false))))
                   (call ci::either
                     (call ci::eq (local kind) (i64 6))
                     (call ci::eq (local kind) (i64 9))))
@@ -530,7 +554,11 @@ declarations.begin
                     (local present)
                     (call ci::both
                       (call ci::either
-                        (call ci::eq (local kind) (i64 11))
+                        (call ci::either
+                          (call ci::eq (local kind) (i64 11))
+                          (call ci::either
+                            (call ci::eq (local kind) (i64 12))
+                            (call ci::either (call ci::eq (local kind) (i64 13)) (bool false))))
                         (call ci::either
                           (call ci::eq (local kind) (i64 15))
                           (call ci::eq (local kind) (i64 19))))
@@ -546,7 +574,11 @@ declarations.begin
                     (binding included
                       (if
                         (call ci::either
-                          (call ci::eq (local kind) (i64 11))
+                          (call ci::either
+                            (call ci::eq (local kind) (i64 11))
+                            (call ci::either
+                              (call ci::eq (local kind) (i64 12))
+                              (call ci::either (call ci::eq (local kind) (i64 13)) (bool false))))
                           (call ci::either
                             (call ci::eq (local kind) (i64 15))
                             (call ci::eq (local kind) (i64 19))))

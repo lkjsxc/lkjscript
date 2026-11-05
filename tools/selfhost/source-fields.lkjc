@@ -373,5 +373,38 @@ declarations.begin
                             (i64 -1))))
                       (i64 -1))))
                 (i64 -1))))
-          (i64 -1))))))
+          (i64 -1))))
+    (function create ordered-items
+      (visibility private) (effect pure)
+      (parameter create data (type Bytes)) (parameter create at (type I64))
+      (parameter create count (type I64)) (parameter create width (type I64))
+      (returns Bool)
+      (body
+        (if (call ci::lt (local count) (i64 2)) (bool true)
+          (let (binding next (call ci::add (local at) (local width)))
+            (in
+              (if
+                (call ci::lt
+                  (call source-index::compare (local data) (local at) (local data) (local next) (local width) (i64 0))
+                  (i64 0))
+                (call ordered-items (local data) (local next) (call ci::sub (local count) (i64 1)) (local width))
+                (bool false)))))))
+    (function create ordered-nonempty-array
+      (visibility public) (effect pure)
+      (parameter create data (type Bytes)) (parameter create at (type I64))
+      (parameter create end (type I64)) (parameter create tag (type I64))
+      (parameter create width (type I64)) (returns I64)
+      (body
+        (let (binding parsed (call source-read::array (local data) (local at) (local end) (local tag) (local width)))
+          (in
+            (if (call ci::eq (field (local parsed) (name code)) (i64 0))
+              (if (call ci::lt (i64 0) (field (local parsed) (name length)))
+                (if
+                  (call ordered-items (local data) (field (local parsed) (name start))
+                    (field (local parsed) (name length)) (local width))
+                  (field (local parsed) (name next))
+                  (i64 -1))
+                (i64 -1))
+              (i64 -1))))))
+))
 declarations.end

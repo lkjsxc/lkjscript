@@ -54,10 +54,18 @@ declarations.begin
                   (let
                     (binding data (call source-table::data (local graph) (local row)))
                     (binding at (call source-link-ref::name-end (local data) (i64 39)))
+                    (binding binding-kind (call ci::get (local data) (local at)))
+                    (binding value-kind (call ci::get (local data) (call ci::add (local at) (i64 1))))
                     (in
-                      (call ci::both
-                        (call ci::eq (call ci::get (local data) (local at)) (i64 0))
-                        (call ci::eq (call ci::get (local data) (call ci::add (local at) (i64 1))) (i64 1)))))
+                      (if (call ci::eq (local binding-kind) (i64 0))
+                        (call ci::both
+                          (call ci::eq (local value-kind) (i64 1))
+                          (call binding-parent (local graph) (local parent) (i64 8)))
+                        (if (call ci::eq (local binding-kind) (i64 1))
+                          (call ci::both
+                            (call ci::eq (local value-kind) (i64 0))
+                            (call binding-parent (local graph) (local parent) (i64 18)))
+                          (bool false)))))
                   (bool true))))))))
     (function create check
       (visibility private)
@@ -113,5 +121,20 @@ declarations.begin
                       (binding rows (call source-sort::rows (local raw)))
                       (in (call result (call check (local graph) (local rows) (i64 0)) (local rows))))
                     (call result (i64 15) (call ci::text-bytes (text ""))))))
-              (call result (local code) (call ci::text-bytes (text ""))))))))))
+              (call result (local code) (call ci::text-bytes (text ""))))))))
+    (function create binding-parent
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes)) (parameter create parent (type I64))
+      (parameter create operation (type I64)) (returns Bool)
+      (body
+        (if
+          (call ci::both (call ci::lt (i64 -1) (local parent))
+            (call ci::lt (local parent) (call source-table::count (local graph))))
+          (if (call ci::eq (call source-table::kind (local graph) (local parent)) (i64 17))
+            (call ci::eq
+              (call ci::get (local graph) (call ci::add (call source-table::start (local graph) (local parent)) (i64 37)))
+              (local operation))
+            (bool false))
+          (bool false))))
+))
 declarations.end

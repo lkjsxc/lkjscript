@@ -1,4 +1,4 @@
-//! Raw profile-8 certificates are hostile input, even when their digest is valid.
+//! Raw profile-9 certificates are hostile input, even when their digest is valid.
 use super::*;
 use input::ValueType;
 

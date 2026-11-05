@@ -1,13 +1,19 @@
 //! Test-only normalized closure projection. Rust admission remains a Tier 1 boundary.
 //! No expression evaluation, native instruction selection, or runtime templates.
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
+use crate::platform::execution::normalized::NormalizedValueSchema;
 use crate::platform::execution::normalized::prepare::{
     NormalizedFieldSelector, NormalizedFunctionBody, NormalizedInstruction as I, NormalizedProgram,
+    NormalizedRecordLayout, NormalizedVariantLayout,
 };
 use crate::platform::kernel::{
-    FunctionEffect, ParameterUse, ResultRelation, TypeForm, TypeObjectDigest,
+    CaseReference, DeclarationReference, FieldReference, FunctionEffect, ParameterUse,
+    ResultRelation, TypeForm, TypeObject, TypeObjectDigest, encode_type_object,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+
+#[cfg(test)]
+mod nominal_tests;
 
 pub(crate) const HEADER: usize = 72;
 pub(crate) const DESCRIPTORS: usize = 160;
@@ -22,7 +28,7 @@ fn unsupported() -> Diagnostic {
         DiagnosticClass::Source,
         "compiler_input_unsupported",
         format!(
-            "LKJCI1 profile 8 requires a closed pure byte/aggregate/callable function closure with forward branches (exporter precondition at {})",
+            "LKJCI1 profile 9 requires a closed pure byte/aggregate/callable/acyclic-nominal closure with forward branches (exporter precondition at {})",
             std::panic::Location::caller()
         ),
     )
@@ -75,6 +81,53 @@ struct State {
     stack: Vec<ValueType>,
 }
 
+impl State {
+    fn copied(&self) -> Result<Self, Diagnostic> {
+        let mut initialized = Vec::new();
+        let mut stack = Vec::new();
+        initialized
+            .try_reserve_exact(self.initialized.len())
+            .map_err(|_| allocation())?;
+        stack
+            .try_reserve_exact(self.stack.len())
+            .map_err(|_| allocation())?;
+        initialized.extend_from_slice(&self.initialized);
+        stack.extend_from_slice(&self.stack);
+        Ok(Self { initialized, stack })
+    }
+}
+
+fn merge_state(
+    states: &mut [Option<State>],
+    successor: usize,
+    after: &State,
+    locals: &[ValueType],
+) -> Result<(), Diagnostic> {
+    let destination = states.get_mut(successor).ok_or_else(unsupported)?;
+    if let Some(state) = destination {
+        if state.stack != after.stack
+            || state.initialized.len() != after.initialized.len()
+            || state.initialized.len() != locals.len()
+        {
+            return Err(unsupported());
+        }
+        for ((current, other), ty) in state
+            .initialized
+            .iter_mut()
+            .zip(&after.initialized)
+            .zip(locals)
+        {
+            if *ty == ValueType::owned(6) && current != other {
+                return Err(unsupported());
+            }
+            *current &= *other;
+        }
+    } else {
+        *destination = Some(after.copied()?);
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Record {
     pub fields: Vec<(String, u64)>,
@@ -86,17 +139,84 @@ pub(crate) struct FunctionType {
     pub result: u64,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct NominalRecord {
+    pub declaration: DeclarationReference,
+    pub fields: Vec<(FieldReference, u64)>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct NominalVariant {
+    pub declaration: DeclarationReference,
+    pub cases: Vec<(CaseReference, Option<u64>)>,
+}
+
 /// Current mixed descriptor table. The seven primitive identities precede it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum Descriptor {
     Record(Record),
     Function(FunctionType),
+    NominalRecord(NominalRecord),
+    NominalVariant(NominalVariant),
+}
+
+impl Descriptor {
+    fn declaration(&self) -> Option<DeclarationReference> {
+        match self {
+            Self::NominalRecord(record) => Some(record.declaration),
+            Self::NominalVariant(variant) => Some(variant.declaration),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Default)]
 struct Types {
     descriptors: Vec<Descriptor>,
     known: BTreeMap<TypeObjectDigest, u64>,
+}
+
+enum NominalLayout<'a> {
+    Record(&'a NormalizedRecordLayout),
+    Variant(&'a NormalizedVariantLayout),
+}
+
+fn nominal_layout(
+    program: &NormalizedProgram,
+    ty: TypeObjectDigest,
+    declaration: DeclarationReference,
+) -> Result<NominalLayout<'_>, Diagnostic> {
+    match (program.record_index(ty), program.variant_index(ty)) {
+        (Some(index), None) => {
+            let record = program.records.get(index).ok_or_else(unsupported)?;
+            if record.owned
+                || record.declaration != declaration
+                || !record.type_parameters.is_empty()
+                || !record.type_parameter_constraints.is_empty()
+                || !record.arguments.is_empty()
+            {
+                return Err(unsupported());
+            }
+            Ok(NominalLayout::Record(record))
+        }
+        (None, Some(index)) => {
+            let variant = program.variants.get(index).ok_or_else(unsupported)?;
+            if variant.declaration != declaration
+                || !variant.type_parameters.is_empty()
+                || !variant.type_parameter_constraints.is_empty()
+                || !variant.arguments.is_empty()
+            {
+                return Err(unsupported());
+            }
+            Ok(NominalLayout::Variant(variant))
+        }
+        _ => Err(unsupported()),
+    }
+}
+
+fn nominal_type(declaration: DeclarationReference) -> Result<TypeObjectDigest, Diagnostic> {
+    encode_type_object(&TypeObject::new(TypeForm::Named { declaration })?)
+        .map(|(identity, _)| identity)
 }
 
 /// Compound identities are copyable by induction over checked construction.
@@ -129,9 +249,32 @@ impl Types {
         }
     }
 
+    fn nominal_fields(&self, identity: u64) -> Result<&[(FieldReference, u64)], Diagnostic> {
+        match self.descriptor(identity) {
+            Some(Descriptor::NominalRecord(record)) => Ok(&record.fields),
+            _ => Err(unsupported()),
+        }
+    }
+
+    fn nominal_cases(&self, identity: u64) -> Result<&[(CaseReference, Option<u64>)], Diagnostic> {
+        match self.descriptor(identity) {
+            Some(Descriptor::NominalVariant(variant)) => Ok(&variant.cases),
+            _ => Err(unsupported()),
+        }
+    }
+
     fn intern(&mut self, descriptor: Descriptor) -> Result<u64, Diagnostic> {
         if let Some(index) = self.descriptors.iter().position(|d| d == &descriptor) {
             return input_word(index)?.checked_add(8).ok_or_else(unsupported);
+        }
+        // A nominal definition has one exact layout; physical shape never
+        // makes two different declarations equal or permits a conflicting copy.
+        if descriptor.declaration().is_some_and(|declaration| {
+            self.descriptors
+                .iter()
+                .any(|existing| existing.declaration() == Some(declaration))
+        }) {
+            return Err(unsupported());
         }
         let identity = input_word(self.descriptors.len())?
             .checked_add(8)
@@ -164,6 +307,32 @@ impl Types {
         self.intern(Descriptor::Function(FunctionType { parameters, result }))
     }
 
+    fn nominal_record(&mut self, record: NominalRecord) -> Result<u64, Diagnostic> {
+        if record.fields.is_empty()
+            || record.fields.iter().any(|(field, ty)| {
+                field.package != record.declaration.package
+                    || !copyable_identity(*ty, self.descriptors.len())
+            })
+            || record.fields.windows(2).any(|pair| pair[0].0 >= pair[1].0)
+        {
+            return Err(unsupported());
+        }
+        self.intern(Descriptor::NominalRecord(record))
+    }
+
+    fn nominal_variant(&mut self, variant: NominalVariant) -> Result<u64, Diagnostic> {
+        if variant.cases.is_empty()
+            || variant.cases.iter().any(|(case, ty)| {
+                case.package != variant.declaration.package
+                    || ty.is_some_and(|ty| !copyable_identity(ty, self.descriptors.len()))
+            })
+            || variant.cases.windows(2).any(|pair| pair[0].0 >= pair[1].0)
+        {
+            return Err(unsupported());
+        }
+        self.intern(Descriptor::NominalVariant(variant))
+    }
+
     fn full_signature(&mut self, function: &Function) -> Result<u64, Diagnostic> {
         let count = usize::try_from(function.parameters).map_err(|_| unsupported())?;
         let parameters = function.locals.get(..count).ok_or_else(unsupported)?;
@@ -184,7 +353,9 @@ impl Types {
 
     // Explicit enter/exit frames make the complete descriptor walk stack safe.
     // Every child is settled before its parent is interned. The active set
-    // rejects semantic cycles independently of traversal depth.
+    // rejects structural cycles and nominal recursion outside this private
+    // acyclic subset independently of traversal depth. Nominal recursion is
+    // not reclassified as a source-language semantic error here.
     fn code(
         &mut self,
         program: &NormalizedProgram,
@@ -209,6 +380,12 @@ impl Types {
                     TypeForm::Function { parameters, .. } => {
                         parameters.len().checked_add(1).ok_or_else(unsupported)?
                     }
+                    TypeForm::Named { declaration } => {
+                        match nominal_layout(program, ty, *declaration)? {
+                            NominalLayout::Record(record) => record.fields.len(),
+                            NominalLayout::Variant(variant) => variant.cases.len(),
+                        }
+                    }
                     TypeForm::I64
                     | TypeForm::Bool
                     | TypeForm::Unit
@@ -230,6 +407,18 @@ impl Types {
                     TypeForm::Function { parameters, result } => {
                         pending.push((*result, false));
                         pending.extend(parameters.iter().rev().map(|ty| (*ty, false)));
+                    }
+                    TypeForm::Named { declaration } => {
+                        match nominal_layout(program, ty, *declaration)? {
+                            NominalLayout::Record(record) => {
+                                pending.extend(record.fields.iter().rev().map(|f| (f.ty, false)));
+                            }
+                            NominalLayout::Variant(variant) => {
+                                pending.extend(variant.cases.iter().rev().filter_map(|case| {
+                                    case.payload.map(|payload| (payload, false))
+                                }));
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -265,6 +454,43 @@ impl Types {
                         mapped.push(*self.known.get(parameter).ok_or_else(unsupported)?);
                     }
                     self.function(mapped, *self.known.get(result).ok_or_else(unsupported)?)?
+                }
+                TypeForm::Named { declaration } => {
+                    match nominal_layout(program, ty, *declaration)? {
+                        NominalLayout::Record(record) => {
+                            let mut fields = Vec::new();
+                            fields
+                                .try_reserve_exact(record.fields.len())
+                                .map_err(|_| allocation())?;
+                            for field in record.fields.iter() {
+                                fields.push((
+                                    field.reference,
+                                    *self.known.get(&field.ty).ok_or_else(unsupported)?,
+                                ));
+                            }
+                            self.nominal_record(NominalRecord {
+                                declaration: *declaration,
+                                fields,
+                            })?
+                        }
+                        NominalLayout::Variant(variant) => {
+                            let mut cases = Vec::new();
+                            cases
+                                .try_reserve_exact(variant.cases.len())
+                                .map_err(|_| allocation())?;
+                            for case in variant.cases.iter() {
+                                let payload = case
+                                    .payload
+                                    .map(|ty| self.known.get(&ty).copied().ok_or_else(unsupported))
+                                    .transpose()?;
+                                cases.push((case.reference, payload));
+                            }
+                            self.nominal_variant(NominalVariant {
+                                declaration: *declaration,
+                                cases,
+                            })?
+                        }
+                    }
                 }
                 _ => return Err(unsupported()),
             };
@@ -472,11 +698,14 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                 };
                 initial.initialized[..code.parameter_count as usize].fill(1);
                 let mut states = vec![None; code.instructions.len()];
-                states[0] = Some(initial.clone());
+                states[0] = Some(initial.copied()?);
                 let mut linear = initial;
                 for (ip, instruction) in code.instructions.iter().enumerate() {
-                    let before = states[ip].take().unwrap_or_else(|| linear.clone());
-                    let mut after = before.clone();
+                    let before = match states[ip].take() {
+                        Some(state) => state,
+                        None => linear.copied()?,
+                    };
+                    let mut after = before.copied()?;
                     let mut node = Node {
                         initialized: before.initialized.clone(),
                         stack: before.stack.clone(),
@@ -574,6 +803,212 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                             node.tag = 15;
                             node.a = ty;
                             node.b = input_word(index)?;
+                        }
+                        I::Record {
+                            layout: Some(layout),
+                            type_arguments,
+                            fields,
+                        } if type_arguments.is_empty() => {
+                            if layout.1 != program.value_origin() {
+                                return Err(unsupported());
+                            }
+                            let record = program
+                                .records
+                                .get(layout.0 as usize)
+                                .ok_or_else(unsupported)?;
+                            let named = nominal_type(record.declaration)?;
+                            if program.record_index(named) != Some(layout.0 as usize) {
+                                return Err(unsupported());
+                            }
+                            let ty = types.code(program, named)?;
+                            let canonical = types.nominal_fields(ty)?;
+                            if fields.len() != canonical.len() {
+                                return Err(unsupported());
+                            }
+                            let start = after
+                                .stack
+                                .len()
+                                .checked_sub(fields.len())
+                                .ok_or_else(unsupported)?;
+                            let mut seen = Vec::new();
+                            seen.try_reserve_exact(fields.len())
+                                .map_err(|_| allocation())?;
+                            seen.resize(fields.len(), false);
+                            node.data
+                                .try_reserve_exact(
+                                    fields.len().checked_mul(8).ok_or_else(unsupported)?,
+                                )
+                                .map_err(|_| allocation())?;
+                            for (field, value) in fields.iter().zip(&after.stack[start..]) {
+                                let NormalizedFieldSelector::Nominal {
+                                    layout: selected,
+                                    offset,
+                                } = field
+                                else {
+                                    return Err(unsupported());
+                                };
+                                let member = *offset as usize;
+                                let (_, expected) =
+                                    canonical.get(member).ok_or_else(unsupported)?;
+                                let visited = seen.get_mut(member).ok_or_else(unsupported)?;
+                                if selected != layout
+                                    || *visited
+                                    || *value != ValueType::owned(*expected)
+                                {
+                                    return Err(unsupported());
+                                }
+                                *visited = true;
+                                node.data
+                                    .extend_from_slice(&u64::from(*offset).to_le_bytes());
+                            }
+                            node.tag = 14;
+                            node.a = ty;
+                            node.b = input_word(fields.len())?;
+                            after.stack.truncate(start);
+                            after.stack.push(ValueType::owned(ty));
+                        }
+                        I::Field(NormalizedFieldSelector::Nominal { layout, offset }) => {
+                            if layout.1 != program.value_origin() {
+                                return Err(unsupported());
+                            }
+                            let record = program
+                                .records
+                                .get(layout.0 as usize)
+                                .ok_or_else(unsupported)?;
+                            let named = nominal_type(record.declaration)?;
+                            if program.record_index(named) != Some(layout.0 as usize) {
+                                return Err(unsupported());
+                            }
+                            let ty = types.code(program, named)?;
+                            let (_, field) = types
+                                .nominal_fields(ty)?
+                                .get(*offset as usize)
+                                .ok_or_else(unsupported)?;
+                            if after.stack.pop() != Some(ValueType::owned(ty)) {
+                                return Err(unsupported());
+                            }
+                            after.stack.push(ValueType::owned(*field));
+                            node.tag = 15;
+                            node.a = ty;
+                            node.b = u64::from(*offset);
+                        }
+                        I::Variant {
+                            layout,
+                            type_arguments,
+                            case,
+                            has_payload,
+                        } if type_arguments.is_empty() => {
+                            if layout.1 != program.value_origin() {
+                                return Err(unsupported());
+                            }
+                            let variant = program
+                                .variants
+                                .get(layout.0 as usize)
+                                .ok_or_else(unsupported)?;
+                            let named = nominal_type(variant.declaration)?;
+                            if program.variant_index(named) != Some(layout.0 as usize) {
+                                return Err(unsupported());
+                            }
+                            let ty = types.code(program, named)?;
+                            let (_, payload) = types
+                                .nominal_cases(ty)?
+                                .get(*case as usize)
+                                .ok_or_else(unsupported)?;
+                            if payload.is_some() != *has_payload {
+                                return Err(unsupported());
+                            }
+                            if let Some(payload) = payload
+                                && after.stack.pop() != Some(ValueType::owned(*payload))
+                            {
+                                return Err(unsupported());
+                            }
+                            after.stack.push(ValueType::owned(ty));
+                            node.tag = 22;
+                            node.a = ty;
+                            node.b = u64::from(*case);
+                            node.c = u64::from(*has_payload);
+                        }
+                        I::SwitchVariant(jumps) => {
+                            let first = jumps.first().ok_or_else(unsupported)?;
+                            if first.layout.1 != program.value_origin() {
+                                return Err(unsupported());
+                            }
+                            let variant = program
+                                .variants
+                                .get(first.layout.0 as usize)
+                                .ok_or_else(unsupported)?;
+                            let named = nominal_type(variant.declaration)?;
+                            if program.variant_index(named) != Some(first.layout.0 as usize) {
+                                return Err(unsupported());
+                            }
+                            let ty = types.code(program, named)?;
+                            let cases = types.nominal_cases(ty)?;
+                            if jumps.len() != cases.len()
+                                || after.stack.pop() != Some(ValueType::owned(ty))
+                            {
+                                return Err(unsupported());
+                            }
+                            let mut bindings = HashSet::new();
+                            bindings
+                                .try_reserve(jumps.len())
+                                .map_err(|_| allocation())?;
+                            node.data
+                                .try_reserve_exact(
+                                    jumps.len().checked_mul(32).ok_or_else(unsupported)?,
+                                )
+                                .map_err(|_| allocation())?;
+                            let mut previous_target = ip;
+                            for (ordinal, (jump, (_, payload))) in
+                                jumps.iter().zip(cases).enumerate()
+                            {
+                                let target = jump.target as usize;
+                                if jump.layout != first.layout
+                                    || jump.case as usize != ordinal
+                                    || target <= previous_target
+                                    || target >= code.instructions.len()
+                                    || payload.is_some() != jump.binding_local.is_some()
+                                {
+                                    return Err(unsupported());
+                                }
+                                previous_target = target;
+                                let mut arm = after.copied()?;
+                                if let (Some(local), Some(payload)) = (jump.binding_local, payload)
+                                {
+                                    if local < code.parameter_count
+                                        || !bindings.insert(local)
+                                        || after.initialized.get(local as usize) != Some(&0)
+                                    {
+                                        return Err(unsupported());
+                                    }
+                                    let slot = function
+                                        .locals
+                                        .get_mut(local as usize)
+                                        .ok_or_else(unsupported)?;
+                                    let expected = ValueType::owned(*payload);
+                                    if slot.identity != 0 && *slot != expected {
+                                        return Err(unsupported());
+                                    }
+                                    *slot = expected;
+                                    *arm.initialized
+                                        .get_mut(local as usize)
+                                        .ok_or_else(unsupported)? = 1;
+                                }
+                                merge_state(&mut states, target, &arm, &function.locals)?;
+                                for word in [
+                                    u64::from(jump.case),
+                                    u64::from(jump.target),
+                                    u64::from(jump.binding_local.is_some()),
+                                    u64::from(jump.binding_local.unwrap_or(0)),
+                                ] {
+                                    node.data.extend_from_slice(&word.to_le_bytes());
+                                }
+                            }
+                            node.tag = 23;
+                            node.a = ty;
+                            node.b = input_word(jumps.len())?;
+                            // Every arm receives its own payload-local transfer.
+                            // There is no implicit fallthrough or shared binder state.
+                            successors.clear();
                         }
                         I::LoadLocal { local, .. } | I::MoveLocal(local) => {
                             node.tag = 4;
@@ -828,25 +1263,7 @@ pub(crate) fn export(program: &NormalizedProgram, entry: usize) -> Result<Vec<u8
                         _ => return Err(unsupported()),
                     }
                     for successor in successors {
-                        let state = states.get_mut(successor).ok_or_else(unsupported)?;
-                        if let Some(state) = state {
-                            if state.stack != after.stack {
-                                return Err(unsupported());
-                            }
-                            for ((current, other), ty) in state
-                                .initialized
-                                .iter_mut()
-                                .zip(&after.initialized)
-                                .zip(&function.locals)
-                            {
-                                if *ty == ValueType::owned(6) && current != other {
-                                    return Err(unsupported());
-                                }
-                                *current &= *other;
-                            }
-                        } else {
-                            *state = Some(after.clone());
-                        }
+                        merge_state(&mut states, successor, &after, &function.locals)?;
                     }
                     linear = after;
                     function.nodes.push(node);
@@ -909,7 +1326,7 @@ fn input_word(value: usize) -> Result<u64, Diagnostic> {
 }
 
 /// Raw test-fixture writer. Malformed semantic rows remain encodable so their
-/// consumer controls reach the intended validation layer. Only profile 8 is emitted.
+/// consumer controls reach the intended validation layer. Only profile 9 is emitted.
 pub(crate) fn encode_records(
     functions: &[Function],
     records: &[Record],
@@ -933,6 +1350,8 @@ pub(crate) fn encode_descriptors(
 enum DescriptorRef<'a> {
     Record(&'a Record),
     Function(&'a FunctionType),
+    NominalRecord(&'a NominalRecord),
+    NominalVariant(&'a NominalVariant),
 }
 
 fn encode_layout(
@@ -969,6 +1388,8 @@ fn encode_layout(
     rows.extend(descriptors.iter().map(|descriptor| match descriptor {
         Descriptor::Record(record) => DescriptorRef::Record(record),
         Descriptor::Function(function) => DescriptorRef::Function(function),
+        Descriptor::NominalRecord(record) => DescriptorRef::NominalRecord(record),
+        Descriptor::NominalVariant(variant) => DescriptorRef::NominalVariant(variant),
     }));
     let mut signature_ids = Vec::new();
     signature_ids
@@ -1002,7 +1423,7 @@ fn encode_layout(
         };
         let existing = rows.iter().position(|descriptor| match descriptor {
             DescriptorRef::Function(signature) => matches(signature),
-            DescriptorRef::Record(_) => false,
+            _ => false,
         });
         let identity = if let Some(index) = existing {
             input_word(index)?.checked_add(8).ok_or_else(unsupported)?
@@ -1080,6 +1501,42 @@ fn encode_layout(
                         .ok_or_else(unsupported)?,
                 )?;
             }
+            DescriptorRef::NominalRecord(record) => {
+                if record
+                    .fields
+                    .iter()
+                    .any(|(field, _)| field.package != record.declaration.package)
+                {
+                    return Err(unsupported());
+                }
+                length = checked_input_end(length, 32)?;
+                length = checked_input_end(
+                    length,
+                    record
+                        .fields
+                        .len()
+                        .checked_mul(32)
+                        .ok_or_else(unsupported)?,
+                )?;
+            }
+            DescriptorRef::NominalVariant(variant) => {
+                if variant
+                    .cases
+                    .iter()
+                    .any(|(case, _)| case.package != variant.declaration.package)
+                {
+                    return Err(unsupported());
+                }
+                length = checked_input_end(length, 32)?;
+                length = checked_input_end(
+                    length,
+                    variant
+                        .cases
+                        .len()
+                        .checked_mul(32)
+                        .ok_or_else(unsupported)?,
+                )?;
+            }
         }
     }
     for function in functions {
@@ -1137,6 +1594,30 @@ fn encode_layout(
                     bytes.extend_from_slice(&parameter.to_le_bytes());
                 }
             }
+            DescriptorRef::NominalRecord(record) => {
+                word(&mut bytes, row, 10);
+                word(&mut bytes, row + 8, input_word(record.fields.len())?);
+                word(&mut bytes, row + 16, input_word(offset)?);
+                bytes.extend_from_slice(&record.declaration.package.bytes());
+                bytes.extend_from_slice(&record.declaration.declaration.bytes());
+                for (field, ty) in &record.fields {
+                    bytes.extend_from_slice(&field.field.bytes());
+                    bytes.extend_from_slice(&ty.to_le_bytes());
+                    bytes.extend_from_slice(&0_u64.to_le_bytes());
+                }
+            }
+            DescriptorRef::NominalVariant(variant) => {
+                word(&mut bytes, row, 11);
+                word(&mut bytes, row + 8, input_word(variant.cases.len())?);
+                word(&mut bytes, row + 16, input_word(offset)?);
+                bytes.extend_from_slice(&variant.declaration.package.bytes());
+                bytes.extend_from_slice(&variant.declaration.declaration.bytes());
+                for (case, payload) in &variant.cases {
+                    bytes.extend_from_slice(&case.case.bytes());
+                    bytes.extend_from_slice(&u64::from(payload.is_some()).to_le_bytes());
+                    bytes.extend_from_slice(&payload.unwrap_or(0).to_le_bytes());
+                }
+            }
         }
     }
     let mut node_index = 0;
@@ -1172,7 +1653,7 @@ fn encode_layout(
             if node.tag == 12 {
                 word(&mut bytes, at + 8, input_word(payload_offset)?);
             }
-            if node.tag == 14 {
+            if matches!(node.tag, 14 | 23) {
                 word(&mut bytes, at + 24, input_word(payload_offset)?);
             }
             bytes[at + 32..at + 40].copy_from_slice(&node.immediate.to_le_bytes());
@@ -1188,7 +1669,7 @@ fn encode_layout(
     }
     bytes[..8].copy_from_slice(b"LKJCI001");
     // Profile is u32; @12 remains the independent u32 optional-policy tag.
-    bytes[8..12].copy_from_slice(&8u32.to_le_bytes());
+    bytes[8..12].copy_from_slice(&9u32.to_le_bytes());
     // @12 tag 0 + @32 zero allowance means explicitly unbounded.
     word(&mut bytes, 16, input_word(length)?);
     word(&mut bytes, 24, input_word(count)?);
@@ -1241,7 +1722,7 @@ pub(crate) fn rechecksum(bytes: &mut [u8]) {
 }
 
 /// Small independent test builder. Arithmetic operation IDs are test notation,
-/// not a second wire reader; only profile 8 is emitted.
+/// not a second wire reader; only profile 9 is emitted.
 pub(crate) fn arithmetic(operations: &[(u32, i64)]) -> Result<Vec<u8>, Diagnostic> {
     let mut root = Function {
         result: 1,

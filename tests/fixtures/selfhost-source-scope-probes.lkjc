@@ -17,5 +17,68 @@ declarations.begin
       (let
         (binding graph (call ci::slice (local data) (i64 4) (call ci::length (local data))))
         (binding code (call source-scope::with-work (local graph) (call ci::u32 (local data) (i64 0))))
-        (in (call result (local graph) (local code)))))))))
+        (in (call result (local graph) (local code)))))))
+  (function create forest-rows-valid (visibility private) (effect pure)
+    (parameter create rows (type Bytes)) (parameter create count (type I64))
+    (parameter create row (type I64)) (returns Bool)
+    (body (if (call ci::eq (local row) (local count)) (bool true)
+      (if (call ci::both
+        (call ci::eq (call source-table::column (local rows) (local row) (i64 0)) (local row))
+        (call ci::lte (call source-table::parent (local rows) (local row)) (local count)))
+        (call forest-rows-valid (local rows) (local count) (call ci::add (local row) (i64 1)))
+        (bool false)))))
+  (function create forest-result (visibility private) (effect pure)
+    (parameter create work
+      (type (record (code I64) (finite Bool) (high I64) (low I64)
+        (observed-high I64) (observed-low I64) (saturated Bool))))
+    (returns (record (diagnostic I64) (image Bytes)))
+    (body (record structural
+      (field diagnostic (field (local work) (name code)))
+      (field image
+        (if (call ci::eq (field (local work) (name code)) (i64 0))
+          (let
+            (binding a (type ByteBuffer) (call ci::empty))
+            (binding b (type ByteBuffer) (call ci::le
+              (if (field (local work) (name finite)) (i64 1) (i64 0)) (i64 8) (local a)))
+            (binding c (type ByteBuffer) (call ci::le
+              (field (local work) (name high)) (i64 8) (local b)))
+            (binding d (type ByteBuffer) (call ci::le
+              (field (local work) (name low)) (i64 8) (local c)))
+            (binding e (type ByteBuffer) (call ci::le
+              (field (local work) (name observed-high)) (i64 8) (local d)))
+            (binding f (type ByteBuffer) (call ci::le
+              (field (local work) (name observed-low)) (i64 8) (local e)))
+            (binding g (type ByteBuffer) (call ci::le
+              (if (field (local work) (name saturated)) (i64 1) (i64 0)) (i64 8) (local f)))
+            (in (call ci::freeze (local g))))
+          (call ci::text-bytes (text "")))))))
+  (function create read-forest (visibility public) (effect pure)
+    (parameter create data (type Bytes))
+    (returns (record (diagnostic I64) (image Bytes)))
+    (body (if (call ci::lt (call ci::length (local data)) (i64 80))
+      (call result (local data) (i64 12))
+      (let
+        (binding count (call ci::u32 (local data) (i64 0)))
+        (binding finite (call ci::get (local data) (i64 12)))
+        (in
+          (if (call ci::both
+            (call ci::eq (call ci::length (local data))
+              (call ci::add (i64 80) (call ci::mul (local count) (i64 12))))
+            (call ci::either (call ci::eq (local finite) (i64 0))
+              (call ci::eq (local finite) (i64 1))))
+            (let
+              (binding rows (call ci::slice (local data) (i64 80) (call ci::length (local data))))
+              (in
+                (if (call forest-rows-valid (local rows) (local count) (i64 0))
+                  (call forest-result
+                    (call source-forest::prove (local rows) (local count) (i64 1)
+                      (if (call ci::eq (local finite) (i64 0))
+                        (call source-budget::unbounded)
+                        (call source-budget::finite-words
+                          (call ci::u32 (local data) (i64 8))
+                          (call ci::u32 (local data) (i64 4))))))
+                  (call result (local data) (i64 15)))))
+            (call result (local data) (i64 12))))))))
+
+))
 declarations.end

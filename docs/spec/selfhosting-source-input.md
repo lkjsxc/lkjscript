@@ -25,8 +25,8 @@ P_self profile and same-process reclamation retain their separate obligations.
 The current carrier has one package and no dependencies or external blobs.
 Recognized unsupported boundaries reject explicitly; importing a package's
 interface or prior validation witness cannot supply its missing source bodies.
-This carrier is separate from normalized LKJCI1: mode 0 uses profile 8 for ELF
-and mode 1 uses profile 7 for canonical artifacts. The existing Tier 1 paths use
+This carrier is separate from normalized LKJCI1: mode 0 uses profile 9 for ELF
+and mode 1 uses profile 8 for canonical artifacts. The existing Tier 1 paths use
 Rust admission and normalization. The source route derives both mode-0 and
 mode-1 inputs inside lkjscript from the complete raw carrier.
 
@@ -122,8 +122,10 @@ by source-budget constructors, including the full u64 wire domain.
 
 Termination does not depend on a finite allowance. Carrier/object scans advance
 over finite byte or record ranges. Binary directory searches shrink their
-intervals. Ownership forests use bounded pointer doubling followed by a root
-check; cycles still reject. Later parent walks run only after that forest proof.
+intervals. Ownership forests use bounded pointer doubling with a complete rooting
+proof fused into each pass; a separately charged terminal root scan remains when
+no pass proves every row rooted. Cycles still reject. Later parent walks run only
+after that forest proof.
 Structural type admission settles distinct nodes or rejects a no-progress pass.
 Type/nominal queues retain visited-state deduplication. Namespace merge-sort
 splits finite row ranges. These structural arguments also apply in unbounded
@@ -241,8 +243,9 @@ failure returns 17. Resource exhaustion remains 6.
 
 Nonempty R/E application arguments on Call and FunctionValue remain unsupported
 with 13. Implementation witnesses, associated owned types, nontrivial result
-relations, read-scope/read-source metadata, Match and lexical Region forms remain
-outside this extension. It does not implement E2 effect compatibility,
+relations, read-scope/read-source metadata and lexical Region forms remain
+outside this extension. Ordinary Match framing and arm-local payload bindings
+are included in the closed nominal extension below. It does not implement E2 effect compatibility,
 substitution, requirement satisfaction or source-to-normalized lowering.
 
 ## Syntax membership and exact value-local scope
@@ -259,7 +262,10 @@ parent field. Interface declarations own Operations; Operations own their ordere
 Parameters. Function declarations own their ordered requirement and effect binders.
 Each expression has one owning expression, binding initializer, declaration root,
 or expression-valued port. Each let binding belongs to one let, has the ordinary
-let kind and owns its required initializer. Module membership is obtained from
+let kind and owns its required initializer. Each MatchPayload binding belongs to
+one Match arm, has kind 1 and no initializer. A Match owns its scrutinee at
+position 0 and, for zero-based arm i, its optional binding at 2*i+1 and body at
+2*i+2. Case references are endpoints, not syntax children. Module membership is obtained from
 canonical declaration fields; modules do not encode a separate member array.
 
 The pass extracts every supported containment edge, sorts rows deterministically
@@ -279,10 +285,12 @@ this is not native lexical region reclamation.
 Every local expression is checked, including untaken branches, uncalled definitions
 and final array items. Function-parameter references must reach their exact callable
 container; ordinary lexical-binding references must reach their containing let.
-The encoded reference variant must match that binder category. An operation-parameter,
-match-payload or transaction-binding reference to an otherwise admitted function
-parameter or let binding is a proved semantic mismatch. Genuine excluded owner
-forms encounter the preceding unsupported-profile boundary instead.
+A MatchPayload reference must reach its exact binding through that arm's body
+edge, never through the scrutinee, a sibling arm or an enclosing continuation.
+The encoded reference variant must match the binder category. An operation-
+parameter, match-payload or transaction-binding reference to a different binder
+category is a proved semantic mismatch. Genuine excluded owner forms encounter
+the preceding unsupported-profile boundary instead.
 
 The immediate child on the ancestry path determines visibility: initializer i may
 refer only to bindings with smaller positions; the body follows all bindings.
@@ -293,9 +301,17 @@ identity with a nearest-name lookup. Custody validation remains a later obligati
 ancestry-proof allowance. `with-policy` also supports explicit unbounded work and
 the full u64 finite domain. Complete carrier/endpoint/membership admission
 precedes this proof. The default entrypoint uses the carrier's tagged policy.
-Each doubling or final-root pass reserves O units before visiting rows; the value-
-local scan reserves one unit per owner and one per visited ancestor. Exact fit
-passes. Refusal returns diagnostic 6 without a semantic-invalid claim or output.
+Each doubling or final-root pass reserves O units before visiting rows. A doubling
+pass visits every row and also records whether every doubled parent is the root
+sentinel. That complete proof ends ancestry checking immediately; it does not
+charge or execute later jumps or a redundant final-root pass. If any row remains
+unrooted, doubling continues until its distance covers O, then the separately
+charged final-root scan preserves cycle rejection. With u32 owner counts and
+initial distance one, the largest doubled distance is 2^32, representable in I64.
+The value-local scan reserves one unit per owner and one per visited ancestor.
+Exact fit passes. Refusal returns diagnostic 6 without a semantic-invalid claim
+or output. This changes the algorithm's required work, while retaining exact
+None/zero/finite-u64 policy meaning and passive observation saturation.
 Carrier bounds independently bound decoding, edge construction and sorting;
 these work units are not VM allocation charges, native allocator requests or RSS.
 
@@ -446,8 +462,9 @@ identity remain separate evidence.
 These layers establish restricted-profile E1 admission. The active-profile
 extension below adds compound typing, exact ByteBuffer custody and both E3 output
 paths. Full contextual read/witness scope, effect applications, general callable
-generics, nominal owned aggregates, first-class functions and lexical Regions
-remain separate semantic extensions. The full Tier 2 profile, complete-source
+generics, nominal owned aggregates, task/effectful callables and lexical Regions
+remain separate semantic extensions. Closed pure callables and the ordinary
+nominal subset below do not establish those broader families. The full Tier 2 profile, complete-source
 fixed-point equations and measured same-process reclamation requirements are
 unchanged.
 
@@ -497,21 +514,23 @@ owners and targets. Target selection does not prune its source or unit closure.
 
 | Dimension | Current contract |
 | --- | --- |
-| Copyable values | Unit, Bool, I64, Text/StaticText, Bytes, List<I64>, closed pure Function values, and structural records over admitted copyable values |
+| Copyable values | Unit, Bool, I64, Text/StaticText, Bytes, List<I64>, closed pure Function values, structural records, and closed nongeneric acyclic ordinary nominal Record/Variant values over admitted copyable children |
 | Affine values | ByteBuffer, with exact consume moves and synchronous borrowed length reads |
-| Supplied descriptors | The corresponding compound descriptors, pure Function signatures, and the scoped TypeParameter/List<T> descriptors of the recognized list intrinsics |
-| Declarations | Modules; pure monomorphic Functions; exact active External implementations; Components with empty requirements; their signature, syntax and function-port owners; command Targets |
-| Expressions | Literals, structural Record and Field, List<I64>, Local, If, Let, nonempty Sequence, direct Call, FunctionValue, prefix Bind and Invoke |
-| Generic calls and named values | The closed I64 substitutions for the exact `core.list.length` and `core.list.get` signatures; no general generic function-body expansion |
+| Supplied descriptors | The corresponding compound descriptors, plain Named nominal types, pure Function signatures, and the scoped TypeParameter/List<T> descriptors of the recognized list intrinsics |
+| Declarations | Modules; closed ordinary Record/Variant declarations and every Field/Case; pure monomorphic Functions; exact active External implementations; Components with empty requirements; their signature, syntax and function-port owners; command Targets |
+| Expressions | Literals, structural/nominal Record and Field, Variant, exhaustive Match, List<I64>, Local, If, Let, nonempty Sequence, direct Call, FunctionValue, prefix Bind and Invoke |
+| Generic calls and named values | Plain nongeneric Named nominal definitions and the closed I64 substitutions for the exact `core.list.length` and `core.list.get` signatures; no nominal Apply or general generic function-body expansion |
 | Entry signatures | Pure `() -> I64` or `(Bytes) -> {diagnostic: I64, image: Bytes}`, through a component function port with no runner arguments |
-| Remaining families | Nominal owned aggregates/choices and Match, arbitrary List<T>, task/effectful callables, resource/owned captures, general generic specialization, explicit implementation witnesses/read views and lexical Regions remain separate extensions |
+| Remaining families | OwnedRecord/OwnedChoice and their affine deconstruction, recursive or generic nominal values, arbitrary List<T>, task/effectful callables, resource/owned captures, general generic specialization, explicit implementation witnesses/read views and lexical Regions remain separate extensions |
 
 Pure Function descriptors also type named values, callable parameters/results
 and callable fields. Their exposed parameters and result must be copyable in
 this profile. Supported ByteBuffer-consuming/borrowing declarations remain
 available through direct Call, but have no exposed callable signature. Structural
-field descriptors retain exact names and child types. Source record evaluation preserves authored field order while
-runtime layout uses canonical field order. Let annotations must agree with the
+field descriptors retain exact names and child types. Ordinary structural and
+nominal Record expressions require nonempty, unique, strictly canonical selector
+order. Evaluation preserves that admitted vector; a private runtime permutation
+does not authorize a different source order. Let annotations must agree with the
 initializer's type, If conditions are Bool, both branches agree, and Sequence
 checks every item before taking its last type. Declared signatures type direct
 and mutual recursion without expanding callees.
@@ -551,6 +570,48 @@ uses and result. Unknown/unsupported forms reject with 13; type, arity, result,
 annotation or custody disagreements reject with 19. Task functions remain
 unsupported even with an empty effect row. Calls preserve eager left-to-right
 argument evaluation and current arithmetic trap order.
+
+### Closed ordinary nominal values and exhaustive Match
+
+This subset uses existing source expression tags: Record 13, Variant 14, Field
+15 and Match 18. It changes neither source profile 3, request profile 2 nor
+canonical schema epoch 1. The private Mode-0 descriptor/opcode tags and Mode-1
+canonical instruction tags are separate number spaces.
+
+Every admitted nominal definition has a nonempty, strictly canonical Field or
+Case vector, no type parameters or constraints, and an acyclic transitive
+copyable member closure. Identity is the exact package-qualified declaration;
+equal field shapes do not make two nominal types interchangeable. Plain Named
+type descriptors refer to that identity. Nonempty nominal type arguments and
+generic/recursive values are outside this slice. A generic definition rejects
+with 13 before its supplied argument list is considered; a nongeneric definition
+with supplied arguments is an arity error 19. Legal nominal recursion that passed
+E1 remains unsupported 13, not a structural type-cycle error 17 or an expanding
+parameter-slot error 18.
+
+Nominal Record construction must cover the declaration's exact ordered field
+vector, with each value having the declared type. A nominal Field selector must
+belong to the receiver's exact declaration. Variant construction derives the
+declaration from its exact Case parent and checks payload presence and type.
+No payload and a present Unit payload are distinct source forms.
+
+Match evaluates its scrutinee once. Its arm vector must be the exact complete
+canonical CaseReference vector of that scrutinee's Variant declaration. Each
+arm body is checked, including untaken cases. A payloadless case has no binder;
+a case with a payload has a fresh MatchPayload binding, no initializer and an
+explicit annotation equal to the exact payload type. Missing or mismatched
+annotations reject with 19. A present Unit payload therefore still requires a
+Unit-annotated binding. E1 confines that binding to its own arm body. All arm
+results must agree exactly; the result may be ByteBuffer subject to the separate
+custody rules. Malformed Match framing, including a bare tag 18 without its
+payload, rejects with 12 rather than the former unsupported-form result.
+
+Admission covers every declaration, member, supplied type descriptor and
+expression, including unused definitions, unselected payload cases, uncalled
+functions, untaken branches and unselected targets. Noncopyable member closures
+remain unsupported; they cannot be hidden in an unused case. This is ordinary
+copyable Record/Variant support, not OwnedRecord/OwnedChoice, implementation
+witnesses, read views, Regions or the full P_self profile.
 
 ### Closed pure Function values, Bind and Invoke
 
@@ -607,8 +668,13 @@ length call creates only a synchronous loan; it uses qualifier 1 and releases
 that loan at call return. Borrowed values cannot be stored, aggregated, returned
 or consumed. General borrowed helper functions remain outside this profile.
 
-Both If branches are admitted. Branch-balanced disposal removes owners retained
-on only one branch. Scope exit disposes remaining owners in reverse lexical
+Both If branches and every Match arm are admitted. Each Match arm starts from
+the same post-scrutinee custody state. The final intersection is determined over
+all arms before disposal is derived separately for each actual arm state; a
+later moved owner must also be disposed on every earlier arm that retains it.
+Copyable payload bindings add no owned custody. Borrow state and owned-result
+agreement remain exact. Branch-balanced disposal removes owners retained on
+only some paths. Scope exit disposes remaining owners in reverse lexical
 order; returning an owner transfers it and disposes other live owners. Sequence
 discards owned intermediate results. A tail-position direct or indirect call is emitted as TailCall or TailInvoke
 only when its transfer leaves no owned local live. Otherwise native lowering
@@ -616,11 +682,13 @@ uses Call or Invoke, required cleanup and Return. The generated backend independ
 checks the resulting flow certificates.
 
 The planner inventories all callables in canonical owner order, derives local
-slots and control flow, and writes current mode-0/profile-8 input. Primitive,
-structural-record and pure Function runtime descriptors, full declaration
+slots and control flow, and writes current mode-0/profile-9 input. Primitive,
+structural-record, nominal Record/Variant and pure Function runtime descriptors,
+full declaration
 signatures, Bind suffixes, type payloads, qualifier cells and every instruction
-state come from source admission and lowering. This internal format
-is passed through `elf::compile-elf`; no host-normalized IR is an input.
+state come from source admission and lowering. Match dispatch initializes only
+the selected arm's payload local; its source-qualified case order is converted
+to the exact dense runtime ordinals. This internal format is passed through `elf::compile-elf`; no host-normalized IR is an input.
 
 Plan rows, trace headers and runtime state cells retain their checked u64 fields
 and signed-I64 byte-index extent. Dynamic record metadata is included in layout
@@ -642,21 +710,30 @@ source summary pass computes all seven owner-summary dimensions; canonical units
 use interface, implementation, type, effect, capability and validation-dependency
 dimensions. Unit lowering preserves original IDs, authored names and declared
 type descriptors. It follows canonical pre-tail instruction order, including
-ordinary Call/Invoke, FunctionValue, BeginBind/Capture/Bind and forward owned-Let
-Unit/StoreLocal cleanup. Empty Bind still emits BeginBind and Bind. Native
+ordinary Call/Invoke, FunctionValue, BeginBind/Capture/Bind, nominal Record/
+Variant/Field/SwitchVariant and forward owned-Let Unit/StoreLocal cleanup.
+Record/Variant declaration units use canonical payload tags 3/4 and preserve
+the original member/type vectors. Match preserves C0's case interning, fresh
+payload-local allocation, arm-body and forward-jump order. A copyable payload
+binder does not add a synthetic Unit/StoreLocal cleanup pair. Its annotation is
+retained in the source Type closure and does not by itself add a unit type-table
+entry. Empty Bind still emits BeginBind and Bind. Native
 TailCall/TailInvoke/Drop/Pass traces are not reinterpreted as canonical unit IR.
 
 The compiler independently projects the public interface, selects exact runtime
 owners and callable reference containment, and derives their required transitive
 Type closure, including FunctionValue's exact supplied types and named behavior
-dependencies. Bind and Invoke retain their canonical callee/argument roles. Valid
+dependencies. Ordinary nominal declarations and Field/Case runtime owners keep
+their exact source parents and identities; summary relations include nominal
+member and Match dependencies. Bind and Invoke retain their canonical
+callee/argument roles. Valid
 unused supplied Types are admitted but do not become unrelated
 artifact objects. It constructs PackageRevision from the original admitted
 RevisionCore, package identity, derived interface digest and empty dependencies.
 The source request contains no interface digest, witness, owner subset, compiler
 unit, compilation map or generated code.
 
-These source-derived results form current mode-1/profile-7 input inside lkjscript.
+These source-derived results form current mode-1/profile-8 input inside lkjscript.
 Object rows use exact ObjectKey order. Equal keys are collapsed only after exact
 length and byte-window agreement; different bytes for one key reject before
 emission. Unit directories, metadata, descriptors and payload extents are checked
@@ -705,3 +782,7 @@ C2=C3 and Ahost=A1=A2=A3, strict loading/provenance for every generation, indepe
 program behavior and compiler-source mutations, complete-inventory negatives and
 fresh frozen-tree gates. The broader P_self semantic families and same-process
 phase reclamation retain their separate requirements in [selfhosting.md](selfhosting.md).
+The [ordinary nominal decision proposal](../decisions/20261103-closed-ordinary-nominal.md)
+records the publicly adopted candidate, passed focused source controls and the
+pending renewed fixed-point and frozen-tree acceptance;
+this specification alone is not an execution or fixed-point receipt.

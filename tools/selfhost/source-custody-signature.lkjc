@@ -5,7 +5,36 @@ declarations.begin
     (function create parameter-type (visibility package) (effect pure) (parameter create graph (type Bytes)) (parameter create mapping (type Bytes)) (parameter create row (type I64)) (returns I64) (body (let (binding data (call source-table::data (local graph) (local row))) (in (call source-value-types::reference (local graph) (local mapping) (local data) (call source-link-ref::name-end (local data) (i64 57)))))))
     (function create mode (visibility package) (effect pure) (parameter create graph (type Bytes)) (parameter create row (type I64)) (returns I64) (body (let (binding data (call source-table::data (local graph) (local row))) (in (call ci::get (local data) (call ci::add (call source-link-ref::name-end (local data) (i64 57)) (i64 33)))))))
     (function create qualified (visibility package) (effect pure) (parameter create graph (type Bytes)) (parameter create row (type I64)) (returns Bool) (body (let (binding data (call source-table::data (local graph) (local row))) (in (call ci::eq (call ci::get (local data) (call ci::add (call source-link-ref::name-end (local data) (i64 57)) (i64 34))) (i64 0))))))
-    (function create binding-type (visibility package) (effect pure) (parameter create graph (type Bytes)) (parameter create mapping (type Bytes)) (parameter create row (type I64)) (returns I64) (body (let (binding data (call source-table::data (local graph) (local row))) (binding at (call ci::add (call source-link-ref::name-end (local data) (i64 39)) (i64 19))) (in (if (call ci::eq (call ci::get (local data) (local at)) (i64 1)) (call source-value-types::reference (local graph) (local mapping) (local data) (call ci::add (local at) (i64 1))) (i64 0))))))
+    (function create binding-type
+  (visibility package)
+  (effect pure)
+  (parameter create graph (type Bytes))
+  (parameter create mapping (type Bytes))
+  (parameter create row (type I64))
+  (returns I64)
+  (body
+    (let
+      (binding data (call source-table::data (local graph) (local row)))
+      (binding end (call source-link-ref::name-end (local data) (i64 39)))
+      (binding present (call ci::get (local data) (call ci::add (local end) (i64 1))))
+      (in
+        (if
+          (call ci::either (call ci::eq (local present) (i64 0)) (call ci::eq (local present) (i64 1)))
+          (let
+            (binding at
+              (call ci::add
+                (local end)
+                (call ci::add (i64 2) (if (call ci::eq (local present) (i64 1)) (i64 17) (i64 0)))))
+            (in
+              (if
+                (call ci::eq (call ci::get (local data) (local at)) (i64 1))
+                (call source-value-types::reference
+                  (local graph)
+                  (local mapping)
+                  (local data)
+                  (call ci::add (local at) (i64 1)))
+                (i64 0))))
+          (i64 0))))))
     (function create local-owner (visibility package) (effect pure) (parameter create graph (type Bytes)) (parameter create data (type Bytes)) (returns I64) (body (call source-table::owner (local graph) (local data) (i64 39) (if (call ci::eq (call ci::get (local data) (i64 38)) (i64 0)) (i64 7) (i64 8)))))
     (function create local-type (visibility package) (effect pure) (parameter create graph (type Bytes)) (parameter create mapping (type Bytes)) (parameter create row (type I64)) (returns I64) (body (if (call ci::eq (call source-table::kind (local graph) (local row)) (i64 15)) (call parameter-type (local graph) (local mapping) (local row)) (call binding-type (local graph) (local mapping) (local row)))))
     (function create result-at

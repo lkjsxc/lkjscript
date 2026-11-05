@@ -398,7 +398,7 @@ fn selfhost_artifact_input_preserves_unmetered_and_exact_u64_allowances() {
     .unwrap();
     let program = prepare_snapshot(&source);
     let valid = selfhost_artifact_input::bundle(program.artifact()).unwrap();
-    assert_eq!(u32::from_le_bytes(valid[8..12].try_into().unwrap()), 7);
+    assert_eq!(u32::from_le_bytes(valid[8..12].try_into().unwrap()), 8);
     assert_eq!(&valid[12..16], &[0; 4]);
     assert_eq!(&valid[32..40], &[0; 8]);
     let expected = image("compile-elf", &valid);
@@ -444,7 +444,7 @@ fn selfhost_artifact_input_preserves_unmetered_and_exact_u64_allowances() {
         input::rechecksum(&mut invalid);
         assert_eq!(result("compile-elf", &invalid), (3, vec![]));
     }
-    for profile in [4_u32, 5, 6, 8] {
+    for profile in [4_u32, 5, 6, 7, 9] {
         let mut stale = valid.clone();
         stale[8..12].copy_from_slice(&profile.to_le_bytes());
         input::rechecksum(&mut stale);
@@ -809,7 +809,7 @@ fn selfhost_artifact_callable_export_roundtrips_types_callees_generics_and_behav
         assert!(empty_prefix && supplied_type);
 
         let projection = selfhost_artifact_input::bundle(original.artifact()).unwrap();
-        assert_eq!(&projection[8..12], &7_u32.to_le_bytes());
+        assert_eq!(&projection[8..12], &8_u32.to_le_bytes());
         let emitted = image("compile-elf", &projection);
         let loaded = crate::platform::compiler::load_artifact(&emitted).unwrap();
         loaded.require_current_admission(|| Ok(())).unwrap();
@@ -1660,7 +1660,7 @@ pub(super) fn capacity_bundle() -> &'static (Vec<u8>, Vec<u8>) {
         let at = |offset| {
             usize::try_from(u64::from_le_bytes(input[offset..offset + 8].try_into().unwrap())).unwrap()
         };
-        assert_eq!(u32::from_le_bytes(input[8..12].try_into().unwrap()), 7);
+        assert_eq!(u32::from_le_bytes(input[8..12].try_into().unwrap()), 8);
         assert_eq!(at(80), 800);
         assert_eq!(&input[12..16], &[0; 4]);
         assert_eq!(&input[32..40], &[0; 8]);

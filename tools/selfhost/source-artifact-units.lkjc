@@ -30,11 +30,13 @@ declarations.begin
         (let
           (binding kind (call source-table::kind (local graph) (local row)))
           (in
-            (call
-              ci::either
-              (call ci::eq (local kind) (i64 5))
-              (call
-                ci::either
+            (call ci::either
+              (call ci::either
+                (call ci::eq (local kind) (i64 2))
+                (call ci::either
+                  (call ci::eq (local kind) (i64 3))
+                  (call ci::either (call ci::eq (local kind) (i64 5)) (bool false))))
+              (call ci::either
                 (call ci::eq (local kind) (i64 6))
                 (call ci::either (call ci::eq (local kind) (i64 9)) (call ci::eq (local kind) (i64 20)))))))))
     (function create fill

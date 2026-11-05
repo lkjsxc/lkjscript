@@ -426,6 +426,18 @@ declarations.begin
           (binding at (call source-link-ref::name-end (local data) (i64 39)))
           (in
             (if
+              (call ci::eq (call ci::get (local data) (local at)) (i64 1))
+              (if
+                (call ci::eq (call ci::get (local data) (call ci::add (local at) (i64 1))) (i64 0))
+                (if
+                  (call ci::eq (call ci::get (local data) (call ci::add (local at) (i64 2))) (i64 0))
+                  (i64 0)
+                  (if (call source-value-types::callable-value (local types)
+                      (call source-value-types::reference (local graph) (local mapping) (local data)
+                        (call ci::add (local at) (i64 3))))
+                    (i64 0) (i64 13)))
+                (i64 13))
+              (if
               (call ci::both
                 (call ci::eq (call ci::get (local data) (local at)) (i64 0))
                 (call ci::eq (call ci::get (local data) (call ci::add (local at) (i64 1))) (i64 1)))
@@ -445,7 +457,7 @@ declarations.begin
                         (call ci::add (local at) (i64 20)))))
                   (i64 0)
                   (i64 13)))
-              (i64 13))))))
+              (i64 13)))))))
     (function create expression-profile
       (visibility private)
       (effect pure)
@@ -487,19 +499,12 @@ declarations.begin
                         (call ci::eq (local op) (i64 13))
                         (if
                           (call ci::eq (call ci::get (local data) (i64 38)) (i64 0))
-                          (if
-                            (call ci::eq
-                              (field (call source-table::array (local data) (i64 39)) (name value))
-                              (i64 0))
-                            (i64 0)
-                            (i64 19))
-                          (i64 13))
+                          (if (call ci::eq (field (call source-table::array (local data) (i64 39)) (name value)) (i64 0))
+                            (i64 0) (i64 19))
+                          (call source-nominal-infer::record-profile (local graph) (local types) (local mapping) (local data)))
                         (if
                           (call ci::eq (local op) (i64 15))
-                          (if
-                            (call ci::eq (call ci::get (local data) (i64 55)) (i64 1))
-                            (i64 0)
-                            (i64 13))
+                          (i64 0)
                           (if
                             (call ci::eq (local op) (i64 16))
                             (if
@@ -512,7 +517,9 @@ declarations.begin
                                 (call source-value-types::primitive (i64 1)))
                               (i64 0)
                               (i64 13))
-                            (i64 13)))))))))))))
+                            (if (call ci::eq (local op) (i64 14))
+                              (call source-nominal-infer::variant-profile (local graph) (local types) (local mapping) (local data))
+                              (if (call ci::eq (local op) (i64 18)) (i64 0) (i64 13)))))))))))))))
     (function create port-parameters
       (visibility private)
       (effect pure)
@@ -803,6 +810,11 @@ declarations.begin
           (binding kind (call source-table::kind (local graph) (local row)))
           (in
             (if
+              (call ci::either (call ci::eq (local kind) (i64 2)) (call ci::eq (local kind) (i64 3)))
+              (call source-nominal-layout::check (local graph) (local types) (local mapping) (local row))
+              (if (call ci::either (call ci::eq (local kind) (i64 12)) (call ci::eq (local kind) (i64 13)))
+                (i64 0)
+                (if
               (call ci::either (call ci::eq (local kind) (i64 1)) (call ci::eq (local kind) (i64 11)))
               (if
                 (call ci::eq (local kind) (i64 11))
@@ -837,7 +849,7 @@ declarations.begin
                             (if
                               (call ci::eq (local kind) (i64 20))
                               (call target-profile (local graph) (local types) (local mapping) (local row))
-                              (i64 13))))))))))))))
+                              (i64 13))))))))))))))))
     (function create owner-inventory
       (visibility private)
       (effect pure)

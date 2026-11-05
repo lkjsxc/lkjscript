@@ -155,7 +155,7 @@ fn native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter() {
     ]);
     assert_eq!(accepted_head, std::fs::read(project.join("HEAD")).unwrap());
 
-    // Independently encode profile 8: a main function calls checked add(1, 41).
+    // Independently encode profile 9: a main function calls checked add(1, 41).
     // No exporter/code generator is used to construct this input.
     // Header160 + descriptors9*32 + functions2*80 + instructions4*64 = pool864.
     // The pool has Function parameter metadata16 and value/state cells96.
@@ -164,7 +164,13 @@ fn native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter() {
     fn put(bytes: &mut [u8], at: usize, value: u64) {
         bytes[at..at + 8].copy_from_slice(&value.to_le_bytes());
     }
-    payload[8..12].copy_from_slice(&8u32.to_le_bytes());
+    fn refresh_checksum(bytes: &mut [u8]) {
+        let mut digest = blake3::Hasher::new();
+        digest.update(&bytes[..40]);
+        digest.update(&bytes[72..]);
+        bytes[40..72].copy_from_slice(digest.finalize().as_bytes());
+    }
+    payload[8..12].copy_from_slice(&9u32.to_le_bytes());
     // Policy tag @12 and allowance @32 remain zero: explicitly unmetered.
     for (at, value) in [
         (16, 976),
@@ -221,10 +227,7 @@ fn native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter() {
         put(&mut payload, at, 1); // I64 type identity.
         put(&mut payload, at + 8, 0); // Qualifier is a separate word.
     }
-    let mut digest = blake3::Hasher::new();
-    digest.update(&payload[..40]);
-    digest.update(&payload[72..]);
-    payload[40..72].copy_from_slice(digest.finalize().as_bytes());
+    refresh_checksum(&mut payload);
     let input = temporary.path().join("input.lkjci");
     std::fs::write(&input, &payload).unwrap();
     let detached = temporary.path().join("detached");
@@ -260,6 +263,18 @@ fn native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter() {
     assert!(output.status.success());
     assert_eq!(output.stdout, b"42");
     assert!(output.stderr.is_empty());
+    // A checksum-consistent predecessor profile remains unsupported.
+    payload[8..12].copy_from_slice(&8u32.to_le_bytes());
+    refresh_checksum(&mut payload);
+    std::fs::write(&input, &payload).unwrap();
+    let rejected = execute_compiler();
+    assert_eq!(rejected.status.code(), Some(65));
+    assert!(rejected.stdout.is_empty());
+    assert_eq!(rejected.stderr, b"compiler_rejected:2\n");
+
+    // Restore the current profile and checksum before isolating invalid magic.
+    payload[8..12].copy_from_slice(&9u32.to_le_bytes());
+    refresh_checksum(&mut payload);
     payload[0] = 0;
     std::fs::write(&input, payload).unwrap();
     let rejected = execute_compiler();

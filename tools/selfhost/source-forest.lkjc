@@ -22,12 +22,15 @@ declarations.begin
       (parameter create rows (type Bytes))
       (parameter create row (type I64))
       (parameter create count (type I64))
+      (parameter create all-rooted (type Bool))
       (parameter create out (type ByteBuffer) (use consume))
-      (returns ByteBuffer)
+      (returns (record (rows Bytes) (rooted Bool)))
       (body
         (if
           (call ci::eq (local row) (local count))
-          (local out)
+          (record structural
+            (field rows (call ci::freeze (local out)))
+            (field rooted (local all-rooted)))
           (let
             (binding parent (call source-table::parent (local rows) (local row)))
             (binding ancestor
@@ -38,7 +41,14 @@ declarations.begin
             (binding next
               (type ByteBuffer)
               (call source-table::edge (local row) (local ancestor) (i64 0) (local out)))
-            (in (call jump (local rows) (call ci::add (local row) (i64 1)) (local count) (local next)))))))
+            (in
+              (call jump
+                (local rows)
+                (call ci::add (local row) (i64 1))
+                (local count)
+                (if (call ci::eq (local ancestor) (local count)) (local all-rooted) (bool false))
+                (local next)))))))
+
     (function create prove
       (visibility package)
       (effect pure)
@@ -75,16 +85,17 @@ declarations.begin
                 (call ci::lt (local distance) (local count))
                 (let
                   (binding empty (type ByteBuffer) (call ci::empty))
-                  (binding buffer
-                    (type ByteBuffer)
-                    (call jump (local rows) (i64 0) (local count) (local empty)))
-                  (binding next (call ci::freeze (local buffer)))
+                  (binding jumped
+                    (call jump (local rows) (i64 0) (local count) (bool true) (local empty)))
                   (in
-                    (call prove
-                      (local next)
-                      (local count)
-                      (call ci::mul (local distance) (i64 2))
-                      (local remaining))))
+                    (if
+                      (field (local jumped) (name rooted))
+                      (local remaining)
+                      (call prove
+                        (field (local jumped) (name rows))
+                        (local count)
+                        (call ci::mul (local distance) (i64 2))
+                        (local remaining)))))
                 (if
                   (call rooted (local rows) (i64 0) (local count))
                   (local remaining)

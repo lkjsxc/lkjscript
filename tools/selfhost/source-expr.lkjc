@@ -437,5 +437,8 @@ declarations.begin
                                                     (local cursor-1)
                                                     (local cursor-1))))
                                               (local cursor-0))))
-                                        (i64 -2)))))))))))))))))))))
+                                        (if
+                                          (call ci::eq (local operation) (i64 18))
+                                          (call source-match::read (local data) (local at) (local end))
+                                          (i64 -2))))))))))))))))))))))
 declarations.end

@@ -2,7 +2,7 @@ declarations.begin
 (units
   (module create source-index
     (function create compare
-      (visibility private)
+      (visibility package)
       (effect pure)
       (parameter create data (type Bytes))
       (parameter create left (type I64))

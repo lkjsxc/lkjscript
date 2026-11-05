@@ -23,7 +23,8 @@ declarations.begin
   (function create compound (visibility private) (effect pure)
     (parameter create types (type Bytes)) (parameter create identity (type I64)) (parameter create kind (type I64))
     (returns Bool)
-    (body (call ci::either (call ci::eq (local kind) (i64 10)) (call ci::both (call ci::eq (local kind) (i64 11)) (call source-value-types::function-copyable (local types) (local identity))))))
+    (body (call ci::either (call ci::either (call ci::eq (local kind) (i64 10)) (call ci::both (call ci::eq (local kind) (i64 11)) (call source-value-types::function-copyable (local types) (local identity))))
+      (call source-nominal-layout::nominal (local types) (local identity)))))
   (function create find (visibility private) (effect pure)
     (parameter create mapping (type Bytes)) (parameter create identity (type I64))
     (parameter create low (type I64)) (parameter create high (type I64))
@@ -205,7 +206,7 @@ declarations.begin
                       (local count))
                     (bool false))
                   (bool false))))
-            (bool false)))
+            (call source-runtime-nominal::same (local types) (local left) (local right))))
         (bool false))))
   (function create existing
     (visibility private)
@@ -337,21 +338,43 @@ declarations.begin
                       (call source-value-types::successor (local types) (local at))
                       (local mapped)
                       (local recorded)))))))))))
-  (function create field-index (visibility private) (effect pure)
+  (function create field-index
+    (visibility private) (effect pure)
     (parameter create graph (type Bytes)) (parameter create types (type Bytes))
     (parameter create facts (type Bytes)) (parameter create row (type I64))
     (returns I64)
-    (body (if (call ci::eq (call source-table::kind (local graph) (local row)) (i64 17))
-      (let (binding data (call source-table::data (local graph) (local row)))
-        (in (if (call ci::eq (call ci::get (local data) (i64 37)) (i64 15))
-          (let
-            (binding child (call source-table::owner (local graph) (local data) (i64 38) (i64 9)))
-            (binding name (call source-table::array (local data) (i64 56)))
-            (in (call source-value-types::field-index (local types)
-              (call source-scalar-infer::fact (local facts) (local child))
-              (call ci::slice (local data) (field (local name) (name next))
-                (call ci::add (field (local name) (name next)) (field (local name) (name value)))))))
-          (i64 0)))) (i64 0))))
+    (body
+      (if (call ci::eq (call source-table::kind (local graph) (local row)) (i64 17))
+        (let
+          (binding data (call source-table::data (local graph) (local row)))
+          (binding operation (call ci::get (local data) (i64 37)))
+          (in
+            (if (call ci::eq (local operation) (i64 15))
+              (let
+                (binding child (call source-table::owner (local graph) (local data) (i64 38) (i64 9)))
+                (binding semantic (call source-scalar-infer::fact (local facts) (local child)))
+                (in
+                  (if (call ci::eq (call ci::get (local data) (i64 55)) (i64 0))
+                    (if (call ci::eq (call source-value-types::kind (local types) (local semantic)) (i64 13))
+                      (call source-nominal-layout::member-index (local types) (local semantic) (local data) (i64 56))
+                      (i64 -1))
+                    (if (call ci::eq (call ci::get (local data) (i64 55)) (i64 1))
+                      (let
+                        (binding name (call source-table::array (local data) (i64 56)))
+                        (in
+                          (call source-value-types::field-index (local types) (local semantic)
+                            (call ci::slice (local data) (field (local name) (name next))
+                              (call ci::add (field (local name) (name next)) (field (local name) (name value)))))))
+                      (i64 -1)))))
+              (if (call ci::eq (local operation) (i64 14))
+                (let
+                  (binding semantic (call source-scalar-infer::fact (local facts) (local row)))
+                  (in
+                    (if (call ci::eq (call source-value-types::kind (local types) (local semantic)) (i64 14))
+                      (call source-nominal-layout::member-index (local types) (local semantic) (local data) (i64 38))
+                      (i64 -1))))
+                (i64 0)))))
+        (i64 0))))
   (function create facts (visibility private) (effect pure)
     (parameter create graph (type Bytes)) (parameter create types (type Bytes))
     (parameter create source-map (type Bytes)) (parameter create semantic (type Bytes))
@@ -486,6 +509,37 @@ declarations.begin
       (let (binding next (type ByteBuffer) (call ci::append
         (call source-value-types::field-name (local types) (local semantic) (local index)) (i64 0) (local out)))
         (in (call field-names (local types) (local semantic) (call ci::add (local index) (i64 1)) (local count) (local next)))))))
+  (function create encode-nominal
+    (visibility private) (effect pure)
+    (parameter create types (type Bytes)) (parameter create mapping (type Bytes))
+    (parameter create records (type Bytes)) (parameter create index (type I64))
+    (parameter create at (type I64))
+    (parameter create descriptors (type ByteBuffer) (use consume))
+    (parameter create payload (type ByteBuffer) (use consume))
+    (returns (record (code I64) (descriptors Bytes) (payload Bytes)))
+    (body
+      (let
+        (binding semantic (call ci::u64 (local records) (call ci::mul (local index) (i64 8))))
+        (binding encoded
+          (call source-runtime-nominal::encode (local types) (local mapping) (local semantic)
+            (call ci::add (local index) (i64 8)) (local at)))
+        (in
+          (if (call ci::eq (field (local encoded) (name code)) (i64 0))
+            (let
+              (binding next-descriptors (type ByteBuffer)
+                (call quad (call ci::sub (call source-value-types::kind (local types) (local semantic)) (i64 3))
+                  (call source-nominal-layout::count (local types) (local semantic))
+                  (local at) (i64 0) (local descriptors)))
+              (binding rows (field (local encoded) (name rows)))
+              (binding next-payload (type ByteBuffer)
+                (call ci::append-slice (local rows) (i64 0) (call ci::length (local rows)) (local payload)))
+              (in
+                (call encode-records (local types) (local mapping) (local records)
+                  (call ci::add (local index) (i64 1)) (field (local encoded) (name next))
+                  (local next-descriptors) (local next-payload))))
+            (record structural (field code (field (local encoded) (name code)))
+              (field descriptors (call ci::freeze (local descriptors)))
+              (field payload (call ci::freeze (local payload)))))))))
   (function create encode-records (visibility private) (effect pure)
     (parameter create types (type Bytes)) (parameter create mapping (type Bytes))
     (parameter create records (type Bytes)) (parameter create index (type I64))
@@ -496,7 +550,12 @@ declarations.begin
     (body (if (call ci::eq (call ci::mul (local index) (i64 8)) (call ci::length (local records)))
       (record structural (field code (i64 0)) (field descriptors (call ci::freeze (local descriptors)))
         (field payload (call ci::freeze (local payload))))
-      (if (call ci::eq (call source-value-types::kind (local types) (call ci::u64 (local records) (call ci::mul (local index) (i64 8)))) (i64 11)) (call encode-function (local types) (local mapping) (local records) (local index) (local at) (local descriptors) (local payload)) (let
+      (if (call ci::eq (call source-value-types::kind (local types) (call ci::u64 (local records) (call ci::mul (local index) (i64 8)))) (i64 11)) (call encode-function (local types) (local mapping) (local records) (local index) (local at) (local descriptors) (local payload)) (if
+        (call source-nominal-layout::nominal (local types)
+          (call ci::u64 (local records) (call ci::mul (local index) (i64 8))))
+        (call encode-nominal (local types) (local mapping) (local records) (local index) (local at)
+          (local descriptors) (local payload))
+        (let
         (binding semantic (call ci::u64 (local records) (call ci::mul (local index) (i64 8))))
         (binding count (call source-value-types::record-count (local types) (local semantic)))
         (in (if (call ci::lt (call ci::div (call ci::sub (i64 9223372036854775807) (local at)) (i64 32)) (local count))
@@ -517,7 +576,7 @@ declarations.begin
                   (local next-descriptors) (local next-payload))))
               (record structural (field code (field (local fields) (name code)))
                 (field descriptors (call ci::freeze (local descriptors)))
-                (field payload (call ci::freeze (local payload))))))))))))))
+                (field payload (call ci::freeze (local payload)))))))))))))))
   (function create encode (visibility package) (effect pure)
     (parameter create types (type Bytes)) (parameter create mapping (type Bytes))
     (parameter create records (type Bytes)) (parameter create blob (type I64))

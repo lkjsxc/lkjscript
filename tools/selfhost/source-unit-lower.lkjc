@@ -306,10 +306,19 @@ declarations.begin
           (binding kind (call source-table::kind (local graph) (local owner)))
           (in
             (if
-              (call ci::either (call ci::eq (local kind) (i64 5)) (call ci::eq (local kind) (i64 6)))
-              (call callable (local graph) (local parents) (local mapping) (local owner))
+              (call ci::either
+                (call ci::eq (local kind) (i64 2))
+                (call ci::either (call ci::eq (local kind) (i64 3)) (bool false)))
+              (call source-unit-lower-nominal::prepare (local graph) (local owner))
               (if
-                (call ci::either (call ci::eq (local kind) (i64 9)) (call ci::eq (local kind) (i64 20)))
-                (call container (local graph) (local owner))
-                (record structural (field code (i64 13)) (field descriptor (call ci::text-bytes (text ""))))))))))))
+                (call ci::either (call ci::eq (local kind) (i64 5)) (call ci::eq (local kind) (i64 6)))
+                (call callable (local graph) (local parents) (local mapping) (local owner))
+                (if
+                  (call ci::either
+                    (call ci::eq (local kind) (i64 9))
+                    (call ci::eq (local kind) (i64 20)))
+                  (call container (local graph) (local owner))
+                  (record structural
+                    (field code (i64 13))
+                    (field descriptor (call ci::text-bytes (text "")))))))))))))
 declarations.end

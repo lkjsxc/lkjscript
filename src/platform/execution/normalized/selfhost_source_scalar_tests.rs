@@ -912,7 +912,7 @@ fn selfhost_source_scalar_e3_compiles_selected_requests_and_executes_independent
             eprintln!(
                 "selfhost scalar execution case={} compiler_sha256={} carrier_sha256={} \
                  request_sha256={} selected_target={} \
-                 program_sha256={} target=linux-x86_64 output=ELF64 normalized_profile=8 \
+                 program_sha256={} target=linux-x86_64 output=ELF64 normalized_profile=9 \
                  arguments=[] environment=empty \
                  program_deadline_seconds=5 exit={:?} stdout_sha256={} elapsed_ms={}",
                 case.name,

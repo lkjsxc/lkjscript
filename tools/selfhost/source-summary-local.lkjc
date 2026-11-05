@@ -196,12 +196,20 @@ declarations.begin
               (local out)))
           (in
             (if
-              (call ci::eq (local kind) (i64 5))
-              (call source-summary-local::external-interface (local data) (local at) (local prefix))
+              (call ci::either
+                (call ci::eq (local kind) (i64 2))
+                (call ci::either (call ci::eq (local kind) (i64 3)) (bool false)))
+              (call nominal-interface (local data) (local kind) (local at) (local prefix))
               (if
-                (call ci::eq (local kind) (i64 6))
-                (call source-summary-local::function-interface (local data) (local at) (local prefix))
-                (call source-summary-local::component-interface (local data) (local at) (local prefix))))))))
+                (call ci::eq (local kind) (i64 5))
+                (call source-summary-local::external-interface (local data) (local at) (local prefix))
+                (if
+                  (call ci::eq (local kind) (i64 6))
+                  (call source-summary-local::function-interface (local data) (local at) (local prefix))
+                  (call source-summary-local::component-interface
+                    (local data)
+                    (local at)
+                    (local prefix)))))))))
     (function create interface
       (visibility package)
       (effect pure)
@@ -212,13 +220,21 @@ declarations.begin
       (body
         (if
           (call ci::either
-            (call ci::eq (local kind) (i64 5))
+            (call ci::eq (local kind) (i64 2))
             (call ci::either
-              (call ci::eq (local kind) (i64 6))
-              (call ci::either (call ci::eq (local kind) (i64 9)) (bool false))))
+              (call ci::eq (local kind) (i64 3))
+              (call ci::either
+                (call ci::eq (local kind) (i64 5))
+                (call ci::either
+                  (call ci::eq (local kind) (i64 6))
+                  (call ci::either (call ci::eq (local kind) (i64 9)) (bool false))))))
           (call source-summary-local::declaration-interface (local data) (local kind) (local out))
           (if
-            (call ci::eq (local kind) (i64 11))
+            (call ci::either
+              (call ci::eq (local kind) (i64 11))
+              (call ci::either
+                (call ci::eq (local kind) (i64 12))
+                (call ci::either (call ci::eq (local kind) (i64 13)) (bool false))))
             (call source-summary-material::piece
               (i64 1)
               (local data)
@@ -697,5 +713,37 @@ declarations.begin
                 (local directory)
                 (local semantic)
                 (call ci::add (local row) (i64 1))
-                (local next)))))))))
+                (local next)))))))
+    (function create nominal-interface
+      (visibility package)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create kind (type I64))
+      (parameter create at (type I64))
+      (parameter create out (type ByteBuffer) (use consume))
+      (returns ByteBuffer)
+      (body
+        (let
+          (binding members (call source-table::skip (local data) (local at) (i64 17)))
+          (binding a
+            (type ByteBuffer)
+            (call source-summary-material::byte-piece
+              (i64 2)
+              (call ci::sub (local kind) (i64 1))
+              (local out)))
+          (binding b
+            (type ByteBuffer)
+            (call source-summary-material::piece
+              (i64 3)
+              (local data)
+              (local members)
+              (call ci::sub (call ci::length (local data)) (i64 32))
+              (local a)))
+          (in
+            (call source-summary-material::piece
+              (i64 4)
+              (local data)
+              (local at)
+              (local members)
+              (local b))))))))
 declarations.end

@@ -421,7 +421,7 @@ declarations.begin
                     (type ByteBuffer)
                     (call asm::store (i64 5) (local offset) (i64 1) (local b)))
                   (in (call ci::push (i64 80) (local c))))
-                (if (call ci::lt (i64 16) (local tag)) (call callable::instruction (local data) (local layout) (local at) (local out)) (call aggregate::instruction (local data) (local layout) (local at) (local out)))))))))
+                (if (call ci::lt (i64 16) (local tag)) (if (call ci::either (call ci::eq (local tag) (i64 22)) (call ci::eq (local tag) (i64 23))) (call nominal-code::instruction (local data) (local layout) (local f) (local at) (local out)) (call callable::instruction (local data) (local layout) (local at) (local out))) (call aggregate::instruction (local data) (local layout) (local at) (local out)))))))))
     (function create nodes
       (visibility private)
       (effect pure)
@@ -553,7 +553,11 @@ declarations.begin
             (call ci::add (local f) (i64 1))
             (local position)
             (local out))
-          (let
+          (if (call nominal-code::extent (local data)
+              (call flow::node (local data) (call ci::add
+                (call flow::field (local data) (call flow::declaration (local data) (local f)) (i64 32)) (local i)))
+              (local position))
+              (let
             (binding scratch (type ByteBuffer) (call ci::empty))
             (binding emitted
               (type ByteBuffer)
@@ -576,7 +580,8 @@ declarations.begin
                       (local f)
                       (call ci::add (local i) (i64 1))
                       (call ci::add (local position) (local size))
-                      (local next))))))))))
+                      (local next)))))))
+              (call layout-failure (local out))))))
     (function create layout-functions (visibility private) (effect pure)
     (parameter create data (type Bytes)) (parameter create f (type I64)) (parameter create position (type I64)) (parameter create out (type ByteBuffer) (use consume))
     (returns (record (code I64) (bytes Bytes)))

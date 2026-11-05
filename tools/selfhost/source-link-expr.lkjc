@@ -160,7 +160,10 @@ declarations.begin
                             (call source-link-ref::type-ref (local graph) (local data) (i64 38))
                             (i64 9)
                             (i64 17))
-                          (i64 -13))))))))))))
+                          (if
+                            (call ci::eq (local op) (i64 18))
+                            (call match-links (local graph) (local data))
+                            (i64 -13)))))))))))))
     (function create call-value
       (visibility private)
       (effect pure)
@@ -241,5 +244,36 @@ declarations.begin
                               (i64 101))
                             (i64 0)
                             (i64 0))
-                          (i64 -13))))))))))))))
+                          (i64 -13))))))))))))
+    (function create match-items
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes)) (parameter create data (type Bytes))
+      (parameter create at (type I64)) (parameter create count (type I64))
+      (returns I64)
+      (body
+        (if (call ci::lt (local at) (i64 0)) (local at)
+          (if (call ci::eq (local count) (i64 0)) (local at)
+            (let
+              (binding case-end
+                (call source-link-ref::package-ref (local graph) (local data) (local at) (i64 5) (i64 13)))
+              (binding body-at
+                (call source-link-ref::optional (local graph) (local data) (local case-end) (i64 8) (i64 16)))
+              (binding next
+                (call source-link-ref::owner-ref (local graph) (local data) (local body-at) (i64 9) (i64 17)))
+              (in (call match-items (local graph) (local data) (local next)
+                (call ci::sub (local count) (i64 1)))))))))
+    (function create match-links
+      (visibility private) (effect pure)
+      (parameter create graph (type Bytes)) (parameter create data (type Bytes))
+      (returns I64)
+      (body
+        (let
+          (binding value-end
+            (call source-link-ref::owner-ref (local graph) (local data) (i64 38) (i64 9) (i64 17)))
+          (in
+            (if (call ci::lt (local value-end) (i64 0)) (local value-end)
+              (let (binding arms (call source-match::arms (local data)))
+                (in (call match-items (local graph) (local data)
+                  (field (local arms) (name at)) (field (local arms) (name count))))))))))
+))
 declarations.end

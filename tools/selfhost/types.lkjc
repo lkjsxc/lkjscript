@@ -44,7 +44,10 @@ declarations.begin
       (body
         (if
           (call valid (local data) (local ty) (bool false))
-          (call ci::eq (call ci::u64 (local data) (call row (local data) (local ty))) (i64 8))
+          (let
+            (binding kind (call ci::u64 (local data) (call row (local data) (local ty))))
+            (in
+              (call ci::either (call ci::eq (local kind) (i64 8)) (call ci::eq (local kind) (i64 10)))))
           (bool false))))
     (function create callable
       (visibility public)
@@ -101,10 +104,12 @@ declarations.begin
               (bool true)
               (call ci::either
                 (call record (local data) (local ty))
-                (call callable (local data) (local ty)))))
+                (call ci::either
+                  (call callable (local data) (local ty))
+                  (call variant (local data) (local ty))))))
           (bool false))))
     (function create earlier-copyable
-      (visibility private)
+      (visibility package)
       (effect pure)
       (parameter create data (type Bytes))
       (parameter create owner (type I64))
@@ -235,7 +240,7 @@ declarations.begin
                         (bool false))
                       (bool false))))))))))
     (function create less
-      (visibility private)
+      (visibility package)
       (effect pure)
       (parameter create data (type Bytes))
       (parameter create a (type I64))
@@ -397,7 +402,13 @@ declarations.begin
                             (i64 -1))
                           (i64 -1))
                         (i64 -1))
-                      (i64 -1)))
+                      (call nominal-types::end
+                        (local data)
+                        (local ty)
+                        (local blob)
+                        (local count)
+                        (local last)
+                        (local kind))))
                   (i64 -1))))))))
     (function create compounds
       (visibility private)
@@ -461,7 +472,13 @@ declarations.begin
                 (i64 0)
                 (i64 0))
               (i64 0))
-            (call compounds (local data) (i64 8) (local blob))
+            (let
+              (binding settled (call compounds (local data) (i64 8) (local blob)))
+              (in
+                (if
+                  (call ci::lte (i64 0) (local settled))
+                  (if (call nominal-types::unique (local data)) (local settled) (i64 -1))
+                  (i64 -1))))
             (i64 -1)))))
     (function create compiler-result
       (visibility public)
@@ -471,7 +488,10 @@ declarations.begin
       (returns Bool)
       (body
         (if
-          (call record (local data) (local ty))
+          (if
+            (call valid (local data) (local ty) (bool false))
+            (call ci::eq (call ci::u64 (local data) (call row (local data) (local ty))) (i64 8))
+            (bool false))
           (if
             (call ci::eq
               (call ci::u64 (local data) (call ci::add (call row (local data) (local ty)) (i64 8)))
@@ -520,5 +540,52 @@ declarations.begin
       (parameter create data (type Bytes))
       (parameter create at (type I64))
       (returns Bool)
-      (body (call ci::eq (call ci::u64 (local data) (call ci::add (local at) (i64 8))) (i64 1))))))
+      (body (call ci::eq (call ci::u64 (local data) (call ci::add (local at) (i64 8))) (i64 1))))
+    (function create variant
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (returns Bool)
+      (body
+        (if
+          (call valid (local data) (local ty) (bool false))
+          (call ci::eq (call ci::u64 (local data) (call row (local data) (local ty))) (i64 11))
+          (bool false))))
+    (function create field-type
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (parameter create index (type I64))
+      (returns I64)
+      (body
+        (if
+          (call ci::eq (call ci::u64 (local data) (call row (local data) (local ty))) (i64 10))
+          (call ci::u64
+            (local data)
+            (call ci::add (call nominal-types::member (local data) (local ty) (local index)) (i64 16)))
+          (call ci::u64 (local data) (call field (local data) (local ty) (local index))))))
+    (function create case-presence
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (parameter create index (type I64))
+      (returns I64)
+      (body
+        (call ci::u64
+          (local data)
+          (call ci::add (call nominal-types::member (local data) (local ty) (local index)) (i64 16)))))
+    (function create case-payload
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (parameter create ty (type I64))
+      (parameter create index (type I64))
+      (returns I64)
+      (body
+        (call ci::u64
+          (local data)
+          (call ci::add (call nominal-types::member (local data) (local ty) (local index)) (i64 24)))))))
 declarations.end

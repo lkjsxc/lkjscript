@@ -44,7 +44,7 @@ declarations.begin
             (if
               (call word-is (local data) (i64 112) (i64 0))
               (if
-                (call eq (call u32 (local data) (i64 8)) (i64 8))
+                (call eq (call u32 (local data) (i64 8)) (i64 9))
                 (call flow::validate (local data))
                 (i64 2))
               (if

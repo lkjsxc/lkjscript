@@ -1,12 +1,13 @@
 # Tier 1 artifact input and emission
 
-This is Mode 1, profile 7 of the current [LKJCI1 contract](selfhosting.md).
+This is Mode 1, profile 8 of the current [LKJCI1 contract](selfhosting.md).
 Rust admits the source and projects canonical compilation-unit fields. The
 lkjscript compiler checks framing, supported unit layouts, source-object hashes
 and required metadata references, then constructs current `.lkja` bytes. It does
-not yet decode or semantically admit the source objects. Matching unit IR to
-source meaning remains a host precondition and an independent strict-loader
-check. Structural checks alone do not establish type, ownership or effect safety.
+not semantically admit those source objects at this projection boundary.
+For the Tier 1 exporter, matching unit IR to source meaning is a host precondition
+and an independent strict-loader check. The raw-source compiler instead performs
+complete source admission before deriving this same private projection. Structural checks alone do not establish type, ownership or effect safety.
 
 The test-only exporter `src/platform/compiler/selfhost_artifact_input.rs` reads
 one currently admitted package. It projects fields and instructions, without
@@ -18,8 +19,8 @@ effects, constrained type parameters and test summaries reject at export.
 ## Complete input
 
 All scalar fields are little-endian; IDs and digests are raw bytes. Magic is
-`LKJCI001`, the u32 profile at offset 8 is exactly 7, and the u32 emission selector
-at offset 112 is exactly 1. Mode 0 uses profile 8. Each mode rejects every
+`LKJCI001`, the u32 profile at offset 8 is exactly 8, and the u32 emission selector
+at offset 112 is exactly 1. Mode 0 uses profile 9. Each mode rejects every
 other profile; there is no previous-profile reader.
 
 Transport counts, offsets and lengths occupy eight bytes. The selfhost reader
@@ -35,7 +36,7 @@ The header is exactly 160 bytes:
 | Offset | Width | Meaning |
 | --- | --- | --- |
 | 0 | 8 | Magic `LKJCI001` |
-| 8 | 4 | Profile 7 |
+| 8 | 4 | Profile 8 |
 | 12 | 4 | Policy tag: 0 = unbounded, 1 = finite; other tags reject |
 | 16 | 8 | Complete actual byte length L |
 | 24 | 8 | Positive unit count U |
@@ -120,7 +121,7 @@ large-inventory performance.
 
 The ordinary `ci::validate` entry first requires its 128-byte dispatch extent,
 then checks magic and emission selector. The Mode-1 reader requires the complete
-160-byte header and profile 7. Its remaining checks have this order:
+160-byte header and profile 8. Its remaining checks have this order:
 
 | Check | Failure diagnostic |
 | --- | --- |
@@ -175,9 +176,11 @@ serialization control retaining all u64 bits does not establish runtime admissio
 of a bit-63 count. Runtime-owner rows retain their 56-byte representation:
 OwnerKey ordinal u32, OwnerKind ordinal u32, nonzero ID16 and object digest32.
 Rows are strictly ordered by OwnerKey, and each digest names an included Owner
-object. Supported ordinal pairs are declaration 1 with kinds 4/5/8, type parameter
-2 with kind 10, parameter 6 with kind 14, port 10 with kind 18, and target 11 with
-kind 19.
+object. Supported ordinal pairs are declaration 1 with kinds 1/2/4/5/8, type
+parameter 2 with kind 10, field 3 with kind 11, case 4 with kind 12, parameter 6
+with kind 14, port 10 with kind 18, and target 11 with kind 19. Record/Variant
+declarations and their Field/Case owners retain exact source identities; runtime
+metadata does not authorize a different nominal layout.
 
 The package revision and both root pages must exist in the source-object table.
 The logical interface identity uses the package ID and interface map's exact
@@ -211,7 +214,7 @@ boundary; this transport change does not remove it. Every unit starts with a
 | 16 / 32 | 16 each | Nonzero package / owner ID |
 | 48 / 80 / 112 / 144 / 176 / 208 | 32 each | Semantic interface, implementation, type, effect, capability, validation-dependency digests |
 | 240 | 8 | Table directory offset, exactly 272 |
-| 248 | 8 | Signature offset, or zero for component/target |
+| 248 | 8 | Signature offset, or zero for Record/Variant/component/target |
 | 256 | 4 | Payload tag |
 | 260 | 4 | Reserved zero |
 | 264 | 8 | Payload offset |
@@ -236,23 +239,35 @@ arguments. Type and reference indices are zero-based. There are no independent
 
 | Owner ordinal | Kind ordinal | Payload tag | Payload |
 | --- | --- | --- | --- |
+| 1 | 1 | 3 | Record: member span16 followed by rows16 [field-table index, type-table index] |
+| 1 | 2 | 4 | Variant: member span16 followed by rows24 [case-table index, payload presence, payload-type index] |
 | 1 | 4 | 6 | Signature plus implementation-name span16 |
 | 1 | 5 | 7 | Signature plus code descriptor32 |
 | 1 | 8 | 9 | Port span16 followed by port rows32 |
 | 11 | 19 | 11 | Component index, port presence, port index, command runner zero; four u64 words |
 
+Record/Variant member spans are [rows_offset,count], both u64. Their vectors
+are nonempty and retain canonical member order. Type-parameter and constraint
+vectors are empty; the canonical writer emits those empty vectors explicitly.
+Variant absence is [presence=0,type=0], while Some(type-table index 0) is [1,0].
+Member references are interned before their type references, following C0 table
+encounter order. These representation forms do not independently establish the
+source profile's acyclicity, copyability or exact member typing.
+
 External names are the 31 primitives supported by the ELF input profile.
 Component ports contain four u64 fields: port index, function-type index,
 function-implementation tag zero and declaration index. Components have no
 requirements; targets have no routes. All indices, enum values and presence tags
-must be valid. Widening the projection does not add new supported language forms.
+must be valid. Profile 8 adds these ordinary nominal representation forms;
+canonical source admission and strict provenance remain separate obligations.
 
 Code descriptors are 32 bytes: parameter count, local count, instruction offset
 and instruction count, all u64. Parameter count matches the signature. There is
 no independent 128-local or 32,768-instruction projection guard. Instructions are
 48 bytes: tag/A/B u64 at offsets 0/8/16, signed I64 immediate at 24, and u64 extra
-offset/count at 32/40. Extra arrays use eight-byte numeric elements and follow the
-complete instruction array in instruction order. The supported canonical
+offset/count at 32/40. Extra arrays follow the complete instruction array in
+instruction order. Their row width is eight bytes for ordinary numeric vectors,
+16 bytes for Record selectors and 32 bytes for SwitchVariant arms. The supported canonical
 pre-tail IR tags are:
 
 | Tag | Instruction | Fields |
@@ -265,12 +280,32 @@ pre-tail IR tags are:
 | 12 | Call | A declaration index, B argument count; extras are type indices |
 | 13 | FunctionValue | A declaration index; B zero; extras are ordered supplied type indices |
 | 14 | Invoke | A remaining argument count; B zero; no extras |
-| 15 | Structural record | Extras are structural-name indices |
-| 17 | Structural field | A structural-name index |
+| 15 | Record | A nominal presence; B declaration index or zero; extras are [selector tag, index] rows16 |
+| 16 | Variant | A case-table index; B payload presence; empty type-argument extras |
+| 17 | Field | A selector tag; B field/name table index; no extras |
 | 18 | List | A type index, B item count |
+| 20 | SwitchVariant | A/B/immediate zero; extras are [case index, target PC, binder presence, binder local] rows32 |
 | 27 | Return | No operands; only the last instruction |
 | 28 / 29 | Bind / BeginBind | A prefix argument count; B zero; no extras |
 | 30 | Capture | A zero-based prefix position; B zero; no extras |
+
+Record selector tag 0 denotes a nominal Field table index and tag 1 a
+structural Name table index. A=1 requires a nonempty all-nominal selector vector
+and a valid declaration index; A=0 requires B=0 and all-structural selectors.
+Canonical type arguments are empty. Field uses the same selector tags. Variant
+presence is exactly 0 or 1; its empty type-argument vector records the current
+extra-pool cursor with count 0, not an arbitrary zero offset.
+
+SwitchVariant has a nonempty arm vector and preserves its order and instruction
+PCs. Case-table indices
+are unique but need not increase numerically: canonical CaseReference order is
+not relocation-table index order. Targets are forward and within the code.
+Absent binders require local 0; present binders require a local in
+[parameter_count,local_count). This lower bound is a private projection shape
+matching C0's fresh payload locals, not a new canonical-unit rule. Complete case
+coverage and payload typing are established by source admission/strict loading,
+not by this representation-only reader. Malformed selected-family declarations,
+selectors, presence tags or arm rows reject with diagnostic 10.
 
 Unused operands and immediate bytes are zero. Projected canonical tag 10 is
 `JumpIfFalse`; it is not Mode-0 tag 10's tail-call operation. The canonical IR
@@ -282,7 +317,9 @@ opcodes reject even in untaken code. FunctionValue uses the current canonical
 empty requirement/effect/read-scope vectors and supplied type-index sequence;
 it has no Call argument-count field. BeginBind and Capture retain their original
 PCs, including BeginBind followed by Bind for an empty prefix. This is support
-for existing canonical instructions, not a new Mode-1 encoding or schema epoch.
+for existing canonical instructions. Profile 8 changes the private Record/Field
+projection and adds nominal declaration, Variant and SwitchVariant layouts; it
+does not change canonical instruction tags or schema epoch 1.
 Shape admission checks bounds and layout, not abstract stack execution or
 correspondence with the raw source graph. Strict loading and source-driven oracle
 controls independently establish those semantic/provenance obligations.
@@ -356,13 +393,13 @@ map and pack codecs. The selfhost-emitted probe executable is built through the
 Mode-0 native backend and cached by its exact emission-payload hash. The controls
 strictly load emitted artifacts and execute programs with fixed expected values
 and trap codes. Native stage controls compare A2/A3 with the same
-VM/reference/C1 output. A successful Profile-7 execution record must bind
-the actual adopted compiler and inputs; an earlier Profile-5 record cannot prove
-the changed path. All such projected-input results retain Tier 1 scope.
+VM/reference/C1 output. A successful Profile-8 execution record must bind
+the actual adopted compiler and inputs; earlier Profile-5 or Profile-7 records
+cannot prove the changed path. All such projected-input results retain Tier 1 scope.
 
 ## Capacity, allocation and evidence boundaries
 
-Profile 7 removes projection-only 4 GiB extent, 8 MiB unit, 100,000-object/owner,
+Profile 8 retains the earlier removal of projection-only 4 GiB extent, 8 MiB unit, 100,000-object/owner,
 32,768-table/instruction and 128-parameter/local/operand guards. It does not widen
 canonical u32 semantic indices, remove the canonical unit codec's 8 MiB boundary,
 remove the generic packed codec's independent 128 MiB configuration ceiling, or
@@ -373,10 +410,10 @@ storage packs and loaders retain their separate admission contracts. Those cuts
 require their own progressive decoding,
 checked allocation, lifecycle and complete caller proofs.
 
-The current Mode 0 profile is 8, with its own callable descriptors, wide framing
-and unchanged exact explicit-policy metric. Mode 1 remains profile 7.
-`LKJSG002`, canonical unit/map/pack/`.lkja` bytes and schema epoch 1 are unchanged
-by this private transport cut. The native runtime's former 256 MiB per-value
+The current Mode 0 profile is 9, with structural/callable and nominal descriptors,
+wide framing and the unchanged exact explicit-policy metric. Mode 1 is profile 8.
+The raw `LKJSG002` profile 3, `LKJSRQ01` request profile 2, canonical
+unit/map/pack/`.lkja` bytes and schema epoch 1 are unchanged by this private cut. The native runtime's former 256 MiB per-value
 quota was removed in the preceding capacity cut; checked signed-I64 extents,
 physical host limits and context-owned bump allocation remain. The independent
 LKJPH001 invocation interface can reclaim scratch and retained output contexts.
@@ -399,7 +436,7 @@ C1/C2/C3 artifacts, a hash-consistent malformed unused unit reaching diagnostic
 10 beyond the former 700-unit boundary, and entry result 42 in both evaluators.
 Independent map controls covered empty/singleton maps, 752/753 and 896/897 leaf
 boundaries, and a three-level 11-page tree with independent physical/logical
-oracles. These historical outcomes are not relabeled as Profile-7 evidence.
+oracles. These historical outcomes are not relabeled as Profile-7 or Profile-8 evidence.
 
 The Profile-7 controls retain those expectations and add exact tagged-policy,
 wide field/pool, canonical-u32, metadata-root, partial-row and checked-sum cases.
@@ -408,5 +445,11 @@ carrier or a valid ten-million-unit closure. A projected code body above 8 MiB
 does not establish that the canonical unit codec or public loader admits such a
 unit. The [cutover decision](../decisions/20261030-artifact-profile7.md) records
 implementation, observed verification, adoption and remaining proof separately.
+Profile-8 nominal layout, unused-unit and source/artifact agreement controls are
+required before acceptance. The [ordinary nominal decision proposal](../decisions/20261103-closed-ordinary-nominal.md)
+records public adoption and passed focused source/artifact controls; renewed
+fixed-point and frozen-tree acceptance remain pending. No capacity result follows
+from
+this specification.
 Source-derived canonical artifacts, complete semantic admission and native phase
 reclamation remain Tier 2 obligations.

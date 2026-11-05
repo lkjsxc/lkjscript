@@ -541,9 +541,9 @@ fn selfhost_source_scope_work_refusal_is_distinct_and_exact_bound_passes() {
     kernel::validate_full(&deep).unwrap();
     assert_eq!(deep.owners.len(), 10);
     let deep_bytes = graph::packet(&deep);
-    // Four 10-row jumps + a 10-row rooted scan + a 10-owner scan +
-    // leaf/six Sequence ancestors/callable = 68, independently enumerated.
-    for (work, code) in [(67_u32, 6), (68, 0)] {
+    // Four 10-row jumps prove all roots, followed by a 10-owner scan +
+    // leaf/six Sequence ancestors/callable = 58, independently enumerated.
+    for (work, code) in [(57_u32, 6), (58, 0)] {
         let mut input = work.to_le_bytes().to_vec();
         input.extend_from_slice(&deep_bytes);
         assert_eq!(
@@ -590,4 +590,159 @@ fn selfhost_source_scope_does_not_claim_type_admission_or_type_inventory_identit
     assert_ne!(before, after);
     assert_ne!(Sha256::digest(&before), Sha256::digest(&after));
     expect(&source, 0);
+}
+
+fn forest_packet(parents: &[u32], maximum: Option<u64>) -> Vec<u8> {
+    let count = u32::try_from(parents.len()).unwrap();
+    let mut bytes = vec![0; 80];
+    bytes[..4].copy_from_slice(&count.to_le_bytes());
+    if let Some(maximum) = maximum {
+        bytes[4..8].copy_from_slice(&(maximum as u32).to_le_bytes());
+        bytes[8..12].copy_from_slice(&((maximum >> 32) as u32).to_le_bytes());
+        bytes[12] = 1;
+    }
+    for (row, parent) in parents.iter().copied().enumerate() {
+        bytes.extend_from_slice(&u32::try_from(row).unwrap().to_le_bytes());
+        bytes.extend_from_slice(&parent.to_le_bytes());
+        bytes.extend_from_slice(&0_u32.to_le_bytes());
+    }
+    bytes
+}
+
+fn forest_expected_work(maximum: Option<u64>, charged: u64) -> Vec<u8> {
+    let remaining = maximum.map(|maximum| maximum.checked_sub(charged).unwrap());
+    [
+        u64::from(maximum.is_some()),
+        remaining.unwrap_or(0) >> 32,
+        remaining.unwrap_or(0) & u64::from(u32::MAX),
+        charged >> 32,
+        charged & u64::from(u32::MAX),
+        0,
+    ]
+    .into_iter()
+    .flat_map(u64::to_le_bytes)
+    .collect()
+}
+
+// Expected charges are supplied by independently enumerated parent distances,
+// not obtained from the source implementation or from a budget search.
+fn forest_expect(parents: &[u32], maximum: Option<u64>, code: i64, charged: u64) {
+    let bytes = forest_packet(parents, maximum);
+    let expected = if code == 0 {
+        forest_expected_work(maximum, charged)
+    } else {
+        vec![]
+    };
+    assert_eq!(
+        result("read-forest", &bytes),
+        (code, expected.clone()),
+        "parents={parents:?}, maximum={maximum:?}"
+    );
+    emitted_result_bytes("read-forest", &bytes, code, &expected);
+}
+
+#[test]
+fn selfhost_source_forest_fused_root_proof_preserves_exact_allowances() {
+    for maximum in [None, Some(0), Some(u64::MAX)] {
+        forest_expect(&[], maximum, 0, 0);
+    }
+    forest_expect(&[1], Some(0), 6, 0);
+    forest_expect(&[1], Some(1), 0, 1);
+    forest_expect(&[1], Some(u64::MAX), 0, 1);
+    forest_expect(&[5; 5], Some(5), 0, 5);
+
+    // A 33-owner star has maximum parent distance two. One complete
+    // doubled-parent pass proves every row rooted: exactly 33 charged visits.
+    // The old count-bound loop used six jumps plus a final rooted scan.
+    let mut star = vec![0; 33];
+    star[0] = 33;
+    for maximum in [None, Some(33), Some(u64::MAX)] {
+        forest_expect(&star, maximum, 0, 33);
+    }
+    for maximum in [0, 32] {
+        forest_expect(&star, Some(maximum), 6, 0);
+    }
+
+    // Distances are 1..=9. Four complete passes cover 2, 4, 8, then 16
+    // parent edges, so the exact allowance is 4 * 9 = 36.
+    let mut chain = (0_u32..9)
+        .map(|node| node.saturating_sub(1))
+        .collect::<Vec<u32>>();
+    chain[0] = 9;
+    forest_expect(&chain, Some(35), 6, 0);
+    forest_expect(&chain, Some(36), 0, 36);
+    forest_expect(&chain, None, 0, 36);
+}
+
+#[test]
+fn selfhost_source_forest_early_root_requires_every_component() {
+    // Three terminating rows precede a disconnected two-cycle. No successful
+    // prefix may suppress the cycle. Three jumps and the terminal rooted scan
+    // consume 4 * 5 = 20; one-short remains resource refusal, not invalidity.
+    let parents = [5, 0, 5, 4, 3];
+    forest_expect(&parents, Some(19), 6, 0);
+    forest_expect(&parents, Some(20), 15, 0);
+    forest_expect(&parents, None, 15, 0);
+    forest_expect(&parents, Some(u64::MAX), 15, 0);
+    forest_expect(&[0], Some(0), 6, 0);
+    forest_expect(&[0], Some(1), 15, 0);
+}
+
+#[test]
+fn selfhost_source_forest_probe_rejects_invalid_framing_before_traversal() {
+    let baseline = forest_packet(&[1], None);
+    let mut bad_count = baseline.clone();
+    bad_count[..4].copy_from_slice(&u32::MAX.to_le_bytes());
+    let mut trailing = baseline.clone();
+    trailing.push(0);
+    let mut bad_policy = baseline.clone();
+    bad_policy[12] = 2;
+    let truncated = baseline[..baseline.len() - 1].to_vec();
+    for bytes in [bad_count, trailing, bad_policy, truncated] {
+        assert_eq!(result("read-forest", &bytes), (12, vec![]));
+        emitted_result_bytes("read-forest", &bytes, 12, &[]);
+    }
+    let mut bad_row = baseline;
+    bad_row[80..84].copy_from_slice(&1_u32.to_le_bytes());
+    for bytes in [bad_row, forest_packet(&[2], None)] {
+        assert_eq!(result("read-forest", &bytes), (15, vec![]));
+        emitted_result_bytes("read-forest", &bytes, 15, &[]);
+    }
+}
+
+#[test]
+fn selfhost_source_forest_cancellation_does_not_poison_retry() {
+    let mut parents = vec![0; 257];
+    parents[0] = 257;
+    let bytes = forest_packet(&parents, None);
+    let (source, program) = probes("source-scope-probe");
+    let declaration = function("source-scope-probe", "read-forest");
+    let policy = NormalizedRunPolicy::foreground();
+    for checks in [1, 1000] {
+        let error = NormalizedVm::for_test(program, policy)
+            .invoke(
+                declaration,
+                vec![NormalizedValue::bytes(bytes.as_slice())],
+                None,
+                &ExecutionControl::cancel_after_checks(checks),
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.class,
+            crate::platform::execution::ExecutionFailureClass::Cancelled
+        );
+        let error = NormalizedReferenceInterpreter::new(source, program, policy)
+            .invoke(
+                declaration,
+                vec![NormalizedValue::bytes(bytes.as_slice())],
+                None,
+                &ExecutionControl::cancel_after_checks(checks),
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.class,
+            crate::platform::execution::ExecutionFailureClass::Cancelled
+        );
+    }
+    forest_expect(&parents, None, 0, 257);
 }

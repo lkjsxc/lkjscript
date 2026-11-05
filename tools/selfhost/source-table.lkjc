@@ -47,5 +47,10 @@ declarations.begin
       (call ci::mul (local row) (i64 12)) (local offset)))))
   (function create parent (visibility package) (effect pure)
     (parameter create rows (type Bytes)) (parameter create row (type I64)) (returns I64)
-    (body (call column (local rows) (local row) (i64 4))))))
+    (body (call column (local rows) (local row) (i64 4))))
+  (function create start (visibility package) (effect pure)
+    (parameter create graph (type Bytes)) (parameter create row (type I64)) (returns I64)
+    (body (call ci::u32 (local graph)
+      (call ci::add (call ci::u32 (local graph) (i64 92)) (call ci::mul (local row) (i64 8))))))
+))
 declarations.end
