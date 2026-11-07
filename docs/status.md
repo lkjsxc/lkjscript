@@ -1,169 +1,124 @@
+
 # Current status
 
-Updated 2026-11-07 (Asia/Tokyo); wide-Sequence candidate evidence snapshot. Accepted typed meaning is the sole editable
-program authority; maintained source proposals are adopted through public transactions.
+Updated 2026-11-07; implementation status: accepted.
+Accepted typed meaning is the sole editable program authority; maintained source
+proposals are adopted through public transactions.
 
-## Current delivery boundary
+## Current delivery and verification
 
-Accepted and integrated on `origin/main`.
-The closed ordinary nominal implementation is `6bf7559a`,
-with corrected tree `25b21080`. The
-[decision](decisions/20261103-closed-ordinary-nominal.md#acceptance-evidence-and-delivery)
-binds retained compiler evidence to original tree `2a30272f` and fresh corrective
-gates to `25b21080`. Milestones A and C and the closed
-pure callable expansion retain their accepted scope. Full Tier 2 Milestone B
-(P_self) remains open. No release archive or production deployment is published.
+Wide Sequence implementation: `411886df`, corrected tree
+`75ae1da2`. Delivery: integrated into `main` and pushed; the advertised remote matched the implementation commit. The
+[canonical acceptance record](decisions/20261107-wide-sequence-capacity.md#acceptance-evidence-and-delivery)
+separately binds retained compiler computations on `45fe92e4` and fresh
+corrective gates on `75ae1da2`. Documentation has its own later tree and
+fresh changed-check receipt; it does not inherit the implementation seal.
 
-## Accepted capabilities
+| Validation and source binding | Recorded outcome |
+| --- | --- |
+| Original literal selfhost, `45fe92e4` | 302 passed, 0 failed, 14 ignored across three selections |
+| Original maintained native closure / complete inventory / 8193-prefix | Each 1 passed; 0 failed or ignored |
+| Original maintained raw-source fixed point | 1 passed; actual C2=C3 and Ahost=A1=A2=A3, independent controls and final repository recheck |
+| Corrected-tree bootstrap and verifier bridge | Passed: fresh bootstrap invocation and exact typed verifier bridge; Cargo reuse recorded |
+| Corrected selected library and controlled exact capacity test | Library build and exact inventory passed; one controlled exact test passed (1/0/0) with the explicit 600 s watchdog and two owned contenders. |
+| Corrected fresh complete full check | 29/29 fresh passed; 0 reused, 0 unrun; root library 3,082 passed / 0 failed / 20 ignored; all 16 workspace streams retained |
+| Corrected release target | Passed: `x86_64-unknown-linux-musl` static-musl target policy |
+| Corrective acceptance and independent terminal audit | Passed: corrected candidate accepted; exact private-test projection and source, image, receipt, stream and actual-session bindings verified |
+
+The canonical decision binds retained original-tree computations and fresh
+corrected-tree results under exact-function relevance guards, with unchanged
+surrounding source and all other file/mode inputs.
+
+No implementation `check changed` pass is claimed. Corrective acceptance requires
+all 29 fresh full gates. This two-file acceptance prose requires a separate fresh
+changed5 check and documentation commit after the exact implementation commit.
+
+The [ordinary nominal record](decisions/20261103-closed-ordinary-nominal.md#acceptance-evidence-and-delivery)
+retains the earlier delivery and its distinct original/corrected-tree verification.
+Milestones A and C and the callable/ordinary-nominal expansions keep their accepted
+scope. Full Tier 2 Milestone B (P_self) remains open. No release archive or
+production deployment is published.
+
+## Language and capacity scope
 
 The source compiler covers the maintained scalar/compound closure, structural
-records/fields, `List<I64>`, lexical control flow, direct monomorphic recursion, closed I64
-list substitutions, exact intrinsic signatures and binary filters. ByteBuffer
-consumption, synchronous borrows, branch-balanced disposal, reverse lexical
-cleanup and returned-owner transfer remain checked; live custody prevents unsafe
-tail transfer. Both ELF and canonical artifacts are built from complete raw source.
-
+records/fields, `List<I64>`, lexical control flow, direct monomorphic recursion,
+closed I64 list substitutions, exact intrinsic signatures and binary filters.
 FunctionValue, prefix Bind and Invoke support exact copyable captures, callable
 fields/results, ordinary indirect calls and custody-aware graph-tail frame reuse.
-Empty Bind preserves identity without an environment. Text and StaticText retain
-distinct semantic identities. The [callable decision](decisions/20261101-closed-pure-callables-profile8.md)
-retains that expansion's separate implementation and evidence.
+Empty Bind preserves identity. Text and StaticText remain semantically distinct.
 
-The ordinary nominal slice adds closed, nongeneric, acyclic, copyable
-Record/Variant values and exhaustive Match through both outputs. Exact nominal
-identity, absence versus Unit and authored initializer order are preserved.
-All-arm ByteBuffer custody includes owned buffer results, nested Match and separate
-synchronous reads before, inside and after Match. General borrowed helpers and
-a loan spanning Match remain outside this profile.
+Closed, nongeneric, acyclic, copyable Record/Variant values and exhaustive Match
+retain exact nominal identity, absence versus Unit and authored initializer order.
+ByteBuffer results, nested Match, branch-balanced disposal, reverse lexical
+cleanup and synchronous reads before/inside/after Match remain checked. General
+borrowed helpers and a loan spanning Match remain outside this profile.
 
-Migrated opaque child ownership uses iterative cleanup. VM and reference have
-independent iterative semantic comparison; raw structural observation remains a
-separate fallible operation. The selected pure canonical-reference driver retains
-graph activations and expression continuations on the heap, with exact custody,
-call-depth/tail accounting, cancellation and modeled allocation obligations.
-This does not make every reference route or generated native CALL stack unbounded.
+Wide Sequence removes the selected child/owner/unit/instruction/reference limits
+and four repeated parent-copy paths. Temporary-discard lookups are rekeyed to
+eliminate the quadratic parent-bucket scan.
+Package-source collection/publication and normalized preparation use the reviewed
+optional policies. Exact finite allowances, complete semantic/custody proof,
+checked representations, physical allocation and atomic VM/shared attachment
+remain independent obligations.
 
-## Accepted nominal graph and delivery
+The complete disk witness exercised 1,000,001 children, a 17,000,092-byte owner,
+an 11,000,387-byte unit, 2,000,002 instructions, 1,000,003 reference owners,
+644,003,269 modeled preparation bytes and 19,000,062 derivation steps, without
+preparation saturation. Both outputs, strict loading, exact Ahost agreement,
+VM/reference/C0/C2 result 42 and 17 recovery frames passed. The separate historical
+build-13 preparation controls and component retain their original attribution.
 
-| Identity | Accepted nominal implementation |
-| --- | --- |
-| Implementation / corrected tree | `6bf7559a` / `25b21080` |
-| Mainline delivery | Fast-forwarded into `origin/main` at `6bf7559a` |
-| Public graph revision | `rev_afe20e53…` |
-| Semantic state | `semantic_state_cf986535…` |
-| Complete carrier | Profile 3; 26,107,644 bytes; exact binding in the nominal decision |
+Those seven quantities do not independently prove the removed 1M-runtime-owner
+threshold, individual 4 MiB ArtifactManifest, 10K artifact packages, 1M artifact
+segments or 16 GiB bundle threshold. The >256 MiB codec/collector witness has
+separate component scope. Public disk GraphRepository authoring is exercised;
+an executed CLI file-input crossing is not claimed.
 
-Public adoption and complete readback cover 80,845 live owners across 135 modules,
-96 supplied types and 59,447 retirements. The complete active inventory has 1,371
-pure and 27 external callables. All 17 changed ordered signatures and the removed
-parameter were checked. Inventory does not replace semantic/custody admission.
-
-The implementation uses LKJSG002 profile 3, LKJSRQ01 profile 2, Mode-0 profile 9,
-Mode-1 profile 8 and canonical schema epoch 1. Changed private formats switch
-together without predecessor fallback; incompatible derived inputs require regeneration.
-
-## Verification
-
-Prerequisite and focused runs retain their separate bindings. The literal
-selfhost, named controls and raw fixed point below ran on original frozen tree
-`2a30272f`; corrected bootstrap, public CLI, full and release checks belong to
-`25b21080` under the decision’s guarded evidence composition.
-
-| Validation | Result |
-| --- | --- |
-| C0 native/producer prerequisites | 17 passed; 0 failed or ignored |
-| Focused source/index/forest selections | 18 passed; 0 failed or ignored |
-| Literal selfhost script | 296 passed, 0 failed, 11 ignored across three selections |
-| Maintained native closure / complete inventory / 8193-prefix | Each 1 passed; 0 failed or ignored |
-| Whole maintained raw-source fixed point | 1 passed; 0 failed or ignored; actual C2=C3 and Ahost=A1=A2=A3 |
-| Corrected-tree bootstrap / focused public CLI control | Passed; exact public control 1 passed, 0 failed or ignored |
-| Complete fresh full check, all 29 gates | 29 passed, all fresh; 0 reused or unrun |
-| Release target | Passed; original bootstrap-bound verifier, exit 0 |
-| Corrective acceptance and terminal audit | Passed; corrected tree accepted with final relevance guards |
-
-The C2/C3 controls check 42 nominal behavior inputs and 20 negative mutations.
-The wide fixture constructs, admits and lowers all 257 cases and Match arms into
-ELF and artifacts; each artifact’s complete canonical dispatch inventory is checked.
-Recorded runtime checks select seven cases, including canonical ordinals 255 and 256.
-Strict loading, exact host artifact agreement, compiler-source mutation sensitivity,
-same-process C1/C2 recovery and final unchanged-repository checks passed in the
-retained original-tree raw fixed-point control. The decision distinguishes each result and its binary evidence:
-the literal script does not separately record its selected test-image hash.
-
-The 8193-prefix crossing retains its explicit 32 GiB process allowance.
-Its largest unit remains below the separate 4 MiB object and 8 MiB unit-codec
-ceilings; it does not establish those capacity removals.
-
-## Wide Sequence candidate
-
-The current candidate includes both publicly adopted cursor and discard-key
-changes: 81,456 live owners, 97 supplied types and 61,339 retirements; complete
-carrier 26,611,855 bytes. The [decision](decisions/20261107-wide-sequence-capacity.md)
-binds each completed control. Mainline acceptance remains the nominal delivery.
-
-The second same-binary pair passed six fixtures/twelve identical output pairs.
-All six ELF observations were lower; artifact observations were equal or higher.
-Historical host results record 29 passes with path-only provenance. Four custody
-controls and C1/C2 100,001-child pilots retain complete bindings; the pilots passed
-both outputs, independent execution and 17 phase frames.
-The C2 pilot genuinely generated C2/C3 from complete public source and passed its
-terminal source audit. These pilots crossed only the old child-count ceiling.
-
-The candidate also removes package-source container byte/object, generic map-entry
-and link read-set defaults through public export/stage consumers. Exact optional
-decoder/read/work allowances and independent package/topology bounds remain.
-The corrected source path passed 72 focused controls, including the actual
->256 MiB container/collector crossing. The candidate now also gives normalized
-preparation independent optional work/metadata allowances, with None defaults,
-semantic finite-closure proof and exact local/shared VM attachment.
-The retained 82 preparation controls and in-memory 1,000,001-item component
-passed, with 644,003,269 modeled metadata bytes, 19,000,062 derivation steps,
-strict loading, VM/reference/C0 result 42 and cleanup. Current phase controls
-passed three selections across five processes and 109 frames. The fresh disk/C2
-million-item witness also passed both outputs, exact host artifact agreement,
-VM/reference/C0/C2 result 42 and 17 recovery frames. These results retain separate
-source/image bindings. Maintained artifact equations and final acceptance remain pending.
+Both public compiler-source adoptions cover 81,456 live owners, 97 supplied types
+and 61,339 retirements; the complete carrier is 26,611,855 bytes. LKJSG002 profile 3,
+LKJSRQ01 profile 2, Mode-0 profile 9, Mode-1 profile 8 and canonical schema epoch 1
+are unchanged. Exact identities and historical evidence remain in the decision.
 
 ## Remaining work
 
-Selected next action: complete maintained raw native/artifact equations, generate
-and verify guides, then run the frozen bootstrap/literal/named/fresh-full/release
-seal and integrate its exact accepted tree. Public disk GraphRepository authoring
-is exercised; CLI file-input capacity requires its own executed proof.
-
-The same-binary 64-block helper pair reduced If/Jump VM instructions from 2,171,227
-to 447,208, while the straight control rose from 146,587 to 272,159 (+85.7%) and
-from 41,541,957 to 57,316,566 modeled cumulative bytes (+38.0%). The decision
-retains both cases and single-run timings. This whole-batch helper comparison
-does not isolate indexing or establish whole-compiler speed; straight-path overhead
-and admission-stage measurement remain follow-up work. Forest early completion
-improves proof work but establishes no new capacity removal.
+A possible next measurement is scoped reuse of an already validated link
+projection within one operation. The completed disk witness observed a 460,574 ms
+host link stage; this does not attribute the cost, establish an implementation or
+demonstrate an improvement. The second Sequence pair had lower ELF observations
+and equal/higher artifact observations. The earlier nominal helper pair likewise
+included a straight-path regression. Their canonical decisions retain both sides;
+neither comparison establishes a uniform or whole-compiler speedup.
 
 Tier 2 Milestone B remains open for OwnedRecord/OwnedChoice and affine
 deconstruction, general `List<T>`, owned witnesses and source-tied read views,
 lexical Regions, generic/recursive nominal values, general generic specialization,
-task/effectful callables and resource/owned captures. Consecutive boxed-spine
-Clone admission remains depth 256;
-structural type/AST/identity, owned-storage escape and codec paths retain separate
-bounds. Default call/value-stack policies, broader reference routes and native
-CALL growth are unchanged. Owned-record layout preparation retains its 64 MiB
-cumulative metadata default and depth-256 guard. The candidate seal remains pending. Separate 10,000-package/
-readiness and 100,000-edge limits, untouched object domains, source/IR coordinates
+task/effectful callables and resource/owned captures.
+
+Opaque-child cleanup and selected semantic comparison/reference continuation
+routes are iterative. General structural/boxed-value lifecycle work remains:
+boxed-spine Clone admission is depth 256, and type/AST/identity, owned-storage
+escape and codec paths keep separate bounds. Default call/value-stack policies,
+broader reference routes and generated non-tail native CALL growth are unchanged.
+Owned-record layout preparation retains its 64 MiB metadata default and depth-256
+guard. Separate package/readiness/edge limits, the CompilationManifest aggregate,
+bounded exact builtin retention, untouched object domains, source/IR coordinates
 and storage/data/queue/HTTP/dev-tool families remain open.
 
 The accepted [native phase ABI](spec/native-phases.md) promotes the complete Bytes
 result into a separate output context before scratch disposal. Arbitrary-value
 promotion, finer subpass lifetimes and heap-backed native calls are not established.
 
-## Accepted milestone records
+## Milestone records
 
-| Milestone | Accepted implementation | Verification tree(s) | Acceptance |
+| Milestone | Implementation | Verification tree(s) | Canonical record |
 | --- | --- | --- | --- |
 | A — maintained raw-source self-compilation | `010ce014` | `7c4b670f` | [Seal](decisions/20261101-active-source-acceptance.json), [decision](decisions/20261101-active-source-self-compilation.md) |
 | C — same-process native scratch reclamation | `a1e4c9dd` | `43041af8` | [Seal](decisions/20261101-native-phase-acceptance.json), [decision](decisions/20261101-native-phase-reclamation.md) |
 | Closed pure callable expansion | `8526ed77` | `3de34681` | [Acceptance](decisions/20261101-closed-pure-callables-profile8.md#acceptance-and-mainline-delivery) |
 | Closed ordinary nominal expansion | `6bf7559a` | `25b21080`; retained compiler controls `2a30272f` | [Acceptance](decisions/20261103-closed-ordinary-nominal.md#acceptance-evidence-and-delivery) |
+| Wide Sequence capacity | `411886df` | `75ae1da2`; retained compiler controls `45fe92e4` | [accepted](decisions/20261107-wide-sequence-capacity.md#acceptance-evidence-and-delivery) |
 
-Each implementation retains its exact acceptance scope. Same-process reclamation
-covers C1 and C2 processes; C3 byte equality does not establish a separate C3 phase
-process. Later documentation commits are distinct from tested implementation trees.
+Each implementation retains its exact scope. Same-process reclamation covers C1
+and C2 processes; C3 byte equality does not establish a separate C3 phase process.
+Later documentation commits remain distinct from tested implementation trees.
