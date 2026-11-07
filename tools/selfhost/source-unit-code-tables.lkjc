@@ -315,52 +315,65 @@ declarations.begin
             (if
               (call ci::eq (call source-table::kind (local graph) (local parent)) (i64 17))
               (let
-                (binding record (call source-table::data (local graph) (local parent)))
-                (binding op (call ci::get (local record) (i64 37)))
+                (binding op
+                  (call ci::get
+                    (local graph)
+                    (call ci::add (call source-table::start (local graph) (local parent)) (i64 37))))
                 (binding position (call source-table::column (local parents) (local row) (i64 8)))
                 (in
                   (if
-                    (call ci::eq (local op) (i64 10))
-                    (call source-custody-signature::mode
-                      (local graph)
-                      (call source-custody-signature::parameter
-                        (local graph)
-                        (call source-table::owner (local graph) (local record) (i64 57) (i64 2))
-                        (local position)))
-                    (if
-                      (call ci::eq (local op) (i64 15))
-                      (let
-                        (binding child (call source-table::data (local graph) (local row)))
-                        (in
-                          (if
-                            (call ci::eq (call ci::get (local child) (i64 37)) (i64 5))
-                            (if
-                              (call memory
-                                (local graph)
-                                (local mapping)
-                                (call source-custody-signature::local-owner (local graph) (local child)))
-                              (i64 1)
-                              (i64 0))
-                            (i64 0))))
-                      (if
+                    (call ci::eq (local op) (i64 9))
+                    (let
+                      (binding last
+                        (call source-table::sequence-last (local graph) (local parent) (local position)))
+                      (in
                         (if
-                          (call ci::either
-                            (call ci::eq (local op) (i64 7))
-                            (call ci::either (call ci::eq (local op) (i64 18)) (bool false)))
-                          (call ci::lt (i64 0) (local position))
+                          (call ci::lt (local last) (i64 0))
+                          (i64 -1)
                           (if
-                            (call ci::eq (local op) (i64 8))
-                            (call ci::eq
-                              (local position)
-                              (field (call source-table::array (local record) (i64 38)) (name value)))
+                            (call ci::eq (local last) (i64 1))
+                            (call context (local graph) (local parents) (local mapping) (local parent))
+                            (i64 0)))))
+                    (let
+                      (binding record (call source-table::data (local graph) (local parent)))
+                      (in
+                        (if
+                          (call ci::eq (local op) (i64 10))
+                          (call source-custody-signature::mode
+                            (local graph)
+                            (call source-custody-signature::parameter
+                              (local graph)
+                              (call source-table::owner (local graph) (local record) (i64 57) (i64 2))
+                              (local position)))
+                          (if
+                            (call ci::eq (local op) (i64 15))
+                            (let
+                              (binding child (call source-table::data (local graph) (local row)))
+                              (in
+                                (if
+                                  (call ci::eq (call ci::get (local child) (i64 37)) (i64 5))
+                                  (if
+                                    (call memory
+                                      (local graph)
+                                      (local mapping)
+                                      (call source-custody-signature::local-owner (local graph) (local child)))
+                                    (i64 1)
+                                    (i64 0))
+                                  (i64 0))))
                             (if
-                              (call ci::eq (local op) (i64 9))
-                              (call ci::eq
-                                (call ci::add (local position) (i64 1))
-                                (field (call source-table::array (local record) (i64 38)) (name value)))
-                              (bool false))))
-                        (call context (local graph) (local parents) (local mapping) (local parent))
-                        (i64 0))))))
+                              (if
+                                (call ci::either
+                                  (call ci::eq (local op) (i64 7))
+                                  (call ci::either (call ci::eq (local op) (i64 18)) (bool false)))
+                                (call ci::lt (i64 0) (local position))
+                                (if
+                                  (call ci::eq (local op) (i64 8))
+                                  (call ci::eq
+                                    (local position)
+                                    (field (call source-table::array (local record) (i64 38)) (name value)))
+                                  (bool false)))
+                              (call context (local graph) (local parents) (local mapping) (local parent))
+                              (i64 0)))))))))
               (i64 0))))))
     (function create mode
       (visibility package)

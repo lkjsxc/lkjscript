@@ -203,57 +203,16 @@ declarations.begin
       (parameter create maximum (type I64))
       (returns I64)
       (body
-        (let
-          (binding length (call ci::length (local data)))
-          (in
+        (if
+          (call ci::lt (local maximum) (i64 0))
+          (i64 -1)
+          (if
+            (call ci::lt (call ci::length (local data)) (i64 50))
+            (i64 -1)
             (if
-              (if
-                (call ci::lt (i64 49) (local length))
-                (if (call ci::lt (local length) (i64 8388609)) (bool true) (bool false))
-                (bool false))
-              (let
-                (binding end (call ci::sub (local length) (i64 32)))
-                (in
-                  (if
-                    (if
-                      (call ci::same
-                        (call ci::slice (local data) (i64 0) (i64 8))
-                        (call ci::text-bytes (local magic)))
-                      (if
-                        (call ci::eq (call ci::get (local data) (i64 8)) (i64 1))
-                        (if
-                          (call ci::eq (call ci::get (local data) (i64 9)) (i64 0))
-                          (if
-                            (call ci::eq (call ci::u32 (local data) (i64 14)) (i64 0))
-                            (if
-                              (call ci::eq
-                                (call ci::u32 (local data) (i64 10))
-                                (call ci::sub (local length) (i64 50)))
-                              (if
-                                (call ci::lt (i64 -1) (local maximum))
-                                (if
-                                  (if
-                                    (call ci::lt (local maximum) (call ci::sub (local length) (i64 50)))
-                                    (bool false)
-                                    (bool true))
-                                  (if
-                                    (call ci::same
-                                      (call ci::slice (local data) (local end) (local length))
-                                      (call wire::digest
-                                        (local context)
-                                        (call ci::slice (local data) (i64 0) (local end))))
-                                    (bool true)
-                                    (bool false))
-                                  (bool false))
-                                (bool false))
-                              (bool false))
-                            (bool false))
-                          (bool false))
-                        (bool false))
-                      (bool false))
-                    (local end)
-                    (i64 -1))))
-              (i64 -1))))))
+              (call ci::lt (local maximum) (call ci::sub (call ci::length (local data)) (i64 50)))
+              (i64 -1)
+              (call envelope-framed (local data) (local magic) (local context)))))))
     (function create typed
       (visibility public)
       (effect pure)
@@ -620,5 +579,142 @@ declarations.begin
                 (bool false)
                 (bool true))
               (bool false))
-            (bool false)))))))
+            (bool false)))))
+  (function create envelope-framed
+    (visibility public)
+    (effect pure)
+    (parameter create data (type Bytes))
+    (parameter create magic (type Text))
+    (parameter create context (type Text))
+    (returns I64)
+    (body
+      (let
+        (binding length (call ci::length (local data)))
+        (in
+          (if
+            (call ci::lt (i64 49) (local length))
+            (let
+              (binding end (call ci::sub (local length) (i64 32)))
+              (in
+                (if
+                  (if
+                    (call ci::same
+                      (call ci::slice (local data) (i64 0) (i64 8))
+                      (call ci::text-bytes (local magic)))
+                    (if
+                      (call ci::eq (call ci::get (local data) (i64 8)) (i64 1))
+                      (if
+                        (call ci::eq (call ci::get (local data) (i64 9)) (i64 0))
+                        (if
+                          (call ci::eq (call ci::u32 (local data) (i64 14)) (i64 0))
+                          (if
+                            (call ci::eq
+                              (call ci::u32 (local data) (i64 10))
+                              (call ci::sub (local length) (i64 50)))
+                            (call ci::same
+                              (call ci::slice (local data) (local end) (local length))
+                              (call wire::digest
+                                (local context)
+                                (call ci::slice (local data) (i64 0) (local end))))
+                            (bool false))
+                          (bool false))
+                        (bool false))
+                      (bool false))
+                    (bool false))
+                  (local end)
+                  (i64 -1))))
+            (i64 -1))))))
+  (function create sequence-span
+    (visibility package)
+    (effect pure)
+    (parameter create data (type Bytes))
+    (parameter create at (type I64))
+    (parameter create end (type I64))
+    (returns (record (code I64) (next I64) (start I64) (length I64)))
+    (body
+      (let
+        (binding count (call unsigned (local data) (local at) (local end)))
+        (in
+          (if
+            (if
+              (call ci::eq (field (local count) (name code)) (i64 0))
+              (if
+                (call ci::lt (i64 0) (field (local count) (name value)))
+                (call items-fit
+                  (local data)
+                  (field (local count) (name next))
+                  (local end)
+                  (field (local count) (name value))
+                  (i64 17))
+                (bool false))
+              (bool false))
+            (let
+              (binding next
+                (call ci::add
+                  (field (local count) (name next))
+                  (call ci::mul (field (local count) (name value)) (i64 17))))
+              (in
+                (if
+                  (call ci::eq (local next) (local end))
+                  (record structural
+                    (field code (i64 0))
+                    (field next (local next))
+                    (field start (field (local count) (name next)))
+                    (field length (field (local count) (name value))))
+                  (record structural
+                    (field code (i64 12))
+                    (field next (local at))
+                    (field start (i64 0))
+                    (field length (i64 0))))))
+            (record structural
+              (field code (i64 12))
+              (field next (local at))
+              (field start (i64 0))
+              (field length (i64 0))))))))
+  (function create sequence-items
+    (visibility private)
+    (effect pure)
+    (parameter create data (type Bytes))
+    (parameter create at (type I64))
+    (parameter create end (type I64))
+    (parameter create count (type I64))
+    (returns I64)
+    (body
+      (if
+        (call ci::eq (local count) (i64 0))
+        (local at)
+        (if
+          (call ci::lt (i64 0) (local count))
+          (let
+            (binding next (call typed (local data) (local at) (local end) (i64 9) (i64 17)))
+            (in
+              (if
+                (call ci::lt (i64 -1) (local next))
+                (call sequence-items
+                  (local data)
+                  (local next)
+                  (local end)
+                  (call ci::sub (local count) (i64 1)))
+                (i64 -1))))
+          (i64 -1)))))
+  (function create sequence
+    (visibility package)
+    (effect pure)
+    (parameter create data (type Bytes))
+    (parameter create at (type I64))
+    (parameter create end (type I64))
+    (returns I64)
+    (body
+      (let
+        (binding span (call sequence-span (local data) (local at) (local end)))
+        (in
+          (if
+            (call ci::eq (field (local span) (name code)) (i64 0))
+            (call sequence-items
+              (local data)
+              (field (local span) (name start))
+              (local end)
+              (field (local span) (name length)))
+            (i64 -1))))))
+))
 declarations.end

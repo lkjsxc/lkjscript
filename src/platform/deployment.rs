@@ -5,7 +5,7 @@ mod grant_selection;
 pub(crate) mod pure_batch;
 pub mod shared;
 
-use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, load_artifact};
+use super::compiler::load_artifact;
 use super::configuration::{
     ConfigurationObservation, ConfigurationStore, ConfigurationValue, MAXIMUM_CONFIGURATION_FIELDS,
     MAXIMUM_CONFIGURATION_VALUE_BYTES,
@@ -1580,11 +1580,7 @@ impl AdmittedDeployment {
         let directory = path.parent().unwrap_or_else(|| Path::new(".")).to_owned();
         let artifact_path = resolve_relative(&directory, &descriptor.artifact, "artifact")?;
         checkpoint()?;
-        let artifact_bytes = read_bounded(
-            &artifact_path,
-            MAXIMUM_ARTIFACT_BUNDLE_BYTES,
-            "component artifact",
-        )?;
+        let artifact_bytes = read_with_limit(&artifact_path, None, "component artifact")?;
         if let Some(digest) = artifact_sha256 {
             use sha2::Digest;
             *digest =
@@ -2785,6 +2781,11 @@ fn validate_digest(value: &str, label: &str) -> Result<(), Diagnostic> {
 }
 
 fn read_bounded(path: &Path, maximum: u64, label: &str) -> Result<Vec<u8>, Diagnostic> {
+    read_with_limit(path, Some(maximum), label)
+}
+
+fn read_with_limit(path: &Path, maximum: Option<u64>, label: &str) -> Result<Vec<u8>, Diagnostic> {
+    use std::io::Read;
     let metadata = fs::symlink_metadata(path)
         .map_err(|error| deployment_io("deployment_read", path, error))?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
@@ -2796,20 +2797,63 @@ fn read_bounded(path: &Path, maximum: u64, label: &str) -> Result<Vec<u8>, Diagn
             ),
         ));
     }
-    if metadata.len() > maximum {
+    let descriptor = rustix::fs::open(
+        path,
+        rustix::fs::OFlags::RDONLY
+            | rustix::fs::OFlags::NOFOLLOW
+            | rustix::fs::OFlags::NONBLOCK
+            | rustix::fs::OFlags::CLOEXEC,
+        rustix::fs::Mode::empty(),
+    )
+    .map_err(|error| deployment_io("deployment_read", path, error.into()))?;
+    let mut file = fs::File::from(descriptor);
+    let opened = file
+        .metadata()
+        .map_err(|error| deployment_io("deployment_read", path, error))?;
+    if !opened.is_file() {
         return Err(deployment_error(
-            "deployment_input_limit",
-            format!("{label} '{}' exceeds {maximum} bytes", path.display()),
+            "deployment_input_kind",
+            format!("{label} '{}' is not a regular file", path.display()),
         ));
     }
-    let bytes = fs::read(path).map_err(|error| deployment_io("deployment_read", path, error))?;
-    if u64::try_from(bytes.len()).map_or(true, |length| length > maximum) {
-        return Err(deployment_error(
+    let limit_error = || {
+        Diagnostic::new(
+            DiagnosticClass::Resource,
             "deployment_input_limit",
-            format!("{label} '{}' exceeds {maximum} bytes", path.display()),
-        ));
+            format!(
+                "{label} '{}' exceeds its configured byte allowance",
+                path.display()
+            ),
+        )
+    };
+    if maximum.is_some_and(|maximum| opened.len() > maximum) {
+        return Err(limit_error());
     }
-    Ok(bytes)
+    let mut bytes = Vec::new();
+    let mut remaining = maximum;
+    let mut chunk = [0_u8; 65_536];
+    loop {
+        let count = match file.read(&mut chunk) {
+            Ok(count) => count,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(deployment_io("deployment_read", path, error)),
+        };
+        if count == 0 {
+            return Ok(bytes);
+        }
+        if let Some(available) = remaining {
+            let count = u64::try_from(count).map_err(|_| limit_error())?;
+            remaining = Some(available.checked_sub(count).ok_or_else(limit_error)?);
+        }
+        bytes.try_reserve(count).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "deployment_input_allocation",
+                format!("cannot allocate {label} input"),
+            )
+        })?;
+        bytes.extend_from_slice(&chunk[..count]);
+    }
 }
 
 fn deployment_io(code: &str, path: &Path, error: std::io::Error) -> Diagnostic {
@@ -2828,6 +2872,32 @@ fn deployment_error(code: &str, message: impl Into<String>) -> Diagnostic {
 mod tests {
     use super::*;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn artifact_read_allowance_is_optional_exact_and_fallible() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("artifact");
+        let expected = vec![42_u8; 131_073];
+        fs::write(&path, &expected).unwrap();
+        let exact = u64::try_from(expected.len()).unwrap();
+        for maximum in [None, Some(exact), Some(u64::MAX)] {
+            assert_eq!(
+                read_with_limit(&path, maximum, "artifact").unwrap(),
+                expected
+            );
+        }
+        for maximum in [0, exact - 1] {
+            let error = read_with_limit(&path, Some(maximum), "artifact").unwrap_err();
+            assert_eq!(error.code, "deployment_input_limit");
+            assert_eq!(error.class, DiagnosticClass::Resource);
+        }
+        fs::write(&path, []).unwrap();
+        assert!(
+            read_with_limit(&path, Some(0), "artifact")
+                .unwrap()
+                .is_empty()
+        );
+    }
 
     fn minimal() -> Vec<u8> {
         serde_json::to_vec(&serde_json::json!({

@@ -1063,7 +1063,7 @@ fn validate_operation(operation: &ExpressionOperation) -> Result<(), Diagnostic>
             require_unique("let binding", bindings.iter().copied())?;
         }
         ExpressionOperation::Sequence { items } => {
-            require_count("sequence items", items.len(), false)?;
+            require_sequence_count(items.len())?;
         }
         ExpressionOperation::Call {
             type_arguments,
@@ -1259,6 +1259,23 @@ fn validate_text(value: &TextValue) -> Result<(), Diagnostic> {
         )),
         TextValue::Blob { .. } => Ok(()),
     }
+}
+
+fn require_sequence_count(count: usize) -> Result<(), Diagnostic> {
+    let Some(last) = count.checked_sub(1) else {
+        return Err(expression_error(
+            "kernel_expression_child_count",
+            "sequence items must be nonempty",
+        ));
+    };
+    u32::try_from(last).map_err(|_| {
+        Diagnostic::new(
+            DiagnosticClass::Resource,
+            "kernel_expression_child_ordinal",
+            "sequence child ordinal exceeds the current u32 representation",
+        )
+    })?;
+    Ok(())
 }
 
 fn require_count(label: &str, count: usize, allow_zero: bool) -> Result<(), Diagnostic> {
@@ -1495,7 +1512,16 @@ fn expression_children(operation: &ExpressionOperation) -> Vec<ExpressionChild> 
             push_child(&mut children, *body, ExpressionChildRole::LetBody, 0);
         }
         ExpressionOperation::Sequence { items } => {
-            push_many(&mut children, items, ExpressionChildRole::SequenceItem)
+            // Local admission proves that every child has a representable
+            // ordinal. Iterating that domain cannot alias the final position
+            // through a saturating usize conversion.
+            children.extend(items.iter().zip(0..=u32::MAX).map(|(expression, ordinal)| {
+                ExpressionChild {
+                    expression: *expression,
+                    role: ExpressionChildRole::SequenceItem,
+                    ordinal,
+                }
+            }));
         }
         ExpressionOperation::Parallel { left, right } => {
             push_child(&mut children, *left, ExpressionChildRole::ParallelLeft, 0);
@@ -1624,4 +1650,31 @@ fn push_many(
 
 fn expression_error(code: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(DiagnosticClass::Semantic, code, message)
+}
+
+#[cfg(test)]
+mod sequence_capacity_tests {
+    use super::*;
+
+    #[test]
+    fn sequence_count_preserves_nonempty_and_exact_ordinal_representation() {
+        assert_eq!(
+            require_sequence_count(0).unwrap_err().code,
+            "kernel_expression_child_count"
+        );
+        for count in [1, 100_000, 100_001] {
+            require_sequence_count(count).unwrap();
+        }
+        if let Ok(maximum_ordinal) = usize::try_from(u32::MAX) {
+            require_sequence_count(maximum_ordinal).unwrap();
+            if let Some(all_ordinals) = maximum_ordinal.checked_add(1) {
+                require_sequence_count(all_ordinals).unwrap();
+                if let Some(overflow) = all_ordinals.checked_add(1) {
+                    let error = require_sequence_count(overflow).unwrap_err();
+                    assert_eq!(error.class, DiagnosticClass::Resource);
+                    assert_eq!(error.code, "kernel_expression_child_ordinal");
+                }
+            }
+        }
+    }
 }

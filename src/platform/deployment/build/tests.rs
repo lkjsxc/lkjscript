@@ -36,7 +36,7 @@ fn private_publication_checks_access_without_changing_existing_files() {
             mode
         );
         assert_eq!(fs::read(&path).unwrap(), b"private");
-        output::inspect_exact(&path, b"private", 7).unwrap();
+        output::inspect_exact(&path, b"private", Some(7)).unwrap();
     }
     fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
     output::publish_private_exact(&path, b"private", 7).unwrap();
@@ -77,20 +77,24 @@ fn output_and_data_roots_are_separate_by_path_components() {
 fn exact_reuse_checks_bytes_and_preserves_conflicting_outputs() {
     let temporary = tempfile::tempdir().unwrap();
     let path = temporary.path().join("build-test.lkja");
-    output::inspect_exact(&path, b"complete", 8).unwrap();
+    output::inspect_exact(&path, b"complete", Some(8)).unwrap();
     assert!(!path.exists());
-    let created = output::publish_exact(&path, b"complete", 8).unwrap();
+    let created = output::publish_exact(&path, b"complete", Some(8)).unwrap();
     assert_eq!(created.visibility, "created");
-    let reused = output::publish_exact(&path, b"complete", 8).unwrap();
+    let reused = output::publish_exact(&path, b"complete", Some(8)).unwrap();
     assert_eq!(reused.visibility, "reused-exact");
     assert_eq!(reused.durability, "synchronized");
     for bytes in [b"replaced".as_slice(), b"short", b"complete-extra"] {
         assert_eq!(
-            output::inspect_exact(&path, bytes, 32).unwrap_err().code,
+            output::inspect_exact(&path, bytes, Some(32))
+                .unwrap_err()
+                .code,
             "deployment_build_conflict"
         );
         assert_eq!(
-            output::publish_exact(&path, bytes, 32).unwrap_err().code,
+            output::publish_exact(&path, bytes, Some(32))
+                .unwrap_err()
+                .code,
             "deployment_build_conflict"
         );
         assert_eq!(fs::read(&path).unwrap(), b"complete");
@@ -108,9 +112,9 @@ fn concurrent_identical_publication_creates_one_complete_file() {
             let path = path.clone();
             let barrier = Arc::clone(&barrier);
             std::thread::spawn(move || {
-                output::inspect_exact(&path, b"immutable", 9).unwrap();
+                output::inspect_exact(&path, b"immutable", Some(9)).unwrap();
                 barrier.wait();
-                output::publish_exact(&path, b"immutable", 9).unwrap()
+                output::publish_exact(&path, b"immutable", Some(9)).unwrap()
             })
         })
         .collect::<Vec<_>>();
@@ -141,11 +145,15 @@ fn byte_limits_apply_before_creation_and_during_input_reading() {
     let temporary = tempfile::tempdir().unwrap();
     let path = temporary.path().join("bounded");
     assert_eq!(
-        output::inspect_exact(&path, b"1234", 3).unwrap_err().code,
+        output::inspect_exact(&path, b"1234", Some(3))
+            .unwrap_err()
+            .code,
         "output_byte_limit"
     );
     assert_eq!(
-        output::publish_exact(&path, b"1234", 3).unwrap_err().code,
+        output::publish_exact(&path, b"1234", Some(3))
+            .unwrap_err()
+            .code,
         "output_byte_limit"
     );
     assert!(!path.exists());
@@ -155,7 +163,7 @@ fn byte_limits_apply_before_creation_and_during_input_reading() {
         output::read_regular(&path, 3).unwrap_err().code,
         "deployment_input_limit"
     );
-    assert!(output::read_regular(&path, usize::MAX).is_err());
+    assert_eq!(output::read_regular(&path, usize::MAX).unwrap(), b"1234");
     fs::write(&path, b"").unwrap();
     assert_eq!(output::read_regular(&path, 0).unwrap(), b"");
 }
@@ -182,8 +190,8 @@ fn nonregular_and_symlink_outputs_are_not_reused_or_followed() {
     .unwrap();
     for path in [&link, &dangling, &directory, &fifo] {
         assert!(output::read_regular(path, 4).is_err());
-        assert!(output::inspect_exact(path, b"same", 4).is_err());
-        assert!(output::publish_exact(path, b"same", 4).is_err());
+        assert!(output::inspect_exact(path, b"same", Some(4)).is_err());
+        assert!(output::publish_exact(path, b"same", Some(4)).is_err());
         assert!(output::inspect_private_exact(path, b"same", 4).is_err());
         assert!(output::publish_private_exact(path, b"same", 4).is_err());
     }
@@ -206,8 +214,8 @@ fn parent_admission_prevents_reuse_through_links_or_traversal() {
         directory.join("../real/existing"),
         temporary.path().join("missing/new"),
     ] {
-        assert!(output::inspect_exact(&path, b"same", 4).is_err());
-        assert!(output::publish_exact(&path, b"same", 4).is_err());
+        assert!(output::inspect_exact(&path, b"same", Some(4)).is_err());
+        assert!(output::publish_exact(&path, b"same", Some(4)).is_err());
     }
     assert_eq!(fs::read(directory.join("existing")).unwrap(), b"same");
 }
@@ -250,4 +258,46 @@ fn malformed_or_excessive_templates_reject_before_output_creation() {
     }
     assert!(BuildTemplate::read(Path::new("")).is_err());
     assert!(BuildTemplate::read(Path::new(&"x".repeat(4097))).is_err());
+}
+
+#[test]
+fn artifact_output_allowance_is_optional_and_exact_on_create_and_reuse() {
+    let directory = tempfile::tempdir().unwrap();
+    for (index, maximum) in [None, Some(4), Some(usize::MAX)].into_iter().enumerate() {
+        let path = directory.path().join(format!("allowed-{index}"));
+        output::inspect_exact(&path, b"data", maximum).unwrap();
+        output::publish_exact(&path, b"data", maximum).unwrap();
+        output::inspect_exact(&path, b"data", maximum).unwrap();
+        assert_eq!(
+            output::publish_exact(&path, b"data", maximum)
+                .unwrap()
+                .visibility,
+            "reused-exact"
+        );
+    }
+    for maximum in [0, 3] {
+        let path = directory.path().join(format!("refused-{maximum}"));
+        for reuse in [false, true] {
+            if reuse {
+                std::fs::write(&path, b"data").unwrap();
+            }
+            assert_eq!(
+                output::inspect_exact(&path, b"data", Some(maximum))
+                    .unwrap_err()
+                    .code,
+                "output_byte_limit"
+            );
+            assert_eq!(
+                output::publish_exact(&path, b"data", Some(maximum))
+                    .unwrap_err()
+                    .code,
+                "output_byte_limit"
+            );
+            if reuse {
+                assert_eq!(std::fs::read(&path).unwrap(), b"data");
+            } else {
+                assert!(!path.exists());
+            }
+        }
+    }
 }

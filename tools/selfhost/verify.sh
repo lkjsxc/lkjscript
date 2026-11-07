@@ -121,6 +121,7 @@ sha256sum src/platform/compiler/selfhost_input.rs \
   src/platform/execution/normalized/selfhost_source_nominal_values_tests.rs \
   src/platform/execution/normalized/selfhost_source_unit_index_tests.rs \
   src/platform/execution/normalized/selfhost_source_label_measurement_tests.rs \
+  src/platform/execution/normalized/selfhost_source_sequence_tests.rs \
   tests/fixtures/selfhost-source-nominal-values.lkjc \
   tests/fixtures/selfhost-untaken-unsupported.lkjc > .artifacts/selfhost/inputs.sha256
 rg --files tools/selfhost src/platform/compiler/elf_x86_64 \

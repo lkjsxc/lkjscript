@@ -18,6 +18,111 @@ mod caller;
 use caller::{Mode, word};
 const TEST_ADDRESS_SPACE: u64 = 32 * 1024 * 1024 * 1024;
 const SLAB: u64 = 65_536;
+
+#[derive(Clone, Copy)]
+struct PhasePolicy {
+    address_space: Option<u64>,
+    deadline: Duration,
+}
+
+impl PhasePolicy {
+    fn bounded(deadline: Duration) -> Self {
+        Self {
+            address_space: Some(TEST_ADDRESS_SPACE),
+            deadline,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct AddressSpaceLimits {
+    soft: Option<u64>,
+    hard: Option<u64>,
+}
+
+fn address_space_argument(limit: Option<u64>) -> Check<String> {
+    match limit {
+        None => Ok("unlimited".to_owned()),
+        // Linux reserves this rlim_t representation for RLIM_INFINITY.
+        Some(u64::MAX) => {
+            Err("finite phase address-space allowance exceeds the OS representation".to_owned())
+        }
+        Some(bytes) => Ok(bytes.to_string()),
+    }
+}
+
+fn parse_address_space_limits(text: &str) -> Check<AddressSpaceLimits> {
+    fn limit(value: Option<&str>) -> Check<Option<u64>> {
+        match value.ok_or("phase address-space limit absent")? {
+            "unlimited" => Ok(None),
+            value => {
+                ensure(
+                    !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()),
+                    "phase address-space limit integer",
+                )?;
+                let bytes = value
+                    .parse::<u64>()
+                    .map_err(|_| "phase address-space limit extent")?;
+                address_space_argument(Some(bytes))?;
+                Ok(Some(bytes))
+            }
+        }
+    }
+    let mut rows = text
+        .lines()
+        .filter_map(|line| line.strip_prefix("Max address space"));
+    let row = rows.next().ok_or("phase Max address space row absent")?;
+    ensure(
+        rows.next().is_none(),
+        "duplicate phase Max address space row",
+    )?;
+    let mut fields = row.split_whitespace();
+    let soft = limit(fields.next())?;
+    let hard = limit(fields.next())?;
+    ensure(
+        fields.next() == Some("bytes") && fields.next().is_none(),
+        "phase address-space limit units/framing",
+    )?;
+    Ok(AddressSpaceLimits { soft, hard })
+}
+
+fn process_address_space(pid: u32) -> Check<AddressSpaceLimits> {
+    let text = fs::read_to_string(format!("/proc/{pid}/limits"))
+        .map_err(|error| format!("phase process limits: {error}"))?;
+    parse_address_space_limits(&text)
+}
+
+fn observe_address_space(
+    label: &str,
+    pid: u32,
+    frame: u64,
+    event: &str,
+    selected: PhasePolicy,
+) -> Check<()> {
+    let observed = process_address_space(pid)?;
+    equal(
+        observed,
+        AddressSpaceLimits {
+            soft: selected.address_space,
+            hard: selected.address_space,
+        },
+        "actual phase address-space allowance",
+    )?;
+    eprintln!(
+        "NATIVE_PHASE_POLICY {}",
+        serde_json::json!({
+            "case": label,
+            "event": event,
+            "frame": frame,
+            "pid": pid,
+            "selected_address_space": address_space_argument(selected.address_space)?,
+            "soft": address_space_argument(observed.soft)?,
+            "hard": address_space_argument(observed.hard)?,
+            "deadline_seconds": selected.deadline.as_secs().to_string(),
+        })
+    );
+    Ok(())
+}
 struct Joined(Child);
 impl Drop for Joined {
     fn drop(&mut self) {
@@ -287,7 +392,8 @@ fn observe(pid: u32, mem: &File, frame: &Frame, baseline: u64) -> Check<Observat
     })
 }
 
-fn policy(pid: u32, limit: u64) -> Check<()> {
+fn policy(pid: u32, limit: Option<u64>) -> Check<()> {
+    let limit = address_space_argument(limit)?;
     let output = Command::new("/usr/bin/prlimit")
         .env_clear()
         .args(["--pid", &pid.to_string(), &format!("--as={limit}:")])
@@ -490,7 +596,16 @@ fn verify(
     deadline: Duration,
     alternate: Option<(&[u8], &[u8])>,
 ) -> Check<()> {
-    verify_observed(label, image, request, expected, mode, deadline, alternate).map(|_| ())
+    verify_observed(
+        label,
+        image,
+        request,
+        expected,
+        mode,
+        PhasePolicy::bounded(deadline),
+        alternate,
+    )
+    .map(|_| ())
 }
 
 fn verify_observed(
@@ -499,9 +614,16 @@ fn verify_observed(
     request: &[u8],
     expected: &[u8],
     mode: Mode,
-    deadline: Duration,
+    phase_policy: PhasePolicy,
     alternate: Option<(&[u8], &[u8])>,
 ) -> Check<Vec<AllocationObservation>> {
+    let address_space = address_space_argument(phase_policy.address_space)?;
+    if phase_policy.address_space.is_none() {
+        ensure(
+            process_address_space(std::process::id())?.hard.is_none(),
+            "unbounded phase allowance requires an unlimited inherited hard address-space limit",
+        )?;
+    }
     crate::release_container::inspect_static_elf_bytes(image)
         .map_err(|e| format!("{label}: production ELF: {e:?}"))?;
     let wrapper = caller::wrap(image, request, alternate.map(|(input, _)| input), mode)?;
@@ -524,7 +646,7 @@ fn verify_observed(
     let mut child = Joined(
         Command::new("/usr/bin/prlimit")
             .env_clear()
-            .arg(format!("--as={TEST_ADDRESS_SPACE}"))
+            .arg(format!("--as={address_space}"))
             .args(["--core=0", "--"])
             .arg(&binary)
             .current_dir(directory.path())
@@ -543,7 +665,7 @@ fn verify_observed(
         offset: 0,
         base: 0,
         start,
-        deadline,
+        deadline: phase_policy.deadline,
         mid_cancel: false,
         cancelled: false,
         allocation_free: mode == Mode::AllocationFree,
@@ -574,6 +696,7 @@ fn verify_observed(
         equal(frame.id, *id, "native phase frame order")?;
         let pid = driver.child.0.id();
         if *id == 100 {
+            observe_address_space(label, pid, *id, "startup", phase_policy)?;
             baseline = process_snapshot(pid)?.anonymous;
         }
         let mem = driver
@@ -737,7 +860,8 @@ fn verify_observed(
                     "promotion control did not allocate separate survival storage",
                 )?;
             }
-            policy(pid, TEST_ADDRESS_SPACE)?;
+            policy(pid, phase_policy.address_space)?;
+            observe_address_space(label, pid, *id, "restored", phase_policy)?;
         }
         if [7, 20].contains(id) {
             equal(frame.status, 1, "native cancellation completion")?;
@@ -795,20 +919,24 @@ fn verify_observed(
             }
             106 => policy(
                 pid,
-                observation
-                    .snapshot
-                    .vm_bytes
-                    .checked_add(4 * SLAB)
-                    .ok_or("compiler failure policy extent")?,
+                Some(
+                    observation
+                        .snapshot
+                        .vm_bytes
+                        .checked_add(4 * SLAB)
+                        .ok_or("compiler failure policy extent")?,
+                ),
             )?,
-            200 => policy(pid, observation.snapshot.vm_bytes)?,
+            200 => policy(pid, Some(observation.snapshot.vm_bytes))?,
             201 => policy(
                 pid,
-                observation
-                    .snapshot
-                    .vm_bytes
-                    .checked_add(2 * SLAB)
-                    .ok_or("promotion failure policy extent")?,
+                Some(
+                    observation
+                        .snapshot
+                        .vm_bytes
+                        .checked_add(2 * SLAB)
+                        .ok_or("promotion failure policy extent")?,
+                ),
             )?,
             107 => {
                 driver.mid_cancel = true;
@@ -861,7 +989,7 @@ pub(super) fn verify_empty_bind_identity_pair(
         input,
         expected,
         Mode::AllocationIdentity,
-        FOCUSED_DEADLINE,
+        PhasePolicy::bounded(FOCUSED_DEADLINE),
         None,
     )?;
     let bound = verify_observed(
@@ -870,7 +998,7 @@ pub(super) fn verify_empty_bind_identity_pair(
         input,
         expected,
         Mode::AllocationIdentity,
-        FOCUSED_DEADLINE,
+        PhasePolicy::bounded(FOCUSED_DEADLINE),
         None,
     )?;
     ensure(
@@ -928,16 +1056,22 @@ fn native_elf_phase_reclaims_and_recovers_in_both_backends() -> Check<()> {
     // Explicit workload exceeds the two-slab allowance used to refuse final
     // payload promotion. Restore that child-only policy before the next attempt.
     let input = (0u8..=255).cycle().take(1_048_593).collect::<Vec<_>>();
-    for (label, image) in [("Rust-echo", &host), ("source-echo", &source)] {
-        verify(
-            label,
-            image,
-            &input,
-            &input,
-            Mode::Echo,
-            FOCUSED_DEADLINE,
-            None,
-        )?;
+    for (policy_label, address_space) in [("finite", Some(TEST_ADDRESS_SPACE)), ("unbounded", None)]
+    {
+        for (label, image) in [("Rust-echo", &host), ("source-echo", &source)] {
+            verify_observed(
+                &format!("{label}/{policy_label}"),
+                image,
+                &input,
+                &input,
+                Mode::Echo,
+                PhasePolicy {
+                    address_space,
+                    deadline: FOCUSED_DEADLINE,
+                },
+                None,
+            )?;
+        }
     }
     Ok(())
 }
@@ -1232,13 +1366,142 @@ pub(super) fn verify_compiler(
     // by maintained_fixed_point. One process emits artifact then ELF, rejects,
     // cancels, encounters actual mmap refusal, and emits another artifact while
     // the first artifact survives every invocation and recovery path.
-    verify(
+    verify_compiler_with_address_space(
+        label,
+        image,
+        request,
+        expected,
+        elf_request,
+        elf_expected,
+        Some(TEST_ADDRESS_SPACE),
+    )
+}
+
+pub(super) fn verify_compiler_with_address_space(
+    label: &str,
+    image: &[u8],
+    request: &[u8],
+    expected: &[u8],
+    elf_request: &[u8],
+    elf_expected: &[u8],
+    address_space: Option<u64>,
+) -> Check<()> {
+    verify_observed(
         label,
         image,
         request,
         expected,
         Mode::Compiler,
-        WHOLE_SOURCE_DEADLINE,
+        PhasePolicy {
+            address_space,
+            deadline: WHOLE_SOURCE_DEADLINE,
+        },
         Some((elf_request, elf_expected)),
+    )
+    .map(|_| ())
+}
+
+#[test]
+fn native_elf_phase_address_space_policy_is_exact() -> Check<()> {
+    equal(
+        address_space_argument(None)?,
+        "unlimited".to_owned(),
+        "unbounded OS allowance",
+    )?;
+    for (bytes, text) in [
+        (0, "0"),
+        (1, "1"),
+        (TEST_ADDRESS_SPACE, "34359738368"),
+        (u64::MAX - 1, "18446744073709551614"),
+    ] {
+        equal(
+            address_space_argument(Some(bytes))?,
+            text.to_owned(),
+            "finite OS allowance",
+        )?;
+        equal(
+            parse_address_space_limits(&format!("Max address space {text} unlimited bytes\n"))?,
+            AddressSpaceLimits {
+                soft: Some(bytes),
+                hard: None,
+            },
+            "finite soft allowance and distinct unlimited hard allowance",
+        )?;
+    }
+    ensure(
+        address_space_argument(Some(u64::MAX)).is_err(),
+        "finite MAX became OS infinity",
+    )?;
+    equal(
+        parse_address_space_limits("Max address space unlimited unlimited bytes\n")?,
+        AddressSpaceLimits {
+            soft: None,
+            hard: None,
+        },
+        "explicit unlimited kernel limits",
+    )?;
+    for text in [
+        "",
+        "Max address space unlimited bytes\n",
+        "Max address space 1 2 kB\n",
+        "Max address space 1 2 bytes trailing\n",
+        "Max address space 18446744073709551615 unlimited bytes\n",
+        "Max address space 1 unlimited bytes\nMax address space 2 unlimited bytes\n",
+    ] {
+        ensure(
+            parse_address_space_limits(text).is_err(),
+            "invalid kernel limit row admitted",
+        )?;
+    }
+    Ok(())
+}
+
+#[test]
+fn native_elf_phase_compiler_recovers_with_unbounded_address_space() -> Check<()> {
+    // The in-work cancellation oracle waits for 8 MiB of live scratch. Give it
+    // observable compilation work while preserving the independent echo result.
+    let body = "(body (record structural (field diagnostic (i64 0)) (field image (local input))))";
+    ensure(
+        super::FIXTURE.matches(body).count() == 1,
+        "compiler phase fixture must replace exactly the binary-entry body",
+    )?;
+    let expanded = format!(
+        "(body (sequence {}(record structural (field diagnostic (i64 0)) (field image (local input)))))",
+        "(i64 0) ".repeat(4096),
+    );
+    let fixture = super::FIXTURE.replacen(body, &expanded, 1);
+    let source = super::byte_buffer_tests::author_only(&fixture)?;
+    let case = super::case_from_snapshot(&source)?;
+    let compiler = bootstrap_compiler()?;
+    let host = host_oracle(&case)?;
+    let request = case.request("binary-main", SourceOutputMode::CanonicalArtifact)?;
+    let elf_request = case.request("binary-main", SourceOutputMode::Elf)?;
+    let elf = run_filter(
+        "native-phase/unbounded-compiler-elf",
+        compiler,
+        &elf_request,
+        0,
+        FOCUSED_DEADLINE,
+    )?;
+    let input = b"compiled phase fixture echoes its independent input";
+    equal_bytes(
+        &run_filter(
+            "native-phase/unbounded-compiler-behavior",
+            &elf,
+            input,
+            0,
+            FOCUSED_DEADLINE,
+        )?,
+        input,
+        "unbounded compiler fixture behavior",
+    )?;
+    verify_compiler_with_address_space(
+        "compiler-unbounded",
+        compiler,
+        &request,
+        &host.bytes,
+        &elf_request,
+        &elf,
+        None,
     )
 }

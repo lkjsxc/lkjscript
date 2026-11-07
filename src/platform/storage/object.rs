@@ -166,10 +166,15 @@ impl ObjectDomain {
         }
     }
 
-    /// Current object-format boundary, separate from a caller's optional read policy.
+    /// Physical/remaining format boundaries, separate from optional caller admission.
+    /// Audited owner, unit and artifact inventories have no default byte ceiling.
     pub const fn maximum_bytes(self) -> Option<usize> {
         match self {
-            Self::Transaction | Self::SemanticDiff => None,
+            Self::Owner
+            | Self::CompilerUnit
+            | Self::ArtifactManifest
+            | Self::Transaction
+            | Self::SemanticDiff => None,
             Self::MapPage => Some(crate::platform::persistent_map::MAXIMUM_PAGE_BYTES),
             Self::SemanticRoot
             | Self::Revision
@@ -179,13 +184,10 @@ impl ObjectDomain {
             Self::Type | Self::OwnerSummary | Self::Dependency | Self::PackageInterface => {
                 Some(1024 * 1024)
             }
-            Self::Owner
-            | Self::Sequence
+            Self::Sequence
             | Self::ValidationWitness
             | Self::Draft
             | Self::Conflict
-            | Self::CompilerUnit
-            | Self::ArtifactManifest
             | Self::PackageRevision
             | Self::PackageTransport
             | Self::BackupManifest
@@ -1391,5 +1393,98 @@ mod admission_policy_tests {
         );
         assert_eq!(admission.remaining().maximum_objects, Some(0));
         assert!(admission.admit_object_bytes(0).is_err());
+    }
+}
+
+#[cfg(test)]
+mod unbounded_inventory_tests {
+    use super::*;
+    use crate::platform::storage::memory::MemoryPackedStore;
+
+    #[test]
+    fn wide_inventory_objects_preserve_explicit_stage_and_packed_read_allowances() {
+        let bytes = vec![b'Q'; 4 * 1024 * 1024 + 1];
+        let length = u64::try_from(bytes.len()).unwrap();
+        let allowances = [
+            None,
+            Some(0),
+            Some(length - 1),
+            Some(length),
+            Some(length + 1),
+            Some(u64::MAX),
+        ];
+        for domain in [
+            ObjectDomain::Owner,
+            ObjectDomain::CompilerUnit,
+            ObjectDomain::ArtifactManifest,
+        ] {
+            assert_eq!(domain.maximum_bytes(), None);
+            let key = ObjectKey::for_bytes(domain, &bytes);
+            key.verify(&bytes).unwrap();
+            let base = MemoryPackedStore::default();
+            for maximum in allowances {
+                let mut stage = ObjectStage::with_limits(
+                    &base,
+                    ObjectStageLimits {
+                        maximum_objects: None,
+                        maximum_bytes: maximum,
+                        maximum_pages: None,
+                    },
+                );
+                let result = stage.stage(key, &bytes, &mut StoreWork::default());
+                if maximum.is_none_or(|limit| limit >= length) {
+                    assert_eq!(result.unwrap(), StageOutcome::Inserted);
+                    assert_eq!(stage.len(), 1);
+                    assert_eq!(stage.staged_byte_count(), length);
+                } else {
+                    let error = result.unwrap_err();
+                    assert_eq!(error.class, StoreErrorClass::Resource);
+                    assert_eq!(error.code, "change_budget_staged_bytes");
+                    assert!(stage.is_empty());
+                    assert_eq!(stage.staged_byte_count(), 0);
+                }
+            }
+
+            let mut store = MemoryPackedStore::default();
+            let mut work = StoreWork::default();
+            store.stage(key, &bytes, &mut work).unwrap();
+            store.seal_staged(64 * 1024, &mut work).unwrap();
+            assert_eq!(store.staged_len(), 0);
+            for maximum in allowances {
+                let mut admission = StoreReadAdmission::new(StoreReadLimits {
+                    maximum_bytes: maximum,
+                    ..StoreReadLimits::unbounded()
+                });
+                let result = store.read_admitted(
+                    key,
+                    domain.maximum_bytes(),
+                    &mut admission,
+                    &mut StoreWork::default(),
+                );
+                let accepted = maximum.is_none_or(|limit| limit >= length);
+                if accepted {
+                    assert_eq!(result.unwrap().unwrap(), bytes);
+                } else {
+                    let error = result.unwrap_err();
+                    assert_eq!(error.class, StoreErrorClass::Resource);
+                    assert_eq!(error.code, "object_read_bytes_exhausted");
+                }
+                let charged = if accepted { length } else { 0 };
+                assert_eq!(
+                    admission.remaining().maximum_bytes,
+                    maximum.map(|limit| limit - charged)
+                );
+                assert_eq!(admission.observation().bytes, charged);
+                assert!(!admission.observation().saturated);
+            }
+            for maximum in [0, bytes.len() - 1, bytes.len(), bytes.len() + 1, usize::MAX] {
+                let result = store.read(key, Some(maximum), &mut StoreWork::default());
+                if maximum < bytes.len() {
+                    assert_eq!(result.unwrap_err().class, StoreErrorClass::Resource);
+                } else {
+                    assert_eq!(result.unwrap().unwrap(), bytes);
+                }
+            }
+        }
     }
 }

@@ -175,11 +175,11 @@ fn replace_unit_checked(
     // admission. Every changed enclosing digest is recomputed before the strict reader runs.
     // An explicitly rejected-unit control also carries invalid code through the full
     // rehashed bundle. Ordinary callers still require neutral unit-level admission.
-    let bytes = crate::platform::packed::encode_canonical(
+    let bytes = crate::platform::packed::linear::encode(
         COMPILER_UNIT_MAGIC,
         COMPILER_UNIT_ENVELOPE_DOMAIN,
         unit,
-        super::super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+        None,
     )
     .unwrap();
     let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);

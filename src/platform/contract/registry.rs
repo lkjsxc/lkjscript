@@ -318,11 +318,9 @@ pub const MAXIMUM_FUNCTION_DEFINITION_MAP_ENTRIES: u64 = MAXIMUM_FUNCTION_DEFINI
 pub const MAXIMUM_FUNCTION_DEFINITION_STORE_OBJECTS: u64 = MAXIMUM_FUNCTION_DEFINITION_MAP_PAGES
     + MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS
     + MAXIMUM_FUNCTION_DEFINITION_FACT_READS;
-pub const MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES: u64 = MAXIMUM_FUNCTION_DEFINITION_MAP_BYTES
-    + MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS
-        * super::super::kernel::contract::MAXIMUM_OWNER_OBJECT_BYTES as u64
-    + MAXIMUM_FUNCTION_DEFINITION_FACT_READS
-        * super::super::witness::contract::MAXIMUM_OWNER_SUMMARY_BYTES as u64;
+// An admitted owner can exceed one fixed byte envelope. Bounded record/read
+// counts therefore do not imply a finite aggregate store-byte maximum.
+pub const MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES: Option<u64> = None;
 
 pub(crate) const FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT: &str = "LKJICT04";
 pub(crate) const FUNCTION_DEFINITION_CONTINUATION_INTEGRITY_DOMAIN: &str =
@@ -2018,20 +2016,6 @@ pub fn limit_descriptors() -> &'static [LimitDescriptor] {
             OverridePolicy::Fixed,
         ),
         limit(
-            "package_container_bytes",
-            crate::platform::package_transport::source::MAXIMUM_CONTAINER_BYTES,
-            LimitClass::HostileDecoderSafety,
-            LimitUnit::Bytes,
-            OverridePolicy::Fixed,
-        ),
-        limit(
-            "package_container_objects",
-            crate::platform::package_transport::source::MAXIMUM_CONTAINER_OBJECTS,
-            LimitClass::HostileDecoderSafety,
-            LimitUnit::Items,
-            OverridePolicy::Fixed,
-        ),
-        limit(
             "package_closure_packages",
             crate::platform::package_transport::MAXIMUM_PACKAGE_CLOSURE,
             LimitClass::DeterministicOperationBudget,
@@ -2747,26 +2731,14 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "package_source_budget",
             DiagnosticClass::Resource,
-            "A source operation exhausted an explicitly selected finite work/read allowance or an exact representation boundary.",
-            "Inspect the named metric and selected allowance; ordinary source admission has no default aggregate work/read quota.",
-        ),
-        diagnostic(
-            "package_source_container_bytes",
-            DiagnosticClass::Resource,
-            "Canonical source exceeds the container byte ceiling.",
-            "Export a smaller complete closure and restage.",
+            "A source operation exhausted an explicitly selected finite allowance, host capacity, or an exact representation boundary.",
+            "Inspect the named metric and selected allowance; ordinary source admission has no default aggregate work, read, container-byte or object-count quota.",
         ),
         diagnostic(
             "package_source_object_bytes",
             DiagnosticClass::Resource,
             "One canonical object exceeds its narrower read ceiling.",
             "Correct the producer graph and export valid source; restage the new exact binding.",
-        ),
-        diagnostic(
-            "package_source_objects",
-            DiagnosticClass::Resource,
-            "The complete source closure exceeds the distinct-object ceiling.",
-            "Export a smaller complete closure and restage.",
         ),
         DiagnosticDescriptor {
             code: "cli_usage",
@@ -5489,8 +5461,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "normalized_instantiation_storage",
             DiagnosticClass::Resource,
-            "Prepared nominal/type metadata exceeds the existing allocation budget before growth.",
-            "Reduce the concrete type/layout closure and retry; no partial preparation is admitted.",
+            "Prepared type metadata exhausted a selected finite allowance, or checked physical storage could not be reserved.",
+            "Inspect the explicit preparation allowance, host capacity, or representation extent and retry; no partial preparation is admitted.",
         ),
         diagnostic(
             "reference_instantiation_storage",
@@ -5657,8 +5629,8 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         diagnostic(
             "normalized_instantiation_work",
             DiagnosticClass::Resource,
-            "Disposable composite type instantiation exceeded the bounded validation work inventory.",
-            "Reduce the statically selected generic call closure and retry preparation.",
+            "Prepared type derivation exhausted the selected finite work allowance.",
+            "Review the caller-selected allowance and retry; ordinary preparation has no default work quota.",
         ),
         diagnostic(
             "normalized_instantiation_scope",
@@ -8097,7 +8069,8 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ),
                 (
                     "maximum-store-bytes",
-                    MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES.to_string(),
+                    MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES
+                        .map_or_else(|| "unbounded".to_owned(), |maximum| maximum.to_string()),
                     "bytes",
                 ),
                 (
@@ -8265,6 +8238,13 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 &[
                     ("default-validation-visits", "unbounded".to_owned()),
                     ("default-validation-read-bytes", "unbounded".to_owned()),
+                    ("default-container-bytes", "unbounded".to_owned()),
+                    ("default-container-objects", "unbounded".to_owned()),
+                    ("default-map-entries", "unbounded".to_owned()),
+                    (
+                        "container-policy",
+                        "exact-optional-bytes-packages-objects".to_owned(),
+                    ),
                     (
                         "ordinary-paths",
                         "collection-staging-dependency-validation-independent-oracle-link-readback"
@@ -8825,7 +8805,8 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ),
                     (
                         "preparation-accounting",
-                        "cumulative-steps-and-metadata-bytes-before-growth".to_owned(),
+                        "cumulative-steps-and-modeled-metadata-before-growth-with-explicit-saturation"
+                            .to_owned(),
                     ),
                 ],
             )?);
@@ -8859,7 +8840,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ),
                     (
                         "limits",
-                        "finite-closure-still-subject-to-preparation-work-and-storage".to_owned(),
+                        "semantic-finite-closure;unbounded-default-work-and-metadata;exact-optional-u64-allowances".to_owned(),
                     ),
                 ],
             )?);
@@ -9014,7 +8995,27 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     if field.starts_with("list-") {
                         observation.push(("saturation-field", format!("{tier}-list-saturated")));
                     }
+                    let preparation_saturation = match field {
+                        "type-derivation-steps" => Some("type-derivation-saturated"),
+                        "type-metadata-bytes" => Some("type-metadata-saturated"),
+                        _ => None,
+                    };
+                    if let Some(flag) = preparation_saturation {
+                        observation.push(("saturation-field", format!("{tier}-{flag}")));
+                    }
                     records.push(compact_record("execution.observation", &observation)?);
+                    if let Some(flag) = preparation_saturation {
+                        records.push(compact_record(
+                            "execution.observation",
+                            &[
+                                ("record", "execution".to_owned()),
+                                ("field", format!("{tier}-{flag}")),
+                                ("scalar", "boolean".to_owned()),
+                                ("semantics", "false-exact-true-lower-bound".to_owned()),
+                                ("permission", "none".to_owned()),
+                            ],
+                        )?);
+                    }
                 }
                 records.push(compact_record(
                     "execution.observation",
@@ -10295,11 +10296,7 @@ mod tests {
                 * (super::super::super::persistent_map::MAXIMUM_PAGE_BYTES / 6) as u64
         );
         assert!(MAXIMUM_FUNCTION_DEFINITION_STORE_OBJECTS > point_reads);
-        const {
-            assert!(
-                MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES > MAXIMUM_FUNCTION_DEFINITION_MAP_BYTES
-            );
-        }
+        assert_eq!(MAXIMUM_FUNCTION_DEFINITION_STORE_BYTES, None);
         let registry = registry_snapshot().expect("registry snapshot");
         let inspection = registry
             .section(RegistrySection::Inspection)
@@ -10313,6 +10310,7 @@ mod tests {
             "maximum-logical-bytes value=8388608",
             "maximum-map-pages",
             "maximum-map-bytes",
+            "maximum-store-bytes value=unbounded",
             "maximum-map-entries",
             "maximum-store-objects",
             "maximum-store-bytes",
@@ -10468,7 +10466,10 @@ mod tests {
     -> Result<(), String> {
         assert!(limit_descriptors().iter().all(|descriptor| !matches!(
             descriptor.name,
-            "package_validation_visits" | "package_validation_read_bytes"
+            "package_validation_visits"
+                | "package_validation_read_bytes"
+                | "package_container_bytes"
+                | "package_container_objects"
         )));
         assert!(
             diagnostic_descriptors()
@@ -10483,6 +10484,10 @@ mod tests {
         for field in [
             "default-validation-visits=unbounded",
             "default-validation-read-bytes=unbounded",
+            "default-container-bytes=unbounded",
+            "default-container-objects=unbounded",
+            "default-map-entries=unbounded",
+            "container-policy=exact-optional-bytes-packages-objects",
             "zero=exact-finite-zero",
             "u64-max=exact-finite-maximum-not-unbounded",
             "observation-permission=none",

@@ -1,5 +1,8 @@
 //! Focused normalized compiler-unit tests.
 
+#[path = "artifact_capacity_tests.rs"]
+mod artifact_capacity_tests;
+
 #[path = "associated_serial_admission_tests.rs"]
 mod associated_serial_admission_tests;
 
@@ -1850,18 +1853,14 @@ fn graph9_artifact_links_deterministically_and_reopens_without_graph4_modules() 
 }
 
 #[test]
-fn artifact_manifest_rejects_vector_lengths_before_allocation() {
+fn artifact_manifest_rejects_unframed_vector_lengths_without_declared_count_allocation() {
     struct ExcessPackages;
     impl bincode::Encode for ExcessPackages {
         fn encode<E: bincode::enc::Encoder>(
             &self,
             encoder: &mut E,
         ) -> Result<(), bincode::error::EncodeError> {
-            bincode::Encode::encode(
-                &u64::try_from(super::artifact::MAXIMUM_ARTIFACT_PACKAGES + 1)
-                    .expect("artifact package limit fits u64"),
-                encoder,
-            )
+            bincode::Encode::encode(&u64::MAX, encoder)
         }
     }
 
@@ -1871,11 +1870,7 @@ fn artifact_manifest_rejects_vector_lengths_before_allocation() {
             &self,
             encoder: &mut E,
         ) -> Result<(), bincode::error::EncodeError> {
-            bincode::Encode::encode(
-                &u64::try_from(super::artifact::MAXIMUM_ARTIFACT_RUNTIME_OWNERS + 1)
-                    .expect("artifact runtime-owner limit fits u64"),
-                encoder,
-            )
+            bincode::Encode::encode(&u64::MAX, encoder)
         }
     }
 
@@ -1922,11 +1917,11 @@ fn artifact_manifest_rejects_vector_lengths_before_allocation() {
     }
 
     fn decode_hostile_manifest(value: &impl bincode::Encode) -> crate::platform::Diagnostic {
-        let bytes = crate::platform::packed::encode_canonical(
+        let bytes = crate::platform::packed::linear::encode(
             super::artifact::ARTIFACT_MANIFEST_MAGIC,
             super::artifact::ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
             value,
-            super::artifact::MAXIMUM_ARTIFACT_MANIFEST_BYTES,
+            None,
         )
         .expect("encode hostile artifact manifest without allocating declared vectors");
         let key = ObjectKey::for_bytes(ObjectDomain::ArtifactManifest, &bytes);
@@ -1961,7 +1956,10 @@ fn artifact_manifest_rejects_vector_lengths_before_allocation() {
         object_bytes: manifest.object_bytes,
     });
     assert_eq!(package_error.code, "packed_decode");
-    assert!(package_error.message.contains("before allocation"));
+    assert_eq!(
+        package_error.class,
+        crate::platform::DiagnosticClass::Corrupt
+    );
 
     let runtime_error = decode_hostile_manifest(&OversizedRuntimeManifest {
         contract_version: manifest.contract_version,
@@ -1987,7 +1985,10 @@ fn artifact_manifest_rejects_vector_lengths_before_allocation() {
         object_bytes: manifest.object_bytes,
     });
     assert_eq!(runtime_error.code, "packed_decode");
-    assert!(runtime_error.message.contains("before allocation"));
+    assert_eq!(
+        runtime_error.class,
+        crate::platform::DiagnosticClass::Corrupt
+    );
 }
 
 #[test]
@@ -2751,11 +2752,11 @@ fn artifact_rejects_independently_encoded_unchecked_binding_prefixes() {
             }
         }
         // Deliberately bypass the normal compiler encoder: all enclosing digests are valid.
-        let bytes = crate::platform::packed::encode_canonical(
+        let bytes = crate::platform::packed::linear::encode(
             super::unit::COMPILER_UNIT_MAGIC,
             super::unit::COMPILER_UNIT_ENVELOPE_DOMAIN,
             &unit,
-            super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+            None,
         )
         .unwrap();
         let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
@@ -2824,11 +2825,11 @@ fn artifact_rejects_erased_or_forged_compiled_parameter_constraints() {
             "erased" => signature.type_parameter_constraints[0] = TypeParameterConstraints::None,
             _ => signature.type_parameter_constraints[1] = TypeParameterConstraints::CaptureSafe,
         }
-        let bytes = crate::platform::packed::encode_canonical(
+        let bytes = crate::platform::packed::linear::encode(
             super::unit::COMPILER_UNIT_MAGIC,
             super::unit::COMPILER_UNIT_ENVELOPE_DOMAIN,
             &unit,
-            super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+            None,
         )
         .unwrap();
         let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
@@ -2972,11 +2973,11 @@ fn artifact_rejects_nominal_parameter_bound_member_and_application_forgery() {
             _ => panic!("nominal fixture payload"),
         }
         // Bypass the compiler encoder and rebind the complete content-addressed container.
-        let bytes = crate::platform::packed::encode_canonical(
+        let bytes = crate::platform::packed::linear::encode(
             super::unit::COMPILER_UNIT_MAGIC,
             super::unit::COMPILER_UNIT_ENVELOPE_DOMAIN,
             &unit,
-            super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+            None,
         )
         .unwrap();
         let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);

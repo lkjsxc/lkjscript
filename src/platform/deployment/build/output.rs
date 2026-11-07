@@ -38,36 +38,50 @@ fn open_regular(path: &Path) -> Result<File, Diagnostic> {
     Ok(file)
 }
 
-fn read_file(file: &mut File, path: &Path, maximum: usize) -> Result<Vec<u8>, Diagnostic> {
-    let maximum = u64::try_from(maximum)
-        .ok()
-        .and_then(|value| value.checked_add(1))
-        .ok_or_else(|| deployment_error("deployment_input_limit", "input bound overflow"))?;
+fn read_file(file: &mut File, path: &Path, maximum: Option<usize>) -> Result<Vec<u8>, Diagnostic> {
     let length = file
         .metadata()
         .map_err(|error| deployment_io("deployment_read", path, error))?
         .len();
-    if length >= maximum {
-        return Err(deployment_error(
-            "deployment_input_limit",
-            "build input exceeds its byte bound",
-        ));
+    if maximum.is_some_and(|maximum| u128::from(length) > maximum as u128) {
+        return Err(input_limit());
     }
     let mut bytes = Vec::new();
-    file.take(maximum)
-        .read_to_end(&mut bytes)
-        .map_err(|error| deployment_io("deployment_read", path, error))?;
-    if u64::try_from(bytes.len()).map_or(true, |length| length >= maximum) {
-        return Err(deployment_error(
-            "deployment_input_limit",
-            "build input exceeds its byte bound",
-        ));
+    let mut remaining = maximum;
+    let mut chunk = [0_u8; 65_536];
+    loop {
+        let count = match file.read(&mut chunk) {
+            Ok(count) => count,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(deployment_io("deployment_read", path, error)),
+        };
+        if count == 0 {
+            return Ok(bytes);
+        }
+        if let Some(available) = remaining {
+            remaining = Some(available.checked_sub(count).ok_or_else(input_limit)?);
+        }
+        bytes.try_reserve(count).map_err(|_| {
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "deployment_input_allocation",
+                "cannot allocate build input",
+            )
+        })?;
+        bytes.extend_from_slice(&chunk[..count]);
     }
-    Ok(bytes)
+}
+
+fn input_limit() -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Resource,
+        "deployment_input_limit",
+        "build input exceeds its configured byte allowance",
+    )
 }
 
 pub(super) fn read_regular(path: &Path, maximum: usize) -> Result<Vec<u8>, Diagnostic> {
-    read_file(&mut open_regular(path)?, path, maximum)
+    read_file(&mut open_regular(path)?, path, Some(maximum))
 }
 
 fn verify_exact(path: &Path, expected: &[u8], owner_only: bool) -> Result<File, Diagnostic> {
@@ -75,7 +89,7 @@ fn verify_exact(path: &Path, expected: &[u8], owner_only: bool) -> Result<File, 
     if owner_only {
         verify_private_access(&file, path)?;
     }
-    let observed = read_file(&mut file, path, expected.len()).map_err(|error| {
+    let observed = read_file(&mut file, path, Some(expected.len())).map_err(|error| {
         if error.code == "deployment_input_limit" {
             conflict(path)
         } else {
@@ -117,7 +131,11 @@ fn conflict(path: &Path) -> Diagnostic {
     )
 }
 
-pub(super) fn inspect_exact(path: &Path, bytes: &[u8], maximum: usize) -> Result<(), Diagnostic> {
+pub(super) fn inspect_exact(
+    path: &Path,
+    bytes: &[u8],
+    maximum: Option<usize>,
+) -> Result<(), Diagnostic> {
     inspect_with_access(path, bytes, maximum, false)
 }
 
@@ -126,16 +144,16 @@ pub(super) fn inspect_private_exact(
     bytes: &[u8],
     maximum: usize,
 ) -> Result<(), Diagnostic> {
-    inspect_with_access(path, bytes, maximum, true)
+    inspect_with_access(path, bytes, Some(maximum), true)
 }
 
 fn inspect_with_access(
     path: &Path,
     bytes: &[u8],
-    maximum: usize,
+    maximum: Option<usize>,
     owner_only: bool,
 ) -> Result<(), Diagnostic> {
-    if bytes.len() > maximum {
+    if maximum.is_some_and(|maximum| bytes.len() > maximum) {
         return Err(Diagnostic::new(
             DiagnosticClass::Resource,
             "output_byte_limit",
@@ -154,7 +172,7 @@ fn inspect_with_access(
 pub(super) fn publish_exact(
     path: &Path,
     bytes: &[u8],
-    maximum: usize,
+    maximum: Option<usize>,
 ) -> Result<OwnedOutputReceipt, Diagnostic> {
     publish_with_access(path, bytes, maximum, false)
 }
@@ -164,19 +182,19 @@ pub(super) fn publish_private_exact(
     bytes: &[u8],
     maximum: usize,
 ) -> Result<OwnedOutputReceipt, Diagnostic> {
-    publish_with_access(path, bytes, maximum, true)
+    publish_with_access(path, bytes, Some(maximum), true)
 }
 
 fn publish_with_access(
     path: &Path,
     bytes: &[u8],
-    maximum: usize,
+    maximum: Option<usize>,
     owner_only: bool,
 ) -> Result<OwnedOutputReceipt, Diagnostic> {
     let result = if owner_only {
-        publish_private_create_new(path, bytes, Some(maximum), "immutable private build output")
+        publish_private_create_new(path, bytes, maximum, "immutable private build output")
     } else {
-        publish_create_new(path, bytes, Some(maximum), "immutable build output")
+        publish_create_new(path, bytes, maximum, "immutable build output")
     };
     match result {
         Ok(receipt) => Ok(receipt),

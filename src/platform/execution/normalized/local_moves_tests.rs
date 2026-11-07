@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use super::super::prepare::NormalizedVariantJump;
+use super::super::prepare::{NormalizedPreparationLimits, NormalizedVariantJump};
 use super::super::value::{ValueOrigin, VariantLayoutIndex};
 use super::*;
 use crate::platform::execution::ExecutionControl;
@@ -170,18 +170,34 @@ fn weak_shared_storage_is_reserved_before_detaching_and_rewriting() {
     let mut input = code(vec![load(0), I::Return]);
     let weak = Arc::downgrade(&input.instructions);
     let control = ExecutionControl::uncancelled();
-    let mut work = Budget::new(&control);
-    // Leave room only for the linear fallback's scratch arrays. Optional
-    // liveness cannot authorize an unreserved copy when a weak observer exists.
-    let scratch = 2 * std::mem::size_of::<Option<usize>>() + 2 * std::mem::size_of::<usize>();
-    work.reserve::<u8>(256 * 1024 * 1024 - scratch).unwrap();
-    assert_eq!(
-        derive(&mut input, &mut work).unwrap_err().class,
-        DiagnosticClass::Resource
+    // Two one-word liveness rows and one decision byte per instruction precede
+    // the mandatory instruction copy that detaches the weak observer.
+    let scratch = u64::try_from(2 * std::mem::size_of::<u64>() + 2).unwrap();
+    let detached = u64::try_from(2 * std::mem::size_of::<I>()).unwrap();
+    let required = scratch.checked_add(detached).unwrap();
+    let mut work = Budget::with_limits(
+        &control,
+        NormalizedPreparationLimits {
+            maximum_type_derivation_steps: Some(12),
+            maximum_type_metadata_bytes: Some(required - 1),
+        },
     );
+    let diagnostic = derive(&mut input, &mut work).unwrap_err();
+    assert_eq!(diagnostic.class, DiagnosticClass::Resource);
+    assert_eq!(diagnostic.code, "normalized_instantiation_storage");
+    assert_eq!(work.work_for_test(), (11, scratch));
     assert!(weak.upgrade().is_some());
     assert_eq!(input.instructions[0], load(0));
-    optimize(&mut input);
+
+    let mut exact = Budget::with_limits(
+        &control,
+        NormalizedPreparationLimits {
+            maximum_type_derivation_steps: Some(12),
+            maximum_type_metadata_bytes: Some(required),
+        },
+    );
+    derive(&mut input, &mut exact).unwrap();
+    assert_eq!(exact.work_for_test(), (12, required));
     assert!(weak.upgrade().is_none());
     assert_eq!(input.instructions[0], I::MoveLocal(0));
 }
@@ -258,15 +274,24 @@ fn analysis_is_bounded_cancelled_and_rejects_foreign_operands() {
     }
     let mut input = code(vec![I::Return]);
     input.local_count = u32::MAX;
-    assert_eq!(
-        derive(
-            &mut input,
-            &mut Budget::new(&ExecutionControl::uncancelled())
-        )
-        .unwrap_err()
-        .class,
-        DiagnosticClass::Resource
+    // The advisory matrix is too large, so the fallback first reserves one
+    // Option<usize> per local. Refuse that exact request before allocating it.
+    let local_storage = u64::from(input.local_count)
+        .checked_mul(u64::try_from(std::mem::size_of::<Option<usize>>()).unwrap())
+        .unwrap();
+    let control = ExecutionControl::uncancelled();
+    let mut work = Budget::with_limits(
+        &control,
+        NormalizedPreparationLimits {
+            maximum_type_metadata_bytes: Some(local_storage - 1),
+            ..NormalizedPreparationLimits::default()
+        },
     );
+    let diagnostic = derive(&mut input, &mut work).unwrap_err();
+    assert_eq!(diagnostic.class, DiagnosticClass::Resource);
+    assert_eq!(diagnostic.code, "normalized_instantiation_storage");
+    assert_eq!(work.work_for_test(), (3, 0));
+    assert_eq!(input.instructions.as_ref(), &[I::Return]);
     for size in [32, 4096] {
         let mut input = code(vec![load(0); size]);
         let control = ExecutionControl::cancel_after_checks((size * 12 + 64) as u64);

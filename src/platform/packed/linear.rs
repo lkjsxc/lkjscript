@@ -1,4 +1,4 @@
-//! Optional exact payload policy for audited, extent-driven history decoders.
+//! Optional exact payload policy for audited, extent-driven decoders.
 //!
 //! Generic bincode collection decoders reserve the entire declared count before
 //! reading its elements. These entry points require progressive fallible sequence
@@ -19,8 +19,43 @@ pub(crate) trait LinearDecode: Decode<()> {}
 
 const ALLOCATION_FAILURE: &str = "packed sequence allocation failed";
 
-/// Each concrete history element has a nonempty encoding. Decode it before
-/// reserving its slot: malformed counts can advance only over available input.
+/// Each element must have a nonempty encoding. Decode it before reserving its
+/// slot: malformed counts can advance only over available input. The caller of
+/// the length-explicit form has already decoded and admitted its wire count.
+pub(crate) fn decode_vec_len_with<
+    Context,
+    T,
+    D: bincode::de::Decoder<Context = Context>,
+    F: FnMut(&mut D) -> Result<T, bincode::error::DecodeError>,
+>(
+    decoder: &mut D,
+    length: usize,
+    mut read_element: F,
+) -> Result<Vec<T>, bincode::error::DecodeError> {
+    let mut values = Vec::new();
+    for _ in 0..length {
+        let value = read_element(decoder)?;
+        values
+            .try_reserve(1)
+            .map_err(|_| bincode::error::DecodeError::Other(ALLOCATION_FAILURE))?;
+        values.push(value);
+    }
+    Ok(values)
+}
+
+pub(crate) fn decode_vec_with<
+    Context,
+    T,
+    D: bincode::de::Decoder<Context = Context>,
+    F: FnMut(&mut D) -> Result<T, bincode::error::DecodeError>,
+>(
+    decoder: &mut D,
+    read_element: F,
+) -> Result<Vec<T>, bincode::error::DecodeError> {
+    let length = usize::decode(decoder)?;
+    decode_vec_len_with(decoder, length, read_element)
+}
+
 pub(crate) fn decode_vec<
     Context,
     T: Decode<Context>,
@@ -28,16 +63,40 @@ pub(crate) fn decode_vec<
 >(
     decoder: &mut D,
 ) -> Result<Vec<T>, bincode::error::DecodeError> {
+    decode_vec_with(decoder, T::decode)
+}
+
+/// Slice readers prove the complete byte extent before reserving it. Readers
+/// without a contiguous view fall back to progressive element decoding.
+pub(crate) fn decode_bytes<Context, D: bincode::de::Decoder<Context = Context>>(
+    decoder: &mut D,
+) -> Result<Vec<u8>, bincode::error::DecodeError> {
+    use bincode::de::read::Reader;
     let length = usize::decode(decoder)?;
-    let mut values = Vec::new();
-    for _ in 0..length {
-        let value = T::decode(decoder)?;
-        values
-            .try_reserve(1)
+    decoder.claim_bytes_read(length)?;
+    if let Some(source) = decoder
+        .reader()
+        .peek_read(length)
+        .and_then(|source| source.get(..length))
+    {
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(source.len())
             .map_err(|_| bincode::error::DecodeError::Other(ALLOCATION_FAILURE))?;
-        values.push(value);
+        bytes.extend_from_slice(source);
+        decoder.reader().consume(length);
+        return Ok(bytes);
     }
-    Ok(values)
+    decoder.unclaim_bytes_read(length);
+    decode_vec_len_with(decoder, length, u8::decode)
+}
+
+pub(crate) fn decode_string<Context, D: bincode::de::Decoder<Context = Context>>(
+    decoder: &mut D,
+) -> Result<String, bincode::error::DecodeError> {
+    String::from_utf8(decode_bytes(decoder)?).map_err(|error| bincode::error::DecodeError::Utf8 {
+        inner: error.utf8_error(),
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -270,6 +329,89 @@ mod tests {
                 .unwrap_err()
                 .code,
             "packed_noncanonical"
+        );
+    }
+    #[derive(Debug, Encode, PartialEq)]
+    struct Strings(Vec<String>);
+    impl<Context> Decode<Context> for Strings {
+        fn decode<D: bincode::de::Decoder<Context = Context>>(
+            decoder: &mut D,
+        ) -> Result<Self, bincode::error::DecodeError> {
+            Ok(Self(decode_vec_with(decoder, decode_string)?))
+        }
+    }
+    impl LinearDecode for Strings {}
+
+    #[test]
+    fn progressive_nested_strings_preserve_bytes_and_reject_impossible_extents() {
+        let value = Strings(vec![String::new(), "a".into(), "λ🙂".repeat(4097)]);
+        let bytes = encode(MAGIC, DOMAIN, &value, None).unwrap();
+        let standard =
+            bincode::encode_to_vec(&value, bincode::config::standard().with_no_limit()).unwrap();
+        assert_eq!(&bytes[HEADER_BYTES..bytes.len() - 32], standard);
+        assert_eq!(
+            decode_canonical::<Strings>(&bytes, MAGIC, DOMAIN, None).unwrap(),
+            value
+        );
+
+        // Each tuple emits a vector length followed by a string length without
+        // its bytes. A valid envelope must not authorize that declared reserve.
+        for declared in [1_u64, u64::MAX] {
+            let malformed = encode(MAGIC, DOMAIN, &(1_u8, declared), None).unwrap();
+            assert_eq!(
+                decode_canonical::<Strings>(&malformed, MAGIC, DOMAIN, None)
+                    .unwrap_err()
+                    .code,
+                "packed_decode"
+            );
+        }
+        let invalid_utf8 = encode(MAGIC, DOMAIN, &(1_u8, 1_u8, 0xff_u8), None).unwrap();
+        assert_eq!(
+            decode_canonical::<Strings>(&invalid_utf8, MAGIC, DOMAIN, None)
+                .unwrap_err()
+                .code,
+            "packed_decode"
+        );
+    }
+
+    #[test]
+    fn progressive_string_decode_supports_non_peeking_readers_and_exact_limits() {
+        #[derive(Debug, PartialEq)]
+        struct Text(String);
+        impl<Context> Decode<Context> for Text {
+            fn decode<D: bincode::de::Decoder<Context = Context>>(
+                decoder: &mut D,
+            ) -> Result<Self, bincode::error::DecodeError> {
+                Ok(Self(decode_string(decoder)?))
+            }
+        }
+
+        let configuration = bincode::config::standard().with_no_limit();
+        let bytes = bincode::encode_to_vec("λ🙂", configuration).unwrap();
+        let mut stream = std::io::Cursor::new(&bytes);
+        assert_eq!(
+            bincode::decode_from_std_read::<Text, _, _>(&mut stream, configuration).unwrap(),
+            Text("λ🙂".into())
+        );
+        let truncated = &bytes[..bytes.len() - 1];
+        let mut stream = std::io::Cursor::new(truncated);
+        assert!(bincode::decode_from_std_read::<Text, _, _>(&mut stream, configuration).is_err());
+
+        let ascii = bincode::encode_to_vec("abc", configuration).unwrap();
+        // Bincode charges the usize length field's in-memory width, then bytes.
+        let limited = bincode::config::standard().with_limit::<11>();
+        assert_eq!(
+            bincode::decode_from_slice::<Text, _>(&ascii, limited)
+                .unwrap()
+                .0,
+            Text("abc".into())
+        );
+        assert!(
+            bincode::decode_from_slice::<Text, _>(
+                &ascii,
+                bincode::config::standard().with_limit::<10>(),
+            )
+            .is_err()
         );
     }
 }

@@ -73,7 +73,12 @@ declarations.begin
         (binding borrowed-live (type ByteBuffer) (call push (i64 42) (local initial)))
         (in (call size (local borrowed-live))))))
     (function create sequence-cleanup (visibility public) (effect pure) (returns I64)
-      (body (sequence (call empty) (call constant))))
+      (body (let
+        (binding start (type ByteBuffer) (call empty))
+        (binding live (type ByteBuffer) (call push (i64 42) (local start)))
+        (binding selected (type ByteBuffer) (sequence (call empty) (local live)))
+        (binding frozen (call freeze (local selected)))
+        (in (call bytes-get (local frozen) (i64 0))))))
     (function create owned-loop (visibility private) (effect pure)
       (parameter create remaining (type I64))
       (parameter create buffer (type ByteBuffer) (use consume)) (returns ByteBuffer)
@@ -172,7 +177,9 @@ declarations.begin
         (binding returned (type ByteBuffer) (call return-cleanup (local forwarded) (local spare)))
         (binding frozen (call freeze (local returned)))
         (in (record structural
-          (field diagnostic (if (call equal (local count) (i64 2)) (i64 0) (i64 99)))
+          (field diagnostic (if (call equal (local count) (i64 2))
+            (if (call equal (call sequence-cleanup) (i64 42)) (i64 0) (i64 99))
+            (i64 99)))
           (field image (call bytes-concat
             (call bytes-concat (call choice-bytes (bool true)) (call choice-bytes (bool false)))
             (call bytes-concat (local frozen) (local input)))))))))

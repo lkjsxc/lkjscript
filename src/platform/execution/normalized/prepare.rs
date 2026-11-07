@@ -63,6 +63,14 @@ struct TargetPreparationInputs<'a> {
     functions: &'a [NormalizedFunction],
 }
 
+/// Optional caller allowances for modeled type/layout derivation. Artifact
+/// admission and physical allocation extents remain independent obligations.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct NormalizedPreparationLimits {
+    pub maximum_type_derivation_steps: Option<u64>,
+    pub maximum_type_metadata_bytes: Option<u64>,
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NormalizedPreparationWork {
     pub admission_bytes: u64,
@@ -71,7 +79,9 @@ pub struct NormalizedPreparationWork {
     pub runtime_owners: u64,
     pub type_objects: u64,
     pub type_derivation_steps: u64,
+    pub type_derivation_saturated: bool,
     pub type_metadata_bytes: u64,
+    pub type_metadata_saturated: bool,
     pub instructions: u64,
     pub functions: u64,
     pub record_layouts: u64,
@@ -978,7 +988,6 @@ pub struct NormalizedProgram {
     pub(super) buffer_free_types: BTreeSet<TypeObjectDigest>,
     pub(super) comparable_types: BTreeSet<TypeObjectDigest>,
     pub(super) application_free_types: BTreeSet<TypeObjectDigest>,
-    pub(super) capture_proof_bytes: usize,
     artifact: Arc<LoadedArtifact>,
     pub root_repository: RepositoryId,
     pub root_package: PackageId,
@@ -1016,6 +1025,14 @@ impl NormalizedProgram {
 
     pub(crate) fn prepare_with_control(
         artifact: LoadedArtifact,
+        control: &crate::platform::execution::ExecutionControl,
+    ) -> Result<Self, Diagnostic> {
+        Self::prepare_with_limits(artifact, NormalizedPreparationLimits::default(), control)
+    }
+
+    pub(crate) fn prepare_with_limits(
+        artifact: LoadedArtifact,
+        limits: NormalizedPreparationLimits,
         control: &crate::platform::execution::ExecutionControl,
     ) -> Result<Self, Diagnostic> {
         control.check().map_err(|error| {
@@ -1070,7 +1087,7 @@ impl NormalizedProgram {
             .into();
         let requirements = prepare_requirements(&units, &indexes, &runtime_owners)?;
         let operations = prepare_operations(&indexes, &runtime_owners)?;
-        let mut type_work = super::prepared_types::Budget::new(control);
+        let mut type_work = super::prepared_types::Budget::with_limits(control, limits);
         let functions = {
             let mut function_validation = FunctionValidationInputs {
                 types: &types,
@@ -1132,7 +1149,6 @@ impl NormalizedProgram {
             buffer_free_types: BTreeSet::new(),
             comparable_types: BTreeSet::new(),
             application_free_types: BTreeSet::new(),
-            capture_proof_bytes: 0,
             root_repository: root_compilation.repository_id,
             root_package: artifact.manifest.root_package,
             root_revision: root_compilation.revision,
@@ -1166,7 +1182,7 @@ impl NormalizedProgram {
         )?;
         validate_borrowed_result_calls(&program)?;
         super::session::validate_program_interactive_targets(&program)?;
-        super::prepared_types::share_code(&mut program, control)?;
+        super::prepared_types::share_code_budgeted(&mut program, &mut type_work)?;
         Ok(program)
     }
 
@@ -2276,6 +2292,19 @@ fn prepare_functions(
     finish_dense(functions, "function")
 }
 
+// This is a physical allocation reservation, separate from modeled proof bytes.
+fn preparation_vector<T>(count: usize) -> Result<Vec<T>, Diagnostic> {
+    let mut values = Vec::new();
+    values.try_reserve_exact(count).map_err(|_| {
+        Diagnostic::new(
+            DiagnosticClass::Resource,
+            "normalized_instantiation_storage",
+            "normalized preparation storage exceeds host allocation or representation capacity",
+        )
+    })?;
+    Ok(values)
+}
+
 /// Reverse only unconditional edges, starting at returns. Each instruction and edge is
 /// visited at most once; cycles have no terminal seed and can never become certified.
 fn terminal_continuations(
@@ -2289,10 +2318,13 @@ fn terminal_continuations(
     // Dense predecessor links avoid hidden Vec growth for many one-edge destinations.
     // Every instruction has at most one outgoing unconditional edge and one queue entry.
     work.reserve::<usize>(code.len())?;
-    let mut predecessors = vec![None; code.len()];
-    let mut next_predecessor = vec![None; code.len()];
-    let mut terminal = vec![false; code.len()];
-    let mut pending = Vec::with_capacity(code.len());
+    let mut predecessors = preparation_vector(code.len())?;
+    predecessors.resize(code.len(), None);
+    let mut next_predecessor = preparation_vector(code.len())?;
+    next_predecessor.resize(code.len(), None);
+    let mut terminal = preparation_vector(code.len())?;
+    terminal.resize(code.len(), false);
+    let mut pending = preparation_vector(code.len())?;
     for (index, instruction) in code.iter().enumerate() {
         work.step()?;
         match instruction {
@@ -2345,7 +2377,7 @@ pub(super) fn derive_tail_dispatch(
     work: &mut super::prepared_types::Budget<'_>,
 ) -> Result<(), Diagnostic> {
     work.reserve::<bool>(functions.len())?;
-    let mut graph = Vec::with_capacity(functions.len());
+    let mut graph = preparation_vector(functions.len())?;
     for function in functions.iter() {
         work.step()?;
         graph.push(
@@ -3619,7 +3651,7 @@ fn translate_code(
     text_cache: &mut BTreeMap<BlobObjectDigest, Arc<str>>,
     work: &mut NormalizedPreparationWork,
 ) -> Result<NormalizedCode, Diagnostic> {
-    let mut instructions = Vec::with_capacity(code.instructions.len());
+    let mut instructions = preparation_vector(code.instructions.len())?;
     for instruction in &code.instructions {
         let translated = match instruction {
             CompiledInstruction::BeginReadViewScope { read_scope } => {

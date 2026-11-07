@@ -34,8 +34,6 @@ pub const CONTAINER_CONTRACT_IDENTITY: &str = "lkjscript-package-container";
 pub const CONTAINER_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 pub const READINESS_CONTRACT_IDENTITY: &str = "lkjscript-package-transport-selection";
 pub const READINESS_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
-pub const MAXIMUM_CONTAINER_BYTES: usize = 268_435_456;
-pub const MAXIMUM_CONTAINER_OBJECTS: usize = 1_000_000;
 #[cfg(test)]
 pub(crate) const FORMER_VALIDATION_VISITS: u64 = 16_000_000;
 #[cfg(test)]
@@ -106,6 +104,16 @@ impl PackageReadiness {
     }
 }
 
+/// Optional allowances for one complete container decode. `None` permits any
+/// input-framed byte/object inventory; every `Some`, including `u64::MAX`, is
+/// finite. The package-closure profile is checked independently of these limits.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PackageContainerDecodeLimits {
+    pub maximum_bytes: Option<u64>,
+    pub maximum_packages: Option<u64>,
+    pub maximum_objects: Option<u64>,
+}
+
 #[derive(Clone, Debug)]
 pub struct PackageContainer {
     pub root: PackageTransportBinding,
@@ -148,7 +156,7 @@ fn limit(dimension: &str) -> Diagnostic {
         DiagnosticClass::Resource,
         "package_source_budget",
         format!(
-            "offline package admission exhausted {dimension}; export a smaller exact closure and restage"
+            "offline package admission exhausted {dimension}; inspect the selected allowance, host capacity, or representation boundary and retry"
         ),
     )
 }
@@ -169,15 +177,20 @@ fn source_domain(domain: ObjectDomain) -> bool {
     )
 }
 
-fn admit_container_counts(bytes: usize, packages: usize, objects: usize) -> Result<(), Diagnostic> {
-    if bytes > MAXIMUM_CONTAINER_BYTES {
-        return Err(limit("container bytes"));
-    }
+fn admit_container_packages(packages: usize) -> Result<(), Diagnostic> {
     if packages == 0 || packages > super::MAXIMUM_PACKAGE_CLOSURE {
         return Err(limit("packages"));
     }
-    if objects > MAXIMUM_CONTAINER_OBJECTS {
-        return Err(limit("distinct objects"));
+    Ok(())
+}
+
+fn admit_decode_limit(
+    maximum: Option<u64>,
+    required: u64,
+    dimension: &str,
+) -> Result<(), Diagnostic> {
+    if maximum.is_some_and(|maximum| required > maximum) {
+        return Err(limit(dimension));
     }
     Ok(())
 }
@@ -185,70 +198,72 @@ fn admit_container_counts(bytes: usize, packages: usize, objects: usize) -> Resu
 impl PackageContainer {
     pub(crate) fn encoded_size(&self) -> Result<usize, Diagnostic> {
         self.validate_inventory()?;
-        let size = self
-            .objects
+        let header = self
+            .selections
+            .len()
+            .checked_mul(64)
+            .and_then(|selections| 84_usize.checked_add(selections))
+            .ok_or_else(|| limit("container header representation"))?;
+        self.objects
             .values()
-            .try_fold(84_usize + self.selections.len() * 64, |size, bytes| {
+            .try_fold(header, |size, bytes| {
                 size.checked_add(41)?.checked_add(bytes.len())
             })
-            .ok_or_else(|| limit("container bytes"))?;
-        admit_container_counts(size, self.selections.len(), self.objects.len())?;
-        Ok(size)
+            .ok_or_else(|| limit("container byte representation"))
     }
 
     pub fn encode(&self) -> Result<Vec<u8>, Diagnostic> {
         let size = self.encoded_size()?;
-        let mut bytes = Vec::with_capacity(size);
+        let selection_count = u32::try_from(self.selections.len())
+            .map_err(|_| limit("selection count representation"))?;
+        let object_count =
+            u64::try_from(self.objects.len()).map_err(|_| limit("object count representation"))?;
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(size)
+            .map_err(|_| limit("container allocation"))?;
         bytes.extend_from_slice(&CONTAINER_MAGIC);
         bytes.extend_from_slice(&self.root.package_revision.bytes());
         bytes.extend_from_slice(&self.root.transport.bytes());
-        bytes.extend_from_slice(&(self.selections.len() as u32).to_be_bytes());
-        bytes.extend_from_slice(&(self.objects.len() as u64).to_be_bytes());
+        bytes.extend_from_slice(&selection_count.to_be_bytes());
+        bytes.extend_from_slice(&object_count.to_be_bytes());
         for selection in &self.selections {
             bytes.extend_from_slice(&selection.package_revision.bytes());
             bytes.extend_from_slice(&selection.transport.bytes());
         }
         // ObjectDomain enum order is not a contract; order explicitly by its stable wire tag.
-        let mut ordered = self.objects.iter().collect::<Vec<_>>();
-        ordered.sort_by_key(|(key, _)| (key.domain.tag(), key.digest.bytes()));
+        let mut ordered = Vec::new();
+        ordered
+            .try_reserve_exact(self.objects.len())
+            .map_err(|_| limit("object ordering allocation"))?;
+        ordered.extend(self.objects.iter());
+        ordered.sort_unstable_by_key(|(key, _)| (key.domain.tag(), key.digest.bytes()));
         for (key, object) in ordered {
             key.verify(object).map_err(store_diagnostic)?;
             bytes.push(key.domain.tag());
             bytes.extend_from_slice(&key.digest.bytes());
-            bytes.extend_from_slice(&(object.len() as u64).to_be_bytes());
+            let length =
+                u64::try_from(object.len()).map_err(|_| limit("object byte representation"))?;
+            bytes.extend_from_slice(&length.to_be_bytes());
             bytes.extend_from_slice(object);
         }
         Ok(bytes)
     }
 
     pub fn decode(bytes: &[u8], expected: PackageTransportDigest) -> Result<Self, Diagnostic> {
-        Self::decode_bounded(
-            bytes,
-            expected,
-            MAXIMUM_CONTAINER_BYTES,
-            super::MAXIMUM_PACKAGE_CLOSURE,
-            MAXIMUM_CONTAINER_OBJECTS,
-        )
+        Self::decode_with_limits(bytes, expected, PackageContainerDecodeLimits::default())
     }
 
-    // Internal lowering of hard decoder ceilings supports finite exact-fit fixtures. No public
-    // input selects these bounds, and no caller can raise the normative ceilings.
-    fn decode_bounded(
+    /// Decodes the complete current format under caller-selected allowances.
+    /// Framing, canonical ordering and integrity remain mandatory when unbounded.
+    pub fn decode_with_limits(
         bytes: &[u8],
         expected: PackageTransportDigest,
-        maximum_bytes: usize,
-        maximum_packages: usize,
-        maximum_objects: usize,
+        limits: PackageContainerDecodeLimits,
     ) -> Result<Self, Diagnostic> {
-        if maximum_bytes > MAXIMUM_CONTAINER_BYTES
-            || maximum_packages > super::MAXIMUM_PACKAGE_CLOSURE
-            || maximum_objects > MAXIMUM_CONTAINER_OBJECTS
-        {
-            return Err(limit("non-overridable decoder ceilings"));
-        }
-        if bytes.len() > maximum_bytes {
-            return Err(limit("container bytes"));
-        }
+        let input_bytes =
+            u64::try_from(bytes.len()).map_err(|_| limit("input byte representation"))?;
+        admit_decode_limit(limits.maximum_bytes, input_bytes, "container bytes")?;
         let mut cursor = Cursor(bytes);
         if cursor.take(8)? != CONTAINER_MAGIC {
             return Err(corrupt(
@@ -265,24 +280,34 @@ impl PackageContainer {
                 ),
             ));
         }
-        let selection_count = u32::from_be_bytes(cursor.array()?) as usize;
-        let object_count = usize::try_from(u64::from_be_bytes(cursor.array()?))
-            .map_err(|_| limit("distinct objects"))?;
-        admit_container_counts(bytes.len(), selection_count, object_count)?;
-        if selection_count > maximum_packages || object_count > maximum_objects {
-            return Err(limit("package or object inventory"));
-        }
+        let selections = u32::from_be_bytes(cursor.array()?);
+        let objects = u64::from_be_bytes(cursor.array()?);
+        admit_decode_limit(limits.maximum_packages, u64::from(selections), "packages")?;
+        admit_decode_limit(limits.maximum_objects, objects, "distinct objects")?;
+        let selection_count =
+            usize::try_from(selections).map_err(|_| limit("selection count representation"))?;
+        let object_count =
+            usize::try_from(objects).map_err(|_| limit("object count representation"))?;
+        admit_container_packages(selection_count)?;
         let minimum = selection_count
             .checked_mul(64)
             .and_then(|count| object_count.checked_mul(41)?.checked_add(count))
-            .ok_or_else(|| limit("container lengths"))?;
+            .ok_or_else(|| {
+                corrupt(
+                    "package_container_truncated",
+                    "container inventory cannot fit its input framing",
+                )
+            })?;
         if minimum > cursor.0.len() {
             return Err(corrupt(
                 "package_container_truncated",
                 "container inventory is truncated before allocation",
             ));
         }
-        let mut selections = Vec::with_capacity(selection_count);
+        let mut selections = Vec::new();
+        selections
+            .try_reserve_exact(selection_count)
+            .map_err(|_| limit("selection allocation"))?;
         for _ in 0..selection_count {
             selections.push(cursor.binding()?);
         }
@@ -327,7 +352,9 @@ impl PackageContainer {
             }
             let key = ObjectKey::from_digest(domain, digest);
             key.verify(object).map_err(store_diagnostic)?;
-            objects.insert(key, object.to_vec());
+            let object = crate::platform::storage::object::copy_object_bytes(object)
+                .map_err(store_diagnostic)?;
+            objects.insert(key, object);
         }
         if !cursor.0.is_empty() {
             return Err(corrupt(
@@ -345,7 +372,7 @@ impl PackageContainer {
     }
 
     fn validate_inventory(&self) -> Result<(), Diagnostic> {
-        admit_container_counts(0, self.selections.len(), self.objects.len())?;
+        admit_container_packages(self.selections.len())?;
         if self
             .selections
             .windows(2)
@@ -398,8 +425,10 @@ impl PackageContainer {
     ) -> Result<AdmittedClosure, Diagnostic> {
         control.check().map_err(execution_diagnostic)?;
         // Include the decoder's one complete container read and object-integrity visits.
-        let input_bytes = self.encoded_size()? as u64;
-        let input_visits = self.objects.len() as u64;
+        let input_bytes = u64::try_from(self.encoded_size()?)
+            .map_err(|_| limit("container byte accounting representation"))?;
+        let input_visits = u64::try_from(self.objects.len())
+            .map_err(|_| limit("container visit accounting representation"))?;
         let mut visits = SourceAllowance::new(maximum_visits);
         if !visits.reserve(input_visits) {
             return Err(limit("validation visits"));
@@ -537,7 +566,6 @@ pub(crate) struct CollectingStore<'a, S: ?Sized> {
     base: &'a S,
     admission: RefCell<StoreReadAdmission>,
     objects: RefCell<BTreeMap<ObjectKey, Vec<u8>>>,
-    retained_bytes: std::cell::Cell<usize>,
     remaining_visits: std::cell::Cell<SourceAllowance>,
     semantic_visits: std::cell::Cell<SourceObservation>,
 }
@@ -559,7 +587,6 @@ impl<'a, S: ?Sized> CollectingStore<'a, S> {
                 maximum_bytes: maximum_read_bytes,
             })),
             objects: RefCell::new(BTreeMap::new()),
-            retained_bytes: std::cell::Cell::new(84),
             remaining_visits: std::cell::Cell::new(SourceAllowance::new(maximum_visits)),
             semantic_visits: std::cell::Cell::new(SourceObservation::default()),
         }
@@ -673,25 +700,6 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for CollectingStore<
         external: &mut StoreReadAdmission,
         work: &mut StoreWork,
     ) -> Result<Option<Vec<u8>>, StoreError> {
-        if !self.objects.borrow().contains_key(&key)
-            && self.objects.borrow().len() == MAXIMUM_CONTAINER_OBJECTS
-        {
-            return Err(StoreError::new(
-                StoreErrorClass::Resource,
-                "package_source_objects",
-                "source admission exhausted distinct objects",
-            ));
-        }
-        let maximum = if self.objects.borrow().contains_key(&key) {
-            maximum
-        } else {
-            {
-                let remaining = MAXIMUM_CONTAINER_BYTES
-                    .saturating_sub(self.retained_bytes.get())
-                    .saturating_sub(41);
-                Some(maximum.map_or(remaining, |maximum| maximum.min(remaining)))
-            }
-        };
         let internal = *self.admission.borrow();
         let outer = *external;
         let mut allowance = internal.remaining();
@@ -722,21 +730,8 @@ impl<S: ImmutableObjectStore + ?Sized> ImmutableObjectStore for CollectingStore<
         if let Some(bytes) = &bytes
             && !self.objects.borrow().contains_key(&key)
         {
-            let total = self
-                .retained_bytes
-                .get()
-                .checked_add(41)
-                .and_then(|total| total.checked_add(bytes.len()))
-                .filter(|total| *total <= MAXIMUM_CONTAINER_BYTES)
-                .ok_or_else(|| {
-                    StoreError::new(
-                        StoreErrorClass::Resource,
-                        "package_source_container_bytes",
-                        "source admission exhausted container bytes before retaining an object",
-                    )
-                })?;
-            self.retained_bytes.set(total);
-            self.objects.borrow_mut().insert(key, bytes.clone());
+            let retained = crate::platform::storage::object::copy_object_bytes(bytes)?;
+            self.objects.borrow_mut().insert(key, retained);
         }
         Ok(bytes)
     }
@@ -850,7 +845,6 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
 ) -> Result<AdmittedClosure, Diagnostic> {
     control.check().map_err(execution_diagnostic)?;
     let store = CollectingStore::with_budget(base, maximum_visits, maximum_read_bytes);
-    store.retained_bytes.set(84 + selections.len() * 64);
     let mut work = StoreWork::default();
     let mut map_admission = crate::platform::persistent_map::MapAdmission::unbounded();
     let mut visit = |count| {
@@ -1126,6 +1120,11 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
     let dependency_plan = validated.logical.dependency_plan.evidence().clone();
     let dependency_order = validated.logical.dependency_plan.into_order();
     control.check().map_err(execution_diagnostic)?;
+    let mut retained_selections = Vec::new();
+    retained_selections
+        .try_reserve_exact(selections.len())
+        .map_err(|_| limit("selection retention allocation"))?;
+    retained_selections.extend_from_slice(selections);
     if let Some(cache) = reuse {
         cache.commit(pending_validations, &store, control)?;
     }
@@ -1140,7 +1139,7 @@ fn collect_admitted<S: ImmutableObjectStore + ?Sized>(
         validation_semantic_visits,
         container: PackageContainer {
             root,
-            selections: selections.to_vec(),
+            selections: retained_selections,
             objects: store.objects.into_inner(),
         },
         packages,
@@ -1184,14 +1183,23 @@ pub(crate) fn entries<S: ImmutableObjectStore + ?Sized>(
     store: &S,
     root: MapRoot,
 ) -> Result<EncodedEntries, Diagnostic> {
-    if root.entries() > MAXIMUM_CONTAINER_OBJECTS as u64 {
-        return Err(limit("map entries"));
-    }
     let reader = ObjectPageReader::new(store);
     let mut entries = Vec::new();
     PersistentMap::from_root(root)
         .for_each(&reader, &mut MapWork::default(), |key, value| {
-            entries.push((key.to_vec(), value.to_vec()));
+            // Grow only for an entry that the checked map traversal actually returned.
+            // The untrusted root count is never an allocation request.
+            let allocation = || crate::platform::persistent_map::MapError {
+                class: MapErrorClass::Resource,
+                code: "package_source_map_allocation",
+                message: "source map entry allocation failed".to_owned(),
+            };
+            entries.try_reserve(1).map_err(|_| allocation())?;
+            let key = crate::platform::storage::object::copy_object_bytes(key)
+                .map_err(|_| allocation())?;
+            let value = crate::platform::storage::object::copy_object_bytes(value)
+                .map_err(|_| allocation())?;
+            entries.push((key, value));
             Ok(())
         })
         .map_err(|error| {
@@ -1202,7 +1210,7 @@ pub(crate) fn entries<S: ImmutableObjectStore + ?Sized>(
             };
             package_error(class, "package_source_map", error.message)
         })?;
-    if entries.len() as u64 != root.entries() {
+    if u64::try_from(entries.len()).ok() != Some(root.entries()) {
         return Err(corrupt(
             "package_source_map_count",
             "source map count disagrees with reconstructed inventory",
@@ -1525,6 +1533,7 @@ mod tests {
     include!("native_plan_source_tests.rs");
     include!("native_plan_reuse_tests.rs");
     include!("source_validation_control_tests.rs");
+    include!("source_capacity_tests.rs");
     include!("source_validation_reuse_tests.rs");
 
     #[test]
@@ -1849,7 +1858,6 @@ declarations.end
                 .expect("canonical repeated encode"),
             bytes
         );
-        assert!(bytes.len() < MAXIMUM_CONTAINER_BYTES);
         let mut trailing = bytes.clone();
         trailing.push(0);
         assert_not_ready(&trailing, admitted.container.root.transport);
@@ -2056,70 +2064,54 @@ declarations.end
                 .code,
             "package_source_budget"
         );
-        let mut bytes = source.container.encode().unwrap();
-        bytes[76..84].copy_from_slice(&1_000_001_u64.to_be_bytes());
-        assert_not_ready(&bytes, source.container.root.transport);
-        assert_eq!(
-            PackageContainer::decode(&bytes, source.container.root.transport)
-                .unwrap_err()
-                .code,
-            "package_source_budget"
-        );
     }
 
     #[test]
-    fn decoder_header_ceiling_guards_are_exact_and_duplicate_keys_reject() {
-        // Exercise the pre-allocation dimension guards at their actual integer ceilings. This is
-        // not a maximum-capacity graph execution: complete source exact-fit work is tested with
-        // the bounded semantic/read admission fixture above.
-        admit_container_counts(268_435_456, 10_000, 1_000_000).unwrap();
-        for counts in [
-            (268_435_457, 10_000, 1_000_000),
-            (268_435_456, 10_001, 1_000_000),
-            (268_435_456, 10_000, 1_000_001),
-        ] {
+    fn decoder_package_profile_and_duplicate_keys_reject() {
+        admit_container_packages(super::super::MAXIMUM_PACKAGE_CLOSURE).unwrap();
+        for count in [0, super::super::MAXIMUM_PACKAGE_CLOSURE + 1] {
             assert_eq!(
-                admit_container_counts(counts.0, counts.1, counts.2)
-                    .unwrap_err()
-                    .class,
+                admit_container_packages(count).unwrap_err().class,
                 DiagnosticClass::Resource
             );
         }
         let source = standard_source();
         let exact_bytes = source.container.encode().unwrap();
-        let counts = (
-            exact_bytes.len(),
-            source.container.selections.len(),
-            source.container.objects.len(),
-        );
-        let exact = PackageContainer::decode_bounded(
+        let counts = [
+            u64::try_from(exact_bytes.len()).unwrap(),
+            u64::try_from(source.container.selections.len()).unwrap(),
+            u64::try_from(source.container.objects.len()).unwrap(),
+        ];
+        let exact = PackageContainer::decode_with_limits(
             &exact_bytes,
             source.container.root.transport,
-            counts.0,
-            counts.1,
-            counts.2,
+            PackageContainerDecodeLimits {
+                maximum_bytes: Some(counts[0]),
+                maximum_packages: Some(counts[1]),
+                maximum_objects: Some(counts[2]),
+            },
         )
         .unwrap();
         assert!(exact.admit().is_ok());
-        for bounds in [
-            (counts.0 - 1, counts.1, counts.2),
-            (counts.0, counts.1 - 1, counts.2),
-            (counts.0, counts.1, counts.2 - 1),
-        ] {
+        for dimension in 0..3 {
+            let mut lower = counts;
+            lower[dimension] -= 1;
             assert_eq!(
-                PackageContainer::decode_bounded(
+                PackageContainer::decode_with_limits(
                     &exact_bytes,
                     source.container.root.transport,
-                    bounds.0,
-                    bounds.1,
-                    bounds.2,
+                    PackageContainerDecodeLimits {
+                        maximum_bytes: Some(lower[0]),
+                        maximum_packages: Some(lower[1]),
+                        maximum_objects: Some(lower[2]),
+                    },
                 )
                 .unwrap_err()
                 .class,
                 DiagnosticClass::Resource
             );
         }
-        let mut bytes = source.container.encode().unwrap();
+        let mut bytes = exact_bytes;
         let records = 84 + source.container.selections.len() * 64;
         let first_length =
             u64::from_be_bytes(bytes[records + 33..records + 41].try_into().unwrap()) as usize;

@@ -140,6 +140,11 @@ pub(super) fn program_material(
     program: &super::super::execution::normalized::NormalizedProgram,
 ) -> Option<RetainedMaterial> {
     let work = &program.work;
+    // The immutable builtin has a separate bounded retention contract.
+    // Saturated telemetry cannot establish its finite retained-size proof.
+    if work.type_metadata_saturated {
+        return None;
+    }
     let records = [
         work.packages,
         work.compiler_units,

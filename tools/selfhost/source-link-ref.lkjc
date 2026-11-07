@@ -384,5 +384,55 @@ declarations.begin
                     (local data)
                     (local next)
                     (call ci::sub (local remaining) (i64 1))
-                    (local mode)))))))))))
+                    (local mode)))))))))
+  (function create sequence-items
+    (visibility private)
+    (effect pure)
+    (parameter create graph (type Bytes))
+    (parameter create data (type Bytes))
+    (parameter create at (type I64))
+    (parameter create remaining (type I64))
+    (returns I64)
+    (body
+      (if
+        (call ci::lt (local at) (i64 0))
+        (local at)
+        (if
+          (call ci::eq (local remaining) (i64 0))
+          (local at)
+          (if
+            (call ci::lt (local remaining) (i64 0))
+            (i64 -12)
+            (call sequence-items
+              (local graph)
+              (local data)
+              (call owner-ref (local graph) (local data) (local at) (i64 9) (i64 17))
+              (call ci::sub (local remaining) (i64 1))))))))
+  (function create sequence
+    (visibility package)
+    (effect pure)
+    (parameter create graph (type Bytes))
+    (parameter create data (type Bytes))
+    (parameter create at (type I64))
+    (returns I64)
+    (body
+      (if
+        (call ci::lt (local at) (i64 0))
+        (local at)
+        (let
+          (binding span
+            (call source-read::sequence-span
+              (local data)
+              (local at)
+              (call ci::sub (call ci::length (local data)) (i64 32))))
+          (in
+            (if
+              (call ci::eq (field (local span) (name code)) (i64 0))
+              (call sequence-items
+                (local graph)
+                (local data)
+                (field (local span) (name start))
+                (field (local span) (name length)))
+              (i64 -12)))))))
+))
 declarations.end

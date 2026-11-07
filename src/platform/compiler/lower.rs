@@ -7,7 +7,7 @@ use super::unit::{
     CompiledInstruction, CompiledOperationLayout, CompiledParameter, CompiledPort,
     CompiledPortImplementation, CompiledRequirement, CompiledSignature, CompiledText,
     CompiledTransactionOutcome, CompiledTransactionRequirement, CompiledVariantJump,
-    MAXIMUM_COMPILER_UNIT_ITEMS, OptimizationPolicy,
+    OptimizationPolicy,
 };
 use crate::platform::builtin_standard::BuiltinStandard;
 use crate::platform::change::{
@@ -568,7 +568,7 @@ pub(super) fn canonical_code<B: CodeRead + ?Sized>(
         canonical: read,
         package,
         scope,
-        tables: TablesBuilder::from_tables(tables),
+        tables: TablesBuilder::from_tables(tables)?,
         derived_type_objects: BTreeMap::new(),
         derived_type_admission: DerivedTypeAdmission::default(),
         work: CompilationWork::default(),
@@ -617,7 +617,7 @@ pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
             OwnerKey::Declaration(declaration) => Some(declaration),
             _ => None,
         },
-        tables: TablesBuilder::from_tables(&unit.tables),
+        tables: TablesBuilder::from_tables(&unit.tables)?,
         derived_type_objects: BTreeMap::new(),
         derived_type_admission: DerivedTypeAdmission::default(),
         work: CompilationWork::default(),
@@ -716,7 +716,13 @@ pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
         .derived_type_admission
         .parallel
         .reserve::<TypeObjectDigest>(unit.tables.types.len())?;
-    let mut pending = unit.tables.types.clone();
+    let mut pending = Vec::new();
+    reserve_vector(
+        &mut pending,
+        unit.tables.types.len(),
+        "derived type closure",
+    )?;
+    pending.extend_from_slice(&unit.tables.types);
     let mut seen = BTreeSet::new();
     while let Some(ty) = pending.pop() {
         // Charge duplicate and missing attempts too. A missing root is never
@@ -728,13 +734,6 @@ pub(super) fn reconstruct_parallel_result_types<B: CanonicalBaseRead + ?Sized>(
         let Some(object) = builder.with_expression_read(|read| read.type_object(ty))? else {
             continue;
         };
-        if seen.len() >= MAXIMUM_COMPILER_UNIT_ITEMS {
-            return Err(compiler_error(
-                DiagnosticClass::Resource,
-                "compiler_owned_record_type_limit",
-                "owned record type closure exceeds the compiler-unit bound",
-            ));
-        }
         read.reserve(1)?;
         builder
             .derived_type_admission
@@ -1486,13 +1485,6 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         {
             return Ok(digest);
         }
-        if self.derived_type_objects.len() >= MAXIMUM_COMPILER_UNIT_ITEMS {
-            return Err(compiler_error(
-                DiagnosticClass::Resource,
-                "compiler_derived_type_storage",
-                "derived type inventory exceeds the compiler-unit bound",
-            ));
-        }
         // Count canonical payload bytes without constructing a buffer. Reserve the
         // retained map entry and temporary encoding buffers before producing them.
         let mut size = bincode::enc::write::SizeWriter::default();
@@ -1559,19 +1551,18 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         self.derived_type_admission
             .parallel
             .reserve::<TypeObjectDigest>(self.tables.types.values.len())?;
-        let mut pending = self.tables.types.values.clone();
+        let mut pending = Vec::new();
+        reserve_vector(
+            &mut pending,
+            self.tables.types.values.len(),
+            "derived type closure",
+        )?;
+        pending.extend_from_slice(&self.tables.types.values);
         let mut seen = BTreeSet::new();
         while let Some(ty) = pending.pop() {
             self.canonical.code_step()?;
             if !seen.insert(ty) {
                 continue;
-            }
-            if seen.len() > MAXIMUM_COMPILER_UNIT_ITEMS {
-                return Err(compiler_error(
-                    DiagnosticClass::Resource,
-                    "compiler_owned_record_type_limit",
-                    "owned record type closure exceeds the compiler-unit bound",
-                ));
             }
             let object = self
                 .with_expression_read(|read| read.type_object(ty))?
@@ -2298,13 +2289,6 @@ impl<B: CodeRead + ?Sized> UnitBuilder<'_, B> {
         // The exact canonical child admission proves category and transferability;
         // a type-form catch-all must not classify an associated member as ordinary.
         self.canonical.code_step()?;
-        if self.derived_type_objects.len() >= MAXIMUM_COMPILER_UNIT_ITEMS {
-            return Err(compiler_error(
-                DiagnosticClass::Resource,
-                "compiler_parallel_result_type_limit",
-                "derived parallel result types exceed the compiler-unit bound",
-            ));
-        }
         let fields = vec![
             StructuralTypeField {
                 name: crate::platform::kernel::Name::new("left")?,
@@ -4777,13 +4761,6 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
                 "compiled local count overflows its dense index domain",
             )
         })?;
-        if self.next_local as usize > MAXIMUM_COMPILER_UNIT_ITEMS {
-            return Err(compiler_error(
-                DiagnosticClass::Resource,
-                "compiler_local_count",
-                "compiled local count exceeds the compiler-unit work bound",
-            ));
-        }
         self.locals.insert(reference, local);
         Ok(local)
     }
@@ -4867,14 +4844,8 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
 
     fn push(&mut self, instruction: CompiledInstruction) -> Result<u32, Diagnostic> {
         self.unit.canonical.code_step()?;
-        if self.instructions.len() == MAXIMUM_COMPILER_UNIT_ITEMS {
-            return Err(compiler_error(
-                DiagnosticClass::Resource,
-                "compiler_instruction_count",
-                "compiled instruction count exceeds the compiler-unit bound",
-            ));
-        }
-        let index = u32_count("compiled instruction index", self.instructions.len())?;
+        let index = next_dense_index("compiled instruction count", self.instructions.len())?;
+        reserve_vector(&mut self.instructions, 1, "compiled instructions")?;
         self.instructions.push(instruction);
         self.unit.work.instructions_emitted = self.unit.work.instructions_emitted.saturating_add(1);
         Ok(index)
@@ -4900,19 +4871,19 @@ struct TablesBuilder {
 }
 
 impl TablesBuilder {
-    fn from_tables(tables: &CompilationTables) -> Self {
-        Self {
-            declarations: InternTable::from_values(&tables.declarations),
-            fields: InternTable::from_values(&tables.fields),
-            cases: InternTable::from_values(&tables.cases),
-            requirements: InternTable::from_values(&tables.requirements),
-            operations: InternTable::from_values(&tables.operations),
-            ports: InternTable::from_values(&tables.ports),
-            types: InternTable::from_values(&tables.types),
-            structural_names: InternTable::from_values(&tables.structural_names),
-            read_view_fields: InternTable::from_values(&tables.read_view_fields),
-            texts: InternTable::from_values(&tables.texts),
-        }
+    fn from_tables(tables: &CompilationTables) -> Result<Self, Diagnostic> {
+        Ok(Self {
+            declarations: InternTable::from_values(&tables.declarations)?,
+            fields: InternTable::from_values(&tables.fields)?,
+            cases: InternTable::from_values(&tables.cases)?,
+            requirements: InternTable::from_values(&tables.requirements)?,
+            operations: InternTable::from_values(&tables.operations)?,
+            ports: InternTable::from_values(&tables.ports)?,
+            types: InternTable::from_values(&tables.types)?,
+            structural_names: InternTable::from_values(&tables.structural_names)?,
+            read_view_fields: InternTable::from_values(&tables.read_view_fields)?,
+            texts: InternTable::from_values(&tables.texts)?,
+        })
     }
     fn declaration(&mut self, value: DeclarationReference) -> Result<u32, Diagnostic> {
         self.declarations.intern(value, "declaration relocations")
@@ -4987,29 +4958,23 @@ impl<T> Default for InternTable<T> {
 }
 
 impl<T: Clone + Ord> InternTable<T> {
-    fn from_values(values: &[T]) -> Self {
-        Self {
-            indexes: values
-                .iter()
-                .cloned()
-                .enumerate()
-                .map(|(index, value)| (value, index as u32))
-                .collect(),
-            values: values.to_vec(),
+    fn from_values(values: &[T]) -> Result<Self, Diagnostic> {
+        u32_count("compiled relocation count", values.len())?;
+        let mut table = Self::default();
+        reserve_vector(&mut table.values, values.len(), "compiled relocations")?;
+        for (index, value) in values.iter().enumerate() {
+            let index = u32_count("compiled relocation index", index)?;
+            table.values.push(value.clone());
+            table.indexes.insert(value.clone(), index);
         }
+        Ok(table)
     }
     fn intern(&mut self, value: T, label: &'static str) -> Result<u32, Diagnostic> {
         if let Some(index) = self.indexes.get(&value) {
             return Ok(*index);
         }
-        if self.values.len() == MAXIMUM_COMPILER_UNIT_ITEMS {
-            return Err(compiler_error(
-                DiagnosticClass::Resource,
-                "compiler_relocation_count",
-                format!("{label} exceed the compiler-unit bound"),
-            ));
-        }
-        let index = u32_count(label, self.values.len())?;
+        let index = next_dense_index(label, self.values.len())?;
+        reserve_vector(&mut self.values, 1, label)?;
         self.values.push(value.clone());
         self.indexes.insert(value, index);
         Ok(index)
@@ -5021,6 +4986,32 @@ fn compiled_text(value: TextValue) -> CompiledText {
         TextValue::Inline { text } => CompiledText::Inline(text),
         TextValue::Blob { digest, bytes } => CompiledText::Blob { digest, bytes },
     }
+}
+
+fn reserve_vector<T>(
+    values: &mut Vec<T>,
+    additional: usize,
+    label: &str,
+) -> Result<(), Diagnostic> {
+    values.try_reserve(additional).map_err(|_| {
+        compiler_error(
+            DiagnosticClass::Resource,
+            "compiler_allocation",
+            format!("cannot allocate {label}"),
+        )
+    })
+}
+
+fn next_dense_index(label: &'static str, length: usize) -> Result<u32, Diagnostic> {
+    let index = u32_count(label, length)?;
+    index.checked_add(1).ok_or_else(|| {
+        compiler_error(
+            DiagnosticClass::Resource,
+            "compiler_dense_index",
+            format!("{label} does not fit the dense compiler count domain"),
+        )
+    })?;
+    Ok(index)
 }
 
 fn u32_count(label: &'static str, count: usize) -> Result<u32, Diagnostic> {
@@ -6113,5 +6104,28 @@ mod read_view_lower_tests {
         };
         assert_eq!(*read_scope, source_scope);
         assert_ne!(*read_scope, descriptor_scope);
+    }
+}
+
+#[cfg(test)]
+mod dense_index_tests {
+    use super::next_dense_index;
+
+    #[test]
+    fn compiler_dense_count_accepts_former_limit_and_checks_growth_before_mutation() {
+        assert_eq!(
+            next_dense_index("instructions", 1_000_000).unwrap(),
+            1_000_000
+        );
+        assert_eq!(
+            next_dense_index("instructions", u32::MAX as usize - 1).unwrap(),
+            u32::MAX - 1
+        );
+        assert_eq!(
+            next_dense_index("instructions", u32::MAX as usize)
+                .unwrap_err()
+                .code,
+            "compiler_dense_index"
+        );
     }
 }

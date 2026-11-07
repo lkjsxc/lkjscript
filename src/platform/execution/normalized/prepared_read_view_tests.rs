@@ -2,7 +2,9 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use super::*;
-use crate::platform::execution::ExecutionControl;
+use crate::platform::execution::{
+    ExecutionControl, normalized::prepare::NormalizedPreparationLimits,
+};
 use crate::platform::kernel::{
     CallableResult, Name, ReadScopeParameter, ReadScopeSource, ResultRelation,
 };
@@ -382,7 +384,7 @@ fn prepared_view_instruction_reprocessing_preserves_exact_applied_scope_identity
         let mut budget = Budget::new(&control);
         let identities = applied_scope_identities(&supplied, &mut budget).unwrap();
         assert_eq!(identities.len(), 2);
-        assert!(budget.work_for_test().0 >= supplied.len());
+        assert!(budget.work_for_test().0 >= u64::try_from(supplied.len()).unwrap());
         assert!(budget.work_for_test().1 > 0);
         assert_eq!(
             resolve_scope(actuals[0], Some(&identities)).unwrap(),
@@ -541,19 +543,20 @@ fn prepared_view_instruction_reprocessing_preserves_exact_applied_scope_identity
             assert_eq!(error.class, DiagnosticClass::Corrupt);
             assert_eq!(error.code, "normalized_instantiation_scope");
         }
-        for (steps, bytes, expected_code) in [
-            (MAXIMUM_WORK, 0, "normalized_instantiation_work"),
-            (
-                0,
-                MAXIMUM_METADATA_BYTES,
-                "normalized_instantiation_storage",
-            ),
+        for (maximum_steps, maximum_bytes, expected_code) in [
+            (Some(0), None, "normalized_instantiation_work"),
+            (None, Some(0), "normalized_instantiation_storage"),
         ] {
-            let error = applied_scope_identities(
-                &supplied,
-                &mut Budget::with_work_for_test(&control, steps, bytes),
-            )
-            .unwrap_err();
+            let mut budget = Budget::with_limits(
+                &control,
+                NormalizedPreparationLimits {
+                    maximum_type_derivation_steps: maximum_steps,
+                    maximum_type_metadata_bytes: maximum_bytes,
+                },
+            );
+            let error = applied_scope_identities(&supplied, &mut budget).unwrap_err();
+            assert!(!budget.steps.observation().saturated);
+            assert!(!budget.bytes.observation().saturated);
             assert_eq!(error.class, DiagnosticClass::Resource);
             assert_eq!(error.code, expected_code);
         }

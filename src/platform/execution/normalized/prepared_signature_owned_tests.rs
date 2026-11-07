@@ -6,9 +6,9 @@ use crate::platform::compiler::{
 };
 use crate::platform::execution::ExecutionControl;
 use crate::platform::execution::normalized::prepare::{
-    NormalizedCode, NormalizedFunctionBody, NormalizedInstruction, NormalizedPreparationWork,
-    NormalizedProgram, RuntimeIndexes, load_runtime_owners, load_type_objects, load_units,
-    normalized_parameters, validate_normalized_resource_signature,
+    NormalizedCode, NormalizedFunctionBody, NormalizedInstruction, NormalizedPreparationLimits,
+    NormalizedPreparationWork, NormalizedProgram, RuntimeIndexes, load_runtime_owners,
+    load_type_objects, load_units, normalized_parameters, validate_normalized_resource_signature,
 };
 use crate::platform::execution::normalized::prepared_types::Budget;
 use crate::platform::execution::normalized::value::ValueOrigin;
@@ -349,9 +349,14 @@ fn associated_signature_context_shares_work_storage_cancellation_and_healthy_ret
     assert!(steps > 1 && bytes > 0);
     assert!(f.owned(&mut work).unwrap());
     assert_eq!(work.work_for_test(), (steps * 2, bytes * 2));
-    let maximum = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
-    for (remaining, success) in [(steps * 2, true), (steps * 2 - 1, false)] {
-        let mut work = Budget::with_work_for_test(&control, maximum - remaining, 0);
+    for (maximum_steps, success) in [(steps * 2, true), (steps * 2 - 1, false)] {
+        let mut work = Budget::with_limits(
+            &control,
+            NormalizedPreparationLimits {
+                maximum_type_derivation_steps: Some(maximum_steps),
+                ..Default::default()
+            },
+        );
         assert!(f.owned(&mut work).unwrap());
         match f.owned(&mut work) {
             Ok(owned) => assert!(success && owned),
@@ -362,12 +367,19 @@ fn associated_signature_context_shares_work_storage_cancellation_and_healthy_ret
                     crate::platform::diagnostic::DiagnosticClass::Resource,
                     "{error:?}"
                 );
+                assert_eq!(error.code, "normalized_instantiation_work");
             }
         }
+        assert_eq!(work.work_for_test().0, maximum_steps);
     }
-    let maximum_bytes = 256 * 1024 * 1024;
-    for (remaining, success) in [(bytes, true), (bytes - 1, false)] {
-        let mut work = Budget::with_work_for_test(&control, 0, maximum_bytes - remaining);
+    for (maximum_bytes, success) in [(bytes, true), (bytes - 1, false)] {
+        let mut work = Budget::with_limits(
+            &control,
+            NormalizedPreparationLimits {
+                maximum_type_metadata_bytes: Some(maximum_bytes),
+                ..Default::default()
+            },
+        );
         match f.owned(&mut work) {
             Ok(owned) => assert!(success && owned),
             Err(error) => {
@@ -377,11 +389,17 @@ fn associated_signature_context_shares_work_storage_cancellation_and_healthy_ret
                     crate::platform::diagnostic::DiagnosticClass::Resource,
                     "{error:?}"
                 );
+                assert_eq!(error.code, "normalized_instantiation_storage");
             }
+        }
+        if success {
+            assert_eq!(work.work_for_test().1, maximum_bytes);
+        } else {
+            assert!(work.work_for_test().1 <= maximum_bytes);
         }
     }
     for cutoff in [0, 1, steps / 2, steps - 1] {
-        let control = ExecutionControl::cancel_after_checks(cutoff as u64);
+        let control = ExecutionControl::cancel_after_checks(cutoff);
         let error = f.owned(&mut Budget::new(&control)).unwrap_err();
         assert_eq!(
             error.class,
@@ -420,9 +438,15 @@ fn associated_signature_context_shares_work_storage_cancellation_and_healthy_ret
     validate(&mut prefix).unwrap();
     let (prefix_steps, _) = prefix.work_for_test();
     assert!(prefix_steps > steps);
-    let mut exhausted = Budget::with_work_for_test(&control, maximum - prefix_steps, 0);
+    let mut exhausted = Budget::with_limits(
+        &control,
+        NormalizedPreparationLimits {
+            maximum_type_derivation_steps: Some(prefix_steps),
+            ..Default::default()
+        },
+    );
     validate(&mut exhausted).unwrap();
-    assert_eq!(exhausted.work_for_test().0, maximum);
+    assert_eq!(exhausted.work_for_test().0, prefix_steps);
     let error = super::super::super::prepared_types::complete_with_implementations(
         &mut program,
         &f.units,
@@ -436,15 +460,24 @@ fn associated_signature_context_shares_work_storage_cancellation_and_healthy_ret
         "{error:?}"
     );
     assert_eq!(error.code, "normalized_instantiation_work");
-    let mut one_short = Budget::with_work_for_test(&control, maximum - prefix_steps + 1, 0);
+    assert_eq!(exhausted.work_for_test().0, prefix_steps);
+    let mut one_short = Budget::with_limits(
+        &control,
+        NormalizedPreparationLimits {
+            maximum_type_derivation_steps: Some(prefix_steps - 1),
+            ..Default::default()
+        },
+    );
     let error = validate(&mut one_short).unwrap_err();
     assert_eq!(
         error.class,
         crate::platform::diagnostic::DiagnosticClass::Resource,
         "{error:?}"
     );
+    assert_eq!(error.code, "normalized_instantiation_work");
+    assert_eq!(one_short.work_for_test().0, prefix_steps - 1);
     for cutoff in [0, 1, prefix_steps - 1] {
-        let cancellation = ExecutionControl::cancel_after_checks(cutoff as u64);
+        let cancellation = ExecutionControl::cancel_after_checks(cutoff);
         let error = validate(&mut Budget::new(&cancellation)).unwrap_err();
         assert_eq!(
             error.class,

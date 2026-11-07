@@ -902,11 +902,10 @@ declarations.begin
       (body
         (let
           (binding end
-            (call source-read::envelope
+            (call source-read::envelope-framed
               (local data)
               (text "LKJOWNER")
-              (text "lkjscript.kernel.owner-envelope")
-              (i64 4194304)))
+              (text "lkjscript.kernel.owner-envelope")))
           (in
             (if
               (call ci::lt (i64 -1) (local end))

@@ -2,9 +2,8 @@
 
 use super::artifact::{
     ARTIFACT_CONTRACT_VERSION, ArtifactManifest, ArtifactPackage, ArtifactRuntimeOwner,
-    EncodedArtifact, LoadedArtifact, MAXIMUM_ARTIFACT_REFERENCE_OWNERS, artifact_error,
-    canonicalize_dependency_artifact_interfaces, closure_facts, encode_artifact,
-    runtime_owner_expectations,
+    EncodedArtifact, LoadedArtifact, artifact_error, canonicalize_dependency_artifact_interfaces,
+    closure_facts, encode_artifact, runtime_owner_expectations,
 };
 use super::cache::load_exact_current_compilation_with_view;
 use super::lower::CodeRead;
@@ -527,13 +526,6 @@ fn build_reference_owner_map(
     while let Some(owner) = pending.pop_first() {
         if bindings.contains_key(&owner) {
             continue;
-        }
-        if bindings.len() as u64 == MAXIMUM_ARTIFACT_REFERENCE_OWNERS {
-            return Err(link_error(
-                DiagnosticClass::Resource,
-                "artifact_link_reference_owner_count",
-                "reference-execution closure exceeds its per-package owner bound",
-            ));
         }
         let read = view.read_owner(owner)?;
         work.repository.add_canonical(read.work);

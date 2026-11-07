@@ -1392,7 +1392,7 @@ fn verify_wide(
         "raw source callable wide count={count} prefix_payload_bytes={prefix_bytes} \
          max_bind_chunk=64 chunks={} expected={expected} source_bytes={} source_carrier_bytes={} \
          source_carrier_sha256={} artifact_bytes={} compiler_units={units} maximum_unit_bytes={} \
-         storage_unit_limit={:?} codec_unit_limit={} output_modes=2 independent_engines=4",
+         storage_unit_limit={:?} codec_unit_limit={:?} output_modes=2 independent_engines=4",
         count.div_ceil(64),
         text.len(),
         case.carrier.len(),
@@ -1400,7 +1400,7 @@ fn verify_wide(
         host.bytes.len(),
         maximum_unit,
         ObjectDomain::CompilerUnit.maximum_bytes(),
-        crate::platform::compiler::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+        None::<usize>,
     );
     Ok(())
 }
@@ -1868,9 +1868,9 @@ fn selfhost_source_callable_prefix_8193_unit_and_carrier_extent_probe() -> Check
         .map_err(|error| format!("8193 prefix source-authoring dependency: {error}"))?;
     let case = case_from_snapshot(&source)?;
     let host = host_oracle(&case).map_err(|error| format!(
-        "8193 prefix canonical-unit/storage dependency: storage_limit={:?} codec_limit={}: {error}",
+        "8193 prefix canonical-unit/storage dependency: storage_limit={:?} codec_limit={:?}: {error}",
         ObjectDomain::CompilerUnit.maximum_bytes(),
-        crate::platform::compiler::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+        None::<usize>,
     ))?;
     let entry = function_named(&case.source, "callable-wide", "entry")?;
     let index = usize::try_from(host.program.function(entry).ok_or("probe entry absent")?.0)
@@ -1890,7 +1890,7 @@ fn selfhost_source_callable_prefix_8193_unit_and_carrier_extent_probe() -> Check
          count=8193 prefix_payload_bytes=65544 expected={expected} source_bytes={} \
          source_carrier_bytes={} source_carrier_sha256={} private_carrier_bytes={} \
          private_carrier_sha256={} artifact_bytes={} units={} maximum_unit_bytes={} \
-         storage_unit_limit={:?} codec_unit_limit={}",
+         storage_unit_limit={:?} codec_unit_limit={:?}",
         text.len(),
         case.carrier.len(),
         sha256(&case.carrier),
@@ -1900,7 +1900,7 @@ fn selfhost_source_callable_prefix_8193_unit_and_carrier_extent_probe() -> Check
         units,
         maximum_unit,
         ObjectDomain::CompilerUnit.maximum_bytes(),
-        crate::platform::compiler::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+        None::<usize>,
     );
     Ok(())
 }

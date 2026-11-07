@@ -17,8 +17,10 @@ pub(super) fn verify(code: &CompiledCode) -> Result<(), Diagnostic> {
     };
     let mut active = Vec::new();
     let mut locals = BTreeSet::new();
-    let mut before = Vec::with_capacity(code.instructions.len());
-    let mut after = Vec::with_capacity(code.instructions.len());
+    let mut before = Vec::new();
+    reserve_items(&mut before, code.instructions.len(), "region entry states")?;
+    let mut after = Vec::new();
+    reserve_items(&mut after, code.instructions.len(), "region exit states")?;
     for (index, instruction) in code.instructions.iter().enumerate() {
         before.push(active.last().map(|&(index, _)| index));
         match instruction {
@@ -26,6 +28,7 @@ pub(super) fn verify(code: &CompiledCode) -> Result<(), Diagnostic> {
                 if !locals.insert(*local) {
                     return Err(invalid());
                 }
+                reserve_items(&mut active, 1, "active region states")?;
                 active.push((index, *local));
             }
             CompiledInstruction::Region(RegionInstruction::End { local }) => {

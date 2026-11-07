@@ -121,12 +121,7 @@ declarations.begin
                       (call ci::eq (local operation) (i64 7))
                       (let
                         (binding cursor-0
-                          (call source-read::typed
-                            (local data)
-                            (local at)
-                            (local end)
-                            (i64 9)
-                            (i64 17)))
+                          (call source-read::typed (local data) (local at) (local end) (i64 9) (i64 17)))
                         (in
                           (if
                             (call ci::lt (i64 -1) (local cursor-0))
@@ -185,12 +180,7 @@ declarations.begin
                               (local cursor-0))))
                         (if
                           (call ci::eq (local operation) (i64 9))
-                          (call source-fields::nonempty-array
-                            (local data)
-                            (local at)
-                            (local end)
-                            (i64 9)
-                            (i64 17))
+                          (call source-read::sequence (local data) (local at) (local end))
                           (if
                             (call ci::eq (local operation) (i64 10))
                             (let
@@ -201,10 +191,7 @@ declarations.begin
                                   (call ci::lt (i64 -1) (local cursor-0))
                                   (let
                                     (binding cursor-1
-                                      (call source-fields::zero
-                                        (local data)
-                                        (local cursor-0)
-                                        (local end)))
+                                      (call source-fields::zero (local data) (local cursor-0) (local end)))
                                     (in
                                       (if
                                         (call ci::lt (i64 -1) (local cursor-1))
@@ -250,9 +237,7 @@ declarations.begin
                                                                   (i64 17))))
                                                             (in
                                                               (if
-                                                                (call ci::lt
-                                                                  (i64 -1)
-                                                                  (local cursor-5))
+                                                                (call ci::lt (i64 -1) (local cursor-5))
                                                                 (local cursor-5)
                                                                 (local cursor-5))))
                                                           (local cursor-4))))
@@ -270,10 +255,7 @@ declarations.begin
                                     (call ci::lt (i64 -1) (local cursor-0))
                                     (let
                                       (binding cursor-1
-                                        (call source-fields::zero
-                                          (local data)
-                                          (local cursor-0)
-                                          (local end)))
+                                        (call source-fields::zero (local data) (local cursor-0) (local end)))
                                       (in
                                         (if
                                           (call ci::lt (i64 -1) (local cursor-1))
@@ -315,7 +297,9 @@ declarations.begin
                                           (local cursor-1))))
                                     (local cursor-0))))
                               (if
-                                (call ci::either (call ci::eq (local operation) (i64 12)) (call ci::eq (local operation) (i64 21)))
+                                (call ci::either
+                                  (call ci::eq (local operation) (i64 12))
+                                  (call ci::eq (local operation) (i64 21)))
                                 (let
                                   (binding cursor-0
                                     (call source-read::typed

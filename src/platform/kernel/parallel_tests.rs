@@ -119,11 +119,11 @@ fn parallel_current_framing_rejects_mutated_graph_contracts() {
         };
         expression.contract_version = generation;
         let disguised = OwnerRecord::Expression(expression);
-        let bytes = crate::platform::packed::encode_canonical(
+        let bytes = crate::platform::packed::linear::encode(
             contract::OWNER_MAGIC,
             contract::OWNER_ENVELOPE_DOMAIN,
             &disguised,
-            contract::MAXIMUM_OWNER_OBJECT_BYTES,
+            None,
         )
         .unwrap();
         let digest = OwnerObjectDigest::of(&bytes);

@@ -14,6 +14,7 @@ use super::value::{
     FunctionIndex, NormalizedMapKey, NormalizedRecord, NormalizedValue, RequirementIndex,
     VariantLayoutIndex,
 };
+use crate::platform::admission::Observation;
 use crate::platform::binary64::Binary64;
 use crate::platform::diagnostic::DiagnosticClass;
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
@@ -46,6 +47,9 @@ pub(super) use structured::ChildProbe;
 #[cfg(test)]
 #[path = "vm_borrow_result_tests.rs"]
 pub(super) mod borrow_result_tests;
+#[cfg(test)]
+#[path = "vm_preparation_capacity_tests.rs"]
+mod preparation_capacity_tests;
 #[cfg(test)]
 #[path = "vm_scoped_parallel_tests.rs"]
 mod scoped_parallel_tests;
@@ -110,7 +114,9 @@ pub struct NormalizedRunObservation {
     pub allocated_bytes_saturated: bool,
     pub allocation_charges: u64,
     pub type_derivation_steps: u64,
+    pub type_derivation_saturated: bool,
     pub type_metadata_bytes: u64,
+    pub type_metadata_saturated: bool,
     pub(crate) value_work: super::value::ValueWork,
     pub collection_items: u64,
     pub collection_items_saturated: bool,
@@ -465,7 +471,9 @@ impl<'a> NormalizedVm<'a> {
                 allocated_bytes_saturated: false,
                 allocation_charges: 0,
                 type_derivation_steps: self.program.work.type_derivation_steps,
+                type_derivation_saturated: self.program.work.type_derivation_saturated,
                 type_metadata_bytes: self.program.work.type_metadata_bytes,
+                type_metadata_saturated: self.program.work.type_metadata_saturated,
                 value_work: super::value::ValueWork::default(),
                 collection_items: 0,
                 collection_items_saturated: false,
@@ -488,17 +496,16 @@ impl<'a> NormalizedVm<'a> {
         };
         let result = (|| {
             machine.select_root_allowance(&entry)?;
-            let proof_bytes = self
-                .program
-                .capture_proof_bytes
-                .checked_add(self.program.affine_variants.len())
-                .ok_or_else(|| {
-                    resource_error(
-                        "normalized_allocation",
-                        "prepared proof storage accounting overflowed",
-                    )
-                })?;
-            machine.charge_allocation(proof_bytes as u64)?;
+            reserve_preparation_allocation(
+                machine.policy,
+                machine.shared_budget.as_deref(),
+                &mut machine.observation,
+                Observation {
+                    consumed: self.program.work.type_metadata_bytes,
+                    saturated: self.program.work.type_metadata_saturated,
+                },
+                self.program.affine_variants.len(),
+            )?;
             let port_arguments = match entry {
                 NormalizedEntryPoint::Function(function) => {
                     let arguments = machine.admit_arguments(function, &[], arguments.into_vec())?;
@@ -713,6 +720,27 @@ fn reserve_execution_allocation(
     bytes: u64,
 ) -> Result<(), ExecutionError> {
     reserve_execution_storage(policy, shared_budget, observation, bytes, 0)
+}
+
+/// Attach modeled cumulative preparation storage, not a physical allocation extent.
+/// A saturated amount is only an observation and cannot satisfy a finite allowance.
+/// Stage local counters before shared admission so refusal changes neither ledger.
+fn reserve_preparation_allocation(
+    policy: NormalizedRunPolicy,
+    shared_budget: Option<&super::shared_budget::SharedBudget>,
+    observation: &mut NormalizedRunObservation,
+    mut prepared: Observation,
+    affine_variant_entries: usize,
+) -> Result<(), ExecutionError> {
+    prepared.observe(Observation::from_usize(affine_variant_entries));
+    let mut next = observation.clone();
+    next.allocated_bytes_saturated |= prepared.saturated;
+    reserve_execution_allocation(policy, None, &mut next, prepared.consumed)?;
+    if let Some(budget) = shared_budget {
+        budget.reserve_observed_allocation(prepared)?;
+    }
+    *observation = next;
+    Ok(())
 }
 
 // The count, exactness flag and shared finite reservation commit as one pair.

@@ -4,10 +4,11 @@
 
 use super::prepare::{
     ClosedTypeEnvironment, NormalizedCode, NormalizedEntryPoint, NormalizedFunctionBody,
-    NormalizedInstruction, NormalizedProgram, NormalizedRecordLayout,
+    NormalizedInstruction, NormalizedPreparationLimits, NormalizedProgram, NormalizedRecordLayout,
     NormalizedTransactionRequirement, NormalizedVariantLayout,
 };
 use super::value::FunctionIndex;
+use crate::platform::admission::{Meter, Observation};
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::kernel::{
     ReadScopeArgument, ReadScopeBinder, ReadScopeReference, ReadViewFieldKind,
@@ -66,62 +67,54 @@ type EffectApplication = (
     Vec<crate::platform::kernel::EffectRow>,
     Vec<crate::platform::kernel::RequirementReference>,
 );
-const MAXIMUM_WORK: usize = crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK;
-// Finite preparation storage, independent of invocation-lifetime allocation accounting.
-const MAXIMUM_METADATA_BYTES: usize = 256 * 1024 * 1024;
-
+// Modeled derivation work/storage and exact caller permission are separate.
+// Physical collection extents remain checked by their allocation sites.
 pub(super) struct Budget<'a> {
-    steps: usize,
-    bytes: usize,
+    steps: Meter,
+    bytes: Meter,
     control: &'a crate::platform::execution::ExecutionControl,
     type_lookup: type_lookup::TypeLookupBuilder,
 }
 
 impl<'a> Budget<'a> {
+    #[cfg(test)]
     pub(super) fn new(control: &'a crate::platform::execution::ExecutionControl) -> Self {
+        Self::with_limits(control, NormalizedPreparationLimits::default())
+    }
+
+    pub(super) fn with_limits(
+        control: &'a crate::platform::execution::ExecutionControl,
+        limits: NormalizedPreparationLimits,
+    ) -> Self {
         Self {
-            steps: 0,
-            bytes: 0,
+            steps: Meter::new(limits.maximum_type_derivation_steps),
+            bytes: Meter::new(limits.maximum_type_metadata_bytes),
             control,
             type_lookup: type_lookup::TypeLookupBuilder::default(),
         }
-    }
-    #[cfg(test)]
-    pub(super) fn work_for_test(&self) -> (usize, usize) {
-        (self.steps, self.bytes)
     }
 
     #[cfg(test)]
-    pub(super) fn with_work_for_test(
-        control: &'a crate::platform::execution::ExecutionControl,
-        steps: usize,
-        bytes: usize,
-    ) -> Self {
-        assert!(steps <= MAXIMUM_WORK && bytes <= MAXIMUM_METADATA_BYTES);
-        Self {
-            steps,
-            bytes,
-            control,
-            type_lookup: type_lookup::TypeLookupBuilder::default(),
-        }
+    pub(super) fn work_for_test(&self) -> (u64, u64) {
+        (
+            self.steps.observation().consumed,
+            self.bytes.observation().consumed,
+        )
     }
 
     pub(super) fn reserve<T>(&mut self, count: usize) -> Result<(), Diagnostic> {
-        reserve_metadata(&mut self.bytes, count, std::mem::size_of::<T>())
+        self.bytes
+            .charge(Observation::product(count, std::mem::size_of::<T>()))
+            .map_err(|_| storage_allowance())
     }
 
     /// Advisory analyses may decline storage without consuming the ledger or
     /// turning their own capacity limit into rejection of admitted meaning.
     pub(super) fn try_reserve<T>(&mut self, count: usize) -> bool {
-        let Some(total) = count
-            .checked_mul(std::mem::size_of::<T>())
-            .and_then(|added| self.bytes.checked_add(added))
-            .filter(|total| *total <= MAXIMUM_METADATA_BYTES)
-        else {
+        let Some(bytes) = count.checked_mul(std::mem::size_of::<T>()) else {
             return false;
         };
-        self.bytes = total;
-        true
+        self.bytes.charge(Observation::from_usize(bytes)).is_ok()
     }
 
     pub(super) fn step(&mut self) -> Result<(), Diagnostic> {
@@ -189,33 +182,30 @@ fn step(work: &mut Budget<'_>) -> Result<(), Diagnostic> {
     work.control
         .check()
         .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))?;
-    work.steps = work
-        .steps
-        .checked_add(1)
-        .filter(|n| *n <= MAXIMUM_WORK)
-        .ok_or_else(|| {
-            Diagnostic::new(
-                DiagnosticClass::Resource,
-                "normalized_instantiation_work",
-                "prepared type closure exceeds its bounded work inventory",
-            )
-        })?;
-    Ok(())
+    work.steps.charge(Observation::exact(1)).map_err(|_| {
+        Diagnostic::new(
+            DiagnosticClass::Resource,
+            "normalized_instantiation_work",
+            "prepared type derivation exhausted the selected work allowance",
+        )
+    })
 }
 
-fn reserve_metadata(bytes: &mut usize, count: usize, size: usize) -> Result<(), Diagnostic> {
-    *bytes = count
-        .checked_mul(size)
-        .and_then(|added| bytes.checked_add(added))
-        .filter(|total| *total <= MAXIMUM_METADATA_BYTES)
-        .ok_or_else(|| {
-            Diagnostic::new(
-                DiagnosticClass::Resource,
-                "normalized_instantiation_storage",
-                "nominal layout metadata exceeds the existing allocation limit",
-            )
-        })?;
-    Ok(())
+fn storage_allowance() -> Diagnostic {
+    Diagnostic::new(
+        DiagnosticClass::Resource,
+        "normalized_instantiation_storage",
+        "prepared type metadata exhausted the selected storage allowance",
+    )
+}
+
+fn record_work(program: &mut NormalizedProgram, work: &Budget<'_>) {
+    let steps = work.steps.observation();
+    let bytes = work.bytes.observation();
+    program.work.type_derivation_steps = steps.consumed;
+    program.work.type_derivation_saturated = steps.saturated;
+    program.work.type_metadata_bytes = bytes.consumed;
+    program.work.type_metadata_saturated = bytes.saturated;
 }
 
 #[cfg(test)]
@@ -251,21 +241,35 @@ pub(super) fn complete_with_implementations(
     complete_budgeted(program, work, true)
 }
 
+pub(super) fn share_code_budgeted(
+    program: &mut NormalizedProgram,
+    work: &mut Budget<'_>,
+) -> Result<(), Diagnostic> {
+    // Keep the same caller meters through the final preparation phase.
+    shared_code::share(program, work)?;
+    record_work(program, work);
+    Ok(())
+}
+
+#[cfg(test)]
 pub(super) fn share_code(
     program: &mut NormalizedProgram,
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), Diagnostic> {
-    let mut work = Budget {
-        steps: usize::try_from(program.work.type_derivation_steps).map_err(|_| missing())?,
-        bytes: usize::try_from(program.work.type_metadata_bytes).map_err(|_| missing())?,
-        control,
-        type_lookup: type_lookup::TypeLookupBuilder::default(),
-    };
-    shared_code::share(program, &mut work)?;
-    program.capture_proof_bytes = work.bytes;
-    program.work.type_derivation_steps = work.steps as u64;
-    program.work.type_metadata_bytes = work.bytes as u64;
-    Ok(())
+    let mut work = Budget::new(control);
+    work.steps
+        .charge(Observation {
+            consumed: program.work.type_derivation_steps,
+            saturated: program.work.type_derivation_saturated,
+        })
+        .map_err(|_| missing())?;
+    work.bytes
+        .charge(Observation {
+            consumed: program.work.type_metadata_bytes,
+            saturated: program.work.type_metadata_saturated,
+        })
+        .map_err(|_| missing())?;
+    share_code_budgeted(program, &mut work)
 }
 
 #[cfg(test)]
@@ -499,9 +503,7 @@ fn complete_budgeted(
     }
     work.reserve::<u8>(bytes)?;
     super::local_moves::derive_program(program, work)?;
-    program.capture_proof_bytes = work.bytes;
-    program.work.type_derivation_steps = work.steps as u64;
-    program.work.type_metadata_bytes = program.capture_proof_bytes as u64;
+    record_work(program, work);
     program.prepared_type_lookup = work.finish_type_lookup(program.value_origin);
     Ok(())
 }
@@ -2974,34 +2976,88 @@ mod tests {
     }
 
     #[test]
-    fn derivation_reservations_fit_exactly_and_fail_before_one_over_growth() {
+    fn derivation_allowances_are_exact_and_failed_charges_preserve_permission() {
         let control = crate::platform::execution::ExecutionControl::uncancelled();
-        let mut budget = Budget {
-            steps: MAXIMUM_WORK - 1,
-            bytes: 0,
-            control: &control,
-            type_lookup: type_lookup::TypeLookupBuilder::default(),
-        };
-        step(&mut budget).unwrap();
-        assert_eq!(budget.steps, MAXIMUM_WORK);
+        for allowance in [0, 6, 7, u64::MAX] {
+            let mut work = Budget::with_limits(
+                &control,
+                NormalizedPreparationLimits {
+                    maximum_type_derivation_steps: Some(allowance),
+                    maximum_type_metadata_bytes: Some(allowance),
+                },
+            );
+            let before = work.bytes;
+            assert_eq!(work.reserve::<u8>(7).is_ok(), allowance >= 7);
+            if allowance < 7 {
+                assert_eq!(work.bytes, before);
+            }
+            if allowance == 7 {
+                assert_eq!(work.bytes.remaining(), Some(0));
+                assert_eq!(
+                    work.reserve::<u8>(1).unwrap_err().code,
+                    "normalized_instantiation_storage"
+                );
+                assert_eq!(work.bytes.observation(), Observation::exact(7));
+            }
+            let before = work.steps;
+            assert_eq!(work.step().is_ok(), allowance >= 1);
+            if allowance == 0 {
+                assert_eq!(work.steps, before);
+            }
+        }
+        let mut maximum = Budget::with_limits(
+            &control,
+            NormalizedPreparationLimits {
+                maximum_type_derivation_steps: Some(u64::MAX),
+                maximum_type_metadata_bytes: Some(u64::MAX),
+            },
+        );
+        maximum.steps.charge(Observation::exact(u64::MAX)).unwrap();
+        maximum.bytes.charge(Observation::exact(u64::MAX)).unwrap();
         assert_eq!(
-            step(&mut budget).unwrap_err().code,
+            maximum.step().unwrap_err().code,
             "normalized_instantiation_work"
         );
-        let maximum = super::MAXIMUM_METADATA_BYTES;
-        let mut bytes = maximum - 32;
-        reserve_metadata(&mut bytes, 1, 32).unwrap();
-        assert_eq!(bytes, maximum);
         assert_eq!(
-            reserve_metadata(&mut bytes, 1, 1).unwrap_err().code,
+            maximum.reserve::<u8>(1).unwrap_err().code,
             "normalized_instantiation_storage"
         );
-        assert_eq!(bytes, maximum);
+        assert!(!maximum.steps.observation().saturated);
+        assert!(!maximum.bytes.observation().saturated);
+    }
+
+    #[test]
+    fn unbounded_derivation_observations_cross_old_ceilings_and_saturate_passively() {
+        let control = crate::platform::execution::ExecutionControl::uncancelled();
+        let mut work = Budget::new(&control);
+        work.steps.charge(Observation::exact(10_000_000)).unwrap();
+        work.step().unwrap();
+        work.reserve::<u8>(256 * 1024 * 1024).unwrap();
+        work.reserve::<u8>(1).unwrap();
+        assert_eq!(work.steps.observation(), Observation::exact(10_000_001));
         assert_eq!(
-            reserve_metadata(&mut bytes, usize::MAX, 32)
-                .unwrap_err()
-                .class,
-            DiagnosticClass::Resource
+            work.bytes.observation(),
+            Observation::exact(256 * 1024 * 1024 + 1)
         );
+
+        // These are modeled observations, not physical allocation requests.
+        work.steps.charge(Observation::exact(u64::MAX)).unwrap();
+        work.bytes.charge(Observation::exact(u64::MAX)).unwrap();
+        work.step().unwrap();
+        work.reserve::<u8>(1).unwrap();
+        assert!(work.steps.observation().saturated && work.bytes.observation().saturated);
+        assert_eq!(
+            (work.steps.remaining(), work.bytes.remaining()),
+            (None, None)
+        );
+        let before = work.bytes;
+        assert!(!work.try_reserve::<u64>(usize::MAX));
+        assert_eq!(work.bytes, before);
+
+        let cancelled = crate::platform::execution::ExecutionControl::cancel_after_checks(0);
+        work.control = &cancelled;
+        let before = (work.steps, work.bytes);
+        assert_eq!(work.step().unwrap_err().class, DiagnosticClass::Cancelled);
+        assert_eq!((work.steps, work.bytes), before);
     }
 }

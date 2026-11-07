@@ -27,13 +27,7 @@ fn nominal_owner_round_trips_and_foreign_header_rejects() {
     );
     record.set_encoding_for_edit(0);
     assert!(encode_owner(&record).is_err());
-    let forged = packed::encode_canonical(
-        OWNER_MAGIC,
-        OWNER_ENVELOPE_DOMAIN,
-        &record,
-        MAXIMUM_OWNER_OBJECT_BYTES,
-    )
-    .unwrap();
+    let forged = packed::linear::encode(OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN, &record, None).unwrap();
     assert_eq!(
         decode_owner(
             &forged,

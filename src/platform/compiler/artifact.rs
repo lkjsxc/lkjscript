@@ -63,12 +63,6 @@ pub(crate) const ARTIFACT_MANIFEST_ENVELOPE_DOMAIN: &str = "lkjscript.artifact-m
 pub(crate) const ARTIFACT_BUNDLE_DIGEST_DOMAIN: &str = "lkjscript.artifact-bundle";
 pub(crate) const ARTIFACT_BUNDLE_CHECKSUM_DOMAIN: &str = "lkjscript.artifact-bundle.complete";
 pub(crate) const ARTIFACT_CLOSURE_DIGEST_DOMAIN: &str = "lkjscript.artifact-object-closure";
-pub(crate) const MAXIMUM_ARTIFACT_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
-pub(crate) const MAXIMUM_ARTIFACT_PACKAGES: usize = 10_000;
-pub(crate) const MAXIMUM_ARTIFACT_RUNTIME_OWNERS: usize = 1_000_000;
-pub(crate) const MAXIMUM_ARTIFACT_REFERENCE_OWNERS: u64 = 1_000_000;
-pub(crate) const MAXIMUM_ARTIFACT_SEGMENTS: usize = 1_000_000;
-pub(crate) const MAXIMUM_ARTIFACT_BUNDLE_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 pub(crate) const TARGET_ARTIFACT_SEGMENT_BYTES: usize = 4 * 1024 * 1024;
 
 pub(crate) const BUNDLE_HEADER_BYTES: usize = 8 + 2 + 2 + 8 + 8 + 32;
@@ -167,11 +161,7 @@ impl<Context> Decode<Context> for ArtifactPackage {
             interface: PackageInterfaceDigest::decode(decoder)?,
             interface_owners: MapRoot::decode(decoder)?,
             compilation: CompilationManifestDigest::decode(decoder)?,
-            runtime_owners: decode_bounded_vec(
-                decoder,
-                MAXIMUM_ARTIFACT_RUNTIME_OWNERS,
-                "artifact runtime-owner count",
-            )?,
+            runtime_owners: crate::platform::packed::linear::decode_vec(decoder)?,
             reference_owners: MapRoot::decode(decoder)?,
         })
     }
@@ -200,11 +190,7 @@ impl<Context> Decode<Context> for ArtifactManifest {
             bytecode_contract_version: u16::decode(decoder)?,
             compilation_manifest_contract_version: u16::decode(decoder)?,
             root_package: PackageId::decode(decoder)?,
-            packages: decode_bounded_vec(
-                decoder,
-                MAXIMUM_ARTIFACT_PACKAGES,
-                "artifact package count",
-            )?,
+            packages: crate::platform::packed::linear::decode_vec(decoder)?,
             closure: ArtifactClosureDigest::decode(decoder)?,
             object_count: u64::decode(decoder)?,
             object_bytes: u64::decode(decoder)?,
@@ -212,31 +198,8 @@ impl<Context> Decode<Context> for ArtifactManifest {
     }
 }
 
-fn decode_bounded_vec<Context, T, D>(
-    decoder: &mut D,
-    maximum: usize,
-    label: &'static str,
-) -> Result<Vec<T>, DecodeError>
-where
-    T: Decode<Context>,
-    D: Decoder<Context = Context>,
-{
-    let encoded_length = u64::decode(decoder)?;
-    let length = usize::try_from(encoded_length)
-        .map_err(|_| DecodeError::OutsideUsizeRange(encoded_length))?;
-    if length > maximum {
-        return Err(DecodeError::OtherString(format!(
-            "{label} exceeds {maximum} before allocation"
-        )));
-    }
-    decoder.claim_container_read::<T>(length)?;
-    let mut values = Vec::with_capacity(length);
-    for _ in 0..length {
-        decoder.unclaim_bytes_read(std::mem::size_of::<T>());
-        values.push(T::decode(decoder)?);
-    }
-    Ok(values)
-}
+// All nested records are fixed-field except the two progressive vectors above.
+impl crate::platform::packed::linear::LinearDecode for ArtifactManifest {}
 
 const fn runtime_owner_kind(kind: OwnerKind) -> bool {
     matches!(
@@ -284,11 +247,11 @@ const fn reference_owner_kind(kind: OwnerKind) -> bool {
 impl ArtifactManifest {
     pub fn encode(&self) -> Result<(ArtifactManifestDigest, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let bytes = crate::platform::packed::encode_canonical(
+        let bytes = crate::platform::packed::linear::encode(
             ARTIFACT_MANIFEST_MAGIC,
             ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
             self,
-            MAXIMUM_ARTIFACT_MANIFEST_BYTES,
+            None,
         )?;
         let key = ObjectKey::for_bytes(ObjectDomain::ArtifactManifest, &bytes);
         Ok((
@@ -302,11 +265,11 @@ impl ArtifactManifest {
             .object_key()
             .verify(bytes)
             .map_err(store_diagnostic)?;
-        let manifest: Self = crate::platform::packed::decode_canonical(
+        let manifest: Self = crate::platform::packed::linear::decode_canonical(
             bytes,
             ARTIFACT_MANIFEST_MAGIC,
             ARTIFACT_MANIFEST_ENVELOPE_DOMAIN,
-            MAXIMUM_ARTIFACT_MANIFEST_BYTES,
+            None,
         )?;
         manifest.validate()?;
         Ok(manifest)
@@ -331,11 +294,11 @@ impl ArtifactManifest {
                 "artifact manifest uses a predecessor or foreign graph, compiler, or artifact contract",
             ));
         }
-        if self.packages.is_empty() || self.packages.len() > MAXIMUM_ARTIFACT_PACKAGES {
+        if self.packages.is_empty() {
             return Err(artifact_error(
-                DiagnosticClass::Resource,
+                DiagnosticClass::Corrupt,
                 "artifact_manifest_package_count",
-                "artifact manifest package count is outside the current implementation bound",
+                "artifact manifest requires its root package",
             ));
         }
         if self
@@ -354,16 +317,8 @@ impl ArtifactManifest {
             ));
         }
         for package in &self.packages {
-            if package.runtime_owners.len() > MAXIMUM_ARTIFACT_RUNTIME_OWNERS {
-                return Err(artifact_error(
-                    DiagnosticClass::Resource,
-                    "artifact_manifest_runtime_owner_count",
-                    "artifact package runtime-owner count exceeds the current implementation bound",
-                ));
-            }
             if package.repository_id.bytes() == [0; 16]
                 || package.package.bytes() == [0; 16]
-                || package.reference_owners.entries() > MAXIMUM_ARTIFACT_REFERENCE_OWNERS
                 || package
                     .runtime_owners
                     .windows(2)
@@ -719,8 +674,7 @@ pub struct EncodedArtifact {
 
 impl EncodedArtifact {
     pub(crate) fn into_admitted(self) -> Result<(Vec<u8>, LoadedArtifact), Diagnostic> {
-        if self.bytes.len() as u64 > MAXIMUM_ARTIFACT_BUNDLE_BYTES
-            || self.manifest != self.admitted.manifest
+        if self.manifest != self.admitted.manifest
             || self.manifest_digest != self.admitted.manifest_digest
             || self.bundle_digest != self.admitted.bundle_digest
             || self.segment_count != self.admitted.segment_count
@@ -757,45 +711,30 @@ pub(crate) fn encode_artifact(
     let segments = builder
         .seal_targeted(TARGET_ARTIFACT_SEGMENT_BYTES)
         .map_err(store_diagnostic)?;
-    if segments.is_empty() || segments.len() > MAXIMUM_ARTIFACT_SEGMENTS {
+    if segments.is_empty() {
         return Err(artifact_error(
-            DiagnosticClass::Resource,
+            DiagnosticClass::Corrupt,
             "artifact_bundle_segment_count",
-            "artifact segment count is outside the current implementation bound",
+            "artifact closure requires a nonempty segment inventory",
         ));
     }
-    let manifest_length = manifest_bytes.len() as u64;
-    let segment_count = segments.len() as u64;
-    let core_length = BUNDLE_HEADER_BYTES as u64
-        + manifest_length
-        + segments.iter().try_fold(0_u64, |total, segment| {
+    let manifest_length = encoded_length(manifest_bytes.len())?;
+    let segment_count = encoded_length(segments.len())?;
+    let header_and_manifest = (BUNDLE_HEADER_BYTES as u64)
+        .checked_add(manifest_length)
+        .ok_or_else(encoded_length_overflow)?;
+    let core_length = segments
+        .iter()
+        .try_fold(header_and_manifest, |total, segment| {
+            let length = encoded_length(segment.bytes.len())?;
             total
                 .checked_add(SEGMENT_HEADER_BYTES as u64)
-                .and_then(|value| value.checked_add(segment.bytes.len() as u64))
-                .ok_or_else(|| {
-                    artifact_error(
-                        DiagnosticClass::Resource,
-                        "artifact_bundle_length",
-                        "artifact bundle length overflows its contract domain",
-                    )
-                })
+                .and_then(|value| value.checked_add(length))
+                .ok_or_else(encoded_length_overflow)
         })?;
     let total_length = core_length
         .checked_add(BUNDLE_FOOTER_BYTES as u64)
-        .ok_or_else(|| {
-            artifact_error(
-                DiagnosticClass::Resource,
-                "artifact_bundle_length",
-                "artifact bundle length overflows its contract domain",
-            )
-        })?;
-    if total_length > MAXIMUM_ARTIFACT_BUNDLE_BYTES {
-        return Err(artifact_error(
-            DiagnosticClass::Resource,
-            "artifact_bundle_length",
-            "artifact bundle exceeds its current hostile decoder bound",
-        ));
-    }
+        .ok_or_else(encoded_length_overflow)?;
     let capacity = usize::try_from(total_length).map_err(|_| {
         artifact_error(
             DiagnosticClass::Resource,
@@ -803,7 +742,14 @@ pub(crate) fn encode_artifact(
             "artifact bundle length does not fit this platform",
         )
     })?;
-    let mut bytes = Vec::with_capacity(capacity);
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(capacity).map_err(|_| {
+        artifact_error(
+            DiagnosticClass::Resource,
+            "artifact_bundle_allocation",
+            "cannot allocate the encoded artifact bundle",
+        )
+    })?;
     bytes.extend_from_slice(&ARTIFACT_BUNDLE_MAGIC);
     bytes.extend_from_slice(&crate::platform::canonical_schema::SCHEMA_EPOCH.to_le_bytes());
     bytes.extend_from_slice(&0_u16.to_be_bytes());
@@ -812,11 +758,11 @@ pub(crate) fn encode_artifact(
     bytes.extend_from_slice(&manifest_digest.bytes());
     bytes.extend_from_slice(&manifest_bytes);
     for segment in &segments {
-        bytes.extend_from_slice(&(segment.bytes.len() as u64).to_be_bytes());
+        bytes.extend_from_slice(&encoded_length(segment.bytes.len())?.to_be_bytes());
         bytes.extend_from_slice(&segment.id.bytes());
         bytes.extend_from_slice(&segment.bytes);
     }
-    if bytes.len() as u64 != core_length {
+    if encoded_length(bytes.len())? != core_length {
         return Err(artifact_error(
             DiagnosticClass::Infrastructure,
             "artifact_bundle_encode_length",
@@ -849,15 +795,27 @@ pub(crate) fn encode_artifact(
     })
 }
 
-pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
-    if bytes.len() as u64 > MAXIMUM_ARTIFACT_BUNDLE_BYTES
-        || bytes.len() < BUNDLE_HEADER_BYTES + BUNDLE_FOOTER_BYTES
-    {
-        return Err(artifact_error(
+fn encoded_length(length: usize) -> Result<u64, Diagnostic> {
+    u64::try_from(length).map_err(|_| {
+        artifact_error(
             DiagnosticClass::Resource,
             "artifact_bundle_length",
-            "artifact bundle byte length is outside its hostile decoder bound",
-        ));
+            "artifact length does not fit its wire representation",
+        )
+    })
+}
+
+fn encoded_length_overflow() -> Diagnostic {
+    artifact_error(
+        DiagnosticClass::Resource,
+        "artifact_bundle_length",
+        "artifact bundle length overflows its wire representation",
+    )
+}
+
+pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
+    if bytes.len() < BUNDLE_HEADER_BYTES + BUNDLE_FOOTER_BYTES {
+        return Err(bundle_truncated("artifact_bundle_length"));
     }
     if bytes.get(..8) != Some(ARTIFACT_BUNDLE_MAGIC.as_slice()) {
         return Err(artifact_error(
@@ -887,23 +845,15 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
         read_u64(bytes, 12, "artifact_bundle_manifest_length")?,
         "artifact_bundle_manifest_length",
     )?;
-    if manifest_length == 0 || manifest_length > MAXIMUM_ARTIFACT_MANIFEST_BYTES {
-        return Err(artifact_error(
-            DiagnosticClass::Resource,
-            "artifact_bundle_manifest_length",
-            "artifact manifest length is outside its hostile decoder bound",
-        ));
+    if manifest_length == 0 {
+        return Err(bundle_truncated("artifact_bundle_manifest_length"));
     }
     let segment_count = usize_from_u64(
         read_u64(bytes, 20, "artifact_bundle_segment_count")?,
         "artifact_bundle_segment_count",
     )?;
-    if segment_count == 0 || segment_count > MAXIMUM_ARTIFACT_SEGMENTS {
-        return Err(artifact_error(
-            DiagnosticClass::Resource,
-            "artifact_bundle_segment_count",
-            "artifact segment count is outside its hostile decoder bound",
-        ));
+    if segment_count == 0 {
+        return Err(bundle_truncated("artifact_bundle_segment_count"));
     }
     let manifest_digest = ArtifactManifestDigest::from_bytes(read_array::<32>(
         bytes,
@@ -919,6 +869,9 @@ pub fn load_artifact(bytes: &[u8]) -> Result<LoadedArtifact, Diagnostic> {
         .ok_or_else(|| bundle_overflow("artifact_bundle_footer"))?;
     if manifest_end > footer_start {
         return Err(bundle_truncated("artifact_bundle_manifest_bounds"));
+    }
+    if segment_count > (footer_start - manifest_end) / SEGMENT_HEADER_BYTES {
+        return Err(bundle_truncated("artifact_bundle_segment_count"));
     }
     let manifest =
         ArtifactManifest::decode(&bytes[BUNDLE_HEADER_BYTES..manifest_end], manifest_digest)?;
@@ -1043,16 +996,13 @@ fn admission_binding(
     let mut visited = 0_u64;
     for (key, bytes) in objects {
         checkpoint()?;
-        visited = visited
-            .checked_add(bytes.len() as u64)
-            .filter(|count| *count <= MAXIMUM_ARTIFACT_BUNDLE_BYTES)
-            .ok_or_else(|| {
-                artifact_error(
-                    DiagnosticClass::Resource,
-                    "artifact_admission_bytes",
-                    "current artifact admission exceeds its checked byte bound",
-                )
-            })?;
+        visited = visited.checked_add(bytes.len() as u64).ok_or_else(|| {
+            artifact_error(
+                DiagnosticClass::Resource,
+                "artifact_admission_bytes",
+                "current artifact admission byte count overflows its representation",
+            )
+        })?;
         hasher.update(&[key.domain.tag()]);
         hasher.update(&key.digest.bytes());
         hasher.update(&(bytes.len() as u64).to_be_bytes());
@@ -1570,26 +1520,12 @@ pub(crate) fn runtime_owner_expectations(
         if let CompilationPayload::OwnedImplementation(implementation) = &unit.payload {
             for method in &implementation.methods {
                 inventory_step()?;
-                if method_targets.len() >= MAXIMUM_ARTIFACT_RUNTIME_OWNERS {
-                    return Err(artifact_error(
-                        DiagnosticClass::Resource,
-                        "artifact_owned_contract_work",
-                        "static method inventory exceeds artifact proof admission",
-                    ));
-                }
                 method_targets.insert(method.function);
             }
         }
     }
     let mut expected = BTreeMap::new();
-    let mut current_package = None;
-    let mut current_package_count = 0_usize;
     for ((package, owner), unit) in units {
-        if current_package != Some(*package) {
-            current_package = Some(*package);
-            current_package_count = 0;
-        }
-        let before = expected.len();
         for reference in &unit.tables.requirements {
             insert_runtime_expectation(
                 &mut expected,
@@ -2061,22 +1997,6 @@ pub(crate) fn runtime_owner_expectations(
                 }
             }
             CompilationPayload::Constant { .. } | CompilationPayload::Test { .. } => {}
-        }
-        current_package_count = current_package_count
-            .checked_add(expected.len().saturating_sub(before))
-            .ok_or_else(|| {
-                artifact_error(
-                    DiagnosticClass::Resource,
-                    "artifact_runtime_owner_count",
-                    "runtime-owner expectation count overflowed its platform domain",
-                )
-            })?;
-        if current_package_count > MAXIMUM_ARTIFACT_RUNTIME_OWNERS {
-            return Err(artifact_error(
-                DiagnosticClass::Resource,
-                "artifact_runtime_owner_count",
-                "compiler units require more runtime owners than the artifact contract permits",
-            ));
         }
     }
     validate_artifact_http_route_contracts(units, &expected)?;
@@ -4660,14 +4580,13 @@ fn validate_reference_owners(
             continue;
         }
         let count = package_counts.entry(package).or_default();
-        *count = count.saturating_add(1);
-        if *count > MAXIMUM_ARTIFACT_REFERENCE_OWNERS {
-            return Err(artifact_error(
+        *count = count.checked_add(1).ok_or_else(|| {
+            artifact_error(
                 DiagnosticClass::Resource,
                 "artifact_reference_owner_count",
-                "reference-execution closure exceeds its per-package owner bound",
-            ));
-        }
+                "reference-execution inventory count overflows its wire representation",
+            )
+        })?;
         let record = records.get(&key).ok_or_else(|| {
             artifact_error(
                 DiagnosticClass::Corrupt,

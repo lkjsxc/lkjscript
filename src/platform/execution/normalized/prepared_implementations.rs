@@ -1410,7 +1410,10 @@ pub(super) fn close(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::execution::normalized::tests::owned_implementation_scheme_tests::duplicate_dag_fixture;
+    use crate::platform::execution::normalized::{
+        prepare::NormalizedPreparationLimits,
+        tests::owned_implementation_scheme_tests::duplicate_dag_fixture,
+    };
 
     fn standard() -> NormalizedProgram {
         let artifact = crate::platform::compiler::load_artifact(include_bytes!(
@@ -1429,22 +1432,26 @@ mod tests {
             if cancelled {
                 control.cancel();
             }
-            let mut work = Budget {
-                steps: MAXIMUM_WORK - 1,
-                bytes: 0,
-                control: &control,
-                type_lookup: type_lookup::TypeLookupBuilder::default(),
-            };
+            let mut work = Budget::with_limits(
+                &control,
+                NormalizedPreparationLimits {
+                    maximum_type_derivation_steps: Some(1),
+                    ..Default::default()
+                },
+            );
             let error =
                 close(&mut program, &BTreeMap::new(), &BTreeMap::new(), &mut work).unwrap_err();
             if cancelled {
                 assert_eq!(error.class, DiagnosticClass::Cancelled);
-                assert_eq!(work.steps, MAXIMUM_WORK - 1);
+                assert_eq!(work.steps.observation().consumed, 0);
             } else {
+                assert_eq!(error.class, DiagnosticClass::Resource);
                 assert_eq!(error.code, "normalized_instantiation_work");
-                assert_eq!(work.steps, MAXIMUM_WORK);
+                assert_eq!(work.steps.observation().consumed, 1);
             }
-            assert_eq!(work.bytes, 0);
+            assert_eq!(work.bytes.observation().consumed, 0);
+            assert!(!work.steps.observation().saturated);
+            assert!(!work.bytes.observation().saturated);
             assert!(Arc::ptr_eq(&base.functions, &program.functions));
             assert!(Arc::ptr_eq(&base.ports, &program.ports));
         }
@@ -1523,7 +1530,7 @@ mod tests {
                     requires_specialization(&program, &mut work).unwrap(),
                     "root {root}"
                 );
-                assert_eq!(work.bytes, 0);
+                assert_eq!(work.bytes.observation().consumed, 0);
             }
         }
         for selected in [false, true] {
@@ -1571,12 +1578,13 @@ mod tests {
         let mut work = Budget::new(&control);
         close(&mut program, &BTreeMap::new(), &BTreeMap::new(), &mut work).unwrap();
         assert_eq!(
-            work.bytes, 0,
+            work.bytes.observation().consumed,
+            0,
             "absence must not allocate specialization state"
         );
         assert!(
-            work.steps > 0,
-            "absence must be established by bounded reads"
+            work.steps.observation().consumed > 0,
+            "absence must inspect its input"
         );
         assert!(Arc::ptr_eq(&before.functions, &program.functions));
         assert!(Arc::ptr_eq(&before.ports, &program.ports));
@@ -1743,8 +1751,10 @@ mod tests {
         }
         assert_eq!(closing.witnesses.len(), 25);
         assert_eq!(closing.normalized.len(), 25);
-        assert!(closing.work.steps < 4096);
-        assert!(closing.work.bytes < 128 * 1024);
+        assert!(closing.work.steps.observation().consumed < 4096);
+        assert!(closing.work.bytes.observation().consumed < 128 * 1024);
+        assert!(!closing.work.steps.observation().saturated);
+        assert!(!closing.work.bytes.observation().saturated);
 
         let changed = ImplementationOperand::Concrete {
             implementation: both,

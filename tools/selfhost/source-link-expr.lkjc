@@ -91,7 +91,7 @@ declarations.begin
             (i64 17))
           (if
             (call ci::eq (local op) (i64 9))
-            (call source-link-ref::array (local graph) (local data) (i64 38) (i64 9) (i64 17))
+            (call source-link-ref::sequence (local graph) (local data) (i64 38))
             (if
               (call ci::eq (local op) (i64 10))
               (call call-value (local graph) (local data) (i64 1))
@@ -114,12 +114,7 @@ declarations.begin
                       (call source-link-ref::array
                         (local graph)
                         (local data)
-                        (call source-link-ref::optional
-                          (local graph)
-                          (local data)
-                          (i64 38)
-                          (i64 -2)
-                          (i64 2))
+                        (call source-link-ref::optional (local graph) (local data) (i64 38) (i64 -2) (i64 2))
                         (i64 0)
                         (i64 0))
                       (i64 1))

@@ -26,7 +26,7 @@ use super::change::{
     AuthoredChange, AuthoredChangeSet, BoundOwnerSummary, DeclarationSelector, ModuleSelector,
     OwnerSelector,
 };
-use super::compiler::{MAXIMUM_ARTIFACT_BUNDLE_BYTES, build_incremental, load_current_compilation};
+use super::compiler::{build_incremental, load_current_compilation};
 use super::contract::{
     CapabilitiesSnapshot, FUNCTION_DEFINITION_CONTINUATION_INTEGRITY_DOMAIN,
     FUNCTION_DEFINITION_CONTINUATION_MAGIC_TEXT, FUNCTION_DEFINITION_DEFAULT_ITEMS,
@@ -747,7 +747,7 @@ pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
             None,
         )
     } else if let Some(template) = template {
-        let snapshot = template.publish(&prepared, maximum_artifact_output_bytes()?)?;
+        let snapshot = template.publish(&prepared, None)?;
         (snapshot.artifact.clone(), Some(snapshot))
     } else {
         let output_path = output_path.ok_or_else(|| usage_error("build requires --output"))?;
@@ -755,7 +755,7 @@ pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
             publish_create_new(
                 Path::new(&output_path),
                 &prepared.artifact_bytes,
-                Some(maximum_artifact_output_bytes()?),
+                None,
                 "normalized graph artifact",
             )?,
             None,
@@ -817,19 +817,6 @@ pub fn execute_build(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
         )?;
     }
     Ok(output.finish())
-}
-
-fn maximum_artifact_output_bytes() -> Result<usize, Diagnostic> {
-    usize::try_from(MAXIMUM_ARTIFACT_BUNDLE_BYTES)
-        .ok()
-        .and_then(|maximum| maximum.checked_add(50))
-        .ok_or_else(|| {
-            Diagnostic::new(
-                DiagnosticClass::Resource,
-                "artifact_output_limit",
-                "artifact output limit is not representable on this platform",
-            )
-        })
 }
 
 pub struct ForegroundRunOptions {
@@ -1424,16 +1411,32 @@ fn source_run_receipt_output(
             run.production.type_derivation_steps.to_string(),
         ),
         (
+            "production-type-derivation-saturated",
+            run.production.type_derivation_saturated.to_string(),
+        ),
+        (
             "production-type-metadata-bytes",
             run.production.type_metadata_bytes.to_string(),
+        ),
+        (
+            "production-type-metadata-saturated",
+            run.production.type_metadata_saturated.to_string(),
         ),
         (
             "reference-type-derivation-steps",
             run.reference.type_derivation_steps.to_string(),
         ),
         (
+            "reference-type-derivation-saturated",
+            run.reference.type_derivation_saturated.to_string(),
+        ),
+        (
             "reference-type-metadata-bytes",
             run.reference.type_metadata_bytes.to_string(),
+        ),
+        (
+            "reference-type-metadata-saturated",
+            run.reference.type_metadata_saturated.to_string(),
         ),
         (
             "production-collection-items",
@@ -1666,7 +1669,7 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
             let publication = publish_create_new(
                 Path::new(&path),
                 &exported.container,
-                Some(crate::platform::package_transport::source::MAXIMUM_CONTAINER_BYTES),
+                None,
                 "current package source container",
             )?;
             let mut output = compact_response_writer()?;
@@ -1728,11 +1731,7 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
                 .parse::<PackageTransportDigest>()
                 .map_err(|error| direct_option_error("--transport", error))?;
             let path = required_option(&arguments[3..], "--input-file")?;
-            let pack = read_bounded(
-                Path::new(&path),
-                crate::platform::package_transport::source::MAXIMUM_CONTAINER_BYTES,
-                "package source container",
-            )?;
+            let pack = read_with_limit(Path::new(&path), None, "package source container")?;
             let repository = open_normalized_repository(project)?;
             let receipt = repository.stage_package_transport(digest, &pack)?;
             let mut output = compact_response_writer()?;
@@ -1988,15 +1987,13 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
             ensure_options(&arguments[3..], &["--kind", "--output"], &[])?;
             let kind = required_option(&arguments[3..], "--kind")?;
             let path = required_option(&arguments[3..], "--output")?;
-            let (bytes, maximum, digest) = match kind.as_str() {
+            let (bytes, digest) = match kind.as_str() {
                 "transport" => (
                     standard.transport_bytes(),
-                    maximum_artifact_output_bytes()?,
                     standard.package_transport.to_string(),
                 ),
                 "artifact" => (
                     standard.artifact_bytes(),
-                    maximum_artifact_output_bytes()?,
                     standard.artifact.bundle_digest.to_string(),
                 ),
                 _ => {
@@ -2005,12 +2002,8 @@ pub fn execute_package_builtin(arguments: Vec<String>) -> Result<Vec<u8>, Diagno
                     ));
                 }
             };
-            let publication = publish_create_new(
-                Path::new(&path),
-                bytes,
-                Some(maximum),
-                "built-in standard asset",
-            )?;
+            let publication =
+                publish_create_new(Path::new(&path), bytes, None, "built-in standard asset")?;
             append_compact_record(
                 &mut output,
                 "output",
@@ -10102,9 +10095,11 @@ fn read_with_limit(
     let mut remaining = maximum;
     let mut chunk = [0_u8; 65_536];
     loop {
-        let count = file
-            .read(&mut chunk)
-            .map_err(|error| io_error("read_bytes", path, error))?;
+        let count = match file.read(&mut chunk) {
+            Ok(count) => count,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(io_error("read_bytes", path, error)),
+        };
         if count == 0 {
             return Ok(bytes);
         }

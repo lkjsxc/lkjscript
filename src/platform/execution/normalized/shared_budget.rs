@@ -1,6 +1,7 @@
 //! Invocation-wide cumulative admission shared by structured children.
 //! Local observations remain local; successful reservations are never refunded.
 use super::vm::NormalizedRunPolicy;
+use crate::platform::admission::Observation;
 use crate::platform::execution::{ExecutionError, finite_charge};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -57,6 +58,21 @@ impl SharedBudget {
         Ok(())
     }
 
+    /// Modeled preparation bytes may be a saturated lower bound. They never
+    /// authorize an exact finite reservation, including a full-u64 allowance.
+    pub(super) fn reserve_observed_allocation(
+        &self,
+        bytes: Observation,
+    ) -> Result<(), ExecutionError> {
+        if bytes.saturated && self.maximum_bytes.is_some() {
+            return Err(ExecutionError::resource(
+                "normalized_allocation",
+                "structured invocation cannot fit saturated preparation storage into its finite allocation quota",
+            ));
+        }
+        self.reserve(bytes.consumed, 0)
+    }
+
     /// Check both ledgers before changing either, including map-node reservations.
     pub(super) fn reserve(&self, bytes: u64, items: u64) -> Result<(), ExecutionError> {
         // Limits cannot change during an invocation. Observations are maintained
@@ -109,7 +125,15 @@ mod tests {
         std::thread::scope(|scope| {
             let (sender, receiver) = std::sync::mpsc::sync_channel(1);
             let budget = &budget;
-            scope.spawn(move || sender.send(budget.reserve(u64::MAX, u64::MAX)).unwrap());
+            scope.spawn(move || {
+                let result = budget.reserve(u64::MAX, u64::MAX).and_then(|()| {
+                    budget.reserve_observed_allocation(Observation {
+                        consumed: u64::MAX,
+                        saturated: true,
+                    })
+                });
+                sender.send(result).unwrap();
+            });
             let result = receiver.recv_timeout(std::time::Duration::from_secs(5));
             // Release before asserting, so a regression cannot deadlock scope join.
             drop(held);

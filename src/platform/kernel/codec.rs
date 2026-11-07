@@ -4,10 +4,9 @@
 
 use super::contract::{
     DEPENDENCY_ENVELOPE_DOMAIN, DEPENDENCY_MAGIC, MAXIMUM_DEPENDENCY_BYTES,
-    MAXIMUM_OWNER_OBJECT_BYTES, MAXIMUM_RETIREMENT_BYTES, MAXIMUM_ROOT_BYTES,
-    MAXIMUM_TYPE_OBJECT_BYTES, OWNER_ENVELOPE_DOMAIN, OWNER_MAGIC, RETIREMENT_ENVELOPE_DOMAIN,
-    RETIREMENT_MAGIC, ROOT_ENVELOPE_DOMAIN, ROOT_MAGIC, TYPE_OBJECT_ENVELOPE_DOMAIN,
-    TYPE_OBJECT_MAGIC,
+    MAXIMUM_RETIREMENT_BYTES, MAXIMUM_ROOT_BYTES, MAXIMUM_TYPE_OBJECT_BYTES, OWNER_ENVELOPE_DOMAIN,
+    OWNER_MAGIC, RETIREMENT_ENVELOPE_DOMAIN, RETIREMENT_MAGIC, ROOT_ENVELOPE_DOMAIN, ROOT_MAGIC,
+    TYPE_OBJECT_ENVELOPE_DOMAIN, TYPE_OBJECT_MAGIC,
 };
 use super::digest::{
     DependencyObjectDigest, OwnerObjectDigest, RetirementObjectDigest, SemanticRootDigest,
@@ -21,6 +20,8 @@ use super::root::{
 use super::type_object::TypeObject;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::packed;
+
+mod linear;
 
 pub const OWNER_BINDING_BYTES: usize = 33;
 pub const DEPENDENCY_BINDING_BYTES: usize = 32;
@@ -262,13 +263,8 @@ mod shareable_encoding_tests {
                 encode_owner(&record).unwrap_err().code,
                 "kernel_owner_header"
             );
-            let forged = packed::encode_canonical(
-                OWNER_MAGIC,
-                OWNER_ENVELOPE_DOMAIN,
-                &record,
-                MAXIMUM_OWNER_OBJECT_BYTES,
-            )
-            .unwrap();
+            let forged =
+                packed::linear::encode(OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN, &record, None).unwrap();
             assert_eq!(
                 decode_owner(
                     &forged,
@@ -364,13 +360,8 @@ mod borrowed_result_encoding_tests {
         f.result.relation = crate::platform::kernel::ResultRelation::ReadFrom {
             source: ParameterId::migrate(b"foreign-source", 0),
         };
-        let bytes = packed::encode_canonical(
-            OWNER_MAGIC,
-            OWNER_ENVELOPE_DOMAIN,
-            &invalid,
-            MAXIMUM_OWNER_OBJECT_BYTES,
-        )
-        .unwrap();
+        let bytes =
+            packed::linear::encode(OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN, &invalid, None).unwrap();
         let error = decode_owner(
             &bytes,
             invalid.owner(),
@@ -1038,12 +1029,7 @@ pub fn decode_retirement_binding(bytes: &[u8]) -> Result<RetirementBinding, Diag
 
 pub fn encode_owner(record: &OwnerRecord) -> Result<(OwnerObjectDigest, Vec<u8>), Diagnostic> {
     record.validate_local()?;
-    let bytes = packed::encode_canonical(
-        OWNER_MAGIC,
-        OWNER_ENVELOPE_DOMAIN,
-        record,
-        MAXIMUM_OWNER_OBJECT_BYTES,
-    )?;
+    let bytes = packed::linear::encode(OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN, record, None)?;
     Ok((OwnerObjectDigest::of(&bytes), bytes))
 }
 
@@ -1058,12 +1044,8 @@ pub fn decode_owner(
         OwnerObjectDigest::of(bytes).bytes(),
         "owner",
     )?;
-    let record: OwnerRecord = packed::decode_canonical(
-        bytes,
-        OWNER_MAGIC,
-        OWNER_ENVELOPE_DOMAIN,
-        MAXIMUM_OWNER_OBJECT_BYTES,
-    )?;
+    let linear::LinearOwner(record) =
+        packed::linear::decode_canonical(bytes, OWNER_MAGIC, OWNER_ENVELOPE_DOMAIN, None)?;
     record.validate_local()?;
     if record.owner() != expected_owner || record.kind() != expected_kind {
         return Err(codec_error(

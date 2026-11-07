@@ -1,6 +1,6 @@
 # Current status
 
-Updated 2026-11-05 (Asia/Tokyo). Accepted typed meaning is the sole editable
+Updated 2026-11-07 (Asia/Tokyo); wide-Sequence candidate evidence snapshot. Accepted typed meaning is the sole editable
 program authority; maintained source proposals are adopted through public transactions.
 
 ## Current delivery boundary
@@ -43,9 +43,9 @@ graph activations and expression continuations on the heap, with exact custody,
 call-depth/tail accounting, cancellation and modeled allocation obligations.
 This does not make every reference route or generated native CALL stack unbounded.
 
-## Compiler graph and delivery
+## Accepted nominal graph and delivery
 
-| Identity | Current implementation |
+| Identity | Accepted nominal implementation |
 | --- | --- |
 | Implementation / corrected tree | `6bf7559a` / `25b21080` |
 | Mainline delivery | Fast-forwarded into `origin/main` at `6bf7559a` |
@@ -94,12 +94,42 @@ The 8193-prefix crossing retains its explicit 32 GiB process allowance.
 Its largest unit remains below the separate 4 MiB object and 8 MiB unit-codec
 ceilings; it does not establish those capacity removals.
 
+## Wide Sequence candidate
+
+The current candidate includes both publicly adopted cursor and discard-key
+changes: 81,456 live owners, 97 supplied types and 61,339 retirements; complete
+carrier 26,611,855 bytes. The [decision](decisions/20261107-wide-sequence-capacity.md)
+binds each completed control. Mainline acceptance remains the nominal delivery.
+
+The second same-binary pair passed six fixtures/twelve identical output pairs.
+All six ELF observations were lower; artifact observations were equal or higher.
+Historical host results record 29 passes with path-only provenance. Four custody
+controls and C1/C2 100,001-child pilots retain complete bindings; the pilots passed
+both outputs, independent execution and 17 phase frames.
+The C2 pilot genuinely generated C2/C3 from complete public source and passed its
+terminal source audit. These pilots crossed only the old child-count ceiling.
+
+The candidate also removes package-source container byte/object, generic map-entry
+and link read-set defaults through public export/stage consumers. Exact optional
+decoder/read/work allowances and independent package/topology bounds remain.
+The corrected source path passed 72 focused controls, including the actual
+>256 MiB container/collector crossing. The candidate now also gives normalized
+preparation independent optional work/metadata allowances, with None defaults,
+semantic finite-closure proof and exact local/shared VM attachment.
+The retained 82 preparation controls and in-memory 1,000,001-item component
+passed, with 644,003,269 modeled metadata bytes, 19,000,062 derivation steps,
+strict loading, VM/reference/C0 result 42 and cleanup. Current phase controls
+passed three selections across five processes and 109 frames. The fresh disk/C2
+million-item witness also passed both outputs, exact host artifact agreement,
+VM/reference/C0/C2 result 42 and 17 recovery frames. These results retain separate
+source/image bindings. Maintained artifact equations and final acceptance remain pending.
+
 ## Remaining work
 
-Selected next action: remove wide Sequence count/framing gates together with the
-scalar and artifact cursors’ repeated whole-parent copies. Public-transaction
-admission and owner/unit envelope crossing remain unverified; no new capacity
-closure is claimed.
+Selected next action: complete maintained raw native/artifact equations, generate
+and verify guides, then run the frozen bootstrap/literal/named/fresh-full/release
+seal and integrate its exact accepted tree. Public disk GraphRepository authoring
+is exercised; CLI file-input capacity requires its own executed proof.
 
 The same-binary 64-block helper pair reduced If/Jump VM instructions from 2,171,227
 to 447,208, while the straight control rose from 146,587 to 272,159 (+85.7%) and
@@ -117,8 +147,9 @@ Clone admission remains depth 256;
 structural type/AST/identity, owned-storage escape and codec paths retain separate
 bounds. Default call/value-stack policies, broader reference routes and native
 CALL growth are unchanged. Owned-record layout preparation retains its 64 MiB
-cumulative metadata default and depth-256 guard. Canonical unit/object envelopes,
-source/IR coordinates and storage/data/queue/HTTP/dev-tool families remain separate work.
+cumulative metadata default and depth-256 guard. The candidate seal remains pending. Separate 10,000-package/
+readiness and 100,000-edge limits, untouched object domains, source/IR coordinates
+and storage/data/queue/HTTP/dev-tool families remain open.
 
 The accepted [native phase ABI](spec/native-phases.md) promotes the complete Bytes
 result into a separate output context before scratch disposal. Arbitrary-value

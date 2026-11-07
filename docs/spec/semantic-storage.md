@@ -275,6 +275,29 @@ editable repositories. The strict uncompressed container carries exactly one cur
 closure, including private implementations and current retirements, without historical bodies,
 operational data, grants, host paths, compiler caches, or executable units.
 
+The [wide-Sequence candidate](../decisions/20261107-wide-sequence-capacity.md) removes
+default container byte/distinct-object and generic map-entry quotas through container
+encoding, decoding, collection, public export/stage I/O and link read-set metadata.
+This shared source reader also participates in ordinary candidate publication with
+no imported packages. Complete owner/callable proof, exact read sets and canonical
+availability remain mandatory. Acceptance and maintained equations are recorded
+separately in the linked wide-Sequence decision.
+
+PackageContainer::decode uses unbounded decoder allowances. Its normal
+decode_with_limits entry accepts independent Option<u64> byte/package/object limits:
+None is unbounded, while Some(0), Some(n) and Some(u64::MAX) are exact finite values.
+No maximum-valued sentinel or clamping is used. The separate package/readiness
+10,000-count and dependency-edge 100,000 limits remain, as do untouched per-object
+domain bounds; this is not a blanket package-topology capacity change.
+
+Container header/selection extents and wire count/length conversions use checked
+arithmetic. Before allocating inventory, the decoder establishes that all declared
+selection records and object headers fit the remaining input, then verifies each
+actual object extent, domain, digest and strict key order. Flat vector growth and
+byte copies reserve fallibly. Generic map results grow from checked returned entries,
+never an untrusted declared root count, and require exact final count agreement.
+The wire layout, canonical bytes, root membership and trailing-data checks are unchanged.
+
 Staging fully reconstructs and validates the entire container before installation, synchronizes
 immutable material, verifies its installed bytes, and exposes one complete readiness inventory.
 The input read, interface and semantic validation, existing-object comparison, and durable readback
@@ -309,6 +332,34 @@ alter semantic `HEAD`.
 An accepted semantic publication may be followed by incremental cache maintenance using its
 in-memory prepared compiler impact. Authority publication is already complete. Cache failure is a
 separate derived observation and cannot cause semantic rollback or a failed-write report.
+
+### Normalized executable preparation
+
+The [wide-Sequence candidate](../decisions/20261107-wide-sequence-capacity.md)
+keeps strict artifact admission before constructing executable derived state.
+NormalizedPreparationLimits provides independent optional u64 derivation-work
+and modeled-metadata allowances. Ordinary preparation selects None for both;
+Some(0), Some(n) and Some(u64::MAX) retain exact finite meanings. One pair of
+ledgers spans signature validation, concrete closure and code sharing. Callable
+constructor-flow SCC rejection and finite closed-effect specialization remain
+semantic requirements independently of cumulative work permission.
+
+Modeled preparation totals have explicit saturation flags and are distinct from
+physical bytes, current RSS and permission. VM attachment stages local and shared
+finite allocation checks atomically; a saturated lower bound cannot authorize a
+finite byte request. Unbounded bytes do not erase collection limits. Physical
+instruction, continuation and tail-call graph vectors reserve fallibly with
+checked extents. None of this changes repository authority or artifact bytes.
+
+The immutable builtin uses a separate bounded exact retention admission. Its
+retained-size calculation rejects saturated metadata as insufficient proof of
+that finite bound. It is not an uncached fallback and is not made unbounded here.
+The historical public in-memory million-item preparation control passed with
+644,003,269 modeled metadata bytes and 19,000,062 derivation steps, strict
+loading, VM/reference/C0 result 42 and cleanup. Its original source/image binding
+remains separate from later phase-harness changes. Fresh build-15 disk/C2 recovery
+passed under its own source/image binding. Acceptance and maintained equations
+are recorded separately in the linked wide-Sequence decision.
 
 ## External artifact output
 

@@ -331,7 +331,9 @@ impl Budget<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::execution::ExecutionControl;
+    use crate::platform::execution::{
+        ExecutionControl, normalized::prepare::NormalizedPreparationLimits,
+    };
 
     fn node_bytes<T>() -> usize {
         std::mem::size_of::<T>() + 3 * std::mem::size_of::<usize>()
@@ -407,22 +409,30 @@ mod tests {
             + node_bytes::<(Bindings, ResolvedTypes)>()
             + node_bytes::<(TypeParameterId, TypeObjectDigest)>()
             + node_bytes::<(TypeObjectDigest, TypeObjectDigest)>();
+        let required = u64::try_from(required).unwrap();
         let control = ExecutionControl::uncancelled();
         let cancelled = ExecutionControl::cancel_after_checks(0);
         for short in [false, true] {
-            let mut work = Budget::new(&control);
-            work.bytes = MAXIMUM_METADATA_BYTES - required + usize::from(short);
+            let mut work = Budget::with_limits(
+                &control,
+                NormalizedPreparationLimits {
+                    maximum_type_metadata_bytes: Some(required - u64::from(short)),
+                    ..Default::default()
+                },
+            );
             let outcome =
                 work.remember_application_substitution(function, template, result, &bindings);
+            assert!(!work.bytes.observation().saturated);
             if short {
                 assert_eq!(outcome.unwrap_err().class, DiagnosticClass::Resource);
                 assert!(work.type_lookup.applications.is_empty());
             } else {
                 outcome.unwrap();
-                assert_eq!(work.bytes, MAXIMUM_METADATA_BYTES);
+                assert_eq!(work.bytes.observation().consumed, required);
+                assert_eq!(work.bytes.remaining(), Some(0));
                 work.remember_application_substitution(function, template, result, &bindings)
                     .unwrap();
-                assert_eq!(work.bytes, MAXIMUM_METADATA_BYTES);
+                assert_eq!(work.bytes.observation().consumed, required);
                 assert!(
                     work.remember_application_substitution(function, template, template, &bindings)
                         .is_err()
@@ -470,12 +480,19 @@ mod tests {
         let required = node_bytes::<(Bindings, ResolvedTypes)>()
             + context.len() * node_bytes::<(TypeParameterId, TypeObjectDigest)>()
             + node_bytes::<(TypeObjectDigest, TypeObjectDigest)>();
+        let required = u64::try_from(required).unwrap();
         let control = ExecutionControl::uncancelled();
         for short in [false, true] {
-            let mut work = Budget::new(&control);
-            work.bytes = MAXIMUM_METADATA_BYTES - required + usize::from(short);
-            let before = work.bytes;
+            let mut work = Budget::with_limits(
+                &control,
+                NormalizedPreparationLimits {
+                    maximum_type_metadata_bytes: Some(required - u64::from(short)),
+                    ..Default::default()
+                },
+            );
+            let before = work.bytes.observation().consumed;
             let outcome = work.remember_type_substitution(template, result, &context);
+            assert!(!work.bytes.observation().saturated);
             if short {
                 assert_eq!(
                     outcome.unwrap_err().code,
@@ -484,13 +501,14 @@ mod tests {
                 assert!(work.type_lookup.contexts.is_empty());
             } else {
                 outcome.unwrap();
-                assert_eq!(work.bytes - before, required);
-                assert_eq!(work.bytes, MAXIMUM_METADATA_BYTES);
+                assert_eq!(work.bytes.observation().consumed - before, required);
+                assert_eq!(work.bytes.observation().consumed, required);
+                assert_eq!(work.bytes.remaining(), Some(0));
                 assert_eq!(work.type_lookup.contexts[&context][&template], result);
                 // Duplicate proofs retain no additional key or node storage.
                 work.remember_type_substitution(template, result, &context)
                     .unwrap();
-                assert_eq!(work.bytes, MAXIMUM_METADATA_BYTES);
+                assert_eq!(work.bytes.observation().consumed, required);
                 assert!(
                     work.remember_type_substitution(template, template, &context)
                         .is_err()
@@ -500,14 +518,15 @@ mod tests {
         let mut work = Budget::new(&control);
         work.remember_type_substitution(template, result, &context)
             .unwrap();
-        let before = work.bytes;
+        let before = work.bytes.observation().consumed;
         let other = TypeObjectDigest::from_bytes([59; 32]);
         work.remember_type_substitution(other, result, &context)
             .unwrap();
         assert_eq!(
-            work.bytes - before,
-            node_bytes::<(TypeObjectDigest, TypeObjectDigest)>()
+            work.bytes.observation().consumed - before,
+            u64::try_from(node_bytes::<(TypeObjectDigest, TypeObjectDigest)>()).unwrap()
         );
+        assert!(!work.bytes.observation().saturated);
         assert_eq!(work.type_lookup.contexts.len(), 1);
         assert_eq!(work.type_lookup.contexts[&context].len(), 2);
     }

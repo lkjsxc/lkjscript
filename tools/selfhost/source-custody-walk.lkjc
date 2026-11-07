@@ -61,23 +61,74 @@ declarations.begin
             (in (call source-custody-machine::descend (local current) (i64 4) (local index) (local mark) (local binding)
               (call source-custody-state::empty) (local initializer) (local mode) (field (local current) (name state))))))))))
     (function create sequence-next
-      (visibility private) (effect pure)
-      (parameter create input (type (record (graph Bytes) (parents Bytes) (types Bytes)
-        (mapping Bytes) (facts Bytes) (owner I64))))
-      (parameter create current (type (record (code I64) (row I64) (enter Bool) (mode I64)
-        (owned Bool) (terminal Bool) (state Bytes) (stack Bytes) (events Bytes))))
+      (visibility private)
+      (effect pure)
+      (parameter create input
+        (type (record (graph Bytes) (parents Bytes) (types Bytes) (mapping Bytes) (facts Bytes) (owner I64))))
+      (parameter create current
+        (type
+          (record
+            (code I64)
+            (row I64)
+            (enter Bool)
+            (mode I64)
+            (owned Bool)
+            (terminal Bool)
+            (state Bytes)
+            (stack Bytes)
+            (events Bytes))))
       (parameter create index (type I64))
-      (returns (record (code I64) (row I64) (enter Bool) (mode I64) (owned Bool)
-        (terminal Bool) (state Bytes) (stack Bytes) (events Bytes)))
-      (body (let
-        (binding graph (field (local input) (name graph)))
-        (binding data (call source-table::data (local graph) (field (local current) (name row))))
-        (binding count (field (call source-table::array (local data) (i64 38)) (name value)))
-        (in (call source-custody-machine::descend (local current) (i64 6) (local index) (i64 0) (i64 0)
-          (call source-custody-state::empty)
-          (call source-scalar-cursor::array-child (local graph) (local data) (i64 38) (local index) (i64 9))
-          (if (call ci::eq (call ci::add (local index) (i64 1)) (local count))
-            (field (local current) (name mode)) (i64 2)) (field (local current) (name state)))))))
+      (returns
+        (record
+          (code I64)
+          (row I64)
+          (enter Bool)
+          (mode I64)
+          (owned Bool)
+          (terminal Bool)
+          (state Bytes)
+          (stack Bytes)
+          (events Bytes)))
+      (body
+        (if
+          (call ci::lt (local index) (i64 0))
+          (call source-custody-machine::fail
+            (i64 19)
+            (field (local current) (name row))
+            (field (local current) (name state))
+            (field (local current) (name stack)))
+          (let
+            (binding graph (field (local input) (name graph)))
+            (binding step
+              (call source-table::sequence-step
+                (local graph)
+                (field (local current) (name row))
+                (call ci::sub (local index) (i64 1))))
+            (in
+              (if
+                (call ci::eq (field (local step) (name code)) (i64 0))
+                (if
+                  (field (local step) (name enter))
+                  (call source-custody-machine::descend
+                    (local current)
+                    (i64 6)
+                    (local index)
+                    (i64 0)
+                    (i64 0)
+                    (call source-custody-state::empty)
+                    (field (local step) (name row))
+                    (if (field (local step) (name last)) (field (local current) (name mode)) (i64 2))
+                    (field (local current) (name state)))
+                  (call source-custody-machine::fail
+                    (i64 19)
+                    (field (local current) (name row))
+                    (field (local current) (name state))
+                    (field (local current) (name stack))))
+                (call source-custody-machine::fail
+                  (i64 19)
+                  (field (local current) (name row))
+                  (field (local current) (name state))
+                  (field (local current) (name stack)))))))))
     (function create aggregate-next
       (visibility private) (effect pure)
       (parameter create input (type (record (graph Bytes) (parents Bytes) (types Bytes)
@@ -343,27 +394,86 @@ declarations.begin
           (call source-custody-machine::fail (field (local cleaned) (name code)) (field (local frame) (name row))
             (field (local current) (name state)) (field (local frame) (name rest))))))))
     (function create after-sequence
-      (visibility private) (effect pure)
-      (parameter create input (type (record (graph Bytes) (parents Bytes) (types Bytes)
-        (mapping Bytes) (facts Bytes) (owner I64))))
-      (parameter create current (type (record (code I64) (row I64) (enter Bool) (mode I64)
-        (owned Bool) (terminal Bool) (state Bytes) (stack Bytes) (events Bytes))))
-      (parameter create frame (type (record (tag I64) (row I64) (mode I64) (index I64)
-        (mark I64) (extra I64) (payload Bytes) (rest Bytes))))
-      (returns (record (code I64) (row I64) (enter Bool) (mode I64) (owned Bool)
-        (terminal Bool) (state Bytes) (stack Bytes) (events Bytes)))
-      (body (let
-        (binding data (call source-table::data (field (local input) (name graph)) (field (local frame) (name row))))
-        (binding count (field (call source-table::array (local data) (i64 38)) (name value)))
-        (binding next (call ci::add (field (local frame) (name index)) (i64 1)))
-        (in (if (call ci::eq (local next) (local count))
-          (call source-custody-machine::finish (field (local frame) (name row)) (field (local frame) (name mode))
-            (field (local current) (name owned)) (field (local current) (name terminal))
-            (field (local current) (name state)) (field (local frame) (name rest)) (call source-custody-state::empty))
-          (call source-custody-machine::prepend
-            (call sequence-next (local input) (call source-custody-machine::parent (local frame) (local current)) (local next))
-            (call source-custody-state::event (i64 7) (field (local frame) (name row)) (field (local current) (name row))
-              (if (field (local current) (name owned)) (i64 1) (i64 0)) (field (local current) (name state)))))))))
+      (visibility private)
+      (effect pure)
+      (parameter create input
+        (type (record (graph Bytes) (parents Bytes) (types Bytes) (mapping Bytes) (facts Bytes) (owner I64))))
+      (parameter create current
+        (type
+          (record
+            (code I64)
+            (row I64)
+            (enter Bool)
+            (mode I64)
+            (owned Bool)
+            (terminal Bool)
+            (state Bytes)
+            (stack Bytes)
+            (events Bytes))))
+      (parameter create frame
+        (type
+          (record
+            (tag I64)
+            (row I64)
+            (mode I64)
+            (index I64)
+            (mark I64)
+            (extra I64)
+            (payload Bytes)
+            (rest Bytes))))
+      (returns
+        (record
+          (code I64)
+          (row I64)
+          (enter Bool)
+          (mode I64)
+          (owned Bool)
+          (terminal Bool)
+          (state Bytes)
+          (stack Bytes)
+          (events Bytes)))
+      (body
+        (let
+          (binding step
+            (call source-table::sequence-step
+              (field (local input) (name graph))
+              (field (local frame) (name row))
+              (field (local frame) (name index))))
+          (in
+            (if
+              (call ci::eq (field (local step) (name code)) (i64 0))
+              (if
+                (field (local step) (name enter))
+                (call source-custody-machine::prepend
+                  (call source-custody-machine::descend
+                    (call source-custody-machine::parent (local frame) (local current))
+                    (i64 6)
+                    (call ci::add (field (local frame) (name index)) (i64 1))
+                    (i64 0)
+                    (i64 0)
+                    (call source-custody-state::empty)
+                    (field (local step) (name row))
+                    (if (field (local step) (name last)) (field (local frame) (name mode)) (i64 2))
+                    (field (local current) (name state)))
+                  (call source-custody-state::event
+                    (i64 7)
+                    (field (local current) (name row))
+                    (field (local frame) (name row))
+                    (if (field (local current) (name owned)) (i64 1) (i64 0))
+                    (field (local current) (name state))))
+                (call source-custody-machine::finish
+                  (field (local frame) (name row))
+                  (field (local frame) (name mode))
+                  (field (local current) (name owned))
+                  (field (local current) (name terminal))
+                  (field (local current) (name state))
+                  (field (local frame) (name rest))
+                  (call source-custody-state::empty)))
+              (call source-custody-machine::fail
+                (i64 19)
+                (field (local frame) (name row))
+                (field (local current) (name state))
+                (field (local frame) (name rest))))))))
     (function create after-condition
       (visibility private) (effect pure)
       (parameter create input (type (record (graph Bytes) (parents Bytes) (types Bytes)

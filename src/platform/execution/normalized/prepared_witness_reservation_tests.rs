@@ -1,14 +1,18 @@
 //! Exact allocation/work admission of the whole-node interner, before publication.
 use super::*;
 use crate::platform::execution::{
-    ExecutionControl, normalized::tests::owned_implementation_scheme_tests::duplicate_dag_fixture,
+    ExecutionControl,
+    normalized::{
+        prepare::NormalizedPreparationLimits,
+        tests::owned_implementation_scheme_tests::duplicate_dag_fixture,
+    },
 };
 use crate::platform::kernel::{DeclarationPayload, KernelSnapshot, OwnerRecord};
 
 struct Probe {
     result: Result<(), Diagnostic>,
-    steps: usize,
-    bytes: usize,
+    steps: u64,
+    bytes: u64,
     applied: usize,
     normalized: usize,
 }
@@ -34,17 +38,18 @@ fn named(source: &KernelSnapshot, name: &str) -> DeclarationReference {
 fn probe(
     source: &KernelSnapshot,
     program: &NormalizedProgram,
-    bytes: usize,
-    steps: usize,
+    maximum_bytes: Option<u64>,
+    maximum_steps: Option<u64>,
     control: &ExecutionControl,
 ) -> Probe {
     let mut types = program.types.clone();
-    let mut work = Budget {
-        steps,
-        bytes,
+    let mut work = Budget::with_limits(
         control,
-        type_lookup: type_lookup::TypeLookupBuilder::default(),
-    };
+        NormalizedPreparationLimits {
+            maximum_type_derivation_steps: maximum_steps,
+            maximum_type_metadata_bytes: maximum_bytes,
+        },
+    );
     let implementations = source
         .owners
         .iter()
@@ -128,10 +133,12 @@ fn probe(
             &BTreeMap::new(),
         )
         .map(|_| ());
+    assert!(!closing.work.steps.observation().saturated);
+    assert!(!closing.work.bytes.observation().saturated);
     Probe {
         result,
-        steps: closing.work.steps,
-        bytes: closing.work.bytes,
+        steps: closing.work.steps.observation().consumed,
+        bytes: closing.work.bytes.observation().consumed,
         applied: closing.witnesses.len(),
         normalized: closing.normalized.len(),
     }
@@ -141,15 +148,14 @@ fn probe(
 fn complete_witness_nodes_reserve_exactly_and_refuse_one_byte_short_before_publication() {
     let (source, program) = duplicate_dag_fixture(1);
     let control = ExecutionControl::uncancelled();
-    let base = probe(&source, &program, 0, 0, &control);
+    let base = probe(&source, &program, None, None, &control);
     assert!(base.result.is_ok());
     assert_eq!((base.applied, base.normalized), (1, 1));
     assert!(base.bytes > 0);
-    let maximum = super::MAXIMUM_METADATA_BYTES;
-    let exact = probe(&source, &program, maximum - base.bytes, 0, &control);
+    let exact = probe(&source, &program, Some(base.bytes), None, &control);
     assert!(exact.result.is_ok());
-    assert_eq!(exact.bytes, maximum);
-    let short = probe(&source, &program, maximum - base.bytes + 1, 0, &control);
+    assert_eq!(exact.bytes, base.bytes);
+    let short = probe(&source, &program, Some(base.bytes - 1), None, &control);
     let error = short.result.unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Resource);
     assert_eq!(error.code, "normalized_instantiation_storage");
@@ -160,29 +166,23 @@ fn complete_witness_nodes_reserve_exactly_and_refuse_one_byte_short_before_publi
 fn complete_witness_nodes_keep_work_and_cancellation_separate_from_semantic_refusal() {
     let (source, program) = duplicate_dag_fixture(1);
     let control = ExecutionControl::uncancelled();
-    let base = probe(&source, &program, 0, 0, &control);
+    let base = probe(&source, &program, None, None, &control);
     assert!(base.result.is_ok());
     assert!(base.steps > 2);
-    let exact = probe(&source, &program, 0, MAXIMUM_WORK - base.steps, &control);
+    let exact = probe(&source, &program, None, Some(base.steps), &control);
     assert!(exact.result.is_ok());
-    assert_eq!(exact.steps, MAXIMUM_WORK);
-    let short = probe(
-        &source,
-        &program,
-        0,
-        MAXIMUM_WORK - base.steps + 1,
-        &control,
-    );
+    assert_eq!(exact.steps, base.steps);
+    let short = probe(&source, &program, None, Some(base.steps - 1), &control);
     let error = short.result.unwrap_err();
     assert_eq!(error.class, DiagnosticClass::Resource);
     assert_eq!(error.code, "normalized_instantiation_work");
     assert_eq!((short.applied, short.normalized), (0, 0));
-    for after in [0, 1, base.steps as u64 - 1] {
+    for after in [0, 1, base.steps - 1] {
         let stopped = probe(
             &source,
             &program,
-            0,
-            0,
+            None,
+            None,
             &ExecutionControl::cancel_after_checks(after),
         );
         assert_eq!(

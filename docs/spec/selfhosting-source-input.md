@@ -139,11 +139,18 @@ Logical owner/retirement map roots retain canonical key/row encodings and
 ordering, while allowing arbitrary row and byte counts within their checked
 backing extent. Their former 100,000-entry and 8 MiB quotas no longer apply.
 
-This cut does not widen the carrier's u32 length/count/offset/span fields or
-canonical per-object formats. Canonical child-array limits, payload bounds,
-structural depth admission and later normalized/native backend limits remain
-separate coupled work. No full-capacity or Tier 2 completion claim follows from
-the optional proof policy.
+The optional proof policy does not widen the carrier's u32 length/count/offset/span
+fields or change canonical object formats. The candidate wide-Sequence contract
+below removes its child-count and Owner/CompilerUnit/ArtifactManifest default
+payload quotas through matching readers and storage consumers. Its public
+publication/export path also removes package-source byte/object/map-entry defaults.
+Acceptance and maintained equations are recorded separately in the
+[wide-Sequence decision](../decisions/20261107-wide-sequence-capacity.md).
+Normalized derivation work and modeled metadata now have independent optional
+allowances in this contract. Other per-form limits,
+object domains, package topology, structural depth and later runtime/native
+boundaries remain separate work;
+no full-capacity or Tier 2 completion claim follows.
 
 ## Binding and references
 
@@ -535,6 +542,105 @@ initializer's type, If conditions are Bool, both branches agree, and Sequence
 checks every item before taking its last type. Declared signatures type direct
 and mutual recursion without expanding callees.
 
+### Wide Sequence candidate contract
+
+Acceptance and maintained equations are recorded separately in the
+[Sequence decision](../decisions/20261107-wide-sequence-capacity.md).
+A Sequence remains nonempty and has no default child-count quota. Its fixed-width
+17-byte typed references must fit the exact admitted owner payload; compare count
+with remaining bytes divided by 17 before multiplication, and require no trailing
+payload. Namespace/nonzero identity, expression endpoints, unique containment,
+lexical context, type and custody checks remain independent obligations. Other
+expression forms keep their existing local admission.
+
+Scalar completion, canonical artifact completion, custody traversal and artifact
+Local-context lookup use shared absolute carrier cursors instead of repeatedly
+copying the complete Sequence parent. The cursor checks the owner row/kind, span,
+operation, payload end and ordinal before selecting a reference; the selected
+endpoint is rechecked. Full envelope/graph validation remains earlier in the
+pipeline. Initial entry and other passes may still copy an owner. Authored order,
+nonfinal disposal, final-result use mode, outer lexical context, first-trap identity
+and live-owner cleanup are unchanged. This contract adds no format/profile version
+and makes no whole-compiler timing or allocation claim.
+
+The publicly adopted correction keys temporary-discard proof tag 7 by the completed
+child, with the Sequence parent retained as source. Instruction tag 6 (Drop)
+queries that exact pair. The detail word, custody snapshot, generic first/latest
+index behavior and other instruction lookups remain unchanged. Unique containment
+remains required, and the final child has no temporary discard. This removes the
+parent-bucket scan diagnosed after the first cursor pair; it is separate from the
+four copy paths. Artifact lowering retains its own admitted-source path, so both
+output modes require actual equivalence and behavior controls.
+
+Executed owned-value checks require the nonfinal ByteBuffer temporary's exact
+child/parent key and state, followed by one final Local transfer. Framed old-key,
+wrong-parent and missing-event mutants fail the exact selected lookup. Derived
+evidence is compared by VM/reference/C0-native probes; corrupt-proof lookup
+controls cover VM/reference only. The four post-correction custody selections
+passed. Public correction and the second pair also passed: six fixture identities
+and twelve matching outputs, with lower ELF and equal/higher artifact wall-time
+observations. No uniform speedup or full scaling bound follows.
+
+The candidate public publication path reconstructs complete owners through the
+shared package-source reader. Its container byte/object, generic map-entry and
+link read-set defaults are removed together with public export/stage I/O limits.
+Checked framing, exact map counts and complete callable/source proof remain.
+PackageContainer::decode_with_limits exposes exact optional u64 allowances;
+ordinary decode and collection impose no byte/object default. Package-count,
+readiness and dependency-edge admission remain separate bounds. See
+[semantic storage](semantic-storage.md#package-transports) for the full container
+and policy contract. Its 72 focused controls and actual >256 MiB codec/collector
+crossing passed. Complete capacity acceptance and maintained equations are
+recorded separately in the linked wide-Sequence decision.
+
+The candidate's normalized preparation uses independent optional u64 derivation
+and modeled-metadata allowances, both None by default. One ledger pair continues
+through signature checks, concrete closure and final code sharing. Exact finite
+allowances, cancellation and physical allocation refusal remain meaningful;
+saturation flags report observations without creating permission. Strict artifact
+admission and callable constructor-flow SCC rejection still establish finite
+specialization, including unused and composed callable paths. VM attachment
+preserves those observations and atomically checks local/shared finite allocation
+permission; collection permission remains independent. Instruction/continuation
+vectors reserve fallibly. The fixed builtin's separate bounded exact retention
+admission remains; it is not an uncached fallback or an unbounded-capacity claim.
+
+The second million-item attempt completed public disk publication and both C2
+outputs, then failed at independent C0 metadata preparation. It does not establish
+host equality, fixture execution or lifecycle recovery. A later source-bound
+public in-memory component passed with 1,000,001 children, 17,000,092 owner bytes,
+11,000,387 unit bytes, 2,000,002 instructions, 1,000,003 reference owners,
+644,003,269 modeled preparation bytes and 19,000,062 derivation steps. Strict
+loading and VM/reference/C0 result 42 with cleanup passed. Those seven crossings
+retain their historical build-13 identity and do not supply disk, CLI or selfhost
+recovery evidence. The component observed three prepared runtime owners. Neither
+its reference-owner population nor its 267,505,213-byte bundle independently
+proves the removed 1,000,000-runtime-owner, individual 4 MiB manifest,
+10,000-package, 1,000,000-segment or 16 GiB bundle thresholds.
+
+The capacity phase harness now explicitly selects an unbounded address-space
+policy: launch and restoration use unlimited soft/hard limits, with a checked
+unlimited inherited hard limit. Ordinary finite controls still select 32 GiB;
+Some(u64::MAX) is a checked RLIMIT representation refusal, never an infinity
+sentinel. Three current-source controls passed five processes, 109 frames and
+14 startup/restoration kernel observations, including actual in-work cancellation
+and retry. The fresh build-15 public-disk/C2 witness independently crossed those
+same seven measured quantities and passed exact host artifact agreement, strict
+loading, VM/reference/C0/C2 result 42 and 17 recovery frames. It retains its own
+carrier/request/artifact identities. Maintained artifact equations and acceptance
+are recorded separately in the linked wide-Sequence decision.
+
+C1 and the fresh C2 100,001-child public-API controls passed both outputs, host
+artifact equality, independent execution and 17 native phase frames. Their fixture
+carriers, requests and emitted bytes match. Owner/unit bytes and instruction/
+reference counts did not cross their former limits. The C2 control actually
+derived C1/C2/C3 from complete public source, compared C2=C3 and rechecked the
+original repository before using C2. The fresh million-item real-disk crossing
+now has its own passing terminal binding. Preparatory native equality does not
+replace the separate maintained artifact equation or final seal. Those outcomes
+are recorded in the linked wide-Sequence decision, with exact historical evidence,
+resource scope and source bindings.
+
 External admission uses the complete implementation identifier, independently
 of the declaration name. The maintained `ci` declarations use these 27 exact
 implementations. Parameters are unrestricted unless their mode is shown:
@@ -695,9 +801,11 @@ and signed-I64 byte-index extent. Dynamic record metadata is included in layout
 measurement before emission. Function metadata is packed in the same descriptor
 order, and every eligible declaration receives its exact full signature even
 when uncalled. Canonical BeginBind/Capture positions become checked Pass rows
-in the native projection, preserving PCs. Generated mode-0 policy is unbounded. Source u32
-framing, canonical object bounds, canonical IR u32 identities and existing depth
-guards remain separate capacity work. Heap-backed evaluator frames and generated
+in the native projection, preserving PCs. Generated mode-0 policy is unbounded.
+Source u32 framing, checked canonical IR u32 counts/identities, untouched object
+and per-form limits, and existing depth guards remain explicit boundaries. The
+wide-Sequence candidate removes default Owner/CompilerUnit/ArtifactManifest byte
+quotas, not those representations. Heap-backed evaluator frames and generated
 native CALL frames have different physical growth behavior; this profile does
 not claim general native stack unbounding. The independent LKJPH001 invocation
 boundary governs same-process scratch reclamation; closure environments remain
@@ -747,6 +855,22 @@ Artifact packs use the current 4 MiB target, automatically adding segments and
 retaining valid oversized singleton objects. These are physical layout targets,
 not logical package ceilings. No canonical schema epoch change is made by this
 private source/provenance cut.
+
+The wide-Sequence candidate keeps canonical bytes for the same value while moving
+Owner, CompilerUnit and ArtifactManifest decoding to progressive nested readers.
+Absent payload policies impose no default byte maximum; explicit finite policies
+remain exact. A declared vector count cannot reserve its full capacity before its
+encoded elements exist. Unit construction and validation preserve checked u32
+counts/ordinals, and bundle geometry uses checked lengths and input-derived
+framing rather than fixed manifest/package/segment/bundle quotas.
+
+Each package's reference-owner count remains an exact semantic inventory: count
+distinct reachable owners with checked addition, reject missing or unreachable
+records, and compare against the reference-map entry count. This proof is
+independent of the removed count quota. The separate 10,000,000 compiler-unit
+aggregate bound in CompilationManifest and other untouched capacity families
+remain open. Public above-boundary execution, strict loading, genuine maintained
+raw equations and the terminal source-bound seal are required before acceptance.
 
 ### Diagnostics and evidence
 

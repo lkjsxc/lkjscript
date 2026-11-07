@@ -42,6 +42,10 @@ mod callable;
 #[path = "selfhost_source_nominal_values_tests.rs"]
 mod nominal_values;
 
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[path = "selfhost_source_sequence_tests.rs"]
+mod sequence;
+
 #[path = "selfhost_source_unit_index_tests.rs"]
 mod unit_index;
 
@@ -361,16 +365,30 @@ struct HostOracle {
     program: NormalizedProgram,
 }
 
+fn host_phase<T, E: Debug>(name: &str, operation: impl FnOnce() -> Result<T, E>) -> Check<T> {
+    let started = Instant::now();
+    let result = operation();
+    eprintln!(
+        "raw source C0 phase {}",
+        serde_json::json!({
+            "name": name,
+            "status": if result.is_ok() { "passed" } else { "failed" },
+            "elapsed_ms": started.elapsed().as_millis().to_string()
+        })
+    );
+    result.map_err(|error| format!("independent C0 {name}: {error:?}"))
+}
+
 fn host_oracle(case: &InputCase) -> Check<HostOracle> {
-    let build = build_clean(&case.repository, OptimizationPolicy::DeterministicBaseline)
-        .map_err(|error| format!("independent C0 build: {error:?}"))?;
-    let linked = link_artifact(&case.repository, build.manifest_digest, &[])
-        .map_err(|error| format!("independent C0 link: {error:?}"))?;
+    let build = host_phase("build", || {
+        build_clean(&case.repository, OptimizationPolicy::DeterministicBaseline)
+    })?;
+    let linked = host_phase("link", || {
+        link_artifact(&case.repository, build.manifest_digest, &[])
+    })?;
     let bytes = linked.artifact.bytes;
-    let loaded = load_artifact(&bytes)
-        .map_err(|error| format!("independent C0 strict loader: {error:?}"))?;
-    let program = NormalizedProgram::prepare(loaded.clone())
-        .map_err(|error| format!("independent C0 preparation: {error:?}"))?;
+    let loaded = host_phase("strict loader", || load_artifact(&bytes))?;
+    let program = host_phase("preparation", || NormalizedProgram::prepare(loaded.clone()))?;
     eprintln!(
         "raw source C0 output oracle compilation_manifest={} artifact_sha256={} bytes={} units_compiled={}",
         build.manifest_digest,
@@ -1461,6 +1479,7 @@ fn stage_behavior_controls(c2: &[u8], c3: &[u8]) -> Check<()> {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     {
         nominal_values::verify_stages("C2", c2, "C3", c3)?;
+        sequence::verify_stages("C2", c2, "C3", c3)?;
     }
     Ok(())
 }

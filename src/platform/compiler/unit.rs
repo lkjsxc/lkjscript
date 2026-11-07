@@ -15,6 +15,8 @@ use bincode::{Decode, Encode};
 use std::collections::BTreeSet;
 use std::fmt;
 
+#[path = "unit_codec.rs"]
+mod codec;
 #[path = "unit_region.rs"]
 mod region_protocol;
 
@@ -25,8 +27,6 @@ pub const BYTECODE_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SC
 pub(crate) const COMPILER_UNIT_MAGIC: [u8; 8] = *b"LKJCUNIT";
 pub(crate) const COMPILER_UNIT_ENVELOPE_DOMAIN: &str = "lkjscript.compiler-unit-envelope";
 pub(crate) const COMPILER_UNIT_KEY_DOMAIN: &str = "lkjscript.compiler-unit-key";
-pub(crate) const MAXIMUM_COMPILER_UNIT_BYTES: usize = 8 * 1024 * 1024;
-pub(crate) const MAXIMUM_COMPILER_UNIT_ITEMS: usize = 1_000_000;
 
 #[derive(Clone, Copy, Debug, Decode, Encode, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct CompilationUnitKey([u8; 32]);
@@ -734,11 +734,11 @@ pub struct CompiledVariantJump {
 impl CompilationUnit {
     pub fn encode(&self) -> Result<(ObjectKey, Vec<u8>), Diagnostic> {
         self.validate()?;
-        let bytes = crate::platform::packed::encode_canonical(
+        let bytes = crate::platform::packed::linear::encode(
             COMPILER_UNIT_MAGIC,
             COMPILER_UNIT_ENVELOPE_DOMAIN,
             self,
-            MAXIMUM_COMPILER_UNIT_BYTES,
+            None,
         )?;
         Ok((
             ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes),
@@ -756,11 +756,11 @@ impl CompilationUnit {
                 "compiler-unit bytes disagree with their exact object-domain digest",
             ));
         }
-        let unit: Self = crate::platform::packed::decode_canonical(
+        let codec::UnitWire(unit) = crate::platform::packed::linear::decode_canonical(
             bytes,
             COMPILER_UNIT_MAGIC,
             COMPILER_UNIT_ENVELOPE_DOMAIN,
-            MAXIMUM_COMPILER_UNIT_BYTES,
+            None,
         )?;
         unit.validate()?;
         Ok(unit)
@@ -2636,14 +2636,43 @@ fn validate_owned_record_parameters(
 }
 
 fn require_item_count(label: &str, count: usize, allow_zero: bool) -> Result<(), Diagnostic> {
-    if (!allow_zero && count == 0) || count > MAXIMUM_COMPILER_UNIT_ITEMS {
-        return Err(unit_error(
-            DiagnosticClass::Resource,
+    if !allow_zero && count == 0 {
+        return Err(unit_corrupt(
             "compiler_unit_item_count",
-            format!("{label} count {count} is outside the compiler-unit bound"),
+            format!("{label} must not be empty"),
         ));
     }
+    u32::try_from(count).map_err(|_| {
+        unit_error(
+            DiagnosticClass::Resource,
+            "compiler_unit_item_count",
+            format!("{label} count does not fit the dense compiler index domain"),
+        )
+    })?;
     Ok(())
+}
+
+fn reserve_items<T>(values: &mut Vec<T>, additional: usize, label: &str) -> Result<(), Diagnostic> {
+    values.try_reserve(additional).map_err(|_| {
+        unit_error(
+            DiagnosticClass::Resource,
+            "compiler_unit_allocation",
+            format!("cannot allocate {label}"),
+        )
+    })
+}
+
+fn filled_items<T: Copy>(count: usize, value: T, label: &str) -> Result<Vec<T>, Diagnostic> {
+    let mut values = Vec::new();
+    values.try_reserve_exact(count).map_err(|_| {
+        unit_error(
+            DiagnosticClass::Resource,
+            "compiler_unit_allocation",
+            format!("cannot allocate {label}"),
+        )
+    })?;
+    values.resize(count, value);
+    Ok(values)
 }
 
 fn source_declaration(source: &CompilationSource) -> Result<DeclarationReference, Diagnostic> {
@@ -2674,13 +2703,13 @@ fn validate_view_layout(
 }
 
 fn require_runtime_count(label: &str, count: u32) -> Result<(), Diagnostic> {
-    if count as usize > MAXIMUM_COMPILER_UNIT_ITEMS {
-        return Err(unit_error(
+    usize::try_from(count).map_err(|_| {
+        unit_error(
             DiagnosticClass::Resource,
             "compiler_unit_runtime_count",
-            format!("{label} count {count} exceeds the compiler-unit bound"),
-        ));
-    }
+            format!("{label} count does not fit this platform"),
+        )
+    })?;
     Ok(())
 }
 
@@ -2764,7 +2793,7 @@ fn verify_borrow_call_protocol(code: &CompiledCode) -> Result<(), Diagnostic> {
 }
 
 fn verify_stack(code: &CompiledCode) -> Result<Vec<usize>, Diagnostic> {
-    // Persistent, bounded binding states avoid copying an operand bitmap at every instruction.
+    // Persistent binding states avoid copying an operand bitmap at every instruction.
     // A live binding protects its callee and admitted prefix from ordinary stack consumers.
     #[derive(Clone, Copy)]
     struct Binding {
@@ -2774,8 +2803,8 @@ fn verify_stack(code: &CompiledCode) -> Result<Vec<usize>, Diagnostic> {
         captured: usize,
     }
     let mut bindings = Vec::<Binding>::new();
-    let mut pending = vec![(0_usize, 0_usize, None::<usize>)];
-    let mut depths = vec![None; code.instructions.len()];
+    let mut pending = filled_items(1, (0_usize, 0_usize, None::<usize>), "stack proof worklist")?;
+    let mut depths = filled_items(code.instructions.len(), None, "stack proof states")?;
     while let Some((instruction_index, depth, binding)) = pending.pop() {
         let slot = depths.get_mut(instruction_index).ok_or_else(|| {
             unit_corrupt(
@@ -2804,15 +2833,21 @@ fn verify_stack(code: &CompiledCode) -> Result<Vec<usize>, Diagnostic> {
                     "compiled instruction consumes beneath its operand stack",
                 )
             })?;
-        if next_depth > MAXIMUM_COMPILER_UNIT_ITEMS {
-            return Err(unit_error(
-                DiagnosticClass::Resource,
-                "compiler_unit_stack_depth",
-                "compiled operand stack exceeds the compiler-unit bound",
-            ));
-        }
         let active = binding.map(|index| bindings[index]);
-        let protected = active.map_or(0, |value| value.position + 1 + value.captured);
+        let protected = match active {
+            Some(value) => value
+                .position
+                .checked_add(1)
+                .and_then(|position| position.checked_add(value.captured))
+                .ok_or_else(|| {
+                    unit_error(
+                        DiagnosticClass::Resource,
+                        "compiler_unit_stack_count",
+                        "binding operand prefix overflows",
+                    )
+                })?,
+            None => 0,
+        };
         let mut next_binding = binding;
         let next_state =
             match instruction {
@@ -2828,7 +2863,7 @@ fn verify_stack(code: &CompiledCode) -> Result<Vec<usize>, Diagnostic> {
                     let value = active.filter(|value| {
                     value.captured == *index as usize
                         && value.captured < value.arguments
-                        && depth == protected + 1
+                        && protected.checked_add(1) == Some(depth)
                 }).ok_or_else(|| unit_corrupt(
                     "compiler_unit_bind_protocol",
                     "capture does not admit the next value of its exact unfinished binding",
@@ -2869,13 +2904,7 @@ fn verify_stack(code: &CompiledCode) -> Result<Vec<usize>, Diagnostic> {
                 _ => None,
             };
         if let Some(state) = next_state {
-            if bindings.len() >= MAXIMUM_COMPILER_UNIT_ITEMS {
-                return Err(unit_error(
-                    DiagnosticClass::Resource,
-                    "compiler_unit_item_count",
-                    "binding verification exceeds the compiler-unit bound",
-                ));
-            }
+            reserve_items(&mut bindings, 1, "binding proof states")?;
             next_binding = Some(bindings.len());
             bindings.push(state);
         }
@@ -2891,13 +2920,17 @@ fn verify_stack(code: &CompiledCode) -> Result<Vec<usize>, Diagnostic> {
                 }
             }
             CompiledInstruction::Jump(target) => {
+                reserve_items(&mut pending, 1, "compiler proof worklist")?;
                 pending.push((*target as usize, next_depth, next_binding));
             }
             CompiledInstruction::JumpIfFalse(target) => {
+                reserve_items(&mut pending, 1, "compiler proof worklist")?;
                 pending.push((*target as usize, next_depth, next_binding));
+                reserve_items(&mut pending, 1, "compiler proof worklist")?;
                 pending.push((instruction_index + 1, next_depth, next_binding));
             }
             CompiledInstruction::MatchOwned { cases, .. } => {
+                reserve_items(&mut pending, cases.len(), "stack proof worklist")?;
                 pending.extend(
                     cases
                         .iter()
@@ -2905,6 +2938,7 @@ fn verify_stack(code: &CompiledCode) -> Result<Vec<usize>, Diagnostic> {
                 );
             }
             CompiledInstruction::MatchBorrowedOwned { cases, .. } => {
+                reserve_items(&mut pending, cases.len(), "stack proof worklist")?;
                 pending.extend(
                     cases
                         .iter()
@@ -2912,12 +2946,16 @@ fn verify_stack(code: &CompiledCode) -> Result<Vec<usize>, Diagnostic> {
                 );
             }
             CompiledInstruction::SwitchVariant(arms) => {
+                reserve_items(&mut pending, arms.len(), "stack proof worklist")?;
                 pending.extend(
                     arms.iter()
                         .map(|arm| (arm.target as usize, next_depth, next_binding)),
                 );
             }
-            _ => pending.push((instruction_index + 1, next_depth, next_binding)),
+            _ => {
+                reserve_items(&mut pending, 1, "stack proof worklist")?;
+                pending.push((instruction_index + 1, next_depth, next_binding));
+            }
         }
     }
     if depths.iter().any(Option::is_none) {
@@ -2926,11 +2964,10 @@ fn verify_stack(code: &CompiledCode) -> Result<Vec<usize>, Diagnostic> {
             "compiled code contains an unreachable instruction",
         ));
     }
-    Ok(depths
-        .into_iter()
-        .flatten()
-        .map(|(depth, _)| depth)
-        .collect())
+    let mut result = Vec::new();
+    reserve_items(&mut result, depths.len(), "verified stack depths")?;
+    result.extend(depths.into_iter().flatten().map(|(depth, _)| depth));
+    Ok(result)
 }
 
 /// Admit lexical loan custody independently of operand-stack shape. Instruction states are
@@ -2967,8 +3004,12 @@ fn verify_owned_borrow_scopes_with_limit(
     // initial state also precedes allocation of the instruction-indexed state table.
     reserve()?;
     let mut scopes = Vec::<Scope>::new();
-    let mut pending = vec![(0_usize, None::<usize>)];
-    let mut states = vec![None::<Option<usize>>; code.instructions.len()];
+    let mut pending = filled_items(1, (0_usize, None::<usize>), "lexical loan worklist")?;
+    let mut states = filled_items(
+        code.instructions.len(),
+        None::<Option<usize>>,
+        "lexical loan states",
+    )?;
     while let Some((index, active)) = pending.pop() {
         let slot = states.get_mut(index).ok_or_else(|| {
             unit_corrupt(
@@ -3097,7 +3138,7 @@ fn verify_owned_borrow_scopes_with_limit(
         }
         if let Some((source, binding, view)) = enters {
             reserve()?;
-            require_item_count("lexical loan scope states", scopes.len() + 1, false)?;
+            reserve_items(&mut scopes, 1, "lexical loan scope states")?;
             next = Some(scopes.len());
             scopes.push(Scope {
                 parent: active,
@@ -3120,13 +3161,14 @@ fn verify_owned_borrow_scopes_with_limit(
                             "lexical loan end must release its exact innermost binding",
                         )
                     })?;
-                if depth != scope.entry_depth + 1 {
+                if scope.entry_depth.checked_add(1) != Some(depth) {
                     return Err(unit_corrupt(
                         "compiler_unit_borrow_result_stack",
                         "lexical read body must leave exactly one independent result above its enclosing prefix",
                     ));
                 }
                 reserve()?;
+                reserve_items(&mut pending, 1, "compiler proof worklist")?;
                 pending.push((index + 1, scope.parent));
             }
             CompiledInstruction::MatchBorrowedOwned {
@@ -3149,7 +3191,7 @@ fn verify_owned_borrow_scopes_with_limit(
                         ancestor = scope.parent;
                     }
                     let scope = scopes.len();
-                    require_item_count("lexical loan scope states", scope + 1, false)?;
+                    reserve_items(&mut scopes, 1, "lexical loan scope states")?;
                     scopes.push(Scope {
                         parent: active,
                         source: *source_local,
@@ -3158,6 +3200,7 @@ fn verify_owned_borrow_scopes_with_limit(
                         view: false,
                     });
                     reserve()?;
+                    reserve_items(&mut pending, 1, "compiler proof worklist")?;
                     pending.push((case.target as usize, Some(scope)));
                 }
             }
@@ -3176,12 +3219,15 @@ fn verify_owned_borrow_scopes_with_limit(
             | CompiledInstruction::ReturnView => {}
             CompiledInstruction::Jump(target) => {
                 reserve()?;
+                reserve_items(&mut pending, 1, "compiler proof worklist")?;
                 pending.push((*target as usize, next));
             }
             CompiledInstruction::JumpIfFalse(target) => {
                 reserve()?;
+                reserve_items(&mut pending, 1, "compiler proof worklist")?;
                 pending.push((*target as usize, next));
                 reserve()?;
+                reserve_items(&mut pending, 1, "compiler proof worklist")?;
                 pending.push((index + 1, next));
             }
             CompiledInstruction::MatchOwned { cases, .. } => {
@@ -3200,6 +3246,7 @@ fn verify_owned_borrow_scopes_with_limit(
                         ancestor = scope.parent;
                     }
                     reserve()?;
+                    reserve_items(&mut pending, 1, "compiler proof worklist")?;
                     pending.push((case.target as usize, next));
                 }
             }
@@ -3220,11 +3267,13 @@ fn verify_owned_borrow_scopes_with_limit(
                         }
                     }
                     reserve()?;
+                    reserve_items(&mut pending, 1, "compiler proof worklist")?;
                     pending.push((arm.target as usize, next));
                 }
             }
             _ => {
                 reserve()?;
+                reserve_items(&mut pending, 1, "compiler proof worklist")?;
                 pending.push((index + 1, next));
             }
         }
@@ -3294,8 +3343,16 @@ fn verify_read_view_construction_with_limit(
     )?;
     let mut lifetimes = Vec::<Lifetime>::new();
     let mut constructions = Vec::<Construction>::new();
-    let mut states = vec![None::<(Option<usize>, Option<usize>)>; code.instructions.len()];
-    let mut pending = vec![(0_usize, None::<usize>, None::<usize>)];
+    let mut states = filled_items(
+        code.instructions.len(),
+        None::<(Option<usize>, Option<usize>)>,
+        "view protocol states",
+    )?;
+    let mut pending = filled_items(
+        1,
+        (0_usize, None::<usize>, None::<usize>),
+        "view protocol worklist",
+    )?;
     while let Some((index, active, lifetime)) = pending.pop() {
         tick()?;
         let state = states.get_mut(index).ok_or_else(invalid)?;
@@ -3366,7 +3423,7 @@ fn verify_read_view_construction_with_limit(
                     previous = l.parent;
                 }
                 tick()?;
-                require_item_count("view lifetime states", lifetimes.len() + 1, false)?;
+                reserve_items(&mut lifetimes, 1, "view lifetime states")?;
                 next_lifetime = Some(lifetimes.len());
                 lifetimes.push(Lifetime {
                     parent: lifetime,
@@ -3390,7 +3447,7 @@ fn verify_read_view_construction_with_limit(
             }
             CompiledInstruction::BeginReadView { source_local, .. } => {
                 tick()?;
-                require_item_count("view construction states", constructions.len() + 1, false)?;
+                reserve_items(&mut constructions, 1, "view construction states")?;
                 next = Some(constructions.len());
                 constructions.push(Construction {
                     parent: active,
@@ -3412,7 +3469,7 @@ fn verify_read_view_construction_with_limit(
                 };
                 if expected != view_type
                     || fields.len() != ordered.len()
-                    || depths[index] != c.prefix + fields.len()
+                    || c.prefix.checked_add(fields.len()) != Some(depths[index])
                 {
                     return Err(invalid());
                 }
@@ -3437,40 +3494,41 @@ fn verify_read_view_construction_with_limit(
         match instruction {
             CompiledInstruction::Jump(target) => {
                 tick()?;
-                require_item_count("view protocol pending states", pending.len() + 1, false)?;
+                reserve_items(&mut pending, 1, "compiler proof worklist")?;
                 pending.push((*target as usize, next, next_lifetime))
             }
             CompiledInstruction::JumpIfFalse(target) => {
                 tick()?;
                 tick()?;
-                require_item_count("view protocol pending states", pending.len() + 2, false)?;
+                reserve_items(&mut pending, 1, "compiler proof worklist")?;
                 pending.push((*target as usize, next, next_lifetime));
+                reserve_items(&mut pending, 1, "compiler proof worklist")?;
                 pending.push((index + 1, next, next_lifetime));
             }
             CompiledInstruction::MatchOwned { cases, .. } => {
                 for case in cases {
                     tick()?;
-                    require_item_count("view protocol pending states", pending.len() + 1, false)?;
+                    reserve_items(&mut pending, 1, "compiler proof worklist")?;
                     pending.push((case.target as usize, next, next_lifetime));
                 }
             }
             CompiledInstruction::MatchBorrowedOwned { cases, .. } => {
                 for case in cases {
                     tick()?;
-                    require_item_count("view protocol pending states", pending.len() + 1, false)?;
+                    reserve_items(&mut pending, 1, "compiler proof worklist")?;
                     pending.push((case.target as usize, next, next_lifetime));
                 }
             }
             CompiledInstruction::SwitchVariant(arms) => {
                 for arm in arms {
                     tick()?;
-                    require_item_count("view protocol pending states", pending.len() + 1, false)?;
+                    reserve_items(&mut pending, 1, "compiler proof worklist")?;
                     pending.push((arm.target as usize, next, next_lifetime));
                 }
             }
             _ => {
                 tick()?;
-                require_item_count("view protocol pending states", pending.len() + 1, false)?;
+                reserve_items(&mut pending, 1, "compiler proof worklist")?;
                 pending.push((index + 1, next, next_lifetime));
             }
         }

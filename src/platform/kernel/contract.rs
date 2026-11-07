@@ -44,7 +44,6 @@ pub const PACKAGE_TRANSPORT_DIGEST_DOMAIN: &str = "lkjscript.kernel.package-tran
 pub const CHANGE_DIGEST_DOMAIN: &str = "lkjscript.kernel.change.v14";
 pub const PACKAGE_ID_MIGRATION_DOMAIN: &str = "lkjscript.kernel.package-identity-migration.v11";
 
-pub const MAXIMUM_OWNER_OBJECT_BYTES: usize = 4 * 1_048_576;
 pub const MAXIMUM_TYPE_OBJECT_BYTES: usize = 1_048_576;
 pub const MAXIMUM_ROOT_BYTES: usize = 64 * 1024;
 pub const MAXIMUM_DEPENDENCY_BYTES: usize = 1_048_576;

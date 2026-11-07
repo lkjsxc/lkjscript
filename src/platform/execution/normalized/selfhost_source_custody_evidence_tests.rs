@@ -134,6 +134,7 @@ struct Slot {
 
 #[derive(Debug)]
 struct Event {
+    offset: usize,
     tag: u64,
     anchor: u64,
     local: u64,
@@ -174,6 +175,7 @@ fn events(bytes: &[u8], owners: u64) -> Vec<Event> {
             .collect::<std::collections::BTreeSet<_>>();
         assert_eq!(distinct.len(), state.len());
         let event = Event {
+            offset: at,
             tag: word(bytes, at),
             anchor: word(bytes, at + 8),
             local: word(bytes, at + 16),
@@ -181,7 +183,7 @@ fn events(bytes: &[u8], owners: u64) -> Vec<Event> {
             state,
         };
         assert!(event.anchor < owners);
-        if matches!(event.tag, 3 | 4 | 5 | 6 | 10 | 13) {
+        if matches!(event.tag, 3 | 4 | 5 | 6 | 7 | 10 | 13) {
             assert!(event.local < owners);
         }
         result.push(event);
@@ -191,6 +193,155 @@ fn events(bytes: &[u8], owners: u64) -> Vec<Event> {
     result
 }
 
+fn assert_sequence_discard_evidence(
+    source: &KernelSnapshot,
+    case: &Case,
+    output: &[u8],
+    events: &[Event],
+) {
+    // Resolve identities only from the independently authored source. No inferred
+    // type, custody plan, or lowered instruction supplies the expectations.
+    let binding = |name| custody_binding(source, "sequence-cleanup", name);
+    let binding_row = |name| source_row(&case.carrier, OwnerKey::Binding(binding(name)));
+    let OwnerRecord::Binding(selected) = &source.owners[&OwnerKey::Binding(binding("selected"))]
+    else {
+        panic!("Sequence result binding");
+    };
+    let sequence = selected.value.unwrap();
+    let E::Sequence { items } = &expression(source, sequence).operation else {
+        panic!("Sequence result initializer");
+    };
+    let [temporary, transferred] = items.as_slice() else {
+        panic!("one discarded temporary followed by one transferred lexical owner");
+    };
+    let parent = source_row(&case.carrier, OwnerKey::Expression(sequence));
+    let child = source_row(&case.carrier, OwnerKey::Expression(*temporary));
+    let final_child = source_row(&case.carrier, OwnerKey::Expression(*transferred));
+    let start = binding_row("start");
+    let live = binding_row("live");
+    let state = |event: &Event| {
+        event
+            .state
+            .iter()
+            .map(|slot| (slot.owner, slot.category, slot.live, slot.loans))
+            .collect::<std::collections::BTreeSet<_>>()
+    };
+    let temporary_events = events
+        .iter()
+        .filter(|event| event.tag == 7)
+        .collect::<Vec<_>>();
+    let child_keys = temporary_events
+        .iter()
+        .map(|event| event.anchor)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        child_keys.len(),
+        temporary_events.len(),
+        "unique containment gives one discard key per child"
+    );
+    let discards = temporary_events
+        .iter()
+        .copied()
+        .filter(|event| event.local == parent)
+        .collect::<Vec<_>>();
+    assert_eq!(discards.len(), 1, "one nonfinal Sequence temporary");
+    let discard = discards[0];
+    assert_eq!(
+        (discard.anchor, discard.local, discard.detail),
+        (child, parent, 1)
+    );
+    assert_eq!(
+        state(discard),
+        [(start, 1, 0, 0), (live, 1, 1, 0)]
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>()
+    );
+    assert!(
+        temporary_events
+            .iter()
+            .all(|event| event.anchor != final_child),
+        "the final owned result escapes Sequence without temporary discard"
+    );
+    let transfers = events
+        .iter()
+        .filter(|event| event.tag == 3 && event.anchor == final_child && event.local == live)
+        .collect::<Vec<_>>();
+    assert_eq!(transfers.len(), 1, "final lexical owner moves exactly once");
+    assert_eq!(
+        state(transfers[0]),
+        [(start, 1, 0, 0), (live, 1, 0, 0)]
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>()
+    );
+
+    // Mutate genuine selfhost-derived evidence only at this internal lookup probe.
+    // Each input must still pass framing/index admission. The exact production
+    // Drop lookup must refuse the old key, a wrong parent, and a missing event.
+    // Existing invoke checks VM and independent reference; no native-mutant claim.
+    let lookup = |proof: &[u8]| {
+        let indexed = super::super::super::super::invoke(
+            "source-custody-index",
+            "prepare",
+            vec![
+                NormalizedValue::bytes(case.carrier.as_slice()),
+                NormalizedValue::bytes(proof),
+            ],
+        );
+        assert_eq!(
+            raw_value_equal(
+                super::super::super::super::field(&indexed, "code"),
+                &NormalizedValue::I64(0)
+            ),
+            Ok(true)
+        );
+        let selected = super::super::super::super::invoke(
+            "source-custody-lower",
+            "selected",
+            vec![
+                NormalizedValue::bytes(proof),
+                super::super::super::super::field(&indexed, "entries").clone(),
+                super::super::super::super::field(&indexed, "directory").clone(),
+                NormalizedValue::I64(6),
+                NormalizedValue::I64(i64::try_from(parent).unwrap()),
+                NormalizedValue::I64(i64::try_from(child).unwrap()),
+            ],
+        );
+        let NormalizedValue::I64(offset) = selected else {
+            panic!("custody lookup offset");
+        };
+        offset
+    };
+    let at = discard.offset;
+    let end = at
+        .checked_add(40)
+        .unwrap()
+        .checked_add(discard.state.len().checked_mul(32).unwrap())
+        .unwrap();
+    let mut old_key = output.to_vec();
+    old_key[at + 8..at + 16].copy_from_slice(&parent.to_le_bytes());
+    old_key[at + 16..at + 24].copy_from_slice(&child.to_le_bytes());
+    let mut wrong_parent = output.to_vec();
+    wrong_parent[at + 16..at + 24].copy_from_slice(&final_child.to_le_bytes());
+    let missing = output[..at]
+        .iter()
+        .chain(&output[end..])
+        .copied()
+        .collect::<Vec<_>>();
+    for (name, proof, expected) in [
+        ("derived", output.to_vec(), i64::try_from(at).unwrap()),
+        ("old-parent-key", old_key, -1),
+        ("wrong-parent-source", wrong_parent, -1),
+        ("missing-temporary-discard", missing, -1),
+    ] {
+        let actual = lookup(&proof);
+        assert_eq!(actual, expected, "{name}");
+        eprintln!(
+            "source custody discard lookup case={name} evidence_sha256={} selected={actual}",
+            sha256(&proof)
+        );
+    }
+}
+
 #[test]
 fn selfhost_source_custody_evidence_derives_reverse_cleanup_and_branch_repairs() {
     let source = custody_fixture();
@@ -198,6 +349,7 @@ fn selfhost_source_custody_evidence_derives_reverse_cleanup_and_branch_repairs()
     let output = probe(case, "custody-evidence");
     let owners = u32::from_le_bytes(case.carrier[12..16].try_into().unwrap()) as u64;
     let events = events(&output, owners);
+    assert_sequence_discard_evidence(source, case, &output, &events);
     let expected_cleanup = ["inner-second", "inner-first", "outer-second", "outer-first"]
         .map(|name| source_row(&case.carrier, unique_binding(source, name)));
     let actual = events

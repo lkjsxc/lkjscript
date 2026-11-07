@@ -267,9 +267,7 @@ declarations.begin
             (if
               (local binding)
               (call source-unit-code-tables::binding (local record) (field (local state) (name pool)))
-              (call source-unit-code-tables::expression
-                (local record)
-                (field (local state) (name pool)))))
+              (call source-unit-code-tables::expression (local record) (field (local state) (name pool)))))
           (in
             (if
               (call ci::eq (field (local plan) (name code)) (i64 0))
@@ -334,17 +332,23 @@ declarations.begin
                                 (call ci::eq (local op) (i64 5))
                                 (let
                                   (binding local-owner
-                                    (call source-custody-signature::local-owner
-                                      (local graph)
-                                      (local record)))
+                                    (call source-custody-signature::local-owner (local graph) (local record)))
                                   (binding slot
                                     (call source-unit-code-tables::slot
                                       (field (local state) (name slots))
                                       (local local-owner)
                                       (i64 0)))
+                                  (binding selected-mode
+                                    (call source-unit-code-tables::mode
+                                      (local graph)
+                                      (local parents)
+                                      (local mapping)
+                                      (local row)))
                                   (in
                                     (if
-                                      (call ci::lt (local slot) (i64 0))
+                                      (call ci::either
+                                        (call ci::lt (local slot) (i64 0))
+                                        (call ci::lt (local selected-mode) (i64 0)))
                                       (record structural
                                         (field code (i64 3))
                                         (field row (field (local state) (name row)))
@@ -360,11 +364,7 @@ declarations.begin
                                         (bool false)
                                         (i64 7)
                                         (local slot)
-                                        (call source-unit-code-tables::mode
-                                          (local graph)
-                                          (local parents)
-                                          (local mapping)
-                                          (local row))
+                                        (local selected-mode)
                                         (i64 0)
                                         (call ci::text-bytes (text ""))))))
                                 (if
@@ -384,20 +384,14 @@ declarations.begin
                                       (call ci::eq (local op) (i64 21)))
                                     (call source-unit-code-events::move
                                       (local ready)
-                                      (call source-table::owner
-                                        (local graph)
-                                        (local record)
-                                        (i64 38)
-                                        (i64 9))
+                                      (call source-table::owner (local graph) (local record) (i64 38) (i64 9))
                                       (bool true))
                                     (if
                                       (call ci::either
                                         (call ci::eq (local op) (i64 7))
                                         (call ci::either
                                           (call ci::eq (local op) (i64 15))
-                                          (call ci::either
-                                            (call ci::eq (local op) (i64 18))
-                                            (bool false))))
+                                          (call ci::either (call ci::eq (local op) (i64 18)) (bool false))))
                                       (call source-unit-code-events::move
                                         (local ready)
                                         (call source-table::owner
@@ -619,7 +613,6 @@ declarations.begin
       (visibility package)
       (effect pure)
       (parameter create graph (type Bytes))
-      (parameter create data (type Bytes))
       (parameter create state
         (type
           (record
@@ -645,25 +638,31 @@ declarations.begin
           (fragment Bytes)))
       (body
         (let
-          (binding next (call ci::add (local position) (i64 1)))
+          (binding step (call source-table::sequence-step (local graph) (local parent) (local position)))
           (in
             (if
-              (call ci::lt (local next) (field (call source-table::array (local data) (i64 38)) (name value)))
-              (call source-unit-code-events::instruction
-                (local state)
-                (call source-scalar-cursor::array-child
-                  (local graph)
-                  (local data)
-                  (i64 38)
-                  (local next)
-                  (i64 9))
-                (bool true)
-                (i64 9)
-                (i64 0)
-                (i64 0)
-                (i64 0)
-                (call ci::text-bytes (text "")))
-              (call source-unit-code-events::move (local state) (local parent) (bool false)))))))
+              (call ci::eq (field (local step) (name code)) (i64 0))
+              (if
+                (field (local step) (name enter))
+                (call source-unit-code-events::instruction
+                  (local state)
+                  (field (local step) (name row))
+                  (bool true)
+                  (i64 9)
+                  (i64 0)
+                  (i64 0)
+                  (i64 0)
+                  (call ci::text-bytes (text "")))
+                (call source-unit-code-events::move (local state) (local parent) (bool false)))
+              (record structural
+                (field code (i64 3))
+                (field row (field (local state) (name row)))
+                (field enter (field (local state) (name enter)))
+                (field pool (field (local state) (name pool)))
+                (field slots (field (local state) (name slots)))
+                (field locals (field (local state) (name locals)))
+                (field pc (field (local state) (name pc)))
+                (field fragment (call ci::text-bytes (text "")))))))))
     (function create after-aggregate
       (visibility package)
       (effect pure)
@@ -814,9 +813,7 @@ declarations.begin
                       (binding op
                         (call ci::get
                           (local graph)
-                          (call ci::add
-                            (call source-table::start (local graph) (local parent))
-                            (i64 37))))
+                          (call ci::add (call source-table::start (local graph) (local parent)) (i64 37))))
                       (binding position (call source-table::column (local parents) (local row) (i64 8)))
                       (in
                         (if
@@ -827,36 +824,31 @@ declarations.begin
                             (local state)
                             (local parent)
                             (local position))
-                          (let
-                            (binding record (call source-table::data (local graph) (local parent)))
-                            (in
-                              (if
-                                (call ci::eq (local op) (i64 14))
-                                (call source-unit-code-nominal::variant
-                                  (local record)
-                                  (local state)
-                                  (local parent))
+                          (if
+                            (call ci::eq (local op) (i64 9))
+                            (call after-sequence (local graph) (local state) (local parent) (local position))
+                            (let
+                              (binding record (call source-table::data (local graph) (local parent)))
+                              (in
                                 (if
-                                  (call ci::eq (local op) (i64 7))
-                                  (call after-if
-                                    (local graph)
+                                  (call ci::eq (local op) (i64 14))
+                                  (call source-unit-code-nominal::variant
                                     (local record)
                                     (local state)
-                                    (local parent)
-                                    (local position))
+                                    (local parent))
                                   (if
-                                    (call ci::eq (local op) (i64 8))
-                                    (call after-let
+                                    (call ci::eq (local op) (i64 7))
+                                    (call after-if
                                       (local graph)
-                                      (local mapping)
                                       (local record)
                                       (local state)
                                       (local parent)
                                       (local position))
                                     (if
-                                      (call ci::eq (local op) (i64 9))
-                                      (call after-sequence
+                                      (call ci::eq (local op) (i64 8))
+                                      (call after-let
                                         (local graph)
+                                        (local mapping)
                                         (local record)
                                         (local state)
                                         (local parent)

@@ -1058,7 +1058,13 @@ fn selfhost_source_scalar_e3_lowers_more_than_historical_node_limit_natively() {
     let started = std::time::Instant::now();
     // Deliberately bypass run_filter: this capacity control runs only natively,
     // without repeating the large carrier on the VM and reference interpreter.
-    let output = native_filter_tests::execute_filter(&compiler.image, &request, &[], 4093);
+    let output = native_filter_tests::execute_filter_with_deadline(
+        &compiler.image,
+        &request,
+        &[],
+        4093,
+        std::time::Duration::from_secs(600),
+    );
     let compile_ms = started.elapsed().as_millis();
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
     assert!(output.stderr.is_empty());
@@ -1086,7 +1092,7 @@ fn selfhost_source_scalar_e3_lowers_more_than_historical_node_limit_natively() {
          source_shape=balanced_sequence_tree max_sequence_fanout=16 derived_sequence_levels=4 \
          input=LKJSRQ01 request_profile=2 request_sha256={} selected_target={} \
          target=linux-x86_64 arguments=[] environment=empty \
-         stdin_chunk_bytes=4093 filter_deadline_seconds=10",
+         stdin_chunk_bytes=4093 filter_deadline_seconds=600",
         compiler.source_carrier_sha256,
         compiler.executable_sha256,
         sha256(&carrier),

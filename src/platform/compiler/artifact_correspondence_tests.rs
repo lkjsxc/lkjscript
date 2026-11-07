@@ -542,11 +542,11 @@ fn replace_unit(loaded: &mut LoadedArtifact, old: ObjectKey, unit: &CompilationU
     // Packed encoding, map reconstruction and pack sealing do not perform semantic admission.
     // Structural decoding is a control; the strict artifact loader is the adversarial boundary.
     assert_eq!(unit.contract_version, COMPILER_UNIT_CONTRACT_VERSION);
-    let bytes = crate::platform::packed::encode_canonical(
+    let bytes = crate::platform::packed::linear::encode(
         COMPILER_UNIT_MAGIC,
         COMPILER_UNIT_ENVELOPE_DOMAIN,
         unit,
-        super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+        None,
     )
     .unwrap();
     let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);

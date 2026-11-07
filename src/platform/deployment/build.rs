@@ -65,7 +65,7 @@ impl BuildTemplate {
     pub(crate) fn publish(
         self,
         prepared: &PreparedApplication,
-        maximum_artifact_bytes: usize,
+        maximum_artifact_bytes: Option<usize>,
     ) -> Result<BuildSnapshot, Diagnostic> {
         let descriptor = decode_deployment(&serde_json::to_vec(&self.value).map_err(json_error)?)?;
         validate_program_descriptor(&descriptor, &prepared.program)?;

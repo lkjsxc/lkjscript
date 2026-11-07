@@ -129,6 +129,23 @@ pub(super) fn custody_cases() -> &'static [Case] {
         let base = custody_fixture();
         let mut cases = vec![Case::new("custody-baseline", base.clone(), 0, Some(42))];
 
+        // The final lexical ByteBuffer moves out of Sequence into selected.
+        // Reusing its original binding must fail even though all types still fit.
+        let mut source = base.clone();
+        let live = custody_binding(&source, "sequence-cleanup", "live");
+        let frozen = custody_binding(&source, "sequence-cleanup", "frozen");
+        let OwnerRecord::Binding(binding) = &source.owners[&OwnerKey::Binding(frozen)] else {
+            panic!("sequence result freeze binding");
+        };
+        let argument = custody_argument(&source, binding.value.unwrap(), 0);
+        custody_redirect(&mut source, argument, live);
+        cases.push(custody_rejection(
+            "sequence-returned-owner-does-not-revive-source",
+            source,
+            19,
+            true,
+        ));
+
         let mut source = base.clone();
         let first = custody_binding(&source, "unused-double-consume", "first");
         let last = custody_last(&source, custody_let_body(&source, "unused-double-consume"));
@@ -354,7 +371,7 @@ fn selfhost_source_custody_e3_executes_buffer_lifetimes_and_source_mutation() {
             1,
         ),
         (
-            "custody-sequence-temporary-drop",
+            "custody-sequence-temporary-drop-and-lexical-transfer",
             "custody-sequence",
             "sequence-cleanup",
             42,

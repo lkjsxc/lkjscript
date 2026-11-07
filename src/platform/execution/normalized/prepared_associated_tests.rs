@@ -2,7 +2,8 @@
 //! admitted associated artifacts or evidence of public associated execution.
 use super::*;
 use crate::platform::execution::{
-    ExecutionControl, normalized::prepare::PreparedApplicationContext,
+    ExecutionControl,
+    normalized::prepare::{NormalizedPreparationLimits, PreparedApplicationContext},
 };
 use crate::platform::kernel::{
     AssociatedTypeBinding, AssociatedTypeBound, AssociatedTypeMember, DeclarationPayload,
@@ -135,8 +136,8 @@ fn fixture() -> Fixture {
 struct Probe {
     result: Result<Vec<NormalizedImplementationArgument>, Diagnostic>,
     catalog: Vec<NormalizedImplementationArgument>,
-    steps: usize,
-    bytes: usize,
+    steps: u64,
+    bytes: u64,
     applied: usize,
     normalized: usize,
 }
@@ -144,8 +145,8 @@ struct Probe {
 fn probe(
     fixture: &mut Fixture,
     operands: &[ImplementationOperand],
-    bytes: usize,
-    steps: usize,
+    maximum_bytes: Option<u64>,
+    maximum_steps: Option<u64>,
     control: &ExecutionControl,
 ) -> Probe {
     let implementations = fixture
@@ -194,12 +195,13 @@ fn probe(
         .iter()
         .map(|(key, value)| ((fixture.source.root.package_id, *key), value.clone()))
         .collect();
-    let mut work = Budget {
-        steps,
-        bytes,
+    let mut work = Budget::with_limits(
         control,
-        type_lookup: type_lookup::TypeLookupBuilder::default(),
-    };
+        NormalizedPreparationLimits {
+            maximum_type_derivation_steps: maximum_steps,
+            maximum_type_metadata_bytes: maximum_bytes,
+        },
+    );
     let mut closing = Closing {
         templates: Arc::clone(&fixture.program.functions),
         functions: Vec::new(),
@@ -228,11 +230,13 @@ fn probe(
                 .ok_or_else(missing)
         })
         .collect();
+    assert!(!closing.work.steps.observation().saturated);
+    assert!(!closing.work.bytes.observation().saturated);
     Probe {
         result,
         catalog: closing.normalized.values().cloned().collect(),
-        steps: closing.work.steps,
-        bytes: closing.work.bytes,
+        steps: closing.work.steps.observation().consumed,
+        bytes: closing.work.bytes.observation().consumed,
         applied: closing.witnesses.len(),
         normalized: closing.normalized.len(),
     }
@@ -273,8 +277,8 @@ pub(in super::super::super) fn prepared_associated_model() -> AssociatedModel {
     let closed = probe(
         &mut fixture,
         &operands,
-        0,
-        0,
+        None,
+        None,
         &ExecutionControl::uncancelled(),
     );
     let selected = closed.result.unwrap();
@@ -325,8 +329,8 @@ fn associated_closed_members_preserve_exact_witness_identity_and_contract_order(
     let measured = probe(
         &mut fixture,
         &operands,
-        0,
-        0,
+        None,
+        None,
         &ExecutionControl::uncancelled(),
     );
     let selected = measured.result.unwrap();
@@ -362,8 +366,8 @@ fn associated_closed_members_preserve_exact_witness_identity_and_contract_order(
     let probe = probe(
         &mut fixture,
         &operands[..2],
-        0,
-        0,
+        None,
+        None,
         &ExecutionControl::uncancelled(),
     );
     let selected = probe.result.unwrap();
@@ -436,8 +440,8 @@ fn associated_closed_members_admit_unused_members_and_reject_hidden_projection_a
         let probe = probe(
             &mut fixture,
             &[operand],
-            0,
-            0,
+            None,
+            None,
             &ExecutionControl::uncancelled(),
         );
         assert!(probe.result.is_err(), "fault {fault}");
@@ -475,8 +479,8 @@ fn associated_closed_members_refuse_a_bad_unused_prerequisite_before_parent_publ
     let probe = probe(
         &mut fixture,
         &[operand],
-        0,
-        0,
+        None,
+        None,
         &ExecutionControl::uncancelled(),
     );
     assert!(probe.result.is_err());
@@ -629,7 +633,13 @@ fn associated_member_closure_reserves_before_publication_and_retries_after_cance
     let mut fixture = fixture();
     let operand = plain(&fixture);
     let healthy = ExecutionControl::uncancelled();
-    let measured = probe(&mut fixture, std::slice::from_ref(&operand), 0, 0, &healthy);
+    let measured = probe(
+        &mut fixture,
+        std::slice::from_ref(&operand),
+        None,
+        None,
+        &healthy,
+    );
     assert!(measured.result.is_ok());
     // Literal inventory for this one-formal, two-member leaf: three copied
     // type digests, two constraint rows, two closure-map nodes, one interned
@@ -652,6 +662,7 @@ fn associated_member_closure_reserves_before_publication_and_retries_after_cance
         + std::mem::size_of::<NormalizedImplementationApplication>()
         + std::mem::size_of::<(AppliedWitness, NormalizedImplementationArgument)>()
         + (18 + 2 + 4 + 30) * std::mem::size_of::<usize>();
+    let literal_bytes = u64::try_from(literal_bytes).unwrap();
     assert_eq!(
         measured.bytes, literal_bytes,
         "literal allocation inventory"
@@ -660,18 +671,23 @@ fn associated_member_closure_reserves_before_publication_and_retries_after_cance
     let exact = probe(
         &mut fixture,
         std::slice::from_ref(&operand),
-        MAXIMUM_METADATA_BYTES - measured.bytes,
-        MAXIMUM_WORK - measured.steps,
+        Some(literal_bytes),
+        Some(measured.steps),
         &healthy,
     );
     assert!(exact.result.is_ok());
-    assert_eq!(
-        (exact.bytes, exact.steps),
-        (MAXIMUM_METADATA_BYTES, MAXIMUM_WORK)
-    );
-    for (bytes, steps) in [
-        (MAXIMUM_METADATA_BYTES - measured.bytes + 1, 0),
-        (0, MAXIMUM_WORK - measured.steps + 1),
+    assert_eq!((exact.bytes, exact.steps), (literal_bytes, measured.steps));
+    for (bytes, steps, expected_code) in [
+        (
+            Some(literal_bytes - 1),
+            None,
+            "normalized_instantiation_storage",
+        ),
+        (
+            None,
+            Some(measured.steps - 1),
+            "normalized_instantiation_work",
+        ),
     ] {
         let short = probe(
             &mut fixture,
@@ -680,15 +696,17 @@ fn associated_member_closure_reserves_before_publication_and_retries_after_cance
             steps,
             &healthy,
         );
-        assert_eq!(short.result.unwrap_err().class, DiagnosticClass::Resource);
+        let error = short.result.unwrap_err();
+        assert_eq!(error.class, DiagnosticClass::Resource);
+        assert_eq!(error.code, expected_code);
         assert_eq!((short.applied, short.normalized), (0, 0));
     }
-    let cancelled = ExecutionControl::cancel_after_checks((measured.steps / 2) as u64);
+    let cancelled = ExecutionControl::cancel_after_checks(measured.steps / 2);
     let stopped = probe(
         &mut fixture,
         std::slice::from_ref(&operand),
-        0,
-        0,
+        None,
+        None,
         &cancelled,
     );
     assert_eq!(
@@ -697,7 +715,7 @@ fn associated_member_closure_reserves_before_publication_and_retries_after_cance
     );
     assert_eq!((stopped.applied, stopped.normalized), (0, 0));
     assert!(
-        probe(&mut fixture, &[operand], 0, 0, &healthy)
+        probe(&mut fixture, &[operand], None, None, &healthy)
             .result
             .is_ok()
     );
@@ -718,8 +736,8 @@ fn associated_borrowed_member_selection_retains_a_linear_shared_prerequisite_dag
     let probe = probe(
         &mut fixture,
         &[operand],
-        0,
-        0,
+        None,
+        None,
         &ExecutionControl::uncancelled(),
     );
     let selected = probe.result.unwrap();

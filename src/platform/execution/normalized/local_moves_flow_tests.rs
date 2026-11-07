@@ -2,7 +2,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 use super::tests::{code, future_read, load, optimize, switch};
 use super::*;
-use crate::platform::execution::ExecutionControl;
+use crate::platform::execution::{
+    ExecutionControl, normalized::prepare::NormalizedPreparationLimits,
+};
 
 fn binding_switch(a: u32, b: u32, first: Option<u32>, second: Option<u32>) -> I {
     let I::SwitchVariant(mut jumps) = switch(a, b) else {
@@ -375,9 +377,27 @@ fn exhausted_precise_analysis_never_rewrites_and_linear_fallback_remains_safe() 
     let mut input = original.clone();
     assert!(!liveness::derive_with_limits(&mut input, &mut work, 0, 1024).unwrap());
     assert!(Arc::ptr_eq(&original.instructions, &input.instructions));
-    assert!(!work.try_reserve::<u64>(usize::MAX));
-    work.reserve::<u8>(256 * 1024 * 1024).unwrap();
-    assert!(!work.try_reserve::<u8>(1));
+    let mut unbounded = Budget::new(&control);
+    assert!(!unbounded.try_reserve::<u64>(usize::MAX));
+    assert_eq!(unbounded.work_for_test(), (0, 0));
+    const ADVISORY_BYTES: usize = 64;
+    let mut finite = Budget::with_limits(
+        &control,
+        NormalizedPreparationLimits {
+            maximum_type_metadata_bytes: Some(u64::try_from(ADVISORY_BYTES).unwrap()),
+            ..Default::default()
+        },
+    );
+    finite.reserve::<u8>(ADVISORY_BYTES).unwrap();
+    assert_eq!(
+        finite.work_for_test().1,
+        u64::try_from(ADVISORY_BYTES).unwrap()
+    );
+    assert!(!finite.try_reserve::<u8>(1));
+    assert_eq!(
+        finite.work_for_test().1,
+        u64::try_from(ADVISORY_BYTES).unwrap()
+    );
 }
 
 #[test]

@@ -110,11 +110,11 @@ fn rehashed_compiled_and_canonical_expanding_cycle_rejects_independently() {
         ObjectKey::from_digest(ObjectDomain::Owner, digest.bytes()),
         bytes,
     );
-    let bytes = crate::platform::packed::encode_canonical(
+    let bytes = crate::platform::packed::linear::encode(
         COMPILER_UNIT_MAGIC,
         COMPILER_UNIT_ENVELOPE_DOMAIN,
         &unit,
-        super::super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+        None,
     )
     .unwrap();
     let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
@@ -240,11 +240,11 @@ fn interactive_artifact(loaded: &LoadedArtifact) -> Vec<u8> {
             panic!("target unit")
         };
         *runner = RunnerKind::Interactive;
-        let bytes = crate::platform::packed::encode_canonical(
+        let bytes = crate::platform::packed::linear::encode(
             COMPILER_UNIT_MAGIC,
             COMPILER_UNIT_ENVELOPE_DOMAIN,
             &unit,
-            super::super::unit::MAXIMUM_COMPILER_UNIT_BYTES,
+            None,
         )
         .unwrap();
         let key = ObjectKey::for_bytes(ObjectDomain::CompilerUnit, &bytes);
