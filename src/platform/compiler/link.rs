@@ -94,14 +94,17 @@ pub(crate) fn link_artifact_with_view(
     dependencies: &[LoadedArtifact],
 ) -> Result<ArtifactLinkReceipt, Diagnostic> {
     view.require_current_validation()?;
-    let cached = load_exact_current_compilation_with_view(repository, view, compilation)?;
-    let exported = view.build_package_revision()?;
-    let store = repository.object_store()?;
-    let (mut linked, recheck_work, read_reuse) = view
-        .with_link_read_reuse(|| link_prepared(view, &store, &cached, &exported, dependencies))?;
+    let ((mut linked, package_revision_work), recheck_work, read_reuse) = view
+        .with_link_read_reuse(|| {
+            let (cached, exported) =
+                load_exact_current_compilation_with_view(repository, view, compilation)?;
+            let store = repository.object_store()?;
+            let linked = link_prepared(view, &store, &cached, &exported, dependencies)?;
+            Ok((linked, exported.read_work))
+        })?;
     add_repository_work(&mut linked.work.repository, recheck_work);
     linked.work.read_reuse = read_reuse;
-    add_repository_work(&mut linked.work.repository, exported.read_work);
+    add_repository_work(&mut linked.work.repository, package_revision_work);
     Ok(linked)
 }
 

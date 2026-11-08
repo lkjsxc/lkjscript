@@ -16,8 +16,8 @@ use crate::platform::persistent_map::{
     PersistentMap,
 };
 use crate::platform::publication::{
-    GraphRepository, PreparedPublication, RepositoryReadWork, RepositoryView, RevisionRecord,
-    TransactionBody,
+    BuiltPackageRevision, GraphRepository, PreparedPublication, RepositoryReadWork, RepositoryView,
+    RevisionRecord, TransactionBody,
 };
 use crate::platform::semantic_id::{RepositoryId, RevisionId};
 use crate::platform::storage::directory::SealReceipt;
@@ -174,19 +174,19 @@ pub(crate) fn load_exact_current_compilation(
     digest: CompilationManifestDigest,
 ) -> Result<CachedCompilation, Diagnostic> {
     let view = repository.view_current()?;
-    load_exact_current_compilation_with_view(repository, &view, digest)
+    load_exact_current_compilation_with_view(repository, &view, digest).map(|(cached, _)| cached)
 }
 
 pub(crate) fn load_exact_current_compilation_with_view(
     repository: &GraphRepository,
     view: &RepositoryView,
     digest: CompilationManifestDigest,
-) -> Result<CachedCompilation, Diagnostic> {
+) -> Result<(CachedCompilation, BuiltPackageRevision), Diagnostic> {
     view.require_current_validation()?;
     let mut store = repository.object_store()?;
     let manifest = read_manifest(&mut store, digest)?;
-    bind_manifest_to_current(&manifest, view)?;
-    Ok(CachedCompilation { manifest, digest })
+    let package_revision = bind_manifest_to_current(&manifest, view)?;
+    Ok((CachedCompilation { manifest, digest }, package_revision))
 }
 
 pub fn build_clean(
@@ -637,7 +637,7 @@ fn read_manifest_with_work(
 fn bind_manifest_to_current(
     manifest: &CompilationManifest,
     view: &RepositoryView,
-) -> Result<(), Diagnostic> {
+) -> Result<BuiltPackageRevision, Diagnostic> {
     let package_revision = view.build_package_revision()?;
     if manifest.repository_id != view.current().head.repository_id
         || manifest.package_id != view.package()
@@ -652,7 +652,7 @@ fn bind_manifest_to_current(
             "compilation manifest does not bind the exact accepted semantic revision",
         ));
     }
-    Ok(())
+    Ok(package_revision)
 }
 
 fn validate_incremental_base(

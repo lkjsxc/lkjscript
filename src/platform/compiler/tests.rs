@@ -3,6 +3,12 @@
 #[path = "artifact_capacity_tests.rs"]
 mod artifact_capacity_tests;
 
+#[path = "link_projection_tests.rs"]
+mod link_projection_tests;
+
+#[path = "link_projection_measurement_tests.rs"]
+mod link_projection_measurement;
+
 #[path = "associated_serial_admission_tests.rs"]
 mod associated_serial_admission_tests;
 
