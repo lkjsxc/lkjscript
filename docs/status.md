@@ -1,43 +1,41 @@
 
 # Current status
 
-Updated 2026-11-07; implementation status: accepted.
+Updated 2026-11-08; implementation status: accepted.
 Accepted typed meaning is the sole editable program authority; maintained source
 proposals are adopted through public transactions.
 
 ## Current delivery and verification
 
-Wide Sequence implementation: `411886df`, corrected tree
-`75ae1da2`. Delivery: integrated into `main` and pushed; the advertised remote matched the implementation commit. The
-[canonical acceptance record](decisions/20261107-wide-sequence-capacity.md#acceptance-evidence-and-delivery)
-separately binds retained compiler computations on `45fe92e4` and fresh
-corrective gates on `75ae1da2`. Documentation has its own later tree and
-fresh changed-check receipt; it does not inherit the implementation seal.
+Checked package projection reuse: implementation `47e98941`, tested tree
+`0a4ef322`. It is integrated into `main` and pushed; the advertised remote
+matched the implementation commit. The
+[canonical acceptance record](decisions/20261108-link-package-projection-reuse.md#acceptance-evidence-and-delivery)
+binds the complete frozen source, original executables, actual terminals and
+retained results. Documentation changes are checked separately from that tree.
 
-| Validation and source binding | Recorded outcome |
+| Validation | Recorded outcome |
 | --- | --- |
-| Original literal selfhost, `45fe92e4` | 302 passed, 0 failed, 14 ignored across three selections |
-| Original maintained native closure / complete inventory / 8193-prefix | Each 1 passed; 0 failed or ignored |
-| Original maintained raw-source fixed point | 1 passed; actual C2=C3 and Ahost=A1=A2=A3, independent controls and final repository recheck |
-| Corrected-tree bootstrap and verifier bridge | Passed: fresh bootstrap invocation and exact typed verifier bridge; Cargo reuse recorded |
-| Corrected selected library and controlled exact capacity test | Library build and exact inventory passed; one controlled exact test passed (1/0/0) with the explicit 600 s watchdog and two owned contenders. |
-| Corrected fresh complete full check | 29/29 fresh passed; 0 reused, 0 unrun; root library 3,082 passed / 0 failed / 20 ignored; all 16 workspace streams retained |
-| Corrected release target | Passed: `x86_64-unknown-linux-musl` static-musl target policy |
-| Corrective acceptance and independent terminal audit | Passed: corrected candidate accepted; exact private-test projection and source, image, receipt, stream and actual-session bindings verified |
+| Focused projection, read-reuse and artifact controls | 12 passed |
+| Candidate bootstrap and verifier bridge | Passed; exact image and typed verifier bindings |
+| Changed check | 29/29 fresh passed; 0 reused or unrun |
+| Fresh full check | 29/29 fresh passed; root library 3,085 passed / 0 failed / 21 ignored; all 16 workspace streams retained |
+| Fresh maintained raw-source fixed point | 1 passed; actual C2=C3 and Ahost=A1=A2=A3, strict loading, independent behavior/mutation controls and final original-repository recheck |
+| Same-process raw controls | C1 and C2 passed output survival, cancellation/retry and scratch reclamation |
+| Release target | Passed: `x86_64-unknown-linux-musl` target policy |
+| Final source, image, receipt and terminal audit | Passed; prior failed attempts remain separately recorded |
 
-The canonical decision binds retained original-tree computations and fresh
-corrected-tree results under exact-function relevance guards, with unchanged
-surrounding source and all other file/mode inputs.
+One warmed pair on the retained 1,000,007-owner disk fixture reduced link time
+from 379.310 s to 341.528 s (9.96%) and read operations by 15.99%, with identical
+267,505,246-byte artifacts. Peak resident memory was essentially unchanged.
+This is a measured pair, not a statistical or whole-compiler speed guarantee.
 
-No implementation `check changed` pass is claimed. Corrective acceptance requires
-all 29 fresh full gates. This two-file acceptance prose requires a separate fresh
-changed5 check and documentation commit after the exact implementation commit.
-
-The [ordinary nominal record](decisions/20261103-closed-ordinary-nominal.md#acceptance-evidence-and-delivery)
-retains the earlier delivery and its distinct original/corrected-tree verification.
-Milestones A and C and the callable/ordinary-nominal expansions keep their accepted
-scope. Full Tier 2 Milestone B (P_self) remains open. No release archive or
-production deployment is published.
+The [Wide Sequence record](decisions/20261107-wide-sequence-capacity.md#acceptance-evidence-and-delivery)
+and [ordinary nominal record](decisions/20261103-closed-ordinary-nominal.md#acceptance-evidence-and-delivery)
+retain their distinct earlier trees, measurements and verification. Milestones A
+and C and the callable/ordinary-nominal expansions keep their accepted scope.
+Full Tier 2 Milestone B (P_self) remains open. No release archive or production
+deployment is published.
 
 ## Language and capacity scope
 
@@ -82,13 +80,14 @@ are unchanged. Exact identities and historical evidence remain in the decision.
 
 ## Remaining work
 
-A possible next measurement is scoped reuse of an already validated link
-projection within one operation. The completed disk witness observed a 460,574 ms
-host link stage; this does not attribute the cost, establish an implementation or
-demonstrate an improvement. The second Sequence pair had lower ELF observations
-and equal/higher artifact observations. The earlier nominal helper pair likewise
-included a straight-path regression. Their canonical decisions retain both sides;
-neither comparison establishes a uniform or whole-compiler speedup.
+The complete nominal-flow admission test was the last root-library case in both
+fresh runs. It validates the maintained compiler, an independent finite-schema
+fixture and a complete compiler namespace mutant across four engines. Reader
+images are already cached by entry; the two large packets still require fresh
+VM/reference and native execution. The next targeted measurement is that exact
+test alone with its existing phase diagnostics enabled. The observed suite tail
+does not attribute a phase cost; the small three-key cache probe cannot measure
+these large validations.
 
 Tier 2 Milestone B remains open for OwnedRecord/OwnedChoice and affine
 deconstruction, general `List<T>`, owned witnesses and source-tied read views,
@@ -118,6 +117,7 @@ promotion, finer subpass lifetimes and heap-backed native calls are not establis
 | Closed pure callable expansion | `8526ed77` | `3de34681` | [Acceptance](decisions/20261101-closed-pure-callables-profile8.md#acceptance-and-mainline-delivery) |
 | Closed ordinary nominal expansion | `6bf7559a` | `25b21080`; retained compiler controls `2a30272f` | [Acceptance](decisions/20261103-closed-ordinary-nominal.md#acceptance-evidence-and-delivery) |
 | Wide Sequence capacity | `411886df` | `75ae1da2`; retained compiler controls `45fe92e4` | [accepted](decisions/20261107-wide-sequence-capacity.md#acceptance-evidence-and-delivery) |
+| Artifact linking projection reuse | `47e98941` | `0a4ef322` | [Acceptance](decisions/20261108-link-package-projection-reuse.md#acceptance-evidence-and-delivery) |
 
 Each implementation retains its exact scope. Same-process reclamation covers C1
 and C2 processes; C3 byte equality does not establish a separate C3 phase process.

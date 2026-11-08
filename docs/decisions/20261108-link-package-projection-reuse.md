@@ -130,4 +130,70 @@ The complete machine record is
 (SHA-256 `a17f2fab180a4e0e283486aa86de7194d2ced219d1d2915628088778357b5523`).
 The artifact SHA-256 is
 `c730de801b29b1040d46d51e1cbcd0cca113c8aaa42dce929e5f09e539eb9e9c`.
-These measurements precede the required staged-tree acceptance gates.
+The checked implementation preserves this pair's product, test and probe inputs;
+only the decision prose changed before the frozen acceptance run.
+
+## Acceptance evidence and delivery
+
+Implementation `47e989412e40ad2fd6ab75240f5c6a31d922288c` commits the exact
+tested tree `0a4ef322e43500ae071de8ef950df1172e35915d` with sole parent
+`7668bb9d0d314fed7b3adcaf9767cb8e74bb2528`. Main was fast-forwarded and
+pushed normally; a separate advertised-remote query matched that implementation
+commit. Integration preserved every source file and mode input of the accepted
+tree. This later two-file acceptance prose has its own documentation check.
+
+The canonical machine acceptance is
+`.artifacts/capacity-unbounding/link-projection-reuse-20261108/candidate-acceptance-1.json`,
+SHA-256 `b95998c66b361bbe102514146fb5ced96689dfbbaa1ecc7e2b0be48caecf1ac5`.
+It binds all component receipts, actual process terminals, retained failed
+attempts and the complete frozen source snapshot, whose SHA-256 is
+`9e23e0db23e49be32c26d6a3216514309caf7ee7083b53f68f76c6c36246fd05`.
+Receipt paths below are relative to that experiment directory.
+
+| Evidence | Accepted result | Record |
+| --- | --- | --- |
+| Focused controls | 3 projection regressions, 7 read-reuse controls and 2 artifact-link controls passed | `focused-controls-2/receipt.json` |
+| Bootstrap / typed bridge | Original selected verifier and complete source bindings passed | `candidate-bootstrap-1/receipt.json`, `candidate-bridge-1/receipt.json` |
+| Changed | 29 fresh passed; 0 reused, unrun or failed | `candidate-changed-1/changed-receipt.json` |
+| Full, explicitly fresh | 29 fresh passed; 0 reused, unrun or failed | `candidate-full-1/full-receipt.json` |
+| Maintained raw fixed point | Exact ignored control: 1 passed, 0 failed, 0 ignored | `raw-controls-1/receipt.json`, `raw-audit-2/receipt.json` |
+| Release target | Static-musl target policy passed; no archive publication | `candidate-release-target-1/receipt.json` |
+| Main delivery | Accepted tree and source modes preserved; actual push and advertised remote matched | `implementation-delivery-1.json` |
+
+Both changed and full root-library runs finished with 3,085 passed, 0 failed and
+21 ignored. The full run's eight terminal harness summaries total 3,783 passed,
+0 failed, 38 ignored and one filtered test; the separately selected release
+lifecycle control also passed. Two nested helper successes in root stdout are
+not counted twice. All 16 original workspace streams were retained through
+joined checker cleanup and independently rehashed. The full checker took
+4,958.182 s; its root library took 4,945.91 s. Fresh gate execution reused valid
+Cargo outputs where reported.
+
+The raw run genuinely computed its new generations from the complete source:
+
+| Equation | Bytes | SHA-256 |
+| --- | ---: | --- |
+| C2 = C3 | 22,005,001 each | `3c1404bbfc6e0d15b7546d10fc42f9f9a22e4a9dc58b80acd412b2bee41d85fa` |
+| Ahost = A1 = A2 = A3 | 22,908,368 each | `fc6a76ae349a049e69997c919620d3f425d85cfe46a9290ec69bc4160db9b0d3` |
+
+Every artifact underwent strict admission. Independent behavior distinguished
+42 from 43, and a changed compiler source produced diagnostic 77 where the
+original produced 12. Native C1 and C2 phase controls checked survivor output,
+scratch reclamation, cancellation/retry and callee-saved registers. The final
+original-source observation and repository-integrity sentinel followed the
+inner equations; the earlier inner record alone was not accepted. C1's direct
+byte extent remains unspecified, and no separate C3 phase process is claimed.
+
+The first post-run auditor incorrectly split the valid free-form telemetry label
+`case=bulk binary execution` into fields. Its failed receipt remains in
+`raw-audit-1/receipt.json`. The narrow correction follows the producer's leading
+case-label delimiter and preserves strict remaining field checks. It passed on
+the same retained successful raw run; no compiler computation was substituted.
+The aggregate also retains the earlier failed preparation/control attempts.
+
+The source, measurement, changed/full streams, actual raw records and release
+proofs received independent review. The compact checker's typed receipt digest
+is reported with its original attribution, not claimed as independently
+recomputed; retained receipt SHA-256, publication identity and terminal bindings
+were checked. Full P_self, general recursive lifecycle unbounding and heap-backed
+native non-tail calls remain open.
