@@ -22,28 +22,34 @@ fn probes() -> &'static (crate::platform::kernel::KernelSnapshot, NormalizedProg
     })
 }
 
-fn selfhost_native_probe(
+pub(super) fn selfhost_native_backend() -> &'static [u8] {
+    static BACKEND: OnceLock<Vec<u8>> = OnceLock::new();
+    BACKEND
+        .get_or_init(|| {
+            let (source, program) = compiler();
+            let entry = program
+                .function(declaration_named(source, "compile-elf"))
+                .unwrap()
+                .0 as usize;
+            crate::platform::compiler::elf_x86_64::compile_function(program, entry)
+                .unwrap()
+                .0
+        })
+        .as_slice()
+}
+
+pub(super) fn selfhost_native_probe(
     program: &NormalizedProgram,
     function: usize,
     name: &str,
 ) -> std::sync::Arc<[u8]> {
     type Images = BTreeMap<[u8; 32], std::sync::Arc<[u8]>>;
-    static BACKEND: OnceLock<Vec<u8>> = OnceLock::new();
     static IMAGES: OnceLock<std::sync::Mutex<Images>> = OnceLock::new();
     let payload = input::export(program, function).unwrap();
     let payload_hash: [u8; 32] = Sha256::digest(&payload).into();
     // The backend is immutable in this process. Bind each cached probe to its
     // complete normalized input rather than a declaration name or function index.
-    let backend = BACKEND.get_or_init(|| {
-        let (source, program) = compiler();
-        let entry = program
-            .function(declaration_named(source, "compile-elf"))
-            .unwrap()
-            .0 as usize;
-        crate::platform::compiler::elf_x86_64::compile_function(program, entry)
-            .unwrap()
-            .0
-    });
+    let backend = selfhost_native_backend();
     // Keep the cache lock through the joined emission so concurrent tests never
     // execute the backend twice for the same payload. The backend initialization
     // above cannot call this helper or acquire this cache lock.

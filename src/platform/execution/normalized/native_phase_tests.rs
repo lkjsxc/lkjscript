@@ -16,6 +16,8 @@ use std::time::{Duration, Instant};
 #[path = "native_phase_caller.rs"]
 mod caller;
 use caller::{Mode, word};
+#[path = "native_scalar_probe_tests.rs"]
+mod scalar_probe;
 const TEST_ADDRESS_SPACE: u64 = 32 * 1024 * 1024 * 1024;
 const SLAB: u64 = 65_536;
 
@@ -326,7 +328,12 @@ struct Observation {
 #[derive(Debug, PartialEq, Eq)]
 struct AllocationObservation {
     frame: u64,
+    status: u64,
+    diagnostic: u64,
+    output: Vec<u8>,
     attempts: [u64; 2],
+    attempt_saturation: [u64; 2],
+    owned_mapped_bytes: u64,
     output_slabs: [u64; 2],
     output_bytes: [u64; 2],
     output_roots_live: [bool; 2],
@@ -782,7 +789,12 @@ fn verify_observed(
             // walked every slab, rejected saturation, and compared exact maps.
             allocations.push(AllocationObservation {
                 frame: *id,
+                status: frame.status,
+                diagnostic: frame.diagnostic,
+                output: frame.image.clone(),
                 attempts: observation.attempts,
+                attempt_saturation: [word(&frame.handles, 152)?, word(&frame.handles, 312)?],
+                owned_mapped_bytes: observation.owned,
                 output_slabs: [word(&frame.handles, 88)?, word(&frame.handles, 248)?],
                 output_bytes: [word(&frame.handles, 96)?, word(&frame.handles, 256)?],
                 output_roots_live: [
