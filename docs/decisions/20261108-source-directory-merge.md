@@ -228,33 +228,18 @@ bootstrap, bridge, changed-gate outcome and eventual documentation commit belong
 to the final machine handoff; they do not relabel implementation evidence or
 introduce a self-referential commit identity into this record.
 
-## Next measurement: native scalar, Bytes and direct-call costs
+## Follow-up native allocation measurement
 
-The statically reviewed proposal in
-`.artifacts/capacity-unbounding/nominal-flow-20261109/native-scalar-probe-preparation-1/`
-remains unapplied and unexecuted. Its guarded `proposal.patch` SHA-256 is
-`2202c66bee06a1a021e507762667a0efe64db6f0574ab406898045eb4c863e5c`;
-`inputs.json` SHA-256 is
-`33baef4bb0c9e78ffc6331556d89f5d47d8ecd7f44c890f2480ec281d2566cf5`.
+After this implementation's acceptance and delivery, the prepared scalar/Bytes/
+direct-call probe was executed on a separate experimental branch. The
+[measurement record](20261109-native-scalar-allocation.md) binds its exact source,
+original Cargo image, independent outputs, per-invocation request observations
+and existing callable regression. That branch has focused verification only;
+its code has not been integrated into main.
 
-It proposes one publicly authored fixture, normalized input and a single target
-image per emitter, comparing the Rust emitter with the maintained backend at
-Tier 1. Runtime-selected scalar, Bytes and ordinary non-tail direct-call modes
-use two explicit caller-selected counts. Existing lazy compiler fixtures avoid
-initializing a raw C1/C2/C3 chain solely for this experiment.
-
-AllocationIdentity observations would bind actual outputs and nonsaturated
-per-handle request counters, timing scopes and final owned mappings. They count
-allocator requests rather than allocation bytes, mmap calls or peak scratch.
-The call control preserves an ordinary stack call so call-frame work can be
-distinguished from heap requests. Values outside the scalar pool come from
-runtime data; the proposal neither widens the pool nor introduces a default
-work quota. Its successful-invocation mode supplies no new cancellation/OOM
-recovery or deep native-stack proof.
-
-Static scalar/Bytes representation differences are hypotheses for measurement.
-No result, causal allocation attribution, performance improvement or architecture
-change is claimed from this unexecuted proposal.
+The source-directory acceptance above retains its original scope and identities.
+The follow-up measurement changes no production compiler instructions, format,
+accepted graph, explicit policy or capacity boundary.
 
 ## Remaining obligations
 

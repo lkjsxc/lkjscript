@@ -11,6 +11,10 @@ Linear raw-source directory disjointness: corrected implementation tree
 Implementation commit: `0dbb9233`.
 Delivery: integrated into `main` and pushed; independently verified on `origin/main`
 at 00:31 UTC.
+The separate native-allocation measurement is checkpointed as `2f2c22e3` on
+`measurement/20261109-native-scalar-costs`. Its focused measurement and callable
+regression passed. The experimental code has no fresh changed/full/release
+acceptance seal and is not integrated into `main`.
 The [canonical record](decisions/20261108-source-directory-merge.md#acceptance-evidence-and-delivery)
 binds both source trees, the private-test correction, public graph adoption and
 measurements. Each result retains its actual execution tree. Later documentation
@@ -87,10 +91,19 @@ is not claimed.
 
 ## Remaining work
 
-The next measurement is the reviewed, unapplied native scalar/Bytes/direct-call
-probe. It compares Rust and maintained backends on normalized input (Tier 1),
-using runtime-selected workloads and AllocationIdentity observations. It has
-not run; allocation attribution and performance results remain unestablished.
+The [native allocation baseline](decisions/20261109-native-scalar-allocation.md)
+passed on normalized input (Tier 1): 12 processes, 36 invocations and 132 observed
+frames, with independent VM/reference outputs and final owned mappings zero.
+At 8,192 scalar iterations, Rust makes 24,585 allocation requests and the
+maintained backend makes 6; a 17-byte slice adds one request per iteration in both.
+The ordinary identity call adds no allocator requests in this fixture.
+
+The next structural dependency is a derived native type-flow plan for local and
+operand slots, call/capture adapters and typed tail-owner cleanup. Current native
+cleanup probes nonzero locals as pointers; raw I64 bits must never enter that
+probe. The implementation must also preserve checked arithmetic, evaluation order
+and cooperative cancellation. The measurement establishes neither whole-compiler
+allocation shares nor a deep non-tail stack bound.
 
 Tier 2 Milestone B remains open for OwnedRecord/OwnedChoice and affine
 deconstruction, general `List<T>`, owned witnesses and source-tied read views,
