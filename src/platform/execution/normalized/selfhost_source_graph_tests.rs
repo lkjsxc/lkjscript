@@ -378,6 +378,198 @@ fn selfhost_source_graph_rejects_missing_types_foreign_packages_and_retired_owne
 }
 
 #[test]
+fn selfhost_source_graph_disjoint_directories_match_independent_set_oracle() {
+    use crate::platform::semantic_id::{DeclarationId, ExpressionId, ModuleId};
+    use std::collections::HashSet;
+
+    // Preserve the authored live program and its exact type inventory. Only
+    // explicit synthetic historical records vary between these small packets.
+    let base = nominal();
+    assert!(base.retirements.is_empty());
+    kernel::validate_full(&base).unwrap();
+    let owners = base
+        .owners
+        .iter()
+        .map(|(key, record)| (*key, record.kind()))
+        .collect::<Vec<_>>();
+    let middle = owners.len() / 2;
+    assert!(middle > 0 && middle + 1 < owners.len());
+    let first_key = kernel::owner_map_key(owners[0].0);
+    let final_owner = *owners.last().unwrap();
+    let final_key = kernel::owner_map_key(final_owner.0);
+
+    let mut low_identity = [0; 16];
+    low_identity[15] = 1;
+    let low = (
+        OwnerKey::Module(ModuleId::from_bytes(low_identity).unwrap()),
+        kernel::OwnerKind::Module,
+    );
+    let high = (
+        OwnerKey::Expression(ExpressionId::from_bytes([255; 16]).unwrap()),
+        kernel::OwnerKind::Expression,
+    );
+    assert!(kernel::retirement_map_key(low.0) < first_key);
+    assert!(final_key < kernel::retirement_map_key(high.0));
+
+    let live_module = base
+        .owners
+        .keys()
+        .find_map(|key| match key {
+            OwnerKey::Module(id) => Some(*id),
+            _ => None,
+        })
+        .unwrap();
+    let other_domain = (
+        OwnerKey::Declaration(DeclarationId::from_bytes(live_module.bytes()).unwrap()),
+        kernel::OwnerKind::PureFunction,
+    );
+    assert!(!base.owners.contains_key(&other_domain.0));
+    let live_domain_key = kernel::owner_map_key(OwnerKey::Module(live_module));
+    let retired_domain_key = kernel::retirement_map_key(other_domain.0);
+    assert_eq!(live_domain_key[1..], retired_domain_key[1..]);
+    assert_ne!(live_domain_key[0], retired_domain_key[0]);
+    assert!(first_key < retired_domain_key && retired_domain_key < final_key);
+
+    let mut final_byte_identity = live_module.bytes();
+    final_byte_identity[15] = if final_byte_identity[15] == 1 { 2 } else { 1 };
+    let final_byte_neighbor = (
+        OwnerKey::Module(ModuleId::from_bytes(final_byte_identity).unwrap()),
+        kernel::OwnerKind::Module,
+    );
+    assert!(!base.owners.contains_key(&final_byte_neighbor.0));
+    let final_byte_key = kernel::retirement_map_key(final_byte_neighbor.0);
+    assert_eq!(live_domain_key[..16], final_byte_key[..16]);
+    assert_ne!(live_domain_key[16], final_byte_key[16]);
+
+    let cases = [
+        ("retirements-before-live", vec![low]),
+        ("retirements-after-live", vec![high]),
+        ("interleaved-distinct-domain", vec![low, other_domain, high]),
+        ("same-domain-final-byte", vec![final_byte_neighbor]),
+        ("middle-live-overlap", vec![low, owners[middle], high]),
+        ("final-live-overlap", vec![low, other_domain, final_owner]),
+    ];
+    let live_keys = base.owners.keys().copied().collect::<HashSet<_>>();
+    for (case, retired) in cases {
+        let mut source = base.clone();
+        for (owner, last_kind) in retired {
+            assert!(
+                source
+                    .retirements
+                    .insert(
+                        owner,
+                        kernel::RetirementRecord {
+                            graph_contract_version: source.root.graph_contract_version,
+                            owner,
+                            last_kind,
+                            last_name: None,
+                            last_parent: None,
+                            last_live_revision:
+                                crate::platform::semantic_id::RevisionId::from_digest([31; 32]),
+                            deletion_change: kernel::ChangeDigest::from_bytes([41; 32]),
+                        },
+                    )
+                    .is_none(),
+                "{case}"
+            );
+        }
+        rebind_capacity_inventory(&mut source);
+        let retired_keys = source.retirements.keys().copied().collect::<HashSet<_>>();
+        let overlap_count = live_keys.intersection(&retired_keys).count();
+        let code = if overlap_count == 0 { 0 } else { 14 };
+        if overlap_count == 0 {
+            let checked = kernel::validate_full(&source);
+            assert!(checked.is_ok(), "{case}: {checked:?}");
+        } else {
+            let errors = kernel::validate_full(&source).unwrap_err();
+            assert_eq!(errors.len(), overlap_count, "{case}: {errors:?}");
+            assert!(
+                errors.iter().all(|error| {
+                    error.code == "kernel_full_live_retired_overlap"
+                        && error.class == crate::platform::DiagnosticClass::Semantic
+                }),
+                "{case}: {errors:?}"
+            );
+        }
+
+        // Supply the exact rebuilt directory commitment even for an overlap.
+        // The source reader must reject that semantic defect itself; no stale
+        // commitment, count mismatch or object-binding error can explain code 14.
+        let state = kernel::semantic_state_digest_from_root(&source.root).unwrap();
+        assert_eq!(kernel::semantic_state_digest(&source).unwrap(), state);
+        let bytes = packet_with_fixture_commitment(&source, state);
+        assert_eq!(read_word(&bytes, 12), source.owners.len());
+        assert_eq!(read_word(&bytes, 20), source.retirements.len());
+        assert_eq!(&bytes[48..80], &state.bytes());
+        let expected = if code == 0 {
+            state.bytes().to_vec()
+        } else {
+            Vec::new()
+        };
+        eprintln!(
+            "selfhost source disjoint case={case} owners={} retirements={} overlaps={overlap_count} expected={code}",
+            source.owners.len(),
+            source.retirements.len()
+        );
+        for entry in ["read-carrier", "read-graph"] {
+            assert_eq!(
+                result(entry, &bytes),
+                (code, expected.clone()),
+                "{case}: {entry}"
+            );
+            emitted_result(entry, &bytes, code);
+        }
+
+        if case == "interleaved-distinct-domain" {
+            // Start from the fully admitted positive carrier above. These are
+            // byte-level framing mutants, not semantic snapshots or repaired
+            // commitments; every header and other section stays unchanged.
+            assert_eq!(code, 0);
+            let retirement_at = read_word(&bytes, 88);
+            let retirement_count = read_word(&bytes, 20);
+            assert_eq!(retirement_count, 3);
+            let retirement_end = retirement_at
+                .checked_add(retirement_count.checked_mul(49).unwrap())
+                .unwrap();
+            assert_eq!(retirement_end, read_word(&bytes, 92));
+            for (defect, duplicate) in [("duplicate", true), ("reversed", false)] {
+                let mut changed = bytes.clone();
+                let directory = &mut changed[retirement_at..retirement_end];
+                if duplicate {
+                    let (first, remaining) = directory.split_at_mut(49);
+                    remaining[..49].copy_from_slice(first);
+                } else {
+                    for (target, original) in directory.as_chunks_mut::<49>().0.iter_mut().zip(
+                        bytes[retirement_at..retirement_end]
+                            .as_chunks::<49>()
+                            .0
+                            .iter()
+                            .rev(),
+                    ) {
+                        target.copy_from_slice(original);
+                    }
+                }
+                assert_eq!(changed.len(), bytes.len());
+                assert_eq!(&changed[..retirement_at], &bytes[..retirement_at]);
+                assert_eq!(&changed[retirement_end..], &bytes[retirement_end..]);
+                assert_ne!(changed, bytes);
+                eprintln!(
+                    "selfhost source disjoint framing={defect} retirements={retirement_count} expected=12"
+                );
+                for entry in ["read-carrier", "read-graph"] {
+                    assert_eq!(
+                        result(entry, &changed),
+                        (12, Vec::new()),
+                        "{case}: retirement-directory-{defect}: {entry}"
+                    );
+                    emitted_result(entry, &changed, 12);
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn selfhost_source_graph_checks_each_independent_owner_relation_family() {
     let source = byte_buffer_tests::author_only(concat!(
         include_str!("../../../../tests/fixtures/selfhost-source-nominal.lkjc"),
