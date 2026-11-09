@@ -1,41 +1,58 @@
-
 # Current status
 
-Updated 2026-11-08; implementation status: accepted.
+Updated 2026-11-09. Linear source-directory merge accepted and delivered.
 Accepted typed meaning is the sole editable program authority; maintained source
 proposals are adopted through public transactions.
 
 ## Current delivery and verification
 
-Checked package projection reuse: implementation `47e98941`, tested tree
-`0a4ef322`. It is integrated into `main` and pushed; the advertised remote
-matched the implementation commit. The
-[canonical acceptance record](decisions/20261108-link-package-projection-reuse.md#acceptance-evidence-and-delivery)
-binds the complete frozen source, original executables, actual terminals and
-retained results. Documentation changes are checked separately from that tree.
+Linear raw-source directory disjointness: corrected implementation tree
+`01c34060`, based on `9a804993`; retained compiler controls use `933f87a0`.
+Implementation commit: `0dbb9233`.
+Delivery: integrated into `main` and pushed; independently verified on `origin/main`
+at 00:31 UTC.
+The [canonical record](decisions/20261108-source-directory-merge.md#acceptance-evidence-and-delivery)
+binds both source trees, the private-test correction, public graph adoption and
+measurements. Each result retains its actual execution tree. Later documentation
+verification remains separate from implementation acceptance.
 
 | Validation | Recorded outcome |
 | --- | --- |
-| Focused projection, read-reuse and artifact controls | 12 passed |
-| Candidate bootstrap and verifier bridge | Passed; exact image and typed verifier bindings |
-| Changed check | 29/29 fresh passed; 0 reused or unrun |
-| Fresh full check | 29/29 fresh passed; root library 3,085 passed / 0 failed / 21 ignored; all 16 workspace streams retained |
-| Fresh maintained raw-source fixed point | 1 passed; actual C2=C3 and Ahost=A1=A2=A3, strict loading, independent behavior/mutation controls and final original-repository recheck |
-| Same-process raw controls | C1 and C2 passed output survival, cancellation/retry and scratch reclamation |
-| Release target | Passed: `x86_64-unknown-linux-musl` target policy |
-| Final source, image, receipt and terminal audit | Passed; prior failed attempts remain separately recorded |
+| Focused directory, framing, inventory and adoption controls | 7 passed on retained tree; corrected affected test separately passed |
+| Identical-carrier read-nominal control | Passed on retained tree; VM, reference and Rust-native |
+| Maintained raw-source fixed point and independent audit | Passed on retained tree; C2=C3 and Ahost=A1=A2=A3 |
+| Same-process C1/C2 raw controls | Passed on retained tree; 17 frames each, final owned mappings zero |
+| Corrected staged bootstrap and typed verifier bridge | Passed |
+| Corrected changed check | 29 passed fresh; 0 reused/unrun; root 3,086 passed, 0 failed, 21 ignored |
+| Corrected fresh full check | 29 passed fresh; 0 reused/unrun; root 3,086 passed, 0 failed, 21 ignored |
+| Release target and final acceptance audit | Passed; final source, image and terminal audit accepted |
 
-One warmed pair on the retained 1,000,007-owner disk fixture reduced link time
-from 379.310 s to 341.528 s (9.96%) and read operations by 15.99%, with identical
-267,505,246-byte artifacts. Peak resident memory was essentially unchanged.
-This is a measured pair, not a statistical or whole-compiler speed guarantee.
+On the same retained 26,611,855-byte carrier, one measured read-nominal pair
+(including graph admission) changed VM time from 247.055 s to 231.185 s,
+reference time from 1,398.984 s to 1,321.052 s, and Rust-native filter time from
+10.849 s to 10.192 s. VM instructions decreased 7.05%; reference expressions
+decreased 5.57%. These are valid-carrier phase measurements, without separate
+read-graph timing, whole-test/compiler or statistical claims. Cumulative modeled
+allocation is separate from RSS.
 
-The [Wide Sequence record](decisions/20261107-wide-sequence-capacity.md#acceptance-evidence-and-delivery)
-and [ordinary nominal record](decisions/20261103-closed-ordinary-nominal.md#acceptance-evidence-and-delivery)
-retain their distinct earlier trees, measurements and verification. Milestones A
-and C and the callable/ordinary-nominal expansions keep their accepted scope.
-Full Tier 2 Milestone B (P_self) remains open. No release archive or production
-deployment is published.
+The current public adoption has 81,458 live owners, 97 supplied types and 61,470
+retirements; its complete carrier is 26,640,313 bytes. The decision records its
+exact revision, semantic state, core and carrier identities. The paired
+measurement uses the earlier retained carrier, not these different source bytes.
+LKJSG002 profile 3, LKJSRQ01 profile 2, Mode-0 profile 9, Mode-1 profile 8 and
+canonical schema epoch 1 remain unchanged.
+
+The merge advances ordered live/retired cursors directly over complete keys,
+replacing a binary search and temporary key slice per live owner. It preserves
+framing, semantic rejection and exact explicit allowances. This is an algorithm
+improvement, not a new capacity milestone or semantic-profile expansion.
+
+The [projection reuse](decisions/20261108-link-package-projection-reuse.md#acceptance-evidence-and-delivery),
+[Wide Sequence](decisions/20261107-wide-sequence-capacity.md#acceptance-evidence-and-delivery)
+and [ordinary nominal](decisions/20261103-closed-ordinary-nominal.md#acceptance-evidence-and-delivery)
+records retain their earlier accepted trees and evidence. Milestones A and C
+retain their scope. Full Tier 2 Milestone B remains open; no release archive or
+production deployment is published.
 
 ## Language and capacity scope
 
@@ -60,34 +77,20 @@ optional policies. Exact finite allowances, complete semantic/custody proof,
 checked representations, physical allocation and atomic VM/shared attachment
 remain independent obligations.
 
-The complete disk witness exercised 1,000,001 children, a 17,000,092-byte owner,
-an 11,000,387-byte unit, 2,000,002 instructions, 1,000,003 reference owners,
-644,003,269 modeled preparation bytes and 19,000,062 derivation steps, without
-preparation saturation. Both outputs, strict loading, exact Ahost agreement,
-VM/reference/C0/C2 result 42 and 17 recovery frames passed. The separate historical
-build-13 preparation controls and component retain their original attribution.
-
-Those seven quantities do not independently prove the removed 1M-runtime-owner
-threshold, individual 4 MiB ArtifactManifest, 10K artifact packages, 1M artifact
-segments or 16 GiB bundle threshold. The >256 MiB codec/collector witness has
-separate component scope. Public disk GraphRepository authoring is exercised;
-an executed CLI file-input crossing is not claimed.
-
-Both public compiler-source adoptions cover 81,456 live owners, 97 supplied types
-and 61,339 retirements; the complete carrier is 26,611,855 bytes. LKJSG002 profile 3,
-LKJSRQ01 profile 2, Mode-0 profile 9, Mode-1 profile 8 and canonical schema epoch 1
-are unchanged. Exact identities and historical evidence remain in the decision.
+The Wide Sequence record retains the complete million-child disk witness and
+its independent execution/recovery results. It does not independently prove
+the removed 1M-runtime-owner threshold, individual 4 MiB ArtifactManifest,
+10K artifact packages, 1M artifact segments or 16 GiB bundle threshold. The
+>256 MiB codec/collector witness has separate component scope. Public disk
+GraphRepository authoring is exercised; an executed CLI file-input crossing
+is not claimed.
 
 ## Remaining work
 
-The complete nominal-flow admission test was the last root-library case in both
-fresh runs. It validates the maintained compiler, an independent finite-schema
-fixture and a complete compiler namespace mutant across four engines. Reader
-images are already cached by entry; the two large packets still require fresh
-VM/reference and native execution. The next targeted measurement is that exact
-test alone with its existing phase diagnostics enabled. The observed suite tail
-does not attribute a phase cost; the small three-key cache probe cannot measure
-these large validations.
+The next measurement is the reviewed, unapplied native scalar/Bytes/direct-call
+probe. It compares Rust and maintained backends on normalized input (Tier 1),
+using runtime-selected workloads and AllocationIdentity observations. It has
+not run; allocation attribution and performance results remain unestablished.
 
 Tier 2 Milestone B remains open for OwnedRecord/OwnedChoice and affine
 deconstruction, general `List<T>`, owned witnesses and source-tied read views,
@@ -118,6 +121,7 @@ promotion, finer subpass lifetimes and heap-backed native calls are not establis
 | Closed ordinary nominal expansion | `6bf7559a` | `25b21080`; retained compiler controls `2a30272f` | [Acceptance](decisions/20261103-closed-ordinary-nominal.md#acceptance-evidence-and-delivery) |
 | Wide Sequence capacity | `411886df` | `75ae1da2`; retained compiler controls `45fe92e4` | [accepted](decisions/20261107-wide-sequence-capacity.md#acceptance-evidence-and-delivery) |
 | Artifact linking projection reuse | `47e98941` | `0a4ef322` | [Acceptance](decisions/20261108-link-package-projection-reuse.md#acceptance-evidence-and-delivery) |
+| Linear source-directory merge | `0dbb9233` | `01c34060`; retained compiler controls `933f87a0` | [Record](decisions/20261108-source-directory-merge.md#acceptance-evidence-and-delivery) |
 
 Each implementation retains its exact scope. Same-process reclamation covers C1
 and C2 processes; C3 byte equality does not establish a separate C3 phase process.
