@@ -15,8 +15,10 @@ documentation commit `a7a58b2b`. Measurement tree:
 Complete source snapshot SHA-256:
 `18267a2cb46161825c775d4deb311a64e4431e70db58104f0c6e7e38659da6c1`.
 
-This experimental test-only branch passed the focused checks below. It has not
-received fresh changed/full/release acceptance and is not integrated into main.
+At that checkpoint, this experimental test-only branch had passed the focused
+checks below. Its original measurements retain that source and execution scope.
+The probe was subsequently included in the separately accepted and integrated
+[native raw-I64 implementation](20261109-native-i64-slots.md#acceptance-evidence-and-delivery).
 The accepted [source-directory implementation](20261108-source-directory-merge.md#acceptance-evidence-and-delivery)
 and its raw, full and release evidence remain separately attributed.
 
@@ -120,7 +122,12 @@ The context record binds the complete 26,640,313-byte maintained carrier,
 image. Full identities and actual stdout/stderr are retained in the records.
 No gate executable was copied into the artifact directory.
 
-## Next structural dependency
+## Structural dependency identified by the baseline
+
+The following inventory describes the representation at the baseline. The
+subsequent [native raw-I64 implementation](20261109-native-i64-slots.md)
+provides the derived representation plan and adapters; its acceptance remains
+separate from this measurement.
 
 The native path retains exact function signatures and closed prepared types, but
 NormalizedCode has no per-instruction local/operand type map. Canonical stack

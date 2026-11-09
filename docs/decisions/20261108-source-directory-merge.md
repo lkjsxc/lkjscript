@@ -234,8 +234,9 @@ After this implementation's acceptance and delivery, the prepared scalar/Bytes/
 direct-call probe was executed on a separate experimental branch. The
 [measurement record](20261109-native-scalar-allocation.md) binds its exact source,
 original Cargo image, independent outputs, per-invocation request observations
-and existing callable regression. That branch has focused verification only;
-its code has not been integrated into main.
+and existing callable regression. Those measurements retain their original
+focused-verification scope. The probe was subsequently integrated through the
+separately accepted [native raw-I64 implementation](20261109-native-i64-slots.md#acceptance-evidence-and-delivery).
 
 The source-directory acceptance above retains its original scope and identities.
 The follow-up measurement changes no production compiler instructions, format,

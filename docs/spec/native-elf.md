@@ -156,9 +156,9 @@ Rust native Variant layout and the source-native nominal layout are private to
 their respective backends; neither is a public wire or phase ABI. Variant shape
 traps use the existing native rejection/phase recovery path, and surviving phase
 results remain governed by the unchanged structural Bytes-output contract. The
-[ordinary nominal decision proposal](../decisions/20261103-closed-ordinary-nominal.md)
-records the publicly adopted candidate, passed C0 and focused source controls,
-and pending renewed compiler-generation/frozen-tree acceptance.
+[ordinary nominal acceptance record](../decisions/20261103-closed-ordinary-nominal.md#acceptance-evidence-and-delivery)
+binds public adoption, raw-source compiler generations, independent behavior and
+custody controls, and frozen-tree acceptance.
 
 The safe first-party emitter writes the ELF64 header, an RX `PT_LOAD` segment,
 a non-executable stack declaration, native x86_64 code and relocation/data bytes
