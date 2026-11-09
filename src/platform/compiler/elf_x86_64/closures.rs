@@ -1,10 +1,11 @@
 //! Current native callable values and frame-reusing graph transfers.
 //!
 //! Value: [tag=6, immutable target metadata pointer, bound count, flat prefix...]
-//! Target: [ordinary entry, graph body entry or zero, full arity, local count].
+//! Target: [boxed entry, boxed-input graph body or zero, arity, locals, raw-I64 result].
 //! Prefix values are in authored order; operand-stack values are reversed.
 use super::asm::{Asm, Label, R::*, *};
 use super::runtime::Runtime;
+use super::scalar_flow::State;
 use super::{Emitter, Result, layout_extent, unsupported};
 use crate::platform::execution::normalized::prepare::{NormalizedCode, NormalizedFunctionBody};
 use crate::platform::kernel::ParameterUse;
@@ -62,7 +63,7 @@ fn prepare(a: &mut Asm, runtime: &Runtime, arguments: u32, binding: bool) {
     a.bin(0x85, R8, R8);
     a.when(E, runtime.callable);
     a.mov(Ax, R8);
-    pointer_add(a, runtime, Ax, 32);
+    pointer_add(a, runtime, Ax, 40);
     a.load(R13, R12, 16);
     a.load(R9, R8, 16);
     a.mov(Ax, R13);
@@ -401,13 +402,17 @@ impl Emitter<'_> {
         function: usize,
         code: &NormalizedCode,
         live: Label,
+        state: Option<&State>,
     ) -> Result<()> {
         let parameters = &self.program.functions[function].parameters;
         let mut start = 0;
-        for (index, parameter) in parameters.iter().enumerate() {
-            if parameter.use_mode == ParameterUse::Borrow {
-                let index = u32::try_from(index)
-                    .map_err(|_| unsupported("native borrowed parameter index overflowed"))?;
+        for index in 0..code.local_count {
+            let borrowed = parameters
+                .get(index as usize)
+                .is_some_and(|parameter| parameter.use_mode == ParameterUse::Borrow);
+            // Raw scalars and known-empty slots are never pointer candidates.
+            // Boxed or uncertain slots retain the original live-owner check.
+            if borrowed || state.is_some_and(|state| !state.may_own(index)) {
                 owner_range(&mut self.a, &self.runtime, start, index, live)?;
                 start = index + 1;
             }
@@ -422,8 +427,11 @@ impl Emitter<'_> {
         code: &NormalizedCode,
         target: usize,
         arguments: u32,
+        state: Option<&State>,
     ) -> Result<()> {
-        if let Some(body) = self.bodies.get(target).copied().flatten() {
+        if let Some(body) = self.bodies.get(target).copied().flatten()
+            && self.raw_result(function) == self.raw_result(target)
+        {
             let target_function = self
                 .program
                 .functions
@@ -439,7 +447,7 @@ impl Emitter<'_> {
             }
             let ordinary = self.a.label();
             self.runtime.checkpoint(&mut self.a);
-            self.owner_fallback(function, code, ordinary)?;
+            self.owner_fallback(function, code, ordinary, state)?;
             self.a.mov(Bx, Sp);
             self.a.address(R8, body);
             self.a.imm(R9, u64::from(parameters));
@@ -458,6 +466,7 @@ impl Emitter<'_> {
         self.a.call(self.label(target)?);
         self.a
             .group_wide(0, Sp, layout_extent(arguments as usize, 8, 0)?);
+        self.direct_result(target, state.is_some())?;
         self.a.push(Ax);
         // The retained normalized continuation performs lexical cleanup/Return.
         Ok(())
@@ -468,11 +477,17 @@ impl Emitter<'_> {
         function: usize,
         code: &NormalizedCode,
         arguments: u32,
+        state: Option<&State>,
     ) -> Result<()> {
         let ordinary = self.a.label();
         self.runtime.checkpoint(&mut self.a);
-        self.owner_fallback(function, code, ordinary)?;
+        self.owner_fallback(function, code, ordinary, state)?;
         prepare(&mut self.a, &self.runtime, arguments, false);
+        // A tail hint proves a terminal value, not its machine representation.
+        // The boxed ordinary wrapper remains the fallback for unlike results.
+        self.a.load(Ax, R8, 32);
+        self.a.group(7, Ax, i32::from(self.raw_result(function)));
+        self.a.when(NE, ordinary);
         self.a.load(R10, R8, 24);
         self.a.load(R8, R8, 8);
         self.a.bin(0x85, R8, R8);

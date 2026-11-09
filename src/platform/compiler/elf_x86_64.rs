@@ -24,6 +24,9 @@ mod phase;
 #[cfg(test)]
 mod profiling;
 mod runtime;
+mod scalar_abi;
+mod scalar_flow;
+mod scalar_lower;
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod scalar_pool_tests;
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
@@ -141,6 +144,8 @@ struct Emitter<'a> {
     runtime: Runtime,
     functions: Vec<Option<Label>>,
     bodies: Vec<Option<Label>>,
+    callable_entries: Vec<Option<Label>>,
+    callable_bodies: Vec<Option<Label>>,
     constants: BTreeMap<Constant, Label>,
     data: Vec<(Label, Vec<u8>)>,
     rewrites: usize,
@@ -236,6 +241,12 @@ pub(crate) fn compile_function(
     let mut bodies = Vec::new();
     reserve(&mut bodies, program.functions.len())?;
     bodies.resize(program.functions.len(), None);
+    let mut callable_entries = Vec::new();
+    reserve(&mut callable_entries, program.functions.len())?;
+    callable_entries.resize(program.functions.len(), None);
+    let mut callable_bodies = Vec::new();
+    reserve(&mut callable_bodies, program.functions.len())?;
+    callable_bodies.resize(program.functions.len(), None);
     for &index in &reachable {
         let function = &program.functions[index];
         if usize::try_from(function.parameter_count)
@@ -256,6 +267,21 @@ pub(crate) fn compile_function(
             {
                 bodies[index] = Some(a.label());
             }
+            let has_i64 = function.parameters.iter().any(|parameter| {
+                matches!(
+                    program.types.get(&parameter.ty).map(|ty| &ty.form),
+                    Some(TypeForm::I64)
+                )
+            }) || matches!(
+                program.types.get(&function.result.ty).map(|ty| &ty.form),
+                Some(TypeForm::I64)
+            );
+            if has_i64 {
+                callable_entries[index] = Some(a.label());
+                if bodies[index].is_some() {
+                    callable_bodies[index] = Some(a.label());
+                }
+            }
         }
     }
     a.check()?;
@@ -265,6 +291,8 @@ pub(crate) fn compile_function(
         runtime,
         functions,
         bodies,
+        callable_entries,
+        callable_bodies,
         constants: BTreeMap::new(),
         data: Vec::new(),
         rewrites: 0,
@@ -276,6 +304,7 @@ pub(crate) fn compile_function(
     }
     for &index in &reachable {
         e.function(index)?;
+        e.emit_callable_adapters(index)?;
         e.a.check()?;
     }
     e.runtime.emit(&mut e.a, &mut e.data);
@@ -329,10 +358,9 @@ pub(crate) fn compile_function(
                 e.a.absolute(metadata);
                 e.a.bytes(&0_u64.to_le_bytes());
                 e.a.bind(metadata);
-                e.a.absolute(e.functions.get(*index).copied().flatten().ok_or_else(|| {
-                    unsupported("native function constant is outside its closure")
-                })?);
-                if let Some(body) = e.bodies.get(*index).copied().flatten() {
+                let callable_entry = e.callable_label(*index)?;
+                e.a.absolute(callable_entry);
+                if let Some(body) = e.callable_body(*index) {
                     e.a.absolute(body);
                 } else {
                     e.a.bytes(&0_u64.to_le_bytes());
@@ -343,6 +371,7 @@ pub(crate) fn compile_function(
                     NormalizedFunctionBody::External(_) => 0,
                 };
                 e.a.bytes(&locals.to_le_bytes());
+                e.a.bytes(&u64::from(e.raw_result(*index)).to_le_bytes());
             }
         }
     }
@@ -510,10 +539,16 @@ impl Emitter<'_> {
             self.a
                 .load_offset(Di, R12, layout_offset(parameter, 8, 16)?);
             self.a.call(self.runtime.parse);
+            if self.raw_parameter(entry, parameter) {
+                self.a.load(Ax, Ax, 8);
+            }
             self.a.push(Ax);
         }
         self.a.call(self.label(entry)?);
         self.a.group_wide(0, Sp, layout_extent(parameters, 8, 0)?);
+        if self.raw_result(entry) {
+            self.a.call(self.runtime.integer);
+        }
         self.a.mov(Di, Ax);
         self.a.call(self.runtime.print);
         self.a.imm(Di, 0);
@@ -557,6 +592,9 @@ impl Emitter<'_> {
         }
     }
     fn code(&mut self, function: usize, code: &NormalizedCode) -> Result<()> {
+        let (code, rewrites) = scalar_lower::expanded_code(self.program, code)?;
+        self.rewrites += rewrites;
+        let scalar = scalar_flow::Plan::derive(self.program, function, &code)?;
         self.prologue(code.local_count);
         closures::initialize_locals(
             &mut self.a,
@@ -571,32 +609,35 @@ impl Emitter<'_> {
             self.argument(Ax, code.parameter_count - 1 - parameter);
             self.a.store_offset(Bp, -32 - i64::from(parameter) * 8, Ax);
         }
+        // Direct tail transfers have already installed signature-defined raw
+        // parameter words. Bytecode Jump(0) must not repeat entry adaptation.
+        if let Some(body) = self.bodies[function] {
+            self.a.bind(body);
+        }
+        if scalar.is_none() {
+            self.box_fallback_parameters(function, code.parameter_count)?;
+        }
         let mut labels = Vec::new();
         reserve(&mut labels, code.instructions.len())?;
-        for index in 0..code.instructions.len() {
-            labels.push(if index == 0 {
-                self.bodies[function].unwrap_or_else(|| self.a.label())
-            } else {
-                self.a.label()
-            });
+        for _ in code.instructions.iter() {
+            labels.push(self.a.label());
         }
         self.a.check()?;
-        let plan = super::egraph_opt::optimize(self.program, code);
-        self.rewrites += plan.rewrites.len();
-        let mut ip = 0;
-        while ip < code.instructions.len() {
+        let mut state = None;
+        for (ip, instruction) in code.instructions.iter().enumerate() {
             self.a.bind(labels[ip]);
-            if let Some(rewrite) = plan.rewrites.get(&ip) {
-                for instruction in &rewrite.instructions {
-                    self.instruction(function, code, instruction, &labels)?;
+            if let Some(plan) = &scalar {
+                match plan.entry(ip) {
+                    scalar_flow::Entry::Reachable(entry) => state = Some(entry.try_clone()?),
+                    scalar_flow::Entry::Unreachable => state = None,
+                    scalar_flow::Entry::Continue => {}
                 }
-                for label in &labels[ip + 1..rewrite.end] {
-                    self.a.bind(*label);
-                }
-                ip = rewrite.end;
-            } else {
-                self.instruction(function, code, &code.instructions[ip], &labels)?;
-                ip += 1;
+            }
+            self.instruction(function, &code, instruction, &labels, state.as_ref())?;
+            if let Some(state) = &mut state
+                && !state.advance(self.program, instruction)?
+            {
+                return Err(unsupported("native scalar representation replay disagrees"));
             }
         }
         Ok(())
@@ -607,11 +648,19 @@ impl Emitter<'_> {
         code: &NormalizedCode,
         instruction: &I,
         labels: &[Label],
+        state: Option<&scalar_flow::State>,
     ) -> Result<()> {
         match instruction {
             I::Unit => self.push_constant(Constant::Unit),
             I::Bool(v) => self.push_constant(Constant::Bool(*v)),
-            I::I64(v) => self.push_constant(Constant::I64(*v)),
+            I::I64(v) => {
+                if state.is_some() {
+                    self.a.imm(Ax, *v as u64);
+                    self.a.push(Ax);
+                } else {
+                    self.push_constant(Constant::I64(*v));
+                }
+            }
             I::Text(v) | I::StaticText(v) => self.push_constant(Constant::Text(v.to_string())),
             I::LoadLocal { local, use_mode } => {
                 self.a.load_offset(Ax, Bp, -32 - i64::from(*local) * 8);
@@ -657,26 +706,51 @@ impl Emitter<'_> {
                 arguments,
                 ..
             } => {
-                self.a.call(self.label(target.0 as usize)?);
+                let target = target.0 as usize;
+                if let Some(state) = state
+                    && self.scalar_intrinsic(target, *arguments, state)?
+                {
+                    return Ok(());
+                }
+                self.direct_arguments(target, *arguments, state)?;
+                self.a.call(self.label(target)?);
                 self.a.group_wide(0, Sp, u64::from(*arguments) * 8);
+                self.direct_result(target, state.is_some())?;
                 self.a.push(Ax);
             }
             I::TailCall {
                 function: target,
                 arguments,
                 ..
-            } => self.tail_call(function, code, target.0 as usize, *arguments)?,
+            } => {
+                let target = target.0 as usize;
+                if let Some(state) = state
+                    && self.scalar_intrinsic(target, *arguments, state)?
+                {
+                    return Ok(());
+                }
+                self.direct_arguments(target, *arguments, state)?;
+                self.tail_call(function, code, target, *arguments, state)?;
+            }
             I::FunctionValue { function, .. } => {
                 self.push_constant(Constant::Function(function.0 as usize))
             }
             I::BeginBind { .. } | I::Capture { .. } => {}
             I::Invoke { arguments } => {
+                self.box_operands(state, *arguments as usize)?;
                 closures::invoke(&mut self.a, &self.runtime, *arguments);
                 self.a.push(Ax);
             }
-            I::TailInvoke { arguments } => self.tail_invoke(function, code, *arguments)?,
-            I::Bind { arguments } => closures::bind(&mut self.a, &self.runtime, *arguments),
+            I::TailInvoke { arguments } => {
+                self.box_operands(state, *arguments as usize)?;
+                self.tail_invoke(function, code, *arguments, state)?;
+            }
+            I::Bind { arguments } => {
+                self.box_operands(state, *arguments as usize)?;
+                closures::bind(&mut self.a, &self.runtime, *arguments);
+            }
             I::List { items } => {
+                self.box_operands(state, *items as usize)?;
                 self.a.imm(Di, 16 + u64::from(*items) * 8);
                 self.a.call(self.runtime.alloc);
                 self.a.imm(Cx, 4);
@@ -693,6 +767,7 @@ impl Emitter<'_> {
                 self.a.push(Ax);
             }
             I::Record { fields, .. } => {
+                self.box_operands(state, fields.len())?;
                 let mut names = Vec::new();
                 reserve(&mut names, fields.len())?;
                 for field in fields.iter() {
@@ -737,7 +812,10 @@ impl Emitter<'_> {
                 case,
                 has_payload,
                 ..
-            } => self.variant(layout.0, *case, *has_payload),
+            } => {
+                self.box_operands(state, usize::from(*has_payload))?;
+                self.variant(layout.0, *case, *has_payload);
+            }
             I::SwitchVariant(jumps) => self.switch_variant(jumps, labels)?,
             I::Field(field) => {
                 let name = match field {
@@ -773,7 +851,14 @@ impl Emitter<'_> {
                 self.a.push(Ax);
             }
             I::Return => {
+                let from = Self::operand_representation(state, 0)?;
+                let to = if self.raw_result(function) {
+                    scalar_flow::Representation::I64
+                } else {
+                    scalar_flow::Representation::Boxed
+                };
                 self.a.pop(Ax);
+                self.convert_ax(from, to);
                 self.epilogue();
             }
             _ => {
@@ -803,48 +888,17 @@ impl Emitter<'_> {
             | "core.i64.less-equal" => {
                 self.a.load(Ax, Ax, 8);
                 self.a.load(Cx, Cx, 8);
-                match name {
-                    "core.i64.add" => {
-                        self.a.bin(0x01, Ax, Cx);
-                        self.a.when(O, self.runtime.overflow);
-                        self.a.call(self.runtime.integer);
-                    }
-                    "core.i64.subtract" => {
-                        self.a.bin(0x29, Ax, Cx);
-                        self.a.when(O, self.runtime.overflow);
-                        self.a.call(self.runtime.integer);
-                    }
-                    "core.i64.multiply" => {
-                        self.a.imul(Ax, Cx);
-                        self.a.when(O, self.runtime.overflow);
-                        self.a.call(self.runtime.integer);
-                    }
-                    "core.i64.divide" => {
-                        self.a.bin(0x85, Cx, Cx);
-                        self.a.when(E, self.runtime.division);
-                        self.a.imm(Dx, i64::MIN as u64);
-                        self.a.bin(0x39, Ax, Dx);
-                        let divide = self.a.label();
-                        self.a.when(NE, divide);
-                        self.a.group(7, Cx, -1);
-                        self.a.when(E, self.runtime.division);
-                        self.a.bind(divide);
-                        self.a.bytes(&[0x48, 0x99]);
-                        self.a.unary(7, Cx);
-                        self.a.call(self.runtime.integer);
-                    }
-                    _ => {
-                        self.a.bin(0x39, Ax, Cx);
-                        self.a.set(if name == "core.i64.equal" {
-                            E
-                        } else if name == "core.i64.less" {
-                            L
-                        } else {
-                            LE
-                        });
-                        self.a.call(self.runtime.boolean);
-                    }
-                }
+                self.i64_binary(name);
+                self.a.call(
+                    if matches!(
+                        name,
+                        "core.i64.equal" | "core.i64.less" | "core.i64.less-equal"
+                    ) {
+                        self.runtime.boolean
+                    } else {
+                        self.runtime.integer
+                    },
+                );
             }
             "core.i64.to-text" => {
                 self.a.load(Di, Ax, 8);

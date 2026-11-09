@@ -71,10 +71,12 @@ window and new length before reservation, then copies bytes without boxing each
 octet. The unaligned `core.bytes.read-i64-le` and paired word append use signed
 little-endian eight-byte words with exact range checks. Native freeze copies into
 independent immutable bytes. Affine custody is established by
-complete source and normalized admission. Immutable native I64 values -1 through 255 and both Bool values share read-only
-scalar objects; all other integers retain ordinary checked allocation. This
-physical lookup table does not restrict supported scalar values or change affine
-custody. It does not reclaim general scratch allocations.
+complete source and normalized admission. Boxed native I64 values -1 through 255
+and both Bool values share read-only scalar objects; boxing any other I64 uses
+ordinary checked allocation. Proven scalar locals, operands and exact I64 graph
+call boundaries use raw words as described below. The physical lookup table does
+not restrict scalar meaning or change affine custody, and does not reclaim general
+scratch allocations.
 Dynamically allocated backing storage, including retired growth allocations and
 abandoned buffers, belongs to the active native allocation context. Ordinary
 command execution retains its context until process exit. A pure binary filter
@@ -90,6 +92,51 @@ External capability requirements, scoped views, implementation witnesses,
 F64, other byte entry/results, region operations
 and other unsupported instructions produce
 `native_elf_unsupported` before output publication. There is no interpreter fallback.
+
+## Native scalar representation
+
+The Rust emitter derives a disposable representation plan from the exact prepared
+function and application after expanding its optional optimizer rewrites. It
+distinguishes raw I64 words, boxed pointers and empty local slots. Only basic-block
+entry states are retained. Joins, local redefinitions and selected variant payload
+destinations must agree; an absent proof retains boxed lowering for the complete
+function. This optional analysis adds no admission/work ceiling and does not change
+accepted meaning, canonical bytecode or metered VM execution. Failed fallible
+reservation remains a resource failure.
+
+Every graph Code function uses raw words for exact declared I64 parameters and
+results in its direct-call ABI. Other types and external functions retain boxed
+values. This ABI remains stable when a function's internal plan declines: entry
+conversion boxes its I64 parameter locals, and Return converts its result back.
+The direct-tail entry precedes this conversion; bytecode instruction zero has a
+separate label, so Jump(0) never repeats entry conversion.
+
+Immutable List/Record/Variant payloads, callable prefixes, ordinary Invoke
+arguments/results and generic printing remain boxed. Explicit adapters cover each
+raw/boxed crossing, including command-line parsing and the final JSON result.
+Exact pure arithmetic/comparison, byte word/index/length, list length and selected
+ByteBuffer operations can execute directly on raw operands while retaining their
+existing checked overflow, index and range behavior.
+
+A graph callable's ordinary entry adapts its boxed argument window to the direct
+ABI and boxes an I64 result. Its optional tail entry converts boxed parameter
+locals before reaching the shared direct-tail entry. Rust-private target metadata
+has five eight-byte words: boxed ordinary entry, boxed-input graph tail entry or
+zero, arity, local count and raw-I64-result flag. It is compiler-constructed
+metadata within a self-contained image, not a persisted cross-backend format.
+
+Fast graph tail transfer requires compatible direct result representations.
+Otherwise the ordinary call and retained continuation perform conversion.
+Ownership scanning excludes only proven raw/empty locals and existing borrowed
+parameter exclusions; uncertain boxed slots retain the live-owner probe. Raw
+integer bits, including zero and pointer-like values, never authorize pointer
+probing. Aggregate boxing preserves present zero/Unit versus absent payloads.
+
+Intrinsic entry polls and polls formerly reached by out-of-pool scalar result
+allocation remain cooperative cancellation points. Eliminated allocations do not
+increment passive allocator observations. Scratch/output custody and LKJPH001
+publication/reclamation remain unchanged. This representation change does not
+remove OS-stack growth for non-tail calls or establish a new semantic family.
 
 The ordinary Variant/Match backend subset requires the complete reachable
 nominal type closure to be copyable and acyclic, including payload types of

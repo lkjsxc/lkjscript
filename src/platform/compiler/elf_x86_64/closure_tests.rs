@@ -128,6 +128,7 @@ fn native_elf_empty_bind_is_identity_without_any_allocation() -> std::result::Re
     a.bytes(&0_u64.to_le_bytes());
     a.bytes(&3_u64.to_le_bytes());
     a.bytes(&0_u64.to_le_bytes());
+    a.bytes(&0_u64.to_le_bytes()); // Boxed result convention.
     run(a, runtime, "empty-bind")
 }
 

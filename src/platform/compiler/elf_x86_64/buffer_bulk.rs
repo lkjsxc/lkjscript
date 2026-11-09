@@ -24,7 +24,13 @@ impl Emitter<'_> {
     }
 
     pub(super) fn buffer_append_i64_le(&mut self) {
-        self.a.load(Bx, Ax, 8);
+        self.a.load(Ax, Ax, 8);
+        self.buffer_append_i64_le_word();
+    }
+
+    /// Raw I64 in Ax and the consumed builder pointer in Cx.
+    pub(super) fn buffer_append_i64_le_word(&mut self) {
+        self.a.mov(Bx, Ax);
         self.a.push(Bx);
         self.a.mov(R13, Sp);
         self.a.mov(R12, Cx);
@@ -75,7 +81,14 @@ impl Emitter<'_> {
     }
 
     pub(super) fn bytes_read_i64_le(&mut self) {
-        self.a.load(Bx, Cx, 8);
+        self.a.load(Cx, Cx, 8);
+        self.bytes_read_i64_le_word();
+        self.a.call(self.runtime.integer);
+    }
+
+    /// Boxed Bytes in Ax and a raw I64 index in Cx; returns the exact raw word.
+    pub(super) fn bytes_read_i64_le_word(&mut self) {
+        self.a.mov(Bx, Cx);
         self.a.group(7, Bx, 0);
         self.a.when(L, self.runtime.bytes_range);
         self.a.load(Dx, Ax, 8);
@@ -87,6 +100,5 @@ impl Emitter<'_> {
         self.a.load(R12, Ax, 16);
         self.a.bin(0x01, R12, Bx);
         self.a.load(Ax, R12, 0);
-        self.a.call(self.runtime.integer);
     }
 }

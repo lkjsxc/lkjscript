@@ -16,6 +16,8 @@ use std::time::{Duration, Instant};
 #[path = "native_phase_caller.rs"]
 mod caller;
 use caller::{Mode, word};
+#[path = "native_scalar_boundary_tests.rs"]
+mod scalar_boundaries;
 #[path = "native_scalar_probe_tests.rs"]
 mod scalar_probe;
 const TEST_ADDRESS_SPACE: u64 = 32 * 1024 * 1024 * 1024;

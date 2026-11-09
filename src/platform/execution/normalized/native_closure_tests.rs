@@ -286,3 +286,223 @@ fn native_elf_mutual_tail_calls_and_invokes_reuse_stack_and_detect_forced_call_g
     }
     Ok(())
 }
+
+#[test]
+fn native_elf_boxed_fallback_jump_zero_skips_parameter_reboxing() -> std::result::Result<(), String>
+{
+    use crate::platform::execution::normalized::prepare::NormalizedInstruction as I;
+    use crate::platform::kernel::{FunctionEffect, ParameterUse, ResultRelation, TypeForm};
+
+    const SOURCE: &str = r#"declarations.begin
+(units (module create native-zero-jump
+  (function create round-trip (visibility private) (effect pure)
+    (parameter create value (type I64)) (parameter create again (type Bool)) (returns I64)
+    (body (if (local again)
+      (field (record structural (field value (local value))) (name value))
+      (local value))))
+  (function create jump-once (visibility public) (effect pure)
+    (parameter create value (type I64)) (returns I64)
+    (body (call round-trip (local value) (bool true))))
+  (function create jump-never (visibility public) (effect pure)
+    (parameter create value (type I64)) (returns I64)
+    (body (call round-trip (local value) (bool false))))))
+declarations.end"#;
+
+    let source = byte_buffer_tests::author_only(SOURCE)?;
+    let program = prepare_snapshot(&source);
+    let helper = program
+        .function(declaration_named(&source, "round-trip"))
+        .ok_or("Jump(0) helper absent")?;
+    let helper_index = helper.0 as usize;
+    let function = &program.functions[helper_index];
+    if !function.graph_function
+        || function.effect != FunctionEffect::Pure
+        || function.parameter_count != 2
+        || function.parameters.len() != 2
+        || !matches!(function.result.relation, ResultRelation::Value)
+        || function.parameters.iter().any(|parameter| {
+            parameter.use_mode != ParameterUse::Unrestricted
+                || parameter.resource_requirement.is_some()
+        })
+        || !matches!(
+            program
+                .types
+                .get(&function.parameters[0].ty)
+                .map(|ty| &ty.form),
+            Some(TypeForm::I64)
+        )
+        || !matches!(
+            program
+                .types
+                .get(&function.parameters[1].ty)
+                .map(|ty| &ty.form),
+            Some(TypeForm::Bool)
+        )
+        || !matches!(
+            program.types.get(&function.result.ty).map(|ty| &ty.form),
+            Some(TypeForm::I64)
+        )
+    {
+        return Err("Jump(0) helper lost its ordinary (I64, Bool) -> I64 signature".to_owned());
+    }
+    let NormalizedFunctionBody::Code(original) = &function.body else {
+        return Err("Jump(0) helper lacks admitted graph code".to_owned());
+    };
+    if original.parameter_count != 2 || original.local_count != 2 {
+        return Err("Jump(0) helper lost its exact two-parameter frame".to_owned());
+    }
+    let mut records = original
+        .instructions
+        .iter()
+        .filter(|i| matches!(i, I::Record { .. }));
+    let record = records
+        .next()
+        .ok_or("Jump(0) source record absent")?
+        .clone();
+    let mut fields = original
+        .instructions
+        .iter()
+        .filter(|i| matches!(i, I::Field(_)));
+    let field = fields.next().ok_or("Jump(0) source field absent")?.clone();
+    if records.next().is_some() || fields.next().is_some() {
+        return Err("Jump(0) source round trip is not unique".to_owned());
+    }
+    let (
+        I::Record {
+            layout: None,
+            type_arguments,
+            fields,
+        },
+        I::Field(selector),
+    ) = (&record, &field)
+    else {
+        return Err("Jump(0) source round trip is not structural".to_owned());
+    };
+    if !type_arguments.is_empty() || fields.as_ref() != std::slice::from_ref(selector) {
+        return Err("Jump(0) source record and selector disagree".to_owned());
+    }
+
+    // Behavior-preserving test-only lowering of the admitted identity function.
+    // The true path performs its original record/Field round trip once, clears
+    // the flag, then executes Jump(0). Entry local 0 is raw I64; the backedge
+    // writes the boxed Field result, so current representation flow declines
+    // the whole body. The backedge must skip raw-parameter boxing at entry.
+    // This proves derived-code wiring, not a new raw-source compilation route.
+    let mut rewritten = program.clone();
+    let NormalizedFunctionBody::Code(code) =
+        &mut Arc::make_mut(&mut rewritten.functions)[helper_index].body
+    else {
+        return Err("Jump(0) copied helper lacks graph code".to_owned());
+    };
+    let load = |local| I::LoadLocal {
+        local,
+        use_mode: ParameterUse::Unrestricted,
+    };
+    code.instructions = vec![
+        load(1),
+        I::JumpIfFalse(9),
+        load(0),
+        record,
+        field,
+        I::StoreLocal(0),
+        I::Bool(false),
+        I::StoreLocal(1),
+        I::Jump(0),
+        load(0),
+        I::Return,
+    ]
+    .into();
+    let policy = NormalizedRunPolicy::foreground();
+    let control = ExecutionControl::uncancelled();
+    let values = [i64::MIN, -2, -1, 0, 1, 255, 256, i64::MAX];
+    for (name, again) in [("jump-once", true), ("jump-never", false)] {
+        let declaration = declaration_named(&source, name);
+        let index = program
+            .function(declaration)
+            .ok_or("Jump(0) entry absent")?
+            .0 as usize;
+        let NormalizedFunctionBody::Code(wrapper) = &program.functions[index].body else {
+            return Err(format!("{name}: source wrapper lacks graph code"));
+        };
+        if !matches!(wrapper.instructions.as_ref(), [
+            first,
+            I::Bool(flag),
+            I::TailCall { function, arguments: 2, .. },
+            I::Return,
+        ] if matches!(first, I::LoadLocal { local: 0, use_mode: ParameterUse::Unrestricted } | I::MoveLocal(0)) && *flag == again && *function == helper)
+        {
+            return Err(format!("{name}: exact admitted terminal call is absent"));
+        }
+        for expected in values {
+            let arguments = vec![NormalizedValue::I64(expected)];
+            let vm = NormalizedVm::for_test(&program, policy)
+                .invoke(declaration, arguments.clone(), None, &control)
+                .map_err(|e| format!("{name}/{expected}: original VM: {e:?}"))?
+                .0;
+            let reference = NormalizedReferenceInterpreter::new(&source, &program, policy)
+                .invoke(declaration, arguments, None, &control)
+                .map_err(|e| format!("{name}/{expected}: canonical reference: {e:?}"))?
+                .0;
+            if !matches!(&vm, NormalizedValue::I64(value) if *value == expected)
+                || !matches!(&reference, NormalizedValue::I64(value) if *value == expected)
+            {
+                return Err(format!(
+                    "{name}: independent expected I64 {expected}, original VM {vm:?}, reference {reference:?}"
+                ));
+            }
+        }
+        for ordinary in [false, true] {
+            let route = if ordinary { "Call" } else { "TailCall" };
+            let mut candidate = rewritten.clone();
+            if ordinary {
+                let NormalizedFunctionBody::Code(code) =
+                    &mut Arc::make_mut(&mut candidate.functions)[index].body
+                else {
+                    return Err(format!("{name}: copied wrapper lacks graph code"));
+                };
+                let I::TailCall {
+                    read_scope_arguments,
+                    requirement_arguments,
+                    effect_arguments,
+                    function,
+                    type_arguments,
+                    arguments,
+                } = code.instructions[2].clone()
+                else {
+                    return Err(format!("{name}: copied tail-call identity changed"));
+                };
+                Arc::make_mut(&mut code.instructions)[2] = I::Call {
+                    read_scope_arguments,
+                    requirement_arguments,
+                    effect_arguments,
+                    function,
+                    type_arguments,
+                    arguments,
+                };
+            }
+            let image = elf_x86_64::compile_function(&candidate, index)
+                .map_err(|e| format!("{name}/{route}: Jump(0) native compilation: {e:?}"))?
+                .0;
+            for expected in values {
+                let vm = NormalizedVm::for_test(&candidate, policy)
+                    .invoke(
+                        declaration,
+                        vec![NormalizedValue::I64(expected)],
+                        None,
+                        &control,
+                    )
+                    .map_err(|e| format!("{name}/{route}/{expected}: rewritten VM: {e:?}"))?
+                    .0;
+                if !matches!(&vm, NormalizedValue::I64(value) if *value == expected) {
+                    return Err(format!(
+                        "{name}/{route}: rewritten VM expected I64 {expected}, got {vm:?}"
+                    ));
+                }
+                require_output(&bounded_native(&image, &[expected])?, expected).map_err(|e| {
+                    format!("{name}/{route}: Jump(0) parameter representation: {e}")
+                })?;
+            }
+        }
+    }
+    Ok(())
+}
