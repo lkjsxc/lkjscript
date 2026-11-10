@@ -9,7 +9,8 @@ campaigns.
 - Delete remaining modeled work/allocation accounting and unused policy branches,
   keeping useful caller cancellation and actual failure reporting.
 - Narrow compiler input to validated current meaning and exact dependencies.
-  Extend the typed catalogue prototype into type decoding and one consuming pass.
+  Use the typed structural reader and DAG pass, keeping publication metadata in
+  the caller/packager.
 - Widen, segment or stream remaining chosen representation widths and page payloads.
 - Use routine timing to choose the next fixture-sharing or Rust build split.
 
