@@ -75,24 +75,77 @@ Its stdin carries the target, output mode and complete source carrier. Output
 bytes go to stdout and diagnostics to stderr. An external launcher publishes the
 output file atomically. Select `compile-elf` for normalized backend input.
 
-## Typed input prototype
+## Typed compiler input
 
-`typed-input.lkjc` runs on the evaluator and builds a type catalogue with records,
-variants, exhaustive matching, generic lists and structured errors. Its comparison
-checks every digest and canonical image against Rust objects and the cursor reader:
+`typed-input.lkjc` and `typed-dag.lkjc` bootstrap through the Rust evaluator. They
+use records, variants, exhaustive matching and generic persistent collections to
+read structural types and compute their dependency graph.
+
+| API | Result |
+| --- | --- |
+| `typed-input::read(carrier)` | Ordered `TypeEntry` catalogue with digest and canonical image |
+| `typed-input::decode-image(image)` | Named `TypeKind` and ordered child digests |
+| `typed-dag::analyze(entries)` | Child ordinals, reverse parent occurrences and child-before-parent order |
+| `typed-dag::read-graph(carrier)` | Catalogue reading followed by graph analysis |
+
+The structural reader consumes canonical images from an admitted snapshot. It
+checks envelope framing, canonical integer encodings, identity tags and complete
+structural payloads; snapshot admission supplies checksum, digest and semantic
+authority. All 35 type constructors have named cases. Scope, effect and declaration
+metadata are parsed as metadata; structural child occurrences become graph edges.
+
+A catalogue's list position is its graph ordinal, and analysis checks that each
+`TypeEntry.index` agrees. Structured errors identify malformed entries and byte
+offsets, incorrect ordinals, both duplicate-digest positions, missing child
+occurrences, or the ordinals still blocked by cycles. Duplicate edges remain
+present in both directions.
+
+Analysis builds a digest-to-ordinal map, reverse adjacency and pending dependency
+counts. A list queue releases each vertex once and visits each reverse edge once.
+Persistent AVL maps add logarithmic lookup/update work; lists use 32-way trie
+paths. The pass needs no new collection primitive. The cursor DAG instead scans
+the complete edge array for each released vertex.
+
+Run the focused controls and the explicit maintained/scale tier with:
 
 ```sh
-bash tools/check.sh slow typed_compiler_input_matches_maintained_cursor_and_type_objects
+bash tools/check.sh focused typed_compiler_input
+bash tools/check.sh slow typed_compiler_input_matches_maintained_cursor_and_type_objects \
+  typed_compiler_input_structural_dag_scale
 ```
 
-The prototype keeps canonical type bodies as opaque bytes and currently scans the
-list for lookup. Its next step is structural-child decoding and a typed DAG pass;
-collection update cost and intrinsic-heavy notation are measured design inputs.
+Five routine controls cover 49 canonical images spanning all 35 constructors,
+malformed payloads and truncations, ordered child occurrences, reverse
+multiplicities, and structured failure locations. Generated graphs are compared
+with an independent Rust DFS oracle; a reducer removes vertices and edge
+occurrences from a disagreement. The maintained comparison also checks the cursor
+reader and every canonical Rust type object.
 
-On the maintained 26,868,750-byte carrier, all 98 types matched. The typed source
-is 139 lines and 10,394 bytes (2,528 o200k_base tokens); the comparable 21-declaration
-cursor count/data/lookup closure is 10,247 bytes (2,486 tokens). Building the typed
-catalogue took 3 ms; counting and reading all 98 cursor entries took 9 ms. Explicit
-intrinsic wrappers account for much of the notation cost. The evaluator provides
-the generic records/variants/list support used here; the native compiler subset
-will grow with the next typed pass.
+On the maintained 26,868,750-byte carrier, all 98 types and dependency edges matched:
+
+| Evaluator operation | Typed component | Cursor component |
+| --- | ---: | ---: |
+| Read the complete type catalogue | 4 ms | 9 ms |
+| Read and check the structural dependency graph | 43 ms | 2,398 ms |
+
+Geometrically growing probes build canonical carriers, then measure evaluator
+reading and graph analysis:
+
+| Types | Chain | Wide graph |
+| ---: | ---: | ---: |
+| 256 | 50 ms | 57 ms |
+| 1,024 | 200 ms | 229 ms |
+| 4,096 | 820 ms | 932 ms |
+
+The largest lifecycle checks, including result comparison, cloning and destruction,
+took 831 ms and 943 ms. The typed reader is 862 lines, 44,415 bytes and 10,167
+`o200k_base` tokens; the DAG pass is 452 lines, 18,585 bytes and 4,123 tokens.
+The cursor DAG alone is 326 lines, 15,794 bytes and 3,921 tokens. Reader coverage
+differs: the typed decoder handles all constructors, while the cursor child reader
+covers the maintained compiler subset.
+
+The implementation passed public authoring and its first focused runtime run.
+Concrete notation costs remain: explicit intrinsic declarations, repeated generic
+type arguments, reconstruction of unchanged record fields, and repeated matching
+to propagate errors. The next compiler step is a typed current-meaning snapshot
+with exact dependencies, using this structural pass as its first checked component.

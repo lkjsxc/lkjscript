@@ -1,0 +1,452 @@
+declarations.begin
+(units
+  (module create typed-dag
+    (external create add
+      (visibility private)
+      (implementation core.i64.add)
+      (parameter create a (type I64))
+      (parameter create b (type I64))
+      (returns I64))
+
+    (external create sub
+      (visibility private)
+      (implementation core.i64.subtract)
+      (parameter create a (type I64))
+      (parameter create b (type I64))
+      (returns I64))
+
+    (external create equal
+      (visibility private)
+      (implementation core.i64.equal)
+      (parameter create a (type I64))
+      (parameter create b (type I64))
+      (returns Bool))
+
+    (external create less
+      (visibility private)
+      (implementation core.i64.less)
+      (parameter create a (type I64))
+      (parameter create b (type I64))
+      (returns Bool))
+
+    (external create length
+      (visibility private)
+      (implementation core.bytes.length)
+      (parameter create data (type Bytes))
+      (returns I64))
+
+    (external create append
+      (visibility private)
+      (implementation core.list.append)
+      (type-parameter create T)
+      (parameter create values (type (list T)))
+      (parameter create value (type T))
+      (returns (list T)))
+
+    (external create size
+      (visibility private)
+      (implementation core.list.length)
+      (type-parameter create T)
+      (parameter create values (type (list T)))
+      (returns I64))
+
+    (external create item
+      (visibility private)
+      (implementation core.list.get)
+      (type-parameter create T)
+      (parameter create values (type (list T)))
+      (parameter create index (type I64))
+      (returns T))
+
+    (external create contains
+      (visibility private)
+      (implementation core.map.contains)
+      (type-parameter create K)
+      (type-parameter create V)
+      (parameter create values (type (map K V)))
+      (parameter create key (type K))
+      (returns Bool))
+
+    (external create get
+      (visibility private)
+      (implementation core.map.get)
+      (type-parameter create K)
+      (type-parameter create V)
+      (parameter create values (type (map K V)))
+      (parameter create key (type K))
+      (returns V))
+
+    (external create get-or
+      (visibility private)
+      (implementation core.map.get-or)
+      (type-parameter create K)
+      (type-parameter create V)
+      (parameter create values (type (map K V)))
+      (parameter create key (type K))
+      (parameter create fallback (type V))
+      (returns V))
+
+    (external create insert
+      (visibility private)
+      (implementation core.map.insert)
+      (type-parameter create K)
+      (type-parameter create V)
+      (parameter create values (type (map K V)))
+      (parameter create key (type K))
+      (parameter create value (type V))
+      (returns (map K V)))
+
+    (record create TypeDag
+      (visibility public)
+      (field create children (type (list (list I64))))
+      (field create parents (type (list (list I64))))
+      (field create order (type (list I64))))
+
+    (record create EntryError
+      (visibility public)
+      (field create ordinal (type I64))
+      (field create problem (type typed-input::ReadError)))
+
+    (record create OrdinalError (visibility public) (field create ordinal (type I64)) (field create index (type I64)))
+
+    (record create DuplicateDigest
+      (visibility public)
+      (field create first (type I64))
+      (field create second (type I64))
+      (field create digest (type Bytes)))
+
+    (record create MissingChild
+      (visibility public)
+      (field create parent (type I64))
+      (field create position (type I64))
+      (field create digest (type Bytes)))
+
+    (variant create DagError
+      (visibility public)
+      (case create input (payload typed-input::ReadError))
+      (case create malformed (payload EntryError))
+      (case create ordinal (payload OrdinalError))
+      (case create duplicate-digest (payload DuplicateDigest))
+      (case create missing-child (payload MissingChild))
+      (case create cycle (payload (list I64))))
+
+    (variant create DagResult
+      (visibility public)
+      (case create ready (payload TypeDag))
+      (case create error (payload DagError)))
+
+    (record create GraphWork
+      (visibility private)
+      (field create entries (type (list typed-input::TypeEntry)))
+      (field create ordinals (type (map Bytes I64)))
+      (field create children (type (list (list I64))))
+      (field create remaining (type (map I64 I64)))
+      (field create users (type (map I64 (list I64)))))
+
+    (record create SortWork
+      (visibility private)
+      (field create children (type (list (list I64))))
+      (field create parents (type (list (list I64))))
+      (field create remaining (type (map I64 I64)))
+      (field create queue (type (list I64)))
+      (field create head (type I64)))
+
+    (function create index-entries
+      (visibility private)
+      (effect pure)
+      (parameter create entries (type (list typed-input::TypeEntry)))
+      (parameter create ordinal (type I64))
+      (parameter create ordinals (type (map Bytes I64)))
+      (returns DagResult)
+      (body
+        (if
+          (call equal (local ordinal) (call size (types typed-input::TypeEntry) (local entries)))
+          (call build-edges
+            (record GraphWork
+              (field GraphWork::entries (local entries))
+              (field GraphWork::ordinals (local ordinals))
+              (field GraphWork::children (list (list I64)))
+              (field GraphWork::remaining (map I64 I64))
+              (field GraphWork::users (map I64 (list I64))))
+            (i64 0))
+          (let
+            (binding entry (call item (types typed-input::TypeEntry) (local entries) (local ordinal)))
+            (binding digest (field (local entry) typed-input::TypeEntry::digest))
+            (in
+              (if
+                (call equal (field (local entry) typed-input::TypeEntry::index) (local ordinal))
+                (if
+                  (call equal (call length (local digest)) (i64 32))
+                  (if
+                    (call contains (types Bytes I64) (local ordinals) (local digest))
+                    (variant DagResult::error
+                      (variant DagError::duplicate-digest
+                        (record DuplicateDigest
+                          (field DuplicateDigest::first (call get (types Bytes I64) (local ordinals) (local digest)))
+                          (field DuplicateDigest::second (local ordinal))
+                          (field DuplicateDigest::digest (local digest)))))
+                    (call index-entries
+                      (local entries)
+                      (call add (local ordinal) (i64 1))
+                      (call insert (types Bytes I64) (local ordinals) (local digest) (local ordinal))))
+                  (variant DagResult::error
+                    (variant DagError::malformed
+                      (record EntryError
+                        (field EntryError::ordinal (local ordinal))
+                        (field EntryError::problem
+                          (record typed-input::ReadError
+                            (field typed-input::ReadError::at (i64 0))
+                            (field typed-input::ReadError::message (text "type entry digest is not 32 bytes"))))))))
+                (variant DagResult::error
+                  (variant DagError::ordinal
+                    (record OrdinalError
+                      (field OrdinalError::ordinal (local ordinal))
+                      (field OrdinalError::index (field (local entry) typed-input::TypeEntry::index)))))))))))
+
+    (function create build-edges
+      (visibility private)
+      (effect pure)
+      (parameter create work (type GraphWork))
+      (parameter create ordinal (type I64))
+      (returns DagResult)
+      (body
+        (if
+          (call equal
+            (local ordinal)
+            (call size (types typed-input::TypeEntry) (field (local work) GraphWork::entries)))
+          (call materialize (local work) (i64 0) (list (list I64)) (list I64))
+          (match
+            (call typed-input::decode-image
+              (field
+                (call item (types typed-input::TypeEntry) (field (local work) GraphWork::entries) (local ordinal))
+                typed-input::TypeEntry::image))
+            (arm typed-input::ShapeResult::error
+              (payload problem typed-input::ReadError)
+              (variant DagResult::error
+                (variant DagError::malformed
+                  (record EntryError
+                    (field EntryError::ordinal (local ordinal))
+                    (field EntryError::problem (local problem))))))
+            (arm typed-input::ShapeResult::ready
+              (payload shape typed-input::TypeShape)
+              (call resolve-children
+                (local work)
+                (local ordinal)
+                (field (local shape) typed-input::TypeShape::children)
+                (i64 0)
+                (list I64)))))))
+
+    (function create resolve-children
+      (visibility private)
+      (effect pure)
+      (parameter create work (type GraphWork))
+      (parameter create parent (type I64))
+      (parameter create digests (type (list Bytes)))
+      (parameter create position (type I64))
+      (parameter create children (type (list I64)))
+      (returns DagResult)
+      (body
+        (if
+          (call equal (local position) (call size (types Bytes) (local digests)))
+          (call build-edges
+            (record GraphWork
+              (field GraphWork::entries (field (local work) GraphWork::entries))
+              (field GraphWork::ordinals (field (local work) GraphWork::ordinals))
+              (field GraphWork::children
+                (call append (types (list I64)) (field (local work) GraphWork::children) (local children)))
+              (field GraphWork::remaining
+                (call insert
+                  (types I64 I64)
+                  (field (local work) GraphWork::remaining)
+                  (local parent)
+                  (call size (types I64) (local children))))
+              (field GraphWork::users (field (local work) GraphWork::users)))
+            (call add (local parent) (i64 1)))
+          (let
+            (binding digest (call item (types Bytes) (local digests) (local position)))
+            (in
+              (if
+                (call contains (types Bytes I64) (field (local work) GraphWork::ordinals) (local digest))
+                (let
+                  (binding child (call get (types Bytes I64) (field (local work) GraphWork::ordinals) (local digest)))
+                  (binding parents
+                    (call get-or
+                      (types I64 (list I64))
+                      (field (local work) GraphWork::users)
+                      (local child)
+                      (list I64)))
+                  (in
+                    (call resolve-children
+                      (record GraphWork
+                        (field GraphWork::entries (field (local work) GraphWork::entries))
+                        (field GraphWork::ordinals (field (local work) GraphWork::ordinals))
+                        (field GraphWork::children (field (local work) GraphWork::children))
+                        (field GraphWork::remaining (field (local work) GraphWork::remaining))
+                        (field GraphWork::users
+                          (call insert
+                            (types I64 (list I64))
+                            (field (local work) GraphWork::users)
+                            (local child)
+                            (call append (types I64) (local parents) (local parent)))))
+                      (local parent)
+                      (local digests)
+                      (call add (local position) (i64 1))
+                      (call append (types I64) (local children) (local child)))))
+                (variant DagResult::error
+                  (variant DagError::missing-child
+                    (record MissingChild
+                      (field MissingChild::parent (local parent))
+                      (field MissingChild::position (local position))
+                      (field MissingChild::digest (local digest)))))))))))
+
+    (function create materialize
+      (visibility private)
+      (effect pure)
+      (parameter create work (type GraphWork))
+      (parameter create ordinal (type I64))
+      (parameter create parents (type (list (list I64))))
+      (parameter create queue (type (list I64)))
+      (returns DagResult)
+      (body
+        (if
+          (call equal
+            (local ordinal)
+            (call size (types typed-input::TypeEntry) (field (local work) GraphWork::entries)))
+          (call sort
+            (record SortWork
+              (field SortWork::children (field (local work) GraphWork::children))
+              (field SortWork::parents (local parents))
+              (field SortWork::remaining (field (local work) GraphWork::remaining))
+              (field SortWork::queue (local queue))
+              (field SortWork::head (i64 0))))
+          (call materialize
+            (local work)
+            (call add (local ordinal) (i64 1))
+            (call append
+              (types (list I64))
+              (local parents)
+              (call get-or (types I64 (list I64)) (field (local work) GraphWork::users) (local ordinal) (list I64)))
+            (if
+              (call equal
+                (call get (types I64 I64) (field (local work) GraphWork::remaining) (local ordinal))
+                (i64 0))
+              (call append (types I64) (local queue) (local ordinal))
+              (local queue))))))
+
+    (function create unresolved
+      (visibility private)
+      (effect pure)
+      (parameter create remaining (type (map I64 I64)))
+      (parameter create ordinal (type I64))
+      (parameter create count (type I64))
+      (parameter create result (type (list I64)))
+      (returns (list I64))
+      (body
+        (if
+          (call equal (local ordinal) (local count))
+          (local result)
+          (call unresolved
+            (local remaining)
+            (call add (local ordinal) (i64 1))
+            (local count)
+            (if
+              (call equal (call get (types I64 I64) (local remaining) (local ordinal)) (i64 0))
+              (local result)
+              (call append (types I64) (local result) (local ordinal)))))))
+
+    (function create sort
+      (visibility private)
+      (effect pure)
+      (parameter create work (type SortWork))
+      (returns DagResult)
+      (body
+        (if
+          (call equal
+            (field (local work) SortWork::head)
+            (call size (types I64) (field (local work) SortWork::queue)))
+          (if
+            (call equal
+              (call size (types I64) (field (local work) SortWork::queue))
+              (call size (types (list I64)) (field (local work) SortWork::children)))
+            (variant DagResult::ready
+              (record TypeDag
+                (field TypeDag::children (field (local work) SortWork::children))
+                (field TypeDag::parents (field (local work) SortWork::parents))
+                (field TypeDag::order (field (local work) SortWork::queue))))
+            (variant DagResult::error
+              (variant DagError::cycle
+                (call unresolved
+                  (field (local work) SortWork::remaining)
+                  (i64 0)
+                  (call size (types (list I64)) (field (local work) SortWork::children))
+                  (list I64)))))
+          (call release
+            (local work)
+            (call item
+              (types (list I64))
+              (field (local work) SortWork::parents)
+              (call item (types I64) (field (local work) SortWork::queue) (field (local work) SortWork::head)))
+            (i64 0)))))
+
+    (function create release
+      (visibility private)
+      (effect pure)
+      (parameter create work (type SortWork))
+      (parameter create parents (type (list I64)))
+      (parameter create position (type I64))
+      (returns DagResult)
+      (body
+        (if
+          (call equal (local position) (call size (types I64) (local parents)))
+          (call sort
+            (record SortWork
+              (field SortWork::children (field (local work) SortWork::children))
+              (field SortWork::parents (field (local work) SortWork::parents))
+              (field SortWork::remaining (field (local work) SortWork::remaining))
+              (field SortWork::queue (field (local work) SortWork::queue))
+              (field SortWork::head (call add (field (local work) SortWork::head) (i64 1)))))
+          (let
+            (binding parent (call item (types I64) (local parents) (local position)))
+            (binding count (call get (types I64 I64) (field (local work) SortWork::remaining) (local parent)))
+            (in
+              (call release
+                (record SortWork
+                  (field SortWork::children (field (local work) SortWork::children))
+                  (field SortWork::parents (field (local work) SortWork::parents))
+                  (field SortWork::remaining
+                    (call insert
+                      (types I64 I64)
+                      (field (local work) SortWork::remaining)
+                      (local parent)
+                      (call sub (local count) (i64 1))))
+                  (field SortWork::queue
+                    (if
+                      (call equal (local count) (i64 1))
+                      (call append (types I64) (field (local work) SortWork::queue) (local parent))
+                      (field (local work) SortWork::queue)))
+                  (field SortWork::head (field (local work) SortWork::head)))
+                (local parents)
+                (call add (local position) (i64 1))))))))
+
+    (function create analyze
+      (visibility public)
+      (effect pure)
+      (parameter create entries (type (list typed-input::TypeEntry)))
+      (returns DagResult)
+      (body (call index-entries (local entries) (i64 0) (map Bytes I64))))
+
+    (function create read-graph
+      (visibility public)
+      (effect pure)
+      (parameter create data (type Bytes))
+      (returns DagResult)
+      (body
+        (match
+          (call typed-input::read (local data))
+          (arm typed-input::TableResult::error
+            (payload problem typed-input::ReadError)
+            (variant DagResult::error (variant DagError::input (local problem))))
+          (arm typed-input::TableResult::ready
+            (payload entries (list typed-input::TypeEntry))
+            (call analyze (local entries))))))))
+declarations.end
