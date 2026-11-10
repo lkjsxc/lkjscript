@@ -5,19 +5,12 @@ use lkjscript::platform::PreparedDeployment;
 use serde_json::{Value, json};
 use std::net::SocketAddr;
 
-// One round retains complete observations from many separately admitted requests.
-// The maintained HTTP matrix has 111,911 aggregate items. This evidence-only
-// ceiling leaves request JSON admission and the 4 MiB evidence byte limit intact.
-const MAXIMUM_ROUND_ITEMS: usize = 128 * 1024;
-
 fn decode_round(bytes: &[u8]) -> Result<Value, DevError> {
     lkjscript::platform::json::decode_strict_with_integer_policy(
         bytes,
         lkjscript::platform::json::JsonLimits {
             maximum_bytes: MAXIMUM_OUTPUT_BYTES as usize,
             maximum_string_bytes: MAXIMUM_OUTPUT_BYTES as usize,
-            maximum_items: MAXIMUM_ROUND_ITEMS,
-            ..Default::default()
         },
         lkjscript::platform::json::JsonIntegerPolicy::SignedOrUnsigned64,
     )
@@ -716,19 +709,25 @@ mod round_tests {
     use super::*;
 
     #[test]
-    fn aggregate_round_preserves_all_items_without_relaxing_request_or_format_limits() {
-        let value = json!(vec![0; MAXIMUM_ROUND_ITEMS]);
+    fn aggregate_round_preserves_cardinality_and_byte_and_format_checks() {
+        let value = json!(vec![0; 128 * 1024]);
         let bytes = serde_json::to_vec(&value).unwrap();
-        assert!(strict_from_slice::<Value>(&bytes).is_err());
+        assert_eq!(strict_from_slice::<Value>(&bytes).unwrap(), value);
         assert_eq!(decode_round(&bytes).unwrap(), value);
-        let oversized = serde_json::to_vec(&vec![0; MAXIMUM_ROUND_ITEMS + 1]).unwrap();
-        assert!(decode_round(&oversized).is_err());
+        let larger = serde_json::to_vec(&vec![0; 256 * 1024]).unwrap();
+        assert_eq!(
+            decode_round(&larger).unwrap().as_array().unwrap().len(),
+            256 * 1024
+        );
         assert!(decode_round(br#"{"duplicate":1,"duplicate":2}"#).is_err());
         assert!(decode_round(b"[0.5]").is_err());
         assert!(decode_round(&vec![b' '; MAXIMUM_OUTPUT_BYTES as usize + 1]).is_err());
         if let Some(path) = std::env::var_os("LKJSCRIPT_RUNTIME_ROUND_FIXTURE") {
             let bytes = fs::read(path).unwrap();
-            assert!(strict_from_slice::<Value>(&bytes).is_err());
+            assert_eq!(
+                strict_from_slice::<Value>(&bytes).unwrap(),
+                decode_round(&bytes).unwrap()
+            );
             assert_eq!(
                 decode_round(&bytes).unwrap(),
                 serde_json::from_slice::<Value>(&bytes).unwrap()

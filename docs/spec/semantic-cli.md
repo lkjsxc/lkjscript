@@ -1184,18 +1184,13 @@ Application numeric admission retains complete decimal tokens and correctly roun
 fraction and exponent spellings. It deliberately preserves `-0` and `-0.0`. I64 admission remains
 exact, including values above `2^53`, and rejects fraction/exponent spellings such as `1.0` and
 `1e0`. Decimal overflow such as `1e400` rejects. Control schemas, manifests and security inputs
-retain their strict integer policies. Byte/item/string limits, duplicate fields, invalid
+retain their strict integer policies. Byte/string limits, duplicate fields, invalid
 strings and trailing input reject under both policies. Typed JSON built-ins and project/artifact
 commands use the same application policy.
 
-Typed output checks the emitted JSON representation before returning success. The
-root has depth zero; each array member or object value adds one level. Every array
-member and object field consumes one item, including generated typed wrappers.
-A Map entry `[key,value]` consumes three items and places its key/value two levels
-below the Map array; nested values consume their additional items and levels.
-Bytes' `$bytes` value and variants' `case`/`value` fields also count. String-byte
-limits include object field names, case labels and base64 text. Whole-type
-directional eligibility still visits unused arguments and inactive cases separately.
+Typed output checks the emitted JSON representation before returning success.
+String-byte limits include object field names, case labels and base64 text.
+Whole-type directional eligibility visits unused arguments and inactive cases.
 
 Before constructing JSON text, the encoder reserves its aggregate UTF-8 byte
 length against the existing encoded-byte bound. Repeated strings, object keys,
@@ -1205,13 +1200,12 @@ This lower bound can reject an already oversized result with
 receive the final exact serialized-byte check. It is a boundary-output bound,
 not a whole-process memory cap or an internal language execution quota.
 
-Current defaults are 1 MiB of encoded bytes, 100,000 JSON items and 1 MiB per
-decoded string. JSON parsing, typed conversion and typed-data encoding have no
-project-defined nesting ceiling. Semantic work and recursive value cleanup run
-on the host-sized stack reservation. `execution.foreground-limits` exposes the
-remaining byte, item and string controls. For example, a flat primitive-key /
-primitive-value Map fits the item control at 33,333 entries and exceeds it at
-33,334. Type eligibility traverses exact types with a visited set and cancellation.
+Current defaults are 1 MiB of encoded bytes and 1 MiB per decoded string.
+`execution.foreground-limits` exposes these byte controls. JSON parsing, typed
+conversion and typed-data encoding accept arbitrary cardinality and nesting
+within their representable extents and available storage. Semantic work and
+recursive value cleanup run on the host-sized stack reservation. Type eligibility
+traverses exact types with a visited set and cancellation.
 
 `capabilities --section runners` advertises the F64 arithmetic, comparison, parse/format,
 conversion and transport policies in `execution.f64`, `execution.f64-conversion` and

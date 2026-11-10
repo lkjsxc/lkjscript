@@ -19,12 +19,7 @@ fn map_entries_path_updates_preserve_every_retained_version_in_distinct_shapes()
             for key in order {
                 let value = NormalizedValue::I64(13 - 7 * key);
                 tree = tree
-                    .insert(
-                        NormalizedMapKey::I64(key),
-                        value.clone(),
-                        1_000_000,
-                        &mut |_| Ok(()),
-                    )
+                    .insert(NormalizedMapKey::I64(key), value.clone(), &mut |_| Ok(()))
                     .unwrap();
                 oracle.insert(key, value);
             }
@@ -39,12 +34,7 @@ fn map_entries_path_updates_preserve_every_retained_version_in_distinct_shapes()
             for key in (0..count).step_by(5).chain([i64::MIN, i64::MAX]) {
                 let value = NormalizedValue::I64(key.wrapping_mul(11));
                 tree = tree
-                    .insert(
-                        NormalizedMapKey::I64(key),
-                        value.clone(),
-                        1_000_000,
-                        &mut |_| Ok(()),
-                    )
+                    .insert(NormalizedMapKey::I64(key), value.clone(), &mut |_| Ok(()))
                     .unwrap();
                 oracle.insert(key, value);
             }

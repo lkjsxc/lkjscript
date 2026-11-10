@@ -1094,12 +1094,7 @@ impl Value {
         };
         self.ordinary_type = None;
         let output = if let Some(child) = child {
-            values.insert(
-                key,
-                child.raw,
-                super::super::value::MAXIMUM_ADMISSION_ITEMS,
-                reserve,
-            )?
+            values.insert(key, child.raw, reserve)?
         } else {
             values.remove(&key, reserve)?
         };

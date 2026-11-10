@@ -414,7 +414,7 @@ fn native_package_planning_consumes_independently_expected_complete_stages() {
 }
 
 #[test]
-fn native_capacity_admission_is_complete_above_default_json_bytes_and_entries() {
+fn native_capacity_admission_is_complete_above_default_json_bytes() {
     let control = ExecutionControl::uncancelled();
     for (label, proposal) in capacity_cases::capacity_suite() {
         let arguments = bytes(&json!([proposal]));
@@ -426,8 +426,8 @@ fn native_capacity_admission_is_complete_above_default_json_bytes_and_entries() 
                 ..JsonLimits::default()
             };
             assert!(
-                decode_strict(&arguments, byte_only).is_err(),
-                "entry capacity is independent of bytes"
+                decode_strict(&arguments, byte_only).is_ok(),
+                "collection cardinality adds no JSON admission limit"
             );
         }
         let before = invocation_count();
@@ -517,7 +517,7 @@ fn native_full_package_and_distinct_edge_capacities_share_one_complete_projectio
         maximum_bytes: JSON_LIMITS.maximum_bytes,
         ..JsonLimits::default()
     };
-    assert!(decode_strict(&projection.arguments, byte_only).is_err());
+    assert!(decode_strict(&projection.arguments, byte_only).is_ok());
     let output = invoke(&projection.arguments, &control).unwrap();
     assert!(
         output.len() > JsonLimits::default().maximum_bytes,

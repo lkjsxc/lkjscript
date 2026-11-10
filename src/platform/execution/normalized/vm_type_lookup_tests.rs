@@ -616,7 +616,7 @@ fn application_ordinary_candidate_never_substitutes_its_own_read_scope() {
 }
 
 #[test]
-fn application_ordinary_lookup_keeps_control_bounds_and_modeled_vm_accounting() {
+fn application_ordinary_lookup_keeps_cancellation_and_modeled_vm_accounting() {
     let (program, functions) = fixture();
     let function = functions["carry"];
     let template = program.functions[function.0 as usize].result.ty;
@@ -628,18 +628,6 @@ fn application_ordinary_lookup_keeps_control_bounds_and_modeled_vm_accounting() 
         nodes: 0,
     };
     let expected = resolve_application_in(&program, template, &context, &mut measured).unwrap();
-    for short in [false, true] {
-        let mut work = Work {
-            control: &healthy,
-            nodes: MAXIMUM_ADMISSION_ITEMS - measured.nodes + u64::from(short),
-        };
-        let result = resolve_application_in(&program, template, &context, &mut work);
-        if short {
-            assert_eq!(result.unwrap_err().class, ExecutionFailureClass::Resource);
-        } else {
-            assert_eq!(result.unwrap(), expected);
-        }
-    }
     let mut refused = 0;
     let mut accepted = 0;
     for checks in 0..128 {
@@ -701,4 +689,67 @@ fn application_ordinary_lookup_keeps_control_bounds_and_modeled_vm_accounting() 
     assert_eq!(optimized_error.class, ExecutionFailureClass::Resource);
     assert_eq!(optimized_error.code, scanned_error.code);
     assert_eq!(optimized_error.class, scanned_error.class);
+}
+
+#[test]
+#[ignore = "geometric admission-work probe"]
+fn transfer_admission_visits_beyond_former_item_ceiling() {
+    fn intern(program: &mut NormalizedProgram, form: TypeForm) -> TypeObjectDigest {
+        let object = TypeObject::new(form).unwrap();
+        let digest = encode_type_object(&object).unwrap().0;
+        program.types.insert(digest, object);
+        digest
+    }
+
+    let (mut program, _) = fixture();
+    let mut root = intern(&mut program, TypeForm::ByteBuffer);
+    let control = ExecutionControl::uncancelled();
+    for depth in 1..=20 {
+        root = intern(
+            &mut program,
+            TypeForm::OwnedProduct {
+                fields: ["left", "right"]
+                    .into_iter()
+                    .map(|name| StructuralTypeField {
+                        name: Name::new(name).unwrap(),
+                        ty: root,
+                    })
+                    .collect(),
+            },
+        );
+        if depth < 18 {
+            continue;
+        }
+        let started = std::time::Instant::now();
+        let mut work = Work::new(&control);
+        assert!(super::super::validate_type(&program, root, &mut work).unwrap());
+        assert_eq!(work.nodes, (1_u64 << (depth + 1)) - 1);
+        let schema =
+            crate::platform::execution::normalized::reference_schema::NormalizedReferenceSchema {
+                types: program.types.clone(),
+                ..Default::default()
+            };
+        assert_eq!(
+            schema
+                .transfer_type_identity(root, &BTreeMap::new(), &control)
+                .unwrap(),
+            root
+        );
+        assert!(
+            schema
+                .type_instantiation_scratch(root, &BTreeMap::new(), &control)
+                .unwrap()
+                > 0
+        );
+        let error =
+            super::super::admit_type(&program, root, &ExecutionControl::cancel_after_checks(32))
+                .unwrap_err();
+        assert_eq!(error.class, ExecutionFailureClass::Cancelled);
+        assert!(super::super::admit_type(&program, root, &control).unwrap());
+        eprintln!(
+            "transfer admission depth={depth} visits={} elapsed_ms={}",
+            work.nodes,
+            started.elapsed().as_millis()
+        );
+    }
 }

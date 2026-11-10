@@ -103,13 +103,10 @@ list identical when assembling one logical table; changing it can shift page
 boundaries. It is an application-level paging contract, not a stored snapshot or
 an unbounded input stream.
 
-The JSON limits still apply to every input and output. Three argument members
-leave room for 99,997 Text items under the current 100,000-item input bound.
-Their byte lengths must also fit within one MiB. Each output entry consumes three
-JSON items: one list member and two object fields. Thus at most 33,333 of these
-records fit the item count, and long keys may reach the byte limit earlier.
-Reducing the requested count is the caller's choice; the result-file option does
-not bypass either limit.
+Each input and output must fit the one MiB JSON byte limit, including whitespace
+in input files. Long keys increase the encoded result size. Callers can request
+fewer entries to keep a page within that byte limit; result files use the same
+encoding limits as inline results.
 
 ## Reuse the generic window
 

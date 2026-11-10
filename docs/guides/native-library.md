@@ -268,10 +268,9 @@ publication durability and stage cleanup. The file carries the typed JSON value,
 to the existing 1 MiB encoding limit, so larger lists or maps need not fit in one
 display record. Omit `--result-file` to retain the usual inline result.
 
-The JSON structure limits also apply. For example, a flat `Map<Text,I64>` can return
-33,333 entries within the default 100,000-item bound; its entry arrays and their
-members all count. Larger or more deeply nested results reject before a result file
-is published. `capabilities --section runners` lists the current JSON bounds.
+Maps and nested values are accepted while their encoded bytes fit the current
+JSON byte limits. Encoding failures occur before a result file is published.
+`capabilities --section runners` lists the current JSON byte bounds.
 When callers need counts or a most frequent key, the
 [collection summary walkthrough](native-summary.md) shows an ordinary native
 program that returns those fields from a larger internal Map.

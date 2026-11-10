@@ -1,9 +1,7 @@
 //! Sealed custody between fresh invocations of one prepared program.
 //! This physical boundary is shared by evaluators; ordinary shape admission is not.
 use super::super::prepare::NormalizedProgram;
-use super::super::value::{
-    FunctionIndex, MAXIMUM_ADMISSION_ITEMS, NormalizedValue, ValueOrigin, release_raw_values,
-};
+use super::super::value::{FunctionIndex, NormalizedValue, ValueOrigin, release_raw_values};
 use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFailureClass};
 use crate::platform::kernel::{FunctionEffect, ParameterUse, TypeForm, TypeObjectDigest};
 
@@ -102,7 +100,7 @@ impl TransferArguments {
         {
             return Err(reject());
         }
-        let mut work = Work { control, nodes: 0 };
+        let mut work = Work::new(control);
         validate_type(program, application.result(), &mut work)?;
         let mut seen_owned = false;
         for (index, (argument, parameter)) in
@@ -160,7 +158,7 @@ impl TransferArguments {
         {
             return Err(reject());
         }
-        let mut work = Work { control, nodes: 0 };
+        let mut work = Work::new(control);
         for value in self.values.as_mut().ok_or_else(reject)? {
             adopt_value(value, self.source, destination, &mut work)?;
         }
@@ -210,7 +208,7 @@ impl TransferArguments {
         {
             return Err(reject());
         }
-        let mut work = Work { control, nodes: 0 };
+        let mut work = Work::new(control);
         validate_type(program, application.result(), &mut work)?;
         let mut seen_owned = false;
         for (index, (argument, parameter)) in values
@@ -353,7 +351,7 @@ impl TransferArguments {
             return Err(reject());
         }
         let values = self.values.as_mut().ok_or_else(reject)?;
-        let mut work = Work { control, nodes: 0 };
+        let mut work = Work::new(control);
         let mut leases = self.reads.iter().peekable();
         for (index, value) in values.iter_mut().enumerate() {
             if let NormalizedValue::RegionCap { token, .. } = value {
@@ -469,7 +467,7 @@ impl TransferResult {
         if source == destination || transfer.application.function().1 != program.value_origin {
             return Err(reject());
         }
-        let mut work = Work { control, nodes: 0 };
+        let mut work = Work::new(control);
         validate_type(program, transfer.ty, &mut work)?;
         inspect_value(
             program,
@@ -516,7 +514,7 @@ impl TransferResult {
         {
             return Err(reject());
         }
-        let mut work = Work { control, nodes: 0 };
+        let mut work = Work::new(control);
         adopt_value(
             self.value.as_mut().ok_or_else(reject)?,
             self.source,
@@ -537,6 +535,7 @@ impl Drop for TransferResult {
 
 struct Work<'a> {
     control: &'a ExecutionControl,
+    #[cfg(test)]
     nodes: u64,
 }
 
@@ -547,7 +546,7 @@ pub(in super::super) fn admit_type(
     ty: TypeObjectDigest,
     control: &ExecutionControl,
 ) -> Result<bool, ExecutionError> {
-    validate_type(program, ty, &mut Work { control, nodes: 0 })
+    validate_type(program, ty, &mut Work::new(control))
 }
 
 /// Read sharing is checked independently from moving, even though today's
@@ -557,22 +556,24 @@ pub(in super::super) fn admit_shareable_type(
     ty: TypeObjectDigest,
     control: &ExecutionControl,
 ) -> Result<bool, ExecutionError> {
-    validate_shareable_type(program, ty, &mut Work { control, nodes: 0 })
+    validate_shareable_type(program, ty, &mut Work::new(control))
 }
-impl Work<'_> {
+impl<'a> Work<'a> {
+    fn new(control: &'a ExecutionControl) -> Self {
+        Self {
+            control,
+            #[cfg(test)]
+            nodes: 0,
+        }
+    }
+
     fn visit(&mut self) -> Result<(), ExecutionError> {
         self.control.check()?;
-
-        self.nodes = self
-            .nodes
-            .checked_add(1)
-            .filter(|n| *n <= MAXIMUM_ADMISSION_ITEMS)
-            .ok_or_else(|| {
-                ExecutionError::resource(
-                    "normalized_parallel_transfer_items",
-                    "structured transfer exceeds finite admission storage",
-                )
-            })?;
+        // Tests compare lookup work without charging production execution.
+        #[cfg(test)]
+        {
+            self.nodes += 1;
+        }
         Ok(())
     }
 }

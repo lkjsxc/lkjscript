@@ -158,14 +158,11 @@ bundle includes its standard dependency and needs no authoring project at runtim
 The descriptor grants no effects; the command is pure. Detached execution runs
 production once and reports that differential verification was not performed.
 
-The input remains bounded JSON: 1 MiB including whitespace and 100,000 array
-members/object fields, including the outer argument array. For one list of Text,
-99,999 strings fit the item count; their actual lengths must also fit the byte
-bound. A 100,000-element list exceeds the item count before invocation. Intermediate
-Maps stay subject to the runtime's actual structural and value limits. This
-program does not stream an unbounded collection, and its summary does not return
-the complete frequency table. To return bounded complete values, use the
-[result-file interface](native-library.md#save-a-command-result).
+The input's encoded bytes, including whitespace, must fit one MiB. The command
+holds the complete input list and frequency table while producing its summary.
+To return complete typed values, use the
+[result-file interface](native-library.md#save-a-command-result), subject to the
+same encoded-byte limit.
 For a complete frequency table larger than one result, the
 [paging example](native-pagination.md) uses an ordinary generic window function
 and shows its reuse with an application-owned record type.

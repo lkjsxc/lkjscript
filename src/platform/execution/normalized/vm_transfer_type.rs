@@ -143,7 +143,7 @@ pub(in super::super::super) fn resolve_application(
     context: &PreparedApplicationContext<'_>,
     control: &ExecutionControl,
 ) -> Result<TypeObjectDigest, ExecutionError> {
-    let mut work = Work { control, nodes: 0 };
+    let mut work = Work::new(control);
     resolve_application_in(program, template, context, &mut work)
 }
 
@@ -242,7 +242,7 @@ pub(in super::super::super) fn contains_associated_type(
     ty: TypeObjectDigest,
     control: &ExecutionControl,
 ) -> Result<bool, ExecutionError> {
-    contains_associated(program, ty, &mut Work { control, nodes: 0 })
+    contains_associated(program, ty, &mut Work::new(control))
 }
 
 fn contains_associated(
@@ -367,15 +367,8 @@ pub(in super::super::super) fn validate_associated_bindings(
     program: &NormalizedProgram,
     selected: &NormalizedImplementationArgument,
     control: &ExecutionControl,
-    nodes: &mut u64,
 ) -> Result<(), ExecutionError> {
-    let mut work = Work {
-        control,
-        nodes: *nodes,
-    };
-    let result = validate_associated_bindings_in(program, selected, &mut work);
-    *nodes = work.nodes;
-    result
+    validate_associated_bindings_in(program, selected, &mut Work::new(control))
 }
 
 pub(in super::super::super) fn resolve(
@@ -384,7 +377,7 @@ pub(in super::super::super) fn resolve(
     bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
     control: &ExecutionControl,
 ) -> Result<TypeObjectDigest, ExecutionError> {
-    let mut work = Work { control, nodes: 0 };
+    let mut work = Work::new(control);
     resolve_in(program, template, bindings, &mut work)
 }
 

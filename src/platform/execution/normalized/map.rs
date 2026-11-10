@@ -144,7 +144,7 @@ fn storage_error() -> ExecutionError {
     ExecutionError::new(
         ExecutionFailureClass::Resource,
         "normalized_map_storage",
-        "persistent map exceeds its checked length, height, or storage bound",
+        "persistent map length, height, or allocation extent overflows",
     )
 }
 
@@ -357,14 +357,10 @@ fn sorted(
 impl Map {
     pub(super) fn from_items(
         entries: BTreeMap<NormalizedMapKey, NormalizedValue>,
-        maximum_length: u64,
         reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         let length = entries.len();
         let mut entries = RawEntries(entries.into_iter());
-        if length as u64 > maximum_length {
-            return Err(storage_error());
-        }
         reserve(Charge::default())?;
         let root = sorted(&mut entries, length, reserve)?;
         reserve(Charge::default())?;
@@ -404,14 +400,9 @@ impl Map {
         self.get(key).is_some()
     }
 
-    fn inserted_length(
-        &self,
-        key: &NormalizedMapKey,
-        maximum_length: u64,
-    ) -> Result<usize, ExecutionError> {
+    fn inserted_length(&self, key: &NormalizedMapKey) -> Result<usize, ExecutionError> {
         self.length
             .checked_add(usize::from(!self.contains_key(key)))
-            .filter(|length| *length as u64 <= maximum_length)
             .ok_or_else(storage_error)
     }
 
@@ -419,7 +410,6 @@ impl Map {
         &self,
         key: NormalizedMapKey,
         value: NormalizedValue,
-        maximum_length: u64,
         reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         let added = Entry {
@@ -428,7 +418,7 @@ impl Map {
             next_cleanup: None,
         };
         reserve(Charge::default())?;
-        let length = self.inserted_length(&added.key, maximum_length)?;
+        let length = self.inserted_length(&added.key)?;
         let added = entry(added, reserve)?;
         let root = insert(&self.root, added, reserve)?;
         reserve(Charge::default())?;
@@ -445,7 +435,6 @@ impl Map {
         &self,
         key: &NormalizedMapKey,
         value: NormalizedValue,
-        maximum_length: u64,
         reserve: &mut impl FnMut(Charge) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         let mut added = Entry {
@@ -454,7 +443,7 @@ impl Map {
             next_cleanup: None,
         };
         reserve(Charge::default())?;
-        let length = self.inserted_length(key, maximum_length)?;
+        let length = self.inserted_length(key)?;
         reserve(Charge {
             slots: 0,
             bytes: entry_bytes(),

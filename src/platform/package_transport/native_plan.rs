@@ -30,7 +30,6 @@ const TARGET: &str = "package-plan";
 // Raw typed-value admission, source admission and working storage remain separate.
 const JSON_LIMITS: JsonLimits = JsonLimits {
     maximum_bytes: 4 * 1_048_576,
-    maximum_items: 500_000,
     maximum_string_bytes: 256,
 };
 

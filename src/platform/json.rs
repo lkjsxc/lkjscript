@@ -27,7 +27,6 @@ pub enum JsonNumericPolicy {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct JsonLimits {
     pub maximum_bytes: usize,
-    pub maximum_items: usize,
     pub maximum_string_bytes: usize,
 }
 
@@ -35,7 +34,6 @@ impl Default for JsonLimits {
     fn default() -> Self {
         Self {
             maximum_bytes: 1_048_576,
-            maximum_items: 100_000,
             maximum_string_bytes: 1_048_576,
         }
     }
@@ -87,7 +85,7 @@ pub fn decode_strict_with_numeric_policy(
     }
     let (masked, numbers) = match numeric_policy {
         JsonNumericPolicy::Application => {
-            let (masked, numbers) = prepare_application_numbers(bytes, limits)?;
+            let (masked, numbers) = prepare_application_numbers(bytes)?;
             (Some(masked), Some(numbers.into_iter()))
         }
         JsonNumericPolicy::Integers(_) => (None, None),
@@ -98,7 +96,6 @@ pub fn decode_strict_with_numeric_policy(
         limits,
         numeric_policy,
         numbers,
-        items: 0,
     };
     let value = StrictSeed { state: &mut state }
         .deserialize(&mut deserializer)
@@ -118,10 +115,7 @@ pub fn decode_strict_with_numeric_policy(
 /// Locate numeric spans outside strings, leaving the complete JSON grammar to serde's visitor.
 /// Each validated number becomes an equal-length `0` plus spaces, so the visitor can recover
 /// its original scalar representation without serde_json first rounding or erasing its sign.
-fn prepare_application_numbers(
-    bytes: &[u8],
-    limits: JsonLimits,
-) -> Result<(Vec<u8>, Vec<Number>), Diagnostic> {
+fn prepare_application_numbers(bytes: &[u8]) -> Result<(Vec<u8>, Vec<Number>), Diagnostic> {
     let mut masked = bytes.to_vec();
     let mut numbers = Vec::new();
     let mut index = 0;
@@ -146,10 +140,6 @@ fn prepare_application_numbers(
                     && matches!(bytes[index], b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-')
                 {
                     index += 1;
-                }
-                // The root scalar is not an item in the maintained JSON container accounting.
-                if numbers.len() > limits.maximum_items {
-                    return Err(json_error("json_decode", "JSON item count limit exceeded"));
                 }
                 let token = std::str::from_utf8(&bytes[start..index]).map_err(|_| {
                     json_error("json_decode", "JSON number is not an ASCII decimal token")
@@ -190,7 +180,6 @@ struct DecodeState {
     limits: JsonLimits,
     numeric_policy: JsonNumericPolicy,
     numbers: Option<std::vec::IntoIter<Number>>,
-    items: usize,
 }
 
 struct StrictSeed<'a> {
@@ -293,14 +282,6 @@ impl<'de> Visitor<'de> for StrictVisitor<'_> {
     {
         let mut output = Vec::new();
         while let Some(value) = sequence.next_element_seed(StrictSeed { state: self.state })? {
-            self.state.items = self
-                .state
-                .items
-                .checked_add(1)
-                .ok_or_else(|| A::Error::custom("JSON item count limit exceeded"))?;
-            if self.state.items > self.state.limits.maximum_items {
-                return Err(A::Error::custom("JSON item count limit exceeded"));
-            }
             output.push(value);
         }
         Ok(serde_json::Value::Array(output))
@@ -321,14 +302,6 @@ impl<'de> Visitor<'de> for StrictVisitor<'_> {
                 )));
             }
             let value = input.next_value_seed(StrictSeed { state: self.state })?;
-            self.state.items = self
-                .state
-                .items
-                .checked_add(1)
-                .ok_or_else(|| A::Error::custom("JSON item count limit exceeded"))?;
-            if self.state.items > self.state.limits.maximum_items {
-                return Err(A::Error::custom("JSON item count limit exceeded"));
-            }
             output.insert(key, value);
         }
         Ok(serde_json::Value::Object(output))
@@ -496,19 +469,12 @@ mod tests {
     }
 
     #[test]
-    fn application_numbers_retain_all_existing_admission_limits() {
+    fn application_numbers_preserve_byte_limits() {
         for (input, limits) in [
             (
                 b"1.5".as_slice(),
                 JsonLimits {
                     maximum_bytes: 2,
-                    ..JsonLimits::default()
-                },
-            ),
-            (
-                b"[1.5,2.5]".as_slice(),
-                JsonLimits {
-                    maximum_items: 1,
                     ..JsonLimits::default()
                 },
             ),
@@ -529,26 +495,8 @@ mod tests {
         ] {
             assert!(decode_application(input, limits).is_err());
         }
-        assert!(
-            decode_application(
-                b"1.5",
-                JsonLimits {
-                    maximum_items: 0,
-                    ..JsonLimits::default()
-                }
-            )
-            .is_ok()
-        );
-        assert!(
-            decode_application(
-                b"[1.5]",
-                JsonLimits {
-                    maximum_items: 0,
-                    ..JsonLimits::default()
-                }
-            )
-            .is_err()
-        );
+        assert!(decode_application(b"1.5", JsonLimits::default()).is_ok());
+        assert!(decode_application(b"[1.5,2.5]", JsonLimits::default()).is_ok());
     }
     #[test]
     fn nested_json_lifecycle_has_no_project_depth_ceiling() {

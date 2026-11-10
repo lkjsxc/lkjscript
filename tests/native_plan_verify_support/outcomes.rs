@@ -80,9 +80,6 @@ impl Suite {
     pub fn count(&self) -> usize {
         self.count
     }
-    pub fn maximum_items(&self) -> usize {
-        self.batches.iter().map(|batch| batch.items).max().unwrap()
-    }
     pub fn maximum_bytes(&self) -> usize {
         self.batches.iter().map(|batch| batch.bytes).max().unwrap()
     }
@@ -90,7 +87,7 @@ impl Suite {
         json!({"claims_per_phase":self.count,"phases":1,"full_matrix_phase":"source-deleted",
             "attached_sample_executions":1,"verified_per_phase":self.verified,
             "rejected_per_phase":self.count-self.verified,"true_negatives_per_phase":self.true_negatives,
-            "maximum_argument_items":self.maximum_items(),"batches_per_phase":self.batches.len(),"single_executions":2,"empty_batches":1,
+            "batches_per_phase":self.batches.len(),"single_executions":2,"empty_batches":1,
             "raw_and_resource_refusals":4,"subsequent_recoveries":4})
     }
 }

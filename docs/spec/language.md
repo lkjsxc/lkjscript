@@ -124,7 +124,7 @@ separately charges owned carrier metadata. Sharing does not waive admission. All
 checked arithmetic before allocation, are cumulative without refunds, and depend on no observed
 reference counts. Ordinary raw-value admission has no separate aggregate item ceiling; exact
 cumulative invocation policies still apply. Other collection costs and the separately documented
-map, owned-storage, schema, nesting and codec boundaries remain.
+codec byte contracts and exact schema checks remain.
 
 For old length L, let P = floor((L-1)/32) for L > 0, otherwise zero, and let H be the least
 nonnegative height with P <= 32^H. Every append reserves one leaf and one new element handle.
@@ -136,7 +136,7 @@ branch has at most 32 shared child slots. Untouched subtrees incur no new alloca
 Construction and raw traversal check cancellation independently of observations, including before
 result installation. Failure preserves old aliases and releases temporary execution ownership.
 Iterative raw disposal remains stack safe for over-depth rejected values with shared list leaves.
-JSON output explicitly creates a bounded contiguous JSON array; typed-data encoding traverses the
+JSON output creates a contiguous JSON array under its byte policy; typed-data encoding traverses the
 carrier directly. Physical work observations distinguish node visits, reserved and copied slots,
 element handles, nodes, and full external-buffer materializations. The list work record carries
 an aggregate `saturated` flag, propagated through child joins, scopes and observation intervals.
@@ -167,8 +167,10 @@ incur no fresh deep-copy charge. Even transient rotation nodes remain cumulative
 Absent removal allocates no tree storage. Map projection, owned-storage inspection and schema
 checks retain their semantic checks and checked single-allocation extents. Recursive work uses
 the host's physical-memory-sized semantic stack.
-Ordinary raw-value admission no longer imposes a 1,000,000-item aggregate ceiling, and ordinary
-trusted execution omits cumulative quotas unless explicitly selected.
+Lists, maps, owned sequences, read-view storage and typed-value codecs have no
+project-defined cardinality ceiling. Growth checks representable allocation extents,
+actual allocation, cancellation and exact semantic admission. Ordinary trusted
+execution omits cumulative quotas unless explicitly selected.
 
 Map projection reserves owned option/result/variant boxes before cloning their spine and
 stops at shared aggregate handles. Ordered entries reserve their result buffer, each key's
@@ -282,10 +284,11 @@ storage reuse does not preserve outgoing bindings or grant scope authority. Reus
 incurs no replacement-local-storage allocation charge. Ineligible transfers and ordinary calls
 retain the existing allocation and admission path. Other allocation and metadata charges remain
 cumulative, and reference expression/value accounting remains independent.
-Non-tail calls retain call-frame admission: current defaults are 4,096 live call frames
-and 1,000,000 operand values. Instructions, cumulative allocated bytes, cumulative collection
-items and invocation capability calls have no default quotas. Callers may select each quota
-explicitly. Reference work remains independently counted in expression and value units.
+Non-tail call frames and operand storage grow with available memory. Host compiler
+and evaluator work uses the physical-memory-sized stack reservation. Instructions,
+cumulative allocated bytes, cumulative collection items and invocation capability
+calls have no default quotas; callers may select these outer execution controls.
+Reference work remains independently counted in expression and value units.
 Removed return/jump instructions are not counted as executed work. Unmetered u64 observations
 saturate as lower bounds and never determine acceptance or storage-size arithmetic.
 

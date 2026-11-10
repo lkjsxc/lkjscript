@@ -21,7 +21,6 @@ const VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
 const CHECKSUM_DOMAIN: &str = "lkjscript.data.typed-value-envelope.v1";
 const LAYOUT_DOMAIN: &str = "lkjscript.data.typed-layout.v1";
 const BYTE_LIMIT: usize = 4 * 1_048_576;
-const ITEM_LIMIT: usize = 1_000_000;
 
 #[cfg(test)]
 pub(super) fn encode_typed(
@@ -45,8 +44,7 @@ pub(super) fn encode_typed_with_control(
     encoded.extend_from_slice(MAGIC);
     encoded.extend_from_slice(&VERSION.to_be_bytes());
     encoded.extend_from_slice(&layout_digest(program, ty, control)?);
-    let mut budget = ReferenceBudget { items: 0, control };
-    write_value(program, ty, value, &mut encoded, &mut budget)?;
+    write_value(program, ty, value, &mut encoded, control)?;
     ensure_payload_size(encoded.len())?;
     let checksum = digest(CHECKSUM_DOMAIN, &encoded);
     encoded.extend_from_slice(&checksum);
@@ -109,8 +107,7 @@ pub(super) fn decode_typed_with_control(
             "typed data value belongs to a foreign nominal or runtime layout",
         ));
     }
-    let mut budget = ReferenceBudget { items: 0, control };
-    let value = read_value(program, ty, &mut input, &mut budget)?;
+    let value = read_value(program, ty, &mut input, control)?;
     if !input.is_finished() {
         return Err(corrupt_error(
             "normalized_data_value_trailing",
@@ -339,38 +336,14 @@ fn escape_layout_error() -> Diagnostic {
     )
 }
 
-struct ReferenceBudget<'a> {
-    items: usize,
-    control: &'a ExecutionControl,
-}
-
-impl ReferenceBudget<'_> {
-    fn visit(&mut self, already_charged: bool) -> Result<(), Diagnostic> {
-        if already_charged {
-            cancelled(self.control)
-        } else {
-            self.charge(1)
-        }
-    }
-
-    fn charge(&mut self, count: usize) -> Result<(), Diagnostic> {
-        cancelled(self.control)?;
-        self.items = self.items.checked_add(count).ok_or_else(item_error)?;
-        if self.items > ITEM_LIMIT {
-            return Err(item_error());
-        }
-        Ok(())
-    }
-}
-
 fn write_value(
     program: &dyn NormalizedValueSchema,
     ty: TypeObjectDigest,
     value: &NormalizedValue,
     output: &mut Vec<u8>,
-    budget: &mut ReferenceBudget,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
-    budget.visit(false)?;
+    cancelled(control)?;
     match (form(program, ty)?, value) {
         (
             TypeForm::ReadViewApplied { .. }
@@ -401,20 +374,20 @@ fn write_value(
                 return Err(layout_error("structural record"));
             }
             for (field, (_, field_value)) in layout.iter().zip(values.iter()) {
-                write_value(program, field.ty, field_value, output, budget)?;
+                write_value(program, field.ty, field_value, output, control)?;
             }
         }
         (TypeForm::Named { .. } | TypeForm::Applied { .. }, _) => {
-            write_nominal(program, ty, value, output, budget)?;
+            write_nominal(program, ty, value, output, control)?;
         }
         (TypeForm::List { item }, NormalizedValue::List(values)) => {
             write_length(output, values.len())?;
             for item_value in values.iter() {
-                write_value(program, *item, item_value, output, budget)?;
+                write_value(program, *item, item_value, output, control)?;
             }
         }
         (TypeForm::Map { key, value: item }, NormalizedValue::Map(entries)) => {
-            write_map(program, (*key, *item), entries, output, budget)?;
+            write_map(program, (*key, *item), entries, output, control)?;
         }
         (TypeForm::StaticText, _) => return Err(unsupported("StaticText")),
         (TypeForm::Secret, _) => return Err(unsupported("Secret")),
@@ -441,13 +414,13 @@ fn write_map(
     (key_type, item_type): (TypeObjectDigest, TypeObjectDigest),
     entries: &super::map::Map,
     output: &mut Vec<u8>,
-    budget: &mut ReferenceBudget,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
     write_length(output, entries.len())?;
     let mut cursor = entries.iter();
     for (map_key, item_value) in &mut cursor {
-        write_key(program, key_type, map_key, output, budget)?;
-        write_value(program, item_type, item_value, output, budget)?;
+        write_key(program, key_type, map_key, output, control)?;
+        write_value(program, item_type, item_value, output, control)?;
     }
     Ok(())
 }
@@ -457,7 +430,7 @@ fn write_nominal(
     ty: TypeObjectDigest,
     value: &NormalizedValue,
     output: &mut Vec<u8>,
-    budget: &mut ReferenceBudget,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
     if let Some((expected_index, record)) = find_record(program, ty) {
         if record.owned {
@@ -470,7 +443,7 @@ fn write_nominal(
             return Err(layout_error("nominal record"));
         }
         for (field, field_value) in record.fields.iter().zip(fields.iter()) {
-            write_value(program, field.ty, field_value, output, budget)?;
+            write_value(program, field.ty, field_value, output, control)?;
         }
         return Ok(());
     }
@@ -494,7 +467,7 @@ fn write_nominal(
         match (&selected.payload, payload) {
             (None, None) => Ok(()),
             (Some(payload_type), Some(payload_value)) => {
-                write_value(program, *payload_type, payload_value, output, budget)
+                write_value(program, *payload_type, payload_value, output, control)
             }
             _ => Err(layout_error("variant payload")),
         }?;
@@ -507,20 +480,9 @@ fn read_value(
     program: &dyn NormalizedValueSchema,
     ty: TypeObjectDigest,
     input: &mut ReferenceInput<'_>,
-    budget: &mut ReferenceBudget,
+    control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
-    read_reserved_value(program, ty, input, budget, false)
-}
-
-fn read_reserved_value(
-    program: &dyn NormalizedValueSchema,
-    ty: TypeObjectDigest,
-    input: &mut ReferenceInput<'_>,
-    budget: &mut ReferenceBudget<'_>,
-
-    already_charged: bool,
-) -> Result<NormalizedValue, Diagnostic> {
-    budget.visit(already_charged)?;
+    cancelled(control)?;
     match form(program, ty)? {
         TypeForm::RegionBrand { .. }
         | TypeForm::Region { .. }
@@ -575,7 +537,7 @@ fn read_reserved_value(
                 values
                     .try_push((
                         field.name.clone(),
-                        read_value(program, field.ty, input, budget)?,
+                        read_value(program, field.ty, input, control)?,
                     ))
                     .map_err(child_storage_error)?;
             }
@@ -584,14 +546,13 @@ fn read_reserved_value(
             }))
         }
         TypeForm::Named { .. } | TypeForm::Applied { .. } => {
-            read_nominal(program, ty, input, budget)
+            read_nominal(program, ty, input, control)
         }
         TypeForm::List { item } => {
             let count = input.read_count("normalized_data_list_count")?;
-            budget.charge(count)?;
             let mut values = Vec::with_capacity(count);
             for _ in 0..count {
-                values.push(read_reserved_value(program, *item, input, budget, true)?);
+                values.push(read_value(program, *item, input, control)?);
             }
             Ok(NormalizedValue::list(values).map_err(|error| {
                 Diagnostic::new(
@@ -603,10 +564,9 @@ fn read_reserved_value(
         }
         TypeForm::Map { key, value } => {
             let count = input.read_count("normalized_data_map_count")?;
-            budget.charge(count.saturating_mul(2))?;
             let mut entries = BTreeMap::<NormalizedMapKey, NormalizedValue>::new();
             for _ in 0..count {
-                let key_value = read_reserved_value(program, *key, input, budget, true)?;
+                let key_value = read_value(program, *key, input, control)?;
                 let map_key = NormalizedMapKey::from_value(key_value).ok_or_else(|| {
                     corrupt_error(
                         "normalized_data_map_key",
@@ -622,10 +582,10 @@ fn read_reserved_value(
                         "typed data map keys are duplicate or not in canonical order",
                     ));
                 }
-                let item = read_reserved_value(program, *value, input, budget, true)?;
+                let item = read_value(program, *value, input, control)?;
                 entries.insert(map_key, item);
             }
-            NormalizedValue::map_controlled(entries, budget.control)
+            NormalizedValue::map_controlled(entries, control)
                 .map_err(super::runner::execution_diagnostic)
         }
         TypeForm::StaticText => Err(unsupported("StaticText")),
@@ -649,7 +609,7 @@ fn read_nominal(
     program: &dyn NormalizedValueSchema,
     ty: TypeObjectDigest,
     input: &mut ReferenceInput<'_>,
-    budget: &mut ReferenceBudget,
+    control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
     if let Some((layout, record)) = find_record(program, ty) {
         if record.owned {
@@ -659,7 +619,7 @@ fn read_nominal(
             ValuesBuilder::with_capacity(record.fields.len()).map_err(child_storage_error)?;
         for field in record.fields.iter() {
             fields
-                .try_push(read_value(program, field.ty, input, budget)?)
+                .try_push(read_value(program, field.ty, input, control)?)
                 .map_err(child_storage_error)?;
         }
         return Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
@@ -680,7 +640,7 @@ fn read_nominal(
             })?;
         let payload = selected
             .payload
-            .map(|payload_type| read_value(program, payload_type, input, budget).map(Box::new))
+            .map(|payload_type| read_value(program, payload_type, input, control).map(Box::new))
             .transpose()?;
         return Ok(NormalizedValue::Variant {
             layout,
@@ -905,9 +865,9 @@ fn write_key(
     ty: TypeObjectDigest,
     key: &NormalizedMapKey,
     output: &mut Vec<u8>,
-    budget: &mut ReferenceBudget,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
-    budget.visit(false)?;
+    cancelled(control)?;
     match (form(program, ty)?, key) {
         (TypeForm::Bool, NormalizedMapKey::Bool(value)) => {
             write_bytes(output, &[u8::from(*value)])?;
@@ -936,7 +896,7 @@ fn write_bytes(output: &mut Vec<u8>, bytes: &[u8]) -> Result<(), Diagnostic> {
 }
 
 fn write_length(output: &mut Vec<u8>, length: usize) -> Result<(), Diagnostic> {
-    let length = u32::try_from(length).map_err(|_| item_error())?;
+    let length = u32::try_from(length).map_err(|_| extent_error())?;
     write_bytes(output, &length.to_be_bytes())?;
     Ok(())
 }
@@ -1008,11 +968,7 @@ impl<'a> ReferenceInput<'a> {
     }
 
     fn read_count(&mut self, code: &'static str) -> Result<usize, Diagnostic> {
-        let count = usize::try_from(self.read_u32(code)?).map_err(|_| item_error())?;
-        if count > ITEM_LIMIT {
-            return Err(item_error());
-        }
-        Ok(count)
+        usize::try_from(self.read_u32(code)?).map_err(|_| extent_error())
     }
 
     fn read_blob(&mut self, code: &'static str) -> Result<Vec<u8>, Diagnostic> {
@@ -1039,11 +995,11 @@ fn digest(domain: &'static str, bytes: &[u8]) -> [u8; 32] {
     *hasher.finalize().as_bytes()
 }
 
-fn item_error() -> Diagnostic {
+fn extent_error() -> Diagnostic {
     Diagnostic::new(
         DiagnosticClass::Resource,
-        "normalized_data_value_items",
-        "typed data value exceeds the canonical item limit",
+        "normalized_data_value_extent",
+        "typed data count exceeds its encoded or host address domain",
     )
 }
 

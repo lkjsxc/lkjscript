@@ -359,7 +359,7 @@ impl ReferenceState<'_> {
             };
             if binding.member != member.member
                 || binding.ty() != member.template
-                || self.contains_associated(binding.ty(), 0, &mut 0)?
+                || self.contains_associated(binding.ty())?
                 || self.method_type(binding.ty(), &bindings)? != member.ty
                 || !category_matches
             {
@@ -464,7 +464,7 @@ impl ReferenceState<'_> {
         }
         self.associated_step(1)?;
         self.control.check()?;
-        if !self.contains_associated(template, 0, &mut 0)? {
+        if !self.contains_associated(template)? {
             return Ok(None);
         }
         let proof = self.schema.associated_proof().ok_or_else(|| {
@@ -482,23 +482,9 @@ impl ReferenceState<'_> {
         Ok(Some(closed))
     }
 
-    fn contains_associated(
-        &self,
-        ty: TypeObjectDigest,
-        depth: usize,
-        visits: &mut u64,
-    ) -> Result<bool, ExecutionError> {
+    fn contains_associated(&self, ty: TypeObjectDigest) -> Result<bool, ExecutionError> {
         self.control.check()?;
         self.associated_step(1)?;
-        *visits = visits
-            .checked_add(1)
-            .filter(|count| *count <= super::super::value::MAXIMUM_ADMISSION_ITEMS)
-            .ok_or_else(|| {
-                reference_resource(
-                    "reference_associated_runtime_work",
-                    "associated occurrence scan exhausted finite work",
-                )
-            })?;
 
         let form = &self
             .schema
@@ -513,22 +499,18 @@ impl ReferenceState<'_> {
             TypeForm::List { item }
             | TypeForm::Option { item }
             | TypeForm::Stream { item }
-            | TypeForm::OwnedSequence { item } => {
-                self.contains_associated(*item, depth + 1, visits)
-            }
+            | TypeForm::OwnedSequence { item } => self.contains_associated(*item),
             TypeForm::Map { key, value } => {
-                Ok(self.contains_associated(*key, depth + 1, visits)?
-                    || self.contains_associated(*value, depth + 1, visits)?)
+                Ok(self.contains_associated(*key)? || self.contains_associated(*value)?)
             }
             TypeForm::Result { ok, error } => {
-                Ok(self.contains_associated(*ok, depth + 1, visits)?
-                    || self.contains_associated(*error, depth + 1, visits)?)
+                Ok(self.contains_associated(*ok)? || self.contains_associated(*error)?)
             }
             TypeForm::StructuralRecord { fields }
             | TypeForm::OwnedProduct { fields }
             | TypeForm::OwnedChoice { cases: fields } => {
                 for field in fields {
-                    if self.contains_associated(field.ty, depth + 1, visits)? {
+                    if self.contains_associated(field.ty)? {
                         return Ok(true);
                     }
                 }
@@ -536,7 +518,7 @@ impl ReferenceState<'_> {
             }
             TypeForm::Applied { arguments, .. } => {
                 for argument in arguments {
-                    if self.contains_associated(*argument, depth + 1, visits)? {
+                    if self.contains_associated(*argument)? {
                         return Ok(true);
                     }
                 }
@@ -547,11 +529,11 @@ impl ReferenceState<'_> {
                 parameters, result, ..
             } => {
                 for parameter in parameters {
-                    if self.contains_associated(*parameter, depth + 1, visits)? {
+                    if self.contains_associated(*parameter)? {
                         return Ok(true);
                     }
                 }
-                self.contains_associated(*result, depth + 1, visits)
+                self.contains_associated(*result)
             }
             _ => Ok(false),
         }

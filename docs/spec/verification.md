@@ -7,6 +7,10 @@ It also prints the profile, filters, thread count and stack reservation. A nonze
 build or harness exit, or an empty test selection, fails the command. Cargo owns
 incremental artifact reuse.
 
+After changing capability records, refresh their generated guides with the freshly
+built product before the broad run:
+`target/debug/lkjscript capabilities --generate-docs docs/generated`.
+
 During development use `bash tools/check.sh focused FILTER`. It uses the same
 workspace and test profile as the routine suite, so selected tests reuse the same
 build products. Set `RUST_TEST_THREADS` to tune concurrency. The routine and focused
@@ -87,6 +91,15 @@ native invocations. Once C2 and C3 are proved byte-identical, per-input behavior
 runs once for that compiler identity. The native lifecycle control retains both
 producer paths. The default selfhost command selects the fixed point and its
 compact mutation controls; corpus and lifecycle changes select the other tests.
+
+The routine `collection_cardinality_compact_lifecycle` checks map updates, both
+evaluators, JSON cloning and serialization, typed-data round trips, owned indexed
+replacement and cancellation cleanup on 1,024 elements. Run
+`bash tools/check.sh slow collection_cardinality_geometric_lifecycle --nocapture`
+for the same lifecycle at 262,144, 1,048,576 and 2,097,152 elements. The test selects
+the existing outer JSON byte control for its full map representation and uses
+Unit lists to isolate typed-data cardinality from the separate byte contract. It
+prints elapsed time and process RSS for each size.
 
 Keep a compact independent semantic comparison and source mutations that change
 emitted behavior beside compiler fixed points. Share immutable fixture preparation

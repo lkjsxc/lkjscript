@@ -10,20 +10,11 @@ struct Search<'a> {
     schema: &'a NormalizedReferenceSchema,
     bindings: &'a BTreeMap<TypeParameterId, TypeObjectDigest>,
     control: &'a ExecutionControl,
-    remaining: u64,
 }
 
 impl Search<'_> {
     fn step(&mut self) -> Result<(), ExecutionError> {
-        self.control.check()?;
-
-        self.remaining = self.remaining.checked_sub(1).ok_or_else(|| {
-            ExecutionError::resource(
-                "reference_transfer_substitution_work",
-                "canonical transfer identity search exhausted finite work",
-            )
-        })?;
-        Ok(())
+        self.control.check()
     }
 
     fn same(
@@ -251,7 +242,6 @@ impl NormalizedReferenceSchema {
             schema: self,
             bindings,
             control,
-            remaining: super::super::value::MAXIMUM_ADMISSION_ITEMS,
         }
         .lookup(template)
     }
@@ -266,7 +256,6 @@ impl NormalizedReferenceSchema {
             schema: self,
             bindings,
             control,
-            remaining: super::super::value::MAXIMUM_ADMISSION_ITEMS,
         }
         .resolve(template)
     }
@@ -369,19 +358,8 @@ mod tests {
     }
 
     #[test]
-    fn reference_transfer_substitution_search_preserves_resource_and_cancellation_failures() {
+    fn reference_transfer_substitution_search_preserves_cancellation() {
         let (schema, template, _, bindings) = wide();
-        let control = ExecutionControl::uncancelled();
-        let mut search = Search {
-            schema: &schema,
-            bindings: &bindings,
-            control: &control,
-            remaining: 3,
-        };
-        assert_eq!(
-            search.resolve(template).unwrap_err().class,
-            ExecutionFailureClass::Resource
-        );
         let cancelled = ExecutionControl::cancel_after_checks(1);
         assert_eq!(
             schema
@@ -407,13 +385,11 @@ mod tests {
             schema: &schema,
             bindings: &bindings,
             control: &control,
-            remaining: 1,
         };
         assert_eq!(
             search.resolve(symbolic).unwrap(),
             bindings.values().next().copied().unwrap()
         );
-        assert_eq!(search.remaining, 0);
     }
 
     #[test]

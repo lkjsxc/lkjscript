@@ -165,11 +165,11 @@ clones remain identity markers without read or ownership authority.
 
 ## Growth, failure and cleanup
 
-Reserve storage before modeled creation and geometric growth. Pop reserves its
-result envelopes before detaching an element; replacement reserves its result
-before swapping. Existing item, storage, preparation-work and
-cancellation policies remain authoritative. Reservation refusal is an execution
-resource failure; it does not make otherwise valid meaning invalid.
+Reserve storage before creation and geometric growth. Pop reserves its result
+envelopes before detaching an element; replacement reserves its result before
+swapping. Sequence length is limited by representable storage and allocation,
+with cancellation checked throughout. Caller-selected execution controls remain
+authoritative. Reservation refusal is an execution resource failure.
 
 An ordinary read's checked provenance binds the exact admitted sequence, element
 type and program. Raw mutation invalidates admission. Checked insertion and

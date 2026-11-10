@@ -297,7 +297,6 @@ impl Fixture {
             },
             scope: self.scope,
             lifetime,
-            nodes: std::cell::Cell::new(0),
         }
     }
 

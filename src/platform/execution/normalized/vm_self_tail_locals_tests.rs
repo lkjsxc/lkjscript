@@ -1303,12 +1303,7 @@ fn nested_payload(width: i64, length: i64) -> TestResult<NormalizedValue> {
         entries.insert(NormalizedMapKey::I64(key), NormalizedValue::List(list));
     }
     let mut reserve = super::super::value::raw_map_reservation(&control);
-    super::super::map::Map::from_items(
-        entries,
-        super::super::value::MAXIMUM_ADMISSION_ITEMS,
-        &mut reserve,
-    )
-    .map(NormalizedValue::Map)
+    super::super::map::Map::from_items(entries, &mut reserve).map(NormalizedValue::Map)
 }
 
 fn nested_run(

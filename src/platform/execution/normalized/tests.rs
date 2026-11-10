@@ -3057,11 +3057,10 @@ fn assert_json_representation_limits(
         super::codec::encode_value(schema, &value, ty, limits).unwrap(),
         expected
     );
-    for boundary in 0..3 {
+    for boundary in 0..2 {
         let mut lower = limits;
         let maximum = match boundary {
             0 => &mut lower.maximum_bytes,
-            1 => &mut lower.maximum_items,
             _ => &mut lower.maximum_string_bytes,
         };
         if *maximum == 0 {
@@ -3237,19 +3236,13 @@ fn nominal_and_structural_json_fields_obey_representation_limits() {
         &program as &dyn super::value_schema::NormalizedValueSchema,
         &reference,
     ] {
-        for (ty, json, items, string_bytes, text_bytes) in [
-            (record, br#"{"value":null}"#.as_slice(), 1, 5, 5),
-            (structural, br#"{"flag":null}"#.as_slice(), 1, 4, 4),
-            (payload_free, br#"{"case":"Ready"}"#.as_slice(), 1, 5, 9),
-            (variant, br#"{"case":"A"}"#.as_slice(), 1, 4, 5),
-            (variant, br#"{"case":"Ready"}"#.as_slice(), 1, 5, 9),
-            (
-                variant,
-                br#"{"case":"B","value":null}"#.as_slice(),
-                2,
-                5,
-                10,
-            ),
+        for (ty, json, string_bytes, text_bytes) in [
+            (record, br#"{"value":null}"#.as_slice(), 5, 5),
+            (structural, br#"{"flag":null}"#.as_slice(), 4, 4),
+            (payload_free, br#"{"case":"Ready"}"#.as_slice(), 5, 9),
+            (variant, br#"{"case":"A"}"#.as_slice(), 4, 5),
+            (variant, br#"{"case":"Ready"}"#.as_slice(), 5, 9),
+            (variant, br#"{"case":"B","value":null}"#.as_slice(), 5, 10),
         ] {
             assert_json_representation_limits(
                 schema,
@@ -3257,7 +3250,6 @@ fn nominal_and_structural_json_fields_obey_representation_limits() {
                 json,
                 JsonLimits {
                     maximum_bytes: json.len(),
-                    maximum_items: items,
                     maximum_string_bytes: string_bytes,
                 },
             );

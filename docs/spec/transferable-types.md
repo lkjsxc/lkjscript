@@ -95,8 +95,9 @@ state. A visited recursive node prevents repeated expansion; it is not a complet
 positive certificate for another proof. An unsafe member in a mutually recursive
 component rejects the whole relevant closure regardless of traversal order or
 selected value. Exact owner membership is checked before establishing assumptions.
-Traversal and retained proof storage use existing finite admission and cancellation
-controls. Exhaustion is a resource result, not evidence of invalid meaning.
+Traversal checks caller cancellation. Admitted type graphs and declaration cycle
+checks establish termination; a visit count does not define valid meaning. Storage
+extents use checked arithmetic and allocation failures remain resource results.
 
 ## Generic structured groups
 

@@ -133,9 +133,8 @@ The executable, bundle, descriptor and input suffice after the authoring project
 moves away. No graph project or comparison implementation from the compiler
 checkout is needed at runtime.
 
-Two argument members leave room for 99,998 Text elements under the current
-100,000-item input bound; their encoded bytes must also fit one MiB. The command
-holds the full input table while selecting results.
+The complete argument encoding must fit one MiB. The command holds the full input
+table while selecting results, so memory use grows with the input.
 
 ## Transport the sorting library
 

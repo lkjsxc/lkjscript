@@ -120,7 +120,6 @@ pub(crate) fn encode_value_with_control(
     require_json_encoding(program, ty, false, control)?;
     let mut state = EncodeState {
         limits,
-        items: 0,
         text_bytes: 0,
         control,
     };
@@ -582,7 +581,6 @@ fn to_json(
                     "structural runtime record disagrees with its exact type",
                 ));
             }
-            state.charge(values.len(), path)?;
             let mut object = Map::new();
             for ((name, value), field) in values.iter().zip(fields) {
                 let field_path = format!("{path}.{}", name.as_str());
@@ -595,7 +593,6 @@ fn to_json(
             Ok(JsonValue::Object(object))
         }
         (NormalizedValue::List(values), TypeForm::List { item }) => {
-            state.charge(values.len(), path)?;
             super::list::materialized(values.len());
             Ok(JsonValue::Array(
                 values
@@ -651,9 +648,6 @@ fn map_to_json(
     state: &mut EncodeState,
     path: &str,
 ) -> Result<JsonValue, Diagnostic> {
-    // Every entry contributes its outer-array member and both pair members.
-    let items = values.len().checked_mul(3).ok_or_else(json_item_overflow)?;
-    state.charge(items, path)?;
     let mut entries = Vec::new();
     let mut cursor = values.iter();
     for (index, (map_key, value)) in cursor.by_ref().enumerate() {
@@ -697,7 +691,6 @@ fn encode_named(
                 "nominal runtime record disagrees with its exact layout",
             ));
         }
-        state.charge(fields.len(), path)?;
         let mut object = Map::new();
         for (value, field) in fields.iter().zip(layout.fields.iter()) {
             let field_path = format!("{path}.{}", field.name.as_str());
@@ -728,7 +721,6 @@ fn encode_named(
             .cases
             .get(*case as usize)
             .ok_or_else(|| type_error(path, "runtime variant case escaped its exact layout"))?;
-        state.charge(if case.payload.is_some() { 2 } else { 1 }, path)?;
         let case_path = format!("{path}.case");
         state.require_string("case", &case_path)?;
         checkpoint(state.control)?;
@@ -850,7 +842,6 @@ fn bytes_to_json(
     state: &mut EncodeState,
     path: &str,
 ) -> Result<JsonValue, Diagnostic> {
-    state.charge(1, path)?;
     let field_path = format!("{path}.$bytes");
     state.require_string("$bytes", &field_path)?;
     checkpoint(state.control)?;
@@ -888,7 +879,6 @@ fn text_to_json(value: &str, state: &mut EncodeState, path: &str) -> Result<Json
 #[derive(Clone, Copy)]
 struct EncodeState<'a> {
     limits: JsonLimits,
-    items: usize,
     text_bytes: usize,
     control: &'a ExecutionControl,
 }
@@ -925,25 +915,6 @@ impl EncodeState<'_> {
         self.text_bytes = total;
         Ok(())
     }
-
-    fn charge(&mut self, items: usize, path: &str) -> Result<(), Diagnostic> {
-        self.items = self
-            .items
-            .checked_add(items)
-            .ok_or_else(json_item_overflow)?;
-        if self.items > self.limits.maximum_items {
-            return Err(type_error(path, "typed JSON exceeds the item-count limit"));
-        }
-        Ok(())
-    }
-}
-
-fn json_item_overflow() -> Diagnostic {
-    json_error(
-        DiagnosticClass::Resource,
-        "normalized_json_item_overflow",
-        "typed JSON item accounting overflowed",
-    )
 }
 
 fn type_error(path: &str, message: impl Into<String>) -> Diagnostic {

@@ -50,10 +50,10 @@ fn map_keys_share_payload_across_persistent_updates() {
         let address = bytes(&input).as_ptr();
         let key = Key::from_value(input.clone()).unwrap();
         let original = Map::default()
-            .insert(key.clone(), Value::I64(11), 1, &mut |_| Ok(()))
+            .insert(key.clone(), Value::I64(11), &mut |_| Ok(()))
             .unwrap();
         let replacement = original
-            .insert(key.clone(), Value::I64(22), 1, &mut |_| Ok(()))
+            .insert(key.clone(), Value::I64(22), &mut |_| Ok(()))
             .unwrap();
         let removed = replacement.remove(&key, &mut |_| Ok(())).unwrap();
         assert!(removed.is_empty());

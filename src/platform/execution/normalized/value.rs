@@ -18,9 +18,6 @@ pub(super) use view_admission::reject_read_view_type_escape;
 #[path = "map_key_sharing_tests.rs"]
 mod map_key_sharing_tests;
 
-// Remaining map, schema, owned-storage, and view admission paths use this bound.
-pub(crate) const MAXIMUM_ADMISSION_ITEMS: u64 = 1_000_000;
-
 /// Actual storage arithmetic is checked even when cumulative allocation has no quota.
 pub(super) fn collection_storage_bytes(
     items: u64,
@@ -324,7 +321,7 @@ impl NormalizedValue {
         }
     }
 
-    /// Bounded raw ingress only. The carrier conveys no type or origin certificate;
+    /// Raw ingress. The carrier conveys no type or origin certificate;
     /// each evaluator admits every logical child independently before using it.
     pub fn map(
         entries: BTreeMap<NormalizedMapKey, Self>,
@@ -339,18 +336,7 @@ impl NormalizedValue {
         entries: BTreeMap<NormalizedMapKey, Self>,
         control: &crate::platform::execution::ExecutionControl,
     ) -> Result<Self, crate::platform::execution::ExecutionError> {
-        let mut bytes = 0_u64;
-        super::map::Map::from_items(entries, MAXIMUM_ADMISSION_ITEMS, &mut |charge| {
-            control.check()?;
-            bytes = bytes.checked_add(charge.bytes).ok_or_else(|| {
-                crate::platform::execution::ExecutionError::resource(
-                    "normalized_map_storage",
-                    "raw map construction storage accounting overflowed",
-                )
-            })?;
-            Ok(())
-        })
-        .map(Self::Map)
+        super::map::Map::from_items(entries, &mut |_| control.check()).map(Self::Map)
     }
 
     /// Raw boundary construction. Evaluators separately admit all logical
@@ -474,22 +460,12 @@ pub(super) fn projected_value_bytes(
     }
 }
 
-/// Bounded raw-host construction is separate from either evaluator's cumulative
-/// ledger. Raw results still cross that evaluator's complete admission boundary.
+/// Raw-host construction checks cancellation. Raw results still cross the evaluator's
+/// complete admission boundary.
 pub(super) fn raw_map_reservation(
     control: &crate::platform::execution::ExecutionControl,
 ) -> impl FnMut(super::map::Charge) -> Result<(), crate::platform::execution::ExecutionError> + '_ {
-    let mut bytes = 0_u64;
-    move |charge| {
-        control.check()?;
-        bytes = bytes.checked_add(charge.bytes).ok_or_else(|| {
-            crate::platform::execution::ExecutionError::resource(
-                "normalized_map_storage",
-                "raw map operation storage accounting overflowed",
-            )
-        })?;
-        Ok(())
-    }
+    move |_| control.check()
 }
 
 /// Own unadmitted arguments until each value crosses its evaluator's boundary. Rejection

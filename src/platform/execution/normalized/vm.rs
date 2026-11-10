@@ -5741,12 +5741,7 @@ fn normalized_map_intrinsic(
             None => Ok(fallback.into_raw()),
         },
         ("core.map.insert", Some(value)) => values
-            .insert(
-                key,
-                value.into_raw(),
-                super::value::MAXIMUM_ADMISSION_ITEMS,
-                &mut reserve,
-            )
+            .insert(key, value.into_raw(), &mut reserve)
             .map(NormalizedValue::Map),
         ("core.map.remove", None) => values.remove(&key, &mut reserve).map(NormalizedValue::Map),
         _ => Err(type_error("map intrinsic received a foreign arity")),
@@ -5926,12 +5921,7 @@ fn validate_runtime_implementation(
     }
 
     if !application.associated_types.is_empty() {
-        let mut type_nodes = *nodes as u64;
-        let result =
-            transfer::validate_associated_bindings(program, application, control, &mut type_nodes);
-        *nodes = usize::try_from(type_nodes)
-            .map_err(|_| type_error("implementation witness inventory overflow"))?;
-        result?;
+        transfer::validate_associated_bindings(program, application, control)?;
     }
     if visited.contains(&application.identity) {
         return Ok(());

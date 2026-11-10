@@ -39,7 +39,6 @@ pub(super) struct Admission<'a> {
     pub(super) target: ViewIdentity,
     pub(super) scope: ReadScopeArgument,
     pub(super) lifetime: SourceAnchor,
-    nodes: std::cell::Cell<usize>,
 }
 
 fn same_lineage(source: &SourceAnchor, selected: &SourceAnchor) -> bool {
@@ -52,21 +51,6 @@ fn same_lineage(source: &SourceAnchor, selected: &SourceAnchor) -> bool {
 }
 
 impl Admission<'_> {
-    fn tick(&self) -> Result<(), ExecutionError> {
-        let nodes = self
-            .nodes
-            .get()
-            .checked_add(1)
-            .filter(|nodes| *nodes as u64 <= super::super::value::MAXIMUM_ADMISSION_ITEMS)
-            .ok_or_else(|| {
-                resource_error(
-                    "normalized_view_admission_work",
-                    "view admission exceeds finite capacity",
-                )
-            })?;
-        self.nodes.set(nodes);
-        Ok(())
-    }
     fn layout(
         &self,
         ty: TypeObjectDigest,
@@ -94,18 +78,16 @@ impl Admission<'_> {
                 "view construction has an inexact source, scope or field inventory",
             ));
         }
-        self.complete_type(construction.identity.ty, false, 0, control)
+        self.complete_type(construction.identity.ty, false, control)
     }
 
     fn complete_type(
         &self,
         ty: TypeObjectDigest,
         sharing: bool,
-        depth: usize,
         control: &ExecutionControl,
     ) -> Result<(), ExecutionError> {
         control.check()?;
-        self.tick()?;
 
         let layout = self.layout(ty)?;
         if layout.arguments.len() != layout.type_parameters.len()
@@ -141,7 +123,7 @@ impl Admission<'_> {
             control.check()?;
             match field.kind {
                 ReadViewFieldKind::Ordinary => {
-                    ordinary_type(self.program, field.ty, depth + 1, control)?;
+                    ordinary_type(self.program, field.ty, control)?;
                 }
                 ReadViewFieldKind::ReadReference { read_scope } => {
                     if read_scope != layout.read_scope {
@@ -153,7 +135,7 @@ impl Admission<'_> {
                                 "nested view reference has another effective read scope",
                             ));
                         }
-                        self.complete_type(field.ty, sharing, depth + 1, control)?;
+                        self.complete_type(field.ty, sharing, control)?;
                     } else if self.program.is_owned_type(field.ty) {
                         if sharing {
                             transfer::admit_shareable_type(self.program, field.ty, control)?;
@@ -191,7 +173,6 @@ impl storage::ReadViewAdmission for Admission<'_> {
         control: &ExecutionControl,
     ) -> Result<(), ExecutionError> {
         control.check()?;
-        self.tick()?;
         if self.target.program != self.program.value_origin
             || self.selected.program != self.program.value_origin
         {
@@ -235,7 +216,7 @@ impl storage::ReadViewAdmission for Admission<'_> {
                 if source.source() != self.selected {
                     return Err(type_error("subview uses another designated argument"));
                 }
-                self.complete_type(source.identity().ty, false, 0, control)?;
+                self.complete_type(source.identity().ty, false, control)?;
             }
             AdmissionRequest::Field {
                 construction,
@@ -244,7 +225,7 @@ impl storage::ReadViewAdmission for Admission<'_> {
                 self.construction(construction, control)?;
                 let (id, ty, kind, source) = match input {
                     FieldAdmission::Metadata { field, ty, value } => {
-                        ordinary_shape(self.program, value, ty, 0, control)?;
+                        ordinary_shape(self.program, value, ty, control)?;
                         (field, ty, FieldKind::Metadata, None)
                     }
                     FieldAdmission::Owned {
@@ -279,7 +260,7 @@ impl storage::ReadViewAdmission for Admission<'_> {
                                 "view field has an inexact descriptor application",
                             ));
                         }
-                        self.complete_type(ty, false, 0, control)?;
+                        self.complete_type(ty, false, control)?;
                         (field, ty, FieldKind::ViewReference, Some(source))
                     }
                 };
@@ -337,7 +318,7 @@ impl storage::ReadViewAdmission for Admission<'_> {
                     ));
                 }
                 guard.validate(control)?;
-                self.complete_type(guard.identity().ty, false, 0, control)?;
+                self.complete_type(guard.identity().ty, false, control)?;
             }
             AdmissionRequest::RetainProjected {
                 construction,
@@ -382,7 +363,6 @@ impl storage::ReadViewAdmission for Admission<'_> {
                 self.complete_type(
                     target.identity.ty,
                     source.is_shared() || target.sharing,
-                    0,
                     control,
                 )?;
             }
@@ -426,7 +406,6 @@ impl storage::ReadViewAdmission for Admission<'_> {
                     self.complete_type(
                         target.identity.ty,
                         source.is_shared() || target.sharing,
-                        0,
                         control,
                     )?;
                 } else if declared.ty != field.ty {
@@ -448,7 +427,7 @@ impl storage::ReadViewAdmission for Admission<'_> {
                 if declared.kind != ReadViewFieldKind::Ordinary || declared.ty != ty {
                     return Err(type_error("view metadata access has another field type"));
                 }
-                ordinary_shape(self.program, value, ty, 0, control)?;
+                ordinary_shape(self.program, value, ty, control)?;
             }
         }
         Ok(())
@@ -956,7 +935,6 @@ impl Machine<'_> {
             },
             scope: key,
             lifetime: source.clone(),
-            nodes: std::cell::Cell::new(0),
         };
         let control = self.control;
         let (owner, lease) = storage::RuntimeScopeOwner::open(
@@ -1022,7 +1000,6 @@ impl Machine<'_> {
             target: identity,
             scope: key,
             lifetime: view.scope()?.source().clone(),
-            nodes: std::cell::Cell::new(0),
         };
         let target = storage::ViewTarget {
             identity,
@@ -1066,7 +1043,6 @@ impl Machine<'_> {
             target: identity,
             scope: key,
             lifetime: view.scope()?.source().clone(),
-            nodes: std::cell::Cell::new(0),
         };
         let target = storage::ViewTarget {
             identity,
@@ -1199,7 +1175,6 @@ impl Machine<'_> {
             target: construction.identity,
             scope: key,
             lifetime: lifetime.clone(),
-            nodes: std::cell::Cell::new(0),
         };
         let guards = fields
             .len()
@@ -1291,7 +1266,6 @@ impl Machine<'_> {
             },
             scope: layout.read_scope,
             lifetime: pending.lifetime.clone(),
-            nodes: std::cell::Cell::new(0),
         };
         for (ordinal, value) in fields.iter().zip(values) {
             let field = &layout.fields[*ordinal as usize];
@@ -1551,7 +1525,6 @@ impl Machine<'_> {
             target: view.identity(),
             scope: layout.read_scope,
             lifetime: view.scope()?.source().clone(),
-            nodes: std::cell::Cell::new(0),
         };
         let read = view.metadata(field.reference.field, &admission, self.control)?;
         let raw = read.raw(self.control)?;
@@ -1627,7 +1600,6 @@ impl Machine<'_> {
             target,
             scope: layout.read_scope,
             lifetime: view.scope()?.source().clone(),
-            nodes: std::cell::Cell::new(0),
         };
         let mut child = if program.read_view_layout(binding_type).is_some() {
             let target = storage::ViewTarget {
@@ -1855,32 +1827,19 @@ impl Machine<'_> {
 fn ordinary_type(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
-    depth: usize,
     control: &ExecutionControl,
 ) -> Result<(), ExecutionError> {
     let mut ancestors = Vec::new();
-    let mut nodes = 0usize;
-    ordinary_type_in(program, ty, depth, control, &mut ancestors, &mut nodes)
+    ordinary_type_in(program, ty, control, &mut ancestors)
 }
 
 fn ordinary_type_in(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
-    depth: usize,
     control: &ExecutionControl,
     ancestors: &mut Vec<TypeObjectDigest>,
-    nodes: &mut usize,
 ) -> Result<(), ExecutionError> {
     control.check()?;
-    *nodes = nodes
-        .checked_add(1)
-        .filter(|nodes| *nodes as u64 <= super::super::value::MAXIMUM_ADMISSION_ITEMS)
-        .ok_or_else(|| {
-            resource_error(
-                "normalized_view_admission_work",
-                "view ordinary type admission exceeds finite capacity",
-            )
-        })?;
 
     if ancestors.contains(&ty) {
         return Ok(());
@@ -1903,38 +1862,38 @@ fn ordinary_type_in(
         | TypeForm::Text
         | TypeForm::StaticText => {}
         TypeForm::List { item } | TypeForm::Option { item } => {
-            ordinary_type_in(program, *item, depth + 1, control, ancestors, nodes)?
+            ordinary_type_in(program, *item, control, ancestors)?
         }
         TypeForm::Map { key, value } => {
-            ordinary_type_in(program, *key, depth + 1, control, ancestors, nodes)?;
-            ordinary_type_in(program, *value, depth + 1, control, ancestors, nodes)?;
+            ordinary_type_in(program, *key, control, ancestors)?;
+            ordinary_type_in(program, *value, control, ancestors)?;
         }
         TypeForm::Result { ok, error } => {
-            ordinary_type_in(program, *ok, depth + 1, control, ancestors, nodes)?;
-            ordinary_type_in(program, *error, depth + 1, control, ancestors, nodes)?;
+            ordinary_type_in(program, *ok, control, ancestors)?;
+            ordinary_type_in(program, *error, control, ancestors)?;
         }
         TypeForm::StructuralRecord { fields } => {
             for field in fields {
-                ordinary_type_in(program, field.ty, depth + 1, control, ancestors, nodes)?;
+                ordinary_type_in(program, field.ty, control, ancestors)?;
             }
         }
         TypeForm::Named { .. } | TypeForm::Applied { .. } => {
             if let Some(index) = program.record_instances.get(&ty) {
                 let layout = &program.records[index.0 as usize];
                 for argument in layout.arguments.iter() {
-                    ordinary_type_in(program, *argument, depth + 1, control, ancestors, nodes)?;
+                    ordinary_type_in(program, *argument, control, ancestors)?;
                 }
                 for field in layout.fields.iter() {
-                    ordinary_type_in(program, field.ty, depth + 1, control, ancestors, nodes)?;
+                    ordinary_type_in(program, field.ty, control, ancestors)?;
                 }
             } else if let Some(index) = program.variant_instances.get(&ty) {
                 let layout = &program.variants[index.0 as usize];
                 for argument in layout.arguments.iter() {
-                    ordinary_type_in(program, *argument, depth + 1, control, ancestors, nodes)?;
+                    ordinary_type_in(program, *argument, control, ancestors)?;
                 }
                 for case in layout.cases.iter() {
                     if let Some(payload) = case.payload {
-                        ordinary_type_in(program, payload, depth + 1, control, ancestors, nodes)?;
+                        ordinary_type_in(program, payload, control, ancestors)?;
                     }
                 }
             } else {
@@ -1957,31 +1916,9 @@ fn ordinary_shape(
     program: &NormalizedProgram,
     value: &NormalizedValue,
     ty: TypeObjectDigest,
-    depth: usize,
     control: &ExecutionControl,
 ) -> Result<(), ExecutionError> {
-    let mut nodes = 0usize;
-    ordinary_shape_in(program, value, ty, depth, control, &mut nodes)
-}
-
-fn ordinary_shape_in(
-    program: &NormalizedProgram,
-    value: &NormalizedValue,
-    ty: TypeObjectDigest,
-    depth: usize,
-    control: &ExecutionControl,
-    nodes: &mut usize,
-) -> Result<(), ExecutionError> {
-    *nodes = nodes
-        .checked_add(1)
-        .filter(|nodes| *nodes as u64 <= super::super::value::MAXIMUM_ADMISSION_ITEMS)
-        .ok_or_else(|| {
-            resource_error(
-                "normalized_view_admission_work",
-                "view metadata admission exceeds finite capacity",
-            )
-        })?;
-    ordinary_type(program, ty, depth, control)?;
+    ordinary_type(program, ty, control)?;
     let object = &program.types[&ty];
     match (value, &object.form) {
         (NormalizedValue::Unit, TypeForm::Unit)
@@ -1993,22 +1930,15 @@ fn ordinary_shape_in(
         | (NormalizedValue::StaticText(_), TypeForm::StaticText) => {}
         (NormalizedValue::Option(value), TypeForm::Option { item }) => {
             if let Some(value) = value {
-                ordinary_shape_in(program, value, *item, depth + 1, control, nodes)?;
+                ordinary_shape(program, value, *item, control)?;
             }
         }
         (NormalizedValue::Result { success, value }, TypeForm::Result { ok, error }) => {
-            ordinary_shape_in(
-                program,
-                value,
-                if *success { *ok } else { *error },
-                depth + 1,
-                control,
-                nodes,
-            )?
+            ordinary_shape(program, value, if *success { *ok } else { *error }, control)?
         }
         (NormalizedValue::List(values), TypeForm::List { item }) => {
             for value in values.iter() {
-                ordinary_shape_in(program, value, *item, depth + 1, control, nodes)?;
+                ordinary_shape(program, value, *item, control)?;
             }
         }
         (
@@ -2038,7 +1968,7 @@ fn ordinary_shape_in(
                         "view metadata map key has another declared scalar type",
                     ));
                 }
-                ordinary_shape_in(program, value, *item, depth + 1, control, nodes)?;
+                ordinary_shape(program, value, *item, control)?;
             }
         }
         (
@@ -2052,7 +1982,7 @@ fn ordinary_shape_in(
                 if name != &field.name {
                     return Err(type_error("view metadata field identity differs"));
                 }
-                ordinary_shape_in(program, value, field.ty, depth + 1, control, nodes)?;
+                ordinary_shape(program, value, field.ty, control)?;
             }
         }
         (
@@ -2067,7 +1997,7 @@ fn ordinary_shape_in(
                 return Err(type_error("view metadata field inventory differs"));
             }
             for (value, field) in fields.iter().zip(schema.fields.iter()) {
-                ordinary_shape_in(program, value, field.ty, depth + 1, control, nodes)?;
+                ordinary_shape(program, value, field.ty, control)?;
             }
         }
         (
@@ -2087,9 +2017,7 @@ fn ordinary_shape_in(
                 .ok_or_else(|| type_error("view metadata case is missing"))?;
             match (payload, schema.payload) {
                 (None, None) => {}
-                (Some(value), Some(ty)) => {
-                    ordinary_shape_in(program, value, ty, depth + 1, control, nodes)?
-                }
+                (Some(value), Some(ty)) => ordinary_shape(program, value, ty, control)?,
                 _ => return Err(type_error("view metadata payload differs")),
             }
         }

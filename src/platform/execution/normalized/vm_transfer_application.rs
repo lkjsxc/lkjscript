@@ -98,7 +98,7 @@ impl TaskApplication {
             return Err(reject());
         }
         let identity = ValueOrigin::fresh().ok_or_else(reject)?;
-        let mut work = Work { control, nodes: 0 };
+        let mut work = Work::new(control);
         for (position, scope) in f.read_scope_parameters.iter().enumerate() {
             work.visit()?;
             for earlier in &f.read_scope_parameters[..position] {
@@ -295,7 +295,7 @@ impl TaskApplication {
             control,
         )
         .map_err(types::context_error)?;
-        let mut work = Work { control, nodes: 0 };
+        let mut work = Work::new(control);
         if types::resolve_application_in(program, function.result.ty, &context, &mut work)?
             != self.result
         {

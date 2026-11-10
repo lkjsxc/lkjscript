@@ -259,23 +259,9 @@ impl ReferenceState<'_> {
         }
         Ok(matches)
     }
-    fn parallel_transfer_type(
-        &self,
-        ty: TypeObjectDigest,
-        depth: usize,
-        nodes: &mut u64,
-    ) -> Result<bool, ExecutionError> {
+    fn parallel_transfer_type(&self, ty: TypeObjectDigest) -> Result<bool, ExecutionError> {
         self.control.check()?;
 
-        *nodes = nodes
-            .checked_add(1)
-            .filter(|n| *n <= super::super::value::MAXIMUM_ADMISSION_ITEMS)
-            .ok_or_else(|| {
-                reference_resource(
-                    "normalized_parallel_transfer_items",
-                    "structured result type exceeds finite admission",
-                )
-            })?;
         match &self
             .schema
             .types
@@ -289,12 +275,12 @@ impl ReferenceState<'_> {
                 ..
             } => Ok(true),
             TypeForm::OwnedSequence { item } => {
-                self.parallel_transfer_type(*item, depth + 1, nodes)?;
+                self.parallel_transfer_type(*item)?;
                 Ok(true)
             }
             TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
                 for field in fields {
-                    self.parallel_transfer_type(field.ty, depth + 1, nodes)?;
+                    self.parallel_transfer_type(field.ty)?;
                 }
                 Ok(true)
             }
@@ -303,10 +289,10 @@ impl ReferenceState<'_> {
                     reference_type_error("structured result has no exact owned nominal layout")
                 })?;
                 for argument in record.arguments.iter() {
-                    self.parallel_transfer_type(*argument, depth + 1, nodes)?;
+                    self.parallel_transfer_type(*argument)?;
                 }
                 for field in record.fields.iter() {
-                    self.parallel_transfer_type(field.ty, depth + 1, nodes)?;
+                    self.parallel_transfer_type(field.ty)?;
                 }
                 Ok(true)
             }
@@ -557,7 +543,7 @@ impl ReferenceState<'_> {
                 relation: signature.result.relation,
             };
         }
-        self.parallel_transfer_type(signature.result.ty, 0, &mut 0)?;
+        self.parallel_transfer_type(signature.result.ty)?;
         let mut seen_owned = false;
         for parameter in &mut signature.parameters {
             self.control.check()?;
@@ -634,7 +620,7 @@ impl ReferenceState<'_> {
                     ));
                 }
             } else {
-                self.parallel_transfer_type(parameter.ty, 0, &mut 0)?;
+                self.parallel_transfer_type(parameter.ty)?;
             }
         }
         // Vec-to-Arc conversion has its own metadata storage; payloads stay untouched.
@@ -1026,8 +1012,8 @@ impl ReferenceState<'_> {
         let right_types = Arc::clone(&right_task.types);
         let left_type = left_signature.result.ty;
         let right_type = right_signature.result.ty;
-        let owned = self.parallel_transfer_type(left_type, 0, &mut 0)?
-            | self.parallel_transfer_type(right_type, 0, &mut 0)?;
+        let owned =
+            self.parallel_transfer_type(left_type)? | self.parallel_transfer_type(right_type)?;
         let result_type = self.parallel_pair_type(left_type, right_type, owned)?;
         self.charge_allocation(super::super::value::collection_storage_bytes(
             left_signature

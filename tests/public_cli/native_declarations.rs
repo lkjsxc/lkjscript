@@ -766,7 +766,7 @@ declarations.end
 }
 
 #[test]
-fn native_command_map_results_count_json_entry_arrays_before_publication() {
+fn native_command_map_result_files_cross_former_json_item_limit() {
     let public = Native::process_template("command");
     let input = public.input(
         "counts.lkjc",
@@ -809,54 +809,64 @@ declarations.end
     let deployment = public.root.path().join("counts.deployment.json");
     std::fs::write(&deployment, serde_json::to_vec(&descriptor).unwrap()).unwrap();
     let result = public.root.path().join("result.json");
+    // These 33,334 map entries contain 100,002 JSON members, beyond the former
+    // item limit. Prepare one input and independent typed result for both routes.
+    let keys = (0..33_334)
+        .map(|index| format!("key-{index:05}"))
+        .collect::<Vec<_>>();
+    let input = serde_json::to_vec(&[&keys]).unwrap();
+    public.input("arguments.json", std::str::from_utf8(&input).unwrap());
+    let expected =
+        serde_json::to_vec(&keys.iter().map(|key| (key, 1)).collect::<Vec<_>>()).unwrap();
+    assert_eq!(expected.len(), 533_345);
     for detached in [false, true] {
         if detached {
             std::fs::rename(&public.project, public.root.path().join("retained-project")).unwrap();
         }
-        for count in [33_333, 33_334] {
-            let keys = (0..count)
-                .map(|index| format!("key-{index:05}"))
-                .collect::<Vec<_>>();
-            let input = serde_json::to_vec(&[&keys]).unwrap();
-            public.input("arguments.json", std::str::from_utf8(&input).unwrap());
-            let mut route = if detached {
-                vec!["run", "--deployment", path(&deployment)]
-            } else {
-                vec!["run", "count"]
-            };
-            route.extend([
-                "--arguments-file",
-                "arguments.json",
-                "--result-file",
-                "result.json",
-            ]);
-            let records = public.cli(&route, count == 33_333);
-            if count == 33_333 {
-                // One outer entry-array member plus its two members: 99,999 items.
-                let expected =
-                    serde_json::to_vec(&keys.iter().map(|key| (key, 1)).collect::<Vec<_>>())
-                        .unwrap();
-                assert_eq!(expected.len(), 533_329);
-                assert_eq!(std::fs::read(&result).unwrap(), expected);
-                lkjscript::platform::json::decode_application(&expected, Default::default())
-                    .unwrap();
-                std::fs::remove_file(&result).unwrap();
-            } else {
-                // 100,002 actual JSON items must fail before create-new publication.
-                let diagnostic = compact_record(&records, "diagnostic");
-                assert_eq!(compact_field(diagnostic, "code"), "normalized_json_type");
-                assert!(compact_field(diagnostic, "message").contains("item-count limit"));
-                assert!(!result.exists());
-                assert!(records.iter().all(|record| record.operation != "execution"));
-            }
-            assert!(std::fs::read_dir(public.root.path()).unwrap().all(|entry| {
-                !entry
-                    .unwrap()
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with(".lkjscript-output-stage-")
-            }));
+        let mut route = if detached {
+            vec!["run", "--deployment", path(&deployment)]
+        } else {
+            vec!["run", "count"]
+        };
+        route.extend([
+            "--arguments-file",
+            "arguments.json",
+            "--result-file",
+            "result.json",
+        ]);
+        let records = public.cli(&route, true);
+        let actual = std::fs::read(&result).unwrap();
+        assert_eq!(actual, expected);
+        lkjscript::platform::json::decode_application(&actual, Default::default()).unwrap();
+        let output = compact_record(&records, "output");
+        for (key, value) in [
+            ("path", path(&result)),
+            ("visibility", "created"),
+            ("durability", "synchronized"),
+            ("stage-cleanup", "removed"),
+        ] {
+            assert_eq!(compact_field(output, key), value);
         }
+        assert_eq!(compact_field(output, "bytes"), expected.len().to_string());
+        let rejected = public.cli(&route, false);
+        assert_eq!(
+            compact_field(compact_record(&rejected, "diagnostic"), "code"),
+            "output_conflict"
+        );
+        assert!(
+            rejected
+                .iter()
+                .all(|record| record.operation != "execution")
+        );
+        assert_eq!(std::fs::read(&result).unwrap(), expected);
+        std::fs::remove_file(&result).unwrap();
+        assert!(std::fs::read_dir(public.root.path()).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".lkjscript-output-stage-")
+        }));
         let project = if detached {
             public.root.path().join("retained-project")
         } else {

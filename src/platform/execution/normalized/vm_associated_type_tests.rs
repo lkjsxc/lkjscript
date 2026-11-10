@@ -319,11 +319,9 @@ fn associated_runtime_refuses_each_independent_member_scope_and_origin_corruptio
         });
         let selected =
             &fixture.program.functions[fixture.left.0 as usize].implementation_arguments[0];
-        let mut nodes = 0;
-        let result = validate_associated_bindings(&fixture.program, selected, &control, &mut nodes);
+        let result = validate_associated_bindings(&fixture.program, selected, &control);
         if valid {
             result.unwrap();
-            assert!(nodes > 0);
         } else {
             let error = result.unwrap_err();
             assert_eq!(error.class, ExecutionFailureClass::Trap);
@@ -333,7 +331,7 @@ fn associated_runtime_refuses_each_independent_member_scope_and_origin_corruptio
 }
 
 #[test]
-fn associated_runtime_hit_work_bound_and_cancellation_preserve_healthy_retry() {
+fn associated_runtime_cancellation_preserves_healthy_retry() {
     let fixture = prepared_fixture(false);
     let healthy = ExecutionControl::uncancelled();
     let context = PreparedApplicationContext::new(
@@ -353,20 +351,6 @@ fn associated_runtime_hit_work_bound_and_cancellation_preserve_healthy_retry() {
         fixture.left_sequence
     );
     assert!(measured.nodes > 0);
-    for short in [false, true] {
-        let mut work = Work {
-            control: &healthy,
-            nodes: MAXIMUM_ADMISSION_ITEMS - measured.nodes + u64::from(short),
-        };
-        let result =
-            resolve_application_in(&fixture.program, fixture.sequence, &context, &mut work);
-        if short {
-            assert_eq!(result.unwrap_err().class, ExecutionFailureClass::Resource);
-        } else {
-            assert_eq!(result.unwrap(), fixture.left_sequence);
-            assert_eq!(work.nodes, MAXIMUM_ADMISSION_ITEMS);
-        }
-    }
     let mut refused = 0;
     let mut accepted = 0;
     for checks in 0..64 {

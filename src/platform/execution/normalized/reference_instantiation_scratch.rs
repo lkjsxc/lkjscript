@@ -12,7 +12,6 @@ struct Scratch<'a> {
     schema: &'a NormalizedReferenceSchema,
     control: &'a ExecutionControl,
     effects: &'a super::super::reference_effects::Bindings,
-    work: u64,
     bytes: u64,
 }
 
@@ -24,10 +23,14 @@ impl Scratch<'_> {
 
     fn walk(&mut self, ty: TypeObjectDigest) -> Result<(), ExecutionError> {
         self.control.check()?;
-        self.work = self.work.checked_sub(1).ok_or_else(capacity)?;
 
         let schema = self.schema;
-        let object = schema.types.get(&ty).ok_or_else(capacity)?;
+        let object = schema.types.get(&ty).ok_or_else(|| {
+            super::super::reference::reference_error(
+                "reference_raw_instantiation",
+                "canonical raw type has a foreign template",
+            )
+        })?;
         let mut payload = if matches!(
             object.form,
             TypeForm::ReadViewApplied { .. }
@@ -87,7 +90,6 @@ impl Scratch<'_> {
                     let mut atoms = effect.requirements.len();
                     for parameter in &effect.parameters {
                         self.control.check()?;
-                        self.work = self.work.checked_sub(1).ok_or_else(capacity)?;
                         let count = self
                             .effects
                             .get(parameter)
@@ -138,7 +140,6 @@ impl NormalizedReferenceSchema {
             schema: self,
             control,
             effects,
-            work: super::super::value::MAXIMUM_ADMISSION_ITEMS,
             bytes: 0,
         };
         scratch.walk(template)?;
@@ -169,7 +170,7 @@ impl NormalizedReferenceSchema {
 fn capacity() -> ExecutionError {
     ExecutionError::resource(
         "reference_raw_instantiation_scratch",
-        "canonical raw signature exceeds finite substitution scratch capacity",
+        "canonical raw signature storage extent overflowed",
     )
 }
 

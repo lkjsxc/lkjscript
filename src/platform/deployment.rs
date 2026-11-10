@@ -2124,7 +2124,6 @@ fn validate_raw_adapter_fields(bytes: &[u8]) -> Result<(), Diagnostic> {
         bytes,
         super::json::JsonLimits {
             maximum_bytes: MAXIMUM_DEPLOYMENT_BYTES,
-            maximum_items: MAXIMUM_DEPLOYMENT_BYTES,
             maximum_string_bytes: MAXIMUM_DEPLOYMENT_BYTES,
         },
         super::json::JsonIntegerPolicy::SignedOrUnsigned64,

@@ -8,8 +8,6 @@ use crate::platform::execution::ExecutionControl;
 use crate::platform::execution::normalized::child_storage::{Captures, Values};
 use std::collections::BTreeSet;
 
-const TEST_LIMIT: u64 = 1_000_000;
-
 fn free(_: Charge) -> Result<(), ExecutionError> {
     Ok(())
 }
@@ -61,13 +59,13 @@ fn reused_worker_map_scope_restores_saturated_totals_after_nested_unwind() {
         let observed = {
             let _scope = WorkScope::enter();
             let map = Map::default()
-                .insert(key(11), value(17), TEST_LIMIT, &mut free)
+                .insert(key(11), value(17), &mut free)
                 .unwrap();
             let before_nested = Work::current();
             let failure = std::panic::catch_unwind(|| {
                 let _nested = WorkScope::enter();
                 let _map = Map::default()
-                    .insert(key(13), value(19), TEST_LIMIT, &mut free)
+                    .insert(key(13), value(19), &mut free)
                     .unwrap();
                 panic!("disposable nested map observation failure");
             });
@@ -200,7 +198,7 @@ fn persistent_map_order_snapshots_and_rebalancing_match_btree() {
             oracle.remove(&selected);
         } else {
             map = map
-                .insert(selected.clone(), value(step), TEST_LIMIT, &mut free)
+                .insert(selected.clone(), value(step), &mut free)
                 .unwrap();
             oracle.insert(selected, value(step));
         }
@@ -242,8 +240,7 @@ fn persistent_map_randomized_branches_keep_every_retained_history() {
             map.remove(&selected, &mut free).unwrap()
         } else {
             expected.insert(selected.clone(), value(step));
-            map.insert(selected, value(step), TEST_LIMIT, &mut free)
-                .unwrap()
+            map.insert(selected, value(step), &mut free).unwrap()
         };
         agrees(map, oracle);
         agrees(&changed, &expected);
@@ -270,11 +267,11 @@ fn persistent_map_bulk_order_and_all_key_kinds_are_canonical() {
         (NormalizedMapKey::Text(Arc::from("日本語")), value(10)),
     ];
     let entries = ordered.iter().cloned().collect::<BTreeMap<_, _>>();
-    let bulk = Map::from_items(entries.clone(), 10, &mut free).unwrap();
+    let bulk = Map::from_items(entries.clone(), &mut free).unwrap();
     let mut incremental = Map::default();
     for (key, value) in entries.iter().rev() {
         incremental = incremental
-            .insert(key.clone(), value.clone(), 10, &mut free)
+            .insert(key.clone(), value.clone(), &mut free)
             .unwrap();
     }
     assert_raw_iter_equal(bulk.iter(), ordered.iter().map(|(key, value)| (key, value)));
@@ -300,12 +297,11 @@ fn persistent_map_bulk_order_and_all_key_kinds_are_canonical() {
     );
     assert_eq!(
         crate::platform::execution::normalized::structural_equality::assertions::equal(
-            &(Map::from_items(BTreeMap::new(), 0, &mut free).unwrap()),
+            &(Map::from_items(BTreeMap::new(), &mut free).unwrap()),
             &(Map::default())
         ),
         Ok(true)
     );
-    assert!(Map::from_items(entries, 9, &mut free).is_err());
 }
 
 // Independent inspection never reads the carrier's observations or charge counters.
@@ -367,7 +363,7 @@ fn persistent_map_retained_composites_share_entries_subtrees_and_owned_buffers()
         let expected = (0..count)
             .map(|n| (key(n), composite(n, origin)))
             .collect::<BTreeMap<_, _>>();
-        let map = Map::from_items(expected.clone(), TEST_LIMIT, &mut free).unwrap();
+        let map = Map::from_items(expected.clone(), &mut free).unwrap();
         let before = physical(&map);
         let initial_height = shape(&map.root, None, None).0;
         let retained = map.clone();
@@ -381,8 +377,7 @@ fn persistent_map_retained_composites_share_entries_subtrees_and_owned_buffers()
             let is_insert = replacement.is_some();
             let changed = if let Some(replacement) = replacement {
                 oracle.insert(edited.clone(), replacement.clone());
-                map.insert(edited.clone(), replacement, TEST_LIMIT, &mut free)
-                    .unwrap()
+                map.insert(edited.clone(), replacement, &mut free).unwrap()
             } else {
                 oracle.remove(&edited);
                 map.remove(&edited, &mut free).unwrap()
@@ -408,7 +403,6 @@ fn persistent_map_retained_composites_share_entries_subtrees_and_owned_buffers()
                 map.iter()
                     .map(|(key, value)| (key.clone(), value.clone()))
                     .collect(),
-                TEST_LIMIT,
                 &mut free,
             )
             .unwrap();
@@ -444,7 +438,6 @@ fn persistent_map_retained_composites_share_entries_subtrees_and_owned_buffers()
             NormalizedMapKey::Text(text),
             NormalizedValue::Option(Some(payload)),
         )]),
-        1,
         &mut free,
     )
     .unwrap();
@@ -497,22 +490,17 @@ fn persistent_map_accounting_matches_independent_exact_fit_schedule() {
         let expected = independent_storage_schedule(expected_nodes, 1);
         let mut charged = Charge::default();
         map = map
-            .insert(
-                key(key_value),
-                value(key_value),
-                TEST_LIMIT,
-                &mut |charge| {
-                    let next = Charge {
-                        slots: charged.slots + charge.slots,
-                        bytes: charged.bytes + charge.bytes,
-                    };
-                    if next.slots > expected.slots || next.bytes > expected.bytes {
-                        return Err(storage_error());
-                    }
-                    charged = next;
-                    Ok(())
-                },
-            )
+            .insert(key(key_value), value(key_value), &mut |charge| {
+                let next = Charge {
+                    slots: charged.slots + charge.slots,
+                    bytes: charged.bytes + charge.bytes,
+                };
+                if next.slots > expected.slots || next.bytes > expected.bytes {
+                    return Err(storage_error());
+                }
+                charged = next;
+                Ok(())
+            })
             .unwrap();
         assert_eq!(charged, expected);
     }
@@ -524,7 +512,7 @@ fn persistent_map_accounting_matches_independent_exact_fit_schedule() {
     ] {
         let mut charged = Charge::default();
         assert!(
-            map.insert(key(1), value(77), TEST_LIMIT, &mut |charge| {
+            map.insert(key(1), value(77), &mut |charge| {
                 let next = Charge {
                     slots: charged.slots + charge.slots,
                     bytes: charged.bytes + charge.bytes,
@@ -561,7 +549,6 @@ fn persistent_map_accounting_matches_independent_exact_fit_schedule() {
         let mut charges = Vec::new();
         let bulk = Map::from_items(
             (0..count).map(|n| (key(n), value(n))).collect(),
-            TEST_LIMIT,
             &mut |charge| {
                 charges.push(charge);
                 Ok(())
@@ -579,7 +566,7 @@ fn persistent_map_accounting_matches_independent_exact_fit_schedule() {
     let before = Work::current();
     let mut charges = Vec::new();
     let borrowed_map = Map::default()
-        .insert_borrowed(&borrowed, value(1), 1, &mut |charge| {
+        .insert_borrowed(&borrowed, value(1), &mut |charge| {
             if charge.bytes != 0 && charge.slots == 0 {
                 assert_eq!(before.since().key_bytes_copied, 0);
                 assert_eq!(before.since().entry_handles_allocated, 0);
@@ -604,7 +591,7 @@ fn persistent_map_failed_reservations_preserve_all_versions() {
     let expected = (0..256)
         .map(|n| (key(n), value(n)))
         .collect::<BTreeMap<_, _>>();
-    let map = Map::from_items(expected.clone(), TEST_LIMIT, &mut free).unwrap();
+    let map = Map::from_items(expected.clone(), &mut free).unwrap();
     let retained = map.clone();
     for (selected, replacement) in [
         (key(300), Some(300)),
@@ -616,12 +603,7 @@ fn persistent_map_failed_reservations_preserve_all_versions() {
         let operation = |reserve: &mut dyn FnMut(Charge) -> Result<(), ExecutionError>| {
             let mut reserve = |charge| reserve(charge);
             if let Some(replacement) = replacement {
-                map.insert(
-                    selected.clone(),
-                    value(replacement),
-                    TEST_LIMIT,
-                    &mut reserve,
-                )
+                map.insert(selected.clone(), value(replacement), &mut reserve)
             } else {
                 map.remove(&selected, &mut reserve)
             }
@@ -651,14 +633,10 @@ fn persistent_map_failed_reservations_preserve_all_versions() {
             );
             agrees(&map, &expected);
             agrees(&retained, &expected);
-            assert!(
-                map.insert(key(777), value(777), TEST_LIMIT, &mut free)
-                    .is_ok()
-            );
+            assert!(map.insert(key(777), value(777), &mut free).is_ok());
         }
     }
-    assert!(map.insert(key(300), value(300), 256, &mut free).is_err());
-    assert!(map.insert(key(128), value(-1), 256, &mut free).is_ok());
+    assert!(map.insert(key(128), value(-1), &mut free).is_ok());
     let mut allocated = Charge::default();
     let missing = map
         .remove(&key(-1), &mut |charge| {
@@ -685,7 +663,7 @@ fn persistent_map_bulk_failure_and_cancellation_release_every_owned_payload() {
     };
     let mut charges = Vec::new();
     drop(
-        Map::from_items(make_entries(), TEST_LIMIT, &mut |charge| {
+        Map::from_items(make_entries(), &mut |charge| {
             charges.push(charge);
             Ok(())
         })
@@ -695,7 +673,7 @@ fn persistent_map_bulk_failure_and_cancellation_release_every_owned_payload() {
     for fail_at in 0..charges.len() {
         let mut accepted = Vec::new();
         assert!(
-            Map::from_items(make_entries(), TEST_LIMIT, &mut |charge| {
+            Map::from_items(make_entries(), &mut |charge| {
                 if accepted.len() == fail_at {
                     Err(storage_error())
                 } else {
@@ -709,16 +687,15 @@ fn persistent_map_bulk_failure_and_cancellation_release_every_owned_payload() {
         assert_eq!(Arc::strong_count(&payload), 1);
         let control = ExecutionControl::cancel_after_checks(fail_at as u64);
         assert_eq!(
-            Map::from_items(make_entries(), TEST_LIMIT, &mut |_| control.check())
+            Map::from_items(make_entries(), &mut |_| control.check())
                 .unwrap_err()
                 .class,
             ExecutionFailureClass::Cancelled
         );
         assert_eq!(Arc::strong_count(&payload), 1);
     }
-    assert!(Map::from_items(make_entries(), 30, &mut free).is_err());
     assert_eq!(Arc::strong_count(&payload), 1);
-    let healthy = Map::from_items(make_entries(), TEST_LIMIT, &mut free).unwrap();
+    let healthy = Map::from_items(make_entries(), &mut free).unwrap();
     assert_eq!(healthy.len(), 31);
     drop(healthy);
     assert_eq!(Arc::strong_count(&payload), 1);
@@ -733,12 +710,7 @@ fn deep_raw(depth: usize, payload: &Arc<[u8]>) -> NormalizedValue {
                 super::super::list::List::from_items(vec![value], None, &mut |_| Ok(())).unwrap(),
             ),
             2 => NormalizedValue::Map(
-                Map::from_items(
-                    BTreeMap::from([(key(n as i64), value)]),
-                    TEST_LIMIT,
-                    &mut free,
-                )
-                .unwrap(),
+                Map::from_items(BTreeMap::from([(key(n as i64), value)]), &mut free).unwrap(),
             ),
             3 => NormalizedValue::Result {
                 success: false,
@@ -761,12 +733,11 @@ fn persistent_map_deep_rejected_raw_values_and_partial_trees_dispose_iteratively
             let payload: Arc<[u8]> = Arc::from([23_u8; 17]);
             let map = Map::from_items(
                 BTreeMap::from([(key(0), deep_raw(20_000, &payload)), (key(1), value(1))]),
-                TEST_LIMIT,
                 &mut free,
             )
             .unwrap();
             let retained = map.clone();
-            let changed = map.insert(key(2), value(2), TEST_LIMIT, &mut free).unwrap();
+            let changed = map.insert(key(2), value(2), &mut free).unwrap();
             assert!(std::ptr::eq(
                 map.get(&key(0)).unwrap(),
                 changed.get(&key(0)).unwrap()
@@ -787,20 +758,19 @@ fn persistent_map_deep_rejected_raw_values_and_partial_trees_dispose_iteratively
             for fail_at in 0..16 {
                 let entries = (0..7).map(|n| (key(n), deep_raw(2048, &payload))).collect();
                 let control = ExecutionControl::cancel_after_checks(fail_at);
-                assert!(Map::from_items(entries, TEST_LIMIT, &mut |_| control.check()).is_err());
+                assert!(Map::from_items(entries, &mut |_| control.check()).is_err());
                 assert_eq!(Arc::strong_count(&payload), 1);
             }
             // Refusal before entry allocation and after a rotated path was partly
             // built both own deep values safely, preserving the independent alias.
             let base = Map::from_items(
                 BTreeMap::from([(key(0), value(0)), (key(1), value(1))]),
-                TEST_LIMIT,
                 &mut free,
             )
             .unwrap();
             let mut checks = 0;
             drop(
-                base.insert(key(2), value(2), TEST_LIMIT, &mut |_| {
+                base.insert(key(2), value(2), &mut |_| {
                     checks += 1;
                     Ok(())
                 })
@@ -809,7 +779,7 @@ fn persistent_map_deep_rejected_raw_values_and_partial_trees_dispose_iteratively
             for fail_at in 0..checks {
                 let control = ExecutionControl::cancel_after_checks(fail_at);
                 assert!(
-                    base.insert(key(2), deep_raw(4096, &payload), TEST_LIMIT, &mut |_| {
+                    base.insert(key(2), deep_raw(4096, &payload), &mut |_| {
                         control.check()
                     })
                     .is_err()
@@ -830,11 +800,7 @@ fn persistent_map_deep_rejected_raw_values_and_partial_trees_dispose_iteratively
                     Ok(true)
                 );
             }
-            assert!(
-                Map::default()
-                    .insert(key(0), value(17), TEST_LIMIT, &mut free)
-                    .is_ok()
-            );
+            assert!(Map::default().insert(key(0), value(17), &mut free).is_ok());
         })
         .unwrap()
         .join()
@@ -861,7 +827,7 @@ fn persistent_map_updates_have_logarithmic_storage_work() {
         for n in 0..count {
             let previous = candidate.clone();
             candidate = candidate
-                .insert(key(n), value(n), TEST_LIMIT, &mut |charge| {
+                .insert(key(n), value(n), &mut |charge| {
                     allocated.slots += charge.slots;
                     allocated.bytes += charge.bytes;
                     Ok(())
@@ -906,7 +872,7 @@ fn persistent_map_observation_saturation_neither_authorizes_nor_exhausts_storage
     let expected = independent_storage_schedule(1, 1);
     let mut accepted = Charge::default();
     let map = Map::default()
-        .insert_borrowed(&selected, value(17), 1, &mut |charge| {
+        .insert_borrowed(&selected, value(17), &mut |charge| {
             let next = Charge {
                 slots: accepted.slots.checked_add(charge.slots).unwrap(),
                 bytes: accepted.bytes.checked_add(charge.bytes).unwrap(),
@@ -922,7 +888,7 @@ fn persistent_map_observation_saturation_neither_authorizes_nor_exhausts_storage
     assert_eq!(Work::current(), saturated);
     let retained = map.clone();
     assert!(
-        map.insert(selected.clone(), value(99), 1, &mut |charge| {
+        map.insert(selected.clone(), value(99), &mut |charge| {
             if charge.bytes != 0 || charge.slots != 0 {
                 Err(storage_error())
             } else {
@@ -957,25 +923,23 @@ fn persistent_map_equality_keeps_admitted_nested_payloads_on_a_bounded_stack() {
                 let mut payload = value(leaf);
                 for _ in 0..255 {
                     payload = NormalizedValue::Map(
-                        Map::default()
-                            .insert(key(0), payload, TEST_LIMIT, &mut free)
-                            .unwrap(),
+                        Map::default().insert(key(0), payload, &mut free).unwrap(),
                     );
                 }
                 payload
             };
             let original_child = nested(7);
             let original = Map::default()
-                .insert(key(-1), original_child.clone(), TEST_LIMIT, &mut free)
+                .insert(key(-1), original_child.clone(), &mut free)
                 .unwrap()
-                .insert(key(1), original_child, TEST_LIMIT, &mut free)
+                .insert(key(1), original_child, &mut free)
                 .unwrap();
             let alias = original.clone();
             let independent_child = nested(7);
             let independently_built = Map::default()
-                .insert(key(1), independent_child.clone(), TEST_LIMIT, &mut free)
+                .insert(key(1), independent_child.clone(), &mut free)
                 .unwrap()
-                .insert(key(-1), independent_child, TEST_LIMIT, &mut free)
+                .insert(key(-1), independent_child, &mut free)
                 .unwrap();
             // Equal logical depth-256 values have different root shapes and separately
             // constructed descendants. Each root retains two aliases of its child.
@@ -986,9 +950,7 @@ fn persistent_map_equality_keeps_admitted_nested_payloads_on_a_bounded_stack() {
                 ),
                 Ok(true)
             );
-            let changed = original
-                .insert(key(1), nested(8), TEST_LIMIT, &mut free)
-                .unwrap();
+            let changed = original.insert(key(1), nested(8), &mut free).unwrap();
             assert_eq!(
                 crate::platform::execution::normalized::structural_equality::assertions::equal(
                     &original, &changed
@@ -1034,7 +996,6 @@ fn persistent_map_retirement_uses_reserved_links_and_keeps_shared_children() -> 
 
             let mut wide = Map::from_items(
                 (0..4_096).map(|index| (key(index), bytes())).collect(),
-                TEST_LIMIT,
                 &mut free,
             )
             .map_err(|error| format!("{error:?}"))?;
@@ -1049,7 +1010,7 @@ fn persistent_map_retirement_uses_reserved_links_and_keeps_shared_children() -> 
             let list = NormalizedValue::list((0..65_536).map(|_| bytes()).collect())
                 .map_err(|error| format!("{error:?}"))?;
             let mut owner = Map::default()
-                .insert(key(0), list, TEST_LIMIT, &mut free)
+                .insert(key(0), list, &mut free)
                 .map_err(|error| format!("{error:?}"))?;
             owner.drain_unique(&mut queue);
             queue.drain();
@@ -1060,7 +1021,7 @@ fn persistent_map_retirement_uses_reserved_links_and_keeps_shared_children() -> 
                 unary = NormalizedValue::Option(Some(Box::new(unary)));
             }
             let mut owner = Map::default()
-                .insert(key(0), unary, TEST_LIMIT, &mut free)
+                .insert(key(0), unary, &mut free)
                 .map_err(|error| format!("{error:?}"))?;
             owner.drain_unique(&mut queue);
             queue.drain();
@@ -1088,7 +1049,7 @@ fn persistent_map_retirement_uses_reserved_links_and_keeps_shared_children() -> 
             ] {
                 let retained = shared.clone();
                 let mut owner = Map::default()
-                    .insert(key(0), shared, TEST_LIMIT, &mut free)
+                    .insert(key(0), shared, &mut free)
                     .map_err(|error| format!("{error:?}"))?;
                 owner.drain_unique(&mut queue);
                 queue.drain();
@@ -1117,7 +1078,6 @@ fn persistent_map_retirement_uses_reserved_links_and_keeps_shared_children() -> 
                         layout: RecordLayoutIndex(0, origin),
                         fields,
                     }),
-                    TEST_LIMIT,
                     &mut free,
                 )
                 .map_err(|error| format!("{error:?}"))?;
@@ -1151,7 +1111,6 @@ fn persistent_map_branching_raw_cleanup_releases_children_and_preserves_failed_b
                     raw = NormalizedValue::Map(
                         Map::from_items(
                             BTreeMap::from([(key(0), raw), (key(1), sibling)]),
-                            TEST_LIMIT,
                             &mut free,
                         )
                         .map_err(|error| format!("{error:?}"))?,
@@ -1164,11 +1123,11 @@ fn persistent_map_branching_raw_cleanup_releases_children_and_preserves_failed_b
             queue.drain();
             assert_eq!(Arc::strong_count(&payload), 1);
 
-            let base = Map::from_items(BTreeMap::from([(key(0), value(7))]), TEST_LIMIT, &mut free)
+            let base = Map::from_items(BTreeMap::from([(key(0), value(7))]), &mut free)
                 .map_err(|error| format!("{error:?}"))?;
             let retained = base.clone();
             assert!(
-                base.insert(key(1), build()?, TEST_LIMIT, &mut |_| Err(storage_error()))
+                base.insert(key(1), build()?, &mut |_| Err(storage_error()))
                     .is_err()
             );
             assert_eq!(Arc::strong_count(&payload), 1);
@@ -1197,7 +1156,7 @@ fn cursor_restart_preserves_exact_mixed_traversal_without_storage_work() {
             .collect(),
     ]
     .map(|expected| {
-        let map = Map::from_items(expected.clone(), TEST_LIMIT, &mut free).unwrap();
+        let map = Map::from_items(expected.clone(), &mut free).unwrap();
         (map, expected)
     });
     for (before, _) in &fixtures {

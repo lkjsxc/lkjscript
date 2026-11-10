@@ -488,7 +488,6 @@ fn retained_map_captures_are_readmitted_independently_and_host_results_are_compl
             .insert(
                 NormalizedMapKey::I64(127),
                 NormalizedValue::Bool(true),
-                1_000_000,
                 &mut |_| Ok(()),
             )
             .unwrap(),

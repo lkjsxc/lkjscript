@@ -13,7 +13,6 @@ pub struct Batch {
     pub expected: Value,
     pub count: usize,
     pub bytes: usize,
-    pub items: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -43,31 +42,20 @@ impl Place {
         left.checked_add(right)
             .ok_or_else(|| self.error("JSON size accounting overflow"))
     }
-    fn items(self, count: usize, limits: JsonLimits) -> PackingResult<usize> {
-        if count > limits.maximum_items {
-            return Err(self.error(format!(
-                "JSON has {count} items; limit {}",
-                limits.maximum_items
-            )));
-        }
-        Ok(count)
-    }
 }
 
 #[derive(Clone, Copy)]
 struct Cost {
     bytes: usize,
-    items: usize,
 }
 impl Cost {
     fn append(self, value: Self, comma: bool, place: Place) -> PackingResult<Self> {
         Ok(Self {
             bytes: place.add(self.bytes, place.add(value.bytes, usize::from(comma))?)?,
-            items: place.add(self.items, place.add(value.items, 1)?)?,
         })
     }
     fn fits(self, limits: JsonLimits) -> bool {
-        self.bytes <= limits.maximum_bytes && self.items <= limits.maximum_items
+        self.bytes <= limits.maximum_bytes
     }
     fn require(self, place: Place, limits: JsonLimits) -> PackingResult<()> {
         if self.bytes > limits.maximum_bytes {
@@ -76,37 +64,31 @@ impl Cost {
                 self.bytes, limits.maximum_bytes
             )));
         }
-        place.items(self.items, limits)?;
         Ok(())
     }
 }
 
-// Count entries before serialization.
-// Container entries count once in their parent; the document root is not an item.
-fn items(value: &Value, place: Place, limits: JsonLimits) -> PackingResult<usize> {
+fn require_strings(value: &Value, place: Place, limits: JsonLimits) -> PackingResult<()> {
     match value {
         Value::Array(values) => {
-            let mut count = place.items(values.len(), limits)?;
             for value in values {
-                count = place.items(place.add(count, items(value, place, limits)?)?, limits)?;
+                require_strings(value, place, limits)?;
             }
-            Ok(count)
         }
         Value::Object(values) => {
-            let mut count = place.items(values.len(), limits)?;
             for (key, value) in values {
                 if key.len() > limits.maximum_string_bytes {
                     return Err(place.error("JSON key exceeds the string-byte limit"));
                 }
-                count = place.items(place.add(count, items(value, place, limits)?)?, limits)?;
+                require_strings(value, place, limits)?;
             }
-            Ok(count)
         }
         Value::String(value) if value.len() > limits.maximum_string_bytes => {
-            Err(place.error("JSON text exceeds the string-byte limit"))
+            return Err(place.error("JSON text exceeds the string-byte limit"));
         }
-        _ => Ok(0),
+        _ => {}
     }
+    Ok(())
 }
 
 // Use the real serializer for escaping and numeric spelling, stopping before
@@ -146,18 +128,17 @@ fn serialized<W: Write>(
     Ok(writer)
 }
 fn measure(value: &Value, place: Place, limits: JsonLimits) -> PackingResult<Cost> {
-    let items = items(value, place, limits)?;
+    require_strings(value, place, limits)?;
     let writer = serialized(value, io::sink(), place, limits)?;
     Ok(Cost {
         bytes: writer.bytes,
-        items,
     })
 }
 
 fn ranges(samples: &[(Value, Value)]) -> PackingResult<Vec<Range<usize>>> {
     let limits = JsonLimits::default();
-    let empty_input = Cost { bytes: 4, items: 1 }; // [[]]
-    let empty_output = Cost { bytes: 2, items: 0 }; // []
+    let empty_input = Cost { bytes: 4 }; // [[]]
+    let empty_output = Cost { bytes: 2 }; // []
     let (mut start, mut input, mut output) = (0, empty_input, empty_output);
     let mut selected = Vec::new();
     for (index, (argument, expected)) in samples.iter().enumerate() {
@@ -193,7 +174,7 @@ fn ranges(samples: &[(Value, Value)]) -> PackingResult<Vec<Range<usize>>> {
 fn admitted(value: &Value, place: Place) -> PackingResult<(String, Cost)> {
     let place = place.batch();
     let limits = JsonLimits::default();
-    let items = items(value, place, limits)?;
+    require_strings(value, place, limits)?;
     let writer = serialized(value, Vec::new(), place, limits)?;
     let decoded = decode_strict(&writer.inner, limits).map_err(|error| {
         place.error(format!(
@@ -209,7 +190,6 @@ fn admitted(value: &Value, place: Place) -> PackingResult<(String, Cost)> {
         text,
         Cost {
             bytes: writer.bytes,
-            items,
         },
     ))
 }
@@ -248,33 +228,23 @@ pub fn batches(
                 expected: batch.expected,
                 count: range.len(),
                 bytes: batch.input.bytes,
-                items: batch.input.items,
             })
         })
         .collect()
 }
 
 #[test]
-fn batching_honors_inclusive_json_items_without_losing_or_reordering_cases() -> PackingResult<()> {
-    let place = Place::sample(0, "input");
-    assert_eq!(
-        items(
-            &json!({"a":[1,{"b":null}],"z":[]}),
-            place,
-            JsonLimits::default()
-        )?,
-        5
-    );
+fn batching_preserves_large_cardinality_and_order() -> PackingResult<()> {
     let samples = vec![
-        (json!(vec![0; 49998]), json!(1)),
-        (json!(vec![0; 49999]), json!(2)),
+        (json!(vec![0; 131072]), json!(1)),
+        (json!(vec![0; 131072]), json!(2)),
         (json!(null), json!(3)),
     ];
     let selected = ranges(&samples)?;
-    assert_eq!(selected, [0..2, 2..3]);
-    let batch = materialize(&samples[..2], 0)?;
-    assert_eq!(batch.input.items, 100_000);
+    assert_eq!(selected, [0..3]);
+    let batch = materialize(&samples, 0)?;
     assert!(batch.arguments.len() < PACKING_BYTES);
+    assert_eq!(batch.expected, json!([1, 2, 3]));
     assert_eq!(
         selected.into_iter().flatten().collect::<Vec<_>>(),
         [0, 1, 2]
@@ -286,14 +256,7 @@ fn batching_honors_inclusive_json_items_without_losing_or_reordering_cases() -> 
 fn batching_retains_byte_case_and_empty_bounds_independently() -> PackingResult<()> {
     assert!(ranges(&[])?.is_empty());
     let empty = materialize(&[], 0)?;
-    assert_eq!(
-        (
-            empty.arguments.as_str(),
-            empty.input.bytes,
-            empty.input.items
-        ),
-        ("[[]]", 4, 1)
-    );
+    assert_eq!((empty.arguments.as_str(), empty.input.bytes), ("[[]]", 4));
     assert_eq!(empty.expected, json!([]));
     let samples = vec![(json!("x".repeat(600000)), json!(null)); 2];
     assert_eq!(ranges(&samples)?, [0..1, 1..2]);
@@ -339,38 +302,6 @@ fn batching_splits_on_output_bytes_and_keeps_late_rejection_and_recovery() -> Pa
     let batch = materialize(&samples[127..], 127)?;
     assert_eq!(batch.arguments, "[[127,128,129]]");
     assert_eq!(batch.expected, json!([large, "rejected", "verified"]));
-    Ok(())
-}
-
-#[test]
-fn batching_checks_output_items_and_indexed_single_pair_refusals() -> PackingResult<()> {
-    let samples = vec![
-        (json!(null), json!(vec![0; 49999])),
-        (json!(null), json!(vec![1; 49999])),
-        (json!(null), json!(2)),
-    ];
-    assert_eq!(ranges(&samples)?, [0..2, 2..3]);
-    let batch = materialize(&samples[..2], 0)?;
-    assert_eq!(
-        admitted(&batch.expected, Place::sample(0, "output"))?
-            .1
-            .items,
-        100_000
-    );
-    let exact = [(json!(vec![0; 99998]), json!(vec![1; 99999]))];
-    assert_eq!(ranges(&exact)?.as_slice(), std::slice::from_ref(&(0..1)));
-    materialize(&exact, 0)?;
-    for (side, pair) in [
-        ("input", (json!(vec![0; 99999]), json!(null))),
-        ("output", (json!(null), json!(vec![0; 100000]))),
-    ] {
-        let samples = [(json!(null), json!(null)), pair];
-        let Err(error) = ranges(&samples) else {
-            return Err(format!("oversized {side} pair was admitted").into());
-        };
-        assert!(error.to_string().starts_with(&format!("sample 1 {side}:")));
-        assert!(error.to_string().contains("100001 items"));
-    }
     Ok(())
 }
 
@@ -434,8 +365,6 @@ fn batching_admits_deep_finite_containers_with_exact_wrapping() -> PackingResult
             let exact = format!("{}null{}", "[".repeat(depth + 2), "]".repeat(depth + 2));
             assert_eq!(batch.arguments, exact);
             assert_eq!(output, exact);
-            assert_eq!(batch.input.items, depth + 2);
-            assert_eq!(cost.items, depth + 2);
             assert_eq!(batch.input.bytes, exact.len());
             assert_eq!(cost.bytes, exact.len());
             let truncated = &exact.as_bytes()[..exact.len() - 1];

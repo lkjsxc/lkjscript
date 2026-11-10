@@ -459,11 +459,6 @@ impl Value {
         }
         while let Some(node) = pending.pop() {
             control.check()?;
-            if seen.len() as u64 >= super::super::value::MAXIMUM_ADMISSION_ITEMS {
-                return Err(reject(
-                    "reference descriptor custody exceeds finite admission",
-                ));
-            }
             reserve((4 * std::mem::size_of::<usize>()) as u64)?;
             if !seen.insert(Arc::as_ptr(&node) as usize) {
                 continue;
@@ -523,11 +518,6 @@ impl Value {
         }
         while let Some(node) = pending.pop() {
             control.check()?;
-            if seen.len() as u64 >= super::super::value::MAXIMUM_ADMISSION_ITEMS {
-                return Err(reject(
-                    "reference ancestor closure exceeds finite admission",
-                ));
-            }
             reserve((std::mem::size_of::<usize>() + 3 * std::mem::size_of::<usize>()) as u64)?;
             if !seen.insert(Arc::as_ptr(&node) as usize) {
                 continue;
@@ -1256,12 +1246,9 @@ impl ReferenceState<'_> {
             return Err(reference_type_error("map update received a foreign value"));
         };
         let output = match child {
-            Some(child) => entries.insert(
-                key,
-                child.release(),
-                super::super::value::MAXIMUM_ADMISSION_ITEMS,
-                &mut |charge| self.reserve_map(charge),
-            )?,
+            Some(child) => {
+                entries.insert(key, child.release(), &mut |charge| self.reserve_map(charge))?
+            }
             None => entries.remove(&key, &mut |charge| self.reserve_map(charge))?,
         };
         Ok(Value {

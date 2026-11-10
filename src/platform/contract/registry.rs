@@ -8267,17 +8267,8 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 "execution.foreground-limits",
                 &[
                     ("single-allocation-bytes", "unbounded".to_owned()),
-                    (
-                        "raw-admission-items",
-                        super::super::execution::normalized::MAXIMUM_ADMISSION_ITEMS.to_string(),
-                    ),
                     ("json-bytes", codec.maximum_bytes.to_string()),
-                    ("json-items", codec.maximum_items.to_string()),
                     ("json-string-bytes", codec.maximum_string_bytes.to_string()),
-                    (
-                        "json-item-counting",
-                        "array-members-and-object-fields-including-typed-wrappers".to_owned(),
-                    ),
                     (
                         "frontier",
                         "current-representation-not-permanent-language-semantics".to_owned(),

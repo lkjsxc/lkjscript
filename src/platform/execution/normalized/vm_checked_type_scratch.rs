@@ -8,21 +8,15 @@ pub(super) fn bound(
     ty: TypeObjectDigest,
     control: &ExecutionControl,
 ) -> Result<u64, ExecutionError> {
-    let mut nodes = 0_u64;
-    visit(program, ty, control, &mut nodes)
+    visit(program, ty, control)
 }
 
 fn visit(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
     control: &ExecutionControl,
-    nodes: &mut u64,
 ) -> Result<u64, ExecutionError> {
     control.check()?;
-    *nodes = nodes
-        .checked_add(1)
-        .filter(|n| *n <= super::super::super::value::MAXIMUM_ADMISSION_ITEMS)
-        .ok_or_else(exhausted)?;
 
     let object = program
         .types
@@ -30,7 +24,7 @@ fn visit(
         .ok_or_else(|| admission_error("raw type substitution has a foreign template"))?;
     let mut nested = 0;
     let mut child = |ty| -> Result<(), ExecutionError> {
-        nested = add(nested, visit(program, ty, control, nodes)?)?;
+        nested = add(nested, visit(program, ty, control)?)?;
         Ok(())
     };
     let mut names = 0;
@@ -141,6 +135,6 @@ fn mul(count: usize, width: usize) -> Result<u64, ExecutionError> {
 fn exhausted() -> ExecutionError {
     resource_error(
         "normalized_type_substitution",
-        "raw type substitution exceeds finite scratch or work",
+        "raw type substitution storage extent overflowed",
     )
 }

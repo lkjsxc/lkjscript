@@ -162,7 +162,29 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer()
             observations.push(json!({"phase":"source-deleted","mode":family,"batch":index,"conditions":batch.count}));
         }
     }
-    assert_eq!(matrix.len(), 46);
+    assert_eq!(matrix.len(), observations.len());
+    // Byte-based packing may change the number of batches; every semantic case
+    // must still run through each producer or checker family.
+    for (mode, count) in batch_modes
+        .iter()
+        .map(|(mode, _)| (*mode, proposals.len()))
+        .chain([
+            ("verify", normal.len()),
+            ("outcome", outcome_suite.count()),
+            ("candidates", exhaustive.len()),
+            ("mutations", mutation_samples.len()),
+        ])
+    {
+        assert_eq!(
+            observations
+                .iter()
+                .filter(|row| row["mode"] == mode)
+                .map(|row| row["conditions"].as_u64().unwrap())
+                .sum::<u64>(),
+            count as u64,
+            "case coverage for {mode}"
+        );
+    }
     assert_eq!(
         observations
             .iter()
@@ -220,15 +242,6 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer()
         .max()
         .unwrap()
         .max(outcome_suite.maximum_bytes());
-    let maximum_items = plans
-        .iter()
-        .chain(&claims)
-        .chain(&candidates)
-        .chain(&adversaries)
-        .map(|batch| batch.items)
-        .max()
-        .unwrap()
-        .max(outcome_suite.maximum_items());
     let conditions = proposals.len() * (batch_modes.len() + 1)
         + exhaustive.len()
         + mutations.len()
@@ -239,7 +252,7 @@ fn native_checker_rejects_false_plans_and_guards_an_independent_producer()
         "storage_combinations":plan::STORAGE_MODES,
         "ordinary_claim_comparisons":proposals.len(), "exhaustive_candidate_claims":exhaustive.len(),
         "valid_exhaustive_claims":512,"rejected_exhaustive_claims":11264,"targeted_mutations_and_recovery":mutations.len(),
-        "batch_conditions":conditions,"batch_executions":observations.len(),"maximum_argument_bytes":maximum_input,"maximum_argument_items":maximum_items,
+        "batch_conditions":conditions,"batch_executions":observations.len(),"maximum_argument_bytes":maximum_input,
         "full_matrix_phase":"source-deleted", "attached_sample_executions":attached_observations.len(),
         "detached_matrix_boundary_executions":2,
         "attached_observations":attached_observations,

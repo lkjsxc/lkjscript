@@ -6949,12 +6949,7 @@ fn reference_map_intrinsic(
             None => Ok(fallback.into_raw()),
         },
         ("core.map.insert", Some(value)) => entries
-            .insert(
-                key,
-                value.into_raw(),
-                super::value::MAXIMUM_ADMISSION_ITEMS,
-                &mut reserve,
-            )
+            .insert(key, value.into_raw(), &mut reserve)
             .map(NormalizedValue::Map),
         ("core.map.remove", None) => entries.remove(&key, &mut reserve).map(NormalizedValue::Map),
         _ => Err(reference_type_error(

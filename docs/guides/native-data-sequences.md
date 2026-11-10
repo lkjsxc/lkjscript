@@ -108,7 +108,7 @@ complete proofs for the sequence and its elements.
 
 Reservation failure, bounds traps and cancellation join owned cleanup, expose no
 successful partial result and allow a healthy subsequent invocation. They do not
-undo completed effects or authorize an implicit retry. Existing finite type-depth,
-collection, storage and preparation limits still apply. Retain preparation,
-execution, growth and admission-work measurements separately; mutable storage
-alone does not establish a speed or API-cost improvement.
+undo completed effects or authorize an implicit retry. Sequence growth and type
+checking have no project-defined cardinality or nesting ceiling. Checked extents,
+actual allocation and caller-selected execution controls still apply. Measure
+preparation, execution, growth and admission work separately.

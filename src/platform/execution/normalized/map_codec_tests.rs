@@ -1,6 +1,5 @@
 //! Fixed map byte contracts, independently constructed envelopes and decoder faults.
 
-use super::super::value::MAXIMUM_ADMISSION_ITEMS;
 use super::super::{codec, data_codec, data_codec_reference};
 use super::*;
 use crate::platform::diagnostic::DiagnosticClass;
@@ -359,12 +358,7 @@ fn map_codecs_preserve_nested_bytes_across_insertion_removal_and_retained_versio
                 NormalizedValue::I64(-i64::from(index) - 1),
             ];
             map = map
-                .insert(
-                    key,
-                    NormalizedValue::list(values).unwrap(),
-                    MAXIMUM_ADMISSION_ITEMS,
-                    &mut |_| Ok(()),
-                )
+                .insert(key, NormalizedValue::list(values).unwrap(), &mut |_| Ok(()))
                 .unwrap();
         }
         let retained = map.clone();
@@ -372,7 +366,6 @@ fn map_codecs_preserve_nested_bytes_across_insertion_removal_and_retained_versio
             .insert(
                 NormalizedMapKey::Text("z".into()),
                 NormalizedValue::list(vec![]).unwrap(),
-                MAXIMUM_ADMISSION_ITEMS,
                 &mut |_| Ok(()),
             )
             .unwrap();
@@ -556,27 +549,15 @@ fn map_and_byte_json_wrappers_obey_representation_limits() {
         &fixture.program as &dyn super::super::value_schema::NormalizedValueSchema,
         &fixture.reference,
     ] {
-        for (ty, json, items, _depth, string_bytes) in [
-            (fixture.maps[1], b"[[1,2]]".as_slice(), 3, 2, 0),
-            (fixture.maps[1], b"[[1,2],[3,4]]".as_slice(), 6, 2, 0),
-            (fixture.maps[3], "[[\"猫\",1]]".as_bytes(), 3, 2, 3),
-            (fixture.nested, br#"[["a",[1,2]]]"#.as_slice(), 5, 3, 1),
-            (
-                fixture.maps[2],
-                br#"[[{"$bytes":"AA=="},1]]"#.as_slice(),
-                4,
-                3,
-                6,
-            ),
-            (fixture.bytes, br#"{"$bytes":""}"#.as_slice(), 1, 1, 6),
-            (
-                fixture.bytes,
-                br#"{"$bytes":"AAECAw=="}"#.as_slice(),
-                1,
-                1,
-                8,
-            ),
-            (fixture.text, "\"猫\"".as_bytes(), 0, 0, 3),
+        for (ty, json, string_bytes) in [
+            (fixture.maps[1], b"[[1,2]]".as_slice(), 0),
+            (fixture.maps[1], b"[[1,2],[3,4]]".as_slice(), 0),
+            (fixture.maps[3], "[[\"猫\",1]]".as_bytes(), 3),
+            (fixture.nested, br#"[["a",[1,2]]]"#.as_slice(), 1),
+            (fixture.maps[2], br#"[[{"$bytes":"AA=="},1]]"#.as_slice(), 6),
+            (fixture.bytes, br#"{"$bytes":""}"#.as_slice(), 6),
+            (fixture.bytes, br#"{"$bytes":"AAECAw=="}"#.as_slice(), 8),
+            (fixture.text, "\"猫\"".as_bytes(), 3),
         ] {
             assert_json_representation_limits(
                 schema,
@@ -584,13 +565,12 @@ fn map_and_byte_json_wrappers_obey_representation_limits() {
                 json,
                 JsonLimits {
                     maximum_bytes: json.len(),
-                    maximum_items: items,
                     maximum_string_bytes: string_bytes,
                 },
             );
         }
-        // Empty containers have no pair/element representation to charge. Type
-        // eligibility still visits their complete element types independently.
+        // Empty containers need no string storage. Type eligibility still checks
+        // their complete element types independently.
         for ty in [fixture.maps[1], fixture.list] {
             let value = codec::decode_typed(schema, b"[]", ty, JsonLimits::default()).unwrap();
             assert_eq!(
@@ -599,7 +579,6 @@ fn map_and_byte_json_wrappers_obey_representation_limits() {
                     &value,
                     ty,
                     JsonLimits {
-                        maximum_items: 0,
                         maximum_string_bytes: 0,
                         ..JsonLimits::default()
                     },

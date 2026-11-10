@@ -8,7 +8,7 @@
 //! `SourceLoans`/retained descriptor leases before entering this boundary.
 
 use super::child_storage::{self, DropQueue, Pending};
-use super::value::{MAXIMUM_ADMISSION_ITEMS, NormalizedValue, RawValue, ValueOrigin};
+use super::value::{NormalizedValue, RawValue, ValueOrigin};
 use crate::platform::execution::{ExecutionControl, ExecutionError};
 use crate::platform::kernel::{ReadScopeArgument, TypeObjectDigest};
 use crate::platform::semantic_id::{BindingId, FieldId};
@@ -113,7 +113,6 @@ impl SourceLoans {
         reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
         let expected = ancestors.checked_add(1).ok_or_else(capacity)?;
-        bounded_items(expected)?;
         validate_read(&selected.value, selected.origin, None, control)?;
         let mut reads = reserved_vec(expected, control, reserve)?;
         reads.push(selected);
@@ -193,7 +192,6 @@ impl RuntimeScopeOwner {
             Some(parent) => parent.live.len().checked_add(1).ok_or_else(capacity)?,
             None => 1,
         };
-        bounded_items(count)?;
         let mut live = reserved_vec(count, control, reserve)?;
         if let Some(parent) = parent {
             for flag in parent.live.iter() {
@@ -700,7 +698,6 @@ impl ViewBuilder {
         control: &ExecutionControl,
         reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
     ) -> Result<Self, ExecutionError> {
-        bounded_items(guards)?;
         let fields = reserved_vec(construction.fields, control, reserve)?;
         let links = reserved_vec(guards, control, reserve)?;
         charge_box::<MeteredReadyCleanup>(control, reserve)?;
@@ -948,7 +945,6 @@ impl ViewBuilder {
             .guard_capacity
             .checked_add(additional)
             .ok_or_else(capacity)?;
-        bounded_items(required)?;
         let links = &mut self.custody_mut()?.links;
         grow_reserved(links, required, control, reserve)?;
         let available = links.capacity();
@@ -1646,7 +1642,6 @@ fn validate_construction(
     control: &ExecutionControl,
 ) -> Result<(), ExecutionError> {
     control.check()?;
-    bounded_items(construction.fields)?;
     if construction.identity.program != construction.source.program
         || construction.identity.program != construction.scope.source.program
     {
@@ -1705,19 +1700,11 @@ fn admit(
     control.check()
 }
 
-fn bounded_items(count: usize) -> Result<(), ExecutionError> {
-    if u64::try_from(count).map_err(|_| capacity())? > MAXIMUM_ADMISSION_ITEMS {
-        return Err(capacity());
-    }
-    Ok(())
-}
-
 fn reserved_vec<T>(
     count: usize,
     control: &ExecutionControl,
     reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
 ) -> Result<Vec<T>, ExecutionError> {
-    bounded_items(count)?;
     let bytes = count
         .checked_mul(std::mem::size_of::<T>())
         .and_then(|bytes| u64::try_from(bytes).ok())
@@ -1737,16 +1724,10 @@ fn grow_reserved<T>(
     reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
 ) -> Result<(), ExecutionError> {
     control.check()?;
-    bounded_items(required)?;
     if required <= values.capacity() {
         return Ok(());
     }
-    let maximum = usize::try_from(MAXIMUM_ADMISSION_ITEMS).map_err(|_| capacity())?;
-    let geometric = values
-        .capacity()
-        .checked_mul(2)
-        .unwrap_or(maximum)
-        .min(maximum);
+    let geometric = values.capacity().checked_mul(2).unwrap_or(required);
     let target = required.max(geometric);
     // Charge the whole new allocation while the old vector is still retained. This does not
     // hide reallocation scratch behind an incremental live-byte receipt.

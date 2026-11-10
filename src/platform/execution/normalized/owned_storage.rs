@@ -315,19 +315,13 @@ impl OwnedStorage {
         restore_view_free(&mut storage, Some(control))?;
         let fields = storage.fields.as_mut().ok_or_else(reject)?;
         let length = fields.len().checked_add(1).ok_or_else(reject)?;
-        if length as u64 > super::value::MAXIMUM_ADMISSION_ITEMS {
-            return Err(ExecutionError::resource(
-                "normalized_sequence_storage",
-                "owned sequence exceeds its finite item bound",
-            ));
-        }
         if length > fields.capacity() {
             let capacity = fields
                 .capacity()
-                .saturating_mul(2)
+                .checked_mul(2)
+                .unwrap_or(length)
                 .max(8)
-                .max(length)
-                .min(super::value::MAXIMUM_ADMISSION_ITEMS as usize);
+                .max(length);
             let bytes = super::value::collection_storage_bytes(
                 capacity as u64,
                 std::mem::size_of::<NormalizedValue>() as u64,
@@ -647,14 +641,12 @@ fn reject_view_fields(
 
 struct StorageEscapeCheck<'a> {
     control: Option<&'a ExecutionControl>,
-    visits: u64,
 }
 
 impl<'a> StorageEscapeCheck<'a> {
     fn new(control: &'a ExecutionControl) -> Self {
         Self {
             control: Some(control),
-            visits: 0,
         }
     }
 
@@ -662,16 +654,6 @@ impl<'a> StorageEscapeCheck<'a> {
         if let Some(control) = self.control {
             control.check()?;
         }
-        self.visits = self
-            .visits
-            .checked_add(1)
-            .filter(|visits| *visits <= super::value::MAXIMUM_ADMISSION_ITEMS + 1)
-            .ok_or_else(|| {
-                ExecutionError::resource(
-                    "normalized_collection_items",
-                    "owned storage escape inspection exceeds finite admission items",
-                )
-            })?;
         match value {
             NormalizedValue::ReadView(_)
             | NormalizedValue::RegionCap { .. }
@@ -765,10 +747,7 @@ impl<'a> StorageEscapeCheck<'a> {
 fn reject_view_fields_uncontrolled(fields: &[NormalizedValue]) -> Result<(), ExecutionError> {
     // These existing callback APIs carry no execution control. Do not allocate a
     // substitute control or silently grant them a new cancellation domain.
-    let mut guard = StorageEscapeCheck {
-        control: None,
-        visits: 0,
-    };
+    let mut guard = StorageEscapeCheck { control: None };
     for field in fields {
         guard.value(field)?;
     }
@@ -780,7 +759,7 @@ fn restore_view_free(
     control: Option<&ExecutionControl>,
 ) -> Result<(), ExecutionError> {
     if !storage.view_free {
-        let mut guard = StorageEscapeCheck { control, visits: 0 };
+        let mut guard = StorageEscapeCheck { control };
         for field in storage.fields.as_deref().ok_or_else(reject)? {
             guard.value(field)?;
         }

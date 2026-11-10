@@ -15,7 +15,6 @@ const VALUE_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EP
 const VALUE_CHECKSUM_DOMAIN: &str = "lkjscript.data.typed-value-envelope.v1";
 const LAYOUT_IDENTITY_DOMAIN: &str = "lkjscript.data.typed-layout.v1";
 const MAXIMUM_VALUE_BYTES: usize = 4 * 1_048_576;
-const MAXIMUM_VALUE_ITEMS: usize = 1_000_000;
 
 #[cfg(test)]
 pub(crate) fn encode_typed(
@@ -43,8 +42,7 @@ pub(crate) fn encode_typed_with_control(
     output.extend_from_slice(VALUE_MAGIC);
     output.extend_from_slice(&VALUE_CONTRACT_VERSION.to_be_bytes());
     output.extend_from_slice(&layout);
-    let mut state = CodecState { items: 0, control };
-    encode_value(program, value, ty, &mut output, &mut state)?;
+    encode_value(program, value, ty, &mut output, control)?;
     if output.len() > MAXIMUM_VALUE_BYTES.saturating_sub(32) {
         return Err(codec_error(
             DiagnosticClass::Resource,
@@ -121,8 +119,7 @@ pub(crate) fn decode_typed_with_control(
             "typed data value belongs to a foreign nominal or runtime layout",
         ));
     }
-    let mut state = CodecState { items: 0, control };
-    let value = decode_value(program, ty, &mut cursor, &mut state)?;
+    let value = decode_value(program, ty, &mut cursor, control)?;
     cursor.finish("normalized_data_value_trailing")?;
     checkpoint(control)?;
     Ok(value)
@@ -134,30 +131,14 @@ fn checkpoint(control: &ExecutionControl) -> Result<(), Diagnostic> {
         .map_err(|error| Diagnostic::new(DiagnosticClass::Cancelled, error.code, error.message))
 }
 
-struct CodecState<'a> {
-    items: usize,
-    control: &'a ExecutionControl,
-}
-
-impl CodecState<'_> {
-    fn enter(&mut self, precharged: bool) -> Result<(), Diagnostic> {
-        checkpoint(self.control)?;
-
-        if !precharged {
-            charge_count(self, 1)?;
-        }
-        Ok(())
-    }
-}
-
 fn encode_value(
     program: &NormalizedProgram,
     value: &NormalizedValue,
     ty: TypeObjectDigest,
     output: &mut Vec<u8>,
-    state: &mut CodecState,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
-    state.enter(false)?;
+    checkpoint(control)?;
     let form = type_form(program, ty)?;
     match (value, form) {
         (
@@ -191,20 +172,20 @@ fn encode_value(
                 return Err(runtime_layout_error("structural record"));
             }
             for ((_, value), field) in values.iter().zip(fields) {
-                encode_value(program, value, field.ty, output, state)?;
+                encode_value(program, value, field.ty, output, control)?;
             }
         }
         (value, TypeForm::Named { .. } | TypeForm::Applied { .. }) => {
-            encode_named(program, value, ty, output, state)?;
+            encode_named(program, value, ty, output, control)?;
         }
         (NormalizedValue::List(values), TypeForm::List { item }) => {
             push_count(output, values.len())?;
             for value in values.iter() {
-                encode_value(program, value, *item, output, state)?;
+                encode_value(program, value, *item, output, control)?;
             }
         }
         (NormalizedValue::Map(values), TypeForm::Map { key, value: item }) => {
-            encode_map(program, values, (*key, *item), output, state)?;
+            encode_map(program, values, (*key, *item), output, control)?;
         }
         (_, TypeForm::StaticText) => return Err(unsupported("StaticText")),
         (_, TypeForm::Secret) => return Err(unsupported("Secret")),
@@ -238,13 +219,13 @@ fn encode_map(
     values: &super::map::Map,
     (key_type, item_type): (TypeObjectDigest, TypeObjectDigest),
     output: &mut Vec<u8>,
-    state: &mut CodecState,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
     push_count(output, values.len())?;
     let mut cursor = values.iter();
     for (map_key, value) in &mut cursor {
-        encode_map_key(program, map_key, key_type, output, state)?;
-        encode_value(program, value, item_type, output, state)?;
+        encode_map_key(program, map_key, key_type, output, control)?;
+        encode_value(program, value, item_type, output, control)?;
     }
     Ok(())
 }
@@ -254,7 +235,7 @@ fn encode_named(
     value: &NormalizedValue,
     ty: TypeObjectDigest,
     output: &mut Vec<u8>,
-    state: &mut CodecState,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
     if let Some((layout_index, layout)) = record_layout(program, ty) {
         if layout.owned {
@@ -271,7 +252,7 @@ fn encode_named(
             return Err(runtime_layout_error("nominal record"));
         }
         for (value, field) in fields.iter().zip(layout.fields.iter()) {
-            encode_value(program, value, field.ty, output, state)?;
+            encode_value(program, value, field.ty, output, control)?;
         }
         return Ok(());
     }
@@ -296,7 +277,7 @@ fn encode_named(
         append_bytes(output, &case.to_be_bytes())?;
         match (payload, layout_case.payload) {
             (None, None) => Ok(()),
-            (Some(value), Some(ty)) => encode_value(program, value, ty, output, state),
+            (Some(value), Some(ty)) => encode_value(program, value, ty, output, control),
             _ => Err(runtime_layout_error("variant payload")),
         }?;
         return Ok(());
@@ -312,20 +293,9 @@ fn decode_value(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
     cursor: &mut Cursor<'_>,
-    state: &mut CodecState,
+    control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
-    decode_value_charged(program, ty, cursor, state, false)
-}
-
-fn decode_value_charged(
-    program: &NormalizedProgram,
-    ty: TypeObjectDigest,
-    cursor: &mut Cursor<'_>,
-    state: &mut CodecState,
-
-    precharged: bool,
-) -> Result<NormalizedValue, Diagnostic> {
-    state.enter(precharged)?;
+    checkpoint(control)?;
     match type_form(program, ty)? {
         TypeForm::RegionBrand { .. }
         | TypeForm::Region { .. }
@@ -388,7 +358,7 @@ fn decode_value_charged(
                 output
                     .try_push((
                         field.name.clone(),
-                        decode_value(program, field.ty, cursor, state)?,
+                        decode_value(program, field.ty, cursor, control)?,
                     ))
                     .map_err(child_storage_error)?;
             }
@@ -397,14 +367,13 @@ fn decode_value_charged(
             }))
         }
         TypeForm::Named { .. } | TypeForm::Applied { .. } => {
-            decode_named(program, ty, cursor, state)
+            decode_named(program, ty, cursor, control)
         }
         TypeForm::List { item } => {
             let count = cursor.count("normalized_data_list_count")?;
-            charge_count(state, count)?;
             let mut output = Vec::with_capacity(count);
             for _ in 0..count {
-                output.push(decode_value_charged(program, *item, cursor, state, true)?);
+                output.push(decode_value(program, *item, cursor, control)?);
             }
             Ok(NormalizedValue::list(output).map_err(|error| {
                 Diagnostic::new(
@@ -416,10 +385,9 @@ fn decode_value_charged(
         }
         TypeForm::Map { key, value } => {
             let count = cursor.count("normalized_data_map_count")?;
-            charge_count(state, count.saturating_mul(2))?;
             let mut output = BTreeMap::<NormalizedMapKey, NormalizedValue>::new();
             for _ in 0..count {
-                let decoded_key = decode_value_charged(program, *key, cursor, state, true)?;
+                let decoded_key = decode_value(program, *key, cursor, control)?;
                 let map_key = NormalizedMapKey::from_value(decoded_key).ok_or_else(|| {
                     codec_error(
                         DiagnosticClass::Corrupt,
@@ -437,10 +405,10 @@ fn decode_value_charged(
                         "typed data map keys are duplicate or not in canonical order",
                     ));
                 }
-                let decoded_value = decode_value_charged(program, *value, cursor, state, true)?;
+                let decoded_value = decode_value(program, *value, cursor, control)?;
                 output.insert(map_key, decoded_value);
             }
-            NormalizedValue::map_controlled(output, state.control)
+            NormalizedValue::map_controlled(output, control)
                 .map_err(super::runner::execution_diagnostic)
         }
         TypeForm::StaticText => Err(unsupported("StaticText")),
@@ -464,7 +432,7 @@ fn decode_named(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
     cursor: &mut Cursor<'_>,
-    state: &mut CodecState,
+    control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
     if let Some((layout, record)) = record_layout(program, ty) {
         if record.owned {
@@ -474,7 +442,7 @@ fn decode_named(
             ValuesBuilder::with_capacity(record.fields.len()).map_err(child_storage_error)?;
         for field in record.fields.iter() {
             fields
-                .try_push(decode_value(program, field.ty, cursor, state)?)
+                .try_push(decode_value(program, field.ty, cursor, control)?)
                 .map_err(child_storage_error)?;
         }
         return Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
@@ -496,7 +464,7 @@ fn decode_named(
             })?;
         let payload = case_layout
             .payload
-            .map(|ty| decode_value(program, ty, cursor, state).map(Box::new))
+            .map(|ty| decode_value(program, ty, cursor, control).map(Box::new))
             .transpose()?;
         return Ok(NormalizedValue::Variant {
             layout,
@@ -715,9 +683,9 @@ fn encode_map_key(
     key: &NormalizedMapKey,
     ty: TypeObjectDigest,
     output: &mut Vec<u8>,
-    state: &mut CodecState,
+    control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
-    state.enter(false)?;
+    checkpoint(control)?;
     // Check the exact declared primitive without allocating a temporary runtime value.
     match (key, type_form(program, ty)?) {
         (NormalizedMapKey::Bool(value), TypeForm::Bool) => {
@@ -755,7 +723,7 @@ fn append_bytes(output: &mut Vec<u8>, bytes: &[u8]) -> Result<(), Diagnostic> {
 }
 
 fn push_count(output: &mut Vec<u8>, value: usize) -> Result<(), Diagnostic> {
-    let value = u32::try_from(value).map_err(|_| item_limit())?;
+    let value = u32::try_from(value).map_err(|_| extent_overflow())?;
     append_bytes(output, &value.to_be_bytes())?;
     Ok(())
 }
@@ -784,7 +752,10 @@ impl<'a> Cursor<'a> {
     }
 
     fn take(&mut self, length: usize, code: &'static str) -> Result<&'a [u8], Diagnostic> {
-        let end = self.offset.checked_add(length).ok_or_else(item_limit)?;
+        let end = self
+            .offset
+            .checked_add(length)
+            .ok_or_else(extent_overflow)?;
         let bytes = self.bytes.get(self.offset..end).ok_or_else(|| {
             codec_error(
                 DiagnosticClass::Corrupt,
@@ -834,11 +805,7 @@ impl<'a> Cursor<'a> {
     }
 
     fn count(&mut self, code: &'static str) -> Result<usize, Diagnostic> {
-        let count = usize::try_from(self.u32(code)?).map_err(|_| item_limit())?;
-        if count > MAXIMUM_VALUE_ITEMS {
-            return Err(item_limit());
-        }
-        Ok(count)
+        usize::try_from(self.u32(code)?).map_err(|_| extent_overflow())
     }
 
     fn blob(&mut self, code: &'static str) -> Result<Vec<u8>, Diagnostic> {
@@ -871,16 +838,6 @@ impl<'a> Cursor<'a> {
     }
 }
 
-// Reserve direct collection children before allocation; their later visits
-// still check cancellation but do not charge the same nodes again.
-fn charge_count(state: &mut CodecState, count: usize) -> Result<(), Diagnostic> {
-    state.items = state.items.checked_add(count).ok_or_else(item_limit)?;
-    if state.items > MAXIMUM_VALUE_ITEMS {
-        return Err(item_limit());
-    }
-    Ok(())
-}
-
 fn digest(domain: &'static str, bytes: &[u8]) -> [u8; 32] {
     let mut hasher = blake3::Hasher::new_derive_key(domain);
     hasher.update(&(bytes.len() as u64).to_be_bytes());
@@ -888,11 +845,11 @@ fn digest(domain: &'static str, bytes: &[u8]) -> [u8; 32] {
     *hasher.finalize().as_bytes()
 }
 
-fn item_limit() -> Diagnostic {
+fn extent_overflow() -> Diagnostic {
     codec_error(
         DiagnosticClass::Resource,
-        "normalized_data_value_items",
-        "typed data value exceeds the canonical item limit",
+        "normalized_data_value_extent",
+        "typed data count or offset exceeds its encoded or host address domain",
     )
 }
 
