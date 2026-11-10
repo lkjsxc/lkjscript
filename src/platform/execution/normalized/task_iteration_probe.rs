@@ -203,7 +203,6 @@ fn invoke(
         "iteration entry must be an exact zero-argument task",
     )?;
     let mut policy = NormalizedRunPolicy {
-        maximum_call_depth: 64,
         ..Default::default()
     };
     if fault == "fuel" {
@@ -393,7 +392,7 @@ fn invoke(
         "configuration/callback order differs",
     )?;
     Ok(
-        json!({"tier":if reference {"reference"} else {"production"},"stride":stride,"threshold":threshold,"case":fault,"observed":observed,"policy":{"maximum_call_depth":policy.maximum_call_depth,"instruction_steps":policy.instruction_steps,"maximum_allocated_bytes":policy.maximum_allocated_bytes},"execution_nanoseconds":nanoseconds,"events":events,"work":work,"output":output,"cleanup_complete":true}),
+        json!({"tier":if reference {"reference"} else {"production"},"stride":stride,"threshold":threshold,"case":fault,"observed":observed,"policy":{"instruction_steps":policy.instruction_steps,"maximum_allocated_bytes":policy.maximum_allocated_bytes},"execution_nanoseconds":nanoseconds,"events":events,"work":work,"output":output,"cleanup_complete":true}),
     )
 }
 

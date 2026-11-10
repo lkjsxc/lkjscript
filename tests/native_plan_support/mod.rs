@@ -264,8 +264,7 @@ pub fn refusals(public: &Native, descriptors: &[(&str, &std::path::PathBuf)]) {
         public.compare(&format!("after-type-{mode}"), descriptor, &valid, &expected);
         let mut restricted: Value = serde_json::from_str(DESCRIPTORS[0].1).unwrap();
         restricted["target"] = json!(format!("dependency-plan-{mode}"));
-        restricted["execution"] =
-            json!({"instruction_fuel":1,"maximum_call_depth":4096,"maximum_value_stack":1000000});
+        restricted["execution"] = json!({"instruction_fuel":1,});
         let restricted = public.input(
             &format!("refusal-{mode}.deployment.json"),
             &restricted.to_string(),

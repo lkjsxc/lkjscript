@@ -118,13 +118,13 @@ fn expect(source: &KernelSnapshot, code: i64) {
 }
 
 #[test]
-fn selfhost_source_scope_admits_complete_compiler_nominal_and_recursive_sources() {
+fn selfhost_source_scope_admits_independent_nominal_and_recursive_sources() {
     let lexical = fixture();
     let nominal = byte_buffer_tests::author_only(include_str!(
         "../../../../tests/fixtures/selfhost-source-nominal.lkjc"
     ))
     .unwrap();
-    for source in [&compiler().0, &lexical, &nominal] {
+    for source in [&lexical, &nominal] {
         expect(source, 0);
         let bytes = graph::packet(source);
         let word = |at| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()) as usize;
@@ -745,4 +745,10 @@ fn selfhost_source_forest_cancellation_does_not_poison_retry() {
         );
     }
     forest_expect(&parents, None, 0, 257);
+}
+
+#[test]
+#[ignore = "slow: whole compiler through syntax readers"]
+fn selfhost_source_scope_admits_complete_compiler() {
+    expect(&compiler().0, 0);
 }

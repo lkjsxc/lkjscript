@@ -8,17 +8,14 @@ mod tests;
 
 pub fn execute_tx(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>> {
     let project = memory::current();
-    std::thread::Builder::new()
-        .name("symbolic-transaction".into())
-        .stack_size(64 * 1_048_576)
-        .spawn(move || memory::with_project(project, || execute(arguments)))
-        .map_err(|error| {
-            single_diagnostic(internal_error(format!(
-                "cannot start transaction worker: {error}"
-            )))
-        })?
-        .join()
-        .map_err(|_| single_diagnostic(internal_error("transaction worker panicked")))?
+    crate::platform::stack::run("symbolic-transaction", move || {
+        memory::with_project(project, || execute(arguments))
+    })
+    .map_err(|error| {
+        single_diagnostic(internal_error(format!(
+            "cannot execute transaction: {error}"
+        )))
+    })?
 }
 
 fn execute(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>> {
@@ -139,7 +136,7 @@ fn execute(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>> {
 fn run_value(
     run: Option<crate::platform::execution::normalized::NormalizedCommandReceipt>,
 ) -> Result<Option<serde_json::Value>, Vec<Diagnostic>> {
-    run.map(|receipt| serde_json::from_slice(&receipt.result_json))
+    run.map(|receipt| crate::platform::json::deserialize(&receipt.result_json))
         .transpose()
         .map_err(|error| {
             single_diagnostic(internal_error(format!("invalid command result: {error}")))

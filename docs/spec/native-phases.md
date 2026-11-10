@@ -156,9 +156,14 @@ The leaf poll routine preserves its incoming flags and all registers except
 reserved volatile R11. A surrounding backend call wrapper may itself clobber
 flags; emitters must place the call before the comparison whose flags a later
 branch consumes, or explicitly preserve those flags. Generated native CALL
-frames still consume the OS stack. This ABI neither removes native stack limits
-nor establishes language-level lexical `Region`, relative-pointer, region-slice
-or region-capability semantics.
+frames consume the OS stack. Standalone startup reads physical memory through
+`sysinfo` and raises the soft `RLIMIT_STACK` toward twice that size, preserving the
+inherited hard limit and any larger existing soft limit. This selects the permitted
+stack growth; operating-system mappings and page allocation provide its storage.
+Stack setup failure reports `native_stack_setup` and exits with status 70.
+Same-process invocation uses the caller's existing stack; the host supplies its
+stack reservation before entering the phase. Lexical `Region`, relative-pointer,
+region-slice and region-capability semantics remain language rules.
 
 ## Required verification
 
@@ -174,6 +179,5 @@ Exact ownership observations must be corroborated by independent process
 mapping observations. A negative control that clears counters while skipping
 unmapping must fail. RSS is corroboration, not the sole reclamation proof.
 Strict artifact loading, independent behavior and source fixed-point checks
-remain required. Focused results and full staged-tree acceptance are recorded
-separately in [status](../status.md); implementation alone is not Milestone C
-acceptance.
+complement these lifecycle controls. [Status](../status.md) records what ran and
+what remains; [verification](verification.md) gives the selectable commands.

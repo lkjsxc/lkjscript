@@ -22,10 +22,7 @@ impl WitnessAdmission {
         }
     }
 
-    fn checkpoint(&mut self, depth: usize) -> bool {
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return false;
-        }
+    fn checkpoint(&mut self) -> bool {
         let Some(remaining) = self.remaining.checked_sub(1) else {
             return false;
         };
@@ -59,9 +56,7 @@ impl<'a> WitnessTypes<'a> {
         depth: usize,
     ) -> Option<TypeObjectDigest> {
         self.remaining = self.remaining.checked_sub(1)?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return None;
-        }
+
         let mut object = self
             .source
             .types
@@ -131,7 +126,7 @@ impl<'a> WitnessTypes<'a> {
         depth: usize,
     ) -> Option<(TypeObjectDigest, Vec<TypeObjectDigest>)> {
         self.remaining = self.remaining.checked_sub(1)?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH || i.type_parameters.len() != arguments.len() {
+        if i.type_parameters.len() != arguments.len() {
             return None;
         }
         let bindings = i
@@ -213,9 +208,7 @@ impl<'a> WitnessTypes<'a> {
         depth: usize,
     ) -> Option<()> {
         self.remaining = self.remaining.checked_sub(1)?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return None;
-        }
+
         if let ImplementationOperand::Concrete {
             implementation,
             type_arguments,
@@ -404,7 +397,6 @@ pub(super) fn materialized_witness_types(
             oracle.record_layout_acyclic(
                 declaration,
                 &mut BTreeSet::new(),
-                0,
                 &mut types.remaining,
             )?;
         }
@@ -1021,7 +1013,7 @@ impl Oracle<'_> {
         let mut pending = vec![(operand, 0)];
         let mut remaining = contract::MAXIMUM_VALIDATION_WORK;
         while let Some((operand, depth)) = pending.pop() {
-            if depth > contract::MAXIMUM_TYPE_DEPTH || remaining == 0 {
+            if remaining == 0 {
                 return false;
             }
             remaining -= 1;
@@ -1081,7 +1073,7 @@ impl Oracle<'_> {
         admission: &mut WitnessAdmission,
         depth: usize,
     ) -> bool {
-        if !admission.checkpoint(depth) {
+        if !admission.checkpoint() {
             return false;
         }
         if admission.admitted.contains(&reference) {
@@ -1107,7 +1099,7 @@ impl Oracle<'_> {
         admission: &mut WitnessAdmission,
         depth: usize,
     ) -> bool {
-        if !admission.checkpoint(depth) {
+        if !admission.checkpoint() {
             return false;
         }
         let scoped = Oracle(self.0, Some(reference));
@@ -1303,10 +1295,10 @@ impl Oracle<'_> {
                     || (!target_scope.owned_type_in_scope(p.ty) && !target_scope.ordinary(p.ty))
                     || if associated_mapping {
                         associated
-                            .definition_type(expected.ty, reference, 0)
+                            .definition_type(expected.ty, reference)
                             .ok()
                             .is_none_or(|expected| {
-                                associated.substitute(p.ty, &environment, 0).ok() != Some(expected)
+                                associated.substitute(p.ty, &environment).ok() != Some(expected)
                             })
                     } else {
                         derived
@@ -1323,11 +1315,10 @@ impl Oracle<'_> {
                 && !target_scope.ordinary(f.result.ty))
                 || if associated_mapping {
                     associated
-                        .definition_type(m.result.ty, reference, 0)
+                        .definition_type(m.result.ty, reference)
                         .ok()
                         .is_none_or(|expected| {
-                            associated.substitute(f.result.ty, &environment, 0).ok()
-                                != Some(expected)
+                            associated.substitute(f.result.ty, &environment).ok() != Some(expected)
                         })
                 } else {
                     derived
@@ -1482,7 +1473,7 @@ impl Oracle<'_> {
         admission: &mut WitnessAdmission,
         depth: usize,
     ) -> bool {
-        if !admission.checkpoint(depth) {
+        if !admission.checkpoint() {
             return false;
         }
         match operand {
@@ -1516,7 +1507,7 @@ impl Oracle<'_> {
         TypeObjectDigest,
         Vec<TypeObjectDigest>,
     )> {
-        if !admission.checkpoint(depth) {
+        if !admission.checkpoint() {
             return None;
         }
         match operand {
@@ -1568,7 +1559,7 @@ impl Oracle<'_> {
                         },
                     );
                     let result = resolver
-                        .admit_operand(operand, self.declaration_occurrence()?, depth + 1)
+                        .admit_operand(operand, self.declaration_occurrence()?)
                         .ok();
                     admission.remaining = resolver.remaining();
                     return result;

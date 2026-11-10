@@ -30,7 +30,7 @@ pub mod matrix;
 pub mod oracle;
 #[allow(
     dead_code,
-    reason = "source differential batches are used by selected public matrices"
+    reason = "source VM batches are used by selected public matrices"
 )]
 pub mod source_batch;
 

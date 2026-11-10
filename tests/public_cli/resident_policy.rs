@@ -255,7 +255,7 @@ fn detached_resident_quotas_remain_optional_and_operational_deadlines_still_join
     let source = public.cli(&["run", "count", "--arguments", "[1000000]"], true);
     let source_execution = compact_record(&source, "execution");
     assert_eq!(compact_field(source_execution, "value"), "1000000");
-    assert_eq!(compact_field(source_execution, "differential"), "equal");
+    assert_eq!(compact_field(source_execution, "engine"), "vm");
     for (field, former_maximum) in [
         ("production-instructions", 10_000_000),
         ("production-allocated-bytes", 268_435_456),
@@ -266,12 +266,6 @@ fn detached_resident_quotas_remain_optional_and_operational_deadlines_still_join
         assert!(actual > former_maximum, "{field}: {actual}");
         eprintln!("ordinary source default witness {field}: {actual}");
     }
-    assert!(
-        compact_field(source_execution, "reference-expressions")
-            .parse::<u64>()
-            .unwrap()
-            > 0
-    );
     assert_eq!(
         std::fs::read(public.project.join("HEAD")).unwrap(),
         source_head
@@ -394,24 +388,7 @@ fn invalid_resident_quota_configuration_rejects_before_artifact_secret_or_listen
         json!([{"name":"must-not-read", "variable":"LKJSCRIPT_ABSENT_RESIDENT_POLICY_SECRET"}]);
     let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     descriptor["listen"] = json!(occupied.local_addr().unwrap().to_string());
-    for (index, field) in ["maximum_call_depth", "maximum_value_stack"]
-        .into_iter()
-        .enumerate()
-    {
-        let mut invalid = descriptor.clone();
-        invalid["execution"][field] = json!(0);
-        let path = public.input(&format!("invalid-{index}.json"), &invalid.to_string());
-        let result = command_at(
-            &public.executable,
-            public.root.path(),
-            &["serve", "--deployment", super::path(&path)],
-        );
-        assert!(!result.status.success());
-        let output = String::from_utf8(result.stdout).unwrap();
-        assert!(output.contains("deployment_execution_limit"), "{output}");
-        assert!(!output.contains("\"event\":\"ready\""));
-        assert!(!public.root.path().join("absent.lkja").exists());
-    }
+
     for field in QUOTAS {
         let mut invalid = descriptor.clone();
         invalid["execution"][field] = json!(-1);
@@ -427,11 +404,7 @@ fn invalid_resident_quota_configuration_rejects_before_artifact_secret_or_listen
         assert!(!output.contains("\"event\":\"ready\""));
         assert!(!public.root.path().join("absent.lkja").exists());
     }
-    for field in [
-        "instruction_fuel",
-        "maximum_call_depth",
-        "maximum_value_stack",
-    ] {
+    for field in ["instruction_fuel"] {
         let mut invalid = descriptor.clone();
         invalid["execution"].as_object_mut().unwrap().remove(field);
         let path = public.input(&format!("missing-{field}.json"), &invalid.to_string());
@@ -465,8 +438,8 @@ fn foreground_cumulative_policies_preserve_zero_exact_and_maximum() {
         ],
         true,
     );
-    descriptor["execution"] = json!({"instruction_fuel":null,"maximum_call_depth":4096,
-        "maximum_value_stack":1000000,"maximum_allocated_bytes":null,
+    descriptor["execution"] = json!({"instruction_fuel":null,
+        "maximum_allocated_bytes":null,
         "maximum_collection_items":null,"maximum_capability_calls":null});
     let baseline = public.input("exact-policy-baseline.json", &descriptor.to_string());
     let records = public.cli(&["run", "--deployment", path(&baseline)], true);
@@ -570,8 +543,8 @@ fn foreground_policy_reporting_does_not_hide_partial_cumulative_limits() {
         ],
         true,
     );
-    descriptor["execution"] = json!({"instruction_fuel":null,"maximum_call_depth":4096,
-        "maximum_value_stack":1000000,"maximum_allocated_bytes":null,
+    descriptor["execution"] = json!({"instruction_fuel":null,
+        "maximum_allocated_bytes":null,
         "maximum_collection_items":null,"maximum_capability_calls":null});
     let baseline = public.input("profile-baseline.json", &descriptor.to_string());
     let records = public.cli(&["run", "--deployment", path(&baseline)], true);

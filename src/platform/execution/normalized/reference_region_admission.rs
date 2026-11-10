@@ -10,7 +10,6 @@ impl Resolver<'_, '_> {
         locals: &mut Locals,
         syntax: &mut Syntax,
         demand: Use,
-        depth: usize,
     ) -> Result<Value> {
         // This independent traversal admits the complete enclosing body, including
         // region custody which the older memory-only loan traversal cannot model.
@@ -81,7 +80,7 @@ impl Resolver<'_, '_> {
                         parameters[3]
                     };
                     if self
-                        .scan(*expression, context, locals, syntax, Use::Value, depth)?
+                        .scan(*expression, context, locals, syntax, Use::Value)?
                         .ty
                         != Some(expected)
                     {
@@ -121,7 +120,7 @@ impl Resolver<'_, '_> {
                 capacity,
                 body,
             } => {
-                let capacity = self.scan(capacity, context, locals, syntax, Use::Value, depth)?;
+                let capacity = self.scan(capacity, context, locals, syntax, Use::Value)?;
                 if capacity.ty != Some(i64_type) {
                     return Err(invalid("region capacity is not I64"));
                 }
@@ -164,7 +163,7 @@ impl Resolver<'_, '_> {
                     syntax,
                     Some(BindingKind::Region),
                 )?;
-                let result = self.scan(body, &scoped, locals, syntax, demand, depth)?;
+                let result = self.scan(body, &scoped, locals, syntax, demand)?;
                 self.region_absent(
                     result
                         .ty
@@ -175,7 +174,7 @@ impl Resolver<'_, '_> {
                 Ok(result)
             }
             E::Offset { pointer } => {
-                let pointer = self.scan(pointer, context, locals, syntax, Use::Value, depth)?;
+                let pointer = self.scan(pointer, context, locals, syntax, Use::Value)?;
                 if !matches!(
                     pointer
                         .ty
@@ -221,11 +220,11 @@ impl Resolver<'_, '_> {
                 let mut inputs = operation.expressions().into_iter().flatten();
                 let first = inputs
                     .next()
-                    .map(|id| self.scan(*id, context, locals, syntax, Use::Value, depth))
+                    .map(|id| self.scan(*id, context, locals, syntax, Use::Value))
                     .transpose()?;
                 let second = inputs
                     .next()
-                    .map(|id| self.scan(*id, context, locals, syntax, Use::Value, depth))
+                    .map(|id| self.scan(*id, context, locals, syntax, Use::Value))
                     .transpose()?;
                 let capability = *operation
                     .capability()

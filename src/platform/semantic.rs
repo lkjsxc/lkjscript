@@ -2776,9 +2776,6 @@ fn collect_expression_relations(
 }
 
 fn relation_child_path(parent: &[u32], ordinal: usize) -> Result<Vec<u32>, Diagnostic> {
-    if parent.len() >= super::meaning::MAXIMUM_EXPRESSION_DEPTH {
-        return Err(relation_work_limit());
-    }
     let mut path = parent.to_vec();
     path.push(u32::try_from(ordinal).map_err(|_| relation_work_limit())?);
     Ok(path)

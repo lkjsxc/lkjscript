@@ -128,7 +128,6 @@ impl OwnedTypeOccurrence {
 pub(crate) struct AssociatedAdmissionLimits {
     pub maximum_steps: Option<usize>,
     pub maximum_metadata_bytes: Option<usize>,
-    pub maximum_depth: usize,
 }
 
 impl Default for AssociatedAdmissionLimits {
@@ -136,7 +135,6 @@ impl Default for AssociatedAdmissionLimits {
         Self {
             maximum_steps: None,
             maximum_metadata_bytes: None,
-            maximum_depth: contract::MAXIMUM_TYPE_DEPTH,
         }
     }
 }
@@ -187,7 +185,7 @@ type WalkContext = (
     u16,
     bool,
 );
-type WalkPending = (TypeObjectDigest, usize, usize);
+type WalkPending = (TypeObjectDigest, usize);
 
 /// Coordinates are local to one immutable traversal. They retain every authority
 /// component while avoiding its repetition in each queue and memo entry.
@@ -220,12 +218,7 @@ impl<'a> WalkQueue<'a> {
         }
     }
 
-    fn push(
-        &mut self,
-        ty: TypeObjectDigest,
-        depth: usize,
-        context: WalkContext,
-    ) -> Result<(), Diagnostic> {
+    fn push(&mut self, ty: TypeObjectDigest, context: WalkContext) -> Result<(), Diagnostic> {
         // Most occurrence checks have one authority context and one pending
         // node. Keep those fixed-size values inline; every spill still reserves
         // its cumulative modeled growth before allocating.
@@ -252,7 +245,7 @@ impl<'a> WalkQueue<'a> {
             id
         };
         if self.first_pending.is_none() {
-            self.first_pending = Some((ty, depth, context_id));
+            self.first_pending = Some((ty, context_id));
             return Ok(());
         }
         if self.pending.len() == self.pending.capacity() {
@@ -266,7 +259,7 @@ impl<'a> WalkQueue<'a> {
                 .try_reserve_exact(growth)
                 .map_err(|_| exhausted("associated pending allocation exhausted"))?;
         }
-        self.pending.push((ty, depth, context_id));
+        self.pending.push((ty, context_id));
         Ok(())
     }
 
@@ -906,26 +899,19 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
         let mut pending = WalkQueue::new(self.admission, initial_context);
         for ty in roots {
             self.validation_work()?;
-            pending.push(*ty, 0, initial_context)?;
+            pending.push(*ty, initial_context)?;
         }
-        let mut depths = BTreeMap::new();
+        let mut seen = BTreeSet::new();
         let mut expanded_nominals = BTreeSet::new();
-        while let Some((ty, depth, context_id)) = pending.pop() {
+        while let Some((ty, context_id)) = pending.pop() {
             self.validation_work()?;
             let (context, parameter_scope, generation, view_allowed) = pending.context(context_id);
-            if depth > self.admission.limits.maximum_depth {
-                return Err(exhausted(
-                    "associated type traversal exceeds its depth admission",
-                ));
-            }
             let key = (ty, context_id);
-            if depths.get(&key).is_some_and(|previous| *previous >= depth) {
+            if seen.contains(&key) {
                 continue;
             }
-            if !depths.contains_key(&key) {
-                self.reserve::<(TypeObjectDigest, usize, usize)>(1)?;
-            }
-            depths.insert(key, depth);
+            self.reserve::<(TypeObjectDigest, usize)>(1)?;
+            seen.insert(key);
             let object = self
                 .type_object(ty)?
                 .ok_or_else(|| reject("missing associated type closure object"))?;
@@ -996,31 +982,24 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
                     ));
                 }
             }
-            let child_depth = depth
-                .checked_add(1)
-                .ok_or_else(|| exhausted("associated occurrence depth overflow"))?;
             // child_types creates an independent short-lived digest vector;
             // queue capacity is retained and reused separately above.
             self.reserve::<TypeObjectDigest>(object.child_type_count())?;
             for child in object.child_types() {
                 self.validation_work()?;
-                pending.push(
-                    child,
-                    child_depth,
-                    (context, parameter_scope, generation, false),
-                )?;
+                pending.push(child, (context, parameter_scope, generation, false))?;
             }
             if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } =
                 object.form
             {
                 // Representation absence is a declaration property, not applied
                 // layout expansion. Scan each raw definition once, including
-                // recursive ordinary definitions; actual syntax still revisits
-                // shared DAG nodes at greater occurrence depths above.
+                // recursive ordinary definitions. Exact authority contexts retain
+                // separate visits for shared DAG nodes.
                 if !expanded_nominals.contains(&declaration) {
                     self.reserve::<DeclarationReference>(1)?;
                     expanded_nominals.insert(declaration);
-                    self.nominal_children(declaration, child_depth, projection_free, &mut pending)?;
+                    self.nominal_children(declaration, projection_free, &mut pending)?;
                 }
             }
         }
@@ -1032,7 +1011,6 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
     fn nominal_children(
         &self,
         reference: DeclarationReference,
-        depth: usize,
         projection_free: bool,
         pending: &mut WalkQueue<'_>,
     ) -> Result<(), Diagnostic> {
@@ -1040,7 +1018,7 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
         // The exact raw declaration is needed for stored-RHS parameter membership.
         // In a non-projection-free absence walk, Forbidden plus false view permission
         // rejects special forms before that scope can grant authority. Keep each
-        // field/case generation and the normal depth checks as separate dimensions.
+        // field/case generation and permission context as separate dimensions.
         let parameter_scope = projection_free.then_some(reference);
         let payload = self.representation_declaration(reference)?.payload;
         let (fields, cases) = match payload {
@@ -1075,7 +1053,6 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
             }
             pending.push(
                 field.ty,
-                depth,
                 (
                     AssociatedTypeContext::Forbidden,
                     parameter_scope,
@@ -1106,7 +1083,6 @@ impl<R: ExpressionRead + ?Sized> AssociatedRead<'_, R> {
             if let Some(ty) = case.payload {
                 pending.push(
                     ty,
-                    depth,
                     (
                         AssociatedTypeContext::Forbidden,
                         parameter_scope,

@@ -263,9 +263,6 @@ impl Interpretation<'_, '_> {
         self.reader.charge(1)?;
         let mut pending = vec![(ty, root, 0_usize)];
         while let Some((ty, permitted, depth)) = pending.pop() {
-            if depth > contract::MAXIMUM_TYPE_DEPTH {
-                return Err(capacity("view oracle finite type capacity exceeded"));
-            }
             let object = self.ty(package, ty)?;
             if projection_free && object.form.is_associated() {
                 return Err(failure(
@@ -672,9 +669,6 @@ impl Interpretation<'_, '_> {
         let mut pending = vec![(package, binder, ty, 0_usize, Environment::new())];
         let mut seen = BTreeSet::new();
         while let Some((package, binder, ty, depth, environment)) = pending.pop() {
-            if depth > contract::MAXIMUM_TYPE_DEPTH {
-                return Err(capacity("view oracle metadata capacity exceeded"));
-            }
             self.reader.charge(environment.len())?;
             if !seen.insert((package, binder, ty, environment.clone())) {
                 continue;
@@ -836,9 +830,6 @@ impl Interpretation<'_, '_> {
         >;
         let mut terms = vec![(package, binder, ty, Environment::new(), 0_usize)];
         while let Some((package, binder, ty, environment, depth)) = terms.pop() {
-            if depth > contract::MAXIMUM_TYPE_DEPTH {
-                return Err(capacity("view oracle stronger-bound capacity exceeded"));
-            }
             let object = self.ty(package, ty)?;
             match &object.form {
                 TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => {}

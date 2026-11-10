@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 pub struct SourceLimits {
     pub maximum_bytes: usize,
     pub maximum_forms: usize,
-    pub maximum_depth: usize,
     pub maximum_atom_bytes: usize,
     pub maximum_string_bytes: usize,
 }
@@ -24,7 +23,6 @@ impl Default for SourceLimits {
         Self {
             maximum_bytes: 1_048_576,
             maximum_forms: 100_000,
-            maximum_depth: 256,
             maximum_atom_bytes: 256,
             maximum_string_bytes: 1_048_576,
         }
@@ -180,7 +178,7 @@ pub(crate) fn parse_source(
                 "unexpected ')' without a matching open list",
             ));
         }
-        roots.push(parser.parse_form(0)?);
+        roots.push(parser.parse_form()?);
         parser.skip_space_and_comments();
     }
     if roots.is_empty() {
@@ -218,16 +216,7 @@ struct Parser<'a> {
 
 #[cfg(test)]
 impl Parser<'_> {
-    fn parse_form(&mut self, depth: usize) -> Result<Form, Diagnostic> {
-        if depth > self.limits.maximum_depth {
-            return Err(self.error(
-                "source_depth",
-                format!(
-                    "source nesting exceeds the limit of {}",
-                    self.limits.maximum_depth
-                ),
-            ));
-        }
+    fn parse_form(&mut self) -> Result<Form, Diagnostic> {
         self.forms = self.forms.saturating_add(1);
         if self.forms > self.limits.maximum_forms {
             return Err(self.error(
@@ -259,7 +248,7 @@ impl Parser<'_> {
                             ));
                         }
                         _ => {
-                            forms.push(self.parse_form(depth + 1)?);
+                            forms.push(self.parse_form()?);
                             self.skip_space_and_comments();
                         }
                     }
@@ -560,13 +549,39 @@ mod tests {
         let error = parse_source("large", b"(module too-large)", limits)
             .expect_err("oversized source rejects");
         assert_eq!(error.code, "source_too_large");
+    }
 
-        let limits = SourceLimits {
-            maximum_depth: 2,
-            ..SourceLimits::default()
-        };
-        let error = parse_source("deep", b"((((x))))", limits).expect_err("deep source rejects");
-        assert_eq!(error.code, "source_depth");
+    #[test]
+    fn source_nesting_lifecycle_crosses_the_former_depth_limit() {
+        crate::platform::stack::run("source-nesting", || {
+            for depth in [256, 1_024, 4_096] {
+                let source = format!("{}x{}", "(".repeat(depth), ")".repeat(depth));
+                let parsed =
+                    parse_source("nested", source.as_bytes(), SourceLimits::default()).unwrap();
+                let copied = parsed.forms.clone();
+                assert_eq!(parsed.forms, copied);
+                let reparsed = parse_source(
+                    "projection",
+                    parsed.semantic_bytes(),
+                    SourceLimits::default(),
+                )
+                .unwrap();
+                assert_eq!(parsed.semantic_bytes(), reparsed.semantic_bytes());
+                assert!(!serde_json::to_vec(&copied).unwrap().is_empty());
+                drop(copied);
+                drop(reparsed);
+                drop(parsed);
+                assert!(
+                    parse_source(
+                        "unfinished",
+                        source[..source.len() - 1].as_bytes(),
+                        SourceLimits::default()
+                    )
+                    .is_err()
+                );
+            }
+        })
+        .unwrap();
     }
 
     #[test]

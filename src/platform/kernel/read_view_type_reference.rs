@@ -29,7 +29,7 @@ impl Resolver<'_> {
         &mut self,
         declaration: DeclarationReference,
     ) -> Result<ReadViewDeclaration> {
-        self.step(0)?;
+        self.step()?;
         let key = OwnerKey::Declaration(declaration.declaration);
         let header = self.header(declaration.package, key, true)?;
         if header.kind != OwnerKind::ReadView
@@ -98,7 +98,7 @@ impl Resolver<'_> {
         let mut ids = BTreeSet::new();
         let mut names = BTreeSet::new();
         for field in &view.fields {
-            self.step(0)?;
+            self.step()?;
             if !ids.insert(field.id) || !names.insert(field.name.as_str()) {
                 return Err(Failure::Inventory);
             }
@@ -196,7 +196,7 @@ impl Resolver<'_> {
         form: &TypeForm,
         occurrence: Occurrence,
     ) -> Result<()> {
-        self.step(0)?;
+        self.step()?;
         self.current_view(occurrence)?;
         let read_scope = match form {
             TypeForm::RegionCap {
@@ -231,7 +231,7 @@ impl Resolver<'_> {
                         .type_parameter(declaration.package, *parameter)
                         .map(|p| p.constraints)
                         .ok_or(Failure::Authority)?;
-                    self.constraints(*actual, constraints, occurrence, 0)?;
+                    self.constraints(*actual, constraints, occurrence)?;
                     if self.contains_read_view(*actual)? {
                         return Err(Failure::Category);
                     }
@@ -280,7 +280,7 @@ impl Resolver<'_> {
         contract: DeclarationReference,
         member: AssociatedTypeMemberId,
     ) -> Result<()> {
-        self.step(0)?;
+        self.step()?;
         self.current_view(self.declaration_occurrence(contract, Context::Contract(contract)))?;
         let inventory = self.contract(contract)?;
         let count = inventory.associated_types.len();
@@ -310,7 +310,7 @@ impl Resolver<'_> {
         let mut pending = vec![ty];
         let mut seen = BTreeSet::new();
         while let Some(ty) = pending.pop() {
-            self.step(0)?;
+            self.step()?;
             if seen.contains(&ty) {
                 continue;
             }
@@ -344,7 +344,7 @@ impl Resolver<'_> {
         ty: TypeObjectDigest,
         occurrence: Occurrence,
     ) -> Result<Category> {
-        self.step(0)?;
+        self.step()?;
         let form = self.object(ty)?.form.clone();
         if view_form(&form) {
             self.admit_read_view_form(&form, occurrence)?;
@@ -365,7 +365,7 @@ impl Resolver<'_> {
         ) {
             return Ok(Category::Callable);
         }
-        if self.owned_type(ty, occurrence, 0)? {
+        if self.owned_type(ty, occurrence)? {
             return Ok(Category::Owned);
         }
         if Oracle(self.source, occurrence.parameter_scope).ordinary(ty) {
@@ -384,7 +384,7 @@ impl Resolver<'_> {
         active: &mut BTreeSet<DeclarationReference>,
         depth: usize,
     ) -> Result<()> {
-        self.step(depth)?;
+        self.step()?;
         if active.contains(&declaration) {
             return Err(Failure::Category);
         }
@@ -399,11 +399,11 @@ impl Resolver<'_> {
         });
         let occurrence = self.declaration_occurrence(declaration, Context::Forbidden);
         for field in &view.fields {
-            self.step(depth)?;
+            self.step()?;
             match &field.kind {
                 ReadViewFieldKind::Ordinary => {
                     if self.contains_read_view(field.ty)?
-                        || self.owned_type(field.ty, occurrence, depth + 1)?
+                        || self.owned_type(field.ty, occurrence)?
                         || !Oracle(self.source, Some(declaration)).ordinary(field.ty)
                         || !Oracle(self.source, Some(declaration))
                             .satisfies_constraints(field.ty, TypeParameterConstraints::Transferable)
@@ -437,7 +437,7 @@ impl Resolver<'_> {
                         }
                         _ => {
                             self.admit_roots(&[field.ty], occurrence, true)?;
-                            if !self.owned_type(field.ty, occurrence, depth + 1)? {
+                            if !self.owned_type(field.ty, occurrence)? {
                                 return Err(Failure::Category);
                             }
                         }

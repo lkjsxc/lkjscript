@@ -5,7 +5,7 @@ use super::*;
 use crate::platform::builtin_standard::BuiltinStandard;
 use crate::platform::compiler::CompilationPayload;
 use crate::platform::control::decode_compact_change;
-use crate::platform::execution::normalized::run_pure_command;
+use crate::platform::execution::normalized::run_pure_command_differential as run_pure_command;
 use crate::platform::normalized_lifecycle::PackageReference;
 use crate::platform::publication::ExportedPackageTransport;
 use crate::platform::semantic_id::AssociatedTypeMemberId;

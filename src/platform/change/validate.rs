@@ -1080,17 +1080,7 @@ impl<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized> IncrementalVali
                         .flatten()
                         .map(|child_height| height.max(child_height.saturating_add(1)))
                 });
-                if height.is_some_and(|height| {
-                    height > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-                }) {
-                    self.error(
-                        "change_validate_type_depth",
-                        "candidate type closure exceeds the hostile-input depth bound",
-                    );
-                    heights.insert(digest, None);
-                } else {
-                    heights.insert(digest, height);
-                }
+                heights.insert(digest, height);
                 continue;
             }
             if heights.contains_key(&digest) {
@@ -1400,7 +1390,7 @@ mod supplied_type_tests {
     use crate::platform::kernel::{TypeForm, encode_type_object};
 
     #[test]
-    fn supplied_child_roots_cannot_hide_an_oversized_parent_depth() {
+    fn supplied_child_roots_cross_former_type_depth() {
         let base = crate::platform::kernel::tests::witness_snapshot();
         let witness = crate::platform::witness::rebuild_full_witness(&base).unwrap();
         let unit = TypeObject::new(TypeForm::Unit).unwrap();
@@ -1409,31 +1399,22 @@ mod supplied_type_tests {
             digest: child,
             object: unit,
         }];
-        for depth in 1..=crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH + 1 {
+        for depth in 1..=crate::platform::kernel::contract::FORMER_TYPE_DEPTH * 4 {
             let object = TypeObject::new(TypeForm::Option { item: child }).unwrap();
             child = encode_type_object(&object).unwrap().0;
             edits.push(PrimitiveEdit::AddTypeObject {
                 digest: child,
                 object,
             });
-            if depth >= crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+            if [256, 512, 1024].contains(&depth) {
                 let canonical = CanonicalDelta::normalize(&base, edits.clone()).unwrap();
                 let overlay = KernelOverlay::new(&base, &canonical);
                 let derived = derive_local_delta(&overlay, &canonical, &witness).unwrap();
                 let result = validate_structural_frontier(&overlay, &canonical, &derived, &witness);
-                if depth == crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-                    assert_eq!(
-                        result.unwrap().work.type_objects_checked,
-                        (depth + 1) as u64
-                    );
-                } else {
-                    assert!(
-                        result
-                            .unwrap_err()
-                            .iter()
-                            .any(|diagnostic| diagnostic.code == "change_validate_type_depth")
-                    );
-                }
+                assert_eq!(
+                    result.unwrap().work.type_objects_checked,
+                    (depth + 1) as u64
+                );
             }
         }
     }

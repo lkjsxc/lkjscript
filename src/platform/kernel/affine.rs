@@ -11,7 +11,6 @@ mod budget_tests;
 #[path = "affine_associated_shape_tests.rs"]
 mod associated_shape_tests;
 
-use super::contract::MAXIMUM_EXPRESSION_DEPTH;
 use super::infer::{ExpressionRead, ExpressionValidationExhaustion, ExpressionValidationLimits};
 use super::owned_associated::{OwnedAssociatedAdmission, OwnedTypeOccurrence};
 use super::work::ValidationWork;
@@ -474,7 +473,7 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
         state: &mut FlowState,
         depth: usize,
     ) -> Result<EvaluatedValue, Diagnostic> {
-        self.step(expression, depth)?;
+        self.work.step()?;
         let record = self.expression(expression)?;
         match record.operation {
             ExpressionOperation::Region { operation } => {
@@ -1870,17 +1869,6 @@ impl<R: ExpressionRead + ?Sized> AffineValidator<'_, '_, R> {
                 .package_interface_owner(package, owner)
                 .map(|value| value.map(ExactRecord::Foreign))
         }
-    }
-
-    fn step(&mut self, expression: ExpressionId, depth: usize) -> Result<(), Diagnostic> {
-        if depth > MAXIMUM_EXPRESSION_DEPTH {
-            return Err(affine_error(
-                "kernel_affine_depth",
-                expression,
-                "affine validation exceeded the expression-depth bound",
-            ));
-        }
-        self.work.step()
     }
 }
 

@@ -16,7 +16,6 @@ const VALUE_CHECKSUM_DOMAIN: &str = "lkjscript.data.typed-value-envelope.v1";
 const LAYOUT_IDENTITY_DOMAIN: &str = "lkjscript.data.typed-layout.v1";
 const MAXIMUM_VALUE_BYTES: usize = 4 * 1_048_576;
 const MAXIMUM_VALUE_ITEMS: usize = 1_000_000;
-const MAXIMUM_VALUE_DEPTH: usize = 128;
 
 #[cfg(test)]
 pub(crate) fn encode_typed(
@@ -45,7 +44,7 @@ pub(crate) fn encode_typed_with_control(
     output.extend_from_slice(&VALUE_CONTRACT_VERSION.to_be_bytes());
     output.extend_from_slice(&layout);
     let mut state = CodecState { items: 0, control };
-    encode_value(program, value, ty, &mut output, &mut state, 0)?;
+    encode_value(program, value, ty, &mut output, &mut state)?;
     if output.len() > MAXIMUM_VALUE_BYTES.saturating_sub(32) {
         return Err(codec_error(
             DiagnosticClass::Resource,
@@ -123,7 +122,7 @@ pub(crate) fn decode_typed_with_control(
         ));
     }
     let mut state = CodecState { items: 0, control };
-    let value = decode_value(program, ty, &mut cursor, &mut state, 0)?;
+    let value = decode_value(program, ty, &mut cursor, &mut state)?;
     cursor.finish("normalized_data_value_trailing")?;
     checkpoint(control)?;
     Ok(value)
@@ -141,15 +140,9 @@ struct CodecState<'a> {
 }
 
 impl CodecState<'_> {
-    fn enter(&mut self, depth: usize, precharged: bool) -> Result<(), Diagnostic> {
+    fn enter(&mut self, precharged: bool) -> Result<(), Diagnostic> {
         checkpoint(self.control)?;
-        if depth > MAXIMUM_VALUE_DEPTH {
-            return Err(codec_error(
-                DiagnosticClass::Resource,
-                "normalized_data_value_depth",
-                "typed data value exceeds the nesting-depth limit",
-            ));
-        }
+
         if !precharged {
             charge_count(self, 1)?;
         }
@@ -163,9 +156,8 @@ fn encode_value(
     ty: TypeObjectDigest,
     output: &mut Vec<u8>,
     state: &mut CodecState,
-    depth: usize,
 ) -> Result<(), Diagnostic> {
-    state.enter(depth, false)?;
+    state.enter(false)?;
     let form = type_form(program, ty)?;
     match (value, form) {
         (
@@ -199,20 +191,20 @@ fn encode_value(
                 return Err(runtime_layout_error("structural record"));
             }
             for ((_, value), field) in values.iter().zip(fields) {
-                encode_value(program, value, field.ty, output, state, depth + 1)?;
+                encode_value(program, value, field.ty, output, state)?;
             }
         }
         (value, TypeForm::Named { .. } | TypeForm::Applied { .. }) => {
-            encode_named(program, value, ty, output, state, depth)?;
+            encode_named(program, value, ty, output, state)?;
         }
         (NormalizedValue::List(values), TypeForm::List { item }) => {
             push_count(output, values.len())?;
             for value in values.iter() {
-                encode_value(program, value, *item, output, state, depth + 1)?;
+                encode_value(program, value, *item, output, state)?;
             }
         }
         (NormalizedValue::Map(values), TypeForm::Map { key, value: item }) => {
-            encode_map(program, values, (*key, *item), output, state, depth)?;
+            encode_map(program, values, (*key, *item), output, state)?;
         }
         (_, TypeForm::StaticText) => return Err(unsupported("StaticText")),
         (_, TypeForm::Secret) => return Err(unsupported("Secret")),
@@ -247,13 +239,12 @@ fn encode_map(
     (key_type, item_type): (TypeObjectDigest, TypeObjectDigest),
     output: &mut Vec<u8>,
     state: &mut CodecState,
-    depth: usize,
 ) -> Result<(), Diagnostic> {
     push_count(output, values.len())?;
     let mut cursor = values.iter();
     for (map_key, value) in &mut cursor {
-        encode_map_key(program, map_key, key_type, output, state, depth + 1)?;
-        encode_value(program, value, item_type, output, state, depth + 1)?;
+        encode_map_key(program, map_key, key_type, output, state)?;
+        encode_value(program, value, item_type, output, state)?;
     }
     Ok(())
 }
@@ -264,7 +255,6 @@ fn encode_named(
     ty: TypeObjectDigest,
     output: &mut Vec<u8>,
     state: &mut CodecState,
-    depth: usize,
 ) -> Result<(), Diagnostic> {
     if let Some((layout_index, layout)) = record_layout(program, ty) {
         if layout.owned {
@@ -281,7 +271,7 @@ fn encode_named(
             return Err(runtime_layout_error("nominal record"));
         }
         for (value, field) in fields.iter().zip(layout.fields.iter()) {
-            encode_value(program, value, field.ty, output, state, depth + 1)?;
+            encode_value(program, value, field.ty, output, state)?;
         }
         return Ok(());
     }
@@ -306,7 +296,7 @@ fn encode_named(
         append_bytes(output, &case.to_be_bytes())?;
         match (payload, layout_case.payload) {
             (None, None) => Ok(()),
-            (Some(value), Some(ty)) => encode_value(program, value, ty, output, state, depth + 1),
+            (Some(value), Some(ty)) => encode_value(program, value, ty, output, state),
             _ => Err(runtime_layout_error("variant payload")),
         }?;
         return Ok(());
@@ -323,9 +313,8 @@ fn decode_value(
     ty: TypeObjectDigest,
     cursor: &mut Cursor<'_>,
     state: &mut CodecState,
-    depth: usize,
 ) -> Result<NormalizedValue, Diagnostic> {
-    decode_value_charged(program, ty, cursor, state, depth, false)
+    decode_value_charged(program, ty, cursor, state, false)
 }
 
 fn decode_value_charged(
@@ -333,10 +322,10 @@ fn decode_value_charged(
     ty: TypeObjectDigest,
     cursor: &mut Cursor<'_>,
     state: &mut CodecState,
-    depth: usize,
+
     precharged: bool,
 ) -> Result<NormalizedValue, Diagnostic> {
-    state.enter(depth, precharged)?;
+    state.enter(precharged)?;
     match type_form(program, ty)? {
         TypeForm::RegionBrand { .. }
         | TypeForm::Region { .. }
@@ -399,7 +388,7 @@ fn decode_value_charged(
                 output
                     .try_push((
                         field.name.clone(),
-                        decode_value(program, field.ty, cursor, state, depth + 1)?,
+                        decode_value(program, field.ty, cursor, state)?,
                     ))
                     .map_err(child_storage_error)?;
             }
@@ -408,21 +397,14 @@ fn decode_value_charged(
             }))
         }
         TypeForm::Named { .. } | TypeForm::Applied { .. } => {
-            decode_named(program, ty, cursor, state, depth)
+            decode_named(program, ty, cursor, state)
         }
         TypeForm::List { item } => {
             let count = cursor.count("normalized_data_list_count")?;
             charge_count(state, count)?;
             let mut output = Vec::with_capacity(count);
             for _ in 0..count {
-                output.push(decode_value_charged(
-                    program,
-                    *item,
-                    cursor,
-                    state,
-                    depth + 1,
-                    true,
-                )?);
+                output.push(decode_value_charged(program, *item, cursor, state, true)?);
             }
             Ok(NormalizedValue::list(output).map_err(|error| {
                 Diagnostic::new(
@@ -437,8 +419,7 @@ fn decode_value_charged(
             charge_count(state, count.saturating_mul(2))?;
             let mut output = BTreeMap::<NormalizedMapKey, NormalizedValue>::new();
             for _ in 0..count {
-                let decoded_key =
-                    decode_value_charged(program, *key, cursor, state, depth + 1, true)?;
+                let decoded_key = decode_value_charged(program, *key, cursor, state, true)?;
                 let map_key = NormalizedMapKey::from_value(decoded_key).ok_or_else(|| {
                     codec_error(
                         DiagnosticClass::Corrupt,
@@ -456,8 +437,7 @@ fn decode_value_charged(
                         "typed data map keys are duplicate or not in canonical order",
                     ));
                 }
-                let decoded_value =
-                    decode_value_charged(program, *value, cursor, state, depth + 1, true)?;
+                let decoded_value = decode_value_charged(program, *value, cursor, state, true)?;
                 output.insert(map_key, decoded_value);
             }
             NormalizedValue::map_controlled(output, state.control)
@@ -485,7 +465,6 @@ fn decode_named(
     ty: TypeObjectDigest,
     cursor: &mut Cursor<'_>,
     state: &mut CodecState,
-    depth: usize,
 ) -> Result<NormalizedValue, Diagnostic> {
     if let Some((layout, record)) = record_layout(program, ty) {
         if record.owned {
@@ -495,7 +474,7 @@ fn decode_named(
             ValuesBuilder::with_capacity(record.fields.len()).map_err(child_storage_error)?;
         for field in record.fields.iter() {
             fields
-                .try_push(decode_value(program, field.ty, cursor, state, depth + 1)?)
+                .try_push(decode_value(program, field.ty, cursor, state)?)
                 .map_err(child_storage_error)?;
         }
         return Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
@@ -517,7 +496,7 @@ fn decode_named(
             })?;
         let payload = case_layout
             .payload
-            .map(|ty| decode_value(program, ty, cursor, state, depth + 1).map(Box::new))
+            .map(|ty| decode_value(program, ty, cursor, state).map(Box::new))
             .transpose()?;
         return Ok(NormalizedValue::Variant {
             layout,
@@ -539,7 +518,7 @@ fn layout_identity(
 ) -> Result<[u8; 32], Diagnostic> {
     let mut bytes = Vec::new();
     let mut active = BTreeSet::new();
-    describe_layout(program, ty, &mut active, &mut bytes, 0, control)?;
+    describe_layout(program, ty, &mut active, &mut bytes, control)?;
     Ok(digest(LAYOUT_IDENTITY_DOMAIN, &bytes))
 }
 
@@ -548,17 +527,11 @@ fn describe_layout(
     ty: TypeObjectDigest,
     active: &mut BTreeSet<TypeObjectDigest>,
     output: &mut Vec<u8>,
-    depth: usize,
+
     control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
     checkpoint(control)?;
-    if depth > MAXIMUM_VALUE_DEPTH {
-        return Err(codec_error(
-            DiagnosticClass::Resource,
-            "normalized_data_layout_depth",
-            "typed data layout exceeds the nesting-depth limit",
-        ));
-    }
+
     append_bytes(output, &ty.bytes())?;
     match type_form(program, ty)? {
         TypeForm::RegionBrand { .. }
@@ -580,19 +553,19 @@ fn describe_layout(
         TypeForm::Bytes => append_bytes(output, &[3])?,
         TypeForm::Text => append_bytes(output, &[4])?,
         TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
-            describe_nominal_layout(program, ty, declaration, active, output, depth, control)?;
+            describe_nominal_layout(program, ty, declaration, active, output, control)?;
         }
         TypeForm::StructuralRecord { fields } => {
             append_bytes(output, &[6])?;
             push_count(output, fields.len())?;
             for field in fields {
                 push_blob(output, field.name.as_str().as_bytes())?;
-                describe_layout(program, field.ty, active, output, depth + 1, control)?;
+                describe_layout(program, field.ty, active, output, control)?;
             }
         }
         TypeForm::List { item } => {
             append_bytes(output, &[7])?;
-            describe_layout(program, *item, active, output, depth + 1, control)?;
+            describe_layout(program, *item, active, output, control)?;
         }
         TypeForm::Map { key, value } => {
             if !matches!(
@@ -602,8 +575,8 @@ fn describe_layout(
                 return Err(unsupported("unordered map key"));
             }
             append_bytes(output, &[8])?;
-            describe_layout(program, *key, active, output, depth + 1, control)?;
-            describe_layout(program, *value, active, output, depth + 1, control)?;
+            describe_layout(program, *key, active, output, control)?;
+            describe_layout(program, *value, active, output, control)?;
         }
         TypeForm::StaticText => return Err(unsupported("StaticText")),
         TypeForm::Secret => return Err(unsupported("Secret")),
@@ -636,14 +609,14 @@ fn describe_nominal_layout(
     declaration: &DeclarationReference,
     active: &mut BTreeSet<TypeObjectDigest>,
     output: &mut Vec<u8>,
-    depth: usize,
+
     control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
     if let TypeForm::Applied { arguments, .. } = type_form(program, ty)? {
         append_bytes(output, &[9])?;
         push_count(output, arguments.len())?;
         for argument in arguments {
-            describe_layout(program, *argument, active, output, depth + 1, control)?;
+            describe_layout(program, *argument, active, output, control)?;
         }
     } else {
         append_bytes(output, &[5])?;
@@ -665,7 +638,7 @@ fn describe_nominal_layout(
             push_blob(output, field.reference.package.to_string().as_bytes())?;
             push_blob(output, field.reference.field.to_string().as_bytes())?;
             push_blob(output, field.name.as_str().as_bytes())?;
-            describe_layout(program, field.ty, active, output, depth + 1, control)?;
+            describe_layout(program, field.ty, active, output, control)?;
         }
     } else if let Some((_, layout)) = variant_layout(program, ty) {
         append_bytes(output, &[1])?;
@@ -677,7 +650,7 @@ fn describe_nominal_layout(
             match case.payload {
                 Some(payload) => {
                     append_bytes(output, &[1])?;
-                    describe_layout(program, payload, active, output, depth + 1, control)?;
+                    describe_layout(program, payload, active, output, control)?;
                 }
                 None => append_bytes(output, &[0])?,
             }
@@ -743,9 +716,8 @@ fn encode_map_key(
     ty: TypeObjectDigest,
     output: &mut Vec<u8>,
     state: &mut CodecState,
-    depth: usize,
 ) -> Result<(), Diagnostic> {
-    state.enter(depth, false)?;
+    state.enter(false)?;
     // Check the exact declared primitive without allocating a temporary runtime value.
     match (key, type_form(program, ty)?) {
         (NormalizedMapKey::Bool(value), TypeForm::Bool) => {
@@ -900,7 +872,7 @@ impl<'a> Cursor<'a> {
 }
 
 // Reserve direct collection children before allocation; their later visits
-// still check depth/cancellation but do not charge the same nodes again.
+// still check cancellation but do not charge the same nodes again.
 fn charge_count(state: &mut CodecState, count: usize) -> Result<(), Diagnostic> {
     state.items = state.items.checked_add(count).ok_or_else(item_limit)?;
     if state.items > MAXIMUM_VALUE_ITEMS {

@@ -58,7 +58,7 @@ fn shared_command_forks_reuse_accepted_standard_and_run_both_evaluators() {
         assert_eq!(field(&checked, "tests", "failed"), "0");
         assert_eq!(field(&checked, "tests", "differential"), "equal");
         let result = command(project, &["run", "main"]);
-        assert_eq!(field(&result, "execution", "differential"), "equal");
+        assert_eq!(field(&result, "execution", "engine"), "vm");
     }
 }
 
@@ -98,7 +98,7 @@ declarations.end
     assert_eq!(field(&checked, "tests", "passed"), "1");
     let result = command(&project, &["run", "main"]);
     assert_eq!(field(&result, "execution", "value"), "42");
-    assert_eq!(field(&result, "execution", "differential"), "equal");
+    assert_eq!(field(&result, "execution", "engine"), "vm");
     let invalid = format!(
         "request base={}\ndeclarations.begin\n(units (module create invalid (function create wrong (visibility private) (returns I64) (effect pure) (body (bool true)))))\ndeclarations.end\n",
         revision(&project)

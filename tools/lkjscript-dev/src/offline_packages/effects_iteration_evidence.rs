@@ -315,7 +315,6 @@ fn neutral(proof: &Value) -> Result<(), DevError> {
                 && row["threshold"] == threshold
                 && row["case"] == case
                 && row["observed"] == (cell < 16)
-                && row["policy"]["maximum_call_depth"] == 64
                 && row["cleanup_complete"] == true
                 && row["execution_nanoseconds"].as_u64().is_some_and(|n| n > 0),
             "iteration neutral identity, policy, or timing differs",

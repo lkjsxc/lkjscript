@@ -95,25 +95,6 @@ fn canonical_prerequisite_duplicate_dag_admission_scales_with_unique_nodes() {
 }
 
 #[test]
-fn canonical_prerequisite_depth_checks_longer_paths_before_memo_reuse() {
-    let source =
-        byte_buffer_tests::author_only(&owned_implementation_scheme_tests::duplicate_dag_source(3))
-            .unwrap();
-    let maximum = crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
-    assert!(
-        super::super::reference_types::check_duplicate_witness_reuse_depth(&source, maximum, 0,)
-            .is_ok()
-    );
-    assert!(
-        super::super::reference_types::check_duplicate_witness_reuse_depth(&source, maximum, 1,)
-            .is_err()
-    );
-    assert!(super::super::reference_types::check_duplicate_witness_reuse_depth(
-        &source, maximum + 1, 0,
-    ).is_err());
-}
-
-#[test]
 fn canonical_prerequisite_inventory_rejects_unused_missing_scoped_or_nominal_obligations() {
     let original = fixture();
     let unused = named(&original, "UnusedWrapper");

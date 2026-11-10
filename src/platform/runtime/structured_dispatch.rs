@@ -105,6 +105,7 @@ impl StructuredExecutorHandle {
         let (sender, receiver) = mpsc::sync_channel(1);
         let thread = thread::Builder::new()
             .name("lkjscript-structured".to_owned())
+            .stack_size(crate::platform::stack::reservation_bytes().ok()?)
             .spawn(move || {
                 while let Ok(Command::Run(job)) = receiver.recv() {
                     // The typed wrapper reports child panics. This outer boundary

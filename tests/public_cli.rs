@@ -177,8 +177,8 @@ fn foreground_starters_run_from_two_bundles_after_authoring_checkouts_are_remove
             &["--project", path(&project), "run", "main"],
         );
         assert_eq!(
-            compact_field(compact_record(&authoring, "execution"), "differential"),
-            Some("equal")
+            compact_field(compact_record(&authoring, "execution"), "engine"),
+            Some("vm")
         );
         let bundle = temporary.path().join(format!("bundle-{name}"));
         std::fs::create_dir(&bundle).unwrap();
@@ -1036,41 +1036,48 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
             "duplicate observation for {record_name}.{field_name}"
         );
     }
+    assert!(
+        runner_observations
+            .keys()
+            .all(|(record, field)| *record != "execution" || !field.starts_with("reference-")),
+        "ordinary execution advertises only its production invocation"
+    );
+    for field in ["production-instructions", "reference-expressions"] {
+        assert!(runner_observations.contains_key(&("tests", field)));
+    }
     let maximum_observation = u64::MAX.to_string();
-    for tier in ["production", "reference"] {
-        for (suffix, unit) in [
-            ("allocated-bytes", "cumulative-byte"),
-            ("collection-items", "cumulative-item"),
-        ] {
-            let name = format!("{tier}-{suffix}");
-            let observation = runner_observations
-                .get(&("execution", name.as_str()))
-                .expect("unique cumulative observation");
-            assert_eq!(
-                compact_field(observation, "scalar"),
-                Some("nonnegative-integer")
-            );
-            assert_eq!(
-                compact_field(observation, "maximum"),
-                Some(maximum_observation.as_str())
-            );
-            assert_eq!(compact_field(observation, "unit"), Some(unit));
-            assert_eq!(compact_field(observation, "permission"), Some("none"));
-            let saturation = format!("{name}-saturated");
-            assert_eq!(
-                compact_field(observation, "saturation-field"),
-                Some(saturation.as_str())
-            );
-            let exactness = runner_observations
-                .get(&("execution", saturation.as_str()))
-                .expect("unique saturation observation");
-            assert_eq!(compact_field(exactness, "scalar"), Some("boolean"));
-            assert_eq!(
-                compact_field(exactness, "semantics"),
-                Some("false-exact-true-lower-bound")
-            );
-            assert_eq!(compact_field(exactness, "permission"), Some("none"));
-        }
+    for (suffix, unit) in [
+        ("allocated-bytes", "cumulative-byte"),
+        ("collection-items", "cumulative-item"),
+    ] {
+        let name = format!("production-{suffix}");
+        let observation = runner_observations
+            .get(&("execution", name.as_str()))
+            .expect("unique cumulative observation");
+        assert_eq!(
+            compact_field(observation, "scalar"),
+            Some("nonnegative-integer")
+        );
+        assert_eq!(
+            compact_field(observation, "maximum"),
+            Some(maximum_observation.as_str())
+        );
+        assert_eq!(compact_field(observation, "unit"), Some(unit));
+        assert_eq!(compact_field(observation, "permission"), Some("none"));
+        let saturation = format!("{name}-saturated");
+        assert_eq!(
+            compact_field(observation, "saturation-field"),
+            Some(saturation.as_str())
+        );
+        let exactness = runner_observations
+            .get(&("execution", saturation.as_str()))
+            .expect("unique saturation observation");
+        assert_eq!(compact_field(exactness, "scalar"), Some("boolean"));
+        assert_eq!(
+            compact_field(exactness, "semantics"),
+            Some("false-exact-true-lower-bound")
+        );
+        assert_eq!(compact_field(exactness, "permission"), Some("none"));
     }
 
     let list_contract = compact_record(&runner_observation_records, "execution.list");
@@ -1083,38 +1090,36 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         compact_field(list_contract, "length-policy"),
         Some("none-or-exact-u64-before-reservation")
     );
-    for tier in ["production", "reference"] {
-        let saturation = format!("{tier}-list-saturated");
-        let exactness = runner_observations
-            .get(&("execution", saturation.as_str()))
-            .expect("unique aggregate list exactness observation");
-        assert_eq!(compact_field(exactness, "scalar"), Some("boolean"));
-        assert_eq!(compact_field(exactness, "permission"), Some("none"));
+    let saturation = "production-list-saturated".to_owned();
+    let exactness = runner_observations
+        .get(&("execution", saturation.as_str()))
+        .expect("unique aggregate list exactness observation");
+    assert_eq!(compact_field(exactness, "scalar"), Some("boolean"));
+    assert_eq!(compact_field(exactness, "permission"), Some("none"));
+    assert_eq!(
+        compact_field(exactness, "semantics"),
+        Some("false-all-list-counters-exact-true-list-counters-are-lower-bounds")
+    );
+    for suffix in [
+        "node-visits",
+        "element-handle-copies",
+        "element-handle-allocations",
+        "element-slots-reserved",
+        "branch-slot-copies",
+        "branch-slots-reserved",
+        "nodes-allocated",
+        "full-materializations",
+        "materialized-elements",
+    ] {
+        let name = format!("production-list-{suffix}");
+        let observation = runner_observations
+            .get(&("execution", name.as_str()))
+            .expect("unique list work observation");
+        assert_eq!(compact_field(observation, "permission"), Some("none"));
         assert_eq!(
-            compact_field(exactness, "semantics"),
-            Some("false-all-list-counters-exact-true-list-counters-are-lower-bounds")
+            compact_field(observation, "saturation-field"),
+            Some(saturation.as_str())
         );
-        for suffix in [
-            "node-visits",
-            "element-handle-copies",
-            "element-handle-allocations",
-            "element-slots-reserved",
-            "branch-slot-copies",
-            "branch-slots-reserved",
-            "nodes-allocated",
-            "full-materializations",
-            "materialized-elements",
-        ] {
-            let name = format!("{tier}-list-{suffix}");
-            let observation = runner_observations
-                .get(&("execution", name.as_str()))
-                .expect("unique list work observation");
-            assert_eq!(compact_field(observation, "permission"), Some("none"));
-            assert_eq!(
-                compact_field(observation, "saturation-field"),
-                Some(saturation.as_str())
-            );
-        }
     }
 
     use lkjscript::platform::contract::{
@@ -1566,8 +1571,6 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         ("maximum-structural-syntax-nodes", "unbounded", "nodes"),
         ("default-authored-identities", "unbounded", "identities"),
         ("maximum-expanded-type-nodes", "unbounded", "nodes"),
-        ("maximum-combined-expression-depth", "1024", "depth"),
-        ("maximum-type-depth", "256", "depth"),
     ] {
         assert!(change_section.iter().any(|record| {
             record.operation == "change.expression-limit"
@@ -2207,8 +2210,6 @@ fn capabilities_discovery_is_compact_focused_and_exportable() {
         ("change_block_private", "source"),
         ("change_block_capacity", "resource"),
         ("change_input_type_capacity", "resource"),
-        ("change_authored_type_depth", "resource"),
-        ("change_authored_expression_depth", "resource"),
         ("change_block_inventory", "infrastructure"),
     ] {
         assert!(diagnostics_section.iter().any(|record| {
@@ -3923,7 +3924,7 @@ fn copied_binary_completes_normalized_standard_dependent_command_lifecycle() {
     );
     let execution = compact_record(&ran, "execution");
     assert_eq!(compact_field(execution, "value"), Some("\"hello\""));
-    assert_eq!(compact_field(execution, "differential"), Some("equal"));
+    assert_eq!(compact_field(execution, "engine"), Some("vm"));
     assert_eq!(
         std::fs::read(project.join("HEAD")).expect("HEAD after run"),
         head_before_run
@@ -4574,7 +4575,7 @@ fn public_authors_and_runs_a_generic_named_function_value() {
     );
     let execution = compact_record(&ran, "execution");
     assert_eq!(compact_field(execution, "value"), Some("\"hello\""));
-    assert_eq!(compact_field(execution, "differential"), Some("equal"));
+    assert_eq!(compact_field(execution, "engine"), Some("vm"));
     assert_eq!(
         std::fs::read(project.join("HEAD")).expect("HEAD after higher-order run"),
         before_run_head
@@ -4771,16 +4772,12 @@ create.target as=$target name=map component=$component port=$port runner=command
         if n == 8192 {
             assert_eq!(actual.iter().sum::<i64>(), 100_691_968);
         }
-        assert_eq!(compact_field(execution, "differential"), Some("equal"));
-        for tier in ["production", "reference"] {
-            assert_eq!(
-                compact_field(execution, &format!("{tier}-list-full-materializations")),
-                Some("0")
-            );
-            assert_eq!(
-                compact_field(execution, &format!("{tier}-guard-descendants")),
-                Some("0")
-            );
+        assert_eq!(compact_field(execution, "engine"), Some("vm"));
+        for field in [
+            "production-list-full-materializations",
+            "production-guard-descendants",
+        ] {
+            assert_eq!(compact_field(execution, field), Some("0"));
         }
     }
     let current = current_revision_at(&copied, temporary.path(), &project);
@@ -5043,20 +5040,18 @@ create.target as=$command name=configured component=$component port=$port runner
         compact_field(execution, "value"),
         Some(r#"{"first":36,"second":-11}"#)
     );
-    assert_eq!(compact_field(execution, "differential"), Some("equal"));
-    for tier in ["production", "reference"] {
-        assert!(
-            compact_field(execution, &format!("{tier}-capture-admission-nodes"))
-                .unwrap()
-                .parse::<u64>()
-                .unwrap()
-                > 0
-        );
-        assert_eq!(
-            compact_field(execution, &format!("{tier}-guard-descendants")),
-            Some("0")
-        );
-    }
+    assert_eq!(compact_field(execution, "engine"), Some("vm"));
+    assert!(
+        compact_field(execution, "production-capture-admission-nodes")
+            .unwrap()
+            .parse::<u64>()
+            .unwrap()
+            > 0
+    );
+    assert_eq!(
+        compact_field(execution, "production-guard-descendants"),
+        Some("0")
+    );
     assert_eq!(
         accepted,
         current_revision_at(&copied, temporary.path(), &project)
@@ -6918,17 +6913,15 @@ fn public_tail_fold_crosses_the_former_frame_boundary() {
             compact_field(execution, "value"),
             Some((count * (count + 1) / 2).to_string().as_str())
         );
-        assert_eq!(compact_field(execution, "differential"), Some("equal"));
-        let peaks = ["production-peak-call-frames", "reference-peak-call-frames"].map(|name| {
-            compact_field(execution, name)
-                .expect("peak")
-                .parse::<u64>()
-                .expect("integer peak")
-        });
-        assert!(peaks.into_iter().all(|frames| frames <= 8));
+        assert_eq!(compact_field(execution, "engine"), Some("vm"));
+        let frames = compact_field(execution, "production-peak-call-frames")
+            .expect("peak")
+            .parse::<u64>()
+            .expect("integer peak");
+        assert!(frames <= 8);
         if count >= 256 {
-            assert!(peak.is_none_or(|previous| previous == peaks));
-            peak = Some(peaks);
+            assert!(peak.is_none_or(|previous| previous == frames));
+            peak = Some(frames);
         }
         assert_eq!(content_inventory(&project), inventory);
     }
@@ -8111,9 +8104,8 @@ fn copied_binary_authors_builds_and_serves_interactive_topology_from_minimal() {
             },
             "execution": {
                 "instruction_fuel": 1_000_000,
-                "maximum_call_depth": 256,
-                "maximum_value_stack": 4_096
-            },
+
+                },
             "http": null,
             "session": {
                 "maximum_active_sessions": 2,
@@ -9443,8 +9435,8 @@ fn public_extracts_one_function_with_stable_identity_and_atomic_failures() {
         Some("\"hello\"")
     );
     assert_eq!(
-        compact_field(compact_record(&before_run, "execution"), "differential"),
-        Some("equal")
+        compact_field(compact_record(&before_run, "execution"), "engine"),
+        Some("vm")
     );
     compact_success_at(
         &copied_binary,
@@ -9851,8 +9843,8 @@ fn public_extracts_one_function_with_stable_identity_and_atomic_failures() {
         Some("\"hello\"")
     );
     assert_eq!(
-        compact_field(compact_record(&after_run, "execution"), "differential"),
-        Some("equal")
+        compact_field(compact_record(&after_run, "execution"), "engine"),
+        Some("vm")
     );
     assert_eq!(
         current_revision_at(&copied_binary, temporary.path(), &project),
@@ -12186,7 +12178,7 @@ create.target as=$target name={label} component=$component port=$port runner=com
                 &arguments,
             ]);
             let execution = compact_record(&output, "execution");
-            assert_eq!(compact_field(execution, "differential"), Some("equal"));
+            assert_eq!(compact_field(execution, "engine"), Some("vm"));
             let actual: Value =
                 serde_json::from_str(compact_field(execution, "value").unwrap()).unwrap();
             assert_eq!(actual, expected, "all ordered fields and items for {label}");

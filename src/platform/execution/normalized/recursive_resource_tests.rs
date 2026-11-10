@@ -317,12 +317,9 @@ fn recursive_resource_activations_join_success_failure_and_cancellation_in_both_
                     "trap",
                     "cancel",
                     "resource",
-                    "depth",
                     "borrow-cancel",
                 ] {
-                    if (fault == "depth" && tail)
-                        || (fault == "borrow-cancel" && mode.starts_with("consume"))
-                    {
+                    if fault == "borrow-cancel" && mode.starts_with("consume") {
                         continue;
                     }
                     let label = format!("{mode}/tail={tail}/reference={reference}/{fault}");
@@ -360,11 +357,6 @@ fn recursive_resource_activations_join_success_failure_and_cancellation_in_both_
                     let resources = NormalizedResourceScope::with_test_limit(1);
                     let control = ExecutionControl::uncancelled();
                     let policy = NormalizedRunPolicy {
-                        maximum_call_depth: if fault == "depth" {
-                            if mode.starts_with("consume") { 1 } else { 2 }
-                        } else {
-                            32
-                        },
                         ..Default::default()
                     };
                     let result = if reference {
@@ -389,7 +381,7 @@ fn recursive_resource_activations_join_success_failure_and_cancellation_in_both_
                             .map(|(value, observation)| (value, observation.maximum_call_depth))
                     };
                     let mut expected = vec![("acquire".into(), 0), ("prefix".into(), 1)];
-                    if fault != "depth" {
+                    {
                         expected.push(("observe".into(), 1));
                         if matches!(fault, "none" | "quota" | "borrow-cancel")
                             && !mode.starts_with("consume")
@@ -422,9 +414,6 @@ fn recursive_resource_activations_join_success_failure_and_cancellation_in_both_
                         }
                         if fault == "resource" {
                             assert_eq!(error.code, "normalized_resource_limit", "{label}");
-                        }
-                        if fault == "depth" {
-                            assert!(error.code.contains("call_depth"), "{label}: {error:?}");
                         }
                     }
                     assert_eq!(resources.live_resources(), 0, "{label}");

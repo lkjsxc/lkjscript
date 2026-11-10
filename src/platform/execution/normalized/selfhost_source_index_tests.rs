@@ -3,32 +3,7 @@ use super::*;
 
 pub(super) fn assert_probe(name: &str, bytes: &[u8], expected: &[u8]) {
     assert_eq!(result(name, bytes), (0, expected.to_vec()), "{name}");
-    static IMAGES: OnceLock<std::sync::Mutex<BTreeMap<String, Vec<u8>>>> = OnceLock::new();
-    let image = IMAGES
-        .get_or_init(Default::default)
-        .lock()
-        .unwrap()
-        .entry(name.to_owned())
-        .or_insert_with(|| {
-            let module = "source-index-probe";
-            let (_, program) = probes(module);
-            let entry = program.function(function(module, name)).unwrap().0 as usize;
-            let payload = input::export(program, entry).unwrap();
-            let (source, compiler) = compiler();
-            let (code, image) = compile_with_policy(
-                source,
-                compiler,
-                &payload,
-                NormalizedRunPolicy::foreground(),
-            );
-            assert_eq!(code, 0);
-            image
-        })
-        .clone();
-    let output = native_filter_tests::execute_filter(&image, bytes, &[], 127);
-    assert_eq!(output.status.code(), Some(0), "{name}: {:?}", output.stderr);
-    assert_eq!(output.stdout, expected, "{name}");
-    assert!(output.stderr.is_empty());
+    emitted_result_bytes(name, bytes, 0, expected);
 }
 
 fn word(bytes: &mut [u8], at: usize, value: u32) {

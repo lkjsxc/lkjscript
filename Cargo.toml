@@ -33,7 +33,7 @@ rustls-pemfile = "2.2.0"
 ryu = "1.0.23"
 rustix = { version = "1.1.4", default-features = false, features = ["fs", "process", "std"] }
 serde = { version = "1.0.228", default-features = false, features = ["derive", "std"] }
-serde_json = { version = "1.0.149", default-features = false, features = ["std"] }
+serde_json = { version = "1.0.149", default-features = false, features = ["std", "unbounded_depth"] }
 sha2 = "0.11.0"
 tokio = { version = "1.53.1", default-features = false, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-rustls = { version = "0.26.4", default-features = false, features = ["aws_lc_rs", "tls12"] }
@@ -60,33 +60,20 @@ unwrap_used = "deny"
 [lints.rust]
 unsafe_code = "forbid"
 
-# Keep semantic tests optimized and diagnostic builds bounded in the shared target.
+# One incremental profile for focused and routine feedback. Dependencies remain
+# optimized; large compiler/scale controls belong to the explicit slow tier.
 [profile.test]
-opt-level = 2
+opt-level = 1
 debug = "line-tables-only"
 debug-assertions = true
 overflow-checks = true
-incremental = false
-
-# Opt in for interactive Rust debugging and short edit/build loops, not acceptance.
-[profile.test-debug]
-inherits = "test"
-opt-level = 0
-debug = 2
 incremental = true
+codegen-units = 256
+
+[profile.test.package."*"]
+opt-level = 2
 
 [profile.release]
-# Independent test executables share optimized library code without repeating
-# whole-program ThinLTO for every harness and example.
 codegen-units = 256
 lto = false
 strip = "symbols"
-
-# Verification tools need optimized execution, without distribution link costs.
-[profile.bootstrap]
-inherits = "dev"
-opt-level = 2
-debug = 0
-incremental = false
-lto = false
-codegen-units = 256

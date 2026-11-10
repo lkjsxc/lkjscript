@@ -155,10 +155,10 @@ equal-shaped nominal Reply cannot replace the structural protocol record. The
 Rust native Variant layout and the source-native nominal layout are private to
 their respective backends; neither is a public wire or phase ABI. Variant shape
 traps use the existing native rejection/phase recovery path, and surviving phase
-results remain governed by the unchanged structural Bytes-output contract. The
-[ordinary nominal acceptance record](../decisions/20261103-closed-ordinary-nominal.md#acceptance-evidence-and-delivery)
-binds public adoption, raw-source compiler generations, independent behavior and
-custody controls, and frozen-tree acceptance.
+results remain governed by the unchanged structural Bytes-output contract.
+The maintained semantic corpus checks nominal behavior and custody; the native
+lifecycle control checks retained output, cancellation and cleanup through C1 and
+C2. Run the relevant controls using [verification](verification.md).
 
 The safe first-party emitter writes the ELF64 header, an RX `PT_LOAD` segment,
 a non-executable stack declaration, native x86_64 code and relocation/data bytes
@@ -212,4 +212,4 @@ Direct-execution tests compare emitted ELF output with both bytecode and canonic
 interpretation, including runtime arguments, closures, recursive loops, structured
 JSON, integer limits, trap cases and map/fold pipelines. Separate public CLI tests
 exercise detached execution and create-new publication. See [verification](verification.md)
-for the complete acceptance gates.
+for the routine suite and explicit slow controls.

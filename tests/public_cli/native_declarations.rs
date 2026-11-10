@@ -279,7 +279,7 @@ impl Native {
         .collect()
     }
 
-    /// Every source matrix retains independent differential execution under its selected mode.
+    /// Every source matrix checks its independently expected results under the selected mode.
     fn source_batch(
         &self,
         label: &str,
@@ -652,7 +652,7 @@ declarations.end
                 assert_eq!(cleanup["remaining_tasks"], 0);
                 assert_eq!(cleanup["cleanup_failures"], serde_json::json!([]));
             } else {
-                assert_eq!(compact_field(execution, "differential"), "equal");
+                assert_eq!(compact_field(execution, "engine"), "vm");
             }
             let failed = public.cli(&route, false);
             assert_eq!(
@@ -1606,7 +1606,7 @@ fn native_generic_library_and_nominal_consumer_use_exact_transport_and_canonical
     consumer.cli(&["check"], true);
     let output = consumer.cli(&["run", "summary", "--arguments", "[]"], true);
     let execution = compact_record(&output, "execution");
-    assert_eq!(compact_field(execution, "differential"), "equal");
+    assert_eq!(compact_field(execution, "engine"), "vm");
     assert_eq!(
         serde_json::from_str::<Value>(compact_field(execution, "value")).unwrap(),
         serde_json::json!({"count":2,"sum":2})

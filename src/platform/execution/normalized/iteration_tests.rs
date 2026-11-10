@@ -110,7 +110,6 @@ fn task_tail_chain_has_constant_control_state() {
     let (snapshot, program) = plain_task_program("direct");
     let entry = declaration_named(&snapshot, "plain-task-loop");
     let policy = NormalizedRunPolicy {
-        maximum_call_depth: 64,
         ..Default::default()
     };
     let mut accepted = true;
@@ -199,7 +198,6 @@ fn assert_task_tail_context(context: &str) {
     let (snapshot, program) = plain_task_program(context);
     let entry = declaration_named(&snapshot, "plain-task-loop");
     let policy = NormalizedRunPolicy {
-        maximum_call_depth: if terminal { 64 } else { 16 },
         ..Default::default()
     };
     for reference in [false, true] {
@@ -215,22 +213,21 @@ fn assert_task_tail_context(context: &str) {
                 .invoke(entry, args, None, &control)
                 .map(|(v, o)| (v, o.maximum_call_depth))
         };
+        let (value, depth) = result.unwrap_or_else(|e| panic!("{context}/{reference}: {e:?}"));
+        let expected = match context {
+            "non-tail" => 33_558_528 + 8192,
+            "earlier-sequence" => 1,
+            "condition" => 2,
+            _ => 33_558_528,
+        };
+        assert!(
+            matches!(value, NormalizedValue::I64(actual) if actual == expected),
+            "{context}/{reference}"
+        );
         if terminal {
-            let (value, depth) = result.unwrap_or_else(|e| panic!("{context}/{reference}: {e:?}"));
-            assert_eq!(
-                crate::platform::execution::normalized::structural_equality::assertions::equal(
-                    &(value),
-                    &(NormalizedValue::I64(33_558_528))
-                ),
-                Ok(true)
-            );
             assert!(depth <= 2, "{context}/{reference}: {depth}");
         } else {
-            let error = result.unwrap_err();
-            assert!(
-                error.code.ends_with("call_depth"),
-                "{context}/{reference}: {error:?}"
-            );
+            assert!(depth > 4096, "{context}/{reference}: {depth}");
         }
     }
 }
@@ -265,27 +262,97 @@ fn task_control_oracle_detects_disabled_production_transfers() {
             };
         }
     }
-    let policy = NormalizedRunPolicy {
-        maximum_call_depth: 64,
-        ..Default::default()
-    };
-    let control = ExecutionControl::uncancelled();
-    let args = vec![NormalizedValue::I64(8192), NormalizedValue::I64(0)];
+    let policy = NormalizedRunPolicy::default();
+    for count in [2048_i64, 4096, 8192] {
+        let started = std::time::Instant::now();
+        let args = vec![NormalizedValue::I64(count), NormalizedValue::I64(0)];
+        let (value, work) = NormalizedVm::for_test(&program, policy)
+            .invoke(entry, args.clone(), None, &ExecutionControl::uncancelled())
+            .unwrap();
+        assert!(matches!(value, NormalizedValue::I64(actual) if actual == count * (count + 1) / 2));
+        assert_eq!(work.maximum_call_depth, count as usize + 1);
+        assert_eq!(work.live_call_frames_after, 0);
+        assert_eq!(work.live_operands_after, 0);
+        let (value, reference) = NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
+            .invoke(entry, args, None, &ExecutionControl::uncancelled())
+            .unwrap();
+        assert!(matches!(value, NormalizedValue::I64(actual) if actual == count * (count + 1) / 2));
+        assert!(reference.maximum_call_depth <= 2);
+        eprintln!(
+            "call-stack scale input={count} frames={} elapsed_ms={}",
+            work.maximum_call_depth,
+            started.elapsed().as_millis()
+        );
+    }
+    let observed = std::sync::Mutex::new(None);
+    let cancelled = NormalizedVm::for_test(&program, policy)
+        .observing_checked(&observed)
+        .invoke(
+            entry,
+            vec![NormalizedValue::I64(16384), NormalizedValue::I64(0)],
+            None,
+            &ExecutionControl::cancel_after_checks(1000),
+        )
+        .unwrap_err();
     assert_eq!(
-        NormalizedVm::for_test(&program, policy)
-            .invoke(entry, args.clone(), None, &control)
-            .unwrap_err()
-            .code,
-        "normalized_call_depth"
+        cancelled.class,
+        crate::platform::execution::ExecutionFailureClass::Cancelled
     );
-    assert_eq!(
-        crate::platform::execution::normalized::structural_equality::assertions::equal(
-            &(NormalizedReferenceInterpreter::new(&snapshot, &program, policy)
-                .invoke(entry, args, None, &control)
-                .unwrap()
-                .0),
-            &(NormalizedValue::I64(33_558_528))
-        ),
-        Ok(true)
-    );
+    let work = observed.into_inner().unwrap().unwrap();
+    assert_eq!(work.live_call_frames_after, 0);
+    assert_eq!(work.live_operands_after, 0);
+}
+
+#[test]
+#[ignore = "scale: grow operand stack beyond the former one-million-value default"]
+fn vm_operand_stack_scale_and_cancellation_cleanup() {
+    let (snapshot, mut program) = plain_task_program("direct");
+    let entry = declaration_named(&snapshot, "plain-task-loop");
+    let index = program.function(entry).unwrap();
+    for width in [500_000, 1_000_000, 2_000_000] {
+        let started = std::time::Instant::now();
+        let NormalizedFunctionBody::Code(code) =
+            &mut Arc::make_mut(&mut program.functions)[index.0 as usize].body
+        else {
+            panic!("graph")
+        };
+        code.instructions = std::iter::repeat_n(NormalizedInstruction::Unit, width)
+            .chain(std::iter::repeat_n(NormalizedInstruction::Drop, width))
+            .chain([NormalizedInstruction::I64(7), NormalizedInstruction::Return])
+            .collect::<Vec<_>>()
+            .into();
+        let (value, work) = NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
+            .invoke(
+                entry,
+                vec![NormalizedValue::I64(0), NormalizedValue::I64(0)],
+                None,
+                &ExecutionControl::uncancelled(),
+            )
+            .unwrap();
+        assert!(matches!(value, NormalizedValue::I64(7)));
+        assert_eq!(work.maximum_value_stack, width);
+        assert_eq!(work.live_operands_after, 0);
+        assert_eq!(work.live_call_frames_after, 0);
+        eprintln!(
+            "operand-stack scale values={width} elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
+        let observed = std::sync::Mutex::new(None);
+        let error = NormalizedVm::for_test(&program, NormalizedRunPolicy::default())
+            .observing_checked(&observed)
+            .invoke(
+                entry,
+                vec![NormalizedValue::I64(0), NormalizedValue::I64(0)],
+                None,
+                &ExecutionControl::cancel_after_checks(width as u64 / 2),
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.class,
+            crate::platform::execution::ExecutionFailureClass::Cancelled
+        );
+        let work = observed.into_inner().unwrap().unwrap();
+        assert_eq!(work.live_operands_after, 0);
+        assert_eq!(work.live_call_frames_after, 0);
+    }
 }

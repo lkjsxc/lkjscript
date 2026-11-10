@@ -286,7 +286,7 @@ fn result_relations_and_associated_read_view_coordinates_have_literal_layouts() 
     };
     let encode_type = |ty: &AuthoredType| {
         let mut writer = Writer::new(None);
-        writer.authored_type(ty, &BTreeMap::new(), 1).unwrap();
+        writer.authored_type(ty, &BTreeMap::new()).unwrap();
         writer.finish()
     };
     let mut literal = vec![29];
@@ -389,7 +389,7 @@ fn empty_view_construction_still_commits_source_and_field_references_are_qualifi
     let encode_operation = |operation| {
         let mut writer = Writer::new(None);
         writer
-            .expression_operation(&operation, &BTreeMap::new(), 1)
+            .expression_operation(&operation, &BTreeMap::new())
             .unwrap();
         writer.finish()
     };
@@ -514,7 +514,7 @@ fn all_call_and_method_mapping_scope_actuals_change_the_commitment() {
     let encode_operation = |operation: &AuthoredExpressionOperation| {
         let mut writer = Writer::new(None);
         writer
-            .expression_operation(operation, &BTreeMap::new(), 1)
+            .expression_operation(operation, &BTreeMap::new())
             .unwrap();
         writer.finish()
     };

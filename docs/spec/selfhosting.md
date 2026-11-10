@@ -1,27 +1,19 @@
 # Semantic compiler self-hosting contract
 
-The acceptance target is Tier 2: an lkjscript compiler consumes its complete
+The design target is Tier 2: an lkjscript compiler consumes its complete
 authoritative source-graph closure, owns structural and semantic admission and
 normalization, and emits both current `.lkja` and standalone Linux x86_64 ELF.
 Tier 1 consumes Rust-admitted normalized input. Tier 3 additionally replaces text
 authoring, repository packs and package transport. Neither Tier 1 nor Tier 3 is a
-substitute for Tier 2. This document does not claim Tier 2 completion.
+substitute for Tier 2. The target extends the current supported compiler closure.
 
-## Verified starting inventory
+## Bootstrap and verification
 
-The clean initial checkout and fetched origin/main were
-`b83b6dd5dc235daaef0483d10342988f7712085c`. The existing safe Rust ELF emitter
-supported checked I64, Bool, Unit, text constants, records, lists, calls, closures
-and self-tail calls. It rejected Bytes, ByteBuffer, regions and implementation
-witnesses. VM and reference execution already supported byte access, BLAKE3,
-affine byte buffers and lexical regions. No new language primitive is required
-for the initial compiler slice. The checker registry currently defines 29 full
-gates; a fresh execution receipt, not that count, establishes acceptance.
-
-Initial `target` usage was 8.5 GiB with 623 GiB free on the filesystem. Cargo-owned
-debug and stale package artifacts were cleaned using Cargo while no other build
-was active. Use one checkout and `$PWD/target`; preserve unrelated storage and
-retain compact evidence before removing task-owned stage binaries.
+The Rust host builds C1 from the maintained compiler graph. Native generations
+then consume its complete raw source and emit ELF or canonical artifacts.
+[Status](../status.md) records the working bootstrap and next action.
+[Verification](verification.md) defines the routine suite and separate maintained
+fixed-point, semantic-corpus and native-lifecycle controls.
 
 ## Current canonical input: LKJCI1
 
@@ -500,11 +492,10 @@ The host can now build this lkjscript component as a standalone native compiler.
 Select its `compile-elf` command target. The exact binary-filter signature, checked growable input mapping and
 mapping lifetime are specified in [native ELF](native-elf.md). Native output
 must equal VM/reference output for positive, malformed and mutated-source cases.
-Milestone D both-output backend closure is accepted at `108906b5`; its exact
-official receipt records the fresh gate matrix and remaining Rust boundaries.
-E/F require semantic admission, phase-local
-regions and the native source-graph fixed point. Optimizers and parallel compilation
-remain deferred.
+The backend controls compare both output modes with independent host oracles.
+The maintained source fixed point and native lifecycle run separately through the
+[verification commands](verification.md). Semantic admission, phase-local regions
+and compiler-source feature coverage retain their own requirements.
 
 ## Source-record decoding groundwork
 
@@ -552,8 +543,8 @@ logical binding and reference passes below add exact object bindings and endpoin
 closure. Higher source passes separately establish containment, lexical scope,
 namespace, type/DAG, typing and active ByteBuffer custody properties. Broader
 P_self witness, owned aggregate, effect and Region obligations remain distinct.
-Decoding scans bytes and returns scalar cursors; it makes no phase-arena or
-region-native reclamation claim. The A/B/C milestones below govern acceptance.
+The current decoding path scans bytes and returns scalar cursors. Typed input
+and phase reclamation have their own implementations and controls below.
 
 ### Logical source identities and object bindings
 
@@ -645,7 +636,7 @@ both Parameter parent domains. It reuses the exact admitted containment parents.
 Different classes/parents and exact local-binding shadowing remain legal.
 
 `source-type-scope` derives a strict structural DAG from every supplied descriptor,
-including unused types, and preserves the 256-edge depth limit. Each owner's type
+including unused types, by settling descriptors after their structural children. Each owner's type
 roots are checked in their using declaration context, so a shared type digest cannot
 cache scope success across unrelated declarations. Structural fields, List items,
 pure/task function types and Applied arguments participate; nominal declaration
@@ -653,8 +644,7 @@ references do not become structural backedges. Direct task rows and nested
 TaskFunction rows check R/E binder identity against the exact enclosing Function.
 Unused descriptors still receive complete shape/reference/structural admission;
 contextual binder checks apply at owner uses, including untaken expression branches.
-Unused mixed-context descriptors are not globally rejected. Scope, cycle or depth
-failure returns 17.
+Unused mixed-context descriptors are not globally rejected. Scope or cycle failure returns 17.
 Content addressing prevents ordinary rehashing from constructing cyclic type
 objects; derived graph fixtures test cycle proof separately from raw-carrier tests.
 
@@ -713,12 +703,12 @@ compiler entry serves ELF and artifact requests.
 The public meaning remains the accepted GraphRepository revision. Authoring texts
 must be adopted through supported public operations, read back and replayed. An
 implementation or local stored-object comparison does not establish the maintained
-compiler's native fixed point. Status and receipts must identify the exact accepted
-source tree/graph, complete input and tested compiler generations.
+compiler's native fixed point. Tests report the exact source revision, complete
+input and compiler generations; status records the working bootstrap.
 
-### Separate acceptance milestones
+### Independently tested capabilities
 
-| Milestone | Required evidence |
+| Capability | Required controls |
 | --- | --- |
 | A: maintained F_active raw-source self-compilation | Refresh the exact authoritative owner/type/expression/intrinsic/use/call inventory; complete E1/E2/E3 inside lkjscript; C2=C3 and Ahost=A1=A2=A3 on complete raw S and declared E; strict loading/provenance, independent program behavior, compiler-source mutations and layer-reaching complete-inventory negatives. |
 | B: full P_self semantics | Independent source-driven programs and negative controls for required nominal owned records/choices/Match, first-class closures/Invoke, explicit OwnedContract/OwnedImplementation witnesses and associated source-tied views, and lexical Regions. Compiler closure coverage alone is insufficient. |
@@ -734,9 +724,10 @@ The current native boundary is a complete pure binary-filter invocation, defined
 by [LKJPH001](native-phases.md). Rust and source-produced ELF images expose the
 same handle/result contract while keeping their private value representations.
 This boundary does not claim separate reclamation inside every E1/E2/E3 subpass.
-The maintained raw-source fixed-point control also exercises repeated invocation,
-failure and cancellation through both native backends with independent process
-mapping and retained-output checks.
+The maintained native-lifecycle control exercises repeated invocation, failure
+and cancellation through both native backends with independent process mapping
+and retained-output checks. It shares immutable compiler preparation with the
+separate raw-source fixed-point and semantic-corpus controls.
 
 ## Tier 2 capability progress
 
@@ -749,13 +740,13 @@ bootstrap exporter and both output paths to support the adopted construct.
 
 | Family | Host execution | Selfhost IR/output | E1 decoding/references | E1 containment/names/binders | E2 semantics | E3 lowering | Independent source-driven controls | Compiler adoption |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Unit, Bool, I64, If, Let, Sequence and direct monomorphic recursion | VM/reference/native | Profiles 9 and 8 | Current restricted profile | Current restricted profile | Whole-inventory typing | Native flow and canonical pre-tail lowering | Acceptance evidence is recorded by exact source/tree in status and receipts | Current; complete native source fixed point is a separate milestone |
+| Unit, Bool, I64, If, Let, Sequence and direct monomorphic recursion | VM/reference/native | Profiles 9 and 8 | Current restricted profile | Current restricted profile | Whole-inventory typing | Native flow and canonical pre-tail lowering | Independent scalar behavior and compiler-source mutation controls | Current; complete native source fixed point is a separate milestone |
 | Text/StaticText, Bytes, List<I64> and structural records | VM/reference/native | Profiles 9 and 8 | Current restricted profile | Current restricted profile | Active compound typing and closed list substitutions | Native and canonical lowering | Source controls and exact artifact oracle comparisons require recorded execution evidence | Current |
 | Affine ByteBuffer and borrowed buffer reads | VM/reference/native | Profiles 9 and 8 | Current restricted profile | Current restricted profile | Exact consume/borrow/scope/branch custody | Native cleanup fallback and canonical pre-tail cleanup | Source controls and exact artifact oracle comparisons require recorded execution evidence | Current; arbitrary owned aggregates/borrowed helpers remain separate |
 | Interface, Operation and operation Parameters, Requirement, effect/requirement binders | VM/reference | Effectful forms need extension | Owners, constraints and pure/task rows admitted; R/E applications pending | All 12 namespace classes; direct/nested R/E scope | Compatibility/substitution pending | Pending | Four-engine raw-carrier E1 controls; source-driven execution pending | Optional; compiler remains pure |
 | Closed nongeneric acyclic copyable ordinary Record/Variant and exhaustive Match | VM/reference; native candidate installed | Profiles 9 and 8 | Existing canonical forms and complete Match arm framing | Exact Field/Case membership/order and arm-only MatchPayload scope | Exact nominal identity, complete members/arms, annotation and result agreement; n-arm custody | Native descriptors/dispatch and canonical declaration/Switch units implemented in the candidate | Focused raw-source controls passed the 42-input behavior, 20-mutation rejection and selected 257-case dispatch corpus; renewed generations and full acceptance pending | Optional; compiler graph adopted, renewed fixed-point evidence required |
 | OwnedRecord/OwnedChoice and affine deconstruction, generic/recursive nominal values and general List<T> | VM/reference; native portions restricted | Broader extension needed | Owned and broader forms pending | Broader custody/binders pending | Pending | Pending | Pending | Optional |
-| Closed pure first-class functions, binding and Invoke | VM/reference/host ELF with complete capture/storage lifecycle | Callable forms retained in profiles 9 and 8; canonical instructions unchanged | Current FunctionValue/Invoke/Bind forms | Callee-first containment and lexical checks | Exact signatures, copyable captures, suffix types and custody | Native indirect/frame transfer and canonical BeginBind/Capture | Require raw-source four-engine positives, complete-inventory negatives, depth and tail controls; accepted evidence remains receipt-bound | Optional; support and proof must precede compiler adoption |
+| Closed pure first-class functions, binding and Invoke | VM/reference/host ELF with complete capture/storage lifecycle | Callable forms retained in profiles 9 and 8; canonical instructions unchanged | Current FunctionValue/Invoke/Bind forms | Callee-first containment and lexical checks | Exact signatures, copyable captures, suffix types and custody | Native indirect/frame transfer and canonical BeginBind/Capture | Raw-source four-engine positives, complete-inventory negatives, depth and tail controls | Optional; support and proof must precede compiler adoption |
 | OwnedContract/OwnedImplementation, witnesses, associated types and read views | VM/reference | Witness resolution/read-view support needed | Broader forms unsupported | Contextual binders pending | Pending | Pending | Pending | Optional |
 | Lexical Region, capabilities, relative pointers/slices and slab persistence | VM/reference; native pending | Bootstrap/selfhost extension needed | Unsupported forms return 13 | Region/read-scope admission pending | Pending | Pending | Native and reclamation controls pending | Required before adopting lexical Regions in compiler source |
 
@@ -763,11 +754,10 @@ E1-final requires every declared family to satisfy its E1 obligations. Tier 2
 additionally requires all remaining columns, complete compiler-source fixed points,
 behavioral emitted-stage mutations and measured same-process native reclamation.
 The complete profile below remains authoritative; this table cannot narrow it.
-The [ordinary nominal decision proposal](../decisions/20261103-closed-ordinary-nominal.md)
-records the candidate contract, complete public adoption/readback, all 18 passed
-focused controls and both sides of the scoped paired helper observation. Renewed
-compiler generations and complete acceptance still require fixed points and the
-frozen-tree seal.
+The maintained semantic corpus covers ordinary nominal values, complete member
+and case inventories, mutations and 257-case dispatch. The fixed-point control
+checks compiler generation equality and emitted behavior separately; see
+[verification](verification.md) for both selections.
 
 ## Required final profile and proof
 
@@ -798,10 +788,8 @@ tests. Native reproduction from normalized input is a Tier 1 fixed point; it doe
 not establish the required semantic source-graph fixed point. Artifact closure
 additionally requires strict loading and A2/A3 byte equality.
 
-Final acceptance additionally requires complete source S and mutated S' runs,
-negative type/affine/borrow/region/effect admission, both output formats, region
-phase reclamation, exact stage/environment digests and sizes, all discovered
-official changed/fresh-full/release-target gates and a stable verified tree.
-Keep forbid(unsafe_code), denied unwrap/expect/panic, no-Python, one current format,
-and ownership-aware disk bounds. `docs/status.md` distinguishes current attempts
-from accepted work; compact receipts carry observed execution evidence.
+Verification of this target requires complete source S and mutated S' runs,
+negative type/affine/borrow/region/effect admission, both output formats and region
+phase reclamation. The tests report stage identities, execution conditions and
+results. Run the routine suite once per completed change and the relevant slow
+controls explicitly, as described in [verification](verification.md).

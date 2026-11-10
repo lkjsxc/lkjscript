@@ -301,7 +301,6 @@ fn task_tail_chain_retains_one_ancestor_transaction_until_commit_or_reverse_clea
             )
             .unwrap();
             let policy = NormalizedRunPolicy {
-                maximum_call_depth: 64,
                 ..Default::default()
             };
             let control = ExecutionControl::uncancelled();

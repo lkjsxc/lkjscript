@@ -420,21 +420,17 @@ impl Collector<'_, '_, '_, '_> {
         root: TypeObjectDigest,
         scope: Option<DeclarationReference>,
     ) -> Result<(), ExecutionError> {
-        self.meter.reserve::<(TypeObjectDigest, usize)>(1)?;
-        let mut pending = vec![(root, 0usize)];
-        let mut seen = BTreeMap::new();
-        while let Some((ty, depth)) = pending.pop() {
+        self.meter.reserve::<TypeObjectDigest>(1)?;
+        let mut pending = vec![root];
+        let mut seen = BTreeSet::new();
+        while let Some(ty) = pending.pop() {
             self.meter.tick()?;
-            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-                return Err(failure());
-            }
-            if seen.get(&ty).is_some_and(|previous| *previous >= depth) {
+
+            if seen.contains(&ty) {
                 continue;
             }
-            if !seen.contains_key(&ty) {
-                self.meter.node::<(TypeObjectDigest, usize)>()?;
-            }
-            seen.insert(ty, depth);
+            self.meter.node::<TypeObjectDigest>()?;
+            seen.insert(ty);
             let object = self.types.get(&ty).ok_or_else(failure)?;
             if let TypeForm::Applied {
                 declaration,
@@ -459,9 +455,8 @@ impl Collector<'_, '_, '_, '_> {
             self.meter
                 .reserve::<TypeObjectDigest>(object.child_type_count())?;
             let children = object.child_types();
-            self.meter
-                .reserve::<(TypeObjectDigest, usize)>(children.len())?;
-            pending.extend(children.into_iter().map(|child| (child, depth + 1)));
+            self.meter.reserve::<TypeObjectDigest>(children.len())?;
+            pending.extend(children);
         }
         Ok(())
     }
@@ -475,9 +470,7 @@ impl Collector<'_, '_, '_, '_> {
         depth: usize,
     ) -> Result<(), ExecutionError> {
         self.meter.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(failure());
-        }
+
         self.contract(
             origin,
             owner,

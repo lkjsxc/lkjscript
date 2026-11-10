@@ -94,8 +94,8 @@ pub(super) fn pure_batch(
         let records = parse_records("implementation pure row", observed[index].as_bytes()).unwrap();
         let execution = compact_record(&records, "execution");
         if source {
-            assert_eq!(compact_field(execution, "differential"), "equal");
-            for field in ["production-instructions", "reference-expressions"] {
+            assert_eq!(compact_field(execution, "engine"), "vm");
+            for field in ["production-instructions"] {
                 assert!(compact_field(execution, field).parse::<u64>().unwrap() > 0);
             }
         } else {

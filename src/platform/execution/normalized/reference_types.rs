@@ -209,16 +209,9 @@ fn admit_parameter_generation(owner: &OwnerRecord) -> Result<(), ExecutionError>
     Ok(())
 }
 
-fn reserve_witness(
-    allocated: &mut Meter,
-    witness: &Witness,
-    depth: usize,
-    nodes: &mut usize,
-) -> Result<(), ExecutionError> {
+fn reserve_witness(allocated: &mut Meter, nodes: &mut usize) -> Result<(), ExecutionError> {
     *nodes = nodes.checked_add(1).ok_or_else(failure)?;
-    if depth.saturating_add(witness.depth) > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-        || *nodes > crate::platform::kernel::contract::MAXIMUM_CHILDREN
-    {
+    if *nodes > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
         return Err(failure());
     }
     allocate::<Witness>(allocated, 1)
@@ -276,7 +269,7 @@ impl<'source> Closure<'source, '_> {
                 let (ty, _) = encode_type_object(&object).map_err(|_| failure())?;
                 index_node::<(TypeObjectDigest, TypeObject)>(&mut self.allocated)?;
                 self.types.entry(ty).or_insert(object);
-                self.owned_witness_type(ty, Some(reference), 0)?;
+                self.owned_witness_type(ty, Some(reference))?;
             }
         }
         Ok(())
@@ -386,8 +379,8 @@ impl<'source> Closure<'source, '_> {
                 return Err(failure());
             }
             index_node::<crate::platform::semantic_id::FieldId>(&mut self.allocated)?;
-            self.scoped_type_parameters(record.ty, &bindings, 0)?;
-            let field_type = self.identity(record.ty, &bindings, 0)?;
+            self.scoped_type_parameters(record.ty, &bindings)?;
+            let field_type = self.identity(record.ty, &bindings)?;
             result.push((
                 crate::platform::kernel::FieldReference {
                     package: reference.package,
@@ -403,21 +396,51 @@ impl<'source> Closure<'source, '_> {
         &mut self,
         ty: TypeObjectDigest,
         scope: Option<DeclarationReference>,
-        depth: usize,
+    ) -> Result<bool, ExecutionError> {
+        self.owned_witness_type_cached(ty, scope, &mut BTreeMap::new())
+    }
+
+    // The finite nominal-template proof precedes closure construction. Cache
+    // exact instantiated types within this fixed scope so shared field tails
+    // are checked once, while an unfinished entry rejects structural cycles.
+    fn owned_witness_type_cached(
+        &mut self,
+        ty: TypeObjectDigest,
+        scope: Option<DeclarationReference>,
+        checked: &mut BTreeMap<TypeObjectDigest, Option<bool>>,
     ) -> Result<bool, ExecutionError> {
         self.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(failure());
+        if let Some(answer) = checked.get(&ty) {
+            return answer.ok_or_else(|| {
+                ExecutionError::new(
+                    crate::platform::execution::ExecutionFailureClass::Infrastructure,
+                    "reference_instantiation_scope",
+                    "canonical owned type contains a cyclic structural object",
+                )
+            });
         }
+        index_node::<(TypeObjectDigest, Option<bool>)>(&mut self.allocated)?;
+        checked.insert(ty, None);
+        let owned = self.derive_owned_witness_type(ty, scope, checked)?;
+        checked.insert(ty, Some(owned));
+        Ok(owned)
+    }
+
+    fn derive_owned_witness_type(
+        &mut self,
+        ty: TypeObjectDigest,
+        scope: Option<DeclarationReference>,
+        checked: &mut BTreeMap<TypeObjectDigest, Option<bool>>,
+    ) -> Result<bool, ExecutionError> {
         if self.nominal_owned(ty)? {
             let object = self.types.get(&ty).ok_or_else(failure)?;
             allocate::<TypeObjectDigest>(&mut self.allocated, object.child_type_count())?;
             let arguments = object.child_types();
             for argument in arguments {
-                self.owned_witness_type(argument, scope, depth + 1)?;
+                self.owned_witness_type_cached(argument, scope, checked)?;
             }
             for (_, field) in self.owned_record_fields(ty, scope, false)? {
-                self.owned_witness_type(field, scope, depth + 1)?;
+                self.owned_witness_type_cached(field, scope, checked)?;
             }
             return Ok(true);
         }
@@ -454,7 +477,7 @@ impl<'source> Closure<'source, '_> {
         let children = object.child_types();
         let mut owned = sequence;
         for child in children {
-            let child_owned = self.owned_witness_type(child, scope, depth + 1)?;
+            let child_owned = self.owned_witness_type_cached(child, scope, checked)?;
             owned |= child_owned;
         }
         if !owned {
@@ -722,7 +745,7 @@ impl<'source> Closure<'source, '_> {
             };
             if record.header.owner != OwnerKey::TypeParameter(*parameter)
                 || record.declaration != reference.declaration
-                || self.owned_witness_type(*actual, scope, 0)? != record.constraints.has_owned()
+                || self.owned_witness_type(*actual, scope)? != record.constraints.has_owned()
             {
                 return Err(failure());
             }
@@ -842,16 +865,14 @@ impl<'source> Closure<'source, '_> {
         operand: &crate::platform::kernel::ImplementationOperand,
     ) -> Result<bool, ExecutionError> {
         use crate::platform::kernel::ImplementationOperand;
-        allocate::<(&ImplementationOperand, usize)>(&mut self.allocated, 1)?;
-        let mut pending = vec![(operand, 0usize)];
+        allocate::<&ImplementationOperand>(&mut self.allocated, 1)?;
+        let mut pending = vec![operand];
         let mut nodes = 0usize;
         let mut mixed = false;
-        while let Some((operand, depth)) = pending.pop() {
+        while let Some(operand) = pending.pop() {
             self.tick()?;
             nodes = nodes.checked_add(1).ok_or_else(failure)?;
-            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-                || nodes > crate::platform::kernel::contract::MAXIMUM_CHILDREN
-            {
+            if nodes > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
                 return Err(failure());
             }
             match operand {
@@ -872,11 +893,8 @@ impl<'source> Closure<'source, '_> {
                     };
                     mixed |= self.mixed_parameters(*implementation, &scheme.type_parameters)?;
                     mixed |= self.mixed_contract(scheme.contract)?;
-                    allocate::<(&ImplementationOperand, usize)>(
-                        &mut self.allocated,
-                        implementations.len(),
-                    )?;
-                    pending.extend(implementations.iter().map(|operand| (operand, depth + 1)));
+                    allocate::<&ImplementationOperand>(&mut self.allocated, implementations.len())?;
+                    pending.extend(implementations.iter());
                 }
                 ImplementationOperand::Parameter { scope, parameter } => {
                     let formal = self
@@ -938,12 +956,9 @@ impl<'source> Closure<'source, '_> {
         &mut self,
         ty: TypeObjectDigest,
         allowed: &Bindings,
-        depth: usize,
     ) -> Result<(), ExecutionError> {
         self.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(failure());
-        }
+
         let object = self.types.get(&ty).ok_or_else(failure)?;
         if let TypeForm::TypeParameter { parameter } = object.form
             && !allowed.contains_key(&parameter)
@@ -953,7 +968,7 @@ impl<'source> Closure<'source, '_> {
         allocate::<TypeObjectDigest>(&mut self.allocated, object.child_type_count())?;
         let children = object.child_types();
         for child in children {
-            self.scoped_type_parameters(child, allowed, depth + 1)?;
+            self.scoped_type_parameters(child, allowed)?;
         }
         Ok(())
     }
@@ -964,12 +979,12 @@ impl<'source> Closure<'source, '_> {
         bindings: &Bindings,
         scope: Option<DeclarationReference>,
     ) -> Result<(TypeObjectDigest, TypeObjectDigest), ExecutionError> {
-        let ty = self.identity(ty, bindings, 0)?;
+        let ty = self.identity(ty, bindings)?;
         let Some(TypeForm::OwnedSequence { item }) = self.types.get(&ty).map(|ty| &ty.form) else {
             return Err(failure());
         };
         let item = *item;
-        self.owned_witness_type(item, scope, 0)?;
+        self.owned_witness_type(item, scope)?;
         Ok((ty, item))
     }
 
@@ -1049,7 +1064,7 @@ impl<'source> Closure<'source, '_> {
                 }
                 scope = Some(parameter_scope);
             }
-            self.owned_witness_type(item, scope, 0)?;
+            self.owned_witness_type(item, scope)?;
         }
         Ok(())
     }
@@ -1215,7 +1230,7 @@ impl<'source> Closure<'source, '_> {
         scope: Option<DeclarationReference>,
         bindings: &Bindings,
     ) -> Result<Option<Witness>, ExecutionError> {
-        self.witness_selection_in(operand, scope, bindings, None, 0, &mut 0)
+        self.witness_selection_in(operand, scope, bindings, None, &mut 0)
             .map(Some)
     }
 
@@ -1225,15 +1240,12 @@ impl<'source> Closure<'source, '_> {
         scope: Option<DeclarationReference>,
         bindings: &Bindings,
         prerequisites: Option<&BTreeMap<ImplementationParameterId, Witness>>,
-        depth: usize,
         nodes: &mut usize,
     ) -> Result<Witness, ExecutionError> {
         use crate::platform::kernel::ImplementationOperand;
         self.tick()?;
         *nodes = nodes.checked_add(1).ok_or_else(failure)?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-            || *nodes > crate::platform::kernel::contract::MAXIMUM_CHILDREN
-        {
+        if *nodes > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
             return Err(failure());
         }
         match operand {
@@ -1261,8 +1273,8 @@ impl<'source> Closure<'source, '_> {
                 allocate::<TypeObjectDigest>(&mut self.allocated, type_arguments.len())?;
                 let mut arguments = Vec::new();
                 for ty in type_arguments {
-                    self.scoped_type_parameters(*ty, bindings, 0)?;
-                    let actual = self.identity(*ty, bindings, 0)?;
+                    self.scoped_type_parameters(*ty, bindings)?;
+                    let actual = self.identity(*ty, bindings)?;
                     arguments.push(actual);
                 }
                 self.witness_type_arguments(
@@ -1279,7 +1291,6 @@ impl<'source> Closure<'source, '_> {
                         scope,
                         bindings,
                         prerequisites,
-                        depth + 1,
                         nodes,
                     )?);
                 }
@@ -1308,7 +1319,7 @@ impl<'source> Closure<'source, '_> {
                     .unwrap_or(&self.implementation_bindings)
                     .get(parameter)
                 {
-                    reserve_witness(&mut self.allocated, selected, depth, nodes)?;
+                    reserve_witness(&mut self.allocated, nodes)?;
                     Ok(selected.clone())
                 } else if self.symbolic {
                     self.symbolic_witness(*declaration, *parameter, bindings)
@@ -1359,12 +1370,12 @@ impl<'source> Closure<'source, '_> {
         {
             return Err(failure());
         }
-        let self_type = self.identity(formal.self_type, bindings, 0)?;
+        let self_type = self.identity(formal.self_type, bindings)?;
         allocate::<TypeObjectDigest>(&mut self.allocated, formal.type_arguments.len())?;
         let mut type_arguments = reserved_vec(formal.type_arguments.len())?;
         for argument in &formal.type_arguments {
-            self.scoped_type_parameters(*argument, bindings, 0)?;
-            type_arguments.push(self.identity(*argument, bindings, 0)?);
+            self.scoped_type_parameters(*argument, bindings)?;
+            type_arguments.push(self.identity(*argument, bindings)?);
         }
         self.contract_application(
             formal.contract,
@@ -1420,9 +1431,7 @@ impl<'source> Closure<'source, '_> {
                 0,
             ),
         };
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(failure());
-        }
+
         if let Some(witness) = self.interned_witnesses.get(&key) {
             return Ok(witness.clone());
         }
@@ -1446,7 +1455,6 @@ impl<'source> Closure<'source, '_> {
         parameters: &[crate::platform::kernel::ImplementationParameter],
         types: &Bindings,
         supplied: &[Witness],
-        depth: usize,
     ) -> Result<BTreeMap<ImplementationParameterId, Witness>, ExecutionError> {
         if parameters.len() != supplied.len()
             || parameters.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
@@ -1468,9 +1476,9 @@ impl<'source> Closure<'source, '_> {
             {
                 return Err(failure());
             }
-            let expected_self = self.identity(formal.self_type, types, 0)?;
-            reserve_witness(&mut self.allocated, selected, depth, &mut 0)?;
-            let (contract, self_type, arguments) = self.witness_meaning(selected.clone(), depth)?;
+            let expected_self = self.identity(formal.self_type, types)?;
+            reserve_witness(&mut self.allocated, &mut 0)?;
+            let (contract, self_type, arguments) = self.witness_meaning(selected.clone())?;
             if contract != formal.contract
                 || self_type != expected_self
                 || formal.type_arguments.len() != arguments.len()
@@ -1478,8 +1486,8 @@ impl<'source> Closure<'source, '_> {
                 return Err(failure());
             }
             for (expected, actual) in formal.type_arguments.iter().zip(arguments) {
-                self.scoped_type_parameters(*expected, types, 0)?;
-                if self.identity(*expected, types, 0)? != actual {
+                self.scoped_type_parameters(*expected, types)?;
+                if self.identity(*expected, types)? != actual {
                     return Err(failure());
                 }
             }
@@ -1490,7 +1498,7 @@ impl<'source> Closure<'source, '_> {
                 Some(scope),
             )?;
             index_node::<(ImplementationParameterId, Witness)>(&mut self.allocated)?;
-            reserve_witness(&mut self.allocated, selected, depth, &mut 0)?;
+            reserve_witness(&mut self.allocated, &mut 0)?;
             if values.insert(formal.id, selected.clone()).is_some() {
                 return Err(failure());
             }
@@ -1507,19 +1515,13 @@ impl<'source> Closure<'source, '_> {
         let selected = self
             .witness_selection(&operand, scope, bindings)?
             .ok_or_else(failure)?;
-        self.witness_meaning(selected, 0)
+        self.witness_meaning(selected)
     }
 
-    fn witness_meaning(
-        &mut self,
-        witness: Witness,
-        depth: usize,
-    ) -> Result<WitnessMeaning, ExecutionError> {
+    fn witness_meaning(&mut self, witness: Witness) -> Result<WitnessMeaning, ExecutionError> {
         self.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(failure());
-        }
-        reserve_witness(&mut self.allocated, &witness, depth, &mut 0)?;
+
+        reserve_witness(&mut self.allocated, &mut 0)?;
         index_node::<Witness>(&mut self.allocated)?;
         // Reaching an identical applied witness again closes an ordinary mapped
         // callable cycle. Its first visit still checks every canonical mapping.
@@ -1565,8 +1567,8 @@ impl<'source> Closure<'source, '_> {
                         return Err(failure());
                     }
                 }
-                self.scoped_type_parameters(scheme.self_type, &templates, 0)?;
-                if !self.owned_witness_type(scheme.self_type, Some(implementation), 0)? {
+                self.scoped_type_parameters(scheme.self_type, &templates)?;
+                if !self.owned_witness_type(scheme.self_type, Some(implementation))? {
                     return Err(failure());
                 }
                 if check_mappings {
@@ -1575,7 +1577,6 @@ impl<'source> Closure<'source, '_> {
                         &scheme.implementation_parameters,
                         &substitutions,
                         &implementations,
-                        depth + 1,
                     )?;
                     for mapping in &scheme.methods {
                         let OwnerRecord::Declaration(target) = self.owner(
@@ -1598,8 +1599,8 @@ impl<'source> Closure<'source, '_> {
                         for (formal, actual) in
                             function.type_parameters.iter().zip(&mapping.type_arguments)
                         {
-                            self.scoped_type_parameters(*actual, &templates, 0)?;
-                            let actual = self.identity(*actual, &substitutions, 0)?;
+                            self.scoped_type_parameters(*actual, &templates)?;
+                            let actual = self.identity(*actual, &substitutions)?;
                             index_node::<(TypeParameterId, TypeObjectDigest)>(&mut self.allocated)?;
                             if target_bindings.insert(*formal, actual).is_some() {
                                 return Err(failure());
@@ -1614,7 +1615,7 @@ impl<'source> Closure<'source, '_> {
                         let template_arguments = mapping
                             .type_arguments
                             .iter()
-                            .map(|actual| self.identity(*actual, &templates, 0))
+                            .map(|actual| self.identity(*actual, &templates))
                             .collect::<Result<Vec<_>, _>>()?;
                         self.constrained_applications.insert((
                             mapping.function,
@@ -1629,7 +1630,6 @@ impl<'source> Closure<'source, '_> {
                                 Some(implementation),
                                 &substitutions,
                                 Some(&prerequisites),
-                                depth + 1,
                                 &mut 0,
                             )?);
                         }
@@ -1638,25 +1638,24 @@ impl<'source> Closure<'source, '_> {
                             &function.implementation_parameters,
                             &target_bindings,
                             &mapped,
-                            depth + 1,
                         )?;
-                        self.identity(function.result.ty, &target_bindings, 0)?;
+                        self.identity(function.result.ty, &target_bindings)?;
                         for parameter in &function.parameters {
                             let OwnerRecord::Parameter(parameter) = self
                                 .owner(mapping.function.package, OwnerKey::Parameter(*parameter))?
                             else {
                                 return Err(failure());
                             };
-                            self.identity(parameter.ty, &target_bindings, 0)?;
+                            self.identity(parameter.ty, &target_bindings)?;
                         }
                     }
                 }
-                let self_type = self.identity(scheme.self_type, &substitutions, 0)?;
+                let self_type = self.identity(scheme.self_type, &substitutions)?;
                 allocate::<TypeObjectDigest>(&mut self.allocated, scheme.type_arguments.len())?;
                 let mut arguments = reserved_vec(scheme.type_arguments.len())?;
                 for argument in &scheme.type_arguments {
-                    self.scoped_type_parameters(*argument, &templates, 0)?;
-                    arguments.push(self.identity(*argument, &substitutions, 0)?);
+                    self.scoped_type_parameters(*argument, &templates)?;
+                    arguments.push(self.identity(*argument, &substitutions)?);
                 }
                 self.contract_application(
                     scheme.contract,
@@ -1696,9 +1695,9 @@ impl<'source> Closure<'source, '_> {
         }
         for method in &declaration.methods {
             for parameter in &method.parameters {
-                self.identity(parameter.ty, &contract_bindings, 0)?;
+                self.identity(parameter.ty, &contract_bindings)?;
             }
-            self.identity(method.result.ty, &contract_bindings, 0)?;
+            self.identity(method.result.ty, &contract_bindings)?;
         }
         Ok((contract, self_type, arguments))
     }
@@ -1716,7 +1715,7 @@ impl<'source> Closure<'source, '_> {
         }
         for (formal, operand) in function.implementation_parameters.iter().zip(operands) {
             self.tick()?;
-            let expected = self.identity(formal.self_type, child_bindings, 0)?;
+            let expected = self.identity(formal.self_type, child_bindings)?;
             let (contract, actual, arguments) =
                 self.witness_application(operand.clone(), scope, caller_bindings)?;
             if contract != formal.contract
@@ -1726,7 +1725,7 @@ impl<'source> Closure<'source, '_> {
                 return Err(failure());
             }
             for (expected, actual) in formal.type_arguments.iter().zip(arguments) {
-                if self.identity(*expected, child_bindings, 0)? != actual {
+                if self.identity(*expected, child_bindings)? != actual {
                     return Err(failure());
                 }
             }
@@ -1779,9 +1778,9 @@ impl<'source> Closure<'source, '_> {
             .ok_or_else(failure)?;
         let method_id = method.id;
         for parameter in &method.parameters {
-            self.identity(parameter.ty, &substitutions, 0)?;
+            self.identity(parameter.ty, &substitutions)?;
         }
-        self.identity(method.result.ty, &substitutions, 0)?;
+        self.identity(method.result.ty, &substitutions)?;
         if let Some(Witness {
             form:
                 WitnessForm::Concrete {
@@ -1823,14 +1822,13 @@ impl<'source> Closure<'source, '_> {
                 &implementation.implementation_parameters,
                 &substitutions,
                 &implementations,
-                0,
             )?;
             let target = mapping.function;
             allocate::<TypeObjectDigest>(&mut self.allocated, mapping.type_arguments.len())?;
             let arguments = mapping
                 .type_arguments
                 .iter()
-                .map(|ty| self.identity(*ty, &substitutions, 0))
+                .map(|ty| self.identity(*ty, &substitutions))
                 .collect::<Result<Vec<_>, _>>()?;
             if !self.symbolic {
                 allocate::<Witness>(&mut self.allocated, mapping.implementations.len())?;
@@ -1841,7 +1839,6 @@ impl<'source> Closure<'source, '_> {
                         Some(selected),
                         &substitutions,
                         Some(&prerequisites),
-                        0,
                         &mut 0,
                     )?);
                 }
@@ -1852,10 +1849,9 @@ impl<'source> Closure<'source, '_> {
         Ok(())
     }
 
-    // Independently propagate the greatest reached depth from every owning root.
-    // Hidden nominal fields share one depth bound with syntactic children and
-    // complete arguments, including a child reached first on a shorter path.
-    fn product_depths(
+    // Check hidden nominal fields and their instantiated layout authority from
+    // every owning root, visiting each exact type once.
+    fn product_closure(
         &mut self,
         records: &[super::prepare::NormalizedRecordLayout],
         record_instances: &BTreeMap<TypeObjectDigest, usize>,
@@ -1886,34 +1882,26 @@ impl<'source> Closure<'source, '_> {
                         | TypeForm::OwnedSequence { .. }
                 )
             {
-                allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, 1)?;
-                queue.push_back((*ty, 0usize));
+                allocate::<TypeObjectDigest>(&mut self.allocated, 1)?;
+                queue.push_back(*ty);
             }
         }
-        let mut depths = BTreeMap::new();
-        while let Some((ty, depth)) = queue.pop_front() {
+        let mut seen = BTreeSet::new();
+        while let Some(ty) = queue.pop_front() {
             self.tick()?;
-            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-                return Err(ExecutionError::new(
-                    crate::platform::execution::ExecutionFailureClass::Infrastructure,
-                    "reference_product_depth",
-                    "combined owned representation exceeds the type depth bound",
-                ));
-            }
-            if depths.get(&ty).is_some_and(|previous| *previous >= depth) {
+
+            if seen.contains(&ty) {
                 continue;
             }
-            if !depths.contains_key(&ty) {
-                index_node::<(TypeObjectDigest, usize)>(&mut self.allocated)?;
-            }
-            depths.insert(ty, depth);
+            index_node::<TypeObjectDigest>(&mut self.allocated)?;
+            seen.insert(ty);
             self.clone_type(ty)?;
             let object = self.types.get(&ty).cloned().ok_or_else(failure)?;
             allocate::<TypeObjectDigest>(&mut self.allocated, object.child_type_count())?;
-            allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, object.child_type_count())?;
+            allocate::<TypeObjectDigest>(&mut self.allocated, object.child_type_count())?;
             for child in object.child_types() {
                 self.tick()?;
-                queue.push_back((child, depth + 1));
+                queue.push_back(child);
             }
             let nominal = match &object.form {
                 TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. }
@@ -1937,21 +1925,17 @@ impl<'source> Closure<'source, '_> {
                     {
                         return Err(failure());
                     }
-                    allocate::<(TypeObjectDigest, usize)>(
-                        &mut self.allocated,
-                        layout.fields.len(),
-                    )?;
+                    allocate::<TypeObjectDigest>(&mut self.allocated, layout.fields.len())?;
                     for field in layout.fields.iter() {
                         self.tick()?;
-                        queue.push_back((field.ty, depth + 1));
+                        queue.push_back(field.ty);
                     }
                 } else {
                     // Symbolic applications have no runtime layout. Derive their
-                    // actual field identities from canonical members so an outer
-                    // structural prefix cannot erase their hidden depth.
-                    for field in self.symbolic_record_depth_fields(ty, declaration)? {
-                        allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, 1)?;
-                        queue.push_back((field, depth + 1));
+                    // actual field identities from canonical members.
+                    for field in self.symbolic_record_fields(ty, declaration)? {
+                        allocate::<TypeObjectDigest>(&mut self.allocated, 1)?;
+                        queue.push_back(field);
                     }
                 }
             }
@@ -1959,7 +1943,7 @@ impl<'source> Closure<'source, '_> {
         Ok(())
     }
 
-    fn symbolic_record_depth_fields(
+    fn symbolic_record_fields(
         &mut self,
         ty: TypeObjectDigest,
         declaration: DeclarationReference,
@@ -2008,8 +1992,8 @@ impl<'source> Closure<'source, '_> {
                 return Err(failure());
             }
             let ty = owner.ty;
-            self.scoped_type_parameters(ty, &bindings, 0)?;
-            result.push(self.identity(ty, &bindings, 0)?);
+            self.scoped_type_parameters(ty, &bindings)?;
+            result.push(self.identity(ty, &bindings)?);
         }
         Ok(result)
     }
@@ -2085,7 +2069,7 @@ impl<'source> Closure<'source, '_> {
     ) -> Result<TypeObjectDigest, ExecutionError> {
         self.tick()?;
         let Some(proof) = self.associated_proof.clone() else {
-            return self.identity(ty, bindings, 0);
+            return self.identity(ty, bindings);
         };
         self.occurrence_at(package, owner)?;
         let context = self.associated_context.as_ref().ok_or_else(failure)?;
@@ -2119,12 +2103,8 @@ impl<'source> Closure<'source, '_> {
         &mut self,
         ty: TypeObjectDigest,
         bindings: &Bindings,
-        depth: usize,
     ) -> Result<TypeObjectDigest, ExecutionError> {
         self.tick()?;
-        if depth > 256 {
-            return Err(failure());
-        }
         self.clone_type(ty)?;
         let object = self.types.get(&ty).cloned().ok_or_else(failure)?;
         let form = match object.form {
@@ -2149,7 +2129,7 @@ impl<'source> Closure<'source, '_> {
                 declaration,
                 arguments: arguments
                     .into_iter()
-                    .map(|ty| self.identity(ty, bindings, depth + 1))
+                    .map(|ty| self.identity(ty, bindings))
                     .collect::<Result<_, _>>()?,
                 read_scope,
             },
@@ -2160,50 +2140,50 @@ impl<'source> Closure<'source, '_> {
                 declaration,
                 arguments: arguments
                     .into_iter()
-                    .map(|ty| self.identity(ty, bindings, depth + 1))
+                    .map(|ty| self.identity(ty, bindings))
                     .collect::<Result<_, _>>()?,
             },
             TypeForm::Region { region } => TypeForm::Region {
-                region: self.identity(region, bindings, depth + 1)?,
+                region: self.identity(region, bindings)?,
             },
             TypeForm::RelPtr { region, item } => TypeForm::RelPtr {
-                region: self.identity(region, bindings, depth + 1)?,
-                item: self.identity(item, bindings, depth + 1)?,
+                region: self.identity(region, bindings)?,
+                item: self.identity(item, bindings)?,
             },
             TypeForm::RegionSlice { region, item } => TypeForm::RegionSlice {
-                region: self.identity(region, bindings, depth + 1)?,
-                item: self.identity(item, bindings, depth + 1)?,
+                region: self.identity(region, bindings)?,
+                item: self.identity(item, bindings)?,
             },
             TypeForm::RegionCap { region, mode } => TypeForm::RegionCap {
-                region: self.identity(region, bindings, depth + 1)?,
+                region: self.identity(region, bindings)?,
                 mode,
             },
             TypeForm::List { item } => TypeForm::List {
-                item: self.identity(item, bindings, depth + 1)?,
+                item: self.identity(item, bindings)?,
             },
             TypeForm::OwnedSequence { item } => TypeForm::OwnedSequence {
-                item: self.identity(item, bindings, depth + 1)?,
+                item: self.identity(item, bindings)?,
             },
             TypeForm::Option { item } => TypeForm::Option {
-                item: self.identity(item, bindings, depth + 1)?,
+                item: self.identity(item, bindings)?,
             },
             TypeForm::Stream { item } => TypeForm::Stream {
-                item: self.identity(item, bindings, depth + 1)?,
+                item: self.identity(item, bindings)?,
             },
             TypeForm::Map { key, value } => TypeForm::Map {
-                key: self.identity(key, bindings, depth + 1)?,
-                value: self.identity(value, bindings, depth + 1)?,
+                key: self.identity(key, bindings)?,
+                value: self.identity(value, bindings)?,
             },
             TypeForm::Result { ok, error } => TypeForm::Result {
-                ok: self.identity(ok, bindings, depth + 1)?,
-                error: self.identity(error, bindings, depth + 1)?,
+                ok: self.identity(ok, bindings)?,
+                error: self.identity(error, bindings)?,
             },
             TypeForm::Function { parameters, result } => TypeForm::Function {
                 parameters: parameters
                     .into_iter()
-                    .map(|ty| self.identity(ty, bindings, depth + 1))
+                    .map(|ty| self.identity(ty, bindings))
                     .collect::<Result<_, _>>()?,
-                result: self.identity(result, bindings, depth + 1)?,
+                result: self.identity(result, bindings)?,
             },
             TypeForm::TaskFunction {
                 parameters,
@@ -2229,27 +2209,27 @@ impl<'source> Closure<'source, '_> {
                 TypeForm::TaskFunction {
                     parameters: parameters
                         .into_iter()
-                        .map(|ty| self.identity(ty, bindings, depth + 1))
+                        .map(|ty| self.identity(ty, bindings))
                         .collect::<Result<_, _>>()?,
-                    result: self.identity(result, bindings, depth + 1)?,
+                    result: self.identity(result, bindings)?,
                     effect,
                 }
             }
             TypeForm::OwnedChoice { mut cases } => {
                 for case in &mut cases {
-                    case.ty = self.identity(case.ty, bindings, depth + 1)?;
+                    case.ty = self.identity(case.ty, bindings)?;
                 }
                 TypeForm::OwnedChoice { cases }
             }
             TypeForm::OwnedProduct { mut fields } => {
                 for field in &mut fields {
-                    field.ty = self.identity(field.ty, bindings, depth + 1)?;
+                    field.ty = self.identity(field.ty, bindings)?;
                 }
                 TypeForm::OwnedProduct { fields }
             }
             TypeForm::StructuralRecord { mut fields } => {
                 for field in &mut fields {
-                    field.ty = self.identity(field.ty, bindings, depth + 1)?;
+                    field.ty = self.identity(field.ty, bindings)?;
                 }
                 TypeForm::StructuralRecord { fields }
             }
@@ -2327,7 +2307,7 @@ impl<'source> Closure<'source, '_> {
                 allocate::<TypeObjectDigest>(&mut self.allocated, arguments.len())?;
                 let arguments = arguments
                     .iter()
-                    .map(|ty| self.identity(*ty, bindings, 0))
+                    .map(|ty| self.identity(*ty, bindings))
                     .collect::<Result<Vec<_>, _>>()?;
                 let form = if arguments.is_empty() {
                     TypeForm::Named { declaration }
@@ -2373,7 +2353,7 @@ impl<'source> Closure<'source, '_> {
                 )?;
                 let mut child_bindings = Bindings::new();
                 for (parameter, argument) in signature.type_parameters.iter().zip(type_arguments) {
-                    let actual = self.identity(*argument, bindings, 0)?;
+                    let actual = self.identity(*argument, bindings)?;
                     if child_bindings.insert(*parameter, actual).is_some() {
                         return Err(failure());
                     }
@@ -2465,7 +2445,7 @@ impl<'source> Closure<'source, '_> {
                         allocate::<TypeObjectDigest>(&mut self.allocated, type_arguments.len())?;
                         let mut arguments = Vec::new();
                         for ty in type_arguments {
-                            arguments.push(self.identity(ty, bindings, 0)?);
+                            arguments.push(self.identity(ty, bindings)?);
                         }
                         allocate::<(TypeParameterId, TypeObjectDigest)>(
                             &mut self.allocated,
@@ -2484,7 +2464,7 @@ impl<'source> Closure<'source, '_> {
                             scope,
                             bindings,
                         )?;
-                        let ty = self.identity(signature.result.ty, &child_bindings, 0)?;
+                        let ty = self.identity(signature.result.ty, &child_bindings)?;
                         for parameter in &signature.parameters {
                             let OwnerRecord::Parameter(parameter) = self
                                 .owner(function.package, OwnerKey::Parameter(*parameter))?
@@ -2492,7 +2472,7 @@ impl<'source> Closure<'source, '_> {
                             else {
                                 return Err(failure());
                             };
-                            self.identity(parameter.ty, &child_bindings, 0)?;
+                            self.identity(parameter.ty, &child_bindings)?;
                             if parameter.use_mode == crate::platform::kernel::ParameterUse::Borrow
                                 && record.contract_version
                                     != crate::platform::kernel::contract::GRAPH_CONTRACT_VERSION
@@ -2556,7 +2536,7 @@ impl<'source> Closure<'source, '_> {
                     choice_type: product_type,
                     ..
                 } => {
-                    self.identity(product_type, bindings, 0)?;
+                    self.identity(product_type, bindings)?;
                 }
                 ExpressionOperation::SequenceEmpty { sequence_type }
                 | ExpressionOperation::SequenceLength { sequence_type, .. }
@@ -2581,7 +2561,7 @@ impl<'source> Closure<'source, '_> {
                     ..
                 } => {
                     let (sequence, item) = self.sequence(sequence_type, bindings, scope)?;
-                    let result = self.identity(result_type, bindings, 0)?;
+                    let result = self.identity(result_type, bindings)?;
                     let Some(TypeForm::OwnedProduct { fields }) =
                         self.types.get(&result).map(|object| &object.form)
                     else {
@@ -2602,7 +2582,7 @@ impl<'source> Closure<'source, '_> {
                     ..
                 } => {
                     let (sequence, item) = self.sequence(sequence_type, bindings, scope)?;
-                    let result = self.identity(result_type, bindings, 0)?;
+                    let result = self.identity(result_type, bindings)?;
                     let Some(TypeForm::OwnedChoice { cases }) =
                         self.types.get(&result).map(|object| &object.form)
                     else {
@@ -2661,7 +2641,7 @@ impl<'source> Closure<'source, '_> {
                     allocate::<TypeObjectDigest>(&mut self.allocated, type_arguments.len())?;
                     let mut concrete = reserved_vec(type_arguments.len())?;
                     for ty in type_arguments {
-                        concrete.push(self.identity(ty, bindings, 0)?);
+                        concrete.push(self.identity(ty, bindings)?);
                     }
                     self.tick()?;
                     allocate::<(DeclarationReference, Vec<TypeObjectDigest>)>(
@@ -2728,7 +2708,7 @@ impl<'source> Closure<'source, '_> {
                     let mut types = Vec::new();
                     allocate::<TypeObjectDigest>(&mut self.allocated, type_arguments.len())?;
                     for ty in type_arguments {
-                        types.push(self.identity(ty, bindings, 0)?);
+                        types.push(self.identity(ty, bindings)?);
                     }
                     index_node::<(
                         DeclarationReference,
@@ -2776,7 +2756,6 @@ impl<'source> Closure<'source, '_> {
                         &target.implementation_parameters,
                         &target_types,
                         &witnesses,
-                        0,
                     )?;
                     if !self.symbolic {
                         let mut effects = Vec::new();
@@ -2873,24 +2852,6 @@ pub(super) fn check_duplicate_witness_dag(
     source: &KernelSnapshot,
     depth: usize,
 ) -> Result<(usize, usize), ExecutionError> {
-    check_duplicate_witness_dag_in(source, depth, None)
-}
-
-#[cfg(test)]
-pub(super) fn check_duplicate_witness_reuse_depth(
-    source: &KernelSnapshot,
-    depth: usize,
-    current_depth: usize,
-) -> Result<(usize, usize), ExecutionError> {
-    check_duplicate_witness_dag_in(source, depth, Some(current_depth))
-}
-
-#[cfg(test)]
-fn check_duplicate_witness_dag_in(
-    source: &KernelSnapshot,
-    depth: usize,
-    reuse_at_depth: Option<usize>,
-) -> Result<(usize, usize), ExecutionError> {
     let named = |name: &str| {
         source
             .owners
@@ -2919,6 +2880,7 @@ fn check_duplicate_witness_dag_in(
         })
         .ok_or_else(failure)?;
     let control = crate::platform::execution::ExecutionControl::uncancelled();
+    super::reference_nominal_flow::check(&[source], &control)?;
     let mut types = source.types.clone();
     let mut closure = Closure {
         read_view_proof: None,
@@ -2950,11 +2912,7 @@ fn check_duplicate_witness_dag_in(
             implementations: Arc::from([selected.clone(), selected]),
         })?;
     }
-    if reuse_at_depth.is_some() {
-        // Simulate an identical node admitted on the earlier, shorter path.
-        closure.checked_witnesses.insert(selected.clone());
-    }
-    let meaning = closure.witness_meaning(selected, reuse_at_depth.unwrap_or(0))?;
+    let meaning = closure.witness_meaning(selected)?;
     if meaning != (keep, cell, Vec::new()) {
         return Err(failure());
     }
@@ -2966,35 +2924,6 @@ fn check_duplicate_witness_dag_in(
         closure.interned_witnesses.len(),
         usize::try_from(visits.consumed).map_err(|_| failure())?,
     ))
-}
-
-#[cfg(test)]
-pub(super) fn check_product_substitution(
-    mut types: BTreeMap<TypeObjectDigest, TypeObject>,
-    ty: TypeObjectDigest,
-    bindings: Bindings,
-) -> Result<(), ExecutionError> {
-    let control = crate::platform::execution::ExecutionControl::uncancelled();
-    let mut closure = Closure {
-        read_view_proof: None,
-        associated_proof: None,
-        associated_context: None,
-        parallel_targets: BTreeSet::new(),
-        constrained_applications: BTreeSet::new(),
-        symbolic: false,
-        snapshots: BTreeMap::new(),
-        types: &mut types,
-        visits: Meter::new(None),
-        allocated: Meter::new(None),
-        control: &control,
-        effects: BTreeMap::new(),
-        requirements: BTreeMap::new(),
-        implementation_bindings: BTreeMap::new(),
-        checked_witnesses: BTreeSet::new(),
-        interned_witnesses: BTreeMap::new(),
-    };
-    closure.identity(ty, &bindings, 0)?;
-    closure.product_depths(&[], &BTreeMap::new(), &BTreeSet::new())
 }
 
 // Select the independent associated/region preparation path from the complete
@@ -3016,6 +2945,24 @@ pub(super) fn complete(
     snapshots: &[&KernelSnapshot],
     control: &crate::platform::execution::ExecutionControl,
 ) -> Result<(), ExecutionError> {
+    complete_with_raw_check(schema, snapshots, control, false)
+}
+
+#[cfg(test)]
+pub(super) fn complete_raw(
+    schema: &mut NormalizedReferenceSchema,
+    snapshots: &[&KernelSnapshot],
+    control: &crate::platform::execution::ExecutionControl,
+) -> Result<(), ExecutionError> {
+    complete_with_raw_check(schema, snapshots, control, true)
+}
+
+fn complete_with_raw_check(
+    schema: &mut NormalizedReferenceSchema,
+    snapshots: &[&KernelSnapshot],
+    control: &crate::platform::execution::ExecutionControl,
+    check_ordinary_flow: bool,
+) -> Result<(), ExecutionError> {
     if requires_associated_preparation(snapshots) {
         // Independent canonical preparation precedes complete custody, nominal,
         // property and permission proofs. Ordinary source admission is unmetered.
@@ -3025,6 +2972,13 @@ pub(super) fn complete(
             control,
         )?;
         return associated_schema::core(schema, snapshots, proof, control);
+    }
+    super::reference_nominal_flow::check(snapshots, control)?;
+    if check_ordinary_flow {
+        crate::platform::kernel::associated_flow_canonical_reference::validate_all_callables(
+            snapshots, control, None, None,
+        )
+        .map_err(super::reference_schema::source_error)?;
     }
     // The witness-only admission entry bypasses reconstruction deliberately.
     // Rebuild missing affine nominal metadata from its canonical owners here too.
@@ -3180,7 +3134,7 @@ pub(super) fn complete(
                                 bindings.insert(*parameter, ty);
                             }
                             closure.symbolic = true;
-                            closure.identity(function.result.ty, &bindings, 0)?;
+                            closure.identity(function.result.ty, &bindings)?;
                             allocate::<Witness>(
                                 &mut closure.allocated,
                                 function.implementation_parameters.len(),
@@ -3199,12 +3153,11 @@ pub(super) fn complete(
                                 &function.implementation_parameters,
                                 &bindings,
                                 &witnesses,
-                                0,
                             )?;
                             for parameter in &function.implementation_parameters {
-                                closure.identity(parameter.self_type, &bindings, 0)?;
+                                closure.identity(parameter.self_type, &bindings)?;
                                 for argument in &parameter.type_arguments {
-                                    closure.identity(*argument, &bindings, 0)?;
+                                    closure.identity(*argument, &bindings)?;
                                 }
                             }
                             for parameter in &function.parameters {
@@ -3214,7 +3167,7 @@ pub(super) fn complete(
                                 else {
                                     return Err(failure());
                                 };
-                                closure.identity(parameter.ty, &bindings, 0)?;
+                                closure.identity(parameter.ty, &bindings)?;
                             }
                             closure
                                 .body(
@@ -3284,9 +3237,9 @@ pub(super) fn complete(
             requirements.len(),
         )?;
         allocate::<Witness>(&mut closure.allocated, witnesses.len())?;
-        for witness in &witnesses {
+        for _ in &witnesses {
             closure.tick()?;
-            reserve_witness(&mut closure.allocated, witness, 0, &mut 0)?;
+            reserve_witness(&mut closure.allocated, &mut 0)?;
         }
         if !completed.insert((
             function,
@@ -3349,7 +3302,7 @@ pub(super) fn complete(
         }
         let bindings = types.into_iter().zip(arguments).collect();
         closure.implementation_bindings =
-            closure.witness_bindings(function, &implementations, &bindings, &witnesses, 0)?;
+            closure.witness_bindings(function, &implementations, &bindings, &witnesses)?;
         allocate::<(
             crate::platform::kernel::EffectParameterReference,
             crate::platform::kernel::EffectRow,
@@ -3384,11 +3337,11 @@ pub(super) fn complete(
                 )
             })
             .collect();
-        closure.identity(result, &bindings, 0)?;
+        closure.identity(result, &bindings)?;
         for parameter in implementations {
-            closure.identity(parameter.self_type, &bindings, 0)?;
+            closure.identity(parameter.self_type, &bindings)?;
             for argument in parameter.type_arguments {
-                closure.identity(argument, &bindings, 0)?;
+                closure.identity(argument, &bindings)?;
             }
         }
         for parameter in parameters {
@@ -3398,7 +3351,7 @@ pub(super) fn complete(
             else {
                 return Err(failure());
             };
-            closure.identity(parameter.ty, &bindings, 0)?;
+            closure.identity(parameter.ty, &bindings)?;
         }
         if let Some(body) = body {
             closure
@@ -3427,12 +3380,12 @@ pub(super) fn complete(
         .sequence_elements()
         .map_err(|error| at_stage(error, "sequence elements"))?;
     closure
-        .product_depths(
+        .product_closure(
             &schema.records,
             &schema.record_instances,
             &schema.owned_record_declarations,
         )
-        .map_err(|error| at_stage(error, "owned representation depth"))?;
+        .map_err(|error| at_stage(error, "owned representation closure"))?;
     let parallel_targets = std::mem::take(&mut closure.parallel_targets);
     let constrained_applications = std::mem::take(&mut closure.constrained_applications);
     allocate::<bool>(&mut closure.allocated, schema.variants.len())?;
@@ -4396,12 +4349,9 @@ impl Closure<'_, '_> {
         &mut self,
         ty: TypeObjectDigest,
         memo: &mut BTreeMap<TypeObjectDigest, bool>,
-        depth: usize,
     ) -> Result<bool, ExecutionError> {
         self.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(failure());
-        }
+
         if let Some(answer) = memo.get(&ty) {
             return Ok(*answer);
         }
@@ -4412,7 +4362,7 @@ impl Closure<'_, '_> {
             || matches!(&object.form, TypeForm::TaskFunction { effect, .. } if !effect.parameters.is_empty());
         allocate::<TypeObjectDigest>(&mut self.allocated, object.child_type_count())?;
         for child in object.child_types() {
-            unresolved |= self.has_unresolved_type(child, memo, depth + 1)?;
+            unresolved |= self.has_unresolved_type(child, memo)?;
         }
         index_node::<(TypeObjectDigest, bool)>(&mut self.allocated)?;
         memo.insert(ty, unresolved);
@@ -4461,39 +4411,33 @@ impl Closure<'_, '_> {
             }
         }
         for _ in self.types.keys() {
-            allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, 1)?;
+            allocate::<TypeObjectDigest>(&mut self.allocated, 1)?;
         }
-        let mut queue = self
-            .types
-            .keys()
-            .map(|ty| (*ty, 0usize))
-            .collect::<VecDeque<_>>();
+        let mut queue = self.types.keys().copied().collect::<VecDeque<_>>();
         let mut inspected = BTreeSet::new();
         let mut unresolved = BTreeMap::new();
         let mut additions_record = BTreeMap::new();
         let mut additions_variant = BTreeMap::new();
-        while let Some((ty, depth)) = queue.pop_front() {
+        while let Some(ty) = queue.pop_front() {
             self.tick()?;
-            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-                return Err(failure());
-            }
+
             if inspected.contains(&ty) {
                 continue;
             }
             index_node::<TypeObjectDigest>(&mut self.allocated)?;
             inspected.insert(ty);
-            if self.has_unresolved_type(ty, &mut unresolved, 0)? {
+            if self.has_unresolved_type(ty, &mut unresolved)? {
                 continue;
             }
             if self.nominal_owned(ty)? {
-                self.owned_witness_type(ty, None, 0)?;
+                self.owned_witness_type(ty, None)?;
             }
             self.clone_type(ty)?;
             let object = self.types.get(&ty).cloned().ok_or_else(failure)?;
             for child in object.child_types() {
                 self.tick()?;
-                allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, 1)?;
-                queue.push_back((child, depth + 1));
+                allocate::<TypeObjectDigest>(&mut self.allocated, 1)?;
+                queue.push_back(child);
             }
             let TypeForm::Applied {
                 declaration,
@@ -4556,9 +4500,9 @@ impl Closure<'_, '_> {
                         }
                         allocate::<u8>(&mut self.allocated, member.name.as_str().len())?;
                         allocate::<super::prepare::NormalizedRecordField>(&mut self.allocated, 1)?;
-                        allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, 1)?;
-                        let field_type = self.identity(member.ty, &bindings, 0)?;
-                        queue.push_back((field_type, depth + 1));
+                        allocate::<TypeObjectDigest>(&mut self.allocated, 1)?;
+                        let field_type = self.identity(member.ty, &bindings)?;
+                        queue.push_back(field_type);
                         layout.push(super::prepare::NormalizedRecordField {
                             reference: crate::platform::kernel::FieldReference {
                                 package: declaration.package,
@@ -4599,11 +4543,11 @@ impl Closure<'_, '_> {
                         allocate::<super::prepare::NormalizedVariantCase>(&mut self.allocated, 1)?;
                         let payload = member
                             .payload
-                            .map(|ty| self.identity(ty, &bindings, 0))
+                            .map(|ty| self.identity(ty, &bindings))
                             .transpose()?;
                         if let Some(ty) = payload {
-                            allocate::<(TypeObjectDigest, usize)>(&mut self.allocated, 1)?;
-                            queue.push_back((ty, depth + 1));
+                            allocate::<TypeObjectDigest>(&mut self.allocated, 1)?;
+                            queue.push_back(ty);
                         }
                         layout.push(super::prepare::NormalizedVariantCase {
                             reference: crate::platform::kernel::CaseReference {

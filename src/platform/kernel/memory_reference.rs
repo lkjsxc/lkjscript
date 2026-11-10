@@ -185,7 +185,7 @@ impl Oracle<'_> {
     }
     fn associated_owned(&self, ty: TypeObjectDigest) -> bool {
         self.declaration_occurrence().is_some_and(|occurrence| {
-            associated::Resolver::new(self.0).owned_type(ty, occurrence, 0) == Ok(true)
+            associated::Resolver::new(self.0).owned_type(ty, occurrence) == Ok(true)
         })
     }
     fn type_generation(
@@ -679,9 +679,6 @@ impl Oracle<'_> {
         depth: usize,
         remaining: &mut usize,
     ) -> Option<()> {
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return None;
-        }
         *remaining = remaining.checked_sub(1)?;
         let expected = self.form(template)?;
         if let TypeForm::TypeParameter { parameter } = expected {
@@ -832,9 +829,6 @@ impl Oracle<'_> {
         depth: usize,
         remaining: &mut usize,
     ) -> Option<bool> {
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return None;
-        }
         *remaining = remaining.checked_sub(1)?;
         match self.form(ty)? {
             TypeForm::TypeParameter { parameter } => {
@@ -1280,9 +1274,6 @@ impl Oracle<'_> {
         demand: Demand,
         depth: usize,
     ) -> Option<bool> {
-        if depth > contract::MAXIMUM_EXPRESSION_DEPTH {
-            return None;
-        }
         let OwnerRecord::Expression(expression) = self.0.owners.get(&OwnerKey::Expression(id))?
         else {
             return None;

@@ -31,6 +31,39 @@ pub(crate) fn validate(
     maximum_work: Option<u64>,
     maximum_metadata_bytes: Option<u64>,
 ) -> std::result::Result<ReferenceFlowWork, Diagnostic> {
+    validate_selected(
+        snapshots,
+        control,
+        maximum_work,
+        maximum_metadata_bytes,
+        false,
+    )
+}
+
+/// Raw schema admission also proves ordinary callable growth when no associated
+/// form is present. Reuse the same canonical model and finite-flow algorithm.
+pub(crate) fn validate_all_callables(
+    snapshots: &[&KernelSnapshot],
+    control: &ExecutionControl,
+    maximum_work: Option<u64>,
+    maximum_metadata_bytes: Option<u64>,
+) -> std::result::Result<ReferenceFlowWork, Diagnostic> {
+    validate_selected(
+        snapshots,
+        control,
+        maximum_work,
+        maximum_metadata_bytes,
+        true,
+    )
+}
+
+fn validate_selected(
+    snapshots: &[&KernelSnapshot],
+    control: &ExecutionControl,
+    maximum_work: Option<u64>,
+    maximum_metadata_bytes: Option<u64>,
+    include_ordinary: bool,
+) -> std::result::Result<ReferenceFlowWork, Diagnostic> {
     let checkpoint = || {
         control
             .check()
@@ -65,7 +98,7 @@ pub(crate) fn validate(
             }
         }
         budget.observe_boundary(model::ReferencePhaseBoundary::Presence);
-        if !associated {
+        if !associated && !include_ordinary {
             return Ok(ReferenceFlowWork::default());
         }
         let canonical = CanonicalProgram::read_with_budget(snapshots, &[], &budget)?;
@@ -705,9 +738,6 @@ impl<'a, 'b> Adapter<'a, 'b> {
         context: Context,
         depth: usize,
     ) -> Result<model::Term> {
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(model::Refusal::Capacity("canonical type depth"));
-        }
         self.budget.tick()?;
         let object = self.object(context.source.package, digest)?;
         if object.form.is_read_view()
@@ -919,9 +949,6 @@ impl<'a, 'b> Adapter<'a, 'b> {
         context: Context,
         depth: usize,
     ) -> Result<SignatureTerm> {
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(model::Refusal::Capacity("canonical signature depth"));
-        }
         self.budget.tick()?;
         let object = self.object(context.source.package, ty)?;
         if object.form.is_read_view()
@@ -1145,9 +1172,6 @@ impl<'a, 'b> Adapter<'a, 'b> {
         context: Context,
         depth: usize,
     ) -> Result<model::Operand> {
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(model::Refusal::Capacity("canonical witness depth"));
-        }
         match operand {
             ImplementationOperand::Parameter { scope, parameter } => {
                 if !matches!(context.mode, TypeMode::Callable) || *scope != context.source {

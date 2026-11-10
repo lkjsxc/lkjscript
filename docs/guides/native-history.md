@@ -64,7 +64,4 @@ visited link fails the complete response rather than looking like an empty suffi
 No second history database, hidden project copy, timestamp or author attribution
 is synthesized. Existing accepted objects are the only history authority.
 
-See the [precise contract](../spec/semantic-cli.md#recent-recorded-project-history)
-and [verification record](../campaigns/202609281010.md).
-The [original prototype](../campaigns/202609280123.md) remains a separate,
-unaccepted historical attempt, not this continuation's acceptance evidence.
+See the [precise contract](../spec/semantic-cli.md#recent-recorded-project-history).

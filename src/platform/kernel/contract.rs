@@ -61,6 +61,8 @@ pub const MAXIMUM_HTTP_ROUTE_KEY_BYTES_PER_TARGET: usize = 4 * 1_048_576;
 pub const MAXIMUM_HTTP_PATTERN_SEGMENTS: usize = 64;
 pub const MAXIMUM_HTTP_PATTERN_CAPTURES: usize = 32;
 pub const MAXIMUM_HTTP_PATTERN_SEGMENTS_PER_TARGET: usize = 65_536;
-pub const MAXIMUM_TYPE_DEPTH: usize = 256;
-pub const MAXIMUM_EXPRESSION_DEPTH: usize = 1_024;
+#[cfg(test)]
+pub(crate) const FORMER_TYPE_DEPTH: usize = 256;
+#[cfg(test)]
+pub(crate) const FORMER_EXPRESSION_DEPTH: usize = 1_024;
 pub const MAXIMUM_VALIDATION_WORK: usize = 10_000_000;

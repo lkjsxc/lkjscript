@@ -236,13 +236,7 @@ fn contains_associated(
     let mut seen = BTreeSet::new();
     while let Some((ty, depth)) = pending.pop() {
         read.validation_checkpoint()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(compiler_error(
-                DiagnosticClass::Resource,
-                "compiler_parallel_type_depth",
-                "parallel provenance exceeds the type-depth bound",
-            ));
-        }
+
         if seen.contains(&ty) {
             continue;
         }
@@ -310,8 +304,6 @@ fn validate_wrapper(
         } => {
             actuals(type_arguments)?;
             for operand in implementations {
-                admission
-                    .reserve::<usize>(crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH + 1)?;
                 for node in operand.walk() {
                     read.validation_work()?;
                     actuals(node.type_arguments())?;

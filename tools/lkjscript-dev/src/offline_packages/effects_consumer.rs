@@ -1,5 +1,5 @@
 //! Consumer-owned callbacks and an HTTP contract, authored through the public request grammar.
-use crate::pure_tail_program::Request;
+use crate::compact_request::Request;
 use std::collections::BTreeMap;
 
 pub(super) fn response(

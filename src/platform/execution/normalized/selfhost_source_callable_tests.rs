@@ -371,10 +371,7 @@ fn evaluate_cases(
         let input = test.input();
         let expected = test.expected.to_le_bytes();
         let control = ExecutionControl::uncancelled();
-        let mut policy = NormalizedRunPolicy::foreground();
-        if let Some(depth) = test.call_depth {
-            policy.maximum_call_depth = depth;
-        }
+        let policy = NormalizedRunPolicy::foreground();
         let arguments = vec![NormalizedValue::bytes(input.as_slice())];
         let vm = NormalizedVm::for_test(program, policy)
             .invoke(entry, arguments.clone(), None, &control)
@@ -872,7 +869,7 @@ fn rejections(base: &KernelSnapshot) -> Check<Vec<CallableRejection>> {
     Ok(out)
 }
 
-fn verify_rejections(left_name: &str, left: &[u8], right_name: &str, right: &[u8]) -> Check<()> {
+fn verify_rejections(stage: &str, compiler: &[u8]) -> Check<()> {
     let base = fixture()?;
     kernel::validate_full(base)
         .map_err(|error| format!("callable negative baseline must be host-valid: {error:?}"))?;
@@ -890,16 +887,14 @@ fn verify_rejections(left_name: &str, left: &[u8], right_name: &str, right: &[u8
         for mode in [SourceOutputMode::Elf, SourceOutputMode::CanonicalArtifact] {
             let request = raw_source::request(&carrier, selected, mode)
                 .map_err(|error| format!("{} request: {error:?}", test.name))?;
-            for (producer, image) in [(left_name, left), (right_name, right)] {
-                let output = run_filter(
-                    &format!("{producer}/callable-negative/{}/{mode:?}", test.name),
-                    image,
-                    &request,
-                    test.diagnostic,
-                    FOCUSED_DEADLINE,
-                )?;
-                ensure(output.is_empty(), "rejected callable source published code")?;
-            }
+            let output = run_filter(
+                &format!("{stage}/callable-negative/{}/{mode:?}", test.name),
+                compiler,
+                &request,
+                test.diagnostic,
+                FOCUSED_DEADLINE,
+            )?;
+            ensure(output.is_empty(), "rejected callable source published code")?;
         }
         match test.host {
             HostAdmission::Reject => ensure(
@@ -931,7 +926,7 @@ fn verify_rejections(left_name: &str, left: &[u8], right_name: &str, right: &[u8
         }
         eprintln!(
             "raw source callable negative case={} diagnostic={} source_carrier_sha256={} \
-             supplied_owners={} supplied_types={} selected_target={} modes=2 generations=2",
+             supplied_owners={} supplied_types={} selected_target={} modes=2 stage={stage}",
             test.name,
             test.diagnostic,
             sha256(&carrier),
@@ -989,74 +984,32 @@ fn identity_evaluators(
     Ok(())
 }
 
-fn verify_behavior(left_name: &str, left: &[u8], right_name: &str, right: &[u8]) -> Check<()> {
+fn verify_behavior(stage: &str, compiler: &[u8]) -> Check<()> {
     let case = case_from_snapshot(fixture()?)?;
-    // All source compilation requests finish before host_oracle. The additional
-    // identity ELF selections use the same complete S; their canonical units are
-    // included in both already-requested whole-package artifacts.
-    let first = raw_outputs(
-        &format!("{left_name}/callable"),
-        left,
+    // Complete source compilation before constructing the independent host oracle.
+    let output = raw_outputs(
+        &format!("{stage}/callable"),
+        compiler,
         &case,
         TARGET,
         FOCUSED_DEADLINE,
     )?;
-    let second = raw_outputs(
-        &format!("{right_name}/callable"),
-        right,
-        &case,
-        TARGET,
-        FOCUSED_DEADLINE,
-    )?;
-    let identities = [
-        (
-            raw_elf(
-                &format!("{left_name}/identity"),
-                left,
-                &case,
-                "callable-identity",
-            )?,
-            raw_elf(
-                &format!("{left_name}/empty-bind-identity"),
-                left,
-                &case,
-                "callable-empty-bind-identity",
-            )?,
-        ),
-        (
-            raw_elf(
-                &format!("{right_name}/identity"),
-                right,
-                &case,
-                "callable-identity",
-            )?,
-            raw_elf(
-                &format!("{right_name}/empty-bind-identity"),
-                right,
-                &case,
-                "callable-empty-bind-identity",
-            )?,
-        ),
-    ];
-    equal_bytes(&first.elf, &second.elf, "callable stage ELF identity")?;
-    equal_bytes(
-        &first.artifact,
-        &second.artifact,
-        "callable stage artifact identity",
-    )?;
-    equal_bytes(
-        &identities[0].0,
-        &identities[1].0,
-        "identity stage ELF equality",
-    )?;
-    equal_bytes(
-        &identities[0].1,
-        &identities[1].1,
-        "empty-bind identity stage ELF equality",
-    )?;
+    let identities = (
+        raw_elf(
+            &format!("{stage}/identity"),
+            compiler,
+            &case,
+            "callable-identity",
+        )?,
+        raw_elf(
+            &format!("{stage}/empty-bind-identity"),
+            compiler,
+            &case,
+            "callable-empty-bind-identity",
+        )?,
+    );
     let host = host_oracle(&case)?;
-    let loaded = strict_artifact(left_name, &first.artifact, &case, &host)?;
-    strict_artifact(right_name, &second.artifact, &case, &host)?;
+    let loaded = strict_artifact(stage, &output.artifact, &case, &host)?;
     let program = NormalizedProgram::prepare(loaded.clone())
         .map_err(|error| format!("callable artifact prepare: {error:?}"))?;
     canonical_markers(&case.source, &loaded, &program)?;
@@ -1066,11 +1019,7 @@ fn verify_behavior(left_name: &str, left: &[u8], right_name: &str, right: &[u8])
     identity_evaluators(&case, &host, &program)?;
     let entry = function_named(&case.source, MODULE, "binary")?;
     let native = native_image(&host.program, entry)?;
-    for (producer, image) in [
-        ("C0", native.as_slice()),
-        (left_name, first.elf.as_slice()),
-        (right_name, second.elf.as_slice()),
-    ] {
+    for (producer, image) in [("C0", native.as_slice()), (stage, output.elf.as_slice())] {
         execute_cases(producer, image, &cases)?;
         stack_controls(producer, image)?;
     }
@@ -1084,16 +1033,7 @@ fn verify_behavior(left_name: &str, left: &[u8], right_name: &str, right: &[u8])
     )?;
     for (producer, baseline, empty) in [
         ("C0", native_identity.as_slice(), native_empty.as_slice()),
-        (
-            left_name,
-            identities[0].0.as_slice(),
-            identities[0].1.as_slice(),
-        ),
-        (
-            right_name,
-            identities[1].0.as_slice(),
-            identities[1].1.as_slice(),
-        ),
+        (stage, identities.0.as_slice(), identities.1.as_slice()),
     ] {
         for input in [Vec::new(), (0..131_073).map(|i| (i % 251) as u8).collect()] {
             super::phase::verify_empty_bind_identity_pair(baseline, empty, &input, &input)?;
@@ -1107,7 +1047,7 @@ fn verify_behavior(left_name: &str, left: &[u8], right_name: &str, right: &[u8])
         }
     }
     eprintln!(
-        "raw source callable stages={left_name},{right_name} cases={} output_modes=2 \
+        "raw source callable stage={stage} cases={} output_modes=2 \
          independent_engines=vm,canonical-reference,c0-native,source-native \
          runtime_wrapper_counts=255,256,257,2048 record_wrappers=true \
          source_descriptor_growth=none canonical_bind_markers=exact",
@@ -1116,7 +1056,7 @@ fn verify_behavior(left_name: &str, left: &[u8], right_name: &str, right: &[u8])
     Ok(())
 }
 
-fn verify_mutation(left_name: &str, left: &[u8], right_name: &str, right: &[u8]) -> Check<()> {
+fn verify_mutation(stage: &str, compiler: &[u8]) -> Check<()> {
     let mut source = fixture()?.clone();
     let body = function_body(&source, MODULE, "base")?;
     ensure(
@@ -1125,33 +1065,20 @@ fn verify_mutation(left_name: &str, left: &[u8], right_name: &str, right: &[u8])
     )?;
     set_operation(&mut source, body, E::I64 { value: 9 })?;
     let case = case_from_snapshot(&source)?;
-    let first = raw_outputs(
-        &format!("{left_name}/callable-mutation"),
-        left,
+    let output = raw_outputs(
+        &format!("{stage}/callable-mutation"),
+        compiler,
         &case,
         TARGET,
         FOCUSED_DEADLINE,
-    )?;
-    let second = raw_outputs(
-        &format!("{right_name}/callable-mutation"),
-        right,
-        &case,
-        TARGET,
-        FOCUSED_DEADLINE,
-    )?;
-    equal_bytes(
-        &first.elf,
-        &second.elf,
-        "mutated callable ELF stage identity",
-    )?;
-    equal_bytes(
-        &first.artifact,
-        &second.artifact,
-        "mutated callable artifact stage identity",
     )?;
     let host = host_oracle(&case)?;
-    let loaded = strict_artifact("callable-mutation-left", &first.artifact, &case, &host)?;
-    strict_artifact("callable-mutation-right", &second.artifact, &case, &host)?;
+    let loaded = strict_artifact(
+        &format!("{stage}/callable-mutation"),
+        &output.artifact,
+        &case,
+        &host,
+    )?;
     let program = NormalizedProgram::prepare(loaded)
         .map_err(|error| format!("mutated callable artifact: {error:?}"))?;
     let cases = [
@@ -1163,11 +1090,7 @@ fn verify_mutation(left_name: &str, left: &[u8], right_name: &str, right: &[u8])
         &host.program,
         function_named(&case.source, MODULE, "binary")?,
     )?;
-    for (producer, image) in [
-        ("C0", native.as_slice()),
-        (left_name, first.elf.as_slice()),
-        (right_name, second.elf.as_slice()),
-    ] {
+    for (producer, image) in [("C0", native.as_slice()), (stage, output.elf.as_slice())] {
         execute_cases(&format!("{producer}/source-mutation-7-to-9"), image, &cases)?;
     }
     Ok(())
@@ -1318,39 +1241,24 @@ fn wide_markers(
     Ok(())
 }
 
-fn verify_wide(
-    left_name: &str,
-    left: &[u8],
-    right_name: &str,
-    right: &[u8],
-    count: usize,
-) -> Check<()> {
+fn verify_wide(stage: &str, compiler: &[u8], count: usize) -> Check<()> {
     let (text, expected) = wide_source(count)?;
     let source = byte_buffer_tests::author_only(&text)?;
     let case = case_from_snapshot(&source)?;
-    let first = raw_outputs(
-        &format!("{left_name}/callable-wide-{count}"),
-        left,
+    let output = raw_outputs(
+        &format!("{stage}/callable-wide-{count}"),
+        compiler,
         &case,
         "callable-wide",
         FOCUSED_DEADLINE,
-    )?;
-    let second = raw_outputs(
-        &format!("{right_name}/callable-wide-{count}"),
-        right,
-        &case,
-        "callable-wide",
-        FOCUSED_DEADLINE,
-    )?;
-    equal_bytes(&first.elf, &second.elf, "wide callable stage ELF identity")?;
-    equal_bytes(
-        &first.artifact,
-        &second.artifact,
-        "wide callable stage artifact identity",
     )?;
     let host = host_oracle(&case)?;
-    let loaded = strict_artifact("callable-wide-left", &first.artifact, &case, &host)?;
-    strict_artifact("callable-wide-right", &second.artifact, &case, &host)?;
+    let loaded = strict_artifact(
+        &format!("{stage}/callable-wide-{count}"),
+        &output.artifact,
+        &case,
+        &host,
+    )?;
     let program = NormalizedProgram::prepare(loaded)
         .map_err(|error| format!("wide callable preparation: {error:?}"))?;
     let entry = function_named(&case.source, "callable-wide", "entry")?;
@@ -1374,11 +1282,7 @@ fn verify_wide(
         equal(frames, 0, "wide callable frames reclaimed")?;
     }
     let native = native_image(&host.program, entry)?;
-    for (name, image) in [
-        ("C0", native.as_slice()),
-        (left_name, first.elf.as_slice()),
-        (right_name, second.elf.as_slice()),
-    ] {
+    for (name, image) in [("C0", native.as_slice()), (stage, output.elf.as_slice())] {
         run_scalar(
             &format!("{name}/callable-wide-{count}/execute"),
             image,
@@ -1405,17 +1309,12 @@ fn verify_wide(
     Ok(())
 }
 
-pub(super) fn verify_stages(
-    left_name: &str,
-    left: &[u8],
-    right_name: &str,
-    right: &[u8],
-) -> Check<()> {
-    verify_behavior(left_name, left, right_name, right)?;
-    verify_mutation(left_name, left, right_name, right)?;
-    verify_rejections(left_name, left, right_name, right)?;
+pub(super) fn verify_stage(stage: &str, compiler: &[u8]) -> Check<()> {
+    verify_behavior(stage, compiler)?;
+    verify_mutation(stage, compiler)?;
+    verify_rejections(stage, compiler)?;
     for count in [129, 257, 1025] {
-        verify_wide(left_name, left, right_name, right, count)?;
+        verify_wide(stage, compiler, count)?;
     }
     Ok(())
 }
@@ -1608,7 +1507,7 @@ fn observe_projection(reference: bool) -> Check<[Vec<u8>; 4]> {
     let case = case_from_snapshot(fixture()?)?;
     // These are compiler-source VM/reference observations of private E2/E3 state.
     // No host-normalized target or inferred table is supplied to the first call.
-    // C2/C3 ELF/artifact behavior uses the same full fixture in verify_stages.
+    // Named compiler-stage ELF/artifact checks use the same fixture in verify_stage.
     let admitted = projection_call(
         reference,
         "source-scalar",
@@ -1841,21 +1740,21 @@ fn selfhost_source_callable_projection_interns_execution_shapes_without_erasing_
 #[test]
 fn selfhost_source_callables_match_independent_engines_and_canonical_artifacts() -> Check<()> {
     let image = bootstrap_compiler()?;
-    verify_behavior("C1-first", image, "C1-repeat", image)?;
-    verify_mutation("C1-first", image, "C1-repeat", image)
+    verify_behavior("C1", image)?;
+    verify_mutation("C1", image)
 }
 
 #[test]
 fn selfhost_source_callable_inventory_rejections_reach_exact_layers() -> Check<()> {
     let image = bootstrap_compiler()?;
-    verify_rejections("C1-first", image, "C1-repeat", image)
+    verify_rejections("C1", image)
 }
 
 #[test]
 fn selfhost_source_callable_wide_prefixes_match_independent_engines() -> Check<()> {
     let image = bootstrap_compiler()?;
     for count in [129, 257, 1025] {
-        verify_wide("C1-first", image, "C1-repeat", image, count)?;
+        verify_wide("C1", image, count)?;
     }
     Ok(())
 }
@@ -1909,5 +1808,5 @@ fn selfhost_source_callable_prefix_8193_unit_and_carrier_extent_probe() -> Check
 #[ignore = "explicit full 8193-prefix crossing; schedule after the independent unit/carrier extent probe"]
 fn selfhost_source_callable_prefix_8193_crosses_native_chunk_target_end_to_end() -> Check<()> {
     let image = bootstrap_compiler()?;
-    verify_wide("C1-first", image, "C1-repeat", image, 8193)
+    verify_wide("C1", image, 8193)
 }

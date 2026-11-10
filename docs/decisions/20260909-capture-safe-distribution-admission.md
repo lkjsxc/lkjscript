@@ -50,8 +50,6 @@ with one clear proof owner. Schema-3 verifier production admission and old three
 branches are removed; predecessor fixtures remain negative tests. No product/generated asset
 regeneration is required by this tooling-only cutover unless its actual producer inputs change.
 
-Reconsider this finite inventory only when a newly selected public workload changes the supported
-release boundary, with migrated callers, an independent omission test, and all affected public
-acceptance. Exact source/target/transferred/public execution results belong to the
-[public milestone evidence](../evidence/202609092050-capture-safe-public-milestone.json) and status
-owners. The immutable v0.1.28 public boundary is recorded there separately from this rationale.
+Reconsider this finite inventory only when a newly selected public workload changes
+the supported boundary, with migrated callers, an independent omission test and all
+affected public acceptance.

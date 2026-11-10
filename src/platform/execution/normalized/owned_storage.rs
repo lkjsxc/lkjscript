@@ -309,7 +309,7 @@ impl OwnedStorage {
     ) -> Result<(), ExecutionError> {
         self.validate(origin, true)?;
         control.check()?;
-        StorageEscapeCheck::new(control).value(&value, 0)?;
+        StorageEscapeCheck::new(control).value(&value)?;
         let mut storage = self.lock();
         self.validate_storage(&storage, origin, true)?;
         restore_view_free(&mut storage, Some(control))?;
@@ -382,7 +382,7 @@ impl OwnedStorage {
         value: NormalizedValue,
         control: &ExecutionControl,
     ) -> Result<NormalizedValue, ExecutionError> {
-        StorageEscapeCheck::new(control).value(&value, 0)?;
+        StorageEscapeCheck::new(control).value(&value)?;
         if self.mode == Mode::Inert {
             return Err(reject());
         }
@@ -422,7 +422,7 @@ impl OwnedStorage {
                 .and_then(|fields| fields.get(index))
                 .ok_or_else(reject)?;
             if !storage.view_free {
-                StorageEscapeCheck::new(control).value(value, 0)?;
+                StorageEscapeCheck::new(control).value(value)?;
             }
             if value.memory_form().is_some() {
                 value.memory_validate(self.backing_origin, false)?;
@@ -536,7 +536,7 @@ impl OwnedStorage {
             .and_then(|fields| fields.get(index))
             .ok_or_else(reject)?;
         if !storage.view_free {
-            StorageEscapeCheck::new(control).value(value, 0)?;
+            StorageEscapeCheck::new(control).value(value)?;
         }
         // Records, lists, maps, text and bytes share immutable backing. Only the
         // inline sum/option spine allocates during an ordinary value clone.
@@ -633,14 +633,14 @@ impl OwnedStorage {
 }
 
 // A negative guard only: callers still independently admit closed Owned types,
-// child category/provenance, depth and growth before establishing a certificate.
+// child category/provenance and growth before establishing a certificate.
 fn reject_view_fields(
     fields: &[NormalizedValue],
     control: &ExecutionControl,
 ) -> Result<(), ExecutionError> {
     let mut guard = StorageEscapeCheck::new(control);
     for field in fields {
-        guard.value(field, 0)?;
+        guard.value(field)?;
     }
     Ok(())
 }
@@ -658,15 +658,9 @@ impl<'a> StorageEscapeCheck<'a> {
         }
     }
 
-    fn value(&mut self, value: &NormalizedValue, depth: usize) -> Result<(), ExecutionError> {
+    fn value(&mut self, value: &NormalizedValue) -> Result<(), ExecutionError> {
         if let Some(control) = self.control {
             control.check()?;
-        }
-        if depth > 256 {
-            return Err(ExecutionError::resource(
-                "normalized_value_depth",
-                "owned storage escape inspection exceeds finite value depth 256",
-            ));
         }
         self.visits = self
             .visits
@@ -684,27 +678,27 @@ impl<'a> StorageEscapeCheck<'a> {
             | NormalizedValue::RegionPointer { .. } => {
                 return Err(view_escape());
             }
-            NormalizedValue::OwnedProduct(storage) => self.storage(storage, depth)?,
-            NormalizedValue::OwnedChoice(choice) => self.storage(&choice.storage, depth)?,
-            NormalizedValue::OwnedSequence(sequence) => self.storage(&sequence.storage, depth)?,
+            NormalizedValue::OwnedProduct(storage) => self.storage(storage)?,
+            NormalizedValue::OwnedChoice(choice) => self.storage(&choice.storage)?,
+            NormalizedValue::OwnedSequence(sequence) => self.storage(&sequence.storage)?,
             NormalizedValue::Record(super::value::NormalizedRecord::Nominal { fields, .. }) => {
                 for field in fields.iter() {
-                    self.value(field, depth + 1)?;
+                    self.value(field)?;
                 }
             }
             NormalizedValue::Record(super::value::NormalizedRecord::Structural { fields }) => {
                 for (_, field) in fields.iter() {
-                    self.value(field, depth + 1)?;
+                    self.value(field)?;
                 }
             }
-            NormalizedValue::List(values) => self.list(values, depth)?,
-            NormalizedValue::Map(values) => self.map(values, depth)?,
+            NormalizedValue::List(values) => self.list(values)?,
+            NormalizedValue::Map(values) => self.map(values)?,
             NormalizedValue::Variant { payload, .. } | NormalizedValue::Option(payload) => {
                 if let Some(child) = payload {
-                    self.value(child, depth + 1)?;
+                    self.value(child)?;
                 }
             }
-            NormalizedValue::Result { value, .. } => self.value(value, depth + 1)?,
+            NormalizedValue::Result { value, .. } => self.value(value)?,
             NormalizedValue::Function {
                 read_scope_arguments,
                 bound_arguments,
@@ -715,7 +709,7 @@ impl<'a> StorageEscapeCheck<'a> {
                 }
                 if let Some(arguments) = bound_arguments {
                     for argument in arguments.iter() {
-                        self.value(argument, depth + 1)?;
+                        self.value(argument)?;
                     }
                 }
             }
@@ -733,7 +727,7 @@ impl<'a> StorageEscapeCheck<'a> {
         Ok(())
     }
 
-    fn storage(&mut self, token: &OwnedStorage, depth: usize) -> Result<(), ExecutionError> {
+    fn storage(&mut self, token: &OwnedStorage) -> Result<(), ExecutionError> {
         // Inert observations cannot supply child storage. Reject before locking:
         // a raw self-observation inside a callback must never deadlock this walk.
         if token.mode == Mode::Inert {
@@ -744,25 +738,25 @@ impl<'a> StorageEscapeCheck<'a> {
             return Ok(());
         }
         for field in storage.fields.as_deref().ok_or_else(reject)? {
-            self.value(field, depth + 1)?;
+            self.value(field)?;
         }
         Ok(())
     }
 
     #[inline(never)]
-    fn list(&mut self, values: &super::list::List, depth: usize) -> Result<(), ExecutionError> {
+    fn list(&mut self, values: &super::list::List) -> Result<(), ExecutionError> {
         let mut cursor = values.iter();
         for child in &mut cursor {
-            self.value(child, depth + 1)?;
+            self.value(child)?;
         }
         Ok(())
     }
 
     #[inline(never)]
-    fn map(&mut self, values: &super::map::Map, depth: usize) -> Result<(), ExecutionError> {
+    fn map(&mut self, values: &super::map::Map) -> Result<(), ExecutionError> {
         let mut cursor = values.iter();
         for (_, child) in &mut cursor {
-            self.value(child, depth + 1)?;
+            self.value(child)?;
         }
         Ok(())
     }
@@ -776,7 +770,7 @@ fn reject_view_fields_uncontrolled(fields: &[NormalizedValue]) -> Result<(), Exe
         visits: 0,
     };
     for field in fields {
-        guard.value(field, 0)?;
+        guard.value(field)?;
     }
     Ok(())
 }
@@ -788,7 +782,7 @@ fn restore_view_free(
     if !storage.view_free {
         let mut guard = StorageEscapeCheck { control, visits: 0 };
         for field in storage.fields.as_deref().ok_or_else(reject)? {
-            guard.value(field, 0)?;
+            guard.value(field)?;
         }
         storage.view_free = true;
     }

@@ -92,7 +92,7 @@ impl<'a> TypeContext<'a> {
         }
         for (position, parameter) in selected.implementation_type_parameters.iter().enumerate() {
             for previous in &selected.implementation_type_parameters[..position] {
-                work.visit(0)?;
+                work.visit()?;
                 if previous == parameter {
                     return Err(reject());
                 }
@@ -194,13 +194,12 @@ pub(super) fn resolve_application_in(
                 associated: *context.environment(),
                 scopes: application_scopes(program, context)?,
             },
-            0,
             work,
         )?;
         work.control.check()?;
         return if exact { Ok(actual) } else { Err(reject()) };
     }
-    if contains_associated(program, template, 0, work)? {
+    if contains_associated(program, template, work)? {
         return Err(reject());
     }
     let type_context = TypeContext {
@@ -215,7 +214,7 @@ pub(super) fn resolve_application_in(
     {
         // Ordinary substitutions are advisory here: their key has no read
         // scopes, so retain the complete current application-context check.
-        if matches_context(program, template, actual, type_context, 0, work)? {
+        if matches_context(program, template, actual, type_context, work)? {
             work.control.check()?;
             return Ok(actual);
         }
@@ -243,21 +242,20 @@ pub(in super::super::super) fn contains_associated_type(
     ty: TypeObjectDigest,
     control: &ExecutionControl,
 ) -> Result<bool, ExecutionError> {
-    contains_associated(program, ty, 0, &mut Work { control, nodes: 0 })
+    contains_associated(program, ty, &mut Work { control, nodes: 0 })
 }
 
 fn contains_associated(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
-    depth: usize,
     work: &mut Work<'_>,
 ) -> Result<bool, ExecutionError> {
-    work.visit(depth)?;
+    work.visit()?;
     let object = program.types.get(&ty).ok_or_else(reject)?;
     if object.form.is_associated() {
         return Ok(true);
     }
-    let mut child = |ty| contains_associated(program, ty, depth + 1, work);
+    let mut child = |ty| contains_associated(program, ty, work);
     match &object.form {
         TypeForm::StructuralRecord { fields }
         | TypeForm::OwnedProduct { fields }
@@ -300,19 +298,14 @@ fn contains_associated(
 fn catalogued(
     program: &NormalizedProgram,
     selected: &NormalizedImplementationArgument,
-    depth: usize,
     work: &mut Work<'_>,
 ) -> Result<(), ExecutionError> {
-    work.visit(depth)?;
+    work.visit()?;
     let canonical = program
         .implementation_applications
         .get(selected.identity as usize)
         .ok_or_else(reject)?;
-    if canonical.identity != selected.identity
-        || !std::sync::Arc::ptr_eq(canonical, selected)
-        || depth.saturating_add(selected.depth)
-            > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-    {
+    if canonical.identity != selected.identity || !std::sync::Arc::ptr_eq(canonical, selected) {
         return Err(reject());
     }
     Ok(())
@@ -323,7 +316,7 @@ pub(super) fn validate_associated_bindings_in(
     selected: &NormalizedImplementationArgument,
     work: &mut Work<'_>,
 ) -> Result<(), ExecutionError> {
-    catalogued(program, selected, 0, work)?;
+    catalogued(program, selected, work)?;
     if selected.implementation_generation != crate::platform::canonical_schema::SCHEMA_EPOCH
         || selected.contract_generation != crate::platform::canonical_schema::SCHEMA_EPOCH
     {
@@ -331,9 +324,9 @@ pub(super) fn validate_associated_bindings_in(
     }
     let context = TypeContext::selected(program, selected, work)?;
     for (position, binding) in selected.associated_types.iter().enumerate() {
-        work.visit(0)?;
+        work.visit()?;
         for previous in &selected.associated_types[..position] {
-            work.visit(0)?;
+            work.visit()?;
             if previous.member == binding.member {
                 return Err(reject());
             }
@@ -362,7 +355,7 @@ pub(super) fn validate_associated_bindings_in(
             program.is_owned_type(binding.ty)
         };
         if !valid_category
-            || !matches_context(program, binding.template, binding.ty, context, 0, work)?
+            || !matches_context(program, binding.template, binding.ty, context, work)?
         {
             return Err(reject());
         }
@@ -418,7 +411,7 @@ pub(super) fn resolve_in(
         {
             // Recheck the current shape even on a hit. A divergent synthetic
             // clone or stale type table cannot turn derived metadata into proof.
-            let exact = matches(program, template, actual, bindings, 0, work)?;
+            let exact = matches(program, template, actual, bindings, work)?;
             work.control.check()?;
             return if exact { Ok(actual) } else { Err(reject()) };
         }
@@ -445,7 +438,7 @@ fn scan_context(
 ) -> Result<TypeObjectDigest, ExecutionError> {
     // Closed types dominate calls and have the same admitted identity. Check this
     // candidate first so their cost does not depend on unrelated program types.
-    if matches_context(program, template, template, context, 0, work)? {
+    if matches_context(program, template, template, context, work)? {
         return Ok(template);
     }
     if let TypeForm::TypeParameter { parameter } =
@@ -457,8 +450,7 @@ fn scan_context(
             .ok_or_else(reject);
     }
     for candidate in program.types.keys() {
-        if *candidate != template
-            && matches_context(program, template, *candidate, context, 0, work)?
+        if *candidate != template && matches_context(program, template, *candidate, context, work)?
         {
             return Ok(*candidate);
         }
@@ -479,7 +471,6 @@ fn matches(
     template: TypeObjectDigest,
     actual: TypeObjectDigest,
     bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
-    depth: usize,
     work: &mut Work<'_>,
 ) -> Result<bool, ExecutionError> {
     matches_context(
@@ -487,7 +478,6 @@ fn matches(
         template,
         actual,
         TypeContext::ordinary(bindings),
-        depth,
         work,
     )
 }
@@ -497,10 +487,9 @@ fn matches_context(
     template: TypeObjectDigest,
     actual: TypeObjectDigest,
     context: TypeContext<'_>,
-    depth: usize,
     work: &mut Work<'_>,
 ) -> Result<bool, ExecutionError> {
-    work.visit(depth)?;
+    work.visit()?;
     let template = program.types.get(&template).ok_or_else(reject)?;
     // Resolve a member before comparing generations or ordinary forms. The
     // stored output is derived metadata; its original RHS is checked again in
@@ -515,7 +504,7 @@ fn matches_context(
         {
             return Err(reject());
         }
-        catalogued(program, selection.selected(), depth + 1, work)?;
+        catalogued(program, selection.selected(), work)?;
         if template.form.is_read_view() {
             let scope = match &template.form {
                 TypeForm::AssociatedReadViewMember { read_scope, .. }
@@ -548,7 +537,6 @@ fn matches_context(
                 selection.binding().template,
                 actual,
                 selected,
-                depth + 1,
                 work,
             );
         }
@@ -560,7 +548,6 @@ fn matches_context(
             selection.binding().template,
             actual,
             TypeContext::selected(program, selection.selected(), work)?,
-            depth + 1,
             work,
         );
     }
@@ -573,8 +560,7 @@ fn matches_context(
     if template.contract_version != actual.contract_version {
         return Ok(false);
     }
-    let mut child =
-        |template, actual| matches_context(program, template, actual, context, depth + 1, work);
+    let mut child = |template, actual| matches_context(program, template, actual, context, work);
     match (&template.form, &actual.form) {
         (
             TypeForm::RegionBrand {

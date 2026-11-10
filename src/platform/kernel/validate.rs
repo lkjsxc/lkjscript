@@ -1,9 +1,7 @@
 //! Implementation-disjoint full validator for normalized Graph 10 authority.
 
 use super::affine::validate_affine_meaning;
-use super::contract::{
-    MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_HTTP_ROUTES_PER_TARGET, MAXIMUM_TYPE_DEPTH,
-};
+use super::contract::MAXIMUM_HTTP_ROUTES_PER_TARGET;
 use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference, TextValue};
 use super::id::{OwnerKey, OwnerKind, PackageId};
 use super::infer::validate_expression_meaning;
@@ -1526,13 +1524,7 @@ impl FullValidator<'_> {
                     reachable.insert(digest);
                     continue;
                 }
-                if depth > MAXIMUM_TYPE_DEPTH {
-                    self.error(
-                        "kernel_full_type_depth",
-                        format!("type object {digest} exceeds the maximum structural depth"),
-                    );
-                    continue;
-                }
+
                 if active.contains(&digest) {
                     self.error(
                         "kernel_full_type_cycle",
@@ -2364,7 +2356,8 @@ impl FullValidator<'_> {
         owner: OwnerKey,
     ) -> Option<crate::platform::semantic_id::DeclarationId> {
         let mut current = owner;
-        for _ in 0..=MAXIMUM_EXPRESSION_DEPTH {
+        let mut visited = BTreeSet::new();
+        while visited.insert(current) {
             match current {
                 OwnerKey::Declaration(declaration) => return Some(declaration),
                 OwnerKey::RequirementParameter(parameter) => {
@@ -2866,13 +2859,7 @@ impl FullValidator<'_> {
                 if complete.contains(&expression) {
                     continue;
                 }
-                if depth > MAXIMUM_EXPRESSION_DEPTH {
-                    self.error(
-                        "kernel_full_expression_depth",
-                        format!("expression {expression} exceeds the maximum depth"),
-                    );
-                    continue;
-                }
+
                 if !active.insert(expression) {
                     self.error(
                         "kernel_full_expression_cycle",
@@ -4051,7 +4038,8 @@ impl FullValidator<'_> {
 
     fn is_expression_descendant(&self, expression: ExpressionId, scope_root: ExpressionId) -> bool {
         let mut current = expression;
-        for _ in 0..=MAXIMUM_EXPRESSION_DEPTH {
+        let mut visited = BTreeSet::new();
+        while visited.insert(current) {
             if current == scope_root {
                 return true;
             }

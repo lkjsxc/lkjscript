@@ -75,7 +75,7 @@ fn reference_view_work_and_entry_allowances_are_exact_before_consumption() -> Te
 }
 
 #[test]
-fn reference_view_saturation_is_passive_and_depth_guards_remain() -> TestResult {
+fn reference_view_saturation_is_passive_beyond_former_depth() -> TestResult {
     let control = ExecutionControl::uncancelled();
     let mut budget = Budget::new(&control);
     checked(budget.work.charge(Observation::exact(u64::MAX)))?;
@@ -85,15 +85,14 @@ fn reference_view_saturation_is_passive_and_depth_guards_remain() -> TestResult 
     assert!(budget.work.observation().saturated);
     assert!(budget.entries.observation().saturated);
     let before = budget.work;
-    let error = failed(budget.step(kernel::contract::MAXIMUM_TYPE_DEPTH + 1))?;
-    assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+    checked(budget.step())?;
     assert_eq!(budget.work, before);
-    checked(budget.step(0))?;
+    checked(budget.step())?;
     let mut finite = Budget::with_limits(&control, Some(u64::MAX), Some(u64::MAX));
     checked(finite.work.charge(Observation::exact(u64::MAX)))?;
     checked(finite.reserve_observed(Observation::exact(u64::MAX)))?;
     assert_eq!(
-        failed(finite.step(0))?.code,
+        failed(finite.step())?.code,
         "reference_read_view_proof_work"
     );
     assert_eq!(

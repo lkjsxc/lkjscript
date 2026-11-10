@@ -5,29 +5,20 @@ Date: 2026-10-02 (Asia/Tokyo).
 ## Status and authority
 
 The current refinement selects [lexical parallel pairs](../spec/structured-parallel.md)
-in development 0.1.68 before a graph-level channel. Exact child calls, sealed nested
-owned adoption, fresh identities, shared quotas and mandatory join are implemented
-at that separate boundary. This revises the sequencing below: channel semantics
-remain a design, while owned cross-invocation transfer no longer depends on completing
-a general channel API. The [current campaign](../campaigns/20261002-structured-parallel.md)
-owns actual acceptance outcomes; the finite channel model retains its original scope.
+before a graph-level channel. Exact child calls, sealed nested owned adoption, fresh
+identities, shared quotas and mandatory join are implemented at that separate
+boundary. Channel semantics remain a design, while owned cross-invocation transfer
+no longer depends on completing a general channel API.
 
 The following initial decision is retained as the channel design and its rationale.
 
-The first same-task call boundary is implemented and source-accepted in development
-0.1.65. Development 0.1.67 implements the next runtime building block: a preallocated
-single-receiver custody mailbox, adopted by the existing structured-session writer.
-The [runtime continuation](../campaigns/20261002-custody-mailbox.md) and
-[session contract](../spec/structured-sessions.md#phases-and-atomic-transition) own
-its implementation and evidence. The graph-level structured channel remains an
-experiment, **not an implemented cross-invocation owned handoff**. Its finite
-executable design model remains independent of the concrete mailbox.
-The [task-owned contract](../spec/owned-task-transfers.md) and
-[accepted source](../campaigns/20261002-task-owned-transfer.md#accepted-source-and-mainline-delivery)
-own the implemented behavior. This decision does not add another syntax authority,
-select a scheduler or change running services. Public v0.1.64 and its original assets
-are unchanged by this development. The meaning graph remains the sole program authority;
-the [roadmap](../roadmap.md) records the revisable sequence.
+Same-task calls and the single-receiver custody mailbox are implemented. The
+structured-session writer uses that mailbox; the
+[session contract](../spec/structured-sessions.md#phases-and-atomic-transition)
+describes its behavior. The [task-owned contract](../spec/owned-task-transfers.md)
+owns implemented transfer behavior. The graph-level structured channel remains a
+design, with an independent finite executable model. The meaning graph remains the
+sole program authority; the [roadmap](../roadmap.md) records the revisable sequence.
 
 The original decision inspected source `0048ae1ee2e4678b409c782e02044b038bf60052`.
 That predecessor's task bodies can create and dispose of owned choices while independently

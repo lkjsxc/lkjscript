@@ -238,21 +238,6 @@ impl Writer {
         operand: &AuthoredImplementationOperand,
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
-        self.implementation_operand_at(operand, definitions, 0)
-    }
-
-    fn implementation_operand_at(
-        &mut self,
-        operand: &AuthoredImplementationOperand,
-        definitions: &BTreeMap<String, SymbolDefinition>,
-        depth: usize,
-    ) -> Result<(), Diagnostic> {
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(codec_error(
-                "change_authored_implementation_depth",
-                "implementation application nesting exceeds the authored encoding bound",
-            ));
-        }
         match operand {
             AuthoredImplementationOperand::Concrete {
                 implementation,
@@ -262,15 +247,15 @@ impl Writer {
                 if !implementations.is_empty() {
                     self.tag(4)?;
                     self.declaration_reference(implementation, definitions)?;
-                    self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))?;
+                    self.list(type_arguments, |w, ty| w.authored_type(ty, definitions))?;
                     return self.list(implementations, |w, operand| {
-                        w.implementation_operand_at(operand, definitions, depth + 1)
+                        w.implementation_operand(operand, definitions)
                     });
                 }
                 self.tag(if type_arguments.is_empty() { 1 } else { 3 })?;
                 self.declaration_reference(implementation, definitions)?;
                 if !type_arguments.is_empty() {
-                    self.list(type_arguments, |w, ty| w.authored_type(ty, definitions, 1))
+                    self.list(type_arguments, |w, ty| w.authored_type(ty, definitions))
                 } else {
                     Ok(())
                 }
@@ -292,10 +277,8 @@ impl Writer {
             w.raw(&p.id.bytes())?;
             w.name(&p.name)?;
             w.declaration_reference(&p.contract, definitions)?;
-            w.authored_type(&p.self_type, definitions, 1)?;
-            w.list(&p.type_arguments, |w, ty| {
-                w.authored_type(ty, definitions, 1)
-            })
+            w.authored_type(&p.self_type, definitions)?;
+            w.list(&p.type_arguments, |w, ty| w.authored_type(ty, definitions))
         })
     }
     fn symbol(
@@ -525,11 +508,9 @@ impl Writer {
                     w.raw(&p.id.bytes())?;
                     w.name(&p.name)?;
                     w.declaration_reference(&p.contract, definitions)?;
-                    w.authored_type(&p.self_type, definitions, 1)?;
+                    w.authored_type(&p.self_type, definitions)?;
                     if parameterized {
-                        w.list(&p.type_arguments, |w, ty| {
-                            w.authored_type(ty, definitions, 1)
-                        })
+                        w.list(&p.type_arguments, |w, ty| w.authored_type(ty, definitions))
                     } else {
                         Ok(())
                     }
@@ -611,7 +592,7 @@ impl Writer {
                     writer.local_reference(source, definitions)
                 })?;
                 self.function_effect(effect, definitions)?;
-                self.expression(body, definitions, 1)
+                self.expression(body, definitions)
             }
             AuthoredChange::CreateRecord {
                 symbol,
@@ -695,7 +676,7 @@ impl Writer {
                 self.list(parameters, |writer, value| {
                     writer.parameter(value, definitions)
                 })?;
-                self.authored_type(result, definitions, 1)?;
+                self.authored_type(result, definitions)?;
                 self.string(implementation.as_str())
             }
             AuthoredChange::CreateConstant {
@@ -711,8 +692,8 @@ impl Writer {
                 self.module_selector(module, definitions)?;
                 self.name(name)?;
                 self.visibility(*visibility)?;
-                self.authored_type(ty, definitions, 1)?;
-                self.expression(value, definitions, 1)
+                self.authored_type(ty, definitions)?;
+                self.expression(value, definitions)
             }
             AuthoredChange::CreateComponent {
                 symbol,
@@ -745,8 +726,8 @@ impl Writer {
                 self.module_selector(module, definitions)?;
                 self.name(name)?;
                 self.visibility(*visibility)?;
-                self.expression(actual, definitions, 1)?;
-                self.expression(expected, definitions, 1)
+                self.expression(actual, definitions)?;
+                self.expression(expected, definitions)
             }
             AuthoredChange::CreateTarget {
                 symbol,
@@ -916,19 +897,19 @@ impl Writer {
             } => {
                 self.tag(22)?;
                 self.declaration_selector(external, definitions)?;
-                self.authored_type(result, definitions, 1)?;
+                self.authored_type(result, definitions)?;
                 self.string(implementation.as_str())
             }
             AuthoredChange::SetFieldType { field, ty } => {
                 self.tag(23)?;
                 self.owner_selector(field, definitions)?;
-                self.authored_type(ty, definitions, 1)
+                self.authored_type(ty, definitions)
             }
             AuthoredChange::SetCasePayload { case, payload } => {
                 self.tag(24)?;
                 self.owner_selector(case, definitions)?;
                 self.optional(payload.as_ref(), |writer, value| {
-                    writer.authored_type(value, definitions, 1)
+                    writer.authored_type(value, definitions)
                 })
             }
             AuthoredChange::SetParameterUse {
@@ -942,7 +923,7 @@ impl Writer {
             AuthoredChange::SetParameterType { parameter, ty } => {
                 self.tag(25)?;
                 self.owner_selector(parameter, definitions)?;
-                self.authored_type(ty, definitions, 1)
+                self.authored_type(ty, definitions)
             }
             AuthoredChange::SetPortContract {
                 port,
@@ -950,7 +931,7 @@ impl Writer {
             } => {
                 self.tag(41)?;
                 self.owner_selector(port, definitions)?;
-                self.authored_type(function_type, definitions, 1)
+                self.authored_type(function_type, definitions)
             }
             AuthoredChange::SetPort {
                 port,
@@ -959,7 +940,7 @@ impl Writer {
             } => {
                 self.tag(46)?;
                 self.owner_selector(port, definitions)?;
-                self.authored_type(function_type, definitions, 1)?;
+                self.authored_type(function_type, definitions)?;
                 match implementation {
                     AuthoredPortImplementation::Function { function } => {
                         self.tag(1)?;
@@ -967,7 +948,7 @@ impl Writer {
                     }
                     AuthoredPortImplementation::Expression { expression } => {
                         self.tag(2)?;
-                        self.expression(expression, definitions, 1)
+                        self.expression(expression, definitions)
                     }
                 }
             }
@@ -979,7 +960,7 @@ impl Writer {
             } => {
                 self.tag(26)?;
                 self.owner_selector(operation, definitions)?;
-                self.authored_type(result, definitions, 1)?;
+                self.authored_type(result, definitions)?;
                 self.idempotency(*idempotency)?;
                 self.external_visibility(*external_visibility)
             }
@@ -1085,7 +1066,7 @@ impl Writer {
             AuthoredChange::ReplaceFunctionBody { function, body } => {
                 self.tag(35)?;
                 self.declaration_selector(function, definitions)?;
-                self.expression(body, definitions, 1)
+                self.expression(body, definitions)
             }
             AuthoredChange::SetConstant {
                 constant,
@@ -1094,8 +1075,8 @@ impl Writer {
             } => {
                 self.tag(44)?;
                 self.declaration_selector(constant, definitions)?;
-                self.authored_type(ty, definitions, 1)?;
-                self.expression(value, definitions, 1)
+                self.authored_type(ty, definitions)?;
+                self.expression(value, definitions)
             }
             AuthoredChange::SetTest {
                 test,
@@ -1104,8 +1085,8 @@ impl Writer {
             } => {
                 self.tag(45)?;
                 self.declaration_selector(test, definitions)?;
-                self.expression(actual, definitions, 1)?;
-                self.expression(expected, definitions, 1)
+                self.expression(actual, definitions)?;
+                self.expression(expected, definitions)
             }
             AuthoredChange::ExtractFunction {
                 symbol,
@@ -1305,7 +1286,7 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         self.symbol(&value.symbol, definitions)?;
         self.name(&value.name)?;
-        self.authored_type(&value.ty, definitions, 1)?;
+        self.authored_type(&value.ty, definitions)?;
         self.parameter_use(value.use_mode)?;
         self.optional(value.resource_requirement.as_ref(), |writer, value| {
             writer.requirement_reference(value, definitions)
@@ -1373,7 +1354,7 @@ impl Writer {
         definitions: &BTreeMap<String, SymbolDefinition>,
         mut source: impl FnMut(&mut Self, &S) -> Result<(), Diagnostic>,
     ) -> Result<(), Diagnostic> {
-        self.authored_type(&result.ty, definitions, 1)?;
+        self.authored_type(&result.ty, definitions)?;
         match &result.relation {
             AuthoredResultRelation::Value => self.tag(1),
             AuthoredResultRelation::ReadFrom { source: value } => {
@@ -1481,7 +1462,7 @@ impl Writer {
         associated_types: &[AuthoredAssociatedTypeMember],
         definitions: &BTreeMap<String, SymbolDefinition>,
     ) -> Result<(), Diagnostic> {
-        self.authored_type(self_type, definitions, 1)?;
+        self.authored_type(self_type, definitions)?;
         self.list(type_parameters, |writer, parameter| {
             writer.type_parameter_reference(parameter, definitions)
         })?;
@@ -1489,7 +1470,7 @@ impl Writer {
             writer.raw(&method.id.bytes())?;
             writer.name(&method.name)?;
             writer.list(&method.parameters, |writer, (ty, mode)| {
-                writer.authored_type(ty, definitions, 1)?;
+                writer.authored_type(ty, definitions)?;
                 writer.parameter_use(*mode)
             })?;
             writer.callable_result(&method.result, definitions, |writer, source| {
@@ -1560,15 +1541,15 @@ impl Writer {
             writer.type_parameter_reference(parameter, definitions)
         })?;
         self.implementation_parameters(implementation_parameters, definitions)?;
-        self.authored_type(self_type, definitions, 1)?;
+        self.authored_type(self_type, definitions)?;
         self.list(type_arguments, |writer, ty| {
-            writer.authored_type(ty, definitions, 1)
+            writer.authored_type(ty, definitions)
         })?;
         self.list(methods, |writer, mapping| {
             writer.raw(&mapping.method.bytes())?;
             writer.declaration_reference(&mapping.function, definitions)?;
             writer.list(&mapping.type_arguments, |writer, ty| {
-                writer.authored_type(ty, definitions, 1)
+                writer.authored_type(ty, definitions)
             })?;
             writer.read_scope_arguments(&mapping.read_scope_arguments, definitions)?;
             writer.list(&mapping.implementations, |writer, operand| {
@@ -1587,7 +1568,7 @@ impl Writer {
         self.list(fields, |writer, field| {
             writer.raw(&field.id.bytes())?;
             writer.name(&field.name)?;
-            writer.authored_type(&field.ty, definitions, 1)?;
+            writer.authored_type(&field.ty, definitions)?;
             match &field.kind {
                 AuthoredReadViewFieldKind::Ordinary => writer.tag(1),
                 AuthoredReadViewFieldKind::ReadReference { read_scope } => {
@@ -1638,7 +1619,7 @@ impl Writer {
             match &binding.value {
                 AuthoredAssociatedTypeBindingValue::Owned { ty } => {
                     writer.tag(1)?;
-                    writer.authored_type(ty, definitions, 1)
+                    writer.authored_type(ty, definitions)
                 }
                 AuthoredAssociatedTypeBindingValue::ReadViewFamily {
                     scope_parameter,
@@ -1646,7 +1627,7 @@ impl Writer {
                 } => {
                     writer.tag(2)?;
                     writer.read_scope_parameter(scope_parameter)?;
-                    writer.authored_type(ty, definitions, 1)
+                    writer.authored_type(ty, definitions)
                 }
             }
         })
@@ -1666,39 +1647,31 @@ impl Writer {
         &mut self,
         value: &AuthoredType,
         definitions: &BTreeMap<String, SymbolDefinition>,
-        depth: usize,
     ) -> Result<(), Diagnostic> {
-        use crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
         enum Frame<'a> {
-            Type(&'a AuthoredType, usize),
-            Types(&'a [AuthoredType], usize),
-            Fields(&'a [AuthoredStructuralTypeField], usize),
+            Type(&'a AuthoredType),
+            Types(&'a [AuthoredType]),
+            Fields(&'a [AuthoredStructuralTypeField]),
             ReadScope(&'a AuthoredReadScopeArgument),
         }
-        // Lazy slice frames keep pending metadata proportional to depth, including wide
-        // function/application arguments. Admission precedes every child and stack growth.
-        let mut pending = vec![Frame::Type(value, depth)];
+        // Lazy slice frames retain the active path and preserve wire order for wide
+        // argument and field lists.
+        let mut pending = vec![Frame::Type(value)];
         while let Some(frame) = pending.pop() {
-            if pending.len() > 2 * MAXIMUM_TYPE_DEPTH {
-                return Err(codec_error(
-                    "change_authored_type_depth",
-                    "authored type traversal exceeds its bounded depth",
-                ));
-            }
-            let (value, depth) = match frame {
-                Frame::Type(value, depth) => (value, depth),
-                Frame::Types(values, depth) => {
+            let value = match frame {
+                Frame::Type(value) => value,
+                Frame::Types(values) => {
                     if let Some((first, rest)) = values.split_first() {
-                        pending.push(Frame::Types(rest, depth));
-                        pending.push(Frame::Type(first, depth));
+                        pending.push(Frame::Types(rest));
+                        pending.push(Frame::Type(first));
                     }
                     continue;
                 }
-                Frame::Fields(fields, depth) => {
+                Frame::Fields(fields) => {
                     if let Some((first, rest)) = fields.split_first() {
                         self.name(&first.name)?;
-                        pending.push(Frame::Fields(rest, depth));
-                        pending.push(Frame::Type(&first.ty, depth));
+                        pending.push(Frame::Fields(rest));
+                        pending.push(Frame::Type(&first.ty));
                     }
                     continue;
                 }
@@ -1707,13 +1680,7 @@ impl Writer {
                     continue;
                 }
             };
-            if depth > MAXIMUM_TYPE_DEPTH {
-                return Err(codec_error(
-                    "change_authored_type_depth",
-                    "authored type exceeds the maximum structural depth",
-                ));
-            }
-            let next = depth + 1;
+
             match value {
                 AuthoredType::RegionBrand { callable, binding } => {
                     self.tag(30)?;
@@ -1722,7 +1689,7 @@ impl Writer {
                 }
                 AuthoredType::Region { region } => {
                     self.tag(31)?;
-                    pending.push(Frame::Type(region, next));
+                    pending.push(Frame::Type(region));
                 }
                 AuthoredType::RelPtr { region, item }
                 | AuthoredType::RegionSlice { region, item } => {
@@ -1731,8 +1698,8 @@ impl Writer {
                     } else {
                         33
                     })?;
-                    pending.push(Frame::Type(item, next));
-                    pending.push(Frame::Type(region, next));
+                    pending.push(Frame::Type(item));
+                    pending.push(Frame::Type(region));
                 }
                 AuthoredType::RegionCap { region, mode } => {
                     use super::AuthoredRegionMode;
@@ -1746,7 +1713,7 @@ impl Writer {
                         AuthoredRegionMode::Frozen => self.tag(2)?,
                         AuthoredRegionMode::Pinned => self.tag(3)?,
                     }
-                    pending.push(Frame::Type(region, next));
+                    pending.push(Frame::Type(region));
                 }
                 AuthoredType::ReadViewApplied {
                     declaration,
@@ -1757,7 +1724,7 @@ impl Writer {
                     self.declaration_reference(declaration, definitions)?;
                     self.length(arguments.len())?;
                     pending.push(Frame::ReadScope(read_scope));
-                    pending.push(Frame::Types(arguments, next));
+                    pending.push(Frame::Types(arguments));
                 }
                 AuthoredType::AssociatedReadViewMember {
                     contract,
@@ -1831,7 +1798,7 @@ impl Writer {
                     self.tag(18)?;
                     self.declaration_reference(declaration, definitions)?;
                     self.length(arguments.len())?;
-                    pending.push(Frame::Types(arguments, next));
+                    pending.push(Frame::Types(arguments));
                 }
                 AuthoredType::CapabilityResource { interface } => {
                     self.tag(17)?;
@@ -1840,21 +1807,21 @@ impl Writer {
                 AuthoredType::StructuralRecord { fields } => {
                     self.tag(10)?;
                     self.length(fields.len())?;
-                    pending.push(Frame::Fields(fields, next));
+                    pending.push(Frame::Fields(fields));
                 }
                 AuthoredType::OwnedChoice { cases } => {
                     self.tag(23)?;
                     self.length(cases.len())?;
-                    pending.push(Frame::Fields(cases, next));
+                    pending.push(Frame::Fields(cases));
                 }
                 AuthoredType::OwnedProduct { fields } => {
                     self.tag(22)?;
                     self.length(fields.len())?;
-                    pending.push(Frame::Fields(fields, next));
+                    pending.push(Frame::Fields(fields));
                 }
                 AuthoredType::OwnedSequence { item } => {
                     self.tag(24)?;
-                    pending.push(Frame::Type(item, next));
+                    pending.push(Frame::Type(item));
                 }
                 AuthoredType::List { item }
                 | AuthoredType::Option { item }
@@ -1864,17 +1831,17 @@ impl Writer {
                         AuthoredType::Option { .. } => 13,
                         _ => 15,
                     })?;
-                    pending.push(Frame::Type(item, next));
+                    pending.push(Frame::Type(item));
                 }
                 AuthoredType::Map { key, value } => {
                     self.tag(12)?;
-                    pending.push(Frame::Type(value, next));
-                    pending.push(Frame::Type(key, next));
+                    pending.push(Frame::Type(value));
+                    pending.push(Frame::Type(key));
                 }
                 AuthoredType::Result { ok, error } => {
                     self.tag(14)?;
-                    pending.push(Frame::Type(error, next));
-                    pending.push(Frame::Type(ok, next));
+                    pending.push(Frame::Type(error));
+                    pending.push(Frame::Type(ok));
                 }
                 AuthoredType::TaskFunction {
                     parameters,
@@ -1884,14 +1851,14 @@ impl Writer {
                     self.tag(18)?;
                     self.effect_row(effect, definitions)?;
                     self.length(parameters.len())?;
-                    pending.push(Frame::Type(result, next));
-                    pending.push(Frame::Types(parameters, next));
+                    pending.push(Frame::Type(result));
+                    pending.push(Frame::Types(parameters));
                 }
                 AuthoredType::Function { parameters, result } => {
                     self.tag(16)?;
                     self.length(parameters.len())?;
-                    pending.push(Frame::Type(result, next));
-                    pending.push(Frame::Types(parameters, next));
+                    pending.push(Frame::Type(result));
+                    pending.push(Frame::Types(parameters));
                 }
             }
         }
@@ -2103,27 +2070,18 @@ impl Writer {
         &mut self,
         value: &AuthoredExpression,
         definitions: &BTreeMap<String, SymbolDefinition>,
-        depth: usize,
     ) -> Result<(), Diagnostic> {
-        if depth > crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
-            return Err(codec_error(
-                "change_authored_expression_depth",
-                "authored expression exceeds the maximum structural depth",
-            ));
-        }
         self.optional(value.symbol.as_deref(), |writer, symbol| {
             writer.symbol(symbol, definitions)
         })?;
-        self.expression_operation(&value.operation, definitions, depth)
+        self.expression_operation(&value.operation, definitions)
     }
 
     fn expression_operation(
         &mut self,
         value: &AuthoredExpressionOperation,
         definitions: &BTreeMap<String, SymbolDefinition>,
-        depth: usize,
     ) -> Result<(), Diagnostic> {
-        let next = depth.saturating_add(1);
         match value {
             AuthoredExpressionOperation::Region { operation } => {
                 use crate::platform::kernel::RegionExpression as E;
@@ -2143,11 +2101,11 @@ impl Writer {
                     self.symbol(&binding.symbol, definitions)?;
                     self.name(&binding.name)?;
                     self.optional(binding.declared_type.as_ref(), |writer, ty| {
-                        writer.authored_type(ty, definitions, 1)
+                        writer.authored_type(ty, definitions)
                     })?;
                 }
                 if let Some(ty) = operation.ty() {
-                    self.authored_type(ty, definitions, 1)?;
+                    self.authored_type(ty, definitions)?;
                 }
                 if let Some(local) = operation.capability() {
                     self.local_reference(local, definitions)?;
@@ -2157,7 +2115,7 @@ impl Writer {
                     self.operation_reference(operation, definitions)?;
                 }
                 for child in operation.expressions().into_iter().flatten() {
-                    self.expression(child, definitions, next)?;
+                    self.expression(child, definitions)?;
                 }
                 Ok(())
             }
@@ -2171,14 +2129,14 @@ impl Writer {
                 self.tag(50)?;
                 self.declaration_reference(declaration, definitions)?;
                 self.list(type_arguments, |writer, ty| {
-                    writer.authored_type(ty, definitions, 1)
+                    writer.authored_type(ty, definitions)
                 })?;
                 self.read_scope_argument(read_scope, definitions)?;
                 self.local_reference(source, definitions)?;
                 self.associated_inventory_count(fields.len())?;
                 self.list(fields, |writer, field| {
                     writer.raw(&field.field.bytes())?;
-                    writer.expression(&field.value, definitions, next)
+                    writer.expression(&field.value, definitions)
                 })
             }
             AuthoredExpressionOperation::BorrowReadView {
@@ -2191,9 +2149,9 @@ impl Writer {
                 self.symbol(&binding.symbol, definitions)?;
                 self.name(&binding.name)?;
                 self.optional(binding.declared_type.as_ref(), |writer, ty| {
-                    writer.authored_type(ty, definitions, 1)
+                    writer.authored_type(ty, definitions)
                 })?;
-                self.expression(body, definitions, next)
+                self.expression(body, definitions)
             }
             AuthoredExpressionOperation::ReborrowReadView { value, read_scope } => {
                 self.tag(52)?;
@@ -2225,9 +2183,9 @@ impl Writer {
                 self.symbol(&binding.symbol, definitions)?;
                 self.name(&binding.name)?;
                 self.optional(binding.declared_type.as_ref(), |writer, ty| {
-                    writer.authored_type(ty, definitions, 1)
+                    writer.authored_type(ty, definitions)
                 })?;
-                self.expression(body, definitions, next)
+                self.expression(body, definitions)
             }
             AuthoredExpressionOperation::BorrowCall {
                 call,
@@ -2235,25 +2193,25 @@ impl Writer {
                 body,
             } => {
                 self.tag(44)?;
-                self.expression(call, definitions, next)?;
+                self.expression(call, definitions)?;
                 self.symbol(&binding.symbol, definitions)?;
                 self.name(&binding.name)?;
                 self.optional(binding.declared_type.as_ref(), |w, ty| {
-                    w.authored_type(ty, definitions, 1)
+                    w.authored_type(ty, definitions)
                 })?;
-                self.expression(body, definitions, next)
+                self.expression(body, definitions)
             }
             AuthoredExpressionOperation::SequenceEmpty { sequence_type } => {
                 self.tag(39)?;
-                self.authored_type(sequence_type, definitions, 1)
+                self.authored_type(sequence_type, definitions)
             }
             AuthoredExpressionOperation::SequenceLength {
                 sequence_type,
                 source,
             } => {
                 self.tag(40)?;
-                self.authored_type(sequence_type, definitions, 1)?;
-                self.expression(source, definitions, next)
+                self.authored_type(sequence_type, definitions)?;
+                self.expression(source, definitions)
             }
             AuthoredExpressionOperation::SequencePush {
                 sequence_type,
@@ -2261,17 +2219,17 @@ impl Writer {
                 source,
             } => {
                 self.tag(41)?;
-                self.authored_type(sequence_type, definitions, 1)?;
-                self.expression(value, definitions, next)?;
-                self.expression(source, definitions, next)
+                self.authored_type(sequence_type, definitions)?;
+                self.expression(value, definitions)?;
+                self.expression(source, definitions)
             }
             AuthoredExpressionOperation::SequencePop {
                 sequence_type,
                 source,
             } => {
                 self.tag(42)?;
-                self.authored_type(sequence_type, definitions, 1)?;
-                self.expression(source, definitions, next)
+                self.authored_type(sequence_type, definitions)?;
+                self.expression(source, definitions)
             }
             AuthoredExpressionOperation::SequenceGet {
                 sequence_type,
@@ -2279,9 +2237,9 @@ impl Writer {
                 index,
             } => {
                 self.tag(45)?;
-                self.authored_type(sequence_type, definitions, 1)?;
-                self.expression(index, definitions, next)?;
-                self.expression(source, definitions, next)
+                self.authored_type(sequence_type, definitions)?;
+                self.expression(index, definitions)?;
+                self.expression(source, definitions)
             }
             AuthoredExpressionOperation::SequenceReplace {
                 sequence_type,
@@ -2290,10 +2248,10 @@ impl Writer {
                 source,
             } => {
                 self.tag(46)?;
-                self.authored_type(sequence_type, definitions, 1)?;
-                self.expression(index, definitions, next)?;
-                self.expression(value, definitions, next)?;
-                self.expression(source, definitions, next)
+                self.authored_type(sequence_type, definitions)?;
+                self.expression(index, definitions)?;
+                self.expression(value, definitions)?;
+                self.expression(source, definitions)
             }
             AuthoredExpressionOperation::BorrowOwnedItem {
                 sequence_type,
@@ -2303,20 +2261,20 @@ impl Writer {
                 body,
             } => {
                 self.tag(43)?;
-                self.authored_type(sequence_type, definitions, 1)?;
-                self.expression(index, definitions, next)?;
-                self.expression(source, definitions, next)?;
+                self.authored_type(sequence_type, definitions)?;
+                self.expression(index, definitions)?;
+                self.expression(source, definitions)?;
                 self.symbol(&binding.symbol, definitions)?;
                 self.name(&binding.name)?;
                 self.optional(binding.declared_type.as_ref(), |w, ty| {
-                    w.authored_type(ty, definitions, 1)
+                    w.authored_type(ty, definitions)
                 })?;
-                self.expression(body, definitions, next)
+                self.expression(body, definitions)
             }
             AuthoredExpressionOperation::Parallel { left, right } => {
                 self.tag(36)?;
-                self.expression(left, definitions, next)?;
-                self.expression(right, definitions, next)
+                self.expression(left, definitions)?;
+                self.expression(right, definitions)
             }
             AuthoredExpressionOperation::Unit {} => self.tag(1),
             AuthoredExpressionOperation::Bool { value } => {
@@ -2353,9 +2311,9 @@ impl Writer {
                 when_false,
             } => {
                 self.tag(8)?;
-                self.expression(condition, definitions, next)?;
-                self.expression(when_true, definitions, next)?;
-                self.expression(when_false, definitions, next)
+                self.expression(condition, definitions)?;
+                self.expression(when_true, definitions)?;
+                self.expression(when_false, definitions)
             }
             AuthoredExpressionOperation::ChooseOwned {
                 choice_type,
@@ -2363,9 +2321,9 @@ impl Writer {
                 value,
             } => {
                 self.tag(34)?;
-                self.authored_type(choice_type, definitions, 1)?;
+                self.authored_type(choice_type, definitions)?;
                 self.name(case)?;
-                self.expression(value, definitions, next)
+                self.expression(value, definitions)
             }
             AuthoredExpressionOperation::MatchOwned {
                 choice_type,
@@ -2373,16 +2331,16 @@ impl Writer {
                 arms,
             } => {
                 self.tag(35)?;
-                self.authored_type(choice_type, definitions, 1)?;
-                self.expression(source, definitions, next)?;
+                self.authored_type(choice_type, definitions)?;
+                self.expression(source, definitions)?;
                 self.list(arms, |w, (name, binding, body)| {
                     w.name(name)?;
                     w.symbol(&binding.symbol, definitions)?;
                     w.name(&binding.name)?;
                     w.optional(binding.declared_type.as_ref(), |w, ty| {
-                        w.authored_type(ty, definitions, 1)
+                        w.authored_type(ty, definitions)
                     })?;
-                    w.expression(body, definitions, next)
+                    w.expression(body, definitions)
                 })
             }
             AuthoredExpressionOperation::MatchBorrowedOwned {
@@ -2391,16 +2349,16 @@ impl Writer {
                 arms,
             } => {
                 self.tag(38)?;
-                self.authored_type(choice_type, definitions, 1)?;
-                self.expression(source, definitions, next)?;
+                self.authored_type(choice_type, definitions)?;
+                self.expression(source, definitions)?;
                 self.list(arms, |w, (name, binding, body)| {
                     w.name(name)?;
                     w.symbol(&binding.symbol, definitions)?;
                     w.name(&binding.name)?;
                     w.optional(binding.declared_type.as_ref(), |w, ty| {
-                        w.authored_type(ty, definitions, 1)
+                        w.authored_type(ty, definitions)
                     })?;
-                    w.expression(body, definitions, next)
+                    w.expression(body, definitions)
                 })
             }
             AuthoredExpressionOperation::PackOwnedRecord {
@@ -2408,10 +2366,10 @@ impl Writer {
                 fields,
             } => {
                 self.tag(47)?;
-                self.authored_type(record_type, definitions, 1)?;
+                self.authored_type(record_type, definitions)?;
                 self.list(fields, |w, (field, value)| {
                     w.field_reference(field, definitions)?;
-                    w.expression(value, definitions, next)
+                    w.expression(value, definitions)
                 })
             }
             AuthoredExpressionOperation::UnpackOwnedRecord {
@@ -2421,17 +2379,17 @@ impl Writer {
                 body,
             } => {
                 self.tag(48)?;
-                self.authored_type(record_type, definitions, 1)?;
-                self.expression(source, definitions, next)?;
+                self.authored_type(record_type, definitions)?;
+                self.expression(source, definitions)?;
                 self.list(fields, |w, (field, binding)| {
                     w.field_reference(field, definitions)?;
                     w.symbol(&binding.symbol, definitions)?;
                     w.name(&binding.name)?;
                     w.optional(binding.declared_type.as_ref(), |w, ty| {
-                        w.authored_type(ty, definitions, 1)
+                        w.authored_type(ty, definitions)
                     })
                 })?;
-                self.expression(body, definitions, next)
+                self.expression(body, definitions)
             }
             AuthoredExpressionOperation::BorrowOwnedRecordField {
                 record_type,
@@ -2441,25 +2399,25 @@ impl Writer {
                 body,
             } => {
                 self.tag(49)?;
-                self.authored_type(record_type, definitions, 1)?;
-                self.expression(source, definitions, next)?;
+                self.authored_type(record_type, definitions)?;
+                self.expression(source, definitions)?;
                 self.field_reference(field, definitions)?;
                 self.symbol(&binding.symbol, definitions)?;
                 self.name(&binding.name)?;
                 self.optional(binding.declared_type.as_ref(), |w, ty| {
-                    w.authored_type(ty, definitions, 1)
+                    w.authored_type(ty, definitions)
                 })?;
-                self.expression(body, definitions, next)
+                self.expression(body, definitions)
             }
             AuthoredExpressionOperation::PackOwned {
                 product_type,
                 fields,
             } => {
                 self.tag(32)?;
-                self.authored_type(product_type, definitions, 1)?;
+                self.authored_type(product_type, definitions)?;
                 self.list(fields, |w, (name, value)| {
                     w.name(name)?;
-                    w.expression(value, definitions, next)
+                    w.expression(value, definitions)
                 })
             }
             AuthoredExpressionOperation::UnpackOwned {
@@ -2469,17 +2427,17 @@ impl Writer {
                 body,
             } => {
                 self.tag(33)?;
-                self.authored_type(product_type, definitions, 1)?;
-                self.expression(source, definitions, next)?;
+                self.authored_type(product_type, definitions)?;
+                self.expression(source, definitions)?;
                 self.list(fields, |w, (name, b)| {
                     w.name(name)?;
                     w.symbol(&b.symbol, definitions)?;
                     w.name(&b.name)?;
                     w.optional(b.declared_type.as_ref(), |w, ty| {
-                        w.authored_type(ty, definitions, 1)
+                        w.authored_type(ty, definitions)
                     })
                 })?;
-                self.expression(body, definitions, next)
+                self.expression(body, definitions)
             }
             AuthoredExpressionOperation::BorrowOwnedField {
                 product_type,
@@ -2489,33 +2447,31 @@ impl Writer {
                 body,
             } => {
                 self.tag(37)?;
-                self.authored_type(product_type, definitions, 1)?;
-                self.expression(source, definitions, next)?;
+                self.authored_type(product_type, definitions)?;
+                self.expression(source, definitions)?;
                 self.name(field)?;
                 self.symbol(&binding.symbol, definitions)?;
                 self.name(&binding.name)?;
                 self.optional(binding.declared_type.as_ref(), |w, ty| {
-                    w.authored_type(ty, definitions, 1)
+                    w.authored_type(ty, definitions)
                 })?;
-                self.expression(body, definitions, next)
+                self.expression(body, definitions)
             }
             AuthoredExpressionOperation::Let { bindings, body } => {
                 self.tag(9)?;
                 self.list(bindings, |writer, binding| {
                     writer.symbol(&binding.symbol, definitions)?;
                     writer.name(&binding.name)?;
-                    writer.expression(&binding.value, definitions, next)?;
+                    writer.expression(&binding.value, definitions)?;
                     writer.optional(binding.declared_type.as_ref(), |writer, value| {
-                        writer.authored_type(value, definitions, 1)
+                        writer.authored_type(value, definitions)
                     })
                 })?;
-                self.expression(body, definitions, next)
+                self.expression(body, definitions)
             }
             AuthoredExpressionOperation::Sequence { items } => {
                 self.tag(10)?;
-                self.list(items, |writer, value| {
-                    writer.expression(value, definitions, next)
-                })
+                self.list(items, |writer, value| writer.expression(value, definitions))
             }
             AuthoredExpressionOperation::ImplementationCall {
                 function,
@@ -2535,14 +2491,14 @@ impl Writer {
                 })?;
                 self.declaration_reference(function, definitions)?;
                 self.list(type_arguments, |writer, ty| {
-                    writer.authored_type(ty, definitions, 1)
+                    writer.authored_type(ty, definitions)
                 })?;
                 self.read_scope_arguments(read_scope_arguments, definitions)?;
                 self.list(implementations, |writer, operand| {
                     writer.implementation_operand(operand, definitions)
                 })?;
                 self.list(arguments, |writer, expression| {
-                    writer.expression(expression, definitions, next)
+                    writer.expression(expression, definitions)
                 })
             }
             AuthoredExpressionOperation::MethodCall {
@@ -2558,7 +2514,7 @@ impl Writer {
                 self.raw(&method.bytes())?;
                 self.read_scope_arguments(read_scope_arguments, definitions)?;
                 self.list(arguments, |writer, expression| {
-                    writer.expression(expression, definitions, next)
+                    writer.expression(expression, definitions)
                 })
             }
             AuthoredExpressionOperation::Call {
@@ -2578,11 +2534,11 @@ impl Writer {
                 })?;
                 self.declaration_reference(function, definitions)?;
                 self.list(type_arguments, |writer, ty| {
-                    writer.authored_type(ty, definitions, 1)
+                    writer.authored_type(ty, definitions)
                 })?;
                 self.read_scope_arguments(read_scope_arguments, definitions)?;
                 self.list(arguments, |writer, expression| {
-                    writer.expression(expression, definitions, next)
+                    writer.expression(expression, definitions)
                 })
             }
             AuthoredExpressionOperation::FunctionValue {
@@ -2601,22 +2557,22 @@ impl Writer {
                 })?;
                 self.declaration_reference(function, definitions)?;
                 self.list(type_arguments, |writer, ty| {
-                    writer.authored_type(ty, definitions, 1)
+                    writer.authored_type(ty, definitions)
                 })?;
                 self.read_scope_arguments(read_scope_arguments, definitions)
             }
             AuthoredExpressionOperation::Invoke { callee, arguments } => {
                 self.tag(13)?;
-                self.expression(callee, definitions, next)?;
+                self.expression(callee, definitions)?;
                 self.list(arguments, |writer, value| {
-                    writer.expression(value, definitions, next)
+                    writer.expression(value, definitions)
                 })
             }
             AuthoredExpressionOperation::Bind { callee, arguments } => {
                 self.tag(23)?;
-                self.expression(callee, definitions, next)?;
+                self.expression(callee, definitions)?;
                 self.list(arguments, |writer, value| {
-                    writer.expression(value, definitions, next)
+                    writer.expression(value, definitions)
                 })
             }
             AuthoredExpressionOperation::Record {
@@ -2626,14 +2582,14 @@ impl Writer {
             } => {
                 self.tag(14)?;
                 self.list(type_arguments, |writer, value| {
-                    writer.authored_type(value, definitions, 1)
+                    writer.authored_type(value, definitions)
                 })?;
                 self.optional(nominal_type.as_ref(), |writer, value| {
                     writer.declaration_reference(value, definitions)
                 })?;
                 self.list(fields, |writer, field| {
                     writer.field_selector(&field.selector, definitions)?;
-                    writer.expression(&field.value, definitions, next)
+                    writer.expression(&field.value, definitions)
                 })
             }
             AuthoredExpressionOperation::Variant {
@@ -2643,24 +2599,22 @@ impl Writer {
             } => {
                 self.tag(15)?;
                 self.list(type_arguments, |writer, value| {
-                    writer.authored_type(value, definitions, 1)
+                    writer.authored_type(value, definitions)
                 })?;
                 self.case_reference(case, definitions)?;
                 self.optional(payload.as_deref(), |writer, value| {
-                    writer.expression(value, definitions, next)
+                    writer.expression(value, definitions)
                 })
             }
             AuthoredExpressionOperation::Field { value, selector } => {
                 self.tag(16)?;
-                self.expression(value, definitions, next)?;
+                self.expression(value, definitions)?;
                 self.field_selector(selector, definitions)
             }
             AuthoredExpressionOperation::List { item_type, items } => {
                 self.tag(17)?;
-                self.authored_type(item_type, definitions, 1)?;
-                self.list(items, |writer, value| {
-                    writer.expression(value, definitions, next)
-                })
+                self.authored_type(item_type, definitions)?;
+                self.list(items, |writer, value| writer.expression(value, definitions))
             }
             AuthoredExpressionOperation::Map {
                 key_type,
@@ -2668,16 +2622,16 @@ impl Writer {
                 entries,
             } => {
                 self.tag(18)?;
-                self.authored_type(key_type, definitions, 1)?;
-                self.authored_type(value_type, definitions, 1)?;
+                self.authored_type(key_type, definitions)?;
+                self.authored_type(value_type, definitions)?;
                 self.list(entries, |writer, entry| {
-                    writer.expression(&entry.key, definitions, next)?;
-                    writer.expression(&entry.value, definitions, next)
+                    writer.expression(&entry.key, definitions)?;
+                    writer.expression(&entry.value, definitions)
                 })
             }
             AuthoredExpressionOperation::Match { value, arms } => {
                 self.tag(19)?;
-                self.expression(value, definitions, next)?;
+                self.expression(value, definitions)?;
                 self.list(arms, |writer, arm| {
                     writer.case_reference(&arm.case, definitions)?;
                     writer.optional(arm.payload_binding.as_ref(), |writer, binding| {
@@ -2691,10 +2645,9 @@ impl Writer {
                                 )
                             })?,
                             definitions,
-                            1,
                         )
                     })?;
-                    writer.expression(&arm.body, definitions, next)
+                    writer.expression(&arm.body, definitions)
                 })
             }
             AuthoredExpressionOperation::CapabilityCall {
@@ -2706,7 +2659,7 @@ impl Writer {
                 self.requirement_reference(requirement, definitions)?;
                 self.operation_reference(operation, definitions)?;
                 self.list(arguments, |writer, value| {
-                    writer.expression(value, definitions, next)
+                    writer.expression(value, definitions)
                 })
             }
             AuthoredExpressionOperation::Transaction {
@@ -2718,7 +2671,7 @@ impl Writer {
                 self.requirement_reference(requirement, definitions)?;
                 self.symbol(&binding.symbol, definitions)?;
                 self.name(&binding.name)?;
-                self.expression(body, definitions, next)
+                self.expression(body, definitions)
             }
             AuthoredExpressionOperation::TransactionOutcome {
                 requirement,
@@ -2731,14 +2684,14 @@ impl Writer {
                 self.requirement_reference(requirement, definitions)?;
                 self.symbol(&binding.symbol, definitions)?;
                 self.name(&binding.name)?;
-                self.authored_type(type_argument, definitions, 1)?;
+                self.authored_type(type_argument, definitions)?;
                 self.declaration_reference(&outcome.outcome, definitions)?;
                 self.declaration_reference(&outcome.abort_reason, definitions)?;
                 self.case_reference(&outcome.committed, definitions)?;
                 self.case_reference(&outcome.aborted, definitions)?;
                 self.case_reference(&outcome.condition_failed, definitions)?;
                 self.case_reference(&outcome.conflict, definitions)?;
-                self.expression(body, definitions, next)
+                self.expression(body, definitions)
             }
         }
     }
@@ -2767,7 +2720,7 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         self.symbol(&value.symbol, definitions)?;
         self.name(&value.name)?;
-        self.authored_type(&value.ty, definitions, 1)
+        self.authored_type(&value.ty, definitions)
     }
 
     fn case(
@@ -2778,7 +2731,7 @@ impl Writer {
         self.symbol(&value.symbol, definitions)?;
         self.name(&value.name)?;
         self.optional(value.payload.as_ref(), |writer, value| {
-            writer.authored_type(value, definitions, 1)
+            writer.authored_type(value, definitions)
         })
     }
 
@@ -2792,7 +2745,7 @@ impl Writer {
         self.list(&value.parameters, |writer, value| {
             writer.parameter(value, definitions)
         })?;
-        self.authored_type(&value.result, definitions, 1)?;
+        self.authored_type(&value.result, definitions)?;
         self.idempotency(value.idempotency)?;
         self.external_visibility(value.external_visibility)
     }
@@ -2824,11 +2777,11 @@ impl Writer {
     ) -> Result<(), Diagnostic> {
         self.symbol(&value.symbol, definitions)?;
         self.name(&value.name)?;
-        self.authored_type(&value.function_type, definitions, 1)?;
+        self.authored_type(&value.function_type, definitions)?;
         match &value.implementation {
             AuthoredPortImplementation::Expression { expression } => {
                 self.tag(1)?;
-                self.expression(expression, definitions, 1)
+                self.expression(expression, definitions)
             }
             AuthoredPortImplementation::Function { function } => {
                 self.tag(2)?;
@@ -3486,7 +3439,7 @@ mod tests {
     }
 
     #[test]
-    fn iterative_authored_types_preserve_wire_order_and_exact_depth_admission() {
+    fn authored_type_lifecycle_crosses_former_depth_with_exact_wire_order() {
         let ty = AuthoredType::StructuralRecord {
             fields: vec![
                 AuthoredStructuralTypeField {
@@ -3526,22 +3479,42 @@ mod tests {
         expected.extend_from_slice(&1_u64.to_be_bytes());
         expected.extend_from_slice(&[b'b', 12, 2, 15, 7]);
         let mut writer = Writer::new(None);
-        writer.authored_type(&ty, &BTreeMap::new(), 1).unwrap();
+        writer.authored_type(&ty, &BTreeMap::new()).unwrap();
         assert_eq!(writer.finish(), expected);
 
-        let mut ty = AuthoredType::Unit {};
-        for _ in 1..crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            ty = AuthoredType::List { item: Box::new(ty) };
-        }
-        let mut writer = Writer::new(None);
-        writer.authored_type(&ty, &BTreeMap::new(), 1).unwrap();
-        let mut expected = vec![11; crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH - 1];
-        expected.push(1);
-        assert_eq!(writer.finish(), expected);
+        crate::platform::stack::run("authored-type-lifecycle", || {
+            for depth in [64, 512, 4096, 32768] {
+                let start = std::time::Instant::now();
+                let mut ty = AuthoredType::Unit {};
+                for _ in 0..depth {
+                    ty = AuthoredType::List { item: Box::new(ty) };
+                }
+                let copy = ty.clone();
+                assert_eq!(copy, ty);
+                let mut writer = Writer::new(None);
+                writer.authored_type(&ty, &BTreeMap::new()).unwrap();
+                let mut expected = vec![11; depth];
+                expected.push(1);
+                let bytes = writer.finish();
+                assert_eq!(bytes, expected);
+                let mut cloned_writer = Writer::new(None);
+                cloned_writer
+                    .authored_type(&copy, &BTreeMap::new())
+                    .unwrap();
+                assert_eq!(cloned_writer.finish(), bytes);
+                drop(copy);
+                drop(ty);
+                eprintln!(
+                    "authored type lifecycle depth={depth} elapsed_ms={}",
+                    start.elapsed().as_millis()
+                );
+            }
+        })
+        .unwrap();
     }
 
     #[test]
-    fn undefined_symbols_and_excessive_type_depth_fail_before_hashing() {
+    fn undefined_symbols_fail_and_deep_types_hash() {
         let mut missing = connected_request("$module", "$function", "$parameter", "$body");
         let AuthoredChange::CreateFunction { module, .. } = &mut missing.changes[1] else {
             panic!("fixture function")
@@ -3555,7 +3528,7 @@ mod tests {
         );
 
         let mut ty = AuthoredType::Unit {};
-        for _ in 0..crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+        for _ in 0..crate::platform::kernel::contract::FORMER_TYPE_DEPTH {
             ty = AuthoredType::List { item: Box::new(ty) };
         }
         let mut deep = connected_request("$module", "$function", "$parameter", "$body");
@@ -3563,9 +3536,6 @@ mod tests {
             panic!("fixture function")
         };
         result.ty = ty;
-        assert_eq!(
-            canonical_authored_intent_bytes(&deep).unwrap_err().code,
-            "change_authored_type_depth"
-        );
+        assert!(canonical_authored_intent_bytes(&deep).is_ok());
     }
 }

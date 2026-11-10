@@ -1,4 +1,4 @@
-//! Public source differential batches, independently expected and source-bound.
+//! Public source VM batches, independently expected and source-bound.
 use super::batch::{BatchCase, Expected, batch_operation, decode_rows, host_operation};
 use super::*;
 
@@ -174,7 +174,7 @@ pub fn execute_with_source(
     );
     assert_eq!(field(&ordinary, "result", "command"), "run");
     assert_eq!(field(&ordinary, "execution", "target"), smoke_target);
-    assert_eq!(field(&ordinary, "execution", "differential"), "equal");
+    assert_eq!(field(&ordinary, "execution", "engine"), "vm");
     let Expected::Success(expected) = &smoke.expected else {
         unreachable!()
     };
@@ -238,7 +238,7 @@ pub fn execute_with_source(
     assert_eq!(field(&summary, "result", "status"), "success");
     assert_eq!(field(&summary, "result", "command"), "run.batch");
     binding.require(&summary);
-    assert_eq!(field(&summary, "batch", "mode"), "source-differential");
+    assert_eq!(field(&summary, "batch", "mode"), "source-vm");
     assert_eq!(field(&summary, "batch", "source-preparations"), "1");
     assert_eq!(
         field(&summary, "batch", "package-revision"),
@@ -285,7 +285,7 @@ pub fn execute_with_source(
         assert_eq!(row["id"].as_str(), Some(case.id.as_str()));
         assert!(seen.insert(&case.id), "unique source row identity");
         let stdout = row["stdout"].as_str().unwrap();
-        // Source differential execution owns VM/reference/executor state, not a resident taskgroup.
+        // Source VM execution owns VM/executor state, not a resident taskgroup.
         assert!(!stdout.contains(" cleanup="));
         assert!(!stdout.contains("foreground cleanup:"));
         match &case.expected {
@@ -299,7 +299,7 @@ pub fn execute_with_source(
                     "{}: exact selected target",
                     case.id
                 );
-                assert_eq!(field(stdout, "execution", "differential"), "equal");
+                assert_eq!(field(stdout, "execution", "engine"), "vm");
                 assert_eq!(
                     &serde_json::from_str::<Value>(row["result_json"].as_str().unwrap()).unwrap(),
                     expected,
@@ -314,17 +314,11 @@ pub fn execute_with_source(
                 );
                 binding.require(stdout);
                 let production = quoted(stdout, "production-observation");
-                let reference = quoted(stdout, "reference-observation");
                 require_observation(&production, false, &case.id);
-                require_observation(&reference, true, &case.id);
                 require_executor(&quoted(stdout, "executor-observation"), &case.id);
                 assert_eq!(
                     field(stdout, "execution", "production-instructions"),
                     production["instructions"].to_string()
-                );
-                assert_eq!(
-                    field(stdout, "execution", "reference-expressions"),
-                    reference["expressions"].to_string()
                 );
             }
             Expected::Failure(class, code) => {
@@ -405,10 +399,7 @@ fn require_failure_observations(stdout: &str, code: &str, id: &str, deadline: Op
     let mut names = BTreeSet::new();
     for note in notes {
         let note = note.as_str().unwrap();
-        for (name, reference) in [
-            ("production-observation", false),
-            ("reference-observation", true),
-        ] {
+        for (name, reference) in [("production-observation", false)] {
             if let Some(json) = note.strip_prefix(&format!("{name}: ")) {
                 assert!(names.insert(name), "{id}: one actual {name}");
                 require_observation(&serde_json::from_str(json).unwrap(), reference, id);
@@ -518,7 +509,7 @@ declarations.end
         ),
         (
             "repeated-policy-key",
-            "{\"id\":\"a\",\"arguments_json\":\"[7]\",\"execution\":{\"instruction_fuel\":1,\"instruction_fuel\":2,\"maximum_call_depth\":4,\"maximum_value_stack\":4}}\n",
+            "{\"id\":\"a\",\"arguments_json\":\"[7]\",\"execution\":{\"instruction_fuel\":1,\"instruction_fuel\":2}}\n",
             "run_batch_request",
         ),
     ] {
@@ -584,9 +575,7 @@ declarations.end
         "resource",
         "normalized_instruction_steps",
     );
-    quota.execution = Some(
-        serde_json::json!({"instruction_fuel":1,"maximum_call_depth":4096,"maximum_value_stack":1000000}),
-    );
+    quota.execution = Some(serde_json::json!({"instruction_fuel":1,}));
     let mut deadline =
         BatchCase::failure("deadline", &arguments, "cancelled", "execution_deadline");
     deadline.deadline_milliseconds = Some(0);

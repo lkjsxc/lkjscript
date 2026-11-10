@@ -156,8 +156,7 @@ fn native_components_partition_complete_candidates_across_storage_and_detachment
     assert!(!absent.exists());
     // Explicit execution refusal is not a successful typed graph-capacity outcome.
     let mut restricted: Value = serde_json::from_str(DESCRIPTORS[0].1).unwrap();
-    restricted["execution"] =
-        json!({"instruction_fuel":1,"maximum_call_depth":4096,"maximum_value_stack":1000000});
+    restricted["execution"] = json!({"instruction_fuel":1,});
     let descriptor = public.input("fuel-refusal.deployment.json", &restricted.to_string());
     let absent = public.root.join("fuel-refusal-result.json");
     let failure = public.cli(

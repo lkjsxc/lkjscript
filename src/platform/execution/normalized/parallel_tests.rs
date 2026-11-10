@@ -63,7 +63,7 @@ declarations.end
 "#;
 
 #[test]
-fn parallel_nested_language_scopes_share_quotas_and_preserve_depth_limits() {
+fn parallel_nested_language_scopes_grow_and_join_owned_cleanup() {
     let source = byte_buffer_tests::author(NESTED).unwrap();
     let program = prepare_snapshot(&source);
     let entry = declaration_named(&source, "nested-main");
@@ -101,19 +101,9 @@ fn parallel_nested_language_scopes_share_quotas_and_preserve_depth_limits() {
         crate::platform::execution::ExecutionFailureClass::Resource
     );
     for reference in [false, true] {
-        for (depth, policy) in [
-            (
-                3,
-                NormalizedRunPolicy {
-                    maximum_call_depth: 2,
-                    ..NormalizedRunPolicy::foreground()
-                },
-            ),
-            (
-                super::super::parallel::MAXIMUM_STRUCTURED_DEPTH as i64 + 1,
-                NormalizedRunPolicy::foreground(),
-            ),
-        ] {
+        for depth in [16, 32, 64, 128] {
+            let policy = NormalizedRunPolicy::foreground();
+            let started = std::time::Instant::now();
             let cells = super::super::owned_i64_cell::StorageObservation::start();
             let result = if reference {
                 NormalizedReferenceInterpreter::new(&source, &program, policy)
@@ -134,21 +124,12 @@ fn parallel_nested_language_scopes_share_quotas_and_preserve_depth_limits() {
                     )
                     .map(|v| v.0)
             };
-            let error = result.unwrap_err();
-            assert_eq!(
-                error.class,
-                crate::platform::execution::ExecutionFailureClass::Resource
-            );
-            assert!(
-                matches!(
-                    error.code.as_ref(),
-                    "normalized_call_depth"
-                        | "normalized_reference_call_depth"
-                        | "normalized_parallel_depth"
-                ),
-                "{error:?}"
-            );
+            assert!(matches!(result.unwrap(), NormalizedValue::I64(-137)));
             assert_eq!(cells.live(), (0, 0));
+            eprintln!(
+                "parallel nesting={depth} reference={reference} elapsed_ms={}",
+                started.elapsed().as_millis()
+            );
         }
     }
 }

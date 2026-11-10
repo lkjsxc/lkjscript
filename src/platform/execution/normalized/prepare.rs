@@ -12,7 +12,6 @@ use crate::platform::compiler::unit::{
     CompiledParameter, CompiledPortImplementation, CompiledText, CompiledTransactionRequirement,
 };
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
-use crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
 use crate::platform::kernel::{
     BlobObjectDigest, CallableResult, CaseReference, ComparisonPolicy, DeclarationPayload,
     DeclarationReference, EncodedOwnerKey, ExternalVisibility, FieldReference, FunctionEffect,
@@ -1215,9 +1214,6 @@ impl NormalizedProgram {
         substitutions: &BTreeMap<TypeParameterId, TypeObjectDigest>,
         depth: usize,
     ) -> Option<TypeObjectDigest> {
-        if depth > MAXIMUM_TYPE_DEPTH {
-            return None;
-        }
         let object = self.types.get(&digest)?;
         let next = depth.saturating_add(1);
         let form = match &object.form {

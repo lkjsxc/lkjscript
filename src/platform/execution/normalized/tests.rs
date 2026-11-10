@@ -266,8 +266,11 @@ fn run_pure_command(
     arguments: &[u8],
     policy: NormalizedCommandPolicy,
     control: &ExecutionControl,
-) -> Result<super::runner::NormalizedCommandReceipt, crate::platform::diagnostic::Diagnostic> {
-    super::runner::run_pure_command(
+) -> Result<
+    super::runner::differential::DifferentialCommandReceipt,
+    crate::platform::diagnostic::Diagnostic,
+> {
+    super::runner::differential::run_pure_command(
         authority,
         &Arc::new(program.clone()),
         target,
@@ -2854,7 +2857,6 @@ fn foreground_json_preflight_checks_unselected_branches_and_direction() {
                 &program,
                 variant,
                 decoding,
-                JsonLimits::default(),
                 &ExecutionControl::uncancelled()
             )
             .unwrap_err()
@@ -2874,7 +2876,6 @@ fn foreground_json_preflight_checks_unselected_branches_and_direction() {
             &program,
             static_text,
             false,
-            JsonLimits::default(),
             &ExecutionControl::uncancelled()
         )
         .is_ok()
@@ -2884,7 +2885,6 @@ fn foreground_json_preflight_checks_unselected_branches_and_direction() {
             &program,
             static_text,
             true,
-            JsonLimits::default(),
             &ExecutionControl::uncancelled()
         )
         .unwrap_err()
@@ -3057,12 +3057,11 @@ fn assert_json_representation_limits(
         super::codec::encode_value(schema, &value, ty, limits).unwrap(),
         expected
     );
-    for boundary in 0..4 {
+    for boundary in 0..3 {
         let mut lower = limits;
         let maximum = match boundary {
             0 => &mut lower.maximum_bytes,
-            1 => &mut lower.maximum_depth,
-            2 => &mut lower.maximum_items,
+            1 => &mut lower.maximum_items,
             _ => &mut lower.maximum_string_bytes,
         };
         if *maximum == 0 {
@@ -3258,7 +3257,6 @@ fn nominal_and_structural_json_fields_obey_representation_limits() {
                 json,
                 JsonLimits {
                     maximum_bytes: json.len(),
-                    maximum_depth: 1,
                     maximum_items: items,
                     maximum_string_bytes: string_bytes,
                 },
@@ -4636,18 +4634,6 @@ fn dense_vm_enforces_exact_grants_cancellation_and_separate_budgets() {
     )
     .expect_err("allocation budget is independent");
     assert_eq!(allocation_limited.code, "normalized_allocation");
-
-    let (capabilities, _) = bind_fixture_capability(&program, 1);
-    let call_depth_limited = NormalizedVm::for_test(
-        &program,
-        NormalizedRunPolicy {
-            maximum_call_depth: 1,
-            ..NormalizedRunPolicy::default()
-        },
-    )
-    .invoke_root_target(&target_name, Vec::new(), Some(&capabilities), &control)
-    .expect_err("call-depth budget is independent");
-    assert_eq!(call_depth_limited.code, "normalized_call_depth");
 }
 
 #[test]
@@ -4878,10 +4864,7 @@ fn canonical_reference_executes_exact_linked_dependency_bodies_with_shared_budge
         .expect_err("unlinked package authority must reject");
     assert_eq!(missing.code, "normalized_reference_dependency_package");
 
-    let bounded = NormalizedRunPolicy {
-        maximum_call_depth: 1,
-        ..policy
-    };
+    let bounded = NormalizedRunPolicy { ..policy };
     let production_bounded = NormalizedVm::for_test(&program, bounded)
         .invoke(caller, Vec::new(), None, &control)
         .expect("dense linked tail call replaces its caller");
@@ -5072,7 +5055,6 @@ fn pure_tail_preparation_executes_the_current_maintained_standard_artifact() {
     let schema =
         super::NormalizedReferenceSchema::reconstruct([&snapshot]).expect("canonical schema");
     let policy = NormalizedRunPolicy {
-        maximum_call_depth: 8,
         ..Default::default()
     };
     for n in [256_i64, 4096, 8192] {
@@ -5735,17 +5717,6 @@ fn dense_vm_reports_stack_collection_and_capability_budget_dimensions() {
     let control = ExecutionControl::uncancelled();
     let (capabilities, _) = bind_fixture_capability(&program, 2);
 
-    let stack = NormalizedVm::for_test(
-        &program,
-        NormalizedRunPolicy {
-            maximum_value_stack: 1,
-            ..NormalizedRunPolicy::default()
-        },
-    )
-    .invoke(caller, Vec::new(), Some(&capabilities), &control)
-    .expect_err("value-stack budget is independent");
-    assert_eq!(stack.code, "normalized_value_stack");
-
     let collection = NormalizedVm::for_test(
         &program,
         NormalizedRunPolicy {
@@ -6094,7 +6065,6 @@ type.argument parent=@items index=0 type=i64"#)
         .parameters[1]
         .ty;
     let policy = NormalizedRunPolicy {
-        maximum_call_depth: 8,
         ..Default::default()
     };
     for reference in [false, true] {

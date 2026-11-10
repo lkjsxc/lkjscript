@@ -150,7 +150,7 @@ declarations.end
         if let Some(expected) = expected_value {
             let execution = compact_record(&records, "execution");
             assert_eq!(compact_field(execution, "value"), expected);
-            assert_eq!(compact_field(execution, "differential"), "equal");
+            assert_eq!(compact_field(execution, "engine"), "vm");
         }
         if arguments == ["check"] {
             let tests = compact_record(&records, "tests");
@@ -245,8 +245,7 @@ declarations.end
                 "normalized_instruction_steps",
             );
             fuel.execution = Some(serde_json::json!({
-                "instruction_fuel":1,"maximum_call_depth":4096,"maximum_value_stack":1000000
-            }));
+                "instruction_fuel":1,}));
             let mut deadline =
                 BatchCase::failure("deadline", &arguments, "cancelled", "execution_deadline");
             deadline.deadline_milliseconds = Some(0);

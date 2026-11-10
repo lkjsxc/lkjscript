@@ -383,7 +383,6 @@ fn raw_malformed_owned_root_cannot_gain_a_read_admission_certificate() {
             &raw,
             ty,
             source,
-            0,
             &mut Work {
                 control: &control,
                 nodes: 0

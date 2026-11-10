@@ -1,5 +1,5 @@
 //! Compact authoring requests. The product owns their meaning, checking and publication.
-use crate::pure_tail_program::Request;
+use crate::compact_request::Request;
 use std::collections::BTreeMap;
 
 pub(super) fn parameters(r: &mut Request, name: &str, types: &[&str]) {

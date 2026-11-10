@@ -29,7 +29,7 @@ fn quota_values(policy: NormalizedRunPolicy) -> [Option<u64>; 4] {
 }
 
 fn explicit() -> Value {
-    json!({"instruction_fuel": 7, "maximum_call_depth": 19, "maximum_value_stack": 43,
+    json!({"instruction_fuel": 7,
         "maximum_allocated_bytes": 11, "maximum_collection_items": 13, "maximum_capability_calls": 17})
 }
 
@@ -85,13 +85,12 @@ fn strict_descriptor_projection_retains_integer_extremes_and_string_contents() {
 
 #[test]
 fn omitted_cumulative_fields_do_not_install_implicit_quotas() {
-    let value = descriptor(json!({"instruction_fuel": 123, "maximum_call_depth": 19,
-        "maximum_value_stack": 43}));
+    let value = descriptor(json!({"instruction_fuel": 123,
+    }));
     let decoded = decode(&value).unwrap();
     let normalized = normalized_run_policy(decoded.execution.unwrap());
     assert_eq!(quota_values(normalized), [Some(123), None, None, None]);
-    assert_eq!(normalized.maximum_call_depth, 19);
-    assert_eq!(normalized.maximum_value_stack, 43);
+
     let encoded = encode_deployment(&decoded).unwrap();
     let roundtrip = decode_deployment(&encoded).unwrap();
     assert_eq!(decoded.execution, roundtrip.execution);
@@ -118,12 +117,10 @@ fn explicit_cumulative_quotas_preserve_null_zero_finite_and_maximum() {
             let mut expected = [Some(7), Some(11), Some(13), Some(17)];
             expected[index] = choice;
             assert_eq!(quota_values(normalized), expected, "{name}: {choice:?}");
-            assert_eq!(normalized.maximum_call_depth, 19);
-            assert_eq!(normalized.maximum_value_stack, 43);
         }
     }
     let omitted_quotas = descriptor(json!({"instruction_fuel": null,
-        "maximum_call_depth": 19, "maximum_value_stack": 43}));
+    }));
     assert_eq!(
         quota_values(normalized_run_policy(
             decode(&omitted_quotas).unwrap().execution.unwrap()
@@ -143,8 +140,7 @@ fn new_http_recipe_has_no_hidden_cumulative_quotas_but_keeps_live_controls() {
     let decoded = decode_deployment(&encoded).unwrap();
     let normalized = normalized_run_policy(decoded.execution.unwrap());
     assert_eq!(quota_values(normalized), [None; 4]);
-    assert_eq!(normalized.maximum_call_depth, 4096);
-    assert_eq!(normalized.maximum_value_stack, 1_000_000);
+
     let runtime = decoded.runtime.unwrap();
     assert_eq!(runtime.maximum_concurrent_tasks, 16);
     assert_eq!(runtime.maximum_queued_tasks, 64);
@@ -160,7 +156,7 @@ fn new_http_recipe_has_no_hidden_cumulative_quotas_but_keeps_live_controls() {
 }
 
 #[test]
-fn malformed_quotas_and_missing_live_limits_fail_strict_admission() {
+fn malformed_quotas_and_missing_instruction_selection_fail_strict_admission() {
     for name in QUOTAS {
         for value in [
             json!(-1),
@@ -175,11 +171,7 @@ fn malformed_quotas_and_missing_live_limits_fail_strict_admission() {
             assert_eq!(error.code, "deployment_json");
         }
     }
-    for name in [
-        "instruction_fuel",
-        "maximum_call_depth",
-        "maximum_value_stack",
-    ] {
+    for name in ["instruction_fuel"] {
         let mut execution = explicit();
         execution.as_object_mut().unwrap().remove(name);
         assert_eq!(
@@ -188,13 +180,7 @@ fn malformed_quotas_and_missing_live_limits_fail_strict_admission() {
             "{name}"
         );
     }
-    for name in ["maximum_call_depth", "maximum_value_stack"] {
-        for value in [Value::Null, json!(0)] {
-            let mut execution = explicit();
-            execution[name] = value;
-            assert!(decode(&descriptor(execution)).is_err());
-        }
-    }
+
     let raw = serde_json::to_string(&descriptor(explicit())).unwrap();
     assert!(raw.contains("\"instruction_fuel\":7"));
     for replacement in [
@@ -225,7 +211,7 @@ fn discovered_execution_fields_match_required_and_nullable_decoder_contracts() {
         .iter()
         .filter(|field| field.path.starts_with("execution."))
         .collect();
-    assert_eq!(fields.len(), 6);
+    assert_eq!(fields.len(), 4);
     for field in fields {
         let name = field.path.strip_prefix("execution.").unwrap();
         let mut execution = explicit();

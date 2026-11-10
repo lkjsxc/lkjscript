@@ -6,10 +6,6 @@ license = "Apache-2.0"
 publish = false
 default-run = "lkjscript-dev"
 
-[[bin]]
-name = "lkjscript-release-controller"
-path = "src/release/controller_main.rs"
-
 [dependencies]
 base64 = { version = "0.23.1", default-features = false, features = ["std"] }
 blake3 = "1.8.2"

@@ -80,9 +80,8 @@ nested layout objects.
 Kernel region escape checks inspect all actual type arguments and each nominal
 member schema without generating an unbounded sequence of generic substitutions.
 Region-specific inline-layout checks are iterative in both independent admission
-paths. Broader recursive kernel and canonical read-view preparation paths retain
-their existing depth guards and proof policies; this format change does not claim
-those separate admission families are unbounded.
+paths. Broader recursive kernel and canonical read-view preparation paths use the
+physical-memory-sized semantic stack and retain their selected proof policies.
 
 `region-mmap-save` and `region-mmap-load` name persistence of this relative-offset
 slab format. They require first-party safe Rust, without OS memory mappings,

@@ -466,8 +466,9 @@ mod tests {
         let bytes = serde_json::to_vec(&json!({
             "id":"late-ingress", "arguments_json":"[true] trailing",
             "target":"main", "deadline_milliseconds":u64::MAX,
-            "execution":{"instruction_fuel":u64::MAX,"maximum_call_depth":4096,"maximum_value_stack":1000000}
-        })).unwrap();
+            "execution":{"instruction_fuel":u64::MAX,}
+        }))
+        .unwrap();
         let requests = decode_requests(&bytes).unwrap();
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].arguments_json, "[true] trailing");
@@ -487,7 +488,7 @@ mod tests {
             (br#"{"id":"a","arguments_json":"[]","unknown":true}"#.as_slice(), "run_batch_request"),
             (b"{\"id\":\"a\",\"arguments_json\":\"[]\"}\n{\"id\":\"a\",\"arguments_json\":\"[]\"}".as_slice(), "run_batch_id"),
             (b"{\"id\":\"a\",\"arguments_json\":\"[]\"}\n{".as_slice(), "run_batch_request"),
-            (br#"{"id":"a","arguments_json":"[]","execution":{"instruction_fuel":1,"instruction_fuel":2,"maximum_call_depth":4,"maximum_value_stack":4}}"#.as_slice(), "run_batch_request"),
+            (br#"{"id":"a","arguments_json":"[]","execution":{"instruction_fuel":1,"instruction_fuel":2}}"#.as_slice(), "run_batch_request"),
         ] {
             assert_eq!(decode_requests(bytes).unwrap_err().code, code);
         }

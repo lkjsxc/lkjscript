@@ -98,8 +98,8 @@ fn compiler_cache_fifo_does_not_block_acceptance_or_immutable_replay() {
         "1"
     );
     assert_eq!(
-        compact_field(compact_record(&run, "execution"), "differential"),
-        "equal"
+        compact_field(compact_record(&run, "execution"), "engine"),
+        "vm"
     );
     apply_exact(
         &public,

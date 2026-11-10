@@ -1614,7 +1614,7 @@ fn complete_prepared_closure_uses_one_work_budget_and_failure_preserves_healthy_
         .extend((0..128).map(|ordinal| BindingId::migrate(SEED, 10_000 + ordinal)));
     let measure = |context: &Context| {
         let mut resolver = healthy.resolver_with_control(healthy.types(), &control);
-        let facts = resolver.facts(scalar, context, 0).unwrap();
+        let facts = resolver.facts(scalar, context).unwrap();
         assert_eq!(facts.category, ValueCategory::OrdinaryData);
         assert!(facts.metadata && facts.transfer && facts.share);
         let work = resolver.budget.work.observation();
@@ -1629,7 +1629,7 @@ fn complete_prepared_closure_uses_one_work_budget_and_failure_preserves_healthy_
     let mut exact = healthy.resolver_with_control(healthy.types(), &control);
     exact.budget.work = Meter::new(Some(large_work));
     exact.budget.entries = Meter::new(Some(large_entries));
-    let facts = exact.facts(scalar, &large_context, 0).unwrap();
+    let facts = exact.facts(scalar, &large_context).unwrap();
     assert_eq!(facts.category, ValueCategory::OrdinaryData);
     assert!(facts.metadata && facts.transfer && facts.share);
     assert_eq!(exact.budget.work.remaining(), Some(0));
@@ -1642,7 +1642,7 @@ fn complete_prepared_closure_uses_one_work_budget_and_failure_preserves_healthy_
             resolver.budget.work = Meter::new(Some(large_work - 1));
         }
         assert_eq!(
-            resolver.facts(scalar, &large_context, 0).unwrap_err().class,
+            resolver.facts(scalar, &large_context,).unwrap_err().class,
             ExecutionFailureClass::Resource
         );
         assert!(healthy.prepared_metadata(scalar).unwrap());
@@ -1655,7 +1655,7 @@ fn complete_prepared_closure_uses_one_work_budget_and_failure_preserves_healthy_
     let mut state = FactsState::default();
     assert_eq!(
         resolver
-            .facts_walk(scalar, &large_context, &mut state, 0)
+            .facts_walk(scalar, &large_context, &mut state,)
             .unwrap_err()
             .class,
         ExecutionFailureClass::Resource
@@ -1666,7 +1666,7 @@ fn complete_prepared_closure_uses_one_work_budget_and_failure_preserves_healthy_
     let mut state = FactsState::default();
     assert_eq!(
         resolver
-            .facts_walk(scalar, &large_context, &mut state, 0)
+            .facts_walk(scalar, &large_context, &mut state,)
             .unwrap_err()
             .class,
         ExecutionFailureClass::Cancelled
@@ -1705,8 +1705,8 @@ fn complete_prepared_closure_uses_one_work_budget_and_failure_preserves_healthy_
     assert!(candidate.prepared_facts.is_empty());
     assert!(healthy.prepared_transferable(two).unwrap());
 
-    // Ordinary growing substitution is not a finite exact-instance SCC. The
-    // depth limit follows arguments, fields, bind_types and layout together.
+    // Expanding nominal parameter flow rejects before any concrete instances
+    // can be materialized; repeated exact digests cannot prove this closure finite.
     let mut growing = empty();
     let owner = decl(&growing, 131);
     let (parameter, formal) =
@@ -1725,9 +1725,111 @@ fn complete_prepared_closure_uses_one_work_budget_and_failure_preserves_healthy_
         admit(&growing)
             .unwrap_err()
             .message
-            .contains("recursive admission depth guard")
+            .contains("expanding raw nominal parameter cycle")
     );
     assert!(admit(&source).unwrap().prepared_transferable(two).unwrap());
+}
+
+#[test]
+fn raw_nominal_parameter_flow_distinguishes_finite_recursion_from_growth() {
+    for reset in [false, true] {
+        let mut source = empty();
+        let owner = decl(&source, 20_000);
+        let (first, first_ty) =
+            type_parameter(&mut source, owner, 20_000, TypeParameterConstraints::None);
+        let (second, second_ty) =
+            type_parameter(&mut source, owner, 20_001, TypeParameterConstraints::None);
+        let OwnerRecord::TypeParameter(record) = source
+            .owners
+            .get_mut(&OwnerKey::TypeParameter(second))
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        record.name = name("U");
+        let integer = intern(&mut source, TypeForm::I64);
+        let text = intern(&mut source, TypeForm::Text);
+        // R<T,U> -> R<U,T> permutes a finite orbit. R<T,U> -> R<List<U>,I64>
+        // has a growing edge, but the reset prevents that edge from recurring.
+        let arguments = if reset {
+            let list = intern(&mut source, TypeForm::List { item: second_ty });
+            vec![list, integer]
+        } else {
+            vec![second_ty, first_ty]
+        };
+        let recursive = intern(
+            &mut source,
+            TypeForm::Applied {
+                declaration: owner,
+                arguments,
+            },
+        );
+        record_fields(
+            &mut source,
+            owner,
+            20_000,
+            false,
+            vec![first, second],
+            &[first_ty, recursive],
+        );
+        let root = intern(
+            &mut source,
+            TypeForm::Applied {
+                declaration: owner,
+                arguments: vec![integer, text],
+            },
+        );
+        let proof = admit(&source).unwrap();
+        assert!(proof.prepared_metadata(root).unwrap(), "reset={reset}");
+        assert!(proof.prepared_transferable(root).unwrap(), "reset={reset}");
+    }
+
+    // A<T> -> B<List<T>>, B<U> -> A<U> expands across two declarations.
+    let mut source = empty();
+    let first = decl(&source, 20_002);
+    let second = decl(&source, 20_003);
+    let (first_parameter, first_ty) =
+        type_parameter(&mut source, first, 20_002, TypeParameterConstraints::None);
+    let (second_parameter, second_ty) =
+        type_parameter(&mut source, second, 20_003, TypeParameterConstraints::None);
+    let list = intern(&mut source, TypeForm::List { item: first_ty });
+    let forward = intern(
+        &mut source,
+        TypeForm::Applied {
+            declaration: second,
+            arguments: vec![list],
+        },
+    );
+    let back = intern(
+        &mut source,
+        TypeForm::Applied {
+            declaration: first,
+            arguments: vec![second_ty],
+        },
+    );
+    record_fields(
+        &mut source,
+        first,
+        20_002,
+        false,
+        vec![first_parameter],
+        &[forward],
+    );
+    record_fields(
+        &mut source,
+        second,
+        20_003,
+        false,
+        vec![second_parameter],
+        &[back],
+    );
+    let error = admit(&source).unwrap_err();
+    assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+    assert!(
+        error
+            .message
+            .contains("expanding raw nominal parameter cycle")
+    );
 }
 
 #[test]
@@ -5652,8 +5754,8 @@ fn raw_deep_expressions_keep_shallow_nominal_and_witness_depth_independent() {
     // Synthetic source syntax is deeper than the type/operand bound, while
     // every actual type and the supplied concrete witness remain shallow.
     let layers = 300;
-    assert!(layers > kernel::contract::MAXIMUM_TYPE_DEPTH);
-    assert!(layers + 8 < kernel::contract::MAXIMUM_EXPRESSION_DEPTH);
+    assert!(layers > kernel::contract::FORMER_TYPE_DEPTH);
+    assert!(layers + 8 < kernel::contract::FORMER_EXPRESSION_DEPTH);
     let mut source = empty();
     let scalar = intern(&mut source, TypeForm::I64);
     let cell = intern(&mut source, TypeForm::OwnedI64Cell);
@@ -7137,7 +7239,7 @@ fn raw_capability_signature_suffix_and_result_boundaries_remain_exact() {
         let limit = 64 * (levels as u64 + 2);
         let budget = Budget::with_limits(&control, Some(limit), None);
         let mut resolver = proof.resolver_with_budget(&dag.types, budget);
-        let free = resolver.resource_free(ty, &Context::default(), 0).unwrap();
+        let free = resolver.resource_free(ty, &Context::default()).unwrap();
         let work = resolver.budget.work.observation();
         let storage = resolver.budget.entries.observation();
         assert!(!work.saturated && !storage.saturated);
@@ -8380,17 +8482,17 @@ fn raw_nominal_field_metadata_keeps_defining_and_actual_import_edges_separate() 
     let context = Context::declaration(function);
     let mut resolver = proof.resolver_with_control(proof.types(), &control);
     for ty in [used_instance, phantom_instance, variant_type] {
-        let facts = resolver.facts(ty, &context, 0).unwrap();
+        let facts = resolver.facts(ty, &context).unwrap();
         assert_eq!(facts.category, ValueCategory::OrdinaryData);
         assert!(facts.metadata && facts.transfer && facts.share);
         assert!(proof.prepared_transferable(ty).unwrap());
         assert!(
             resolver
-                .capture_safe(ty, &context, &mut BTreeSet::new(), 0)
+                .capture_safe(ty, &context, &mut BTreeSet::new(),)
                 .unwrap()
         );
-        assert!(resolver.memory_free(ty, &context, 0).unwrap());
-        assert!(resolver.resource_free(ty, &context, 0).unwrap());
+        assert!(resolver.memory_free(ty, &context,).unwrap());
+        assert!(resolver.resource_free(ty, &context,).unwrap());
     }
     // One resource walk reaches the same exact Metadata digest first through
     // a lawful defining field, then as a caller phantom actual lacking its edge.
@@ -8420,17 +8522,17 @@ fn raw_nominal_field_metadata_keeps_defining_and_actual_import_edges_separate() 
     let mut query_resolver = proof.resolver_with_control(&query.types, &control);
     assert_eq!(
         query_resolver
-            .resource_free(combined, &context, 0)
+            .resource_free(combined, &context,)
             .unwrap_err()
             .message,
         "reference is outside its exact package dependency inventory"
     );
     assert!(
         query_resolver
-            .capture_safe(forbidden_actual, &context, &mut BTreeSet::new(), 0)
+            .capture_safe(forbidden_actual, &context, &mut BTreeSet::new(),)
             .is_err()
     );
-    assert!(query_resolver.facts(forbidden_actual, &context, 0).is_err());
+    assert!(query_resolver.facts(forbidden_actual, &context,).is_err());
     for declaration in [used, phantom] {
         let mut wrong_actual = caller.clone();
         let instance = intern(
@@ -8602,13 +8704,13 @@ fn raw_lexical_associated_projection_preparation_keeps_witness_and_loan_authorit
         );
         assert!(context.structural_properties);
         assert_eq!(context.lexical, BTreeSet::from([fixture.binding]));
-        resolver.facts(projected_ty, &context, 0).unwrap();
+        resolver.facts(projected_ty, &context).unwrap();
         // Querying the identical prepared digest under another physical owner
         // must not inherit the healthy query's witness or lexical authority.
         let wrong_owner = Context::declaration(fixture.helper);
         assert!(
             resolver
-                .facts(projected_ty, &wrong_owner, 0)
+                .facts(projected_ty, &wrong_owner,)
                 .unwrap_err()
                 .message
                 .contains("associated projection imports another witness binder")
@@ -8616,7 +8718,7 @@ fn raw_lexical_associated_projection_preparation_keeps_witness_and_loan_authorit
         let outside_loan = Context::declaration(fixture.caller);
         assert!(
             resolver
-                .facts(projected_ty, &outside_loan, 0)
+                .facts(projected_ty, &outside_loan,)
                 .unwrap_err()
                 .message
                 .contains("lexical scope is outside its defining callable and loan body")

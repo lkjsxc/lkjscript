@@ -101,8 +101,8 @@ declarations.end
     );
     assert_eq!(result.unwrap(), json!({"count":6,"sum":133}));
     assert_eq!(
-        compact_field(compact_record(&records, "execution"), "differential"),
-        "equal"
+        compact_field(compact_record(&records, "execution"), "engine"),
+        "vm"
     );
     folds.verify_identity();
 }

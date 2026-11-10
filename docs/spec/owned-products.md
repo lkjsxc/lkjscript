@@ -36,12 +36,11 @@ joined parallel children additionally require Shareable.
 ```
 
 The explicit product operand is checked semantic metadata, never an ownership
-certificate. Type fields are unique and canonically ordered by name; all existing
-field-count and depth bounds apply. Pack fields retain their authored expression
-order. Each field appears exactly once and has exactly the annotated field type.
-Depth covers the longest structural path, including shared type nodes and closed
-generic substitutions. A shorter path to a previously visited type cannot hide a
-deeper one. Both preparation derivations check materialized products before execution.
+certificate. Type fields are unique and canonically ordered by name; existing
+field-count bounds apply. Pack fields retain their authored expression order.
+Each field appears exactly once and has exactly the annotated field type.
+Both preparation derivations check materialized products, shared child types and
+closed generic substitutions before execution.
 Owned field operands must be exact live owning locals. Ordinary metadata expressions
 obey their existing evaluation and copying contracts. A trap stops later fields.
 
@@ -68,9 +67,6 @@ does not expose an Owned field, introduce a partial move or give a lifetime-bear
 reference to product storage. Owned fields, missing fields, consumed locals and
 non-local product temporaries cannot use this operation. Bind an owned temporary
 explicitly before inspecting it. Ordinary record projections retain their behavior.
-
-Accepted source, independent public witnesses and the separate distribution
-boundary are recorded in the [metadata continuation](../campaigns/20261001-owned-product-metadata.md).
 
 ### Scoped owned-field reads
 
@@ -148,14 +144,11 @@ field, result or cleanup relationships. Foreign epochs reject, and maintained
 assets are rebuilt through supported product owners.
 
 [Owned choices](owned-choices.md) can be explicit owned product children.
-Both composite forms share bounded mixed-depth validation and iterative cleanup;
+Both composite forms share complete type validation and iterative cleanup;
 ordinary record/Option/Result containment remains rejected.
 The [child-borrow contract](owned-borrows.md#encodings-and-evidence) owns subsequent
 scope-operation, borrowed-binding and derived-layout cuts.
 The [parameterized contract](owned-contract-parameters.md#encodings-and-boundaries)
 owns the later method-signature and application-layout cut.
 
-See the [native guide](../guides/native-owned-products.md) and
-[campaign](../campaigns/20261001-owned-products.md) for literal programs, actual
-verification and remaining work. These products are public in v0.1.64; its
-immutable predecessor v0.1.60 remains unchanged.
+See the [native guide](../guides/native-owned-products.md) for literal programs.

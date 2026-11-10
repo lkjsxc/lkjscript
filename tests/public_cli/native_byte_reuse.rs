@@ -97,7 +97,7 @@ fn native_byte_reuse_preserves_recursive_generic_and_retained_consumers() {
                 }
                 println!("byte-reuse target={target} count={count} work={work}");
             } else {
-                assert_eq!(compact_field(execution, "differential"), "equal");
+                assert_eq!(compact_field(execution, "engine"), "vm");
             }
             std::fs::remove_file(result).unwrap();
         }

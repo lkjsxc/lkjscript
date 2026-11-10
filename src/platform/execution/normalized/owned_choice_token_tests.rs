@@ -193,7 +193,7 @@ fn owned_choice_mixed_maximum_depth_drops_iteratively_with_surviving_markers() {
     let child_marker = child.clone();
     let mut value = NormalizedValue::ByteBuffer(child);
     let mut markers = Vec::new();
-    for depth in 0..contract::MAXIMUM_TYPE_DEPTH {
+    for depth in 0..contract::FORMER_TYPE_DEPTH {
         let fields = vec![StructuralTypeField {
             name: Name::new("child").unwrap(),
             ty,
@@ -217,7 +217,7 @@ fn owned_choice_mixed_maximum_depth_drops_iteratively_with_surviving_markers() {
         };
         markers.push(value.clone());
     }
-    assert_eq!(composites.live(), (contract::MAXIMUM_TYPE_DEPTH, 0));
+    assert_eq!(composites.live(), (contract::FORMER_TYPE_DEPTH, 0));
     drop(value);
     assert_eq!(composites.live(), (0, 0));
     assert_eq!(buffers.live(), (0, 0));

@@ -132,11 +132,9 @@ Use identical octet-range inputs when comparing representations and carriers. Th
 cell targets also accept the carrier's full signed-I64 range. Detached `run`
 reports preparation, invocation and result-encoding nanoseconds separately, plus
 modeled cumulative allocation and work counters. These counters do not measure
-allocator traffic, retained owned bytes or process RSS. Public tests compare the
-complete independently expected output of every target for 513 inputs.
-The [matched measurements](../performance.md#parameterized-owned-worklists-2026-10-05)
-retain stage costs and unfavorable chunked results. Flat storage is the practical
-baseline for those tested workloads.
+allocator traffic, retained owned bytes or process RSS. The
+[public tests](../../tests/public_cli/native_owned_worklists.rs) compare complete
+outputs with independent expected results.
 
 ## Provisional dependency-graph analysis
 

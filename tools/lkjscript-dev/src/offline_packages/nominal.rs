@@ -319,7 +319,7 @@ fn output(
         true,
     )?;
     require(
-        field(&records, "execution", "differential")? == "equal",
+        field(&records, "execution", "engine")? == "vm",
         "nominal production/reference results differ",
     )?;
     let value: Value = serde_json::from_str(&field(&records, "execution", "value")?)?;

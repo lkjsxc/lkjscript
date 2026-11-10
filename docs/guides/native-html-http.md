@@ -141,7 +141,4 @@ HEAD-to-GET or automatic 405/Allow policy. The generated resident instruction al
 remains **10,000,000** and its request deadline remains **30 seconds**. Optional
 foreground metering has not been extended to resident HTTP here.
 
-This is native library composition and an executable guide, not a complete framework,
-HTML sanitizer, throughput benchmark, public deployment, authentication system or
-browser/Wasm client. The [campaign record](../campaigns/202609242248.md) separates
-source acceptance, public-binary experiments and corrected harness failures.
+This example composes a native HTML library with the HTTP runtime.

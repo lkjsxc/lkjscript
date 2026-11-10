@@ -9,14 +9,12 @@ use super::value_schema::NormalizedValueSchema;
 use crate::platform::binary64::Binary64;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::execution::ExecutionControl;
-use crate::platform::json::{JsonLimits, MAXIMUM_JSON_CONTAINER_NESTING, decode_application};
+use crate::platform::json::{JsonLimits, decode_application};
 use crate::platform::kernel::{TypeForm, TypeObjectDigest};
 use base64::Engine;
 use serde_json::{Map, Value as JsonValue};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
-
-const MAXIMUM_TYPE_ADMISSION_BYTES: usize = 256 * 1024 * 1024;
 
 #[cfg(test)]
 pub fn decode_typed(
@@ -36,9 +34,9 @@ pub(crate) fn decode_typed_with_control(
     control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
     // Refuse the complete type before parsing or materializing untrusted input.
-    require_json_encoding(program, ty, true, limits, control)?;
+    require_json_encoding(program, ty, true, control)?;
     let value = decode_application(bytes, limits)?;
-    from_json(program, &value, ty, limits, "$", 0, control)
+    from_json(program, &value, ty, limits, "$", control)
 }
 
 pub fn decode_value(
@@ -57,8 +55,8 @@ pub(crate) fn decode_value_with_control(
     limits: JsonLimits,
     control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
-    require_json_encoding(program, ty, true, limits, control)?;
-    from_json(program, value, ty, limits, "$", 0, control)
+    require_json_encoding(program, ty, true, control)?;
+    from_json(program, value, ty, limits, "$", control)
 }
 
 pub fn encode_typed(
@@ -119,14 +117,14 @@ pub(crate) fn encode_value_with_control(
     value
         .reject_read_view_escape(control)
         .map_err(super::runner::execution_diagnostic)?;
-    require_json_encoding(program, ty, false, limits, control)?;
+    require_json_encoding(program, ty, false, control)?;
     let mut state = EncodeState {
         limits,
         items: 0,
         text_bytes: 0,
         control,
     };
-    to_json(program, value, ty, &mut state, "$", 0)
+    to_json(program, value, ty, &mut state, "$")
 }
 
 fn checkpoint(control: &ExecutionControl) -> Result<(), Diagnostic> {
@@ -200,59 +198,23 @@ pub(super) fn require_json_encoding(
     program: &dyn NormalizedValueSchema,
     root: TypeObjectDigest,
     decoding: bool,
-    limits: JsonLimits,
     control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
     program
         .reject_read_view_escape(root, control)
         .map_err(super::runner::execution_diagnostic)?;
-    fn charge(work: &mut usize, bytes: &mut usize, size: usize) -> Result<(), Diagnostic> {
-        *work = work
-            .checked_add(1)
-            .filter(|count| *count <= crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK)
-            .ok_or_else(|| {
-                json_error(
-                    DiagnosticClass::Resource,
-                    "normalized_json_type_work",
-                    "JSON type eligibility exhausted validation work",
-                )
-            })?;
-        *bytes = bytes
-            .checked_add(size)
-            .filter(|count| *count <= MAXIMUM_TYPE_ADMISSION_BYTES)
-            .ok_or_else(|| {
-                json_error(
-                    DiagnosticClass::Resource,
-                    "normalized_json_type_storage",
-                    "JSON type eligibility exhausted finite admission storage",
-                )
-            })?;
-        Ok(())
-    }
-    let mut pending = vec![(root, 0usize)];
+
+    let mut pending = vec![root];
     let mut seen = BTreeSet::new();
-    let mut work = 0usize;
-    let mut bytes = std::mem::size_of::<(TypeObjectDigest, usize)>();
-    while let Some((ty, depth)) = pending.pop() {
+    while let Some(ty) = pending.pop() {
         checkpoint(control)?;
         if seen.contains(&ty) {
             continue;
         }
-        require_depth(limits, "$", depth)?;
-        charge(
-            &mut work,
-            &mut bytes,
-            std::mem::size_of::<TypeObjectDigest>() + 3 * std::mem::size_of::<usize>(),
-        )?;
         seen.insert(ty);
         let form = json_form(program, ty, decoding, "$")?;
         let mut push = |ty| -> Result<(), Diagnostic> {
-            charge(
-                &mut work,
-                &mut bytes,
-                std::mem::size_of::<(TypeObjectDigest, usize)>(),
-            )?;
-            pending.push((ty, depth + 1));
+            pending.push(ty);
             Ok(())
         };
         match form {
@@ -306,11 +268,9 @@ fn from_json(
     ty: TypeObjectDigest,
     limits: JsonLimits,
     path: &str,
-    depth: usize,
     control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
     checkpoint(control)?;
-    require_depth(limits, path, depth)?;
     let form = json_form(program, ty, true, path)?;
     match form {
         TypeForm::RegionBrand { .. }
@@ -356,7 +316,7 @@ fn from_json(
             "static text must originate in accepted meaning and cannot be decoded from JSON",
         )),
         TypeForm::Named { .. } | TypeForm::Applied { .. } => {
-            decode_named(program, value, ty, limits, path, depth, control)
+            decode_named(program, value, ty, limits, path, control)
         }
         TypeForm::StructuralRecord { fields } => {
             let object = value
@@ -378,15 +338,7 @@ fn from_json(
                 values
                     .try_push((
                         field.name.clone(),
-                        from_json(
-                            program,
-                            value,
-                            field.ty,
-                            limits,
-                            &field_path,
-                            depth + 1,
-                            control,
-                        )?,
+                        from_json(program, value, field.ty, limits, &field_path, control)?,
                     ))
                     .map_err(child_storage_error)?;
             }
@@ -408,7 +360,6 @@ fn from_json(
                         *item,
                         limits,
                         &format!("{path}[{index}]"),
-                        depth + 1,
                         control,
                     )
                 })
@@ -437,7 +388,6 @@ fn from_json(
                     *key,
                     limits,
                     &format!("{path}[{index}][0]"),
-                    depth + 1,
                     control,
                 )?;
                 let key = NormalizedMapKey::from_value(key_value)
@@ -448,7 +398,6 @@ fn from_json(
                     *item,
                     limits,
                     &format!("{path}[{index}][1]"),
-                    depth + 1,
                     control,
                 )?;
                 if output.insert(key, item).is_some() {
@@ -485,7 +434,6 @@ fn decode_named(
     ty: TypeObjectDigest,
     limits: JsonLimits,
     path: &str,
-    depth: usize,
     control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
     if let Some((index, layout)) = record_layout(program, ty) {
@@ -512,7 +460,6 @@ fn decode_named(
                     field.ty,
                     limits,
                     &field_path,
-                    depth + 1,
                     control,
                 )?)
                 .map_err(child_storage_error)?;
@@ -553,7 +500,6 @@ fn decode_named(
                     ty,
                     limits,
                     &format!("{path}.value"),
-                    depth + 1,
                     control,
                 )?))
             }
@@ -589,20 +535,9 @@ fn to_json(
     ty: TypeObjectDigest,
     state: &mut EncodeState,
     path: &str,
-    depth: usize,
 ) -> Result<JsonValue, Diagnostic> {
-    state.require_depth(path, depth)?;
+    checkpoint(state.control)?;
     let form = json_form(program, ty, false, path)?;
-    if matches!(
-        form,
-        TypeForm::Named { .. }
-            | TypeForm::Applied { .. }
-            | TypeForm::StructuralRecord { .. }
-            | TypeForm::List { .. }
-            | TypeForm::Map { .. }
-    ) {
-        state.require_container_depth(path, depth)?;
-    }
     match (value, form) {
         (
             _,
@@ -624,15 +559,13 @@ fn to_json(
                     )
                 })
         }
-        (NormalizedValue::Bytes(value), TypeForm::Bytes) => {
-            bytes_to_json(value, state, path, depth)
-        }
+        (NormalizedValue::Bytes(value), TypeForm::Bytes) => bytes_to_json(value, state, path),
         (NormalizedValue::Text(value), TypeForm::Text)
         | (NormalizedValue::StaticText(value), TypeForm::StaticText) => {
             text_to_json(value, state, path)
         }
         (value, TypeForm::Named { .. } | TypeForm::Applied { .. }) => {
-            encode_named(program, value, ty, state, path, depth)
+            encode_named(program, value, ty, state, path)
         }
         (
             NormalizedValue::Record(NormalizedRecord::Structural { fields: values }),
@@ -656,7 +589,7 @@ fn to_json(
                 state.require_string(name.as_str(), &field_path)?;
                 object.insert(
                     name.as_str().to_owned(),
-                    to_json(program, value, field.ty, state, &field_path, depth + 1)?,
+                    to_json(program, value, field.ty, state, &field_path)?,
                 );
             }
             Ok(JsonValue::Object(object))
@@ -669,20 +602,13 @@ fn to_json(
                     .iter()
                     .enumerate()
                     .map(|(index, value)| {
-                        to_json(
-                            program,
-                            value,
-                            *item,
-                            state,
-                            &format!("{path}[{index}]"),
-                            depth + 1,
-                        )
+                        to_json(program, value, *item, state, &format!("{path}[{index}]"))
                     })
                     .collect::<Result<Vec<_>, _>>()?,
             ))
         }
         (NormalizedValue::Map(values), TypeForm::Map { key, value: item }) => {
-            map_to_json(program, values, (*key, *item), state, path, depth)
+            map_to_json(program, values, (*key, *item), state, path)
         }
         (
             _,
@@ -724,14 +650,10 @@ fn map_to_json(
     (key_type, item_type): (TypeObjectDigest, TypeObjectDigest),
     state: &mut EncodeState,
     path: &str,
-    depth: usize,
 ) -> Result<JsonValue, Diagnostic> {
     // Every entry contributes its outer-array member and both pair members.
     let items = values.len().checked_mul(3).ok_or_else(json_item_overflow)?;
     state.charge(items, path)?;
-    if !values.is_empty() {
-        state.require_container_depth(&format!("{path}[0]"), depth + 1)?;
-    }
     let mut entries = Vec::new();
     let mut cursor = values.iter();
     for (index, (map_key, value)) in cursor.by_ref().enumerate() {
@@ -741,7 +663,6 @@ fn map_to_json(
             key_type,
             state,
             &format!("{path}[{index}][0]"),
-            depth + 2,
         )?;
         let value = to_json(
             program,
@@ -749,7 +670,6 @@ fn map_to_json(
             item_type,
             state,
             &format!("{path}[{index}][1]"),
-            depth + 2,
         )?;
         entries.push(JsonValue::Array(vec![key, value]));
     }
@@ -762,7 +682,6 @@ fn encode_named(
     ty: TypeObjectDigest,
     state: &mut EncodeState,
     path: &str,
-    depth: usize,
 ) -> Result<JsonValue, Diagnostic> {
     if let Some((index, layout)) = record_layout(program, ty) {
         let NormalizedValue::Record(NormalizedRecord::Nominal {
@@ -785,7 +704,7 @@ fn encode_named(
             state.require_string(field.name.as_str(), &field_path)?;
             object.insert(
                 field.name.as_str().to_owned(),
-                to_json(program, value, field.ty, state, &field_path, depth + 1)?,
+                to_json(program, value, field.ty, state, &field_path)?,
             );
         }
         return Ok(JsonValue::Object(object));
@@ -812,7 +731,7 @@ fn encode_named(
         state.charge(if case.payload.is_some() { 2 } else { 1 }, path)?;
         let case_path = format!("{path}.case");
         state.require_string("case", &case_path)?;
-        state.require_depth(&case_path, depth + 1)?;
+        checkpoint(state.control)?;
         let mut object = Map::new();
         object.insert(
             "case".to_owned(),
@@ -824,14 +743,7 @@ fn encode_named(
                 state.require_string("value", &format!("{path}.value"))?;
                 object.insert(
                     "value".to_owned(),
-                    to_json(
-                        program,
-                        value,
-                        *ty,
-                        state,
-                        &format!("{path}.value"),
-                        depth + 1,
-                    )?,
+                    to_json(program, value, *ty, state, &format!("{path}.value"))?,
                 );
             }
             _ => {
@@ -919,15 +831,12 @@ fn map_key_to_json(
     ty: TypeObjectDigest,
     state: &mut EncodeState,
     path: &str,
-    depth: usize,
 ) -> Result<JsonValue, Diagnostic> {
-    state.require_depth(path, depth)?;
+    checkpoint(state.control)?;
     match (key, json_form(program, ty, false, path)?) {
         (NormalizedMapKey::Bool(value), TypeForm::Bool) => Ok(JsonValue::Bool(*value)),
         (NormalizedMapKey::I64(value), TypeForm::I64) => Ok(JsonValue::from(*value)),
-        (NormalizedMapKey::Bytes(value), TypeForm::Bytes) => {
-            bytes_to_json(value, state, path, depth)
-        }
+        (NormalizedMapKey::Bytes(value), TypeForm::Bytes) => bytes_to_json(value, state, path),
         (NormalizedMapKey::Text(value), TypeForm::Text) => text_to_json(value, state, path),
         _ => Err(type_error(
             path,
@@ -940,13 +849,11 @@ fn bytes_to_json(
     value: &[u8],
     state: &mut EncodeState,
     path: &str,
-    depth: usize,
 ) -> Result<JsonValue, Diagnostic> {
-    state.require_container_depth(path, depth)?;
     state.charge(1, path)?;
     let field_path = format!("{path}.$bytes");
     state.require_string("$bytes", &field_path)?;
-    state.require_depth(&field_path, depth + 1)?;
+    checkpoint(state.control)?;
     let encoded_length = value
         .len()
         .checked_add(2)
@@ -987,22 +894,6 @@ struct EncodeState<'a> {
 }
 
 impl EncodeState<'_> {
-    fn require_depth(&self, path: &str, depth: usize) -> Result<(), Diagnostic> {
-        checkpoint(self.control)?;
-        require_depth(self.limits, path, depth)
-    }
-
-    fn require_container_depth(&self, path: &str, depth: usize) -> Result<(), Diagnostic> {
-        self.require_depth(path, depth)?;
-        if depth >= MAXIMUM_JSON_CONTAINER_NESTING {
-            return Err(type_error(
-                path,
-                "typed JSON exceeds the reader's container-nesting limit",
-            ));
-        }
-        Ok(())
-    }
-
     fn require_string(&mut self, value: &str, path: &str) -> Result<(), Diagnostic> {
         if value.len() > self.limits.maximum_string_bytes {
             return Err(type_error(path, "text exceeds the JSON string-byte limit"));
@@ -1053,16 +944,6 @@ fn json_item_overflow() -> Diagnostic {
         "normalized_json_item_overflow",
         "typed JSON item accounting overflowed",
     )
-}
-
-fn require_depth(limits: JsonLimits, path: &str, depth: usize) -> Result<(), Diagnostic> {
-    if depth > limits.maximum_depth {
-        return Err(type_error(
-            path,
-            "typed JSON exceeds the nesting-depth limit",
-        ));
-    }
-    Ok(())
 }
 
 fn type_error(path: &str, message: impl Into<String>) -> Diagnostic {

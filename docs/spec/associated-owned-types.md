@@ -198,14 +198,14 @@ Every encoded participant must use the current epoch.
 Owner, interface and compiler-unit records retain complete headers, declaration
 metadata, ordered fields and inline inventories. Type records retain all authority
 coordinates above. Current owner 4 MiB, interface 1 MiB, unit 8 MiB, type 1 MiB
-and depth/work limits remain. All binding RHS roots enter source/interface
+and selected work limits remain. All binding RHS roots enter source/interface
 admission and lowering tables. Summaries and compiler keys bind the complete
 inventory; inventory-only changes invalidate downstream reuse.
 
 Occurrence traversal keeps its first authority context and pending node in fixed
 inline storage. Additional contexts, pending capacity and visited entries reserve
 cumulative modeled storage before growth. Every invocation rereads its exact
-authority and retains the same depth, work and metadata limits; inline storage
+authority and retains the selected work and metadata policies; inline storage
 does not cache semantic permission across calls or change canonical bytes.
 
 Kernel, interface and compiler readers independently check inventories, roots,

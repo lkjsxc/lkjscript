@@ -283,12 +283,12 @@ fn publication_roots_admit_complete_call_and_method_witness_actuals() {
 }
 
 #[test]
-fn publication_roots_refuse_excessive_witness_depth_before_projection() {
+fn publication_roots_cross_former_witness_depth() {
     let mut witness = ImplementationOperand::Parameter {
         scope: reference(2),
         parameter: ImplementationParameterId::migrate(SEED, 2),
     };
-    for _ in 0..crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
+    for _ in 0..crate::platform::kernel::contract::FORMER_TYPE_DEPTH {
         witness = ImplementationOperand::Concrete {
             implementation: reference(8),
             type_arguments: Vec::new(),
@@ -329,12 +329,10 @@ fn publication_roots_refuse_excessive_witness_depth_before_projection() {
         type_arguments: Vec::new(),
         implementations: vec![previous],
     };
-    // The 257th edge must fail even when the projected root inventory would be empty.
-    let error = admit_candidate_owner_type_roots(&record, &admission(u64::MAX)).unwrap_err();
-    assert_eq!(error.class, DiagnosticClass::Resource);
-    assert_eq!(
-        error.code,
-        "publication_repository_reference_visits_exhausted"
+    assert!(
+        admit_candidate_owner_type_roots(&record, &admission(u64::MAX))
+            .unwrap()
+            .is_empty()
     );
 }
 

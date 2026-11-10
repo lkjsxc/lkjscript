@@ -200,20 +200,17 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             let mut visited = BTreeMap::new();
             while let Some((ty, depth)) = pending.pop() {
                 self.tick()?;
-                if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-                    return Err(Diagnostic::new(
-                        DiagnosticClass::Resource,
-                        "kernel_callable_flow_type_depth",
-                        "associated binding exceeds structural type depth",
-                    ));
-                }
-                if visited.get(&ty).is_some_and(|previous| *previous >= depth) {
+
+                if visited
+                    .get(&ty)
+                    .is_some_and(|previous| *previous >= depth.min(1))
+                {
                     continue;
                 }
                 if !visited.contains_key(&ty) {
                     self.reserve::<(TypeObjectDigest, usize)>(1)?;
                 }
-                visited.insert(ty, depth);
+                visited.insert(ty, depth.min(1));
                 let object = self
                     .read
                     .type_object(owner.package, ty)?
@@ -470,13 +467,7 @@ fn seed_operand<R: CallableClosureRead + ?Sized>(
     let mut pending = vec![(operand, path)];
     while let Some((operand, path)) = pending.pop() {
         analysis.tick()?;
-        if path.len() > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH + 1 {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "kernel_callable_flow_witness_depth",
-                "exact associated witness path exceeds bounded prerequisite depth",
-            ));
-        }
+
         if let ImplementationOperand::Concrete {
             implementations, ..
         } = operand
@@ -602,13 +593,6 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                 _ => {
                     self.reserve::<TypeObjectDigest>(object.child_type_count())?;
                     for (child, ty) in object.child_types().into_iter().enumerate() {
-                        if path.len() >= crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-                            return Err(Diagnostic::new(
-                                DiagnosticClass::Resource,
-                                "kernel_callable_flow_type_depth",
-                                "associated binding exceeds structural type depth",
-                            ));
-                        }
                         self.reserve::<usize>(path.len() + 1)?;
                         self.reserve::<(TypeObjectDigest, Vec<usize>)>(1)?;
                         let mut child_path = path.clone();

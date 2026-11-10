@@ -71,9 +71,7 @@ Exact/N-1 work admission and early/late cancellation probes retain failure class
 The [literal public workload](../../examples/demanded-callable-proof/README.md)
 authors and exports the recursive generic library before creating a concrete item,
 then uses bounded concrete selections, borrowed reads, identity-preserving edits and
-detached execution. [Measurements](../performance.md#demanded-recursive-type-provenance)
-separate admitted proof work and metadata from execution costs; small cases can
-require more work. [Status](../status.md) owns actual acceptance and distribution.
+detached execution.
 
 This does not prove polynomial preparation in general. The exact context inventory
 and the number of genuinely demanded paths may still grow substantially. Concrete

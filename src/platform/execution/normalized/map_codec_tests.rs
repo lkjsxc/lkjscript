@@ -556,7 +556,7 @@ fn map_and_byte_json_wrappers_obey_representation_limits() {
         &fixture.program as &dyn super::super::value_schema::NormalizedValueSchema,
         &fixture.reference,
     ] {
-        for (ty, json, items, depth, string_bytes) in [
+        for (ty, json, items, _depth, string_bytes) in [
             (fixture.maps[1], b"[[1,2]]".as_slice(), 3, 2, 0),
             (fixture.maps[1], b"[[1,2],[3,4]]".as_slice(), 6, 2, 0),
             (fixture.maps[3], "[[\"猫\",1]]".as_bytes(), 3, 2, 3),
@@ -584,7 +584,6 @@ fn map_and_byte_json_wrappers_obey_representation_limits() {
                 json,
                 JsonLimits {
                     maximum_bytes: json.len(),
-                    maximum_depth: depth,
                     maximum_items: items,
                     maximum_string_bytes: string_bytes,
                 },
@@ -613,33 +612,36 @@ fn map_and_byte_json_wrappers_obey_representation_limits() {
 }
 
 #[test]
-fn json_output_respects_the_unchanged_parser_container_limit() {
-    let mut fixture = fixture();
-    let mut ty = fixture.integer;
-    let mut value = NormalizedValue::I64(7);
-    for depth in 1..=128 {
-        ty = admit_runtime_type(&mut fixture.program, TypeForm::List { item: ty });
-        value = NormalizedValue::list(vec![value]).unwrap();
-        if depth < 127 {
-            continue;
-        }
-        let json = format!("{}7{}", "[".repeat(depth), "]".repeat(depth));
-        let parsed =
-            crate::platform::json::decode_application(json.as_bytes(), JsonLimits::default());
-        let encoded = codec::encode_typed(&fixture.program, &value, ty, JsonLimits::default());
-        if depth == 127 {
-            parsed.unwrap();
-            assert_eq!(encoded.unwrap(), json.as_bytes());
-        } else {
-            assert!(
-                parsed
-                    .unwrap_err()
-                    .message
-                    .contains("recursion limit exceeded")
+fn json_nested_lists_cross_former_parser_limits_and_round_trip() {
+    crate::platform::stack::run("json-list-lifecycle", || {
+        let mut fixture = fixture();
+        let mut ty = fixture.integer;
+        let mut value = NormalizedValue::I64(7);
+        for depth in 1..=1024 {
+            ty = admit_runtime_type(&mut fixture.program, TypeForm::List { item: ty });
+            value = NormalizedValue::list(vec![value]).unwrap();
+            if ![128, 256, 512, 1024].contains(&depth) {
+                continue;
+            }
+            let json = format!("{}7{}", "[".repeat(depth), "]".repeat(depth));
+            let parsed =
+                crate::platform::json::decode_application(json.as_bytes(), JsonLimits::default())
+                    .unwrap();
+            assert_eq!(
+                codec::encode_typed(&fixture.program, &value, ty, JsonLimits::default()).unwrap(),
+                json.as_bytes()
             );
-            assert_eq!(encoded.unwrap_err().code, "normalized_json_type");
+            let decoded =
+                codec::decode_value(&fixture.program, &parsed, ty, JsonLimits::default()).unwrap();
+            assert_eq!(
+                codec::encode_typed(&fixture.program, &decoded, ty, JsonLimits::default()).unwrap(),
+                json.as_bytes()
+            );
+            drop(decoded);
+            drop(parsed);
         }
-    }
+    })
+    .unwrap();
 }
 
 #[test]
@@ -885,17 +887,14 @@ fn nested_map_envelope(fixture: &Fixture, depth: usize) -> Vec<u8> {
 }
 
 #[test]
-fn map_codec_nested_boundaries_fit_the_existing_stack_and_preserve_shared_values() {
-    // Preparation has its separate depth owner. Keep it outside the bounded codec worker.
-    let fixture = fixture_with_map_depth(129);
-    std::thread::Builder::new()
-        .name("nested-map-codec-boundaries".to_owned())
-        .stack_size(2 * 1024 * 1024)
-        .spawn(move || {
-            let value = shared_map_chain(128);
+fn map_codec_nested_lifecycle_crosses_former_data_and_json_depth_limits() {
+    crate::platform::stack::run("nested-map-codec-lifecycle", || {
+        let fixture = fixture_with_map_depth(1024);
+        for depth in [128, 256, 512, 1024] {
+            let value = shared_map_chain(depth);
             let retained = value.clone();
-            let ty = fixture.map_chain[128];
-            let expected = nested_map_envelope(&fixture, 128);
+            let ty = fixture.map_chain[depth];
+            let expected = nested_map_envelope(&fixture, depth);
             assert_eq!(
                 data_codec::encode_typed(&fixture.program, &value, ty).unwrap(),
                 expected
@@ -905,72 +904,42 @@ fn map_codec_nested_boundaries_fit_the_existing_stack_and_preserve_shared_values
                 expected
             );
             let decoded = data_codec::decode_typed(&fixture.program, &expected, ty).unwrap();
-            assert_map_chain(&decoded, 128);
+            assert_map_chain(&decoded, depth);
+            drop(decoded);
             let decoded =
                 data_codec_reference::decode_typed(&fixture.reference, &expected, ty).unwrap();
-            assert_map_chain(&decoded, 128);
+            assert_map_chain(&decoded, depth);
+            drop(decoded);
             for schema in [
                 &fixture.program as &dyn super::super::value_schema::NormalizedValueSchema,
                 &fixture.reference,
             ] {
-                // JSON pair framing contributes two container levels per map;
-                // typed data retains its independent 128-map layout boundary.
-                let shallow = shared_map_chain(63);
-                let shallow_ty = fixture.map_chain[63];
-                let json = codec::encode_value(schema, &shallow, shallow_ty, JsonLimits::default())
-                    .unwrap();
-                assert_json_map_chain(&json, 63);
+                let json = codec::encode_value(schema, &value, ty, JsonLimits::default()).unwrap();
+                assert_json_map_chain(&json, depth);
                 let decoded =
-                    codec::decode_value(schema, &json, shallow_ty, JsonLimits::default()).unwrap();
-                assert_map_chain(&decoded, 63);
-                let bytes =
-                    codec::encode_typed(schema, &shallow, shallow_ty, JsonLimits::default())
-                        .unwrap();
+                    codec::decode_value(schema, &json, ty, JsonLimits::default()).unwrap();
+                assert_map_chain(&decoded, depth);
+                drop(decoded);
+                let bytes = codec::encode_typed(schema, &value, ty, JsonLimits::default()).unwrap();
                 let decoded =
-                    codec::decode_typed(schema, &bytes, shallow_ty, JsonLimits::default()).unwrap();
-                assert_map_chain(&decoded, 63);
-                for depth in [64, 128] {
-                    let excessive = shared_map_chain(depth);
-                    let error = codec::encode_value(
-                        schema,
-                        &excessive,
-                        fixture.map_chain[depth],
-                        JsonLimits::default(),
-                    )
-                    .unwrap_err();
-                    assert_eq!(error.class, DiagnosticClass::Source);
-                    assert_eq!(error.code, "normalized_json_type");
-                }
+                    codec::decode_typed(schema, &bytes, ty, JsonLimits::default()).unwrap();
+                assert_map_chain(&decoded, depth);
+                drop(decoded);
+                let mut malformed = bytes;
+                malformed.pop();
+                assert!(
+                    codec::decode_typed(schema, &malformed, ty, JsonLimits::default()).is_err()
+                );
+                drop(json);
             }
-            let excessive = shared_map_chain(129);
-            let excessive_ty = fixture.map_chain[129];
-            for error in [
-                data_codec::encode_typed(&fixture.program, &excessive, excessive_ty).unwrap_err(),
-                data_codec_reference::encode_typed(&fixture.reference, &excessive, excessive_ty)
-                    .unwrap_err(),
-            ] {
-                assert_eq!(error.class, DiagnosticClass::Resource);
-                assert_eq!(error.code, "normalized_data_layout_depth");
-            }
-            // JSON's maintained depth owner reports a source type error, while typed
-            // data's independent layout owners report finite resource exhaustion.
-            for schema in [
-                &fixture.program as &dyn super::super::value_schema::NormalizedValueSchema,
-                &fixture.reference,
-            ] {
-                let error =
-                    codec::encode_value(schema, &excessive, excessive_ty, JsonLimits::default())
-                        .unwrap_err();
-                assert_eq!(error.class, DiagnosticClass::Source);
-                assert_eq!(error.code, "normalized_json_type");
-            }
-            assert_map_chain(&retained, 128);
+            drop(value);
+            assert_map_chain(&retained, depth);
             assert_eq!(
                 data_codec::encode_typed(&fixture.program, &retained, ty).unwrap(),
                 expected
             );
-        })
-        .unwrap()
-        .join()
-        .unwrap();
+            drop(retained);
+        }
+    })
+    .unwrap();
 }

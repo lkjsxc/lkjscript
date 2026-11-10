@@ -40,9 +40,7 @@ impl<'a, 'e, R: ExpressionRead + ?Sized> EffectAppliedTypes<'a, 'e, R> {
         depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         self.derived.read.validation_work()?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH
-            || self.resolved.len() >= contract::MAXIMUM_VALIDATION_WORK
-        {
+        if self.resolved.len() >= contract::MAXIMUM_VALIDATION_WORK {
             return Err(Diagnostic::new(
                 DiagnosticClass::Resource,
                 "kernel_effect_type_capacity",
@@ -192,9 +190,7 @@ impl<'a, 'e, R: ExpressionRead + ?Sized> WitnessAppliedTypes<'a, 'e, R> {
         depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         self.derived.read.validation_work()?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH
-            || self.resolved.len() >= contract::MAXIMUM_VALIDATION_WORK
-        {
+        if self.resolved.len() >= contract::MAXIMUM_VALIDATION_WORK {
             return Err(Diagnostic::new(
                 DiagnosticClass::Resource,
                 "kernel_parallel_types",
@@ -394,9 +390,7 @@ impl<'a, R: ExpressionRead + ?Sized> ScopedAppliedTypes<'a, R> {
         depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         self.admission.step(self.derived.read)?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(storage_exhausted());
-        }
+
         if let Some(result) = self.derived.resolved.get(&ty) {
             return Ok(*result);
         }
@@ -599,9 +593,7 @@ impl<'a, R: ExpressionRead + ?Sized> AppliedTypes<'a, R> {
         depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         self.read.validation_work()?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH
-            || self.resolved.len() >= contract::MAXIMUM_VALIDATION_WORK
-        {
+        if self.resolved.len() >= contract::MAXIMUM_VALIDATION_WORK {
             return Err(Diagnostic::new(
                 DiagnosticClass::Resource,
                 "kernel_parallel_types",

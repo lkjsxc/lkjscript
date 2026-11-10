@@ -277,9 +277,7 @@ impl Closing<'_, '_> {
         depth: usize,
     ) -> Result<(), Diagnostic> {
         step(self.work)?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(missing());
-        }
+
         let object = self.types.get(&ty).ok_or_else(missing)?;
         match object.form {
             TypeForm::AssociatedContractMember { .. }
@@ -307,9 +305,7 @@ impl Closing<'_, '_> {
         depth: usize,
     ) -> Result<(), Diagnostic> {
         step(self.work)?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(missing());
-        }
+
         let object = self.types.get(&ty).ok_or_else(missing)?;
         if let TypeForm::ReadViewApplied { read_scope, .. } = &object.form
             && *read_scope != ReadScopeArgument::Parameter(expected)
@@ -330,9 +326,7 @@ impl Closing<'_, '_> {
         depth: usize,
     ) -> Result<(), Diagnostic> {
         step(self.work)?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(missing());
-        }
+
         if let ImplementationOperand::Concrete {
             type_arguments,
             implementations,
@@ -382,9 +376,7 @@ impl Closing<'_, '_> {
         depth: usize,
     ) -> Result<AppliedWitness, Diagnostic> {
         step(self.work)?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(missing());
-        }
+
         match operand {
             ImplementationOperand::Concrete {
                 implementation,
@@ -428,11 +420,7 @@ impl Closing<'_, '_> {
                     .map(|witness| witness.depth.saturating_add(1))
                     .max()
                     .unwrap_or(0);
-                if depth.saturating_add(subtree_depth)
-                    > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-                {
-                    return Err(missing());
-                }
+
                 self.work.reserve::<TypeObjectDigest>(arguments.len())?;
                 self.work.reserve::<u32>(prerequisites.len())?;
                 let key = (
@@ -440,7 +428,7 @@ impl Closing<'_, '_> {
                     arguments.clone(),
                     prerequisites.iter().map(|w| w.identity).collect(),
                 );
-                // All written operands and depth bounds have been admitted above.
+                // All written operands have been admitted above.
                 // Reuse the entire exact node, not only its numeric identity.
                 if let Some(selected) = self.witnesses.get(&key) {
                     return Ok(selected.clone());
@@ -471,11 +459,7 @@ impl Closing<'_, '_> {
                     return Err(missing());
                 }
                 let witness = bindings.get(parameter).ok_or_else(missing)?;
-                if depth.saturating_add(witness.depth)
-                    > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-                {
-                    return Err(missing());
-                }
+
                 Ok(witness.clone())
             }
         }
@@ -487,11 +471,7 @@ impl Closing<'_, '_> {
         depth: usize,
     ) -> Result<NormalizedImplementationArgument, Diagnostic> {
         step(self.work)?;
-        if depth.saturating_add(witness.depth)
-            > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-        {
-            return Err(missing());
-        }
+
         if let Some(application) = self.normalized.get(witness) {
             return Ok(application.clone());
         }
@@ -1781,7 +1761,7 @@ mod tests {
             different.implementations[0].identity,
             different.implementations[1].identity
         );
-        let maximum = crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
+        let maximum = crate::platform::kernel::contract::FORMER_TYPE_DEPTH;
         for _ in 24..maximum {
             let bindings = Bindings::from([(parameter, selected)]);
             selected = closing
@@ -1789,22 +1769,15 @@ mod tests {
                 .unwrap();
         }
         assert_eq!(selected.depth, maximum);
-        let before = (closing.witnesses.len(), closing.normalized.len());
-        assert!(
-            closing
-                .operand(
-                    &operand,
-                    Some(scope),
-                    &Bindings::from([(parameter, selected)]),
-                    &BTreeMap::new()
-                )
-                .is_err()
-        );
-        assert_eq!(
-            before,
-            (closing.witnesses.len(), closing.normalized.len()),
-            "one-over-depth rejection precedes interned metadata publication"
-        );
+        let next = closing
+            .operand(
+                &operand,
+                Some(scope),
+                &Bindings::from([(parameter, selected)]),
+                &BTreeMap::new(),
+            )
+            .unwrap();
+        assert_eq!(next.depth, maximum + 1);
     }
 }
 

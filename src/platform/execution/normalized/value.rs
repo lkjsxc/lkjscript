@@ -453,7 +453,6 @@ pub(super) fn projected_value_bytes(
 ) -> Result<u64, crate::platform::execution::ExecutionError> {
     let mut value = value;
     let mut bytes = 0_u64;
-    let mut depth = 0_u16;
     loop {
         value = match value {
             NormalizedValue::Option(Some(child))
@@ -464,13 +463,6 @@ pub(super) fn projected_value_bytes(
             } => child,
             _ => return Ok(bytes),
         };
-        depth += 1;
-        if depth > 256 {
-            return Err(crate::platform::execution::ExecutionError::resource(
-                "normalized_value_depth",
-                "map projection exceeds finite value depth 256",
-            ));
-        }
         bytes = bytes
             .checked_add(std::mem::size_of::<NormalizedValue>() as u64)
             .ok_or_else(|| {

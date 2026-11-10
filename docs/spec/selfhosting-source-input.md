@@ -126,7 +126,8 @@ intervals. Ownership forests use bounded pointer doubling with a complete rootin
 proof fused into each pass; a separately charged terminal root scan remains when
 no pass proves every row rooted. Cycles still reject. Later parent walks run only
 after that forest proof.
-Structural type admission settles distinct nodes or rejects a no-progress pass.
+Structural type admission queues each node once when its dependency count reaches
+zero. An exhausted queue with unprocessed nodes identifies a cycle.
 Type/nominal queues retain visited-state deduplication. Namespace merge-sort
 splits finite row ranges. These structural arguments also apply in unbounded
 mode.
@@ -140,17 +141,13 @@ ordering, while allowing arbitrary row and byte counts within their checked
 backing extent. Their former 100,000-entry and 8 MiB quotas no longer apply.
 
 The optional proof policy does not widen the carrier's u32 length/count/offset/span
-fields or change canonical object formats. The candidate wide-Sequence contract
-below removes its child-count and Owner/CompilerUnit/ArtifactManifest default
-payload quotas through matching readers and storage consumers. Its public
-publication/export path also removes package-source byte/object/map-entry defaults.
-Acceptance and maintained equations are recorded separately in the
-[wide-Sequence decision](../decisions/20261107-wide-sequence-capacity.md).
-Normalized derivation work and modeled metadata now have independent optional
-allowances in this contract. Other per-form limits,
-object domains, package topology, structural depth and later runtime/native
-boundaries remain separate work;
-no full-capacity or Tier 2 completion claim follows.
+fields or change canonical object formats. The wide-Sequence contract below has
+no child-count or Owner/CompilerUnit/ArtifactManifest default payload quota through
+matching readers and storage consumers. Its public publication/export path also
+has no package-source byte/object/map-entry defaults. Normalized derivation work
+and modeled metadata still have independent optional allowances. Remaining
+per-form limits, object domains, package topology and runtime/native boundaries
+are described by their owning contracts.
 
 ## Binding and references
 
@@ -170,8 +167,8 @@ The type directory contains content-addressed objects; its complete membership i
 not a separate input to the kernel semantic-state digest. All supplied types are
 still shape-checked, bound to their own digests and reference-checked. Adding a
 valid unused type may therefore preserve the semantic-state digest while changing
-the carrier bytes. The test receipt records a separate SHA-256 for complete
-carrier identity; neither identity substitutes for validation. Reuse across inputs
+the carrier bytes. Test output records a separate SHA-256 for complete carrier
+identity; neither identity substitutes for validation. Reuse across inputs
 must bind the complete carrier, not only the semantic-state digest; an additional
 unused type can change reference closure without changing that state.
 
@@ -378,9 +375,12 @@ parent is reused for Operation-owned Parameters as well as Function Parameters.
 supplied type descriptor, including unused descriptors. Structural field types,
 List items, pure/task function parameters/results and Applied arguments are child edges.
 Named nominal declaration references are not structural backedges. All endpoints
-must already exist in the admitted type directory. Repeatedly settling descriptors
-whose children have known heights establishes acyclicity and the maximum structural
-depth of 256 edges. Unsettled descriptors with no progress identify a cycle.
+must already exist in the admitted type directory. A dense table counts each
+node's remaining child edges, including duplicates. Zero-dependency nodes enter a
+work queue once; processing a node scans the edges and decrements its dependents.
+Queue exhaustion with fewer processed nodes than supplied identifies a cycle.
+The current byte representation performs O(VE + V) scans and O(VE + V²) copying;
+indexed adjacency and mutable storage can reduce the remaining work.
 
 Every supported owner carrying type roots is checked in its enclosing semantic
 declaration context. Traversal follows all child types; a TypeParameter descriptor
@@ -403,16 +403,11 @@ permitted until an owner uses it in an invalid context. Any later cache must bin
 the complete carrier and using binder context, including method, read-scope and
 witness identities when those forms are admitted.
 
-Type-object digests commit to their child digests, so rehashing ordinary objects
-cannot create a self-consistent structural cycle. Independent derived graph fixtures
-exercise cycle proof and the exact depth boundary directly. Raw-carrier tests
-exercise acyclic structure and context-sensitive type-parameter mutations; direct
-cycle tests must not be reported as end-to-end hash-consistent cyclic carrier
-coverage. Raw TaskFunction boundary controls alternate parameter and result edges
-at depths 256 and 257, with a fixed explicitly selected allowance within the
-existing range. Namespace success precedes the structural outcomes 0 and 17.
-A smaller allowance returning 6 is resource evidence, not a depth-semantic result.
-Structural cycle or depth failure is code 17.
+Type-object digests commit to their child digests. Independent derived graph fixtures
+exercise structural cycle rejection. Raw-carrier tests exercise acyclic nesting and
+context-sensitive type-parameter checks. TaskFunction controls alternate parameter
+and result edges across the former 256-edge depth ceiling. Structural cycle or type
+scope failure returns 17; an exhausted caller-selected work allowance returns 6.
 
 ## Nominal member parameter flow
 
@@ -542,10 +537,8 @@ initializer's type, If conditions are Bool, both branches agree, and Sequence
 checks every item before taking its last type. Declared signatures type direct
 and mutual recursion without expanding callees.
 
-### Wide Sequence candidate contract
+### Wide Sequence contract
 
-Acceptance and maintained equations are recorded separately in the
-[Sequence decision](../decisions/20261107-wide-sequence-capacity.md).
 A Sequence remains nonempty and has no default child-count quota. Its fixed-width
 17-byte typed references must fit the exact admitted owner payload; compare count
 with remaining bytes divided by 17 before multiplication, and require no trailing
@@ -630,16 +623,12 @@ loading, VM/reference/C0/C2 result 42 and 17 recovery frames. It retains its own
 carrier/request/artifact identities. Maintained artifact equations and acceptance
 are recorded separately in the linked wide-Sequence decision.
 
-C1 and the fresh C2 100,001-child public-API controls passed both outputs, host
-artifact equality, independent execution and 17 native phase frames. Their fixture
-carriers, requests and emitted bytes match. Owner/unit bytes and instruction/
-reference counts did not cross their former limits. The C2 control actually
-derived C1/C2/C3 from complete public source, compared C2=C3 and rechecked the
-original repository before using C2. The fresh million-item real-disk crossing
-now has its own passing terminal binding. Preparatory native equality does not
-replace the separate maintained artifact equation or final seal. Those outcomes
-are recorded in the linked wide-Sequence decision, with exact historical evidence,
-resource scope and source bindings.
+The maintained semantic corpus includes 100,001-child Sequence controls for both
+outputs, exact host artifact agreement and independent execution. The separate
+`selfhost_source_sequence_crosses_owner_unit_and_reference_ceilings` slow test
+uses public disk publication and defaults to 1,000,001 items. Select scale controls
+through [verification](verification.md); report the sizes, results and resource
+observations from the actual run.
 
 External admission uses the complete implementation identifier, independently
 of the declaration name. The maintained `ci` declarations use these 27 exact
@@ -802,14 +791,14 @@ measurement before emission. Function metadata is packed in the same descriptor
 order, and every eligible declaration receives its exact full signature even
 when uncalled. Canonical BeginBind/Capture positions become checked Pass rows
 in the native projection, preserving PCs. Generated mode-0 policy is unbounded.
-Source u32 framing, checked canonical IR u32 counts/identities, untouched object
-and per-form limits, and existing depth guards remain explicit boundaries. The
-wide-Sequence candidate removes default Owner/CompilerUnit/ArtifactManifest byte
-quotas, not those representations. Heap-backed evaluator frames and generated
-native CALL frames have different physical growth behavior; this profile does
-not claim general native stack unbounding. The independent LKJPH001 invocation
-boundary governs same-process scratch reclamation; closure environments remain
-private scratch values and cannot escape its public Bytes result boundary.
+Source u32 framing, checked canonical IR u32 counts/identities, and remaining object
+and per-form limits remain explicit boundaries. The wide-Sequence candidate removes
+default Owner/CompilerUnit/ArtifactManifest byte quotas. Heap-backed evaluator frames
+grow with execution. Standalone native startup raises the soft OS stack limit toward
+twice physical memory within the caller's hard limit; it preserves a larger existing
+soft limit. The independent LKJPH001 invocation boundary uses the caller's stack and
+governs same-process scratch reclamation. Closure environments remain private scratch
+values and cannot escape its public Bytes result boundary.
 
 ### Canonical artifact construction
 
@@ -869,10 +858,10 @@ distinct reachable owners with checked addition, reject missing or unreachable
 records, and compare against the reference-map entry count. This proof is
 independent of the removed count quota. The separate 10,000,000 compiler-unit
 aggregate bound in CompilationManifest and other untouched capacity families
-remain open. Public above-boundary execution, strict loading, genuine maintained
-raw equations and the terminal source-bound seal are required before acceptance.
+remain open. The scale and bootstrap tests in [verification](verification.md)
+check above-boundary execution, strict loading and maintained raw-source equations.
 
-### Diagnostics and evidence
+### Diagnostics and verification
 
 | Diagnostic | Active source path |
 | --- | --- |
@@ -900,13 +889,11 @@ RevisionCore, complete carrier/request SHA-256, caller target, both current
 profiles, executable bytes, target/ABI/flags and execution environment. A state
 digest alone does not bind unused supplied Type records.
 
-Source-level and stored-object controls are separate from native fixed-point
-acceptance. Milestone A requires complete maintained F_active source to establish
-C2=C3 and Ahost=A1=A2=A3, strict loading/provenance for every generation, independent
-program behavior and compiler-source mutations, complete-inventory negatives and
-fresh frozen-tree gates. The broader P_self semantic families and same-process
-phase reclamation retain their separate requirements in [selfhosting.md](selfhosting.md).
-The [ordinary nominal decision proposal](../decisions/20261103-closed-ordinary-nominal.md)
-records the publicly adopted candidate, passed focused source controls and the
-pending renewed fixed-point and frozen-tree acceptance;
-this specification alone is not an execution or fixed-point receipt.
+The maintained raw-source fixed-point control checks complete F_active source,
+C2=C3, Ahost=A1=A2=A3, strict loading and provenance for every generation, scalar
+behavior changes and compiler-source mutations. The semantic-corpus control adds
+complete-inventory negatives and the active, callable, nominal and sequence cases.
+The native-lifecycle control runs whole compilation, cancellation and cleanup
+through C1 and C2. [Verification](verification.md) documents their separate names
+and combined command. The broader P_self requirements remain in
+[selfhosting.md](selfhosting.md).

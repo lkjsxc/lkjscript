@@ -167,13 +167,10 @@ declarations.end
         NormalizedValue::I64(0),
     );
     for reference in [false, true] {
-        for maximum_call_depth in [3, 4] {
+        for _ in 0..1 {
             let cells = Cells::start();
             let control = ExecutionControl::uncancelled();
-            let policy = NormalizedRunPolicy {
-                maximum_call_depth,
-                ..NormalizedRunPolicy::foreground()
-            };
+            let policy = NormalizedRunPolicy::foreground();
             let result = if reference {
                 let observed = Mutex::new(None);
                 let result = NormalizedReferenceInterpreter::new(&source, &program, policy)
@@ -194,19 +191,15 @@ declarations.end
                 assert_eq!(observed.live_handles_after, 0);
                 result.map(|(value, work)| (value, work.maximum_call_depth))
             };
-            if maximum_call_depth == 3 {
-                let error = result.expect_err("root, nested, leaf and helper require four frames");
-                assert_eq!(error.class, ExecutionFailureClass::Resource);
-                assert!(error.code.ends_with("call_depth"), "{error:?}");
-            } else {
-                assert_eq!(
-                    crate::platform::execution::normalized::structural_equality::assertions::equal(
-                        &(result.unwrap()),
-                        &(expected.clone(), 4)
-                    ),
-                    Ok(true)
-                );
-            }
+
+            assert_eq!(
+                crate::platform::execution::normalized::structural_equality::assertions::equal(
+                    &(result.unwrap()),
+                    &(expected.clone(), 4)
+                ),
+                Ok(true)
+            );
+
             assert_eq!(cells.created(), 1);
             assert_eq!(cells.live(), (0, 0));
         }

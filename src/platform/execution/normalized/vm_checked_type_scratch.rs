@@ -9,14 +9,13 @@ pub(super) fn bound(
     control: &ExecutionControl,
 ) -> Result<u64, ExecutionError> {
     let mut nodes = 0_u64;
-    visit(program, ty, control, 0, &mut nodes)
+    visit(program, ty, control, &mut nodes)
 }
 
 fn visit(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
     control: &ExecutionControl,
-    depth: usize,
     nodes: &mut u64,
 ) -> Result<u64, ExecutionError> {
     control.check()?;
@@ -24,16 +23,14 @@ fn visit(
         .checked_add(1)
         .filter(|n| *n <= super::super::super::value::MAXIMUM_ADMISSION_ITEMS)
         .ok_or_else(exhausted)?;
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(exhausted());
-    }
+
     let object = program
         .types
         .get(&ty)
         .ok_or_else(|| admission_error("raw type substitution has a foreign template"))?;
     let mut nested = 0;
     let mut child = |ty| -> Result<(), ExecutionError> {
-        nested = add(nested, visit(program, ty, control, depth + 1, nodes)?)?;
+        nested = add(nested, visit(program, ty, control, nodes)?)?;
         Ok(())
     };
     let mut names = 0;

@@ -608,7 +608,6 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
         control: &ExecutionControl,
         operation: impl FnOnce(&mut ReferenceState<'_>) -> Result<CheckedValue, ExecutionError>,
     ) -> Result<NormalizedReferenceInvocation, ExecutionError> {
-        validate_reference_policy(self.policy)?;
         control.check()?;
         let binding = self.authority.binding()?;
         if !binding.matches(self.program) {
@@ -637,7 +636,7 @@ impl<'a> NormalizedReferenceInterpreter<'a> {
                 ReferenceWitnessInterner::default(),
             )),
             shared_budget: None,
-            structured_depth: 0,
+
             ancestor_depth: 0,
             memory_domain: super::value::ValueOrigin::fresh().ok_or_else(|| {
                 reference_resource(
@@ -821,7 +820,7 @@ struct ReferenceState<'a> {
     regions: &'a super::region_value::Arena,
     reference_witnesses: Arc<std::sync::Mutex<ReferenceWitnessInterner>>,
     shared_budget: Option<Arc<super::shared_budget::SharedBudget>>,
-    structured_depth: usize,
+
     ancestor_depth: usize,
     memory_domain: super::value::ValueOrigin,
     authority: &'a dyn NormalizedReferenceRead,
@@ -2213,12 +2212,6 @@ impl ReferenceState<'_> {
         let effect_arguments = self.resolve_effect_arguments(effect_arguments)?;
         let requirement_arguments = self.resolve_requirement_arguments(requirement_arguments)?;
         let scopes = self.resolve_read_scope_arguments(scopes)?;
-        if self.call_depth.saturating_add(self.ancestor_depth) >= self.policy.maximum_call_depth {
-            return Err(reference_resource(
-                "normalized_reference_call_depth",
-                "reference execution exceeded its call-depth budget",
-            ));
-        }
         self.call_depth += 1;
         self.observation.maximum_call_depth = self
             .observation
@@ -3581,13 +3574,6 @@ impl ReferenceState<'_> {
                 .is_some_and(Option::is_some)
             || locals.values().any(|v| v.raw().memory_owns_live_loans())
         {
-            if self.call_depth.saturating_add(self.ancestor_depth) >= self.policy.maximum_call_depth
-            {
-                return Err(reference_resource(
-                    "normalized_reference_call_depth",
-                    "retained memory loan scope exceeded call-depth limit",
-                ));
-            }
             self.call_depth += 1;
             self.observation.maximum_call_depth = self
                 .observation
@@ -7225,16 +7211,6 @@ fn reference_map_key_bytes(key: &NormalizedMapKey) -> u64 {
         NormalizedMapKey::Text(value) => value.len() as u64,
         NormalizedMapKey::Bool(_) | NormalizedMapKey::I64(_) => 0,
     }
-}
-
-fn validate_reference_policy(policy: NormalizedRunPolicy) -> Result<(), ExecutionError> {
-    if policy.maximum_call_depth == 0 || policy.maximum_value_stack == 0 {
-        return Err(reference_resource(
-            "normalized_reference_policy",
-            "normalized reference call-depth and value-stack limits must be positive",
-        ));
-    }
-    Ok(())
 }
 
 fn reference_capabilities_unbound() -> ExecutionError {

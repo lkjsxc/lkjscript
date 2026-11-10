@@ -48,10 +48,6 @@ Measure preparation time, execution time, allocation and retained storage for bo
 representations on matched complete outputs. A difference in representation or
 allocation identity is not a performance result. Retain unfavorable results and
 claim API-cost savings only from actual usage measurements.
-The [matched worklist and graph measurements](../performance.md#parameterized-owned-worklists-2026-10-05)
-retain higher chunk32 invocation/allocation costs. Flat storage is the practical
-baseline for those workloads; preparation dominates the flat small cases. Future
-preparation sharing needs its own independently admitted, measured increment.
 
 Idle executor retention of shared worker capacity is a separate runtime problem.
 Its admission, fairness, cancellation and joined-cleanup contract should not be

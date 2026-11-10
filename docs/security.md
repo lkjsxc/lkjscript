@@ -91,35 +91,15 @@ requires both the current activation's declared allowance and actual checked com
 including canonical grant identity for compatible requirement mappings. Sharing a grant does not
 widen an allowance or reset accounting. These checks do not establish hostile-code isolation.
 
-## Current static distribution boundary
+## Distribution inputs
 
-The current release path selects one `x86_64-unknown-linux-musl` candidate and treats every build,
-handoff, archive, manifest, checksum, receipt, image, and downloaded asset as hostile or mutable
-input until validated. First-party ELF inspection requires little-endian ELF64 x86-64 with no
-runtime interpreter, `DT_NEEDED` library, or GLIBC symbol-version requirement. Strict archive
-verification rejects links, traversal, duplicates, extras, noncanonical metadata, target/linkage
-contradiction, checksum corruption, candidate substitution, and unsafe extraction targets.
+The retained release-container reader validates canonical archive structure, member
+identities, checksums and the declared executable's static linkage before installation.
+Local installation treats incoming container bytes and filesystem paths as untrusted.
+These checks do not establish build provenance or binary signing.
 
-Exact v0.1.13 candidate execution passed in pinned Alpine 3.22.5/musl 1.2 and Debian 11/glibc 2.31
-userlands with network unavailable and no host library mounts. Transferred
-application verification receives only exact candidate/verifier bytes, an explicit create-new
-private root, loopback HTTP, and isolated local data/object roots. It does not gain a checkout,
-Cargo, application helper, raw retained secret, database server, or publication permission. The
-separate publication job receives no verifier and executes no repository code.
-
-Public 0.1.13 adds outbound acceptance against deterministic local raw HTTP/TLS/DNS fixtures,
-including destination classes, certificate trust/hostname/validity, redirect denial, limits,
-timeout, cancellation, malformed protocol, and cleanup. Exact-tag and latest downloads passed that
-oracle independently. This is not a live-relay observation, privacy guarantee, DNSSEC claim, or
-general network sandbox.
-
-Immutable v0.1.13 and its independent anonymous exact/latest checks completed the current
-release controls. They
-establish static runtime linkage and only the named Linux/amd64 userland boundary; they do not
-establish a minimum kernel, every CPU feature or filesystem, container independence,
-reproducible-build provenance, binary signing, or universal Linux compatibility. Immutable v0.1.8
-remains an unclosed historical recovery point after a workflow-only cross-application equality
-defect; none of its external objects was changed during additive recovery.
+Development verification follows [the routine and slow test commands](spec/verification.md).
+Current distribution policy is in [Distribution](release.md).
 
 ## Explicit non-claims
 
@@ -127,8 +107,7 @@ The system does not isolate hostile lkjscript programs, native dependencies, an 
 data-root/object-store administrators or co-resident processes. It does not provide
 tenant CPU/RSS isolation, encrypted stores/backups, artifact signatures, authenticated provenance,
 distributed consensus, multi-node publication, cross-authority transactions, inbound certificate
-management, CSRF middleware, audit-log durability, or production portability beyond retained
-exact Linux x86-64 target and userland evidence.
+management, CSRF middleware, audit-log durability, or production portability guarantees.
 
 The inbound HTTP/RFC 6455 listener is plaintext, and first-party data roots/backups are not
 encrypted. The transport negotiates no WebSocket extension or subprotocol and does not provide

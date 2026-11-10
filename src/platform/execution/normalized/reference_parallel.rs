@@ -135,8 +135,7 @@ fn exact_witness_identity(
     depth: usize,
     seen: &mut std::collections::BTreeSet<(u32, u64)>,
 ) -> bool {
-    if depth.saturating_add(canonical.depth) > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-        || seen.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
+    if seen.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
         || !physical_catalog_binding(catalog, prepared)
         || prepared.implementation != canonical.implementation
         || prepared.depth != canonical.depth
@@ -182,10 +181,7 @@ impl ReferenceState<'_> {
                 self.associated_step(prerequisite.type_arguments.len().saturating_add(1))?;
             }
         }
-        if depth.saturating_add(reference.depth)
-            > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-            || seen.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
-        {
+        if seen.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
             return Err(reference_type_error(
                 "physical witness exceeds canonical bounds",
             ));
@@ -270,11 +266,7 @@ impl ReferenceState<'_> {
         nodes: &mut u64,
     ) -> Result<bool, ExecutionError> {
         self.control.check()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(reference_type_error(
-                "structured result type exceeds finite depth",
-            ));
-        }
+
         *nodes = nodes
             .checked_add(1)
             .filter(|n| *n <= super::super::value::MAXIMUM_ADMISSION_ITEMS)
@@ -1020,12 +1012,6 @@ impl ReferenceState<'_> {
                 "parallel requires a task calling context",
             ));
         }
-        if self.structured_depth >= parallel::MAXIMUM_STRUCTURED_DEPTH {
-            return Err(reference_resource(
-                "normalized_parallel_depth",
-                "structured evaluator nesting exceeds its live-stack capacity",
-            ));
-        }
         let CanonicalParallelCall {
             task: mut left_task,
             arguments: left_args,
@@ -1274,7 +1260,7 @@ impl ReferenceState<'_> {
             regions: self.regions,
             reference_witnesses: Arc::clone(&self.reference_witnesses),
             shared_budget: Some(budget),
-            structured_depth: self.structured_depth + 1,
+
             ancestor_depth: self.ancestor_depth.saturating_add(self.call_depth),
             memory_domain,
             authority: self.authority,

@@ -22,12 +22,10 @@ impl Scratch<'_> {
         Ok(())
     }
 
-    fn walk(&mut self, ty: TypeObjectDigest, depth: usize) -> Result<(), ExecutionError> {
+    fn walk(&mut self, ty: TypeObjectDigest) -> Result<(), ExecutionError> {
         self.control.check()?;
         self.work = self.work.checked_sub(1).ok_or_else(capacity)?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         let schema = self.schema;
         let object = schema.types.get(&ty).ok_or_else(capacity)?;
         let mut payload = if matches!(
@@ -51,7 +49,7 @@ impl Scratch<'_> {
                     payload = payload
                         .checked_add(128 + field.name.as_str().len() as u64)
                         .ok_or_else(capacity)?;
-                    self.walk(field.ty, depth + 1)?;
+                    self.walk(field.ty)?;
                 }
             }
             TypeForm::Applied { arguments, .. } | TypeForm::ReadViewApplied { arguments, .. } => {
@@ -64,7 +62,7 @@ impl Scratch<'_> {
                     )
                     .ok_or_else(capacity)?;
                 for argument in arguments {
-                    self.walk(*argument, depth + 1)?;
+                    self.walk(*argument)?;
                 }
             }
             TypeForm::Function { parameters, result }
@@ -80,9 +78,9 @@ impl Scratch<'_> {
                     )
                     .ok_or_else(capacity)?;
                 for parameter in parameters {
-                    self.walk(*parameter, depth + 1)?;
+                    self.walk(*parameter)?;
                 }
-                self.walk(*result, depth + 1)?;
+                self.walk(*result)?;
                 if let TypeForm::TaskFunction { effect, .. } = &object.form {
                     // Closing and encoding a closed row uses an ordered set,
                     // the retained row and the codec's row copy.
@@ -106,15 +104,15 @@ impl Scratch<'_> {
             | TypeForm::Option { item }
             | TypeForm::Stream { item }
             | TypeForm::OwnedSequence { item } => {
-                self.walk(*item, depth + 1)?;
+                self.walk(*item)?;
             }
             TypeForm::Map { key, value }
             | TypeForm::Result {
                 ok: key,
                 error: value,
             } => {
-                self.walk(*key, depth + 1)?;
-                self.walk(*value, depth + 1)?;
+                self.walk(*key)?;
+                self.walk(*value)?;
             }
             TypeForm::AssociatedReadViewMember { .. }
             | TypeForm::AssociatedReadViewProjection { .. } => {}
@@ -143,7 +141,7 @@ impl NormalizedReferenceSchema {
             work: super::super::value::MAXIMUM_ADMISSION_ITEMS,
             bytes: 0,
         };
-        scratch.walk(template, 0)?;
+        scratch.walk(template)?;
         Ok(scratch.bytes)
     }
 

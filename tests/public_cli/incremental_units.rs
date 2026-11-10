@@ -433,8 +433,8 @@ fn new_command_targets_keep_exact_incremental_cache_and_detached_behavior() {
             "1"
         );
         assert_eq!(
-            compact_field(compact_record(&attached, "execution"), "differential"),
-            "equal"
+            compact_field(compact_record(&attached, "execution"), "engine"),
+            "vm"
         );
         let bundle = public.root.path().join("bundle");
         std::fs::create_dir(&bundle).unwrap();

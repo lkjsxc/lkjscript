@@ -904,10 +904,6 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     })
 }
 
-pub(crate) fn read_receipt(path: &Path, candidate: &Path) -> Result<ReceiptBinding, DevError> {
-    read_receipt_inner(path, candidate, None)
-}
-
 fn read_receipt_inner(
     path: &Path,
     candidate: &Path,

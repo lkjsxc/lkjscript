@@ -107,9 +107,9 @@ Transactions do not stage or select dependencies implicitly. Input, declaration
 inventories and result encoding have no synthetic aggregate quota. All 46 optional
 change dimensions use the same exact policies as native changes: `(policy DIMENSION
 unbounded)` selects no allowance, and `(policy DIMENSION N)` selects the exact u64
-allowance, including zero and the largest value. Canonical object representation and
-remaining recursive lifecycle boundaries are independent pending cuts, recorded in
-the [capacity ledger](../decisions/20261025-capacity-unbounding.md).
+allowance, including zero and the largest value. Canonical object representation
+follows the [semantic storage contract](semantic-storage.md). Capacity removal
+priorities are recorded in [direction](../direction.md) and [status](../status.md).
 
 The ordinary change engine validates the complete candidate and computes its
 transitive reverse-dependency test cone. A read-only overlay admits the complete

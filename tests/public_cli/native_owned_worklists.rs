@@ -215,8 +215,8 @@ pub(super) fn deployment(public: &Native, artifact: &str, target: &str) -> PathB
 fn clean_execution(records: &[CompactRecord], detached: bool) {
     let execution = compact_record(records, "execution");
     if !detached {
-        assert_eq!(compact_field(execution, "differential"), "equal");
-        for field in ["production-instructions", "reference-expressions"] {
+        assert_eq!(compact_field(execution, "engine"), "vm");
+        for field in ["production-instructions"] {
             assert!(compact_field(execution, field).parse::<u64>().unwrap() > 0);
         }
         return;

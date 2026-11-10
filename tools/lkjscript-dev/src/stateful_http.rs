@@ -561,14 +561,6 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
     })
 }
 
-pub(crate) fn read_transferred_receipt(
-    path: &Path,
-    candidate_path: &Path,
-    verifier_path: &Path,
-) -> Result<TransferredReceiptBinding, DevError> {
-    read_receipt(path, candidate_path, verifier_path, false)
-}
-
 fn read_receipt(
     path: &Path,
     candidate_path: &Path,
@@ -1873,9 +1865,8 @@ fn write_descriptor(path: &Path, artifact: &Path, data_root: &str) -> Result<(),
         },
         "execution": {
             "instruction_fuel": 10000000,
-            "maximum_call_depth": 4096,
-            "maximum_value_stack": 1000000
-        },
+
+            },
         "http": {
             "maximum_request_body_bytes": 65536,
             "maximum_response_body_bytes": 1048576,
@@ -3932,14 +3923,6 @@ fn unix_nanoseconds() -> Result<u128, DevError> {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .map_err(|error| DevError::infrastructure(format!("system clock: {error}")))
-}
-
-#[cfg(test)]
-pub(crate) fn encode_transferred_test_fixture(
-    value: serde_json::Value,
-) -> Result<Vec<u8>, DevError> {
-    let receipt: StatefulReceipt = serde_json::from_value(value)?;
-    evidence::encode_json(&receipt)
 }
 
 #[cfg(test)]

@@ -1498,13 +1498,8 @@ fn verify_wide(stages: &[(&str, &[u8])]) -> Check<()> {
     Ok(())
 }
 
-pub(super) fn verify_stages(
-    left_name: &str,
-    left: &[u8],
-    right_name: &str,
-    right: &[u8],
-) -> Check<()> {
-    let stages = [(left_name, left), (right_name, right)];
+pub(super) fn verify_stage(name: &str, image: &[u8]) -> Check<()> {
+    let stages = [(name, image)];
     verify_semantics(&stages)?;
     verify_rejections(&stages)?;
     verify_wide(&stages)

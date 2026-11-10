@@ -35,7 +35,6 @@ conversion, text character indexing, filesystem authority or a new persisted enc
 A runtime lacking this intrinsic rejects its external declaration during ordinary
 closure admission; unchanged old exact closures retain their previous behavior.
 
-
 ### Immutable byte ranges and explicit backing detachment
 
 The pure closed external `core.bytes.slice` has exactly `(Bytes, I64, I64) -> Bytes`,
@@ -72,8 +71,7 @@ backing identity. These operations add no owned/borrowed type, lifetime, region,
 mutable reference, effect authority or persisted encoding. Runtimes lacking either
 closed external reject a closure containing it before execution; existing exact
 package selections are not upgraded implicitly. The
-[native guide](../guides/native-byte-ranges.md) and
-[implementation record](../campaigns/20260930-byte-ranges.md) own examples and evidence.
+[native guide](../guides/native-byte-ranges.md) provides examples.
 
 ### Raw byte construction and checked text decoding
 
@@ -166,9 +164,9 @@ second item charge. A key converted from Text/Bytes retains its immutable payloa
 range of a byte view, without a second payload allocation. Existing payloads move into
 new entries; shared payloads, keys and subtrees
 incur no fresh deep-copy charge. Even transient rotation nodes remain cumulatively charged.
-Absent removal allocates no tree storage. Remaining map projection, owned-storage and schema
-depth guards, the 256-wrapper inline Box-spine admission boundary, and checked single-allocation
-extents remain separate from cumulative work.
+Absent removal allocates no tree storage. Map projection, owned-storage inspection and schema
+checks retain their semantic checks and checked single-allocation extents. Recursive work uses
+the host's physical-memory-sized semantic stack.
 Ordinary raw-value admission no longer imposes a 1,000,000-item aggregate ceiling, and ordinary
 trusted execution omits cumulative quotas unless explicitly selected.
 
@@ -228,7 +226,7 @@ cancellation and result encoding apply independently of this value contract.
 Instantiated composite types are disposable derivations of exact rank-one substitutions.
 Production preparation closes all concrete signatures, constants, tests, ports, constructors and
 explicit calls over their nominal members; the canonical evaluator independently closes accepted
-owners. Both use the existing validation-work, type-depth and allocation limits, check cancellation,
+owners. Both use the selected validation-work and allocation policies, check cancellation,
 and charge new traversal and metadata before growth. Preparation steps and cumulative metadata bytes
 are reported separately from runtime payload work. Derived types use canonical identities and are
 never a second editable or serialized type authority.
@@ -343,20 +341,16 @@ The closed current type surface is:
 There are no implicit coercions. `I64` arithmetic traps on overflow and division edge cases.
 Indexing and collection growth are checked. Text is valid UTF-8; portable identifier rules avoid
 normalization-dependent identity. Maps permit bool, i64, bytes, or text keys and iterate by a
-specified total order. Ordinary value admission retains a depth-256 limit for consecutive boxed
-Option/Result/Variant wrappers. Opaque Function/Record/List/Map ownership starts a new inline
-spine; their aggregate edges do not share a default nesting quota. Structural type admission and
-identity, owned-storage escape inspection, map projection and external codecs retain their own
-separate depth contracts. Ordinary raw-value admission has no default aggregate collection-item
-ceiling.
+specified total order. Structural types, values, owned-storage inspection, map projection and
+external codecs have no project-defined nesting ceiling. Recursive compiler and evaluator work,
+including value cloning and destruction, runs on a stack reservation sized from physical memory.
+Ordinary raw-value admission has no default aggregate collection-item ceiling.
 
 Execution admits raw values before installing any local or operand. Admission checks exact
 types, nominal and prepared-program identities, resource provenance and containment with an
-iterative traversal, checking cancellation at every node. The inline boxed-spine bound protects
-remaining recursive raw Clone paths; it does not establish stack safety for every raw-value
-lifecycle operation. Aggregate collection admission follows the exact optional invocation policy.
-Allocation includes newly allocated checked
-metadata and remains cumulative; rejected admission installs no partial value.
+iterative traversal, checking cancellation at every node. Aggregate collection admission follows
+the exact optional invocation policy. Allocation includes newly allocated checked metadata and
+remains cumulative; rejected admission installs no partial value.
 
 Each evaluator carries its own construction-controlled classification: affine-free, direct
 capability resource, or affine nominal variant. A nominal variant with any direct capability
@@ -474,7 +468,7 @@ another admitted direct call. Caller and callee must use the same exact requirem
 Direct and mutual synchronous recursion are admitted: each body is independently checked under
 its declared parameter-use contract, and every recursive call applies that same contract rather
 than unfolding another body during affine validation. This does not prove termination. Existing
-execution control, live call-depth and resource limits still apply; tail transfers do not consume
+cancellation, deadlines and allocation failures remain observable; tail transfers do not consume
 an additional live activation. A call failure, cancellation, or resource exhaustion after transfer
 does not restore caller ownership; unwinding drops remaining task-local authority without an
 implicit external queue transition.
@@ -640,8 +634,9 @@ later evaluation and installs no callable. Earlier completed effects retain thei
 only an enclosing transaction can roll back its staged work. Retention admission is iterative,
 cancellable at every visited node and before installation, and counted separately from input and
 raw-result admission. Opaque callable-environment edges have no default depth quota. Capture slots
-count toward exactly selected cumulative collection and allocation policies; capture-type traversal
-and consecutive inline Box spines retain their separate depth-256 guards. Internal reads and calls preserve checked values
+count toward exactly selected cumulative collection and allocation policies. Capture-type traversal
+and consecutive inline Box spines use the same semantic stack as other recursive values.
+Internal reads and calls preserve checked values
 without rescanning retained descendants or copying a captured collection's payload.
 
 Callable environments are runtime-only and have no semantic equality or serialization. Constants

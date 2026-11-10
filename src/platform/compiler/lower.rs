@@ -2671,13 +2671,6 @@ impl<'a, 'b, B: CodeRead + ?Sized> CodeCompiler<'a, 'b, B> {
         expression: ExpressionId,
         depth: usize,
     ) -> Result<ExpressionRecord, Diagnostic> {
-        if depth > crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
-            return Err(compiler_error(
-                DiagnosticClass::Resource,
-                "compiler_expression_depth",
-                "normalized expression exceeds the compiler recursion bound",
-            ));
-        }
         self.unit.work.maximum_expression_depth = self
             .unit
             .work

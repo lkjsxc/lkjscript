@@ -428,28 +428,14 @@ sort with unchanged accepted order. Failures return
 reads and other host structures are outside the embedded proof policy; this
 slice does not claim all preprocessing allocations are fallible or metered.
 
-The accepted Profile-5 suite included a publicly authored package with 800 units,
-799 unused functions carrying distinct 6,144-byte inline text literals, and input
-over 8 MiB. It checked the complete unit identity/text associations, exact source
-and unit objects after strict loading, multiple reachable map pages, equal
-C1/C2/C3 artifacts, a hash-consistent malformed unused unit reaching diagnostic
-10 beyond the former 700-unit boundary, and entry result 42 in both evaluators.
-Independent map controls covered empty/singleton maps, 752/753 and 896/897 leaf
-boundaries, and a three-level 11-page tree with independent physical/logical
-oracles. These historical outcomes are not relabeled as Profile-7 or Profile-8 evidence.
+Current artifact controls cover exact tagged policies, wide fields and pools,
+canonical-u32 representation, metadata roots, partial rows, checked sums and
+multi-page compilation maps. They check complete unit/source identities, unused
+units and independent physical/logical map oracles. Nominal layout and emitted
+source/artifact agreement belong to the maintained semantic corpus.
 
-The Profile-7 controls retain those expectations and add exact tagged-policy,
-wide field/pool, canonical-u32, metadata-root, partial-row and checked-sum cases.
-Synthetic extent or root-count tests do not claim a physically allocated >4 GiB
-carrier or a valid ten-million-unit closure. A projected code body above 8 MiB
-does not establish that the canonical unit codec or public loader admits such a
-unit. The [cutover decision](../decisions/20261030-artifact-profile7.md) records
-implementation, observed verification, adoption and remaining proof separately.
-Profile-8 nominal layout, unused-unit and source/artifact agreement controls are
-required before acceptance. The [ordinary nominal decision proposal](../decisions/20261103-closed-ordinary-nominal.md)
-records public adoption and passed focused source/artifact controls; renewed
-fixed-point and frozen-tree acceptance remain pending. No capacity result follows
-from
-this specification.
-Source-derived canonical artifacts, complete semantic admission and native phase
-reclamation remain Tier 2 obligations.
+Run focused artifact controls with `bash tools/check.sh focused selfhost_artifact`.
+The maintained raw-source fixed point checks C2=C3 and Ahost=A1=A2=A3 with strict
+loading and provenance. Same-process scratch/output reclamation has its own
+native-lifecycle control. [Verification](verification.md) gives their names and
+combined slow command.

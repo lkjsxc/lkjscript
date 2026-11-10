@@ -197,7 +197,3 @@ The over-limit test declares Content-Length before uploading; an oversized chunk
 body was not included in this acceptance. The listener is plaintext and the guide
 does not establish public-network deployment safety, inbound TLS, authentication,
 hostile-code isolation or browser-side WebAssembly support.
-
-The [execution record](../campaigns/202609241913.md) retains acquisition boundaries,
-failed harness attempts, acceptance scope and the separately unresolved verifier
-process-lifecycle defect.

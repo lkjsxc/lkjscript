@@ -74,7 +74,6 @@ fn recursive_resource_tail_cycles_exhaust_work_without_replaying_effects() {
             let control = ExecutionControl::uncancelled();
             let policy = NormalizedRunPolicy {
                 instruction_steps: Some(256),
-                maximum_call_depth: 4,
                 ..Default::default()
             };
             let error = if reference {

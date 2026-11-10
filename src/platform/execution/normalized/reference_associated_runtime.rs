@@ -51,9 +51,7 @@ impl ReferenceState<'_> {
         operands: &[crate::platform::kernel::ImplementationOperand],
         depth: usize,
     ) -> Result<(), ExecutionError> {
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-            || operands.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
-        {
+        if operands.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
             return Err(reference_type_error(
                 "canonical method operand inventory exceeds finite shape",
             ));
@@ -417,13 +415,7 @@ impl ReferenceState<'_> {
             .cloned()
             .ok_or_else(|| reference_type_error("canonical selected proof is missing"))?;
         let selected = Arc::clone(proof.selection_by_id(identity, self.control)?);
-        if depth.saturating_add(selected.depth)
-            > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-        {
-            return Err(reference_type_error(
-                "canonical selected DAG exceeds finite depth",
-            ));
-        }
+
         self.charge_items(
             selected.actuals.len(),
             std::mem::size_of::<TypeObjectDigest>(),
@@ -507,11 +499,7 @@ impl ReferenceState<'_> {
                     "associated occurrence scan exhausted finite work",
                 )
             })?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(reference_type_error(
-                "associated occurrence exceeds canonical type depth",
-            ));
-        }
+
         let form = &self
             .schema
             .types

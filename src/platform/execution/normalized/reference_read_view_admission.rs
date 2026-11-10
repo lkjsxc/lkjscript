@@ -78,8 +78,8 @@ pub(crate) struct Proof {
 }
 
 /// Explicit proof allowances and passive modeled work/storage observations.
-/// Ordinary preparation selects no aggregate allowance. Depth guards remain
-/// until the complete recursive lifecycle has a separate stack-safety proof.
+/// Ordinary preparation selects no aggregate allowance. Recursive declaration
+/// growth is rejected from its finite parameter relation before instantiation.
 struct Budget<'a> {
     control: &'a ExecutionControl,
     work: Meter,
@@ -101,13 +101,9 @@ impl<'a> Budget<'a> {
             entries: Meter::new(maximum_entries),
         }
     }
-    fn step(&mut self, depth: usize) -> Result<()> {
+    fn step(&mut self) -> Result<()> {
         self.control.check()?;
-        if depth > kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(invalid(
-                "canonical type/layout exceeds the recursive admission depth guard",
-            ));
-        }
+
         self.charge_step()
     }
     // Iterative walks have no recursive host-stack depth. They retain the same
@@ -356,7 +352,7 @@ impl Proof {
             control: control.clone(),
         };
         for snapshot in snapshots {
-            budget.step(0)?;
+            budget.step()?;
             if snapshot.root.graph_contract_version != kernel::contract::GRAPH_CONTRACT_VERSION
                 && (snapshot
                     .types
@@ -381,7 +377,7 @@ impl Proof {
                 snapshot.dependencies.keys().copied().collect(),
             );
             for (key, record) in &snapshot.owners {
-                budget.step(0)?;
+                budget.step()?;
                 if raw_view_metadata(record)
                     && record.header().contract_version != kernel::contract::GRAPH_CONTRACT_VERSION
                 {
@@ -397,7 +393,7 @@ impl Proof {
                     .insert((snapshot.root.package_id, *key), record.clone());
             }
             for (ty, object) in snapshot.types.iter().chain(&snapshot.dependency_types) {
-                budget.step(0)?;
+                budget.step()?;
                 if encode_type_object(object)
                     .map_err(|_| invalid("noncanonical type object"))?
                     .0
@@ -418,9 +414,9 @@ impl Proof {
         let (schemas, next_budget) = {
             let mut resolver = proof.resolver_with_budget(&proof.types, budget);
             let schemas = resolver.schema_graph()?;
-            resolver.check_schema_graph(&schemas)?;
             (schemas, resolver.budget)
         };
+        super::super::reference_nominal_flow::check(snapshots, control)?;
         proof.schemas = schemas;
         budget = next_budget;
         let (lexical_owners, view_functions, budget) = {
@@ -428,7 +424,7 @@ impl Proof {
             // Every stored object has complete syntactic closure, even if no
             // callable or visible field currently selects it.
             for ty in proof.types.keys() {
-                resolver.raw_closure(*ty, 0)?;
+                resolver.raw_closure(*ty)?;
             }
             resolver.admit_inventory()?;
             let (lexical_owners, view_functions) = resolver.admit_all_expressions()?;
@@ -450,7 +446,7 @@ impl Proof {
             Self::reconstruct_raw(snapshots, control, Budget::new(control))?;
         budget.reserve(types.len())?;
         for (ty, object) in types {
-            budget.step(0)?;
+            budget.step()?;
             if encode_type_object(object)
                 .map_err(|_| invalid("derived raw type object has invalid syntax"))?
                 .0
@@ -492,22 +488,22 @@ impl Proof {
         let derived = {
             let mut resolver = self.resolver_with_budget(&self.types, budget);
             while let Some(ty) = pending.pop() {
-                resolver.budget.step(0)?;
+                resolver.budget.step()?;
                 if !checked.insert(ty) {
                     continue;
                 }
-                resolver.raw_closure(ty, 0)?;
+                resolver.raw_closure(ty)?;
                 let context = resolver.property_context_for(ty)?;
-                let independent = resolver.facts(ty, &context, 0)?;
+                let independent = resolver.facts(ty, &context)?;
                 resolver.budget.reserve(1)?;
                 facts.insert(ty, independent);
                 if matches!(resolver.object(ty)?.form, TypeForm::ReadViewApplied { .. }) {
-                    let layout = resolver.layout(ty, &context, 0)?;
+                    let layout = resolver.layout(ty, &context)?;
                     resolver.budget.reserve(1)?;
                     layouts.insert(ty, layout);
                 }
                 for discovered in std::mem::take(&mut resolver.discovered) {
-                    resolver.budget.step(0)?;
+                    resolver.budget.step()?;
                     if !scheduled.contains(&discovered) {
                         resolver.budget.reserve(3)?;
                         pending.try_reserve(1).map_err(|_| {
@@ -643,8 +639,8 @@ impl Proof {
     ) -> Result<Layout> {
         let mut resolver = self.resolver_with_control(types, control);
         let context = resolver.property_context_for(ty)?;
-        resolver.facts(ty, &context, 0)?;
-        let mut layout = resolver.layout(ty, &context, 0)?;
+        resolver.facts(ty, &context)?;
+        let mut layout = resolver.layout(ty, &context)?;
         layout.types = resolver.derived;
         Ok(layout)
     }
@@ -669,7 +665,7 @@ impl Proof {
     ) -> Result<ValueCategory> {
         let mut resolver = self.resolver_with_control(types, control);
         let context = resolver.property_context_for(ty)?;
-        Ok(resolver.facts(ty, &context, 0)?.category)
+        Ok(resolver.facts(ty, &context)?.category)
     }
     #[cfg(test)]
     pub(crate) fn read_shareable(&self, ty: TypeObjectDigest) -> Result<bool> {
@@ -692,7 +688,7 @@ impl Proof {
     ) -> Result<bool> {
         let mut resolver = self.resolver_with_control(types, control);
         let context = resolver.property_context_for(ty)?;
-        let facts = resolver.facts(ty, &context, 0)?;
+        let facts = resolver.facts(ty, &context)?;
         if facts.category != ValueCategory::ReadView {
             return Err(invalid("ReadShareable requires a positive view category"));
         }
@@ -736,13 +732,13 @@ impl Proof {
         let mut names = BTreeSet::new();
         let mut pairs = BTreeSet::new();
         for parameter in parameters {
-            budget.step(0)?;
+            budget.step()?;
             if !ids.insert(parameter.id) || !names.insert(&parameter.name) {
                 return Err(invalid("duplicate scope identity or name"));
             }
         }
         for source in &sources {
-            budget.step(0)?;
+            budget.step()?;
             if !pairs.insert((source.source, source.scope)) {
                 return Err(invalid("duplicate scope source relationship"));
             }
@@ -783,7 +779,7 @@ impl Proof {
             .collect();
         budget.reserve(declarations.len())?;
         for (reference, payload) in declarations {
-            budget.step(0)?;
+            budget.step()?;
             match payload {
                 DeclarationPayload::ReadView(view) => self.add_scopes(
                     ReadScopeBinder::Declaration(reference),
@@ -884,7 +880,7 @@ impl Proof {
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 impl Resolver<'_, '_> {
     fn object(&mut self, ty: TypeObjectDigest) -> Result<TypeObject> {
-        self.budget.step(0)?;
+        self.budget.step()?;
         let object = self
             .derived
             .get(&ty)
@@ -934,7 +930,7 @@ impl Resolver<'_, '_> {
         Ok(ty)
     }
     fn owner(&mut self, package: PackageId, key: OwnerKey) -> Result<OwnerRecord> {
-        self.budget.step(0)?;
+        self.budget.step()?;
         self.proof
             .owners
             .get(&(package, key))
@@ -942,7 +938,7 @@ impl Resolver<'_, '_> {
             .ok_or_else(|| invalid("missing exact canonical owner"))
     }
     fn declaration(&mut self, reference: DeclarationReference) -> Result<DeclarationRecord> {
-        self.budget.step(0)?;
+        self.budget.step()?;
         self.proof.declaration(reference).cloned()
     }
     fn check_reference(&self, context: &Context, reference: DeclarationReference) -> Result<()> {
@@ -964,7 +960,7 @@ impl Resolver<'_, '_> {
     fn property_context(&mut self, context: &Context) -> Result<Context> {
         self.budget.reserve(context.lexical.len())?;
         for _ in &context.lexical {
-            self.budget.step(0)?;
+            self.budget.step()?;
         }
         let mut properties = context.clone();
         properties.structural_properties = true;
@@ -996,7 +992,7 @@ impl Resolver<'_, '_> {
         self.property_context(&context)
     }
     fn scope(&mut self, actual: ReadScopeArgument, context: &Context) -> Result<()> {
-        self.budget.step(0)?;
+        self.budget.step()?;
         match actual {
             ReadScopeArgument::Parameter(reference) => {
                 if self
@@ -1075,10 +1071,10 @@ impl Resolver<'_, '_> {
         Ok(())
     }
     fn context_for(&mut self, ty: TypeObjectDigest) -> Result<Context> {
-        self.context_for_at(ty, 0)
+        self.context_for_at(ty)
     }
-    fn context_for_at(&mut self, ty: TypeObjectDigest, depth: usize) -> Result<Context> {
-        self.budget.step(depth)?;
+    fn context_for_at(&mut self, ty: TypeObjectDigest) -> Result<Context> {
+        self.budget.step()?;
         Ok(match self.object(ty)?.form {
             TypeForm::RegionBrand { callable, binding } => {
                 if self.proof.lexical_owners.get(&(callable.package, binding)) != Some(&callable)
@@ -1140,7 +1136,7 @@ impl Resolver<'_, '_> {
             TypeForm::TypeParameter { parameter } => {
                 let mut selected = None;
                 for ((package, key), record) in &self.proof.owners {
-                    self.budget.step(depth)?;
+                    self.budget.step()?;
                     if *key == OwnerKey::TypeParameter(parameter)
                         && let OwnerRecord::TypeParameter(record) = record
                     {
@@ -1163,7 +1159,7 @@ impl Resolver<'_, '_> {
                 let object = self.object(ty)?;
                 let mut found = Context::default();
                 for child in object.child_types() {
-                    let child = self.context_for_at(child, depth + 1)?;
+                    let child = self.context_for_at(child)?;
                     if let Some(owner) = child.owner {
                         if found.owner.is_some_and(|previous| previous != owner) {
                             return Err(invalid("task type imports another ordinary binder"));
@@ -1213,7 +1209,7 @@ impl Resolver<'_, '_> {
                 let object = self.object(ty)?;
                 let mut found = Context::default();
                 for child in object.child_types() {
-                    let context = self.context_for_at(child, depth + 1)?;
+                    let context = self.context_for_at(child)?;
                     if context.owner.is_some() {
                         found = context;
                         break;
@@ -1250,7 +1246,7 @@ impl Resolver<'_, '_> {
         operand: kernel::RequirementOperand,
         context: &Context,
     ) -> Result<kernel::RequirementConstraint> {
-        self.budget.step(0)?;
+        self.budget.step()?;
         let (constraint, metadata_owner) = match operand {
             kernel::RequirementOperand::Parameter(reference) => {
                 let owner = context
@@ -1327,7 +1323,7 @@ impl Resolver<'_, '_> {
                     ));
                 }
                 for _ in &record.limits {
-                    self.budget.step(0)?;
+                    self.budget.step()?;
                 }
                 (
                     kernel::RequirementConstraint {
@@ -1350,7 +1346,7 @@ impl Resolver<'_, '_> {
             ));
         };
         for operation in &constraint.operations {
-            self.budget.step(0)?;
+            self.budget.step()?;
             let OwnerRecord::Operation(record) =
                 self.owner(operation.package, OwnerKey::Operation(operation.operation))?
             else {
@@ -1373,7 +1369,7 @@ impl Resolver<'_, '_> {
         reference: kernel::EffectParameterReference,
         context: &Context,
     ) -> Result<()> {
-        self.budget.step(0)?;
+        self.budget.step()?;
         let owner = context
             .owner
             .ok_or_else(|| invalid("effect formal has no exact caller owner"))?;
@@ -1406,7 +1402,7 @@ impl Resolver<'_, '_> {
         }
         Ok(())
     }
-    fn effect_row(&mut self, effect: &FunctionEffect, depth: usize) -> Result<kernel::EffectRow> {
+    fn effect_row(&mut self, effect: &FunctionEffect) -> Result<kernel::EffectRow> {
         if let FunctionEffect::Task {
             requirements,
             effect_parameters,
@@ -1419,10 +1415,10 @@ impl Resolver<'_, '_> {
                 .map(|_| ())
                 .chain(effect_parameters.iter().map(|_| ()))
             {
-                self.budget.step(depth)?;
+                self.budget.step()?;
             }
         } else {
-            self.budget.step(depth)?;
+            self.budget.step()?;
         }
         Ok(effect.row())
     }
@@ -1449,7 +1445,7 @@ impl Resolver<'_, '_> {
             .map(|_| ())
             .chain(function.requirement_parameters.iter().map(|_| ()))
         {
-            self.budget.step(0)?;
+            self.budget.step()?;
         }
         unique(&function.effect_parameters, "function effect formals")?;
         unique(
@@ -1499,7 +1495,7 @@ impl Resolver<'_, '_> {
                 return Err(invalid("duplicate requirement formal name"));
             }
         }
-        let row = self.effect_row(&function.effect, 0)?;
+        let row = self.effect_row(&function.effect)?;
         self.admit_effect(&row, &context)
     }
     fn bind_rows(
@@ -1551,7 +1547,7 @@ impl Resolver<'_, '_> {
                 .map(|_| ())
                 .chain(actual.parameters.iter().map(|_| ()))
             {
-                self.budget.step(0)?;
+                self.budget.step()?;
             }
             substitution.effects.insert(
                 kernel::EffectParameterReference {
@@ -1570,14 +1566,13 @@ impl Resolver<'_, '_> {
         &mut self,
         row: &kernel::EffectRow,
         substitution: &Substitution,
-        depth: usize,
     ) -> Result<kernel::EffectRow> {
-        self.budget.step(depth)?;
+        self.budget.step()?;
         row.validate()
             .map_err(|_| invalid("source effect row is not canonical"))?;
         let mut count = Observation::from_usize(row.requirements.len());
         for parameter in &row.parameters {
-            self.budget.step(depth)?;
+            self.budget.step()?;
             if let Some(actual) = substitution.effects.get(parameter) {
                 actual
                     .validate()
@@ -1593,7 +1588,7 @@ impl Resolver<'_, '_> {
         self.budget.reserve_observed(count)?;
         let mut result = kernel::EffectRow::default();
         for operand in &row.requirements {
-            self.budget.step(depth)?;
+            self.budget.step()?;
             result.requirements.push(match operand {
                 kernel::RequirementOperand::Parameter(formal) => substitution
                     .requirements
@@ -1604,14 +1599,14 @@ impl Resolver<'_, '_> {
             });
         }
         for parameter in &row.parameters {
-            self.budget.step(depth)?;
+            self.budget.step()?;
             if let Some(actual) = substitution.effects.get(parameter) {
                 for operand in &actual.requirements {
-                    self.budget.step(depth)?;
+                    self.budget.step()?;
                     result.requirements.push(*operand);
                 }
                 for parameter in &actual.parameters {
-                    self.budget.step(depth)?;
+                    self.budget.step()?;
                     result.parameters.push(*parameter);
                 }
             } else {
@@ -1657,7 +1652,7 @@ impl Resolver<'_, '_> {
         Ok(match self.declaration(owner)?.payload {
             DeclarationPayload::Function(function) => (
                 matches!(function.effect, FunctionEffect::Task { .. }),
-                self.effect_row(&function.effect, 0)?,
+                self.effect_row(&function.effect)?,
             ),
             _ => (false, kernel::EffectRow::default()),
         })
@@ -1689,7 +1684,7 @@ impl Resolver<'_, '_> {
         self.admit_effect(row, context)?;
         self.admit_effect(available, context)?;
         for parameter in &row.parameters {
-            self.budget.step(0)?;
+            self.budget.step()?;
             if available.parameters.binary_search(parameter).is_err() {
                 return Err(invalid(
                     "task invocation exceeds exact caller symbolic effect allowance",
@@ -1697,13 +1692,13 @@ impl Resolver<'_, '_> {
             }
         }
         for required in &row.requirements {
-            self.budget.step(0)?;
+            self.budget.step()?;
             if available.requirements.binary_search(required).is_ok() {
                 continue;
             }
             let mut covered = false;
             for allowance in &available.requirements {
-                self.budget.step(0)?;
+                self.budget.step()?;
                 if let (
                     kernel::RequirementOperand::Concrete(required),
                     kernel::RequirementOperand::Concrete(allowance),
@@ -1727,7 +1722,7 @@ impl Resolver<'_, '_> {
                     for required in &candidate.limits {
                         let mut matched = false;
                         for available in &slot.limits {
-                            self.budget.step(0)?;
+                            self.budget.step()?;
                             matched |= available.name == required.name
                                 && available.unit == required.unit
                                 && available.maximum <= required.maximum;
@@ -1736,7 +1731,7 @@ impl Resolver<'_, '_> {
                     }
                     let mut operations = true;
                     for operation in &candidate.operations {
-                        self.budget.step(0)?;
+                        self.budget.step()?;
                         operations &= slot.operations.binary_search(operation).is_ok();
                     }
                     covered |= required.package == allowance.package
@@ -1780,13 +1775,13 @@ impl Resolver<'_, '_> {
         {
             return Err(invalid("port changes exact owning component inventory"));
         }
-        self.facts(port.function_type, context, 0)?;
+        self.facts(port.function_type, context)?;
         let (_, required) = self.caller_row(context)?;
         self.budget
             .reserve_counts(&[requirements.len(), required.requirements.len()])?;
         let mut available = kernel::EffectRow::default();
         for requirement in requirements {
-            self.budget.step(0)?;
+            self.budget.step()?;
             available
                 .requirements
                 .push(kernel::RequirementOperand::Concrete(
@@ -1797,7 +1792,7 @@ impl Resolver<'_, '_> {
                 ));
         }
         for requirement in &required.requirements {
-            self.budget.step(0)?;
+            self.budget.step()?;
             if matches!(requirement, kernel::RequirementOperand::Concrete(reference) if reference.package != owner.package)
             {
                 available.requirements.push(*requirement);
@@ -1829,15 +1824,15 @@ impl Resolver<'_, '_> {
         self.budget.reserve(parameters.len())?;
         let mut substitution = Substitution::default();
         // Only external call admission uses independent argument roots. Inner
-        // facts/layout use bind_types_at and retain one state and combined depth.
+        // facts/layout use bind_types_at and retain one state throughout the proof.
         for (parameter, actual) in parameters.iter().zip(arguments) {
             let constraints = self.parameter(*parameter, &Context::declaration(reference))?;
-            let facts = self.prove_facts(*actual, context, 0)?.0;
+            let facts = self.prove_facts(*actual, context)?.0;
             if !facts.matches_kind(constraints)
                 || (constraints.requires_transfer() && !facts.transfer)
                 || (constraints.requires_share() && !facts.share)
                 || (constraints.requires_capture_safe()
-                    && !self.capture_safe(*actual, context, &mut BTreeSet::new(), 0)?)
+                    && !self.capture_safe(*actual, context, &mut BTreeSet::new())?)
             {
                 return Err(invalid(
                     "type actual, including phantom actual, violates its exact ordinary/Owned constraint",
@@ -1855,9 +1850,8 @@ impl Resolver<'_, '_> {
         arguments: &[TypeObjectDigest],
         context: &Context,
         state: &mut FactsState,
-        depth: usize,
     ) -> Result<Substitution> {
-        self.budget.step(depth)?;
+        self.budget.step()?;
         self.check_reference(context, reference)?;
         let declaration = self.declaration(reference)?;
         let parameters = declaration.payload.type_parameters().to_vec();
@@ -1870,34 +1864,34 @@ impl Resolver<'_, '_> {
         let mut substitution = Substitution::default();
         for (parameter, actual) in parameters.iter().zip(arguments) {
             let constraints = self.parameter(*parameter, &Context::declaration(reference))?;
-            let facts = self.facts_walk(*actual, context, state, depth + 1)?;
+            let facts = self.facts_walk(*actual, context, state)?;
             if !facts.matches_kind(constraints) {
                 return Err(invalid(
                     "type actual, including phantom actual, violates its exact ordinary/Owned constraint",
                 ));
             }
             if constraints.requires_capture_safe()
-                && !self.capture_safe(*actual, context, &mut BTreeSet::new(), depth + 1)?
+                && !self.capture_safe(*actual, context, &mut BTreeSet::new())?
             {
                 return Err(invalid(
                     "type actual violates its complete CaptureSafe constraint",
                 ));
             }
             if constraints.requires_transfer() {
-                let key = self.facts_key(*actual, context, depth)?;
-                self.facts_search(&key, state.transfer.len(), depth)?;
+                let key = self.facts_key(*actual, context)?;
+                self.facts_search(&key, state.transfer.len())?;
                 if !state.transfer.contains(&key) {
                     self.budget.reserve(1)?;
-                    self.facts_search(&key, state.transfer.len(), depth)?;
+                    self.facts_search(&key, state.transfer.len())?;
                     state.transfer.insert(key);
                 }
             }
             if constraints.requires_share() {
-                let key = self.facts_key(*actual, context, depth)?;
-                self.facts_search(&key, state.share.len(), depth)?;
+                let key = self.facts_key(*actual, context)?;
+                self.facts_search(&key, state.share.len())?;
                 if !state.share.contains(&key) {
                     self.budget.reserve(1)?;
-                    self.facts_search(&key, state.share.len(), depth)?;
+                    self.facts_search(&key, state.share.len())?;
                     state.share.insert(key);
                 }
             }
@@ -1962,15 +1956,10 @@ impl Resolver<'_, '_> {
     /// A Context owns its complete lexical inventory. Charge every copied entry
     /// and finish the cancellable work prefix before allocating any such copy.
     /// Map/set nodes are reserved separately only at their new-entry sites.
-    fn facts_key(
-        &mut self,
-        ty: TypeObjectDigest,
-        context: &Context,
-        depth: usize,
-    ) -> Result<FactsKey> {
+    fn facts_key(&mut self, ty: TypeObjectDigest, context: &Context) -> Result<FactsKey> {
         self.budget.reserve(context.lexical.len())?;
         for _ in &context.lexical {
-            self.budget.step(depth)?;
+            self.budget.step()?;
         }
         Ok((ty, context.clone()))
     }
@@ -1978,38 +1967,37 @@ impl Resolver<'_, '_> {
     /// Distinct digests or symbolic/provenance prefixes can finish comparisons
     /// early. Matching keys may inspect the whole lexical inventory; charge that
     /// prefix before lookup.
-    fn facts_search(&mut self, key: &FactsKey, entries: usize, depth: usize) -> Result<()> {
-        self.budget.step(depth)?;
+    fn facts_search(&mut self, key: &FactsKey, entries: usize) -> Result<()> {
+        self.budget.step()?;
         if entries != 0 {
             for _ in &key.1.lexical {
-                self.budget.step(depth)?;
+                self.budget.step()?;
             }
         }
         Ok(())
     }
-    fn facts(&mut self, ty: TypeObjectDigest, context: &Context, depth: usize) -> Result<Facts> {
-        Ok(self.prove_facts(ty, context, depth)?.0)
+    fn facts(&mut self, ty: TypeObjectDigest, context: &Context) -> Result<Facts> {
+        Ok(self.prove_facts(ty, context)?.0)
     }
     fn prove_facts(
         &mut self,
         ty: TypeObjectDigest,
         context: &Context,
-        depth: usize,
     ) -> Result<(Facts, FactsState)> {
-        self.check_view_actual_closure(ty, context, depth)?;
+        self.check_view_actual_closure(ty, context)?;
         // Complete preparation proves every input and discovered object as an
         // exact root before any facts/layout cache is published. Check this
         // root once, outside convergence, rather than rescan every shared child.
-        self.require_resource_container_free(ty, context, depth)?;
+        self.require_resource_container_free(ty, context)?;
         let mut state = FactsState::default();
         loop {
-            self.budget.step(depth)?;
+            self.budget.step()?;
             state.observed.clear();
-            self.facts_walk(ty, context, &mut state, depth)?;
+            self.facts_walk(ty, context, &mut state)?;
             let mut changed = false;
             for (key, observed) in &state.observed {
-                self.budget.step(depth)?;
-                self.facts_search(key, state.estimates.len(), depth)?;
+                self.budget.step()?;
+                self.facts_search(key, state.estimates.len())?;
                 if let Some(previous) = state.estimates.get_mut(key) {
                     if previous.category != observed.category {
                         return Err(invalid("recursive facts changed value category"));
@@ -2024,16 +2012,16 @@ impl Resolver<'_, '_> {
                     *previous = next;
                 } else {
                     self.budget.reserve(1)?;
-                    let copied = self.facts_key(key.0, &key.1, depth)?;
-                    self.facts_search(&copied, state.estimates.len(), depth)?;
+                    let copied = self.facts_key(key.0, &key.1)?;
+                    self.facts_search(&copied, state.estimates.len())?;
                     state.estimates.insert(copied, *observed);
                     changed = true;
                 }
             }
             if !changed {
                 self.check_facts_obligations(&state)?;
-                let root = self.facts_key(ty, context, depth)?;
-                self.facts_search(&root, state.estimates.len(), depth)?;
+                let root = self.facts_key(ty, context)?;
+                self.facts_search(&root, state.estimates.len())?;
                 let facts = state
                     .estimates
                     .get(&root)
@@ -2050,8 +2038,8 @@ impl Resolver<'_, '_> {
             (&state.share, 2),
         ] {
             for key in keys {
-                self.budget.step(0)?;
-                self.facts_search(key, state.estimates.len(), 0)?;
+                self.budget.step()?;
+                self.facts_search(key, state.estimates.len())?;
                 let facts = state
                     .estimates
                     .get(key)
@@ -2139,12 +2127,11 @@ impl Resolver<'_, '_> {
         ty: TypeObjectDigest,
         context: &Context,
         state: &mut FactsState,
-        depth: usize,
     ) -> Result<Facts> {
-        self.budget.step(depth)?;
+        self.budget.step()?;
         let form = self.object(ty)?.form;
-        let key = self.facts_key(ty, context, depth)?;
-        self.facts_search(&key, state.active.len(), depth)?;
+        let key = self.facts_key(ty, context)?;
+        self.facts_search(&key, state.active.len())?;
         if state.active.contains(&key) {
             let seed = self.facts_seed(&form, context)?;
             if matches!(
@@ -2153,23 +2140,23 @@ impl Resolver<'_, '_> {
             ) {
                 return Err(invalid("cyclic instantiated Owned/view closure"));
             }
-            self.facts_search(&key, state.estimates.len(), depth)?;
+            self.facts_search(&key, state.estimates.len())?;
             return Ok(state.estimates.get(&key).copied().unwrap_or(seed));
         }
         self.budget.reserve(1)?;
-        let active_key = self.facts_key(ty, context, depth)?;
-        self.facts_search(&active_key, state.active.len(), depth)?;
+        let active_key = self.facts_key(ty, context)?;
+        self.facts_search(&active_key, state.active.len())?;
         state.active.insert(active_key);
         let facts = match form.clone() {
             TypeForm::RegionBrand { .. } => {
-                self.region_identity(ty, context, depth)?;
+                self.region_identity(ty, context)?;
                 Facts::identity()
             }
             TypeForm::Region { region }
             | TypeForm::RelPtr { region, .. }
             | TypeForm::RegionSlice { region, .. }
             | TypeForm::RegionCap { region, .. } => {
-                self.region_identity(region, context, depth + 1)?;
+                self.region_identity(region, context)?;
                 match form {
                     TypeForm::RegionCap { mode, .. } => {
                         if let kernel::RegionMode::Shared { scope } = mode {
@@ -2178,7 +2165,7 @@ impl Resolver<'_, '_> {
                         Facts::region_cap(mode)
                     }
                     TypeForm::RelPtr { item, .. } | TypeForm::RegionSlice { item, .. } => {
-                        let item = self.facts_walk(item, context, state, depth + 1)?;
+                        let item = self.facts_walk(item, context, state)?;
                         if item.category == ValueCategory::RegionIdentity {
                             return Err(invalid("region pointee has no runtime value"));
                         }
@@ -2196,7 +2183,7 @@ impl Resolver<'_, '_> {
             | TypeForm::StaticText => Facts::ordinary(),
             TypeForm::Secret | TypeForm::Stream { .. } => {
                 if let TypeForm::Stream { item } = form {
-                    self.ordinary_child(item, context, state, depth + 1)?;
+                    self.ordinary_child(item, context, state)?;
                 }
                 Facts {
                     category: ValueCategory::OrdinaryData,
@@ -2296,24 +2283,24 @@ impl Resolver<'_, '_> {
             }
             TypeForm::ReadViewApplied { .. } => {
                 self.budget.reserve(1)?;
-                let layout = self.layout_at(ty, context, state, depth)?;
+                let layout = self.layout_at(ty, context, state)?;
                 let mut share = true;
                 // Phantom actuals remain part of the independently shared closure.
                 for argument in &layout.arguments {
-                    share &= self.facts_walk(*argument, context, state, depth + 1)?.share;
+                    share &= self.facts_walk(*argument, context, state)?.share;
                 }
                 let field_context = self.property_context(context)?;
                 for field in &layout.fields {
-                    let facts = self.facts_walk(field.ty, &field_context, state, depth + 1)?;
+                    let facts = self.facts_walk(field.ty, &field_context, state)?;
                     match field.kind {
                         ReadViewFieldKind::Ordinary
                             if facts.category == ValueCategory::OrdinaryData =>
                         {
-                            let key = self.facts_key(field.ty, &field_context, depth)?;
-                            self.facts_search(&key, state.metadata.len(), depth)?;
+                            let key = self.facts_key(field.ty, &field_context)?;
+                            self.facts_search(&key, state.metadata.len())?;
                             if !state.metadata.contains(&key) {
                                 self.budget.reserve(1)?;
-                                self.facts_search(&key, state.metadata.len(), depth)?;
+                                self.facts_search(&key, state.metadata.len())?;
                                 state.metadata.insert(key);
                             }
                         }
@@ -2353,8 +2340,7 @@ impl Resolver<'_, '_> {
                     TypeForm::Applied { arguments, .. } => arguments.clone(),
                     _ => Vec::new(),
                 };
-                let substitution =
-                    self.bind_types_at(declaration, &arguments, context, state, depth)?;
+                let substitution = self.bind_types_at(declaration, &arguments, context, state)?;
                 let record = self.declaration(declaration)?;
                 let mut children = Vec::new();
                 let owned = match record.payload {
@@ -2370,7 +2356,7 @@ impl Resolver<'_, '_> {
                             if field.declaration != declaration.declaration {
                                 return Err(invalid("nominal field names another declaration"));
                             }
-                            children.push(self.substitute(field.ty, &substitution, depth + 1)?);
+                            children.push(self.substitute(field.ty, &substitution)?);
                         }
                         owned
                     }
@@ -2385,7 +2371,7 @@ impl Resolver<'_, '_> {
                                 return Err(invalid("nominal case names another declaration"));
                             }
                             if let Some(ty) = case.payload {
-                                children.push(self.substitute(ty, &substitution, depth + 1)?);
+                                children.push(self.substitute(ty, &substitution)?);
                             }
                         }
                         false
@@ -2406,7 +2392,7 @@ impl Resolver<'_, '_> {
                     } else {
                         &field_context
                     };
-                    let f = self.facts_walk(*child, occurrence, state, depth + 1)?;
+                    let f = self.facts_walk(*child, occurrence, state)?;
                     if f.category == ValueCategory::ReadView
                         || (!owned && f.category == ValueCategory::Owned)
                     {
@@ -2447,8 +2433,7 @@ impl Resolver<'_, '_> {
                     self.admit_effect(effect, context)?;
                 }
                 for child in parameters.iter().chain(std::iter::once(&result)) {
-                    if self.facts_walk(*child, context, state, depth + 1)?.category
-                        == ValueCategory::ReadView
+                    if self.facts_walk(*child, context, state)?.category == ValueCategory::ReadView
                     {
                         return Err(invalid("first-class callable signature contains a view"));
                     }
@@ -2468,7 +2453,7 @@ impl Resolver<'_, '_> {
                 let mut transfer = true;
                 let mut share = true;
                 for field in fields {
-                    let f = self.facts_walk(field.ty, context, state, depth + 1)?;
+                    let f = self.facts_walk(field.ty, context, state)?;
                     if f.category == ValueCategory::ReadView
                         || (!owned && f.category == ValueCategory::Owned)
                         || (owned
@@ -2495,7 +2480,7 @@ impl Resolver<'_, '_> {
                 }
             }
             TypeForm::OwnedSequence { item } => {
-                let f = self.facts_walk(item, context, state, depth + 1)?;
+                let f = self.facts_walk(item, context, state)?;
                 if !matches!(
                     f.category,
                     ValueCategory::Owned | ValueCategory::OrdinaryData
@@ -2505,15 +2490,15 @@ impl Resolver<'_, '_> {
                 Facts::owned(f.transfer, f.share)
             }
             TypeForm::List { item } | TypeForm::Option { item } => {
-                self.ordinary_child(item, context, state, depth + 1)?
+                self.ordinary_child(item, context, state)?
             }
             TypeForm::Map { key, value }
             | TypeForm::Result {
                 ok: key,
                 error: value,
             } => {
-                let a = self.ordinary_child(key, context, state, depth + 1)?;
-                let b = self.ordinary_child(value, context, state, depth + 1)?;
+                let a = self.ordinary_child(key, context, state)?;
+                let b = self.ordinary_child(value, context, state)?;
                 Facts {
                     category: ValueCategory::OrdinaryData,
                     metadata: a.metadata && b.metadata,
@@ -2522,9 +2507,9 @@ impl Resolver<'_, '_> {
                 }
             }
         };
-        self.facts_search(&key, state.active.len(), depth)?;
+        self.facts_search(&key, state.active.len())?;
         state.active.remove(&key);
-        self.facts_search(&key, state.observed.len(), depth)?;
+        self.facts_search(&key, state.observed.len())?;
         if let Some(previous) = state.observed.get_mut(&key) {
             if previous.category != facts.category {
                 return Err(invalid("same exact context changed category"));
@@ -2534,18 +2519,13 @@ impl Resolver<'_, '_> {
             previous.share &= facts.share;
         } else {
             self.budget.reserve(1)?;
-            self.facts_search(&key, state.observed.len(), depth)?;
+            self.facts_search(&key, state.observed.len())?;
             state.observed.insert(key, facts);
         }
         Ok(facts)
     }
-    fn region_identity(
-        &mut self,
-        ty: TypeObjectDigest,
-        context: &Context,
-        depth: usize,
-    ) -> Result<()> {
-        self.budget.step(depth)?;
+    fn region_identity(&mut self, ty: TypeObjectDigest, context: &Context) -> Result<()> {
+        self.budget.step()?;
         match self.object(ty)?.form {
             TypeForm::TypeParameter { parameter }
                 if self.parameter(parameter, context)?.is_region() =>
@@ -2571,9 +2551,8 @@ impl Resolver<'_, '_> {
         ty: TypeObjectDigest,
         context: &Context,
         state: &mut FactsState,
-        depth: usize,
     ) -> Result<Facts> {
-        let facts = self.facts_walk(ty, context, state, depth)?;
+        let facts = self.facts_walk(ty, context, state)?;
         if matches!(
             facts.category,
             ValueCategory::Owned | ValueCategory::ReadView | ValueCategory::RegionIdentity
@@ -2597,9 +2576,9 @@ impl Resolver<'_, '_> {
             _ => Err(invalid("type has no read-view scope")),
         }
     }
-    fn layout(&mut self, ty: TypeObjectDigest, context: &Context, depth: usize) -> Result<Layout> {
-        let (_, mut state) = self.prove_facts(ty, context, depth)?;
-        let layout = self.layout_at(ty, context, &mut state, depth)?;
+    fn layout(&mut self, ty: TypeObjectDigest, context: &Context) -> Result<Layout> {
+        let (_, mut state) = self.prove_facts(ty, context)?;
+        let layout = self.layout_at(ty, context, &mut state)?;
         self.check_facts_obligations(&state)?;
         Ok(layout)
     }
@@ -2608,9 +2587,8 @@ impl Resolver<'_, '_> {
         ty: TypeObjectDigest,
         context: &Context,
         state: &mut FactsState,
-        depth: usize,
     ) -> Result<Layout> {
-        self.budget.step(depth)?;
+        self.budget.step()?;
         let TypeForm::ReadViewApplied {
             declaration,
             arguments,
@@ -2634,8 +2612,7 @@ impl Resolver<'_, '_> {
             ));
         }
         self.view_inventory(declaration, &view)?;
-        let mut substitution =
-            self.bind_types_at(declaration, &arguments, context, state, depth)?;
+        let mut substitution = self.bind_types_at(declaration, &arguments, context, state)?;
         let formal = ReadScopeReference {
             binder: ReadScopeBinder::Declaration(declaration),
             parameter: view.scope_parameter.id,
@@ -2644,7 +2621,7 @@ impl Resolver<'_, '_> {
         self.budget.reserve(view.fields.len())?;
         let mut fields = Vec::new();
         for field in view.fields {
-            let ty = self.substitute(field.ty, &substitution, depth + 1)?;
+            let ty = self.substitute(field.ty, &substitution)?;
             let kind = match field.kind {
                 ReadViewFieldKind::Ordinary => ReadViewFieldKind::Ordinary,
                 ReadViewFieldKind::ReadReference { read_scope } => {
@@ -2687,7 +2664,7 @@ impl Resolver<'_, '_> {
             parameter: view.scope_parameter.id,
         });
         for field in &view.fields {
-            self.budget.step(0)?;
+            self.budget.step()?;
             if !ids.insert(field.id) || !names.insert(&field.name) {
                 return Err(invalid("duplicate inline view field identity/name"));
             }
@@ -2713,22 +2690,20 @@ impl Resolver<'_, '_> {
         &mut self,
         ty: TypeObjectDigest,
         substitution: &Substitution,
-        depth: usize,
     ) -> Result<TypeObjectDigest> {
         if substitution.effects.is_empty() && substitution.requirements.is_empty() {
-            return self.substitute_at(ty, substitution, depth, SignatureStage::Types);
+            return self.substitute_at(ty, substitution, SignatureStage::Types);
         }
-        let source = self.substitute_at(ty, substitution, depth, SignatureStage::Effects)?;
-        self.substitute_at(source, substitution, depth, SignatureStage::Types)
+        let source = self.substitute_at(ty, substitution, SignatureStage::Effects)?;
+        self.substitute_at(source, substitution, SignatureStage::Types)
     }
     fn substitute_at(
         &mut self,
         ty: TypeObjectDigest,
         substitution: &Substitution,
-        depth: usize,
         stage: SignatureStage,
     ) -> Result<TypeObjectDigest> {
-        self.budget.step(depth)?;
+        self.budget.step()?;
         let original = self.object(ty)?.form;
         if stage == SignatureStage::Effects
             && (matches!(original, TypeForm::TypeParameter { .. }) || original.is_associated())
@@ -2754,7 +2729,7 @@ impl Resolver<'_, '_> {
                 member,
             } => {
                 if let Some(operand) = substitution.witnesses.get(&(scope, parameter)) {
-                    return self.select_member(operand, contract, member, None, depth + 1);
+                    return self.select_member(operand, contract, member, None);
                 }
                 original.clone()
             }
@@ -2770,7 +2745,7 @@ impl Resolver<'_, '_> {
                     self.budget.reserve(1)?;
                     let mut rhs = Substitution::default();
                     rhs.scopes.insert(*formal, actual);
-                    return self.substitute_at(*template, &rhs, depth + 1, SignatureStage::Types);
+                    return self.substitute_at(*template, &rhs, SignatureStage::Types);
                 }
                 TypeForm::AssociatedReadViewMember {
                     contract,
@@ -2787,7 +2762,7 @@ impl Resolver<'_, '_> {
             } => {
                 let actual = substitute_scope(read_scope, substitution);
                 if let Some(operand) = substitution.witnesses.get(&(scope, parameter)) {
-                    return self.select_member(operand, contract, member, Some(actual), depth + 1);
+                    return self.select_member(operand, contract, member, Some(actual));
                 }
                 TypeForm::AssociatedReadViewProjection {
                     scope,
@@ -2802,8 +2777,7 @@ impl Resolver<'_, '_> {
                 arguments,
                 read_scope,
             } => {
-                let arguments =
-                    self.substitute_many_at(&arguments, substitution, depth + 1, stage)?;
+                let arguments = self.substitute_many_at(&arguments, substitution, stage)?;
                 TypeForm::ReadViewApplied {
                     declaration,
                     arguments,
@@ -2819,21 +2793,21 @@ impl Resolver<'_, '_> {
                 arguments,
             } => TypeForm::Applied {
                 declaration,
-                arguments: self.substitute_many_at(&arguments, substitution, depth + 1, stage)?,
+                arguments: self.substitute_many_at(&arguments, substitution, stage)?,
             },
             TypeForm::Region { region } => TypeForm::Region {
-                region: self.substitute_at(region, substitution, depth + 1, stage)?,
+                region: self.substitute_at(region, substitution, stage)?,
             },
             TypeForm::RelPtr { region, item } => TypeForm::RelPtr {
-                region: self.substitute_at(region, substitution, depth + 1, stage)?,
-                item: self.substitute_at(item, substitution, depth + 1, stage)?,
+                region: self.substitute_at(region, substitution, stage)?,
+                item: self.substitute_at(item, substitution, stage)?,
             },
             TypeForm::RegionSlice { region, item } => TypeForm::RegionSlice {
-                region: self.substitute_at(region, substitution, depth + 1, stage)?,
-                item: self.substitute_at(item, substitution, depth + 1, stage)?,
+                region: self.substitute_at(region, substitution, stage)?,
+                item: self.substitute_at(item, substitution, stage)?,
             },
             TypeForm::RegionCap { region, mode } => TypeForm::RegionCap {
-                region: self.substitute_at(region, substitution, depth + 1, stage)?,
+                region: self.substitute_at(region, substitution, stage)?,
                 mode: match mode {
                     kernel::RegionMode::Shared { scope } => kernel::RegionMode::Shared {
                         scope: substitute_scope(scope, substitution),
@@ -2842,37 +2816,37 @@ impl Resolver<'_, '_> {
                 },
             },
             TypeForm::List { item } => TypeForm::List {
-                item: self.substitute_at(item, substitution, depth + 1, stage)?,
+                item: self.substitute_at(item, substitution, stage)?,
             },
             TypeForm::Option { item } => TypeForm::Option {
-                item: self.substitute_at(item, substitution, depth + 1, stage)?,
+                item: self.substitute_at(item, substitution, stage)?,
             },
             TypeForm::Stream { item } => TypeForm::Stream {
-                item: self.substitute_at(item, substitution, depth + 1, stage)?,
+                item: self.substitute_at(item, substitution, stage)?,
             },
             TypeForm::OwnedSequence { item } => TypeForm::OwnedSequence {
-                item: self.substitute_at(item, substitution, depth + 1, stage)?,
+                item: self.substitute_at(item, substitution, stage)?,
             },
             TypeForm::Map { key, value } => TypeForm::Map {
-                key: self.substitute_at(key, substitution, depth + 1, stage)?,
-                value: self.substitute_at(value, substitution, depth + 1, stage)?,
+                key: self.substitute_at(key, substitution, stage)?,
+                value: self.substitute_at(value, substitution, stage)?,
             },
             TypeForm::Result { ok, error } => TypeForm::Result {
-                ok: self.substitute_at(ok, substitution, depth + 1, stage)?,
-                error: self.substitute_at(error, substitution, depth + 1, stage)?,
+                ok: self.substitute_at(ok, substitution, stage)?,
+                error: self.substitute_at(error, substitution, stage)?,
             },
             TypeForm::StructuralRecord { fields } => TypeForm::StructuralRecord {
-                fields: self.substitute_fields_at(fields, substitution, depth + 1, stage)?,
+                fields: self.substitute_fields_at(fields, substitution, stage)?,
             },
             TypeForm::OwnedProduct { fields } => TypeForm::OwnedProduct {
-                fields: self.substitute_fields_at(fields, substitution, depth + 1, stage)?,
+                fields: self.substitute_fields_at(fields, substitution, stage)?,
             },
             TypeForm::OwnedChoice { cases } => TypeForm::OwnedChoice {
-                cases: self.substitute_fields_at(cases, substitution, depth + 1, stage)?,
+                cases: self.substitute_fields_at(cases, substitution, stage)?,
             },
             TypeForm::Function { parameters, result } => TypeForm::Function {
-                parameters: self.substitute_many_at(&parameters, substitution, depth + 1, stage)?,
-                result: self.substitute_at(result, substitution, depth + 1, stage)?,
+                parameters: self.substitute_many_at(&parameters, substitution, stage)?,
+                result: self.substitute_at(result, substitution, stage)?,
             },
             TypeForm::TaskFunction {
                 parameters,
@@ -2882,18 +2856,13 @@ impl Resolver<'_, '_> {
                 // Close only this source row before ordinary/witness actuals
                 // enter the signature. Inserted actual types remain opaque.
                 let effect = if stage == SignatureStage::Effects {
-                    self.substitute_effect(&effect, substitution, depth + 1)?
+                    self.substitute_effect(&effect, substitution)?
                 } else {
                     effect
                 };
                 TypeForm::TaskFunction {
-                    parameters: self.substitute_many_at(
-                        &parameters,
-                        substitution,
-                        depth + 1,
-                        stage,
-                    )?,
-                    result: self.substitute_at(result, substitution, depth + 1, stage)?,
+                    parameters: self.substitute_many_at(&parameters, substitution, stage)?,
+                    result: self.substitute_at(result, substitution, stage)?,
                     effect,
                 }
             }
@@ -2909,32 +2878,29 @@ impl Resolver<'_, '_> {
         &mut self,
         types: &[TypeObjectDigest],
         substitution: &Substitution,
-        depth: usize,
     ) -> Result<Vec<TypeObjectDigest>> {
         self.budget.reserve(types.len())?;
         types
             .iter()
-            .map(|ty| self.substitute(*ty, substitution, depth))
+            .map(|ty| self.substitute(*ty, substitution))
             .collect()
     }
     fn substitute_many_at(
         &mut self,
         types: &[TypeObjectDigest],
         substitution: &Substitution,
-        depth: usize,
         stage: SignatureStage,
     ) -> Result<Vec<TypeObjectDigest>> {
         self.budget.reserve(types.len())?;
         types
             .iter()
-            .map(|ty| self.substitute_at(*ty, substitution, depth, stage))
+            .map(|ty| self.substitute_at(*ty, substitution, stage))
             .collect()
     }
     fn substitute_fields_at(
         &mut self,
         fields: Vec<StructuralTypeField>,
         substitution: &Substitution,
-        depth: usize,
         stage: SignatureStage,
     ) -> Result<Vec<StructuralTypeField>> {
         self.budget.reserve(fields.len())?;
@@ -2943,7 +2909,7 @@ impl Resolver<'_, '_> {
             .map(|field| {
                 Ok(StructuralTypeField {
                     name: field.name,
-                    ty: self.substitute_at(field.ty, substitution, depth, stage)?,
+                    ty: self.substitute_at(field.ty, substitution, stage)?,
                 })
             })
             .collect()
@@ -2973,7 +2939,7 @@ impl Resolver<'_, '_> {
             .collect();
         let mut graph = BTreeMap::new();
         for (reference, record) in declarations {
-            self.budget.step(0)?;
+            self.budget.step()?;
             let mut roots = Vec::new();
             let category = match record.payload {
                 DeclarationPayload::Record { fields, .. }
@@ -3024,11 +2990,12 @@ impl Resolver<'_, '_> {
             let mut edges = BTreeSet::new();
             let mut visited = BTreeSet::new();
             for ty in roots {
-                self.collect_schema_edges(ty, &context, &mut visited, &mut edges, 0)?;
+                self.collect_schema_edges(ty, &context, &mut visited, &mut edges)?;
             }
             self.budget.reserve(1)?;
             graph.insert(reference, Schema { category, edges });
         }
+        self.check_schema_graph(&graph)?;
         Ok(graph)
     }
     fn collect_schema_edges(
@@ -3037,9 +3004,8 @@ impl Resolver<'_, '_> {
         context: &Context,
         visited: &mut BTreeSet<TypeObjectDigest>,
         edges: &mut BTreeSet<DeclarationReference>,
-        depth: usize,
     ) -> Result<bool> {
-        self.budget.step(depth)?;
+        self.budget.step()?;
         if visited.contains(&ty) {
             return Ok(false);
         }
@@ -3068,67 +3034,35 @@ impl Resolver<'_, '_> {
                     self.budget.reserve(1)?;
                     edges.insert(*declaration);
                 }
-                let expected = self
-                    .declaration(*declaration)?
-                    .payload
-                    .type_parameters()
-                    .len();
-                let actual = match &object.form {
+                let target = self.declaration(*declaration)?;
+                let parameters = target.payload.type_parameters();
+                let arguments = match &object.form {
                     TypeForm::Applied { arguments, .. }
-                    | TypeForm::ReadViewApplied { arguments, .. } => arguments.len(),
-                    _ => 0,
+                    | TypeForm::ReadViewApplied { arguments, .. } => arguments.as_slice(),
+                    _ => &[],
                 };
-                if expected != actual {
+                if parameters.len() != arguments.len() {
                     return Err(invalid("schema nominal actual inventory has wrong arity"));
                 }
             }
             _ => {}
         }
         for child in object.child_types() {
-            view |= self.collect_schema_edges(child, context, visited, edges, depth + 1)?;
+            view |= self.collect_schema_edges(child, context, visited, edges)?;
         }
         Ok(view)
     }
     fn check_schema_graph(&mut self, graph: &BTreeMap<DeclarationReference, Schema>) -> Result<()> {
         for (root, schema) in graph {
-            self.budget.step(0)?;
+            self.budget.step()?;
             for edge in &schema.edges {
                 if !graph.contains_key(edge) {
                     return Err(invalid("nominal schema selects a non-layout declaration"));
                 }
             }
-            if schema.category == ValueCategory::Owned {
-                self.schema_reaches_self(*root, graph)?;
-            }
             if schema.category == ValueCategory::ReadView {
-                self.schema_acyclic(*root, graph, &mut BTreeSet::new(), &mut BTreeSet::new(), 0)?;
+                self.schema_acyclic(*root, graph, &mut BTreeSet::new(), &mut BTreeSet::new())?;
             }
-        }
-        Ok(())
-    }
-    fn schema_reaches_self(
-        &mut self,
-        root: DeclarationReference,
-        graph: &BTreeMap<DeclarationReference, Schema>,
-    ) -> Result<()> {
-        self.budget.reserve(graph[&root].edges.len())?;
-        let mut pending: Vec<_> = graph[&root].edges.iter().copied().collect();
-        let mut visited = BTreeSet::new();
-        while let Some(next) = pending.pop() {
-            self.budget.step(0)?;
-            if next == root {
-                return Err(invalid("cyclic raw Owned declaration schema"));
-            }
-            if visited.contains(&next) {
-                continue;
-            }
-            self.budget.reserve(1)?;
-            visited.insert(next);
-            let schema = graph
-                .get(&next)
-                .ok_or_else(|| invalid("missing referenced nominal schema"))?;
-            self.budget.reserve(schema.edges.len())?;
-            pending.extend(schema.edges.iter().copied());
         }
         Ok(())
     }
@@ -3138,9 +3072,8 @@ impl Resolver<'_, '_> {
         graph: &BTreeMap<DeclarationReference, Schema>,
         active: &mut BTreeSet<DeclarationReference>,
         checked: &mut BTreeSet<DeclarationReference>,
-        depth: usize,
     ) -> Result<()> {
-        self.budget.step(depth)?;
+        self.budget.step()?;
         if active.contains(&root) {
             return Err(invalid(
                 "cyclic raw view referent/phantom declaration closure",
@@ -3155,38 +3088,32 @@ impl Resolver<'_, '_> {
             .get(&root)
             .ok_or_else(|| invalid("missing referenced nominal schema"))?;
         for edge in &schema.edges {
-            self.schema_acyclic(*edge, graph, active, checked, depth + 1)?;
+            self.schema_acyclic(*edge, graph, active, checked)?;
         }
         active.remove(&root);
         checked.insert(root);
         Ok(())
     }
-    fn check_view_actual_closure(
-        &mut self,
-        ty: TypeObjectDigest,
-        context: &Context,
-        depth: usize,
-    ) -> Result<()> {
+    fn check_view_actual_closure(&mut self, ty: TypeObjectDigest, context: &Context) -> Result<()> {
         let mut edges = BTreeSet::new();
-        let view =
-            self.collect_schema_edges(ty, context, &mut BTreeSet::new(), &mut edges, depth)?;
+        let view = self.collect_schema_edges(ty, context, &mut BTreeSet::new(), &mut edges)?;
         if view {
             let mut active = BTreeSet::new();
             let mut checked = BTreeSet::new();
             let proof = self.proof;
             for edge in edges {
-                self.schema_acyclic(edge, &proof.schemas, &mut active, &mut checked, depth)?;
+                self.schema_acyclic(edge, &proof.schemas, &mut active, &mut checked)?;
             }
         }
         Ok(())
     }
 
-    fn raw_closure(&mut self, ty: TypeObjectDigest, depth: usize) -> Result<()> {
+    fn raw_closure(&mut self, ty: TypeObjectDigest) -> Result<()> {
         self.budget.reserve(1)?;
-        let mut pending = vec![(ty, depth)];
+        let mut pending = vec![ty];
         let mut visited = BTreeSet::new();
-        while let Some((ty, depth)) = pending.pop() {
-            self.budget.step(depth)?;
+        while let Some(ty) = pending.pop() {
+            self.budget.step()?;
             if visited.contains(&ty) {
                 continue;
             }
@@ -3195,7 +3122,7 @@ impl Resolver<'_, '_> {
             let object = self.object(ty)?;
             let children = object.child_types();
             self.budget.reserve(children.len())?;
-            pending.extend(children.into_iter().map(|child| (child, depth + 1)));
+            pending.extend(children);
             match object.form.clone() {
                 TypeForm::Named { declaration }
                 | TypeForm::Applied { declaration, .. }
@@ -3219,7 +3146,7 @@ impl Resolver<'_, '_> {
                                     return Err(invalid("missing nominal field"));
                                 };
                                 self.budget.reserve(1)?;
-                                pending.push((field.ty, 0));
+                                pending.push(field.ty);
                             }
                         }
                         DeclarationPayload::Variant { cases, .. } => {
@@ -3236,14 +3163,14 @@ impl Resolver<'_, '_> {
                                 };
                                 if let Some(payload) = case.payload {
                                     self.budget.reserve(1)?;
-                                    pending.push((payload, 0));
+                                    pending.push(payload);
                                 }
                             }
                         }
                         DeclarationPayload::ReadView(view) => {
                             for field in view.fields {
                                 self.budget.reserve(1)?;
-                                pending.push((field.ty, 0));
+                                pending.push(field.ty);
                             }
                         }
                         _ => {}
@@ -3265,7 +3192,7 @@ impl Resolver<'_, '_> {
         let mut owned_suffix = false;
         let mut capability_suffix = false;
         for (position, (ty, use_mode)) in parameters.iter().enumerate() {
-            let facts = self.facts(*ty, context, 0)?;
+            let facts = self.facts(*ty, context)?;
             let refuse = |message: &str| {
                 let owner = context.owner.map_or_else(
                     || "unowned".to_owned(),
@@ -3341,7 +3268,7 @@ impl Resolver<'_, '_> {
                 _ => {}
             }
         }
-        let result_facts = self.facts(result.ty, context, 0)?;
+        let result_facts = self.facts(result.ty, context)?;
         if result_facts.category == ValueCategory::RegionIdentity {
             return Err(invalid("a region identity cannot be a callable result"));
         }
@@ -3367,7 +3294,7 @@ impl Resolver<'_, '_> {
                 let (source_ty, use_mode) = parameters.get(source as usize).ok_or_else(|| {
                     invalid("result source is outside exact ordered parameter inventory")
                 })?;
-                let source_facts = self.facts(*source_ty, context, 0)?;
+                let source_facts = self.facts(*source_ty, context)?;
                 if *effect != FunctionEffect::Pure
                     || *use_mode != ParameterUse::Borrow
                     || !matches!(
@@ -3423,7 +3350,7 @@ impl Resolver<'_, '_> {
                 let (ty, use_mode) = parameters
                     .get(relationship.source as usize)
                     .ok_or_else(|| invalid("scope source position absent"))?;
-                let facts = self.facts(*ty, context, 0)?;
+                let facts = self.facts(*ty, context)?;
                 if *use_mode != ParameterUse::Borrow
                     || !matches!(
                         facts.category,
@@ -3457,7 +3384,7 @@ impl Resolver<'_, '_> {
         let context = Context::declaration(reference);
         self.budget.reserve(function.parameters.len())?;
         for (position, parameter) in function.parameters.iter().enumerate() {
-            self.budget.step(0)?;
+            self.budget.step()?;
             let OwnerRecord::Parameter(record) =
                 self.owner(reference.package, OwnerKey::Parameter(*parameter))?
             else {
@@ -3484,7 +3411,7 @@ impl Resolver<'_, '_> {
                 TypeForm::CapabilityResource { interface } => Some(*interface),
                 _ => None,
             };
-            let free = self.resource_free(record.ty, &context, 0)?;
+            let free = self.resource_free(record.ty, &context)?;
             let refuse = |message: &str| {
                 invalid(format!(
                     "{message}; owner={}/{}; parameter={parameter}; position={position}; type={}; use={:?}",
@@ -3512,7 +3439,7 @@ impl Resolver<'_, '_> {
                 let mut listed = false;
                 if let FunctionEffect::Task { requirements, .. } = &function.effect {
                     for candidate in requirements {
-                        self.budget.step(0)?;
+                        self.budget.step()?;
                         if *candidate == operand {
                             listed = true;
                             break;
@@ -3542,7 +3469,7 @@ impl Resolver<'_, '_> {
             }
             parameters.push((record.ty, record.use_mode));
         }
-        if !self.resource_free(function.result.ty, &context, 0)? {
+        if !self.resource_free(function.result.ty, &context)? {
             return Err(invalid(format!(
                 "function result contains a capability resource; owner={}/{}; type={}",
                 reference.package, reference.declaration, function.result.ty,
@@ -3593,7 +3520,7 @@ impl Resolver<'_, '_> {
             .collect();
         self.budget.reserve(declarations.len())?;
         for (reference, declaration) in declarations {
-            self.budget.step(0)?;
+            self.budget.step()?;
             let expected_kind = match &declaration.payload {
                 DeclarationPayload::ReadView(_) => OwnerKind::ReadView,
                 DeclarationPayload::Function(function) => match function.effect {
@@ -3638,7 +3565,7 @@ impl Resolver<'_, '_> {
                     // Stored Field/Case roots are checked later in this same full
                     // inventory pass; no prepared cache is exposed before it ends.
                     for field in &view.fields {
-                        self.facts(field.ty, &context, 0)?;
+                        self.facts(field.ty, &context)?;
                     }
                     let read_scope = ReadScopeArgument::Parameter(ReadScopeReference {
                         binder: ReadScopeBinder::Declaration(reference),
@@ -3649,7 +3576,7 @@ impl Resolver<'_, '_> {
                         arguments: type_arguments,
                         read_scope,
                     })?;
-                    self.facts(ty, &context, 0)?;
+                    self.facts(ty, &context)?;
                 }
                 DeclarationPayload::Function(function) => {
                     let (parameters, result) = self.function_signature(reference, &function)?;
@@ -3663,14 +3590,11 @@ impl Resolver<'_, '_> {
                         else {
                             return Err(invalid("external parameter absent"));
                         };
-                        if self.facts(parameter.ty, &context, 0)?.category
-                            == ValueCategory::ReadView
-                        {
+                        if self.facts(parameter.ty, &context)?.category == ValueCategory::ReadView {
                             return Err(invalid("external boundary accepts a view"));
                         }
                     }
-                    if self.facts(function.result, &context, 0)?.category == ValueCategory::ReadView
-                    {
+                    if self.facts(function.result, &context)?.category == ValueCategory::ReadView {
                         return Err(invalid("external boundary returns a view"));
                     }
                 }
@@ -3681,7 +3605,7 @@ impl Resolver<'_, '_> {
                         return Err(invalid("contract method inventory is empty"));
                     }
                     for method in &contract.methods {
-                        self.budget.step(0)?;
+                        self.budget.step()?;
                         if !methods.insert(method.id) || !names.insert(&method.name) {
                             return Err(invalid("duplicate contract method identity/name"));
                         }
@@ -3721,7 +3645,7 @@ impl Resolver<'_, '_> {
                         }
                     };
                     let ty = self.intern(form)?;
-                    self.facts(ty, &context, 0)?;
+                    self.facts(ty, &context)?;
                 }
                 DeclarationPayload::Variant { cases, .. } => {
                     unique(&cases, "nominal case inventory")?;
@@ -3736,10 +3660,10 @@ impl Resolver<'_, '_> {
                         }
                     };
                     let ty = self.intern(form)?;
-                    self.facts(ty, &context, 0)?;
+                    self.facts(ty, &context)?;
                 }
                 DeclarationPayload::Constant { ty, .. }
-                    if self.facts(ty, &context, 0)?.category == ValueCategory::ReadView =>
+                    if self.facts(ty, &context)?.category == ValueCategory::ReadView =>
                 {
                     return Err(invalid("constant stores a view"));
                 }
@@ -3790,7 +3714,7 @@ impl Resolver<'_, '_> {
                         ));
                     }
                     if self
-                        .facts(field.ty, &Context::declaration(reference), 0)?
+                        .facts(field.ty, &Context::declaration(reference))?
                         .category
                         == ValueCategory::ReadView
                     {
@@ -3816,9 +3740,7 @@ impl Resolver<'_, '_> {
                         ));
                     }
                     if let Some(ty) = case.payload
-                        && self
-                            .facts(ty, &Context::declaration(reference), 0)?
-                            .category
+                        && self.facts(ty, &Context::declaration(reference))?.category
                             == ValueCategory::ReadView
                     {
                         return Err(invalid("unused ordinary case payload contains a view"));
@@ -3862,9 +3784,7 @@ impl Resolver<'_, '_> {
                         package,
                         declaration: operation.declaration,
                     });
-                    if self.facts(operation.result, &context, 0)?.category
-                        == ValueCategory::ReadView
-                    {
+                    if self.facts(operation.result, &context)?.category == ValueCategory::ReadView {
                         return Err(invalid("capability operation result carries a view"));
                     }
                     for parameter in operation.parameters {
@@ -3873,9 +3793,7 @@ impl Resolver<'_, '_> {
                         else {
                             return Err(invalid("operation parameter missing"));
                         };
-                        if self.facts(parameter.ty, &context, 0)?.category
-                            == ValueCategory::ReadView
-                        {
+                        if self.facts(parameter.ty, &context)?.category == ValueCategory::ReadView {
                             return Err(invalid("capability operation parameter carries a view"));
                         }
                     }
@@ -3885,7 +3803,7 @@ impl Resolver<'_, '_> {
                         package,
                         declaration: port.declaration,
                     });
-                    self.facts(port.function_type, &context, 0)?;
+                    self.facts(port.function_type, &context)?;
                     if let kernel::PortImplementation::Function(function) = port.implementation
                         && let DeclarationPayload::Function(function) =
                             self.declaration(function)?.payload
@@ -3917,7 +3835,7 @@ impl Resolver<'_, '_> {
             return Err(invalid("prerequisite inventory exceeds bound"));
         }
         for prerequisite in prerequisites {
-            self.budget.step(0)?;
+            self.budget.step()?;
             if !ids.insert(prerequisite.id) || !names.insert(&prerequisite.name) {
                 return Err(invalid("duplicate prerequisite identity/name"));
             }
@@ -3942,7 +3860,7 @@ impl Resolver<'_, '_> {
         let DeclarationPayload::OwnedContract(contract_record) = declaration.payload else {
             return Err(invalid("witness contract is not an Owned contract"));
         };
-        if self.facts(self_type, context, 0)?.category != ValueCategory::Owned {
+        if self.facts(self_type, context)?.category != ValueCategory::Owned {
             return Err(invalid("contract Self is not independently Owned"));
         }
         if arguments.len() != contract_record.type_parameters.len() {
@@ -3957,13 +3875,12 @@ impl Resolver<'_, '_> {
         &mut self,
         operand: &ImplementationOperand,
         context: &Context,
-        depth: usize,
     ) -> Result<(
         DeclarationReference,
         TypeObjectDigest,
         Vec<TypeObjectDigest>,
     )> {
-        self.budget.step(depth)?;
+        self.budget.step()?;
         match operand {
             ImplementationOperand::Parameter { scope, parameter } => {
                 if context.owner != Some(*scope) {
@@ -3999,24 +3916,21 @@ impl Resolver<'_, '_> {
                 }
                 for (formal, actual) in record.implementation_parameters.iter().zip(implementations)
                 {
-                    let got = self.operand(actual, context, depth + 1)?;
-                    let expected_self =
-                        self.substitute(formal.self_type, &substitution, depth + 1)?;
+                    let got = self.operand(actual, context)?;
+                    let expected_self = self.substitute(formal.self_type, &substitution)?;
                     let expected_arguments =
-                        self.substitute_many(&formal.type_arguments, &substitution, depth + 1)?;
+                        self.substitute_many(&formal.type_arguments, &substitution)?;
                     if got != (formal.contract, expected_self, expected_arguments) {
                         return Err(invalid(
                             "prerequisite witness application changed exact contract/Self/actuals",
                         ));
                     }
-                    substitution.witnesses.insert(
-                        (*implementation, formal.id),
-                        self.copy_operand(actual, depth + 1)?,
-                    );
+                    substitution
+                        .witnesses
+                        .insert((*implementation, formal.id), self.copy_operand(actual)?);
                 }
-                let self_type = self.substitute(record.self_type, &substitution, depth + 1)?;
-                let arguments =
-                    self.substitute_many(&record.type_arguments, &substitution, depth + 1)?;
+                let self_type = self.substitute(record.self_type, &substitution)?;
+                let arguments = self.substitute_many(&record.type_arguments, &substitution)?;
                 self.contract_application(record.contract, self_type, &arguments, context)?;
                 Ok((record.contract, self_type, arguments))
             }
@@ -4028,9 +3942,8 @@ impl Resolver<'_, '_> {
         contract: DeclarationReference,
         member: AssociatedTypeMemberId,
         read_scope: Option<ReadScopeArgument>,
-        depth: usize,
     ) -> Result<TypeObjectDigest> {
-        self.budget.step(depth)?;
+        self.budget.step()?;
         self.member(contract, member, read_scope.is_some())?;
         match operand {
             ImplementationOperand::Parameter { scope, parameter } => {
@@ -4078,10 +3991,9 @@ impl Resolver<'_, '_> {
                 }
                 for (formal, actual) in record.implementation_parameters.iter().zip(implementations)
                 {
-                    substitution.witnesses.insert(
-                        (*implementation, formal.id),
-                        self.copy_operand(actual, depth + 1)?,
-                    );
+                    substitution
+                        .witnesses
+                        .insert((*implementation, formal.id), self.copy_operand(actual)?);
                 }
                 let binding = record
                     .associated_types
@@ -4090,7 +4002,7 @@ impl Resolver<'_, '_> {
                     .ok_or_else(|| invalid("selected associated binding absent"))?;
                 match (&binding.value, read_scope) {
                     (AssociatedTypeBindingValue::Owned { ty }, None) => {
-                        self.substitute(*ty, &substitution, depth + 1)
+                        self.substitute(*ty, &substitution)
                     }
                     (
                         AssociatedTypeBindingValue::ReadViewFamily {
@@ -4109,19 +4021,15 @@ impl Resolver<'_, '_> {
                             },
                             scope,
                         );
-                        self.substitute(*ty, &substitution, depth + 1)
+                        self.substitute(*ty, &substitution)
                     }
                     _ => Err(invalid("associated member binding kind/arity swap")),
                 }
             }
         }
     }
-    fn reserve_operand_copy(
-        &mut self,
-        operand: &ImplementationOperand,
-        depth: usize,
-    ) -> Result<()> {
-        self.budget.step(depth)?;
+    fn reserve_operand_copy(&mut self, operand: &ImplementationOperand) -> Result<()> {
+        self.budget.step()?;
         if let ImplementationOperand::Concrete {
             type_arguments,
             implementations,
@@ -4131,23 +4039,19 @@ impl Resolver<'_, '_> {
             self.budget
                 .reserve_counts(&[type_arguments.len(), implementations.len()])?;
             for _ in type_arguments {
-                self.budget.step(depth)?;
+                self.budget.step()?;
             }
             for operand in implementations {
-                self.reserve_operand_copy(operand, depth + 1)?;
+                self.reserve_operand_copy(operand)?;
             }
         }
         Ok(())
     }
-    fn copy_operand(
-        &mut self,
-        operand: &ImplementationOperand,
-        depth: usize,
-    ) -> Result<ImplementationOperand> {
-        self.reserve_operand_copy(operand, depth)?;
+    fn copy_operand(&mut self, operand: &ImplementationOperand) -> Result<ImplementationOperand> {
+        self.reserve_operand_copy(operand)?;
         Ok(operand.clone())
     }
-    fn copy_substitution(&mut self, source: &Substitution, depth: usize) -> Result<Substitution> {
+    fn copy_substitution(&mut self, source: &Substitution) -> Result<Substitution> {
         self.budget.reserve_counts(&[
             source.types.len(),
             source.effects.len(),
@@ -4164,10 +4068,10 @@ impl Resolver<'_, '_> {
             .chain(source.scopes.keys().map(|_| ()))
             .chain(source.members.keys().map(|_| ()))
         {
-            self.budget.step(depth)?;
+            self.budget.step()?;
         }
         for row in source.effects.values() {
-            self.budget.step(depth)?;
+            self.budget.step()?;
             self.budget
                 .reserve_counts(&[row.requirements.len(), row.parameters.len()])?;
             for _ in row
@@ -4176,11 +4080,11 @@ impl Resolver<'_, '_> {
                 .map(|_| ())
                 .chain(row.parameters.iter().map(|_| ()))
             {
-                self.budget.step(depth)?;
+                self.budget.step()?;
             }
         }
         for operand in source.witnesses.values() {
-            self.reserve_operand_copy(operand, depth + 1)?;
+            self.reserve_operand_copy(operand)?;
         }
         Ok(source.clone())
     }
@@ -4223,10 +4127,10 @@ impl Resolver<'_, '_> {
                 .ok_or_else(|| invalid("missing unused associated binding"))?;
             match (&member.bound, &binding.value) {
                 (AssociatedTypeBound::Owned, AssociatedTypeBindingValue::Owned { ty }) => {
-                    if self.facts(*ty, &context, 0)?.category != ValueCategory::Owned {
+                    if self.facts(*ty, &context)?.category != ValueCategory::Owned {
                         return Err(invalid("associated Owned binding is not Owned"));
                     }
-                    self.projection_free(*ty, 0)?;
+                    self.projection_free(*ty)?;
                     contract_substitution
                         .members
                         .insert((implementation.contract, member.id), (*ty, None));
@@ -4255,8 +4159,8 @@ impl Resolver<'_, '_> {
                     if read_scope != ReadScopeArgument::Parameter(formal) {
                         return Err(invalid("family RHS uses another binding's scope formal"));
                     }
-                    self.facts(*ty, &Context::binder(binder), 0)?;
-                    self.projection_free(*ty, 0)?;
+                    self.facts(*ty, &Context::binder(binder))?;
+                    self.projection_free(*ty)?;
                     contract_substitution
                         .members
                         .insert((implementation.contract, member.id), (*ty, Some(formal)));
@@ -4288,7 +4192,7 @@ impl Resolver<'_, '_> {
                 contract: implementation.contract,
                 method: method.id,
             });
-            let mut expected = self.copy_substitution(&contract_substitution, 0)?;
+            let mut expected = self.copy_substitution(&contract_substitution)?;
             if function.read_scope_parameters.len() != mapped.read_scope_arguments.len() {
                 return Err(invalid("mapped function scope argument arity changed"));
             }
@@ -4317,12 +4221,12 @@ impl Resolver<'_, '_> {
                 .iter()
                 .zip(&mapped.implementations)
             {
-                let got = self.operand(operand, &context, 0)?;
+                let got = self.operand(operand, &context)?;
                 if got
                     != (
                         formal.contract,
-                        self.substitute(formal.self_type, &actual, 0)?,
-                        self.substitute_many(&formal.type_arguments, &actual, 0)?,
+                        self.substitute(formal.self_type, &actual)?,
+                        self.substitute_many(&formal.type_arguments, &actual)?,
                     )
                 {
                     return Err(invalid(
@@ -4349,16 +4253,16 @@ impl Resolver<'_, '_> {
             }
             for ((ty, use_mode), method_parameter) in parameters.iter().zip(&method.parameters) {
                 if *use_mode != method_parameter.use_mode
-                    || self.substitute(*ty, &actual, 0)?
-                        != self.substitute(method_parameter.ty, &expected, 0)?
+                    || self.substitute(*ty, &actual)?
+                        != self.substitute(method_parameter.ty, &expected)?
                 {
                     return Err(invalid(
                         "mapped method changes complete parameter category/type/use",
                     ));
                 }
             }
-            if self.substitute(result.ty, &actual, 0)?
-                != self.substitute(method.result.ty, &expected, 0)?
+            if self.substitute(result.ty, &actual)?
+                != self.substitute(method.result.ty, &expected)?
                 || substitute_relation(result.relation, &actual) != method.result.relation
             {
                 return Err(invalid(
@@ -4389,8 +4293,8 @@ impl Resolver<'_, '_> {
         }
         Ok(())
     }
-    fn projection_free(&mut self, ty: TypeObjectDigest, depth: usize) -> Result<()> {
-        self.budget.step(depth)?;
+    fn projection_free(&mut self, ty: TypeObjectDigest) -> Result<()> {
+        self.budget.step()?;
         let object = self.object(ty)?;
         if matches!(
             object.form,
@@ -4404,7 +4308,7 @@ impl Resolver<'_, '_> {
             ));
         }
         for child in object.child_types() {
-            self.projection_free(child, depth + 1)?;
+            self.projection_free(child)?;
         }
         Ok(())
     }
@@ -4455,7 +4359,7 @@ impl Resolver<'_, '_> {
                             .filter(|s| s.source as usize == position)
                             .map(|s| s.scope)
                             .collect();
-                        if self.facts(record.ty, &context, 0)?.category == ValueCategory::ReadView {
+                        if self.facts(record.ty, &context)?.category == ValueCategory::ReadView {
                             scopes.insert(self.view_scope(record.ty)?);
                             syntax.view_functions.insert(reference);
                         }
@@ -4477,7 +4381,6 @@ impl Resolver<'_, '_> {
                         &mut locals,
                         &mut syntax,
                         Use::Return,
-                        0,
                     )?;
                     if self.value_category(&value, &context)? == ValueCategory::ReadView {
                         syntax.view_functions.insert(reference);
@@ -4521,14 +4424,7 @@ impl Resolver<'_, '_> {
                     }
                 }
                 DeclarationPayload::Constant { value, .. } => {
-                    self.scan(
-                        value,
-                        &context,
-                        &mut Locals::new(),
-                        &mut syntax,
-                        Use::Value,
-                        0,
-                    )?;
+                    self.scan(value, &context, &mut Locals::new(), &mut syntax, Use::Value)?;
                 }
                 DeclarationPayload::Test {
                     actual, expected, ..
@@ -4539,7 +4435,6 @@ impl Resolver<'_, '_> {
                         &mut Locals::new(),
                         &mut syntax,
                         Use::Value,
-                        0,
                     )?;
                     self.scan(
                         expected,
@@ -4547,7 +4442,6 @@ impl Resolver<'_, '_> {
                         &mut Locals::new(),
                         &mut syntax,
                         Use::Value,
-                        0,
                     )?;
                 }
                 _ => {}
@@ -4590,7 +4484,6 @@ impl Resolver<'_, '_> {
                 &mut Locals::new(),
                 &mut syntax,
                 Use::Value,
-                0,
             )?;
             if value.ty != Some(expected) {
                 return Err(invalid(
@@ -4599,7 +4492,7 @@ impl Resolver<'_, '_> {
             }
         }
         for ((package, key), record) in &self.proof.owners {
-            self.budget.step(0)?;
+            self.budget.step()?;
             match (key, record) {
                 (OwnerKey::Expression(expression), OwnerRecord::Expression(_))
                     if !syntax.reached.contains(&(*package, *expression)) =>
@@ -4622,7 +4515,7 @@ impl Resolver<'_, '_> {
     }
     fn value_category(&mut self, value: &Value, context: &Context) -> Result<ValueCategory> {
         match value.ty {
-            Some(ty) => Ok(self.facts(ty, context, 0)?.category),
+            Some(ty) => Ok(self.facts(ty, context)?.category),
             None => Ok(ValueCategory::OrdinaryData),
         }
     }
@@ -4666,7 +4559,7 @@ impl Resolver<'_, '_> {
         demand: Use,
     ) -> Result<Value> {
         let local = self.local(value, context, locals)?;
-        let category = self.facts(local.ty, context, 0)?.category;
+        let category = self.facts(local.ty, context)?.category;
         if category == ValueCategory::Owned && demand == Use::Value {
             return Err(invalid(
                 "affine Owned local requires consume/borrow/return use",
@@ -4709,7 +4602,7 @@ impl Resolver<'_, '_> {
     ) -> Result<()> {
         for (other, guard) in locals.iter() {
             if *other != value && guard.live && guard.source == local.source {
-                let category = self.facts(guard.ty, context, 0)?.category;
+                let category = self.facts(guard.ty, context)?.category;
                 if guard.read || category == ValueCategory::ReadView {
                     return Err(invalid(
                         "source consume/mutation occurs under a retained read/view guard",
@@ -4728,10 +4621,10 @@ impl Resolver<'_, '_> {
         // branch snapshot. Scope entries are scalar canonical coordinates.
         self.budget.reserve(locals.len())?;
         for local in locals.values() {
-            self.budget.step(0)?;
+            self.budget.step()?;
             self.budget.reserve(local.scopes.len())?;
             for _ in &local.scopes {
-                self.budget.step(0)?;
+                self.budget.step()?;
             }
         }
         Ok(locals.clone())
@@ -4743,7 +4636,7 @@ impl Resolver<'_, '_> {
             ));
         }
         for (key, local) in left.iter_mut() {
-            self.budget.step(0)?;
+            self.budget.step()?;
             let other = right
                 .get(key)
                 .ok_or_else(|| invalid("untaken branch changes affine liveness/source guards"))?;
@@ -4757,7 +4650,7 @@ impl Resolver<'_, '_> {
                 ));
             }
             for (scope, other) in local.scopes.iter().zip(&other.scopes) {
-                self.budget.step(0)?;
+                self.budget.step()?;
                 if scope != other {
                     return Err(invalid(
                         "untaken branch changes affine liveness/source guards",
@@ -4770,7 +4663,7 @@ impl Resolver<'_, '_> {
             // source. Keep the previous exact guard-lifetime obligation.
             if local.live != other.live
                 && (local.read
-                    || self.facts(local.ty, context, 0)?.category == ValueCategory::ReadView)
+                    || self.facts(local.ty, context)?.category == ValueCategory::ReadView)
             {
                 return Err(invalid(
                     "untaken branch changes affine liveness/source guards",
@@ -4826,7 +4719,7 @@ impl Resolver<'_, '_> {
         if value.ty.is_some_and(|actual| actual != ty) {
             return Err(invalid("binding annotation changes admitted result type"));
         }
-        let facts = self.facts(ty, context, 0)?;
+        let facts = self.facts(ty, context)?;
         if matches!(
             record.kind,
             BindingKind::ReadView | BindingKind::ReadViewBorrow
@@ -4900,7 +4793,7 @@ impl Resolver<'_, '_> {
         field: kernel::ReadViewFieldReference,
         context: &Context,
     ) -> Result<Field> {
-        let layout = self.layout(ty, context, 0)?;
+        let layout = self.layout(ty, context)?;
         if layout.declaration != field.declaration {
             return Err(invalid(
                 "view field reference changes exact instantiated declaration",
@@ -4939,13 +4832,10 @@ impl Resolver<'_, '_> {
         locals: &mut Locals,
         syntax: &mut Syntax,
         demand: Use,
-        depth: usize,
     ) -> Result<Value> {
         self.budget.control.check()?;
-        if depth > kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
-            return Err(invalid("all-path canonical expression depth exceeded"));
-        }
-        self.budget.step(0)?;
+
+        self.budget.step()?;
         let package = context
             .owner
             .ok_or_else(|| invalid("expression has no enclosing canonical declaration"))?
@@ -4990,7 +4880,7 @@ impl Resolver<'_, '_> {
         }
         let value = match operation {
             ExpressionOperation::Region { operation } => {
-                self.region_expression(operation, context, locals, syntax, demand, depth + 1)?
+                self.region_expression(operation, context, locals, syntax, demand)?
             }
             ExpressionOperation::Unit {} => self.scalar(TypeForm::Unit)?,
             ExpressionOperation::Bool { .. } => self.scalar(TypeForm::Bool)?,
@@ -5018,11 +4908,11 @@ impl Resolver<'_, '_> {
                 when_true,
                 when_false,
             } => {
-                self.scan(condition, context, locals, syntax, Use::Value, depth + 1)?;
+                self.scan(condition, context, locals, syntax, Use::Value)?;
                 let mut left = self.fork_locals(locals)?;
                 let mut right = self.fork_locals(locals)?;
-                let mut a = self.scan(when_true, context, &mut left, syntax, demand, depth + 1)?;
-                let b = self.scan(when_false, context, &mut right, syntax, demand, depth + 1)?;
+                let mut a = self.scan(when_true, context, &mut left, syntax, demand)?;
+                let b = self.scan(when_false, context, &mut right, syntax, demand)?;
                 if a.ty.is_some() && b.ty.is_some() && a.ty != b.ty {
                     return Err(invalid("untaken branch changes result type"));
                 }
@@ -5059,7 +4949,7 @@ impl Resolver<'_, '_> {
                         nested.lexical.insert(*binding);
                     }
                     let use_mode = if let Some(ty) = record.declared_type {
-                        match self.facts(ty, &nested, 0)?.category {
+                        match self.facts(ty, &nested)?.category {
                             ValueCategory::Owned => Use::Consume,
                             ValueCategory::ReadView if record.kind == BindingKind::ReadView => {
                                 Use::Return
@@ -5069,14 +4959,14 @@ impl Resolver<'_, '_> {
                     } else {
                         Use::Value
                     };
-                    let value = self.scan(source, &nested, locals, syntax, use_mode, depth + 1)?;
+                    let value = self.scan(source, &nested, locals, syntax, use_mode)?;
                     if !matches!(record.kind, BindingKind::Let | BindingKind::ReadView) {
                         return Err(invalid("let syntax binds an unsupported lexical kind"));
                     }
                     self.binding(*binding, &value, &nested, locals, syntax, Some(record.kind))?;
                     nested.lexical.insert(*binding);
                 }
-                let value = self.scan(body, &nested, locals, syntax, demand, depth + 1)?;
+                let value = self.scan(body, &nested, locals, syntax, demand)?;
                 for binding in bindings {
                     locals.remove(&LocalValueReference::LexicalBinding(binding));
                 }
@@ -5093,7 +4983,6 @@ impl Resolver<'_, '_> {
                         locals,
                         syntax,
                         if last { demand } else { Use::Consume },
-                        depth + 1,
                     )?;
                     if !last && self.value_category(&result, context)? == ValueCategory::ReadView {
                         return Err(invalid("sequence silently drops an affine view value"));
@@ -5120,7 +5009,6 @@ impl Resolver<'_, '_> {
                 argument_context.as_ref().unwrap_or(context),
                 locals,
                 syntax,
-                depth + 1,
                 joined,
             )?,
             ExpressionOperation::ImplementationCall {
@@ -5143,7 +5031,6 @@ impl Resolver<'_, '_> {
                 argument_context.as_ref().unwrap_or(context),
                 locals,
                 syntax,
-                depth + 1,
                 joined,
             )?,
             ExpressionOperation::FunctionValue {
@@ -5171,7 +5058,7 @@ impl Resolver<'_, '_> {
                 arguments,
             } => {
                 let (actual_contract, self_type, type_arguments) =
-                    self.operand(&witness, context, 0)?;
+                    self.operand(&witness, context)?;
                 if actual_contract != contract {
                     return Err(invalid("method call changes exact witness contract"));
                 }
@@ -5220,7 +5107,7 @@ impl Resolver<'_, '_> {
                             }))
                         }
                     };
-                    let ty = self.select_member(&witness, contract, member.id, scope, 0)?;
+                    let ty = self.select_member(&witness, contract, member.id, scope)?;
                     let formal = scope.and_then(|s| {
                         if let ReadScopeArgument::Parameter(p) = s {
                             Some(p)
@@ -5235,10 +5122,10 @@ impl Resolver<'_, '_> {
                 let parameters = method
                     .parameters
                     .iter()
-                    .map(|p| Ok((self.substitute(p.ty, &substitution, 0)?, p.use_mode)))
+                    .map(|p| Ok((self.substitute(p.ty, &substitution)?, p.use_mode)))
                     .collect::<Result<Vec<_>>>()?;
                 let result = CallableResult {
-                    ty: self.substitute(method.result.ty, &substitution, 0)?,
+                    ty: self.substitute(method.result.ty, &substitution)?,
                     relation: substitute_relation(method.result.relation, &substitution),
                 };
                 let sources = method
@@ -5249,7 +5136,7 @@ impl Resolver<'_, '_> {
                         scope: substitute_scope(s.scope, &substitution),
                     })
                     .collect::<Vec<_>>();
-                let row = self.effect_row(&method.effect, 0)?;
+                let row = self.effect_row(&method.effect)?;
                 self.admit_invocation(
                     matches!(method.effect, FunctionEffect::Task { .. }),
                     &row,
@@ -5264,7 +5151,6 @@ impl Resolver<'_, '_> {
                     argument_context.as_ref().unwrap_or(context),
                     locals,
                     syntax,
-                    depth + 1,
                     false,
                 )?
             }
@@ -5286,7 +5172,7 @@ impl Resolver<'_, '_> {
                 let mut nested = context.clone();
                 nested.lexical.insert(binding);
                 let previous_pending = syntax.pending_call.replace((package, call, binding));
-                let value = self.scan(call, &nested, locals, syntax, Use::Return, depth + 1)?;
+                let value = self.scan(call, &nested, locals, syntax, Use::Return)?;
                 syntax.pending_call = previous_pending;
                 let category = self.value_category(&value, &nested)?;
                 let kind = match category {
@@ -5299,7 +5185,7 @@ impl Resolver<'_, '_> {
                     }
                 };
                 self.binding(binding, &value, &nested, locals, syntax, Some(kind))?;
-                let result = self.scan(body, &nested, locals, syntax, demand, depth + 1)?;
+                let result = self.scan(body, &nested, locals, syntax, demand)?;
                 locals.remove(&LocalValueReference::LexicalBinding(binding));
                 result
             }
@@ -5311,7 +5197,7 @@ impl Resolver<'_, '_> {
                 fields,
             } => {
                 let source_local = self.local(source, context, locals)?;
-                let source_category = self.facts(source_local.ty, context, 0)?.category;
+                let source_category = self.facts(source_local.ty, context)?.category;
                 if !matches!(
                     source_category,
                     ValueCategory::Owned | ValueCategory::ReadView
@@ -5334,8 +5220,8 @@ impl Resolver<'_, '_> {
                     arguments: type_arguments,
                     read_scope,
                 })?;
-                self.facts(ty, context, 0)?;
-                let layout = self.layout(ty, context, 0)?;
+                self.facts(ty, context)?;
+                let layout = self.layout(ty, context)?;
                 if fields.len() != layout.fields.len() {
                     return Err(invalid("constructor omits inactive view fields"));
                 }
@@ -5357,8 +5243,7 @@ impl Resolver<'_, '_> {
                         } else {
                             Use::Value
                         };
-                    let value =
-                        self.scan(field.value, context, locals, syntax, use_mode, depth + 1)?;
+                    let value = self.scan(field.value, context, locals, syntax, use_mode)?;
                     if value.ty != Some(expected.ty) {
                         return Err(invalid("constructor field has another instantiated type"));
                     }
@@ -5391,7 +5276,7 @@ impl Resolver<'_, '_> {
             }
             ExpressionOperation::ReborrowReadView { value, read_scope } => {
                 let local = self.local(value, context, locals)?;
-                if self.facts(local.ty, context, 0)?.category != ValueCategory::ReadView {
+                if self.facts(local.ty, context)?.category != ValueCategory::ReadView {
                     return Err(invalid("view reborrow selected a nonview"));
                 }
                 self.check_source_scope(&local, read_scope, context)?;
@@ -5444,8 +5329,7 @@ impl Resolver<'_, '_> {
             ExpressionOperation::MoveReadView { value }
             | ExpressionOperation::DropReadView { value } => {
                 let local = self.local(value, context, locals)?;
-                if local.read
-                    || self.facts(local.ty, context, 0)?.category != ValueCategory::ReadView
+                if local.read || self.facts(local.ty, context)?.category != ValueCategory::ReadView
                 {
                     return Err(invalid(
                         "view move/drop consumes a borrowed or nonview local",
@@ -5473,7 +5357,7 @@ impl Resolver<'_, '_> {
                 body,
             } => {
                 let local = self.local(value, context, locals)?;
-                if self.facts(local.ty, context, 0)?.category != ValueCategory::ReadView {
+                if self.facts(local.ty, context)?.category != ValueCategory::ReadView {
                     return Err(invalid("view borrow selected nonview local"));
                 }
                 let mut nested = context.clone();
@@ -5492,7 +5376,7 @@ impl Resolver<'_, '_> {
                     syntax,
                     Some(BindingKind::ReadViewBorrow),
                 )?;
-                let result = self.scan(body, &nested, locals, syntax, demand, depth + 1)?;
+                let result = self.scan(body, &nested, locals, syntax, demand)?;
                 locals.remove(&LocalValueReference::LexicalBinding(binding));
                 result
             }
@@ -5524,7 +5408,7 @@ impl Resolver<'_, '_> {
                 }
                 let mut nested = context.clone();
                 nested.lexical.insert(binding);
-                let category = self.facts(field.ty, context, 0)?.category;
+                let category = self.facts(field.ty, context)?.category;
                 let value = Value {
                     ty: Some(field.ty),
                     source: Some(local.source),
@@ -5543,13 +5427,11 @@ impl Resolver<'_, '_> {
                         BindingKind::OwnedBorrow
                     }),
                 )?;
-                let result = self.scan(body, &nested, locals, syntax, demand, depth + 1)?;
+                let result = self.scan(body, &nested, locals, syntax, demand)?;
                 locals.remove(&LocalValueReference::LexicalBinding(binding));
                 result
             }
-            operation => {
-                self.scan_ordinary(operation, context, locals, syntax, demand, depth + 1)?
-            }
+            operation => self.scan_ordinary(operation, context, locals, syntax, demand)?,
         };
         syntax.active.remove(&(package, expression));
         if matches!(demand, Use::Value | Use::Consume)
@@ -5569,7 +5451,7 @@ impl Resolver<'_, '_> {
         if let ExpressionOperation::Region { operation } = operation
             && let Some(ty) = operation.ty()
         {
-            self.facts(*ty, context, 0)?;
+            self.facts(*ty, context)?;
         }
         let required = match operation {
             ExpressionOperation::PackOwned { product_type, .. }
@@ -5599,7 +5481,7 @@ impl Resolver<'_, '_> {
             _ => None,
         };
         if let Some((ty, kind)) = required {
-            if self.facts(ty, context, 0)?.category != ValueCategory::Owned {
+            if self.facts(ty, context)?.category != ValueCategory::Owned {
                 return Err(invalid(
                     "Owned operation type annotation counterfeits a view/ordinary category",
                 ));
@@ -5624,7 +5506,7 @@ impl Resolver<'_, '_> {
         }
         match operation {
             ExpressionOperation::TransactionOutcome { type_argument, .. } => {
-                if self.facts(*type_argument, context, 0)?.category == ValueCategory::ReadView {
+                if self.facts(*type_argument, context)?.category == ValueCategory::ReadView {
                     return Err(invalid(
                         "transaction syntax hides a view in an unused type actual",
                     ));
@@ -5632,7 +5514,7 @@ impl Resolver<'_, '_> {
             }
             ExpressionOperation::SequencePop { result_type, .. }
             | ExpressionOperation::SequenceReplace { result_type, .. }
-                if self.facts(*result_type, context, 0)?.category != ValueCategory::Owned =>
+                if self.facts(*result_type, context)?.category != ValueCategory::Owned =>
             {
                 return Err(invalid(
                     "Owned sequence result contract contains an ordinary/view occurrence",
@@ -5682,7 +5564,6 @@ impl Resolver<'_, '_> {
         argument_context: &Context,
         locals: &mut Locals,
         syntax: &mut Syntax,
-        depth: usize,
         joined: bool,
     ) -> Result<Value> {
         self.check_reference(context, reference)?;
@@ -5698,8 +5579,8 @@ impl Resolver<'_, '_> {
                     argument_context,
                     &mut substitution,
                 )?;
-                let source_row = self.effect_row(&function.effect, 0)?;
-                let required_row = self.substitute_effect(&source_row, &substitution, 0)?;
+                let source_row = self.effect_row(&function.effect)?;
+                let required_row = self.substitute_effect(&source_row, &substitution)?;
                 self.admit_invocation(
                     matches!(function.effect, FunctionEffect::Task { .. }),
                     &required_row,
@@ -5710,19 +5591,19 @@ impl Resolver<'_, '_> {
                     return Err(invalid("named call omits unused witness actuals"));
                 }
                 for (formal, operand) in function.implementation_parameters.iter().zip(witnesses) {
-                    let got = self.operand(operand, context, 0)?;
+                    let got = self.operand(operand, context)?;
                     if got
                         != (
                             formal.contract,
-                            self.substitute(formal.self_type, &substitution, 0)?,
-                            self.substitute_many(&formal.type_arguments, &substitution, 0)?,
+                            self.substitute(formal.self_type, &substitution)?,
+                            self.substitute_many(&formal.type_arguments, &substitution)?,
                         )
                     {
                         return Err(invalid("named call changes exact witness application"));
                     }
                     substitution
                         .witnesses
-                        .insert((reference, formal.id), self.copy_operand(operand, 0)?);
+                        .insert((reference, formal.id), self.copy_operand(operand)?);
                 }
                 let (parameters, result) = self.function_signature(reference, &function)?;
                 let sources = self
@@ -5770,7 +5651,7 @@ impl Resolver<'_, '_> {
             .into_iter()
             .enumerate()
             .map(|(position, (ty, use_mode))| {
-                self.budget.step(0)?;
+                self.budget.step()?;
                 let direct = matches!(
                     &self
                         .derived
@@ -5781,11 +5662,11 @@ impl Resolver<'_, '_> {
                         .form,
                     TypeForm::CapabilityResource { .. }
                 );
-                let actual = self.substitute(ty, &substitution, 0)?;
+                let actual = self.substitute(ty, &substitution,)?;
                 // Task/binding authority was admitted under the source callee.
                 // Actual types and scopes belong to the caller Context, which
                 // may be a port or test rather than another named function.
-                if named && !direct && !self.resource_free(actual, context, 0)? {
+                if named && !direct && !self.resource_free(actual, context,)? {
                     return Err(invalid(format!(
                         "applied function parameter contains a forbidden capability container; owner={}/{}; position={position}; type={actual}",
                         reference.package, reference.declaration,
@@ -5795,10 +5676,10 @@ impl Resolver<'_, '_> {
             })
             .collect::<Result<Vec<_>>>()?;
         let result = CallableResult {
-            ty: self.substitute(result.ty, &substitution, 0)?,
+            ty: self.substitute(result.ty, &substitution)?,
             relation: substitute_relation(result.relation, &substitution),
         };
-        if named && !self.resource_free(result.ty, context, 0)? {
+        if named && !self.resource_free(result.ty, context)? {
             return Err(invalid(format!(
                 "applied function result contains a capability resource; owner={}/{}; type={}",
                 reference.package, reference.declaration, result.ty,
@@ -5813,7 +5694,6 @@ impl Resolver<'_, '_> {
             argument_context,
             locals,
             syntax,
-            depth,
             joined,
         )
     }
@@ -5827,7 +5707,6 @@ impl Resolver<'_, '_> {
         argument_context: &Context,
         locals: &mut Locals,
         syntax: &mut Syntax,
-        depth: usize,
         joined: bool,
     ) -> Result<Value> {
         if parameters.len() != arguments.len() {
@@ -5842,14 +5721,7 @@ impl Resolver<'_, '_> {
                 ParameterUse::Consume => Use::Consume,
                 ParameterUse::Unrestricted => Use::Value,
             };
-            let value = self.scan(
-                *expression,
-                argument_context,
-                locals,
-                syntax,
-                demand,
-                depth + 1,
-            )?;
+            let value = self.scan(*expression, argument_context, locals, syntax, demand)?;
             if value.ty != Some(*ty) {
                 let caller = context
                     .owner
@@ -5863,9 +5735,9 @@ impl Resolver<'_, '_> {
                         .map_or_else(|| "unproved".to_owned(), |actual| actual.to_string()),
                 )));
             }
-            let category = self.facts(*ty, context, 0)?.category;
+            let category = self.facts(*ty, context)?.category;
             if joined {
-                let facts = self.facts(*ty, context, 0)?;
+                let facts = self.facts(*ty, context)?;
                 if (*use_mode == ParameterUse::Borrow && !facts.share)
                     || (*use_mode != ParameterUse::Borrow && !facts.transfer)
                 {
@@ -5893,7 +5765,7 @@ impl Resolver<'_, '_> {
                 ));
             }
         }
-        let facts = self.facts(result.ty, context, 0)?;
+        let facts = self.facts(result.ty, context)?;
         match result.relation {
             ResultRelation::Value => {
                 if facts.category == ValueCategory::ReadView {
@@ -5944,9 +5816,8 @@ impl Resolver<'_, '_> {
         &mut self,
         ty: TypeObjectDigest,
         context: &Context,
-        depth: usize,
     ) -> Result<()> {
-        self.budget.step(depth)?;
+        self.budget.step()?;
         let forbidden_root = match &self
             .derived
             .get(&ty)
@@ -5969,7 +5840,7 @@ impl Resolver<'_, '_> {
             ),
             _ => false,
         };
-        if forbidden_root && !self.resource_free(ty, context, depth)? {
+        if forbidden_root && !self.resource_free(ty, context)? {
             return Err(invalid(format!(
                 "forbidden canonical container contains a capability resource; type={ty}",
             )));
@@ -5982,19 +5853,14 @@ impl Resolver<'_, '_> {
     /// owner/binder/lexical Context stays fixed; field and actual edges stay distinct.
     /// No result is returned until the whole reachable closure completes, and no
     /// optimistic inner result enters a cache.
-    fn resource_free(
-        &mut self,
-        ty: TypeObjectDigest,
-        context: &Context,
-        depth: usize,
-    ) -> Result<bool> {
+    fn resource_free(&mut self, ty: TypeObjectDigest, context: &Context) -> Result<bool> {
         let mut pending = Vec::new();
         let mut visited = BTreeSet::new();
         let mut free = true;
         let field_context = self.property_context(context)?;
-        self.resource_edge(&mut pending, ty, depth, context.structural_properties)?;
-        while let Some((ty, depth, structural)) = pending.pop() {
-            self.budget.step(depth)?;
+        self.resource_edge(&mut pending, ty, context.structural_properties)?;
+        while let Some((ty, structural)) = pending.pop() {
+            self.budget.step()?;
             if visited.contains(&(ty, structural)) {
                 continue;
             }
@@ -6029,34 +5895,19 @@ impl Resolver<'_, '_> {
             self.budget.reserve_counts(&copied)?;
             for count in copied {
                 for _ in 0..count {
-                    self.budget.step(depth)?;
+                    self.budget.step()?;
                 }
             }
             let object = self.object(ty)?;
             let node_free = match object.form {
                 TypeForm::RegionBrand { .. } => true,
                 TypeForm::Region { region } | TypeForm::RegionCap { region, .. } => {
-                    self.resource_edge(
-                        &mut pending,
-                        region,
-                        depth + 1,
-                        context.structural_properties,
-                    )?;
+                    self.resource_edge(&mut pending, region, context.structural_properties)?;
                     true
                 }
                 TypeForm::RelPtr { region, item } | TypeForm::RegionSlice { region, item } => {
-                    self.resource_edge(
-                        &mut pending,
-                        region,
-                        depth + 1,
-                        context.structural_properties,
-                    )?;
-                    self.resource_edge(
-                        &mut pending,
-                        item,
-                        depth + 1,
-                        context.structural_properties,
-                    )?;
+                    self.resource_edge(&mut pending, region, context.structural_properties)?;
+                    self.resource_edge(&mut pending, item, context.structural_properties)?;
                     true
                 }
                 TypeForm::CapabilityResource { .. } => false,
@@ -6086,21 +5937,16 @@ impl Resolver<'_, '_> {
                     self.budget.reserve(formals.len())?;
                     let mut substitution = Substitution::default();
                     for (formal, actual) in formals.iter().zip(arguments) {
-                        self.budget.step(depth)?;
+                        self.budget.step()?;
                         self.resource_formal(*formal, &Context::declaration(declaration))?;
                         substitution.types.insert(*formal, *actual);
-                        self.resource_edge(
-                            &mut pending,
-                            *actual,
-                            depth + 1,
-                            context.structural_properties,
-                        )?;
+                        self.resource_edge(&mut pending, *actual, context.structural_properties)?;
                     }
                     match &record.payload {
                         DeclarationPayload::Record { fields, .. }
                         | DeclarationPayload::OwnedRecord { fields, .. } => {
                             for id in fields {
-                                self.budget.step(depth)?;
+                                self.budget.step()?;
                                 let Some(OwnerRecord::Field(field)) = proof
                                     .owners
                                     .get(&(declaration.package, OwnerKey::Field(*id)))
@@ -6116,13 +5962,13 @@ impl Resolver<'_, '_> {
                                         "resource closure field has another owner",
                                     ));
                                 }
-                                let child = self.substitute(field.ty, &substitution, depth + 1)?;
-                                self.resource_edge(&mut pending, child, depth + 1, true)?;
+                                let child = self.substitute(field.ty, &substitution)?;
+                                self.resource_edge(&mut pending, child, true)?;
                             }
                         }
                         DeclarationPayload::Variant { cases, .. } => {
                             for id in cases {
-                                self.budget.step(depth)?;
+                                self.budget.step()?;
                                 let Some(OwnerRecord::Case(case)) = proof
                                     .owners
                                     .get(&(declaration.package, OwnerKey::Case(*id)))
@@ -6135,9 +5981,8 @@ impl Resolver<'_, '_> {
                                     return Err(invalid("resource closure case has another owner"));
                                 }
                                 if let Some(payload) = case.payload {
-                                    let child =
-                                        self.substitute(payload, &substitution, depth + 1)?;
-                                    self.resource_edge(&mut pending, child, depth + 1, true)?;
+                                    let child = self.substitute(payload, &substitution)?;
+                                    self.resource_edge(&mut pending, child, true)?;
                                 }
                             }
                         }
@@ -6156,9 +6001,9 @@ impl Resolver<'_, '_> {
                                 read_scope,
                             );
                             for field in &view.fields {
-                                self.budget.step(depth)?;
-                                let child = self.substitute(field.ty, &substitution, depth + 1)?;
-                                self.resource_edge(&mut pending, child, depth + 1, true)?;
+                                self.budget.step()?;
+                                let child = self.substitute(field.ty, &substitution)?;
+                                self.resource_edge(&mut pending, child, true)?;
                             }
                         }
                         _ => return Err(invalid("resource closure nominal owner has no layout")),
@@ -6169,12 +6014,7 @@ impl Resolver<'_, '_> {
                 | TypeForm::OwnedProduct { fields }
                 | TypeForm::OwnedChoice { cases: fields } => {
                     for field in fields {
-                        self.resource_edge(
-                            &mut pending,
-                            field.ty,
-                            depth + 1,
-                            context.structural_properties,
-                        )?;
+                        self.resource_edge(&mut pending, field.ty, context.structural_properties)?;
                     }
                     true
                 }
@@ -6182,19 +6022,9 @@ impl Resolver<'_, '_> {
                 | TypeForm::TaskFunction {
                     parameters, result, ..
                 } => {
-                    self.resource_edge(
-                        &mut pending,
-                        result,
-                        depth + 1,
-                        context.structural_properties,
-                    )?;
+                    self.resource_edge(&mut pending, result, context.structural_properties)?;
                     for parameter in parameters {
-                        self.resource_edge(
-                            &mut pending,
-                            parameter,
-                            depth + 1,
-                            context.structural_properties,
-                        )?;
+                        self.resource_edge(&mut pending, parameter, context.structural_properties)?;
                     }
                     true
                 }
@@ -6202,12 +6032,7 @@ impl Resolver<'_, '_> {
                 | TypeForm::Option { item }
                 | TypeForm::Stream { item }
                 | TypeForm::OwnedSequence { item } => {
-                    self.resource_edge(
-                        &mut pending,
-                        item,
-                        depth + 1,
-                        context.structural_properties,
-                    )?;
+                    self.resource_edge(&mut pending, item, context.structural_properties)?;
                     true
                 }
                 TypeForm::Map { key, value }
@@ -6215,18 +6040,8 @@ impl Resolver<'_, '_> {
                     ok: key,
                     error: value,
                 } => {
-                    self.resource_edge(
-                        &mut pending,
-                        key,
-                        depth + 1,
-                        context.structural_properties,
-                    )?;
-                    self.resource_edge(
-                        &mut pending,
-                        value,
-                        depth + 1,
-                        context.structural_properties,
-                    )?;
+                    self.resource_edge(&mut pending, key, context.structural_properties)?;
+                    self.resource_edge(&mut pending, value, context.structural_properties)?;
                     true
                 }
                 // These exact abstract members/formals have positive Owned/view
@@ -6256,7 +6071,7 @@ impl Resolver<'_, '_> {
     /// declaration or its property constraints. Borrow both raw inventories and
     /// charge every compared identity before selecting the exact parent record.
     fn resource_formal(&mut self, parameter: TypeParameterId, context: &Context) -> Result<()> {
-        self.budget.step(0)?;
+        self.budget.step()?;
         let owner = context
             .owner
             .ok_or_else(|| invalid("type formal has no exact occurrence owner"))?;
@@ -6265,7 +6080,7 @@ impl Resolver<'_, '_> {
         let formals = declaration.payload.type_parameters();
         let mut listed = false;
         for candidate in formals.iter() {
-            self.budget.step(0)?;
+            self.budget.step()?;
             if *candidate == parameter {
                 listed = true;
                 break;
@@ -6274,7 +6089,7 @@ impl Resolver<'_, '_> {
         if !listed {
             return Err(invalid("foreign or unused unlisted type formal"));
         }
-        self.budget.step(0)?;
+        self.budget.step()?;
         match proof
             .owners
             .get(&(owner.package, OwnerKey::TypeParameter(parameter)))
@@ -6292,12 +6107,11 @@ impl Resolver<'_, '_> {
 
     fn resource_edge(
         &mut self,
-        pending: &mut Vec<(TypeObjectDigest, usize, bool)>,
+        pending: &mut Vec<(TypeObjectDigest, bool)>,
         ty: TypeObjectDigest,
-        depth: usize,
         structural: bool,
     ) -> Result<()> {
-        self.budget.step(depth)?;
+        self.budget.step()?;
         self.budget.reserve(1)?;
         pending.try_reserve(1).map_err(|_| {
             ExecutionError::resource(
@@ -6305,7 +6119,7 @@ impl Resolver<'_, '_> {
                 "cannot reserve raw capability closure worklist",
             )
         })?;
-        pending.push((ty, depth, structural));
+        pending.push((ty, structural));
         Ok(())
     }
 
@@ -6317,27 +6131,20 @@ impl Resolver<'_, '_> {
         ty: TypeObjectDigest,
         context: &Context,
         active: &mut BTreeSet<(TypeObjectDigest, bool)>,
-        depth: usize,
     ) -> Result<bool> {
-        self.closure_property(ty, context, active, depth, true)
+        self.closure_property(ty, context, active, true)
     }
-    fn memory_free(
-        &mut self,
-        ty: TypeObjectDigest,
-        context: &Context,
-        depth: usize,
-    ) -> Result<bool> {
-        self.closure_property(ty, context, &mut BTreeSet::new(), depth, false)
+    fn memory_free(&mut self, ty: TypeObjectDigest, context: &Context) -> Result<bool> {
+        self.closure_property(ty, context, &mut BTreeSet::new(), false)
     }
     fn closure_property(
         &mut self,
         ty: TypeObjectDigest,
         context: &Context,
         active: &mut BTreeSet<(TypeObjectDigest, bool)>,
-        depth: usize,
         capture: bool,
     ) -> Result<bool> {
-        self.budget.step(depth)?;
+        self.budget.step()?;
         let key = (ty, context.structural_properties);
         if active.contains(&key) {
             return Ok(true);
@@ -6388,7 +6195,7 @@ impl Resolver<'_, '_> {
                 for (formal, actual) in formals.iter().zip(arguments) {
                     self.parameter(*formal, &Context::declaration(declaration))?;
                     substitution.types.insert(*formal, *actual);
-                    safe &= self.closure_property(*actual, context, active, depth + 1, capture)?;
+                    safe &= self.closure_property(*actual, context, active, capture)?;
                 }
                 let field_context = self.property_context(context)?;
                 match record.payload {
@@ -6402,14 +6209,9 @@ impl Resolver<'_, '_> {
                             if field.declaration != declaration.declaration {
                                 return Err(invalid("capture field has another owner"));
                             }
-                            let child = self.substitute(field.ty, &substitution, depth + 1)?;
-                            safe &= self.closure_property(
-                                child,
-                                &field_context,
-                                active,
-                                depth + 1,
-                                capture,
-                            )?;
+                            let child = self.substitute(field.ty, &substitution)?;
+                            safe &=
+                                self.closure_property(child, &field_context, active, capture)?;
                         }
                     }
                     DeclarationPayload::Variant { cases, .. } => {
@@ -6423,14 +6225,9 @@ impl Resolver<'_, '_> {
                                 return Err(invalid("capture case has another owner"));
                             }
                             if let Some(payload) = case.payload {
-                                let child = self.substitute(payload, &substitution, depth + 1)?;
-                                safe &= self.closure_property(
-                                    child,
-                                    &field_context,
-                                    active,
-                                    depth + 1,
-                                    capture,
-                                )?;
+                                let child = self.substitute(payload, &substitution)?;
+                                safe &=
+                                    self.closure_property(child, &field_context, active, capture)?;
                             }
                         }
                     }
@@ -6442,7 +6239,7 @@ impl Resolver<'_, '_> {
             _ => {
                 let mut safe = true;
                 for child in object.child_types() {
-                    safe &= self.closure_property(child, context, active, depth + 1, capture)?;
+                    safe &= self.closure_property(child, context, active, capture)?;
                 }
                 safe
             }
@@ -6462,7 +6259,7 @@ impl Resolver<'_, '_> {
         self.check_reference(context, reference)?;
         let record = self.declaration(reference)?;
         for ty in types {
-            if !self.memory_free(*ty, context, 0)? {
+            if !self.memory_free(*ty, context)? {
                 return Err(invalid(
                     "first-class callable type actual contains memory/view/resource",
                 ));
@@ -6491,8 +6288,8 @@ impl Resolver<'_, '_> {
                 )?;
                 let (parameters, result) = self.function_signature(reference, &function)?;
                 let task = matches!(function.effect, FunctionEffect::Task { .. });
-                let source_row = self.effect_row(&function.effect, 0)?;
-                let row = self.substitute_effect(&source_row, &substitution, 0)?;
+                let source_row = self.effect_row(&function.effect)?;
+                let row = self.substitute_effect(&source_row, &substitution)?;
                 (parameters, result.ty, task, row)
             }
             DeclarationPayload::External(function) => {
@@ -6531,18 +6328,18 @@ impl Resolver<'_, '_> {
                     "first-class callable carries borrowed/consuming parameters",
                 ));
             }
-            let ty = self.substitute(parameter, &substitution, 0)?;
-            self.facts(ty, context, 0)?;
-            if !self.memory_free(ty, context, 0)? {
+            let ty = self.substitute(parameter, &substitution)?;
+            self.facts(ty, context)?;
+            if !self.memory_free(ty, context)? {
                 return Err(invalid(
                     "first-class callable parameter contains memory/view/resource",
                 ));
             }
             actual_parameters.push(ty);
         }
-        let result = self.substitute(result, &substitution, 0)?;
-        self.facts(result, context, 0)?;
-        if !self.memory_free(result, context, 0)? {
+        let result = self.substitute(result, &substitution)?;
+        self.facts(result, context)?;
+        if !self.memory_free(result, context)? {
             return Err(invalid(
                 "first-class callable result contains memory/view/resource",
             ));
@@ -6559,7 +6356,7 @@ impl Resolver<'_, '_> {
                 result,
             }
         })?;
-        self.facts(ty, context, 0)?;
+        self.facts(ty, context)?;
         Ok(ty)
     }
     fn nominal_fields(
@@ -6610,8 +6407,8 @@ impl Resolver<'_, '_> {
             if field.declaration != reference.declaration {
                 return Err(invalid("record field names another declaration"));
             }
-            let ty = self.substitute(field.ty, &substitution, 0)?;
-            self.facts(ty, context, 0)?;
+            let ty = self.substitute(field.ty, &substitution)?;
+            self.facts(ty, context)?;
             result.push((
                 kernel::FieldReference {
                     package: reference.package,
@@ -6663,14 +6460,14 @@ impl Resolver<'_, '_> {
         let mut committed = false;
         let mut aborted = false;
         for case in &cases {
-            self.budget.step(0)?;
+            self.budget.step()?;
             committed |= *case == contract.committed.case;
             aborted |= *case == contract.aborted.case;
         }
         let mut condition = false;
         let mut conflict = false;
         for case in &reason_cases {
-            self.budget.step(0)?;
+            self.budget.step()?;
             condition |= *case == contract.condition_failed.case;
             conflict |= *case == contract.conflict.case;
         }
@@ -6728,7 +6525,7 @@ impl Resolver<'_, '_> {
             declaration: contract.outcome,
             arguments: vec![actual],
         })?;
-        self.facts(ty, context, 0)?;
+        self.facts(ty, context)?;
         Ok(ty)
     }
     fn direct_requirement(
@@ -6754,7 +6551,6 @@ impl Resolver<'_, '_> {
         locals: &mut Locals,
         syntax: &mut Syntax,
         demand: Use,
-        depth: usize,
     ) -> Result<Value> {
         self.direct_requirement(requirement, context)?;
         let owner = context
@@ -6788,12 +6584,12 @@ impl Resolver<'_, '_> {
             .remove(&LocalValueReference::LexicalBinding(binding))
             .ok_or_else(|| invalid("transaction binding was not admitted"))?;
         locals.insert(LocalValueReference::TransactionBinding(binding), local);
-        let result = self.scan(body, context, locals, syntax, demand, depth + 1)?;
+        let result = self.scan(body, context, locals, syntax, demand)?;
         locals.remove(&LocalValueReference::TransactionBinding(binding));
         Ok(result)
     }
     fn annotated(&mut self, ty: TypeObjectDigest, context: &Context) -> Result<Value> {
-        self.facts(ty, context, 0)?;
+        self.facts(ty, context)?;
         Ok(Value {
             ty: Some(ty),
             ..Value::default()
@@ -6806,7 +6602,6 @@ impl Resolver<'_, '_> {
         locals: &mut Locals,
         syntax: &mut Syntax,
         demand: Use,
-        depth: usize,
     ) -> Result<Value> {
         let package = context
             .owner
@@ -6817,11 +6612,11 @@ impl Resolver<'_, '_> {
         let value = match operation {
             ExpressionOperation::Invoke { callee, arguments }
             | ExpressionOperation::Bind { callee, arguments } => {
-                let callee = self.scan(callee, context, locals, syntax, Use::Value, depth + 1)?;
+                let callee = self.scan(callee, context, locals, syntax, Use::Value)?;
                 let ty = callee
                     .ty
                     .ok_or_else(|| invalid("indirect callable type was not reconstructed"))?;
-                if !self.memory_free(ty, context, 0)? {
+                if !self.memory_free(ty, context)? {
                     return Err(invalid(
                         "indirect callable signature contains memory/view/resource",
                     ));
@@ -6848,14 +6643,13 @@ impl Resolver<'_, '_> {
                 }
                 for (parameter, argument) in parameters.iter().zip(&arguments) {
                     if binding_callable
-                        && !self.capture_safe(*parameter, context, &mut BTreeSet::new(), 0)?
+                        && !self.capture_safe(*parameter, context, &mut BTreeSet::new())?
                     {
                         return Err(invalid(
                             "bound callable prefix is not independently capture-safe",
                         ));
                     }
-                    let actual =
-                        self.scan(*argument, context, locals, syntax, Use::Value, depth + 1)?;
+                    let actual = self.scan(*argument, context, locals, syntax, Use::Value)?;
                     if actual.ty != Some(*parameter) {
                         return Err(invalid(
                             "indirect callable argument differs from exact parameter type",
@@ -6891,7 +6685,7 @@ impl Resolver<'_, '_> {
                 let nominal = if let Some(declaration) = nominal_type {
                     self.budget.reserve(type_arguments.len())?;
                     for _ in &type_arguments {
-                        self.budget.step(0)?;
+                        self.budget.step()?;
                     }
                     let ty = self.intern(if type_arguments.is_empty() {
                         TypeForm::Named { declaration }
@@ -6915,8 +6709,7 @@ impl Resolver<'_, '_> {
                 }
                 let mut seen = BTreeSet::new();
                 for field in fields {
-                    let value =
-                        self.scan(field.value, context, locals, syntax, Use::Value, depth + 1)?;
+                    let value = self.scan(field.value, context, locals, syntax, Use::Value)?;
                     let ty = value
                         .ty
                         .ok_or_else(|| invalid("record field has no exact reconstructed type"))?;
@@ -6930,7 +6723,7 @@ impl Resolver<'_, '_> {
                         (kernel::FieldSelector::Nominal(reference), Some((_, expected))) => {
                             let mut matched = false;
                             for (field, expected) in expected {
-                                self.budget.step(0)?;
+                                self.budget.step()?;
                                 matched |= *field == reference && *expected == ty;
                             }
                             if !matched {
@@ -6996,12 +6789,11 @@ impl Resolver<'_, '_> {
                 let substitution = self.bind_types(declaration, &type_arguments, context)?;
                 let expected = case_record
                     .payload
-                    .map(|ty| self.substitute(ty, &substitution, 0))
+                    .map(|ty| self.substitute(ty, &substitution))
                     .transpose()?;
                 match (payload, expected) {
                     (Some(payload), Some(expected)) => {
-                        let value =
-                            self.scan(payload, context, locals, syntax, Use::Value, depth + 1)?;
+                        let value = self.scan(payload, context, locals, syntax, Use::Value)?;
                         if value.ty != Some(expected) {
                             return Err(invalid(
                                 "variant payload differs from exact substituted case type",
@@ -7027,7 +6819,7 @@ impl Resolver<'_, '_> {
                 self.annotated(ty, context)?
             }
             ExpressionOperation::Field { value, selector } => {
-                let value = self.scan(value, context, locals, syntax, Use::Borrow, depth + 1)?;
+                let value = self.scan(value, context, locals, syntax, Use::Borrow)?;
                 if self.value_category(&value, context)? == ValueCategory::ReadView {
                     return Err(invalid(
                         "ordinary field operation hides view layout authority",
@@ -7060,7 +6852,7 @@ impl Resolver<'_, '_> {
                                 }
                             };
                             let substitution = self.bind_types(declaration, &arguments, context)?;
-                            Some(self.substitute(field_record.ty, &substitution, 0)?)
+                            Some(self.substitute(field_record.ty, &substitution)?)
                         } else {
                             return Err(invalid(
                                 "nominal field source has no exact reconstructed type",
@@ -7084,7 +6876,7 @@ impl Resolver<'_, '_> {
                 let ty =
                     ty.ok_or_else(|| invalid("field selector is absent from exact source layout"))?;
                 {
-                    let f = self.facts(ty, context, 0)?;
+                    let f = self.facts(ty, context)?;
                     if matches!(f.category, ValueCategory::Owned | ValueCategory::ReadView) {
                         return Err(invalid("ordinary field syntax copies an affine child"));
                     }
@@ -7095,9 +6887,9 @@ impl Resolver<'_, '_> {
                 }
             }
             ExpressionOperation::List { item_type, items } => {
-                self.facts(item_type, context, 0)?;
+                self.facts(item_type, context)?;
                 for item in items {
-                    let value = self.scan(item, context, locals, syntax, Use::Value, depth + 1)?;
+                    let value = self.scan(item, context, locals, syntax, Use::Value)?;
                     if value.ty != Some(item_type) {
                         return Err(invalid("list item differs from exact declared item type"));
                     }
@@ -7111,10 +6903,8 @@ impl Resolver<'_, '_> {
                 entries,
             } => {
                 for entry in entries {
-                    let key =
-                        self.scan(entry.key, context, locals, syntax, Use::Value, depth + 1)?;
-                    let value =
-                        self.scan(entry.value, context, locals, syntax, Use::Value, depth + 1)?;
+                    let key = self.scan(entry.key, context, locals, syntax, Use::Value)?;
+                    let value = self.scan(entry.value, context, locals, syntax, Use::Value)?;
                     if key.ty != Some(key_type) || value.ty != Some(value_type) {
                         return Err(invalid(
                             "map entry differs from exact declared key/value types",
@@ -7128,7 +6918,7 @@ impl Resolver<'_, '_> {
                 self.annotated(ty, context)?
             }
             ExpressionOperation::Match { value, arms } => {
-                let scrutinee = self.scan(value, context, locals, syntax, Use::Value, depth + 1)?;
+                let scrutinee = self.scan(value, context, locals, syntax, Use::Value)?;
                 let ty = scrutinee
                     .ty
                     .ok_or_else(|| invalid("match scrutinee has no exact reconstructed type"))?;
@@ -7170,7 +6960,7 @@ impl Resolver<'_, '_> {
                     }
                     let expected = case
                         .payload
-                        .map(|ty| self.substitute(ty, &substitution, 0))
+                        .map(|ty| self.substitute(ty, &substitution))
                         .transpose()?;
                     if expected.is_some() != arm.payload_binding.is_some() {
                         return Err(invalid(
@@ -7191,7 +6981,7 @@ impl Resolver<'_, '_> {
                         let expected =
                             expected.ok_or_else(|| invalid("match binding has no payload"))?;
                         if matches!(
-                            self.facts(expected, context, 0)?.category,
+                            self.facts(expected, context,)?.category,
                             ValueCategory::Owned | ValueCategory::ReadView
                         ) {
                             return Err(invalid("ordinary match binds an affine payload"));
@@ -7213,8 +7003,7 @@ impl Resolver<'_, '_> {
                             branch.insert(LocalValueReference::MatchPayload(binding), local);
                         }
                     }
-                    let mut value =
-                        self.scan(arm.body, context, &mut branch, syntax, demand, depth + 1)?;
+                    let mut value = self.scan(arm.body, context, &mut branch, syntax, demand)?;
                     if let Some(binding) = arm.payload_binding {
                         branch.remove(&LocalValueReference::MatchPayload(binding));
                     }
@@ -7267,8 +7056,7 @@ impl Resolver<'_, '_> {
                     if parameter.parent != ParameterParent::Operation(operation.operation) {
                         return Err(invalid("capability parameter imports another operation"));
                     }
-                    let value =
-                        self.scan(argument, context, locals, syntax, Use::Value, depth + 1)?;
+                    let value = self.scan(argument, context, locals, syntax, Use::Value)?;
                     if value.ty != Some(parameter.ty) {
                         return Err(invalid(
                             "capability argument differs from exact operation parameter type",
@@ -7281,16 +7069,9 @@ impl Resolver<'_, '_> {
                 requirement,
                 binding,
                 body,
-            } => self.scan_transaction(
-                requirement,
-                binding,
-                body,
-                context,
-                locals,
-                syntax,
-                demand,
-                depth + 1,
-            )?,
+            } => {
+                self.scan_transaction(requirement, binding, body, context, locals, syntax, demand)?
+            }
             ExpressionOperation::TransactionOutcome {
                 requirement,
                 binding,
@@ -7325,7 +7106,6 @@ impl Resolver<'_, '_> {
                     locals,
                     syntax,
                     Use::Value,
-                    depth + 1,
                 )?;
                 if result.ty != Some(type_argument) {
                     return Err(invalid(
@@ -7340,14 +7120,7 @@ impl Resolver<'_, '_> {
                 fields,
             } => {
                 for field in fields {
-                    self.scan(
-                        field.value,
-                        context,
-                        locals,
-                        syntax,
-                        Use::Consume,
-                        depth + 1,
-                    )?;
+                    self.scan(field.value, context, locals, syntax, Use::Consume)?;
                 }
                 self.annotated(product_type, context)?
             }
@@ -7356,21 +7129,14 @@ impl Resolver<'_, '_> {
                 fields,
             } => {
                 for field in fields {
-                    self.scan(
-                        field.value,
-                        context,
-                        locals,
-                        syntax,
-                        Use::Consume,
-                        depth + 1,
-                    )?;
+                    self.scan(field.value, context, locals, syntax, Use::Consume)?;
                 }
                 self.annotated(record_type, context)?
             }
             ExpressionOperation::ChooseOwned {
                 choice_type, value, ..
             } => {
-                self.scan(value, context, locals, syntax, Use::Consume, depth + 1)?;
+                self.scan(value, context, locals, syntax, Use::Consume)?;
                 self.annotated(choice_type, context)?
             }
             ExpressionOperation::UnpackOwned {
@@ -7379,8 +7145,8 @@ impl Resolver<'_, '_> {
                 fields,
                 body,
             } => {
-                self.facts(product_type, context, 0)?;
-                let source = self.scan(source, context, locals, syntax, Use::Consume, depth + 1)?;
+                self.facts(product_type, context)?;
+                let source = self.scan(source, context, locals, syntax, Use::Consume)?;
                 if source.ty != Some(product_type) {
                     return Err(invalid(
                         "unpack source differs from exact Owned product annotation",
@@ -7423,7 +7189,7 @@ impl Resolver<'_, '_> {
                     )?;
                     bindings.push(binding);
                 }
-                let result = self.scan(body, context, locals, syntax, demand, depth + 1)?;
+                let result = self.scan(body, context, locals, syntax, demand)?;
                 for binding in bindings {
                     locals.remove(&LocalValueReference::LexicalBinding(binding));
                 }
@@ -7435,9 +7201,9 @@ impl Resolver<'_, '_> {
                 fields,
                 body,
             } => {
-                self.facts(record_type, context, 0)?;
+                self.facts(record_type, context)?;
                 let expected = self.nominal_fields(record_type, context, true)?;
-                let source = self.scan(source, context, locals, syntax, Use::Consume, depth + 1)?;
+                let source = self.scan(source, context, locals, syntax, Use::Consume)?;
                 if source.ty != Some(record_type) {
                     return Err(invalid(
                         "unpack source differs from exact Owned record annotation",
@@ -7478,7 +7244,7 @@ impl Resolver<'_, '_> {
                     )?;
                     bindings.push(binding);
                 }
-                let result = self.scan(body, context, locals, syntax, demand, depth + 1)?;
+                let result = self.scan(body, context, locals, syntax, demand)?;
                 for binding in bindings {
                     locals.remove(&LocalValueReference::LexicalBinding(binding));
                 }
@@ -7494,7 +7260,7 @@ impl Resolver<'_, '_> {
                 source,
                 arms,
             } => {
-                self.facts(choice_type, context, 0)?;
+                self.facts(choice_type, context)?;
                 let borrowed = borrowed_match;
                 let source = self.scan(
                     source,
@@ -7502,7 +7268,6 @@ impl Resolver<'_, '_> {
                     locals,
                     syntax,
                     if borrowed { Use::Borrow } else { Use::Consume },
-                    depth + 1,
                 )?;
                 if source.ty != Some(choice_type) {
                     return Err(invalid(
@@ -7540,13 +7305,13 @@ impl Resolver<'_, '_> {
                     }
                     self.budget.reserve_counts(&[context.lexical.len(), 1])?;
                     for _ in &context.lexical {
-                        self.budget.step(0)?;
+                        self.budget.step()?;
                     }
                     let mut nested = context.clone();
                     nested.lexical.insert(arm.binding);
                     self.budget.reserve_counts(&[source.scopes.len(), 1])?;
                     for _ in &source.scopes {
-                        self.budget.step(0)?;
+                        self.budget.step()?;
                     }
                     let mut scopes = source.scopes.clone();
                     if borrowed {
@@ -7590,8 +7355,7 @@ impl Resolver<'_, '_> {
                             BindingKind::OwnedChoicePayload
                         }),
                     )?;
-                    let mut value =
-                        self.scan(arm.body, &nested, &mut branch, syntax, demand, depth + 1)?;
+                    let mut value = self.scan(arm.body, &nested, &mut branch, syntax, demand)?;
                     branch.remove(&LocalValueReference::LexicalBinding(arm.binding));
                     // The arm's loan permission ends here. Its returned Owned read can
                     // retain the same source, but cannot grant this departed lexical scope.
@@ -7622,7 +7386,7 @@ impl Resolver<'_, '_> {
                 body,
                 field,
             } => {
-                let source = self.scan(source, context, locals, syntax, Use::Borrow, depth + 1)?;
+                let source = self.scan(source, context, locals, syntax, Use::Borrow)?;
                 if source.ty != Some(product_type) {
                     return Err(invalid(
                         "product path source differs from exact Owned product type",
@@ -7636,15 +7400,7 @@ impl Resolver<'_, '_> {
                     .find(|f| f.name == field)
                     .ok_or_else(|| invalid("borrowed product field absent"))?;
                 self.scan_owned_loan(
-                    field.ty,
-                    source,
-                    binding,
-                    body,
-                    context,
-                    locals,
-                    syntax,
-                    demand,
-                    depth + 1,
+                    field.ty, source, binding, body, context, locals, syntax, demand,
                 )?
             }
             ExpressionOperation::BorrowOwnedRecordField {
@@ -7654,8 +7410,8 @@ impl Resolver<'_, '_> {
                 body,
                 field,
             } => {
-                self.facts(record_type, context, 0)?;
-                let source = self.scan(source, context, locals, syntax, Use::Borrow, depth + 1)?;
+                self.facts(record_type, context)?;
+                let source = self.scan(source, context, locals, syntax, Use::Borrow)?;
                 if source.ty != Some(record_type) {
                     return Err(invalid(
                         "nominal path source differs from exact Owned record instance",
@@ -7701,18 +7457,8 @@ impl Resolver<'_, '_> {
                     ));
                 }
                 let substitution = self.bind_types(declaration, &arguments, context)?;
-                let ty = self.substitute(field_record.ty, &substitution, 0)?;
-                self.scan_owned_loan(
-                    ty,
-                    source,
-                    binding,
-                    body,
-                    context,
-                    locals,
-                    syntax,
-                    demand,
-                    depth + 1,
-                )?
+                let ty = self.substitute(field_record.ty, &substitution)?;
+                self.scan_owned_loan(ty, source, binding, body, context, locals, syntax, demand)?
             }
             ExpressionOperation::BorrowOwnedItem {
                 sequence_type,
@@ -7721,8 +7467,8 @@ impl Resolver<'_, '_> {
                 binding,
                 body,
             } => {
-                self.scan(index, context, locals, syntax, Use::Value, depth + 1)?;
-                let source = self.scan(source, context, locals, syntax, Use::Borrow, depth + 1)?;
+                self.scan(index, context, locals, syntax, Use::Value)?;
+                let source = self.scan(source, context, locals, syntax, Use::Borrow)?;
                 if source.ty != Some(sequence_type) {
                     return Err(invalid(
                         "sequence path source differs from exact Owned sequence type",
@@ -7731,17 +7477,7 @@ impl Resolver<'_, '_> {
                 let TypeForm::OwnedSequence { item } = self.object(sequence_type)?.form else {
                     return Err(invalid("borrow sequence type changed"));
                 };
-                self.scan_owned_loan(
-                    item,
-                    source,
-                    binding,
-                    body,
-                    context,
-                    locals,
-                    syntax,
-                    demand,
-                    depth + 1,
-                )?
+                self.scan_owned_loan(item, source, binding, body, context, locals, syntax, demand)?
             }
             ExpressionOperation::SequenceEmpty { sequence_type } => {
                 self.annotated(sequence_type, context)?
@@ -7750,8 +7486,8 @@ impl Resolver<'_, '_> {
                 sequence_type,
                 source,
             } => {
-                self.facts(sequence_type, context, 0)?;
-                self.scan(source, context, locals, syntax, Use::Borrow, depth + 1)?;
+                self.facts(sequence_type, context)?;
+                self.scan(source, context, locals, syntax, Use::Borrow)?;
                 self.scalar(TypeForm::I64)?
             }
             ExpressionOperation::SequenceGet {
@@ -7759,12 +7495,12 @@ impl Resolver<'_, '_> {
                 source,
                 index,
             } => {
-                self.scan(index, context, locals, syntax, Use::Value, depth + 1)?;
-                self.scan(source, context, locals, syntax, Use::Borrow, depth + 1)?;
+                self.scan(index, context, locals, syntax, Use::Value)?;
+                self.scan(source, context, locals, syntax, Use::Borrow)?;
                 let TypeForm::OwnedSequence { item } = self.object(sequence_type)?.form else {
                     return Err(invalid("sequence get source type changed"));
                 };
-                let facts = self.facts(item, context, 0)?;
+                let facts = self.facts(item, context)?;
                 if facts.category != ValueCategory::OrdinaryData {
                     return Err(invalid("sequence get copies an affine value"));
                 }
@@ -7775,8 +7511,8 @@ impl Resolver<'_, '_> {
                 value,
                 source,
             } => {
-                self.scan(value, context, locals, syntax, Use::Consume, depth + 1)?;
-                self.scan(source, context, locals, syntax, Use::Consume, depth + 1)?;
+                self.scan(value, context, locals, syntax, Use::Consume)?;
+                self.scan(source, context, locals, syntax, Use::Consume)?;
                 self.annotated(sequence_type, context)?
             }
             ExpressionOperation::SequencePop {
@@ -7784,8 +7520,8 @@ impl Resolver<'_, '_> {
                 result_type,
                 source,
             } => {
-                self.facts(sequence_type, context, 0)?;
-                self.scan(source, context, locals, syntax, Use::Consume, depth + 1)?;
+                self.facts(sequence_type, context)?;
+                self.scan(source, context, locals, syntax, Use::Consume)?;
                 self.annotated(result_type, context)?
             }
             ExpressionOperation::SequenceReplace {
@@ -7795,10 +7531,10 @@ impl Resolver<'_, '_> {
                 value,
                 source,
             } => {
-                self.facts(sequence_type, context, 0)?;
-                self.scan(index, context, locals, syntax, Use::Value, depth + 1)?;
-                self.scan(value, context, locals, syntax, Use::Consume, depth + 1)?;
-                self.scan(source, context, locals, syntax, Use::Consume, depth + 1)?;
+                self.facts(sequence_type, context)?;
+                self.scan(index, context, locals, syntax, Use::Value)?;
+                self.scan(value, context, locals, syntax, Use::Consume)?;
+                self.scan(source, context, locals, syntax, Use::Consume)?;
                 self.annotated(result_type, context)?
             }
             ExpressionOperation::Parallel { left, right } => {
@@ -7818,13 +7554,12 @@ impl Resolver<'_, '_> {
                         return Err(invalid("joined child kind/result relationship changed"));
                     }
                     syntax.joined_calls.insert((package, expression));
-                    let result =
-                        self.scan(expression, context, locals, syntax, Use::Value, depth + 1)?;
+                    let result = self.scan(expression, context, locals, syntax, Use::Value)?;
                     syntax.joined_calls.remove(&(package, expression));
                     let ty = result.ty.ok_or_else(|| {
                         invalid("joined result type was not independently reconstructed")
                     })?;
-                    let facts = self.facts(ty, context, 0)?;
+                    let facts = self.facts(ty, context)?;
                     if !facts.transfer
                         || !matches!(
                             facts.category,
@@ -7870,9 +7605,8 @@ impl Resolver<'_, '_> {
         locals: &mut Locals,
         syntax: &mut Syntax,
         demand: Use,
-        depth: usize,
     ) -> Result<Value> {
-        if self.facts(ty, context, 0)?.category != ValueCategory::Owned {
+        if self.facts(ty, context)?.category != ValueCategory::Owned {
             return Err(invalid(
                 "Owned child loan changes to view/ordinary category",
             ));
@@ -7903,7 +7637,7 @@ impl Resolver<'_, '_> {
             syntax,
             Some(BindingKind::OwnedBorrow),
         )?;
-        let mut result = self.scan(body, &nested, locals, syntax, demand, depth + 1)?;
+        let mut result = self.scan(body, &nested, locals, syntax, demand)?;
         locals.remove(&LocalValueReference::LexicalBinding(binding));
         // This permission is valid only inside the loan body. Keep the exact
         // returned source/read/type and all enclosing source scopes intact.
@@ -8001,7 +7735,7 @@ fn common_scope_permissions(
     // A join can retain only permission proved on every path. This never
     // invents a common source or widens a scope; view types keep exact scopes.
     for _ in &left.scopes {
-        budget.step(0)?;
+        budget.step()?;
     }
     left.scopes.retain(|scope| right.scopes.contains(scope));
     Ok(())

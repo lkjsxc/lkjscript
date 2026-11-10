@@ -87,7 +87,7 @@ fn command(public: &Native, target: &str, arguments: Value, detached: bool) -> V
         assert_eq!(cleanup["remaining_tasks"], 0);
         assert_eq!(cleanup["cleanup_failures"], json!([]));
     } else {
-        assert_eq!(compact_field(execution, "differential"), "equal");
+        assert_eq!(compact_field(execution, "engine"), "vm");
     }
     let value = serde_json::from_slice(&std::fs::read(&result).unwrap()).unwrap();
     std::fs::remove_file(result).unwrap();

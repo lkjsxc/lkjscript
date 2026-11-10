@@ -1,7 +1,6 @@
 # Explicit effects and reusable task libraries
 
-Status: implemented in the working source; campaign acceptance and selected publication are tracked
-in [202609111843](../campaigns/202609111843.md). This decision is a contract owner, not a release receipt.
+Status: implemented in the working source.
 
 ## Problem and replacement
 

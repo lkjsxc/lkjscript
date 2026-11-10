@@ -306,10 +306,7 @@ fn semantic_equality_recursive_nominal_lists_are_stack_safe_in_both_evaluators()
                         reference,
                         "compare-built",
                         vec![NormalizedValue::I64(128), NormalizedValue::I64(delta)],
-                        NormalizedRunPolicy {
-                            maximum_call_depth: 16,
-                            ..NormalizedRunPolicy::foreground()
-                        },
+                        NormalizedRunPolicy::foreground(),
                         &control,
                         None,
                     )?,

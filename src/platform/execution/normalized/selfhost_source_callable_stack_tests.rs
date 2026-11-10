@@ -322,13 +322,10 @@ fn selfhost_source_callable_reference_non_tail_chains_use_a_bounded_host_stack()
 }
 
 #[test]
-fn selfhost_source_callable_reference_preserves_tail_and_exact_call_depth_policies() -> Check<()> {
+fn selfhost_source_callable_reference_preserves_tail_and_non_tail_call_geometry() -> Check<()> {
     let fixture = Fixture::new()?;
     let tail = Behavior::new("indirect-varying-frames", 9, 257, 1519);
-    let tail_policy = NormalizedRunPolicy {
-        maximum_call_depth: 16,
-        ..NormalizedRunPolicy::foreground()
-    };
+    let tail_policy = NormalizedRunPolicy::foreground();
     let vm_tail = success(
         vm(
             &fixture,
@@ -354,7 +351,7 @@ fn selfhost_source_callable_reference_preserves_tail_and_exact_call_depth_polici
     for work in [vm_tail, reference_tail] {
         ensure(
             work.maximum_call_depth <= 16,
-            "tail chain exceeded exact caller depth policy",
+            "tail chain grew its live frame count",
         )?;
         ensure(
             work.tail_transfers >= 257,
@@ -364,104 +361,33 @@ fn selfhost_source_callable_reference_preserves_tail_and_exact_call_depth_polici
 
     for selector in [7, 8] {
         let behavior = chain(selector, 257);
-        // The finite exact allowance follows the independently counted frame
-        // geometry above, rather than being inferred from the comparator or a cap.
-        let exact_depth = 260;
-        let exact = NormalizedRunPolicy {
-            maximum_call_depth: exact_depth,
-            ..NormalizedRunPolicy::foreground()
-        };
-        let short = NormalizedRunPolicy {
-            maximum_call_depth: exact_depth - 1,
-            ..NormalizedRunPolicy::foreground()
-        };
-        let vm_before = success(
+        let policy = NormalizedRunPolicy::foreground();
+        let vm_work = success(
             vm(
                 &fixture,
                 behavior,
-                exact,
+                policy,
                 &ExecutionControl::uncancelled(),
                 None,
             )?,
             behavior,
         )?;
-        equal(vm_before.maximum_call_depth, exact_depth, "VM exact depth")?;
-        let vm_refused = failure(
-            vm(
-                &fixture,
-                behavior,
-                short,
-                &ExecutionControl::uncancelled(),
-                None,
-            )?,
-            ExecutionFailureClass::Resource,
-            "normalized_call_depth",
-        )?;
-        equal(
-            vm_refused.maximum_call_depth,
-            exact_depth - 1,
-            "VM one-short depth",
-        )?;
-        equal(
-            success(
-                vm(
-                    &fixture,
-                    behavior,
-                    exact,
-                    &ExecutionControl::uncancelled(),
-                    None,
-                )?,
-                behavior,
-            )?,
-            vm_before,
-            "VM exact retry accounting",
-        )?;
-
+        equal(vm_work.maximum_call_depth, 260, "VM non-tail call depth")?;
         on_small_stack(|| {
-            let before = success(
+            let work = success(
                 reference(
                     &fixture,
                     behavior,
-                    exact,
+                    policy,
                     &ExecutionControl::uncancelled(),
                     None,
                 )?,
                 behavior,
             )?;
             equal(
-                before.maximum_call_depth,
-                exact_depth,
-                "reference exact depth",
-            )?;
-            let refused = failure(
-                reference(
-                    &fixture,
-                    behavior,
-                    short,
-                    &ExecutionControl::uncancelled(),
-                    None,
-                )?,
-                ExecutionFailureClass::Resource,
-                "normalized_reference_call_depth",
-            )?;
-            equal(
-                refused.maximum_call_depth,
-                exact_depth - 1,
-                "reference one-short depth",
-            )?;
-            equal(
-                success(
-                    reference(
-                        &fixture,
-                        behavior,
-                        exact,
-                        &ExecutionControl::uncancelled(),
-                        None,
-                    )?,
-                    behavior,
-                )?,
-                before,
-                "reference exact retry accounting",
+                work.maximum_call_depth,
+                260,
+                "reference non-tail call depth",
             )
         })?;
     }
@@ -778,10 +704,7 @@ fn selfhost_source_callable_reference_preserves_established_modeled_accounting()
         cases.push(chain(8, count));
     }
     for behavior in &cases {
-        let mut policy = NormalizedRunPolicy::foreground();
-        if let Some(depth) = behavior.call_depth {
-            policy.maximum_call_depth = depth;
-        }
+        let policy = NormalizedRunPolicy::foreground();
         let previous = success(
             selected_reference(&fixture, *behavior, policy, true)?,
             *behavior,

@@ -85,7 +85,7 @@ fn reject_bad_effect_requests(
         ("wrong-row", "kernel_type_root"),
         ("empty-task-pure", "kernel_type_pure_task_call"),
     ] {
-        let mut r = crate::pure_tail_program::Request::default();
+        let mut r = crate::compact_request::Request::default();
         if label != "empty-task-pure" {
             r.text.push_str(&format!("type.application as=@Job declaration={}\ntype.argument parent=@Job index=0 type=i64\n", library["job"]));
             let requirement = if label == "wrong-row" {
@@ -277,7 +277,7 @@ fn reject_iteration_requests(
         ("iteration-effect-wrong", "kernel_type_argument"),
         ("iteration-pure", "kernel_type_pure_task_call"),
     ] {
-        let mut r = crate::pure_tail_program::Request::default();
+        let mut r = crate::compact_request::Request::default();
         let output = if label == "iteration-result" {
             "bool"
         } else {
@@ -501,7 +501,7 @@ pub(super) fn duplicate_map_output(
     standard: &BTreeMap<String, String>,
     library: &Package,
 ) -> String {
-    let mut r = crate::pure_tail_program::Request::default();
+    let mut r = crate::compact_request::Request::default();
     r.text.push_str(&format!(
         "type.parameter as=@Output parameter={}\n",
         library.symbols["$task-map-step-Output"]

@@ -81,21 +81,14 @@ impl Cost {
     }
 }
 
-// Bound the walk before serialization, including caller-added wrapper depth.
+// Count entries before serialization.
 // Container entries count once in their parent; the document root is not an item.
-fn items(value: &Value, depth: usize, place: Place, limits: JsonLimits) -> PackingResult<usize> {
-    if depth > limits.maximum_depth {
-        return Err(place.error("wrapped JSON exceeds the value-depth limit"));
-    }
-    let child_depth = place.add(depth, 1)?;
+fn items(value: &Value, place: Place, limits: JsonLimits) -> PackingResult<usize> {
     match value {
         Value::Array(values) => {
             let mut count = place.items(values.len(), limits)?;
             for value in values {
-                count = place.items(
-                    place.add(count, items(value, child_depth, place, limits)?)?,
-                    limits,
-                )?;
+                count = place.items(place.add(count, items(value, place, limits)?)?, limits)?;
             }
             Ok(count)
         }
@@ -105,10 +98,7 @@ fn items(value: &Value, depth: usize, place: Place, limits: JsonLimits) -> Packi
                 if key.len() > limits.maximum_string_bytes {
                     return Err(place.error("JSON key exceeds the string-byte limit"));
                 }
-                count = place.items(
-                    place.add(count, items(value, child_depth, place, limits)?)?,
-                    limits,
-                )?;
+                count = place.items(place.add(count, items(value, place, limits)?)?, limits)?;
             }
             Ok(count)
         }
@@ -155,13 +145,8 @@ fn serialized<W: Write>(
     serde_json::to_writer(&mut writer, value).map_err(|error| place.error(error))?;
     Ok(writer)
 }
-fn measure(
-    value: &Value,
-    wrappers: usize,
-    place: Place,
-    limits: JsonLimits,
-) -> PackingResult<Cost> {
-    let items = items(value, wrappers, place, limits)?;
+fn measure(value: &Value, place: Place, limits: JsonLimits) -> PackingResult<Cost> {
+    let items = items(value, place, limits)?;
     let writer = serialized(value, io::sink(), place, limits)?;
     Ok(Cost {
         bytes: writer.bytes,
@@ -178,8 +163,8 @@ fn ranges(samples: &[(Value, Value)]) -> PackingResult<Vec<Range<usize>>> {
     for (index, (argument, expected)) in samples.iter().enumerate() {
         let input_place = Place::sample(index, "input");
         let output_place = Place::sample(index, "output");
-        let argument = measure(argument, 2, input_place, limits)?;
-        let expected = measure(expected, 1, output_place, limits)?;
+        let argument = measure(argument, input_place, limits)?;
+        let expected = measure(expected, output_place, limits)?;
         let single_input = empty_input.append(argument, false, input_place)?;
         let single_output = empty_output.append(expected, false, output_place)?;
         single_input.require(input_place, limits)?;
@@ -208,9 +193,8 @@ fn ranges(samples: &[(Value, Value)]) -> PackingResult<Vec<Range<usize>>> {
 fn admitted(value: &Value, place: Place) -> PackingResult<(String, Cost)> {
     let place = place.batch();
     let limits = JsonLimits::default();
-    let items = items(value, 0, place, limits)?;
+    let items = items(value, place, limits)?;
     let writer = serialized(value, Vec::new(), place, limits)?;
-    // This independent reader also enforces its unchanged 127-container guard.
     let decoded = decode_strict(&writer.inner, limits).map_err(|error| {
         place.error(format!(
             "batch strict JSON {}: {}",
@@ -276,7 +260,6 @@ fn batching_honors_inclusive_json_items_without_losing_or_reordering_cases() -> 
     assert_eq!(
         items(
             &json!({"a":[1,{"b":null}],"z":[]}),
-            0,
             place,
             JsonLimits::default()
         )?,
@@ -438,25 +421,32 @@ fn batching_uses_exact_escaped_bytes_and_inclusive_single_pair_byte_bounds() -> 
 }
 
 #[test]
-fn batching_preserves_asymmetric_reader_container_depth_limits() -> PackingResult<()> {
+fn batching_admits_deep_finite_containers_with_exact_wrapping() -> PackingResult<()> {
     fn nested(count: usize) -> Value {
         (0..count).fold(Value::Null, |value, _| Value::Array(vec![value]))
     }
-    let exact = [(nested(125), nested(126))];
-    assert_eq!(ranges(&exact)?.as_slice(), std::slice::from_ref(&(0..1)));
-    materialize(&exact, 0)?;
-    for (side, pair) in [
-        ("input", (nested(126), Value::Null)),
-        ("output", (Value::Null, nested(127))),
-    ] {
-        let samples = [pair];
-        let Err(error) = materialize(&samples, 7) else {
-            return Err(format!("excessive {side} container nesting was admitted").into());
-        };
-        assert!(error.to_string().starts_with(&format!(
-            "batch starting at sample 7 {side}: batch strict JSON json_decode:"
-        )));
-        assert!(error.to_string().contains("recursion limit exceeded"));
-    }
+    let exercise = || -> PackingResult<()> {
+        for depth in [128, 512, 2048] {
+            let samples = [(nested(depth), nested(depth + 1))];
+            assert_eq!(ranges(&samples)?.as_slice(), std::slice::from_ref(&(0..1)));
+            let batch = materialize(&samples, 7)?;
+            let (output, cost) = admitted(&batch.expected, Place::sample(7, "output"))?;
+            let exact = format!("{}null{}", "[".repeat(depth + 2), "]".repeat(depth + 2));
+            assert_eq!(batch.arguments, exact);
+            assert_eq!(output, exact);
+            assert_eq!(batch.input.items, depth + 2);
+            assert_eq!(cost.items, depth + 2);
+            assert_eq!(batch.input.bytes, exact.len());
+            assert_eq!(cost.bytes, exact.len());
+            let truncated = &exact.as_bytes()[..exact.len() - 1];
+            let error = decode_strict(truncated, JsonLimits::default())
+                .expect_err("unterminated batch JSON must fail");
+            assert_eq!(error.code, "json_decode");
+        }
+        Ok(())
+    };
+    lkjscript::platform::stack::run("batch-container-lifecycle", || {
+        exercise().map_err(|error| error.to_string())
+    })??;
     Ok(())
 }

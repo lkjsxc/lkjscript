@@ -44,13 +44,11 @@ and every result-type encoding branch are admitted read-only before named secret
 adapters. Partial adapter preparation closes earlier owners on failure.
 
 Absent execution selects trusted foreground work without cumulative instruction, allocated-byte,
-collection-item or invocation capability-call quotas. Explicit execution has six fields:
+collection-item or invocation capability-call quotas. Explicit execution has four fields:
 
 | Field | Presence | Accepted value | Omitted-field behavior |
 | --- | --- | --- | --- |
 | `instruction_fuel` | Required | Nonnegative u64 or null | Reject |
-| `maximum_call_depth` | Required | Positive usize | Reject |
-| `maximum_value_stack` | Required | Positive usize | Reject |
 | `maximum_allocated_bytes` | Optional | Nonnegative u64 or null | No cumulative quota |
 | `maximum_collection_items` | Optional | Nonnegative u64 or null | No cumulative quota |
 | `maximum_capability_calls` | Optional | Nonnegative u64 or null | No cumulative quota |
@@ -60,12 +58,11 @@ zero allowance: work consuming zero in that dimension is admitted, and the first
 positive charge fails with its dimension-specific resource diagnostic. Every u64
 value, including u64::MAX, remains finite when supplied as a number. Negative,
 fractional, out-of-range, duplicate and unknown fields reject before
-artifact/secret/adapter access. Call-depth and value-stack limits remain positive.
+artifact/secret/adapter access. VM activations and operands grow with available storage.
 Omission of an optional cumulative field imposes no quota for that dimension.
 Encoding materializes null or the caller's exact number for every cumulative
 selection; round trips preserve both absence and explicit quotas. No historical
-numeric defaults are inserted. This intentionally changes the interpretation of
-older three-field descriptors under the current executable.
+numeric defaults are inserted. The current descriptor format contains no call-depth or operand-stack quota.
 
 The counters are per invocation, not a process-lifetime budget. The production
 observation pairs `instructions`, `allocated_bytes`, `collection_items`, and
@@ -77,10 +74,11 @@ latches its flag true, denoting a lower bound; it does not reject execution or
 grant finite permission. Structured-child merges preserve both inherited flags
 and overflow of the represented sums. Aggregate test receipts and public HTTP
 instruction projections retain the corresponding flags. Allocated bytes and collection items are cumulative work accounting,
-not an RSS or live-heap ceiling. Depth, stack, admission/codec bounds, task concurrency,
+not an RSS or live-heap ceiling. Remaining admission/codec bounds, task concurrency,
 body/stream limits and exact per-grant authority remain independently enforced.
+Compiler and evaluator workers use stack reservations sized from physical memory.
 
-Ordinary source execution, source differential batches and Rust policy defaults also
+Ordinary source execution, source VM batches and Rust policy defaults also
 omit all four cumulative quotas. New HTTP recipes explicitly set four nulls.
 Existing descriptors retain explicitly written numbers; no configuration file is
 implicitly rewritten. To retain a formerly implicit limit, state its number.

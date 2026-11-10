@@ -747,7 +747,7 @@ mod tests {
             .run(&target, b"[]", NormalizedCommandPolicy::default(), &control)
             .expect("fresh command run");
         assert_eq!(run.result_json, b"\"hello\"");
-        assert_eq!(run.differential, "equal");
+        assert!(run.production.instructions > 0);
     }
 
     #[test]

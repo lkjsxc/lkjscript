@@ -133,8 +133,8 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                         }
                         let mut owned_suffix = false;
                         for parameter in &method.parameters {
-                            closure.scoped_type_parameters(parameter.ty, &parameters, 0)?;
-                            if closure.owned_witness_type(parameter.ty, Some(reference), 0)? {
+                            closure.scoped_type_parameters(parameter.ty, &parameters)?;
+                            if closure.owned_witness_type(parameter.ty, Some(reference))? {
                                 owned_suffix = true;
                                 if parameter.use_mode == ParameterUse::Unrestricted
                                     || (method.effect != FunctionEffect::Pure
@@ -150,8 +150,8 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                                 return Err(reject());
                             }
                         }
-                        closure.scoped_type_parameters(method.result.ty, &parameters, 0)?;
-                        closure.owned_witness_type(method.result.ty, Some(reference), 0)?;
+                        closure.scoped_type_parameters(method.result.ty, &parameters)?;
+                        closure.owned_witness_type(method.result.ty, Some(reference))?;
                         if let Some(position) = method.result.relation.source().copied() {
                             let parameter = method
                                 .parameters
@@ -170,12 +170,12 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                 DeclarationPayload::OwnedImplementation(implementation) => {
                     let scheme = closure
                         .owned_scheme_parameters(reference, &implementation.type_parameters)?;
-                    closure.scoped_type_parameters(implementation.self_type, &scheme, 0)?;
-                    if !closure.owned_witness_type(implementation.self_type, Some(reference), 0)? {
+                    closure.scoped_type_parameters(implementation.self_type, &scheme)?;
+                    if !closure.owned_witness_type(implementation.self_type, Some(reference))? {
                         return Err(reject());
                     }
                     for argument in &implementation.type_arguments {
-                        closure.scoped_type_parameters(*argument, &scheme, 0)?;
+                        closure.scoped_type_parameters(*argument, &scheme)?;
                     }
                     closure.contract_application(
                         implementation.contract,
@@ -197,7 +197,6 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                         &implementation.implementation_parameters,
                         &scheme,
                         &supplied,
-                        0,
                     )?;
                     let OwnerRecord::Declaration(owner) = closure.owner(
                         implementation.contract.package,
@@ -261,13 +260,13 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                         for (formal, actual) in
                             function.type_parameters.iter().zip(&mapping.type_arguments)
                         {
-                            closure.scoped_type_parameters(*actual, &scheme, 0)?;
+                            closure.scoped_type_parameters(*actual, &scheme)?;
                             index_node::<(
                                 crate::platform::semantic_id::TypeParameterId,
                                 TypeObjectDigest,
                             )>(&mut closure.allocated)?;
                             if target_types
-                                .insert(*formal, closure.identity(*actual, &scheme, 0)?)
+                                .insert(*formal, closure.identity(*actual, &scheme)?)
                                 .is_some()
                             {
                                 return Err(reject());
@@ -294,12 +293,8 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                                 .collect(),
                             Some(reference),
                         ));
-                        closure.scoped_type_parameters(
-                            function.result.ty,
-                            &target_parameters,
-                            0,
-                        )?;
-                        closure.owned_witness_type(function.result.ty, Some(target), 0)?;
+                        closure.scoped_type_parameters(function.result.ty, &target_parameters)?;
+                        closure.owned_witness_type(function.result.ty, Some(target))?;
                         if function.effect != method.effect
                             || !function.effect_parameters.is_empty()
                             || !function.requirement_parameters.is_empty()
@@ -315,8 +310,8 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                                     .and_then(|position| {
                                         function.parameters.get(position as usize).copied()
                                     })
-                            || closure.identity(function.result.ty, &target_types, 0)?
-                                != closure.identity(method.result.ty, &types, 0)?
+                            || closure.identity(function.result.ty, &target_types)?
+                                != closure.identity(method.result.ty, &types)?
                         {
                             return Err(reject());
                         }
@@ -342,7 +337,6 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                                 Some(reference),
                                 &scheme,
                                 Some(&prerequisites),
-                                0,
                                 &mut 0,
                             )?);
                         }
@@ -351,7 +345,6 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                             &function.implementation_parameters,
                             &target_types,
                             &mapped,
-                            0,
                         )?;
                         for (actual, expected) in function.parameters.iter().zip(&method.parameters)
                         {
@@ -360,13 +353,13 @@ pub(super) fn inventory(closure: &mut Closure<'_, '_>) -> Result<(), ExecutionEr
                             else {
                                 return Err(reject());
                             };
-                            closure.scoped_type_parameters(actual.ty, &target_parameters, 0)?;
-                            closure.owned_witness_type(actual.ty, Some(target), 0)?;
+                            closure.scoped_type_parameters(actual.ty, &target_parameters)?;
+                            closure.owned_witness_type(actual.ty, Some(target))?;
                             if actual.parent != ParameterParent::Function(target.declaration)
                                 || actual.use_mode != expected.use_mode
                                 || actual.resource_requirement.is_some()
-                                || closure.identity(actual.ty, &target_types, 0)?
-                                    != closure.identity(expected.ty, &types, 0)?
+                                || closure.identity(actual.ty, &target_types)?
+                                    != closure.identity(expected.ty, &types)?
                             {
                                 return Err(reject());
                             }
@@ -514,7 +507,7 @@ pub(super) fn body(
         // their result mode, while this pass checks every nested invocation.
         Demand::Owner
     };
-    let actual = checker.flow(root, &mut locals, demand, 0)?;
+    let actual = checker.flow(root, &mut locals, demand)?;
     if expected_owned_result.is_some() && actual != expected_owned_result {
         return Err(reject());
     }
@@ -822,9 +815,7 @@ impl Checker<'_, '_, '_> {
         let mut ancestors = Vec::new();
         loop {
             self.closure.tick()?;
-            if ancestors.len() > crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
-                return Err(reject());
-            }
+
             let local = locals.get_mut(&source).ok_or_else(reject)?;
             if !local.live {
                 return Err(reject());
@@ -946,7 +937,6 @@ impl Checker<'_, '_, '_> {
         body: ExpressionId,
         locals: &mut Locals,
         demand: Demand,
-        depth: usize,
     ) -> Result<Option<TypeObjectDigest>, ExecutionError> {
         let Loan {
             source,
@@ -961,7 +951,7 @@ impl Checker<'_, '_, '_> {
             locals,
             Some(source),
         )?;
-        let result = self.flow(body, locals, demand, depth + 1)?;
+        let result = self.flow(body, locals, demand)?;
         self.unbind(binding, locals)?;
         self.release(locals, ancestors)?;
         Ok(result)
@@ -1114,14 +1104,14 @@ impl Checker<'_, '_, '_> {
                         return Err(reject());
                     };
                     instantiated.push((
-                        self.closure.identity(parameter.ty, &substitutions, 0)?,
+                        self.closure.identity(parameter.ty, &substitutions)?,
                         parameter.use_mode,
                     ));
                 }
                 Ok(Signature {
                     parameters: instantiated,
                     result: crate::platform::kernel::CallableResult {
-                        ty: self.closure.identity(result, &substitutions, 0)?,
+                        ty: self.closure.identity(result, &substitutions)?,
                         relation: match (&owner.payload, source) {
                             (DeclarationPayload::Function(function), Some(source)) => {
                                 match function.result.relation {
@@ -1203,7 +1193,7 @@ impl Checker<'_, '_, '_> {
                     .iter()
                     .map(|parameter| {
                         Ok((
-                            self.closure.identity(parameter.ty, &substitutions, 0)?,
+                            self.closure.identity(parameter.ty, &substitutions)?,
                             parameter.use_mode,
                         ))
                     })
@@ -1211,7 +1201,7 @@ impl Checker<'_, '_, '_> {
                 Ok(Signature {
                     parameters,
                     result: crate::platform::kernel::CallableResult {
-                        ty: self.closure.identity(method.result.ty, &substitutions, 0)?,
+                        ty: self.closure.identity(method.result.ty, &substitutions)?,
                         relation: method
                             .result
                             .try_map_source(|position| Ok(position as usize))
@@ -1232,9 +1222,8 @@ impl Checker<'_, '_, '_> {
         signature: &Signature,
         arguments: &[ExpressionId],
         locals: &mut Locals,
-        depth: usize,
     ) -> Result<Option<LocalValueReference>, ExecutionError> {
-        let (selected, retained) = self.arguments_retained(signature, arguments, locals, depth)?;
+        let (selected, retained) = self.arguments_retained(signature, arguments, locals)?;
         for guards in retained.into_iter().rev() {
             self.release(locals, guards)?;
         }
@@ -1246,7 +1235,6 @@ impl Checker<'_, '_, '_> {
         signature: &Signature,
         arguments: &[ExpressionId],
         locals: &mut Locals,
-        depth: usize,
     ) -> Result<(Option<LocalValueReference>, Vec<Vec<LocalValueReference>>), ExecutionError> {
         if signature.parameters.len() != arguments.len() {
             return Err(reject());
@@ -1267,7 +1255,7 @@ impl Checker<'_, '_, '_> {
                         selected = Some(local);
                     }
                 } else if *mode == ParameterUse::Consume {
-                    let actual = self.flow(*argument, locals, Demand::Owner, depth + 1)?;
+                    let actual = self.flow(*argument, locals, Demand::Owner)?;
                     if actual != Some(*ty) {
                         return Err(reject());
                     }
@@ -1275,7 +1263,7 @@ impl Checker<'_, '_, '_> {
                     return Err(reject());
                 }
             } else {
-                self.flow(*argument, locals, Demand::Data, depth + 1)?;
+                self.flow(*argument, locals, Demand::Data)?;
             }
         }
         if signature.result.relation.source().copied().is_some() && selected.is_none() {
@@ -1289,12 +1277,9 @@ impl Checker<'_, '_, '_> {
         id: ExpressionId,
         locals: &mut Locals,
         demand: Demand,
-        depth: usize,
     ) -> Result<Option<TypeObjectDigest>, ExecutionError> {
         self.closure.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
-            return Err(reject());
-        }
+
         let operation = self.operation(id)?.clone();
         if matches!(demand, Demand::Read { .. })
             && !matches!(
@@ -1363,11 +1348,11 @@ impl Checker<'_, '_, '_> {
                 when_true,
                 when_false,
             } => {
-                self.flow(condition, locals, Demand::Data, depth + 1)?;
+                self.flow(condition, locals, Demand::Data)?;
                 let mut left = self.branch(locals)?;
                 let mut right = self.branch(locals)?;
-                let first = self.flow(when_true, &mut left, demand, depth + 1)?;
-                let second = self.flow(when_false, &mut right, demand, depth + 1)?;
+                let first = self.flow(when_true, &mut left, demand)?;
+                let second = self.flow(when_false, &mut right, demand)?;
                 if first != second {
                     return Err(reject());
                 }
@@ -1380,9 +1365,9 @@ impl Checker<'_, '_, '_> {
                     for item in preceding {
                         // A sequence discards preceding values. Owning results
                         // are legal here and their affine custody ends immediately.
-                        self.flow(*item, locals, Demand::Owner, depth + 1)?;
+                        self.flow(*item, locals, Demand::Owner)?;
                     }
-                    self.flow(*last, locals, demand, depth + 1)?
+                    self.flow(*last, locals, demand)?
                 } else {
                     if matches!(demand, Demand::Read { .. }) {
                         return Err(reject());
@@ -1399,10 +1384,10 @@ impl Checker<'_, '_, '_> {
                         return Err(reject());
                     };
                     let value = owner.value.ok_or_else(reject)?;
-                    let actual = self.flow(value, locals, Demand::Owner, depth + 1)?;
+                    let actual = self.flow(value, locals, Demand::Owner)?;
                     self.bind(*binding, BindingKind::Let, actual, locals, None)?;
                 }
-                let result = self.flow(body, locals, demand, depth + 1)?;
+                let result = self.flow(body, locals, demand)?;
                 for binding in bindings.into_iter().rev() {
                     self.unbind(binding, locals)?;
                 }
@@ -1439,7 +1424,7 @@ impl Checker<'_, '_, '_> {
                     _ => return Err(reject()),
                 };
                 let source = self
-                    .arguments(&signature, &arguments, locals, depth + 1)?
+                    .arguments(&signature, &arguments, locals)?
                     .ok_or_else(reject)?;
                 self.scoped(
                     Loan {
@@ -1450,7 +1435,6 @@ impl Checker<'_, '_, '_> {
                     body,
                     locals,
                     demand,
-                    depth,
                 )?
             }
             ExpressionOperation::BorrowOwnedField {
@@ -1484,7 +1468,6 @@ impl Checker<'_, '_, '_> {
                     body,
                     locals,
                     demand,
-                    depth,
                 )?
             }
             ExpressionOperation::BorrowOwnedRecordField {
@@ -1514,7 +1497,6 @@ impl Checker<'_, '_, '_> {
                     body,
                     locals,
                     demand,
-                    depth,
                 )?
             }
             ExpressionOperation::BorrowOwnedItem {
@@ -1524,7 +1506,7 @@ impl Checker<'_, '_, '_> {
                 binding,
                 body,
             } => {
-                self.flow(index, locals, Demand::Data, depth + 1)?;
+                self.flow(index, locals, Demand::Data)?;
                 let sequence = self.type_at(OwnerKey::Expression(id), sequence_type)?;
                 let TypeForm::OwnedSequence { item } =
                     self.closure.types.get(&sequence).ok_or_else(reject)?.form
@@ -1544,7 +1526,6 @@ impl Checker<'_, '_, '_> {
                     body,
                     locals,
                     demand,
-                    depth,
                 )?
             }
             ExpressionOperation::MatchBorrowedOwned {
@@ -1581,7 +1562,6 @@ impl Checker<'_, '_, '_> {
                         arm.body,
                         &mut branch,
                         demand,
-                        depth,
                     )?;
                     if let Some((joined, previous)) = &mut joined {
                         if *previous != result {
@@ -1603,7 +1583,7 @@ impl Checker<'_, '_, '_> {
                 body,
             } => {
                 let product = self.type_at(OwnerKey::Expression(id), product_type)?;
-                if self.flow(source, locals, Demand::Owner, depth + 1)? != Some(product) {
+                if self.flow(source, locals, Demand::Owner)? != Some(product) {
                     return Err(reject());
                 }
                 let TypeForm::OwnedProduct { fields: types } = self
@@ -1630,7 +1610,7 @@ impl Checker<'_, '_, '_> {
                         None,
                     )?;
                 }
-                let result = self.flow(body, locals, demand, depth + 1)?;
+                let result = self.flow(body, locals, demand)?;
                 for field in fields {
                     self.unbind(field.binding, locals)?;
                 }
@@ -1645,7 +1625,7 @@ impl Checker<'_, '_, '_> {
                 let record = self.type_at(OwnerKey::Expression(id), record_type)?;
                 let types = self.closure.owned_record_fields(record, self.scope, true)?;
                 if fields.len() != types.len()
-                    || self.flow(source, locals, Demand::Owner, depth + 1)? != Some(record)
+                    || self.flow(source, locals, Demand::Owner)? != Some(record)
                 {
                     return Err(reject());
                 }
@@ -1672,7 +1652,7 @@ impl Checker<'_, '_, '_> {
                         None,
                     )?;
                 }
-                let result = self.flow(body, locals, demand, depth + 1)?;
+                let result = self.flow(body, locals, demand)?;
                 for field in fields {
                     self.unbind(field.binding, locals)?;
                 }
@@ -1684,7 +1664,7 @@ impl Checker<'_, '_, '_> {
                 arms,
             } => {
                 let choice = self.type_at(OwnerKey::Expression(id), choice_type)?;
-                if self.flow(source, locals, Demand::Owner, depth + 1)? != Some(choice) {
+                if self.flow(source, locals, Demand::Owner)? != Some(choice) {
                     return Err(reject());
                 }
                 let TypeForm::OwnedChoice { cases } = self
@@ -1712,7 +1692,7 @@ impl Checker<'_, '_, '_> {
                         &mut branch,
                         None,
                     )?;
-                    let result = self.flow(arm.body, &mut branch, demand, depth + 1)?;
+                    let result = self.flow(arm.body, &mut branch, demand)?;
                     self.unbind(arm.binding, &mut branch)?;
                     if let Some((joined, previous)) = &mut joined {
                         if *previous != result {
@@ -1728,11 +1708,11 @@ impl Checker<'_, '_, '_> {
                 result
             }
             ExpressionOperation::Match { value, arms } => {
-                self.flow(value, locals, Demand::Data, depth + 1)?;
+                self.flow(value, locals, Demand::Data)?;
                 let mut joined: Option<(Locals, Option<TypeObjectDigest>)> = None;
                 for arm in arms {
                     let mut branch = self.branch(locals)?;
-                    let result = self.flow(arm.body, &mut branch, demand, depth + 1)?;
+                    let result = self.flow(arm.body, &mut branch, demand)?;
                     if let Some((joined, previous)) = &mut joined {
                         if *previous != result {
                             return Err(reject());
@@ -1759,7 +1739,7 @@ impl Checker<'_, '_, '_> {
                     | ExpressionOperation::MethodCall { arguments, .. } => arguments,
                     _ => unreachable!(),
                 };
-                self.arguments(&signature, arguments, locals, depth)?;
+                self.arguments(&signature, arguments, locals)?;
                 self.owned(signature.result.ty)?
                     .then_some(signature.result.ty)
             }
@@ -1800,9 +1780,8 @@ impl Checker<'_, '_, '_> {
                         value,
                         locals,
                         if owned { Demand::Owner } else { Demand::Data },
-                        depth + 1,
                     )? != owned.then_some(item)
-                    || self.flow(source, locals, Demand::Owner, depth + 1)? != Some(sequence)
+                    || self.flow(source, locals, Demand::Owner)? != Some(sequence)
                 {
                     return Err(reject());
                 }
@@ -1822,7 +1801,7 @@ impl Checker<'_, '_, '_> {
                 if self.owned(item)? {
                     return Err(reject());
                 }
-                self.flow(index, locals, Demand::Data, depth + 1)?;
+                self.flow(index, locals, Demand::Data)?;
                 self.local(source, locals, sequence)?;
                 None
             }
@@ -1843,15 +1822,14 @@ impl Checker<'_, '_, '_> {
                 if owned && !matches!(self.operation(value)?, ExpressionOperation::Local { .. }) {
                     return Err(reject());
                 }
-                self.flow(index, locals, Demand::Data, depth + 1)?;
+                self.flow(index, locals, Demand::Data)?;
                 if !matches!(self.operation(source)?, ExpressionOperation::Local { .. })
                     || self.flow(
                         value,
                         locals,
                         if owned { Demand::Owner } else { Demand::Data },
-                        depth + 1,
                     )? != owned.then_some(item)
-                    || self.flow(source, locals, Demand::Owner, depth + 1)? != Some(sequence)
+                    || self.flow(source, locals, Demand::Owner)? != Some(sequence)
                 {
                     return Err(reject());
                 }
@@ -1863,7 +1841,7 @@ impl Checker<'_, '_, '_> {
                 source,
             } => {
                 let sequence = self.type_at(OwnerKey::Expression(id), sequence_type)?;
-                if self.flow(source, locals, Demand::Owner, depth + 1)? != Some(sequence) {
+                if self.flow(source, locals, Demand::Owner)? != Some(sequence) {
                     return Err(reject());
                 }
                 Some(self.type_at(OwnerKey::Expression(id), result_type)?)
@@ -1873,7 +1851,7 @@ impl Checker<'_, '_, '_> {
                 fields,
             } => {
                 for field in fields {
-                    self.flow(field.value, locals, Demand::Owner, depth + 1)?;
+                    self.flow(field.value, locals, Demand::Owner)?;
                 }
                 Some(self.type_at(OwnerKey::Expression(id), product_type)?)
             }
@@ -1904,7 +1882,6 @@ impl Checker<'_, '_, '_> {
                         field.value,
                         locals,
                         if owned { Demand::Owner } else { Demand::Data },
-                        depth + 1,
                     )? != owned.then_some(ty)
                     {
                         return Err(reject());
@@ -1915,7 +1892,7 @@ impl Checker<'_, '_, '_> {
             ExpressionOperation::ChooseOwned {
                 choice_type, value, ..
             } => {
-                self.flow(value, locals, Demand::Owner, depth + 1)?;
+                self.flow(value, locals, Demand::Owner)?;
                 Some(self.type_at(OwnerKey::Expression(id), choice_type)?)
             }
             ExpressionOperation::Parallel { left, right } => {
@@ -1938,9 +1915,9 @@ impl Checker<'_, '_, '_> {
                 let left_arguments = arguments(&left_call)?;
                 let right_arguments = arguments(&right_call)?;
                 let (_, left_loans) =
-                    self.arguments_retained(&left_signature, &left_arguments, locals, depth + 1)?;
+                    self.arguments_retained(&left_signature, &left_arguments, locals)?;
                 let (_, right_loans) =
-                    self.arguments_retained(&right_signature, &right_arguments, locals, depth + 1)?;
+                    self.arguments_retained(&right_signature, &right_arguments, locals)?;
                 for guards in left_loans.into_iter().chain(right_loans).rev() {
                     self.release(locals, guards)?;
                 }
@@ -2037,7 +2014,6 @@ impl Checker<'_, '_, '_> {
                     },
                     &arguments,
                     locals,
-                    depth,
                 )?;
                 self.owned(operation.result)?.then_some(operation.result)
             }
@@ -2076,13 +2052,13 @@ impl Checker<'_, '_, '_> {
                         return Err(reject());
                     }
                 } else {
-                    self.flow(value, locals, Demand::Data, depth + 1)?;
+                    self.flow(value, locals, Demand::Data)?;
                 }
                 None
             }
             ExpressionOperation::Transaction { body, .. }
             | ExpressionOperation::TransactionOutcome { body, .. } => {
-                self.flow(body, locals, demand, depth + 1)?
+                self.flow(body, locals, demand)?
             }
             other => {
                 let record = crate::platform::kernel::ExpressionRecord {
@@ -2091,7 +2067,7 @@ impl Checker<'_, '_, '_> {
                     operation: other,
                 };
                 for child in self.children(&record)? {
-                    self.flow(child.expression, locals, Demand::Data, depth + 1)?;
+                    self.flow(child.expression, locals, Demand::Data)?;
                 }
                 None
             }

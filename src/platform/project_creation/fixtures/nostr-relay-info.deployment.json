@@ -11,8 +11,8 @@
   },
   "execution": {
     "instruction_fuel": null,
-    "maximum_call_depth": 4096,
-    "maximum_value_stack": 1000000,
+
+
     "maximum_allocated_bytes": null,
     "maximum_collection_items": null,
     "maximum_capability_calls": null

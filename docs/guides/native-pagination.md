@@ -157,12 +157,3 @@ The result is `[{"label":"pear","mass":9},{"label":"猫","mass":11}]`. The libra
 does not need to know the consumer's field names or representation. To run this
 bundle independently, use the descriptor above with artifact `batches.lkja` and
 target `batch`, and supply the same three JSON arguments.
-
-The native requests were exercised with a copied source-accepted executable outside
-the compiler checkout. Three result files return all 99,997 independently checked
-entries, and a 33,334-entry page rejects before file publication. The separately
-authored Shipment consumer checks and runs after its authoring project moves away.
-The [continuation](../campaigns/202609222330.md) retains literal inputs, original
-outputs, source identities and scope. These are native workflow and library
-composition examples, separate from maintained standard-library adoption and
-release acceptance.

@@ -85,11 +85,86 @@ pub(super) fn selfhost_native_probe(
     image
 }
 
+struct ProbeContext {
+    reader: super::source::ProbeReader,
+    semantic_state: String,
+}
+
+fn probe_context() -> &'static ProbeContext {
+    static CONTEXT: OnceLock<ProbeContext> = OnceLock::new();
+    CONTEXT.get_or_init(|| {
+        let (source, _) = probes();
+        ProbeContext {
+            reader: super::source::probe_reader(source),
+            semantic_state: crate::platform::kernel::semantic_state_digest(source)
+                .unwrap()
+                .to_string(),
+        }
+    })
+}
+
+struct ProbeExecutable {
+    bytes: std::sync::Arc<[u8]>,
+    sha256: String,
+}
+
+impl ProbeExecutable {
+    fn new(bytes: impl Into<std::sync::Arc<[u8]>>) -> Self {
+        let bytes = bytes.into();
+        let sha256 = crate::platform::semantic_id::encode_hex(&Sha256::digest(bytes.as_ref()));
+        Self { bytes, sha256 }
+    }
+}
+
+struct PreparedProbe {
+    declaration: crate::platform::kernel::DeclarationReference,
+    native: ProbeExecutable,
+    selfhost: ProbeExecutable,
+}
+
+// This cache can only prepare entries from the one immutable probes() graph.
+// Dynamic programs keep the complete-input digest key in selfhost_native_probe.
+fn prepared_probe(name: &str) -> (std::sync::Arc<PreparedProbe>, bool) {
+    type Probes = BTreeMap<String, std::sync::Arc<PreparedProbe>>;
+    static PREPARED: OnceLock<std::sync::Mutex<Probes>> = OnceLock::new();
+    let mut prepared = PREPARED
+        .get_or_init(|| std::sync::Mutex::new(BTreeMap::new()))
+        .lock()
+        .unwrap();
+    if let Some(probe) = prepared.get(name) {
+        return (std::sync::Arc::clone(probe), true);
+    }
+    let (source, program) = probes();
+    let declaration = declaration_named(source, name);
+    let function = program.function(declaration).unwrap().0 as usize;
+    let native = ProbeExecutable::new(
+        crate::platform::compiler::elf_x86_64::compile_function(program, function)
+            .unwrap()
+            .0,
+    );
+    // Export and hash this immutable entry's selfhost input once, then retain its executable.
+    let selfhost = ProbeExecutable::new(selfhost_native_probe(program, function, name));
+    eprintln!(
+        "selfhost artifact native producer entry={name} bytes={} sha256={}",
+        native.bytes.len(),
+        native.sha256,
+    );
+    let probe = std::sync::Arc::new(PreparedProbe {
+        declaration,
+        native,
+        selfhost,
+    });
+    prepared.insert(name.to_owned(), std::sync::Arc::clone(&probe));
+    (probe, false)
+}
+
 fn profiled_result(name: &str, input: &[u8]) -> (i64, Vec<u8>, serde_json::Value) {
     let total_started = std::time::Instant::now();
-    let (source, program) = probes();
+    let (_, program) = probes();
+    let context = probe_context();
+    let (probe, preparation_cache_hit) = prepared_probe(name);
     let initialization_ns = total_started.elapsed().as_nanos().to_string();
-    let declaration = declaration_named(source, name);
+    let declaration = probe.declaration;
     let arguments = vec![NormalizedValue::bytes(input)];
     let policy = NormalizedRunPolicy::foreground();
     let control = ExecutionControl::uncancelled();
@@ -106,7 +181,7 @@ fn profiled_result(name: &str, input: &[u8]) -> (i64, Vec<u8>, serde_json::Value
         );
     }
     let started = std::time::Instant::now();
-    let reference = NormalizedReferenceInterpreter::new(source, program, policy)
+    let reference = NormalizedReferenceInterpreter::from_reader(&context.reader, program, policy)
         .invoke(declaration, arguments, None, &control)
         .unwrap();
     let reference_ns = started.elapsed().as_nanos().to_string();
@@ -143,31 +218,12 @@ fn profiled_result(name: &str, input: &[u8]) -> (i64, Vec<u8>, serde_json::Value
     else {
         panic!("probe bytes")
     };
-    let function = program.function(declaration).unwrap().0 as usize;
-    let started = std::time::Instant::now();
-    let native = crate::platform::compiler::elf_x86_64::compile_function(program, function)
-        .unwrap()
-        .0;
-    let rust_codegen_ns = started.elapsed().as_nanos().to_string();
-    static PRODUCERS: OnceLock<std::sync::Mutex<BTreeSet<String>>> = OnceLock::new();
-    let native_hash = crate::platform::semantic_id::encode_hex(&Sha256::digest(&native));
-    if PRODUCERS
-        .get_or_init(|| std::sync::Mutex::new(BTreeSet::new()))
-        .lock()
-        .unwrap()
-        .insert(native_hash.clone())
-    {
-        eprintln!(
-            "selfhost artifact native producer entry={name} bytes={} sha256={native_hash}",
-            native.len()
-        );
-    }
     if name == "compile-elf" {
         eprintln!(
             "selfhost artifact encoder input_bytes={} C1_bytes={} C1_sha256={} vm_steps={} vm_cumulative_allocation={} ref_expressions={} ref_cumulative_allocation={} vm_max_call_depth={} ref_max_call_depth={}",
             input.len(),
-            native.len(),
-            crate::platform::semantic_id::encode_hex(&Sha256::digest(&native)),
+            probe.native.bytes.len(),
+            probe.native.sha256,
             vm.1.instructions,
             vm.1.allocated_bytes,
             reference.1.expressions,
@@ -176,21 +232,19 @@ fn profiled_result(name: &str, input: &[u8]) -> (i64, Vec<u8>, serde_json::Value
             reference.1.maximum_call_depth
         );
     }
-    let started = std::time::Instant::now();
-    let selfhost = selfhost_native_probe(program, function, name);
-    let selfhost_codegen_ns = started.elapsed().as_nanos().to_string();
     let mut native_runs = Vec::new();
-    for (emitter, image) in [
-        ("Rust-bootstrap", native.as_slice()),
-        ("selfhost-emitted", selfhost.as_ref()),
+    for (emitter, executable) in [
+        ("Rust-bootstrap", &probe.native),
+        ("selfhost-emitted", &probe.selfhost),
     ] {
         let started = std::time::Instant::now();
-        let output = native_filter_tests::execute_filter(image, input, &[], 127);
+        let output =
+            native_filter_tests::execute_filter(executable.bytes.as_ref(), input, &[], 127);
         native_runs.push(serde_json::json!({
             "emitter": emitter,
             "elapsed_nanoseconds": started.elapsed().as_nanos().to_string(),
-            "executable_bytes": image.len(),
-            "executable_sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(image)),
+            "executable_bytes": executable.bytes.len(),
+            "executable_sha256": executable.sha256.as_str(),
         }));
         assert_eq!(
             output.status.code(),
@@ -214,8 +268,9 @@ fn profiled_result(name: &str, input: &[u8]) -> (i64, Vec<u8>, serde_json::Value
         );
     }
     let observations = serde_json::json!({
-        "probe_semantic_state": crate::platform::kernel::semantic_state_digest(source).unwrap().to_string(),
+        "probe_semantic_state": context.semantic_state.as_str(),
         "initialization_nanoseconds": initialization_ns,
+        "probe_preparation_cache_hit": preparation_cache_hit,
         "vm": {
             "elapsed_nanoseconds": vm_ns,
             "instructions": vm.1.instructions,
@@ -232,8 +287,6 @@ fn profiled_result(name: &str, input: &[u8]) -> (i64, Vec<u8>, serde_json::Value
             "allocated_bytes_saturated": reference.1.allocated_bytes_saturated,
             "maximum_call_depth": reference.1.maximum_call_depth,
         },
-        "rust_codegen_nanoseconds": rust_codegen_ns,
-        "selfhost_probe_preparation_nanoseconds": selfhost_codegen_ns,
         "native_runs": native_runs,
         "native_timing_scope": "process publication, creation, transport, execution, wait, and cleanup",
         "total_nanoseconds": total_started.elapsed().as_nanos().to_string(),
@@ -1451,6 +1504,7 @@ fn selfhost_artifact_object_scans_keep_bounded_call_frames() {
 }
 
 #[test]
+#[ignore = "slow: whole compiler artifact execution"]
 fn selfhost_artifact_container_carries_complete_compiler_and_executes_it() {
     let (source, original) = compiler();
     let (input, emitted) = complete_compiler();

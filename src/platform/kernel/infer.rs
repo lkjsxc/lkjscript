@@ -1,6 +1,5 @@
 //! Independent exact-ID expression type and effect oracle for Graph 14.
 
-use super::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH};
 use super::digest::TypeObjectDigest;
 use super::expression::{ExpressionOperation, FieldSelector, LocalValueReference};
 use super::id::{OwnerKey, OwnerKind, PackageId};
@@ -1113,12 +1112,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         >,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         self.consume_work()?;
-        if depth > MAXIMUM_EXPRESSION_DEPTH {
-            return Err(type_error(
-                "kernel_type_expression_depth",
-                "expression inference exceeded its structural depth bound",
-            ));
-        }
+
         let record = match self.read.owner(OwnerKey::Expression(expression))? {
             Some(OwnerRecord::Expression(record)) => record,
             _ => {
@@ -4619,12 +4613,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         composites_admitted: bool,
     ) -> Result<(), Diagnostic> {
         self.consume_work()?;
-        if depth > MAXIMUM_TYPE_DEPTH {
-            return Err(type_error(
-                "kernel_type_nominal_depth",
-                "nominal type exceeds the existing type-depth limit",
-            ));
-        }
+
         if !occurrence_admitted {
             self.validate_type_occurrence_at(ty, occurrence)?;
         }
@@ -4914,12 +4903,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             return Ok(digest);
         }
         self.consume_work()?;
-        if depth > MAXIMUM_TYPE_DEPTH {
-            return Err(type_error(
-                "kernel_type_substitution_depth",
-                "type substitution exceeded its structural depth bound",
-            ));
-        }
+
         let object = self.type_object(digest)?;
         let next = depth.saturating_add(1);
         let form = match object.form {
@@ -5339,7 +5323,6 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
             return Ok(());
         }
         self.owned_read_with_associated(|read, admission| {
-            super::owned_product::validate_owning_type_depth(read, ty)?;
             admission.validate_occurrence_at(read, &[ty], occurrence)
         })?;
         self.type_metadata_bytes.charge(

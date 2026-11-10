@@ -166,14 +166,23 @@ fn environment(caller: DeclarationReference, callee: DeclarationReference) -> Re
 #[test]
 fn view_reference_positive_categories_and_foreign_owner_contract_rejection() {
     let (mut source, _caller, callee, _view, ty) = fixture();
+    // A root view remains valid; seeing that same type below a wrapper must
+    // still reject, whichever root is traversed first.
+    let wrapped = intern(&mut source, TypeForm::Option { item: ty });
+    for roots in [[ty, wrapped], [wrapped, ty]] {
+        assert_eq!(
+            Resolver::new(&source).admit_roots(&roots, occurrence(callee), false),
+            Err(Failure::Category),
+        );
+    }
     let cell = intern(&mut source, TypeForm::OwnedI64Cell);
     let mut resolver = Resolver::new(&source);
     assert_eq!(
         resolver.read_view_category(ty, occurrence(callee)),
         Ok(ReadCategory::ReadView)
     );
-    assert_eq!(resolver.owned_type(ty, occurrence(callee), 0), Ok(false));
-    assert_eq!(resolver.owned_type(cell, occurrence(callee), 0), Ok(true));
+    assert_eq!(resolver.owned_type(ty, occurrence(callee)), Ok(false));
+    assert_eq!(resolver.owned_type(cell, occurrence(callee)), Ok(true));
     assert!(!Oracle(&source, Some(callee)).ordinary(ty));
     assert!(!Oracle(&source, Some(callee)).capture_safe(ty));
     let OwnerRecord::Declaration(d) = source

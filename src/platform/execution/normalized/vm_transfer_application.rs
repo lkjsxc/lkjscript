@@ -100,26 +100,26 @@ impl TaskApplication {
         let identity = ValueOrigin::fresh().ok_or_else(reject)?;
         let mut work = Work { control, nodes: 0 };
         for (position, scope) in f.read_scope_parameters.iter().enumerate() {
-            work.visit(0)?;
+            work.visit()?;
             for earlier in &f.read_scope_parameters[..position] {
-                work.visit(0)?;
+                work.visit()?;
                 if earlier.id == scope.id {
                     return Err(reject());
                 }
             }
         }
         for (position, source) in f.read_scope_sources.iter().enumerate() {
-            work.visit(0)?;
+            work.visit()?;
             work_scope_source(f, position, &mut work)?;
             for earlier in &f.read_scope_sources[..position] {
-                work.visit(0)?;
+                work.visit()?;
                 if earlier == source {
                     return Err(reject());
                 }
             }
         }
         for (ty, constraint) in types.iter().zip(f.type_parameter_constraints.iter()) {
-            work.visit(0)?;
+            work.visit()?;
             let region = matches!(
                 program.types.get(ty).map(|t| &t.form),
                 Some(TypeForm::RegionBrand { .. })
@@ -138,10 +138,9 @@ impl TaskApplication {
                 return Err(reject());
             }
             if constraint.requires_transfer() {
-                validate_type(program, *ty, 0, &mut work)?;
+                validate_type(program, *ty, &mut work)?;
             }
-            if constraint.requires_share() && !validate_shareable_type(program, *ty, 0, &mut work)?
-            {
+            if constraint.requires_share() && !validate_shareable_type(program, *ty, &mut work)? {
                 return Err(reject());
             }
         }
@@ -174,11 +173,10 @@ impl TaskApplication {
             .iter()
             .zip(f.implementation_arguments.iter())
         {
-            work.visit(0)?;
+            work.visit()?;
             validate_implementation(
                 program,
                 application,
-                0,
                 &mut work,
                 &mut witness_visited,
                 reserve,
@@ -195,7 +193,7 @@ impl TaskApplication {
                 .iter()
                 .zip(application.type_arguments.iter())
             {
-                work.visit(0)?;
+                work.visit()?;
                 if types::resolve_application_in(program, *expected, &context, &mut work)?
                     != *actual
                 {
@@ -215,7 +213,7 @@ impl TaskApplication {
                 validate_parameter_type(program, ty, parameter.use_mode, &mut work)?;
             }
             let result = types::resolve_application_in(program, f.result.ty, &context, &mut work)?;
-            validate_type(program, result, 0, &mut work)?;
+            validate_type(program, result, &mut work)?;
             return Ok(Self {
                 identity,
                 function,
@@ -238,13 +236,13 @@ impl TaskApplication {
         )?)?;
         let mut parameters = Vec::with_capacity(f.parameters.len());
         for p in f.parameters.iter() {
-            work.visit(0)?;
+            work.visit()?;
             let ty = types::resolve_application_in(program, p.ty, &context, &mut work)?;
             validate_parameter_type(program, ty, p.use_mode, &mut work)?;
             parameters.push(ty);
         }
         let result = types::resolve_application_in(program, f.result.ty, &context, &mut work)?;
-        validate_type(program, result, 0, &mut work)?;
+        validate_type(program, result, &mut work)?;
         Ok(Self {
             identity,
             function,
@@ -355,7 +353,7 @@ fn work_scope_source(
         return Err(reject());
     }
     for parameter in function.read_scope_parameters.iter() {
-        work.visit(0)?;
+        work.visit()?;
         if parameter.id == reference.parameter {
             return Ok(());
         }
@@ -387,9 +385,9 @@ fn validate_parameter_type(
     work: &mut Work<'_>,
 ) -> Result<(), ExecutionError> {
     match mode {
-        ParameterUse::Borrow if validate_shareable_type(program, ty, 0, work)? => Ok(()),
-        ParameterUse::Consume if validate_type(program, ty, 0, work)? => Ok(()),
-        ParameterUse::Unrestricted if !validate_type(program, ty, 0, work)? => Ok(()),
+        ParameterUse::Borrow if validate_shareable_type(program, ty, work)? => Ok(()),
+        ParameterUse::Consume if validate_type(program, ty, work)? => Ok(()),
+        ParameterUse::Unrestricted if !validate_type(program, ty, work)? => Ok(()),
         _ => Err(reject()),
     }
 }
@@ -397,12 +395,11 @@ fn validate_parameter_type(
 fn validate_implementation(
     program: &NormalizedProgram,
     application: &super::super::super::prepare::NormalizedImplementationArgument,
-    depth: usize,
     work: &mut Work<'_>,
     visited: &mut BTreeSet<u32>,
     reserve: &mut impl FnMut(u64) -> Result<(), ExecutionError>,
 ) -> Result<(), ExecutionError> {
-    work.visit(depth)?;
+    work.visit()?;
     let canonical = program
         .implementation_applications
         .get(application.identity as usize)
@@ -411,10 +408,7 @@ fn validate_implementation(
     if canonical.identity != application.identity || !Arc::ptr_eq(canonical, application) {
         return Err(reject());
     }
-    if depth.saturating_add(canonical.depth) > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-    {
-        return Err(reject());
-    }
+
     if !application.associated_types.is_empty() {
         types::validate_associated_bindings_in(program, application, work)?;
     }
@@ -442,7 +436,7 @@ fn validate_implementation(
             return Err(reject());
         }
         for (ty, constraint) in arguments.iter().zip(constraints.iter()) {
-            work.visit(0)?;
+            work.visit()?;
             let owned = closed_owned_type(program, *ty, work)?;
             if (contract
                 && !matches!(constraint,
@@ -462,9 +456,9 @@ fn validate_implementation(
                 return Err(reject());
             }
             if constraint.requires_transfer() {
-                validate_type(program, *ty, 0, work)?;
+                validate_type(program, *ty, work)?;
             }
-            if constraint.requires_share() && !validate_shareable_type(program, *ty, 0, work)? {
+            if constraint.requires_share() && !validate_shareable_type(program, *ty, work)? {
                 return Err(reject());
             }
         }
@@ -483,7 +477,7 @@ fn validate_implementation(
         {
             return Err(reject());
         }
-        validate_implementation(program, child, depth + 1, work, visited, reserve)?;
+        validate_implementation(program, child, work, visited, reserve)?;
     }
     Ok(())
 }
@@ -518,7 +512,6 @@ mod tests {
             let result = validate_implementation(
                 &program,
                 node,
-                0,
                 &mut Work {
                     control: &control,
                     nodes: 0,
@@ -541,7 +534,7 @@ mod tests {
         };
         let mut visited = BTreeSet::new();
         let mut reservations = 0;
-        validate_implementation(&program, root, 0, &mut work, &mut visited, &mut |_| {
+        validate_implementation(&program, root, &mut work, &mut visited, &mut |_| {
             reservations += 1;
             Ok(())
         })
@@ -549,7 +542,7 @@ mod tests {
         assert_eq!(visited.len(), 25);
         assert_eq!(reservations, 25);
         assert!(work.nodes < 256, "type and edge admission remains linear");
-        validate_implementation(&program, root, 0, &mut work, &mut visited, &mut |_| {
+        validate_implementation(&program, root, &mut work, &mut visited, &mut |_| {
             panic!("repeated supplying witnesses reuse the same admission ledger")
         })
         .unwrap();
@@ -570,7 +563,6 @@ mod tests {
             validate_implementation(
                 &program,
                 &equal_copy,
-                0,
                 &mut work,
                 &mut visited,
                 &mut |_| panic!("equal copied record is not this canonical handle")
@@ -596,33 +588,11 @@ mod tests {
         };
         let mut visited = BTreeSet::from([root.identity]);
         assert!(
-            validate_implementation(&program, &forged, 0, &mut work, &mut visited, &mut |_| {
+            validate_implementation(&program, &forged, &mut work, &mut visited, &mut |_| {
                 Ok(())
             })
             .is_err()
         );
         assert_eq!(visited.len(), 1);
-    }
-
-    #[test]
-    fn parallel_dag_depth_checks_the_full_shared_suffix_before_memo_skip() {
-        let maximum = crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
-        let program = prepared_duplicate_dag(maximum);
-        let root = program.implementation_applications.last().unwrap();
-        let control = ExecutionControl::uncancelled();
-        let mut work = Work {
-            control: &control,
-            nodes: 0,
-        };
-        let mut visited = BTreeSet::new();
-        validate_implementation(&program, root, 0, &mut work, &mut visited, &mut |_| Ok(()))
-            .unwrap();
-        assert_eq!(visited.len(), maximum + 1);
-        assert!(
-            validate_implementation(&program, root, 1, &mut work, &mut visited, &mut |_| {
-                panic!("an over-depth shared path is refused before memo allocation")
-            })
-            .is_err()
-        );
     }
 }

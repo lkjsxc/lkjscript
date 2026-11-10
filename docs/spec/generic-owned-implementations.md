@@ -183,9 +183,9 @@ can therefore make an otherwise acyclic selected application unsupported. This
 does not claim actual witness growth. Plain forwarding, permutations, projections,
 fully concrete resets and symbolic construction outside those potential recursive
 components retain their admitted applications. Exact type-growth admission remains
-independent. Canonical witness trees obey explicit depth and node-count bounds;
-out-of-bound stored meaning is semantically inadmissible, and malformed encoded
-trees reject during loading. Public authored-input expansion, derived analysis
+independent. Canonical witness loading retains ordered-argument and total-node
+bounds; encoded trees exceeding those bounds reject during loading.
+Public authored-input expansion, derived analysis
 and preparation have separate resource admissions; exhausting those capacities
 does not establish semantic invalidity.
 

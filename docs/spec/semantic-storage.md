@@ -275,13 +275,11 @@ editable repositories. The strict uncompressed container carries exactly one cur
 closure, including private implementations and current retirements, without historical bodies,
 operational data, grants, host paths, compiler caches, or executable units.
 
-The [wide-Sequence candidate](../decisions/20261107-wide-sequence-capacity.md) removes
-default container byte/distinct-object and generic map-entry quotas through container
-encoding, decoding, collection, public export/stage I/O and link read-set metadata.
-This shared source reader also participates in ordinary candidate publication with
+Container encoding, decoding, collection, public export/stage I/O and link read-set
+metadata have no default byte, distinct-object or generic map-entry quotas.
+The shared source reader also participates in ordinary candidate publication with
 no imported packages. Complete owner/callable proof, exact read sets and canonical
-availability remain mandatory. Acceptance and maintained equations are recorded
-separately in the linked wide-Sequence decision.
+availability remain mandatory.
 
 PackageContainer::decode uses unbounded decoder allowances. Its normal
 decode_with_limits entry accepts independent Option<u64> byte/package/object limits:
@@ -335,8 +333,7 @@ separate derived observation and cannot cause semantic rollback or a failed-writ
 
 ### Normalized executable preparation
 
-The [wide-Sequence candidate](../decisions/20261107-wide-sequence-capacity.md)
-keeps strict artifact admission before constructing executable derived state.
+Executable preparation strictly admits artifacts before constructing derived state.
 NormalizedPreparationLimits provides independent optional u64 derivation-work
 and modeled-metadata allowances. Ordinary preparation selects None for both;
 Some(0), Some(n) and Some(u64::MAX) retain exact finite meanings. One pair of

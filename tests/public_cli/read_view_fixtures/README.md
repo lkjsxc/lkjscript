@@ -45,7 +45,7 @@ CLI to regular 0555 bytes outside the checkout, clears the environment, owns
 HOME/TMPDIR, uses LANG=C and an empty PATH, and saves every command/stdout/stderr/
 terminal before assertions. LKJSCRIPT_RETAIN_PRODUCT_EVIDENCE retains the test
 roots and the separate complete source archive. Exact built artifacts run through
-project differential execution, attached artifact production and detached artifact
+project VM execution, attached artifact production and detached artifact
 production. Before detach, complete project trees are copied and byte-compared;
 only owned disposable installed sources and native inputs are then deleted. CLI,
 artifact and deployment hashes must stay unchanged. A missing implementation

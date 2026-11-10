@@ -32,13 +32,13 @@ records, variants and unrestricted containers still cannot contain owned choices
 ```
 
 The explicit type is checked meaning, never an ownership certificate. Case names
-are unique and canonical type/arm order is by name. Existing field-count, depth,
-request-size and proof-work limits apply; no bound is raised. Branch-state forks
-reserve their complete slot work before copying, and joins charge each examined
-slot. Otherwise-unused live owners are not free proof metadata. Owned case analysis
-streams capability-flow states rather than retaining a state for every arm. The type-depth proof
-covers the longest path through shared type nodes and materialized generic
-substitutions, including mixtures of products and choices.
+are unique and canonical type/arm order is by name. Existing field-count,
+request-size and proof-work policies apply. Branch-state forks reserve their
+complete slot work before copying, and joins charge each examined slot.
+Otherwise-unused live owners are not free proof metadata. Owned case analysis
+streams capability-flow states rather than retaining a state for every arm.
+Type validation covers shared type nodes and materialized generic substitutions,
+including mixtures of products and choices.
 
 Construction evaluates exactly one payload expression of the selected case's exact
 type. An owned payload must be an exact live owning local, not a borrowed local or
@@ -140,7 +140,4 @@ running service. Product version components remain opaque identifiers.
 The [child-borrow contract](owned-borrows.md#encodings-and-evidence) owns lexical
 scope operations and borrowed payload bindings.
 
-The [native guide](../guides/native-owned-choices.md) describes ordinary use. The
-[continuation](../campaigns/20261002-owned-choices.md) separates focused tests,
-source acceptance, mainline delivery and finalized distribution. Source availability
-is not a new public binary release.
+The [native guide](../guides/native-owned-choices.md) describes ordinary use.

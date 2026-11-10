@@ -72,13 +72,7 @@ fn constructing<R: CallableClosureRead + ?Sized>(
     let mut result = false;
     while let Some((operand, beneath, depth)) = pending.pop() {
         analysis.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "kernel_callable_flow_witness_depth",
-                "prerequisite operand exceeds bounded witness depth",
-            ));
-        }
+
         match operand {
             ImplementationOperand::Concrete {
                 implementation,

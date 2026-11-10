@@ -7,70 +7,64 @@ use crate::platform::kernel::{self, KernelSnapshot, TypeObjectDigest};
 pub(super) mod cache_measurement;
 
 fn probes(module: &str) -> &'static (KernelSnapshot, NormalizedProgram) {
-    static PROBES: [OnceLock<(KernelSnapshot, NormalizedProgram)>; 12] =
-        [const { OnceLock::new() }; 12];
-    let (index, proposal) = match module {
-        "source-probe" => (
-            0,
-            include_str!("../../../../tests/fixtures/selfhost-source-probes.lkjc"),
-        ),
-        "source-record-probe" => (
-            1,
-            include_str!("../../../../tests/fixtures/selfhost-source-record-probes.lkjc"),
-        ),
-        "source-map-probe" => (
-            2,
-            include_str!("../../../../tests/fixtures/selfhost-source-map-probes.lkjc"),
-        ),
-        "source-state-probe" => (
-            3,
-            include_str!("../../../../tests/fixtures/selfhost-source-state-probes.lkjc"),
-        ),
-        "source-history-probe" => (
-            4,
-            include_str!("../../../../tests/fixtures/selfhost-source-history-probes.lkjc"),
-        ),
-        "source-object-probe" => (
-            5,
-            include_str!("../../../../tests/fixtures/selfhost-source-object-probes.lkjc"),
-        ),
-        "source-graph-probe" => (
-            6,
-            include_str!("../../../../tests/fixtures/selfhost-source-graph-probes.lkjc"),
-        ),
-        "source-scope-probe" => (
-            7,
-            include_str!("../../../../tests/fixtures/selfhost-source-scope-probes.lkjc"),
-        ),
-        "source-namespace-probe" => (
-            8,
-            include_str!("../../../../tests/fixtures/selfhost-source-namespace-probes.lkjc"),
-        ),
-        "source-type-scope-probe" => (
-            9,
-            include_str!("../../../../tests/fixtures/selfhost-source-type-scope-probes.lkjc"),
-        ),
-        "source-nominal-probe" => (
-            10,
-            include_str!("../../../../tests/fixtures/selfhost-source-nominal-probes.lkjc"),
-        ),
-        "source-index-probe" => (
-            11,
-            include_str!("../../../../tests/fixtures/selfhost-source-index-probes.lkjc"),
-        ),
-        _ => return compiler(),
-    };
-    // Each independent probe graph retains the entire compiler source. Unrelated
-    // test entrypoints do not need to share one finite-admission transaction history.
-    PROBES[index].get_or_init(|| {
-        let changes = proposals::updates(proposal).unwrap();
+    if !matches!(
+        module,
+        "source-probe"
+            | "source-record-probe"
+            | "source-map-probe"
+            | "source-state-probe"
+            | "source-history-probe"
+            | "source-object-probe"
+            | "source-graph-probe"
+            | "source-scope-probe"
+            | "source-namespace-probe"
+            | "source-type-scope-probe"
+            | "source-nominal-probe"
+            | "source-index-probe"
+    ) {
+        return compiler();
+    }
+    static PROBES: OnceLock<(KernelSnapshot, NormalizedProgram)> = OnceLock::new();
+    const SOURCE: &str = concat!(
+        include_str!("../../../../tests/fixtures/selfhost-source-probes.lkjc"),
+        "\n",
+        include_str!("../../../../tests/fixtures/selfhost-source-record-probes.lkjc"),
+        "\n",
+        include_str!("../../../../tests/fixtures/selfhost-source-map-probes.lkjc"),
+        "\n",
+        include_str!("../../../../tests/fixtures/selfhost-source-state-probes.lkjc"),
+        "\n",
+        include_str!("../../../../tests/fixtures/selfhost-source-history-probes.lkjc"),
+        "\n",
+        include_str!("../../../../tests/fixtures/selfhost-source-object-probes.lkjc"),
+        "\n",
+        include_str!("../../../../tests/fixtures/selfhost-source-graph-probes.lkjc"),
+        "\n",
+        include_str!("../../../../tests/fixtures/selfhost-source-scope-probes.lkjc"),
+        "\n",
+        include_str!("../../../../tests/fixtures/selfhost-source-namespace-probes.lkjc"),
+        "\n",
+        include_str!("../../../../tests/fixtures/selfhost-source-type-scope-probes.lkjc"),
+        "\n",
+        include_str!("../../../../tests/fixtures/selfhost-source-nominal-probes.lkjc"),
+        "\n",
+        include_str!("../../../../tests/fixtures/selfhost-source-index-probes.lkjc"),
+    );
+    PROBES.get_or_init(|| {
+        let (base, _) = compiler();
         let memory = crate::platform::MemProjectStore::new(None).unwrap();
-        let repository = GraphRepository::create_memory(&memory, &compiler().0, None)
+        let repository = GraphRepository::create_memory(&memory, base, None)
             .unwrap()
             .repository;
-        let source = publish_proposals(&repository, changes);
-        // Compile the public transaction result in its owning repository. A
-        // second import needlessly repeats complete admission and storage.
+        // One public transaction installs all independent probe modules. Prepare
+        // the shared compiler base once; function lookup remains module-qualified.
+        let source = publish_proposals(&repository, proposals::replay(SOURCE));
+        for (key, owner) in &base.owners {
+            assert!(
+                source.owners.get(key) == Some(owner),
+                "probe authoring changed maintained compiler owner {key:?}"
+            );
+        }
         let program = prepare_from_repository(&repository);
         (source, program)
     })
@@ -108,6 +102,90 @@ fn function(module: &str, name: &str) -> DeclarationReference {
     }
 }
 
+// These fixtures are immutable for the lifetime of the test process. Reuse the
+// canonical schema instead of scanning the whole compiler for every probe call.
+pub(super) struct ProbeReader {
+    source: &'static KernelSnapshot,
+    schema: std::sync::Arc<
+        crate::platform::execution::normalized::reference_schema::NormalizedReferenceSchema,
+    >,
+}
+
+impl crate::platform::execution::normalized::reference::NormalizedReferenceRead for ProbeReader {
+    fn binding(
+        &self,
+    ) -> Result<
+        crate::platform::execution::normalized::reference::NormalizedReferenceBinding,
+        ExecutionError,
+    > {
+        crate::platform::execution::normalized::reference::NormalizedReferenceRead::binding(
+            self.source,
+        )
+    }
+    fn owner(
+        &self,
+        owner: OwnerKey,
+    ) -> Result<
+        crate::platform::execution::normalized::reference::NormalizedReferenceOwnerRead,
+        ExecutionError,
+    > {
+        crate::platform::execution::normalized::reference::NormalizedReferenceRead::owner(
+            self.source,
+            owner,
+        )
+    }
+    fn schema(
+        &self,
+    ) -> Result<
+        std::sync::Arc<
+            crate::platform::execution::normalized::reference_schema::NormalizedReferenceSchema,
+        >,
+        ExecutionError,
+    > {
+        Ok(std::sync::Arc::clone(&self.schema))
+    }
+    fn blob(&self, digest: kernel::BlobObjectDigest) -> Result<Vec<u8>, ExecutionError> {
+        crate::platform::execution::normalized::reference::NormalizedReferenceRead::blob(
+            self.source,
+            digest,
+        )
+    }
+    fn owner_in_package(
+        &self,
+        package: kernel::PackageId,
+        owner: OwnerKey,
+    ) -> Result<
+        crate::platform::execution::normalized::reference::NormalizedReferenceOwnerRead,
+        ExecutionError,
+    > {
+        crate::platform::execution::normalized::reference::NormalizedReferenceRead::owner_in_package(
+            self.source,
+            package,
+            owner,
+        )
+    }
+}
+
+pub(super) fn probe_reader(source: &'static KernelSnapshot) -> ProbeReader {
+    use crate::platform::execution::normalized::reference::NormalizedReferenceRead;
+    use crate::platform::execution::normalized::reference_schema::NormalizedReferenceSchema;
+    use std::sync::{Arc, Mutex};
+    type Schemas = BTreeMap<usize, Arc<OnceLock<Arc<NormalizedReferenceSchema>>>>;
+    static SCHEMAS: OnceLock<Mutex<Schemas>> = OnceLock::new();
+    let slot = {
+        let mut schemas = SCHEMAS.get_or_init(Default::default).lock().unwrap();
+        Arc::clone(
+            schemas
+                .entry(std::ptr::from_ref(source) as usize)
+                .or_default(),
+        )
+    };
+    ProbeReader {
+        source,
+        schema: Arc::clone(slot.get_or_init(|| source.schema().unwrap())),
+    }
+}
+
 fn invoke(module: &str, name: &str, arguments: Vec<NormalizedValue>) -> NormalizedValue {
     let (source, program) = probes(module);
     let declaration = function(module, name);
@@ -136,7 +214,8 @@ fn invoke(module: &str, name: &str, arguments: Vec<NormalizedValue>) -> Normaliz
     cache_measurement::finish("raw.vm", measured_vm);
     let measured_reference = cache_measurement::start_cpu();
     let start = std::time::Instant::now();
-    let reference = NormalizedReferenceInterpreter::new(source, program, policy)
+    let reader = probe_reader(source);
+    let reference = NormalizedReferenceInterpreter::from_reader(&reader, program, policy)
         .invoke(declaration, arguments, None, &control)
         .unwrap();
     if observe {
@@ -234,44 +313,53 @@ fn source_reader_native_output(
     output
 }
 
-fn native_reader_image(name: &str) -> Vec<u8> {
-    let module = probe_module(name);
-    static IMAGES: OnceLock<std::sync::Mutex<BTreeMap<String, Vec<u8>>>> = OnceLock::new();
-    let wait = cache_measurement::start();
-    let observing = wait.is_some();
-    let mut images = IMAGES.get_or_init(Default::default).lock().unwrap();
-    let held = cache_measurement::split("rust-native.map-wait", wait);
-    let hit = observing.then(|| images.contains_key(name));
-    let image = images
-        .entry(name.to_owned())
-        .or_insert_with(|| {
-            let build = cache_measurement::start();
-            let (_, program) = probes(module);
-            let image = crate::platform::compiler::elf_x86_64::compile_function(
-                program,
-                program.function(function(module, name)).unwrap().0 as usize,
-            )
-            .unwrap()
-            .0;
-            eprintln!(
-                "selfhost source native producer entry={name} bytes={} sha256={}",
-                image.len(),
-                crate::platform::semantic_id::encode_hex(&Sha256::digest(&image))
-            );
-            cache_measurement::finish("rust-native.build", build);
-            image
+struct ReaderProjection {
+    program: &'static NormalizedProgram,
+    entry: usize,
+    input: Vec<u8>,
+    input_digest: [u8; 32],
+    native: OnceLock<std::sync::Arc<[u8]>>,
+}
+
+// Names select entries only in the immutable probes() fixtures. Executable caches
+// below bind the actual projection bytes, including every reachable function.
+fn reader_projection(name: &str) -> std::sync::Arc<ReaderProjection> {
+    use std::sync::{Arc, Mutex};
+    type Projections = BTreeMap<String, Arc<OnceLock<Arc<ReaderProjection>>>>;
+    static PROJECTIONS: OnceLock<Mutex<Projections>> = OnceLock::new();
+    let slot = {
+        let mut projections = PROJECTIONS.get_or_init(Default::default).lock().unwrap();
+        Arc::clone(projections.entry(name.to_owned()).or_default())
+    };
+    Arc::clone(slot.get_or_init(|| {
+        let module = probe_module(name);
+        let (_, program) = probes(module);
+        let entry = program.function(function(module, name)).unwrap().0 as usize;
+        let input = input::export(program, entry).unwrap();
+        Arc::new(ReaderProjection {
+            program,
+            entry,
+            input_digest: Sha256::digest(&input).into(),
+            input,
+            native: OnceLock::new(),
         })
-        .clone();
-    drop(images);
-    cache_measurement::finish("rust-native.map-hold", held);
-    cache_measurement::note("rust-native.cache", || serde_json::json!({ "hit": hit }));
-    cache_measurement::note("rust-native.image", || {
-        serde_json::json!({
-            "bytes": image.len(),
-            "sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(&image)),
-        })
-    });
-    image
+    }))
+}
+
+fn native_reader_image(name: &str) -> std::sync::Arc<[u8]> {
+    let projection = reader_projection(name);
+    std::sync::Arc::clone(projection.native.get_or_init(|| {
+        let build = cache_measurement::start();
+        let image =
+            native_image_for_payload(projection.program, projection.entry, &projection.input);
+        eprintln!(
+            "selfhost source native producer entry={name} bytes={} sha256={}",
+            image.len(),
+            crate::platform::semantic_id::encode_hex(&Sha256::digest(image.as_ref()))
+        );
+        cache_measurement::finish("rust-native.build", build);
+        image
+    }))
 }
 
 fn result(name: &str, bytes: &[u8]) -> (i64, Vec<u8>) {
@@ -315,60 +403,53 @@ fn emitted_result(name: &str, bytes: &[u8], code: i64) {
 }
 
 fn emitted_result_bytes(name: &str, bytes: &[u8], code: i64, expected: &[u8]) {
-    static IMAGES: OnceLock<std::sync::Mutex<BTreeMap<String, Vec<u8>>>> = OnceLock::new();
-    let module = probe_module(name);
+    use std::sync::{Arc, Mutex};
+    type Images = BTreeMap<([u8; 32], [u8; 32]), Arc<OnceLock<Arc<[u8]>>>>;
+    static IMAGES: OnceLock<Mutex<Images>> = OnceLock::new();
+    let projection = reader_projection(name);
+    let seed = native_compiler_seed();
     let wait = cache_measurement::start();
     let observing = wait.is_some();
-    let mut images = IMAGES.get_or_init(Default::default).lock().unwrap();
-    let held = cache_measurement::split("self-produced.map-wait", wait);
-    let hit = observing.then(|| images.contains_key(name));
-    let image = images.entry(name.to_owned())
-        .or_insert_with(|| {
-            let build = cache_measurement::start();
-            let (_, program) = probes(module);
-            let target = program.function(function(module, name)).unwrap().0 as usize;
-            let projected = cache_measurement::start();
-            let input = input::export(program, target).unwrap();
-            cache_measurement::finish("self-produced.export", projected);
-            cache_measurement::note("self-produced.projection", || serde_json::json!({
-                "profile": u32::from_le_bytes(input[8..12].try_into().unwrap()),
-                "bytes": input.len(),
-                "sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(&input)),
-            }));
-            let word = |at| u64::from_le_bytes(input[at..at + 8].try_into().unwrap());
-            let maximum_locals = (0..word(96) as usize)
-                .map(|row| word(word(88) as usize + row * input::FUNCTION_BYTES + 24))
-                .max()
-                .unwrap_or(0);
-            let maximum_stack = (0..word(120) as usize)
-                .map(|row| word(word(104) as usize + row * input::NODE_BYTES + 56))
-                .max()
-                .unwrap_or(0);
-            eprintln!(
-                "selfhost source normalized entry={name} functions={} nodes={} type_rows={} input_bytes={} maximum_locals={} maximum_stack={} sha256={}",
-                word(96), word(120), word(80), input.len(), maximum_locals, maximum_stack,
-                crate::platform::semantic_id::encode_hex(&Sha256::digest(&input))
-            );
-            let (source, compiler) = compiler();
-            let (diagnostic, image) =
-                compile_with_policy(source, compiler, &input, NormalizedRunPolicy::foreground());
-            assert_eq!(diagnostic, 0, "self-produced validator {name}");
-            eprintln!(
-                "selfhost source self-produced native entry={name} bytes={} sha256={}",
-                image.len(),
-                crate::platform::semantic_id::encode_hex(&Sha256::digest(&image))
-            );
-            cache_measurement::finish("self-produced.build", build);
-            image
-        })
-        .clone();
-    drop(images);
-    cache_measurement::finish("self-produced.map-hold", held);
+    let (slot, hit) = {
+        let mut images = IMAGES.get_or_init(Default::default).lock().unwrap();
+        let held = cache_measurement::split("self-produced.map-wait", wait);
+        let slot = Arc::clone(
+            images
+                .entry((seed.input_digest, projection.input_digest))
+                .or_default(),
+        );
+        let hit = observing.then(|| slot.get().is_some());
+        drop(images);
+        cache_measurement::finish("self-produced.map-hold", held);
+        (slot, hit)
+    };
+    let image = Arc::clone(slot.get_or_init(|| {
+        let build = cache_measurement::start();
+        let input = &projection.input;
+        cache_measurement::note("self-produced.projection", || serde_json::json!({
+            "profile": u32::from_le_bytes(input[8..12].try_into().unwrap()),
+            "bytes": input.len(),
+            "sha256": crate::platform::semantic_id::encode_hex(&projection.input_digest),
+        }));
+        // Preparation uses one cached native seed. Actual reader invocations still
+        // compare VM, reference, Rust-native and self-produced-native observations.
+        let output = source_reader_native_output("compiler-seed", name, &seed.image, input);
+        assert_eq!(output.status.code(), Some(0), "reader {name}: {:?}", output.stderr);
+        assert!(output.stderr.is_empty(), "reader {name}");
+        assert!(output.stdout.starts_with(b"\x7fELF"), "reader {name}");
+        let image: Arc<[u8]> = output.stdout.into();
+        cache_measurement::note("self-produced.seed", || serde_json::json!({
+            "input_sha256": crate::platform::semantic_id::encode_hex(&seed.input_digest),
+            "image_sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(seed.image.as_ref())),
+        }));
+        cache_measurement::finish("self-produced.build", build);
+        image
+    }));
     cache_measurement::note("self-produced.cache", || serde_json::json!({ "hit": hit }));
     cache_measurement::note("self-produced.image", || {
         serde_json::json!({
             "bytes": image.len(),
-            "sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(&image)),
+            "sha256": crate::platform::semantic_id::encode_hex(&Sha256::digest(image.as_ref())),
         })
     });
     let output = source_reader_native_output("self-produced-native", name, &image, bytes);
@@ -832,8 +913,7 @@ fn batch(source: &KernelSnapshot) {
 }
 
 #[test]
-fn selfhost_source_decodes_all_authoritative_records_and_independent_programs() {
-    batch(&compiler().0);
+fn selfhost_source_decodes_independent_records_and_rejects_malformed_inputs() {
     for proposal in [
         include_str!("../../../../tests/fixtures/selfhost-aggregates.lkjc"),
         include_str!("../../../../tests/fixtures/selfhost-generic-list.lkjc"),
@@ -1037,6 +1117,7 @@ fn selfhost_source_proof_policy_preserves_zero_maximum_and_saturated_observation
 }
 
 #[test]
+#[ignore = "slow: whole compiler reader scale"]
 fn selfhost_source_native_readers_admit_complete_current_graph_with_explicit_deadline() {
     let (source, _) = compiler();
     let bytes = graph::packet(source);
@@ -1052,4 +1133,13 @@ fn selfhost_source_native_readers_admit_complete_current_graph_with_explicit_dea
         assert!(output.stderr.is_empty(), "{name}: {:?}", output.stderr);
         emitted_result(name, &bytes, 0);
     }
+}
+
+#[path = "typed_compiler_input_tests.rs"]
+mod typed_compiler_input;
+
+#[test]
+#[ignore = "slow: decode every maintained compiler record"]
+fn selfhost_source_decodes_all_maintained_compiler_records() {
+    batch(&compiler().0);
 }

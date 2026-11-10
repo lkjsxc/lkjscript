@@ -160,7 +160,7 @@ impl<'a> Reader<'a> {
     ) -> Result<AuthoredType, Diagnostic> {
         self.check()?;
         self.type_nodes.observe(BudgetCounter::exact(1));
-        if depth > k::contract::MAXIMUM_TYPE_DEPTH || !self.active_types.insert(digest) {
+        if !self.active_types.insert(digest) {
             return Err(error(
                 "canonical type is cyclic or exceeds type-depth admission",
             ));
@@ -170,9 +170,7 @@ impl<'a> Reader<'a> {
             let mut nodes = BudgetCounter::default();
             while let Some((ty, depth)) = pending.pop() {
                 self.check()?;
-                if depth > k::contract::MAXIMUM_TYPE_DEPTH {
-                    return Err(error("expanded type exceeds type-depth admission"));
-                }
+
                 nodes.observe(BudgetCounter::exact(1));
                 use AuthoredType as T;
                 match ty {
@@ -611,7 +609,7 @@ impl<'a> Reader<'a> {
         depth: usize,
     ) -> Result<AuthoredExpression, Diagnostic> {
         self.check()?;
-        if depth > k::contract::MAXIMUM_EXPRESSION_DEPTH || !self.active_expressions.insert(id) {
+        if !self.active_expressions.insert(id) {
             return Err(error(
                 "canonical body is cyclic or exceeds expression-depth admission",
             ));

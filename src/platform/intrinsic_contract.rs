@@ -656,13 +656,7 @@ fn kernel_type<R: ExpressionRead + ?Sized>(
     maximum: Option<usize>,
 ) -> Result<IntrinsicType, Diagnostic> {
     intrinsic_visit(read, work, maximum)?;
-    if depth > super::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "kernel_full_work",
-            "intrinsic signature exhausted canonical validation visits or type depth",
-        ));
-    }
+
     let object = read
         .type_object(digest)?
         .ok_or_else(|| signature_error("external type is missing"))?;

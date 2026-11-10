@@ -92,7 +92,7 @@ impl Fifo {
             if detached {
                 joined(execution);
             } else {
-                assert_eq!(compact_field(execution, "differential"), "equal");
+                assert_eq!(compact_field(execution, "engine"), "vm");
             }
             Some(serde_json::from_slice(&std::fs::read(result).unwrap()).unwrap())
         } else {

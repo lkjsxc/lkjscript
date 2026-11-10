@@ -88,10 +88,6 @@ cross-platform durability, or service-level claim.
 
 ## Evidence and reversal condition
 
-Storage codec/lookup/merge tests, repository recovery and interruption tests, maintained-project
-verification, the exact copied-binary capacity gate, and the disjoint footer oracle are recorded in
-[`202609031354-incremental-object-catalog.json`](../evidence/202609031354-incremental-object-catalog.json).
-
 Replace this structure only when a maintained workload demonstrates a material correctness or
 resource failure that bounded immutable segments cannot meet. A successor must keep packs and
 accepted `HEAD` canonical, preserve a complete implementation-disjoint rebuild path, validate

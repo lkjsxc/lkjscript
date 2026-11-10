@@ -374,7 +374,7 @@ impl ImplementationOperand {
     pub(crate) fn walk(&self) -> impl Iterator<Item = &Self> {
         // Keep one iterator per ancestor instead of retaining every sibling.
         // Callers admit the complete shape before semantic use.
-        let mut pending = Vec::with_capacity(contract::MAXIMUM_TYPE_DEPTH + 1);
+        let mut pending = Vec::new();
         let mut next = Some(self);
         std::iter::from_fn(move || {
             let operand = loop {
@@ -403,10 +403,8 @@ impl ImplementationOperand {
         let mut nodes = 0usize;
         while let Some((operand, depth)) = pending.pop() {
             nodes += 1;
-            if depth > contract::MAXIMUM_TYPE_DEPTH || nodes > contract::MAXIMUM_CHILDREN {
-                return Err(reject(
-                    "implementation application exceeds its depth or node bound",
-                ));
+            if nodes > contract::MAXIMUM_CHILDREN {
+                return Err(reject("implementation application exceeds its node bound"));
             }
             if let Self::Concrete {
                 type_arguments,
@@ -441,8 +439,8 @@ impl ImplementationOperand {
     }
 }
 
-// Derived Decode would recurse without a bound before semantic admission. Retain the
-// ordinary enum/Vec framing, but reject excessive depth, breadth and total nodes first.
+// Preserve ordinary enum/Vec framing while checking ordered argument and total-node
+// bounds during decoding. Recursive decoding runs on the caller's semantic stack.
 impl<Context> Decode<Context> for ImplementationOperand {
     fn decode<D: bincode::de::Decoder<Context = Context>>(
         decoder: &mut D,
@@ -469,11 +467,6 @@ impl<Context> Decode<Context> for ImplementationOperand {
             depth: usize,
             remaining: &mut usize,
         ) -> Result<ImplementationOperand, bincode::error::DecodeError> {
-            if depth > contract::MAXIMUM_TYPE_DEPTH {
-                return Err(bincode::error::DecodeError::Other(
-                    "implementation application exceeds its depth or node bound",
-                ));
-            }
             match u32::decode(decoder)? {
                 0 => {
                     let implementation = DeclarationReference::decode(decoder)?;
@@ -1678,13 +1671,7 @@ fn validate_implementation_scoped(
         if admission.active.contains(&scope) || admission.completed.contains(&scope) {
             return Ok(());
         }
-        if admission.active.len() > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "kernel_witness_definition_capacity",
-                "implementation definition admission exhausted its finite depth capacity",
-            ));
-        }
+
         admission.associated.reserve::<DeclarationReference>(1)?;
         admission.active.insert(scope);
     }
@@ -2357,11 +2344,7 @@ fn witness_contract_scoped(
     admission: &mut WitnessAdmission,
 ) -> Result<AppliedWitnessContract, Diagnostic> {
     read.validation_work()?;
-    if admission.operand_depth > contract::MAXIMUM_TYPE_DEPTH {
-        return Err(reject(
-            "implementation prerequisite application exceeds its depth bound",
-        ));
-    }
+
     if admission.operand_depth == 0 {
         operand.validate_local()?;
     }

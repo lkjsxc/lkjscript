@@ -3,7 +3,7 @@
 //! Scratch handoff: Function/Record, collection, and affine/view ownership
 //! transitions share one drain using metadata reserved during construction.
 //! This module confers no admission or custody authority and changes no policy
-//! charge. Admission depth guards must remain until their full paths are closed.
+//! charge. Recursive compiler and evaluator work runs on the host-sized semantic stack.
 
 use super::value::{NormalizedRecord, NormalizedValue};
 use crate::platform::execution::ExecutionError;

@@ -86,7 +86,7 @@ impl ReferenceState<'_> {
         visits: &mut usize,
     ) -> Result<AppliedReferenceImplementation, ExecutionError> {
         self.control.check()?;
-        Self::witness_tree_step(depth, visits)?;
+        Self::witness_tree_step(visits)?;
         match operand {
             ImplementationOperand::Concrete {
                 implementation,
@@ -131,7 +131,7 @@ impl ReferenceState<'_> {
                 let selected = values
                     .get(parameter)
                     .ok_or_else(|| reference_type_error("unbound implementation witness"))?;
-                Self::witness_tree_step(depth.saturating_add(selected.depth), visits)?;
+                Self::witness_tree_step(visits)?;
                 Ok(selected.clone())
             }
         }
@@ -218,11 +218,7 @@ impl ReferenceState<'_> {
             .map(|child| child.depth.saturating_add(1))
             .max()
             .unwrap_or(0);
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(reference_type_error(
-                "implementation DAG exceeds canonical depth",
-            ));
-        }
+
         self.charge_allocation((children.len() * std::mem::size_of::<u64>()) as u64)?;
         let children_ids = children
             .iter()
@@ -276,8 +272,8 @@ impl ReferenceState<'_> {
         visits: &mut usize,
         active: &mut BTreeSet<AppliedReferenceImplementation>,
     ) -> Result<OwnedImplementation, ExecutionError> {
-        Self::witness_tree_step(depth, visits)?;
-        self.charge_witness(selected, depth, &mut 0)?;
+        Self::witness_tree_step(visits)?;
+        self.charge_witness(&mut 0)?;
         if selected.canonical.is_some() {
             return self.checked_canonical_implementation(selected);
         }
@@ -872,7 +868,7 @@ impl ReferenceState<'_> {
                     ));
                 }
             }
-            self.charge_witness(selected, depth, &mut 0)?;
+            self.charge_witness(&mut 0)?;
             if implementation.contract != parameter.contract
                 || types.get(&type_parameter) != Some(&implementation.self_type)
                 || parameter.type_arguments.len() != implementation.type_arguments.len()
@@ -1129,12 +1125,6 @@ impl ReferenceState<'_> {
         &mut self,
         target: AdmittedGraphCall,
     ) -> Result<CheckedValue, ExecutionError> {
-        if self.call_depth.saturating_add(self.ancestor_depth) >= self.policy.maximum_call_depth {
-            return Err(reference_resource(
-                "normalized_reference_call_depth",
-                "witness call exceeds call-depth budget",
-            ));
-        }
         self.call_depth += 1;
         self.observation.maximum_call_depth = self
             .observation
@@ -1170,13 +1160,11 @@ impl ReferenceState<'_> {
                 || self.schema.capture_safe_types.contains(&ty)))
     }
 
-    fn witness_tree_step(depth: usize, visits: &mut usize) -> Result<(), ExecutionError> {
+    fn witness_tree_step(visits: &mut usize) -> Result<(), ExecutionError> {
         *visits = visits
             .checked_add(1)
             .ok_or_else(|| reference_type_error("implementation tree size overflow"))?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-            || *visits > crate::platform::kernel::contract::MAXIMUM_CHILDREN
-        {
+        if *visits > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
             return Err(reference_type_error(
                 "implementation tree exceeds canonical bounds",
             ));
@@ -1184,14 +1172,9 @@ impl ReferenceState<'_> {
         Ok(())
     }
 
-    fn charge_witness(
-        &mut self,
-        selected: &AppliedReferenceImplementation,
-        depth: usize,
-        visits: &mut usize,
-    ) -> Result<(), ExecutionError> {
+    fn charge_witness(&mut self, visits: &mut usize) -> Result<(), ExecutionError> {
         self.witness_metadata_step()?;
-        Self::witness_tree_step(depth.saturating_add(selected.depth), visits)?;
+        Self::witness_tree_step(visits)?;
         self.charge_allocation(
             (std::mem::size_of::<AppliedReferenceImplementation>()
                 + 3 * std::mem::size_of::<usize>()) as u64,
@@ -1207,7 +1190,7 @@ impl ReferenceState<'_> {
         visits: &mut usize,
     ) -> Result<(), ExecutionError> {
         self.witness_metadata_step()?;
-        Self::witness_tree_step(depth, visits)?;
+        Self::witness_tree_step(visits)?;
         match operand {
             ImplementationOperand::Concrete {
                 type_arguments,
@@ -1258,11 +1241,7 @@ impl ReferenceState<'_> {
                     "owned method shape traversal exhausted proof admission",
                 )
             })?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(reference_type_error(
-                "owned method type exceeds structural depth",
-            ));
-        }
+
         if self.schema.is_owned_type(ty)
             && matches!(
                 self.schema.types.get(&ty).map(|object| &object.form),

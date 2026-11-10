@@ -2252,13 +2252,7 @@ impl<'v> AssociatedInterfaceAdmission<'v> {
         let mut deferred = false;
         while let Some((ty, depth)) = pending.pop() {
             self.step()?;
-            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-                return Err(interface_error(
-                    DiagnosticClass::Resource,
-                    "package_interface_associated_depth",
-                    "associated interface traversal exceeds its depth admission",
-                ));
-            }
+
             let object = types.get(&ty).ok_or_else(|| {
                 associated_interface_error("associated interface type closure is incomplete")
             })?;
@@ -2424,13 +2418,7 @@ fn validate_type_closure<S: ImmutableObjectStore + ?Sized>(
         }
         // Type traversal and associated proof share the caller's exact optional allowance.
         (associated_admission.visit)(1)?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(interface_error(
-                DiagnosticClass::Resource,
-                "package_interface_type_work",
-                "package-interface type closure exceeds its type-depth bound",
-            ));
-        }
+
         let key = ObjectKey::from_digest(ObjectDomain::Type, digest.bytes());
         let bytes = store
             .read(key, ObjectDomain::Type.maximum_bytes(), work)
@@ -3002,13 +2990,7 @@ fn representation_declarations_admitted(
                         .ok_or_else(|| interface_corrupt("owned layout child proof is absent"))?;
                     depth = depth.max(child_depth.saturating_add(1));
                 }
-                if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-                    return Err(interface_error(
-                        DiagnosticClass::Resource,
-                        "package_interface_type_work",
-                        "owned layout traversal exceeds its type-depth bound",
-                    ));
-                }
+
                 active.remove(&current);
                 budget.reserve::<(OwnerKey, usize)>(1)?;
                 completed.insert(current, depth);

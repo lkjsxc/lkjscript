@@ -1,7 +1,6 @@
 # Persistent immutable lists and graph-owned mapping
 
-Status: accepted; complete implementation acceptance is recorded in
-[`202609091322-persistent-lists.json`](../evidence/202609091322-persistent-lists.json).
+Status: accepted.
 
 Repeated immutable append previously allocated and copied every preceding value occurrence.
 A graph fold producing N outputs therefore copied N(N-1)/2 preceding occurrences. Existing bind,

@@ -4,7 +4,9 @@
 use super::*;
 use crate::platform::compiler::{OptimizationPolicy, build_clean, link_artifact, load_artifact};
 use crate::platform::execution::ExecutionControl;
-use crate::platform::execution::normalized::{NormalizedCommandPolicy, run_pure_command};
+use crate::platform::execution::normalized::{
+    NormalizedCommandPolicy, run_pure_command_differential as run_pure_command,
+};
 use crate::platform::kernel::{KernelSnapshot, Name, OwnerKey, OwnerRecord, PackageId};
 use crate::platform::publication::GraphRepository;
 use crate::platform::semantic_id::{CaseId, DeclarationId, FieldId};

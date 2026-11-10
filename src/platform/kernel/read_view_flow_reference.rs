@@ -141,7 +141,7 @@ impl State {
         Ok(self.clone())
     }
     fn acquire(&mut self, resolver: &mut Resolver<'_>, lease: Lease) -> Result<usize> {
-        resolver.step(0)?;
+        resolver.step()?;
         resolver.reserve_entries(1 + lease.guards.len() + lease.cells.len())?;
         for id in &lease.cells {
             let cell = self.cells.get_mut(id).ok_or(Failure::Authority)?;
@@ -157,7 +157,7 @@ impl State {
         value: &Value,
         extra_cell: Option<usize>,
     ) -> Result<Value> {
-        resolver.step(0)?;
+        resolver.step()?;
         let Some(old) = value.lease() else {
             return Err(Failure::Category);
         };
@@ -191,7 +191,7 @@ impl State {
         resolver.reserve_entries(self.leases.len().checked_add(1).ok_or(Failure::Capacity)?)?;
         let mut pending = vec![first];
         while let Some(id) = pending.pop() {
-            resolver.step(0)?;
+            resolver.step()?;
             let lease = self.leases.remove(&id).ok_or(Failure::Authority)?;
             for cell_id in lease.cells {
                 let cell = self.cells.get_mut(&cell_id).ok_or(Failure::Authority)?;
@@ -318,20 +318,14 @@ impl Engine<'_, '_> {
             consumer: (function.package, key),
         }
     }
-    fn check_depth(&mut self, depth: usize) -> Result<()> {
-        if depth > contract::MAXIMUM_EXPRESSION_DEPTH {
-            return Err(Failure::Capacity);
-        }
-        self.resolver.step(0)
-    }
     fn expression(
         &mut self,
         function: DeclarationReference,
         id: ExpressionId,
     ) -> Result<ExpressionOperation> {
-        self.resolver.step(0)?;
+        self.resolver.step()?;
         if function.package != self.resolver.source.root.package_id
-            || self.scopes.expression(self.resolver, id, 0)? != Some(function)
+            || self.scopes.expression(self.resolver, id)? != Some(function)
         {
             return Err(Failure::Authority);
         }
@@ -363,13 +357,13 @@ impl Engine<'_, '_> {
             } => {
                 for operand in implementations {
                     count = count
-                        .checked_add(self.resolver.operand_entries(operand, 0)?)
+                        .checked_add(self.resolver.operand_entries(operand)?)
                         .ok_or(Failure::Capacity)?;
                 }
             }
             ExpressionOperation::MethodCall { witness, .. } => {
                 count = count
-                    .checked_add(self.resolver.operand_entries(witness, 0)?)
+                    .checked_add(self.resolver.operand_entries(witness)?)
                     .ok_or(Failure::Capacity)?
             }
             _ => {}
@@ -395,8 +389,8 @@ impl Engine<'_, '_> {
         kind: BindingKind,
         initialized: bool,
     ) -> Result<BindingRecord> {
-        self.resolver.step(0)?;
-        if self.scopes.binding(self.resolver, id, 0)? != Some(function) {
+        self.resolver.step()?;
+        if self.scopes.binding(self.resolver, id)? != Some(function) {
             return Err(Failure::Authority);
         }
         let b = match self.resolver.source.owners.get(&OwnerKey::Binding(id)) {
@@ -437,7 +431,7 @@ impl Engine<'_, '_> {
         function: DeclarationReference,
         declaration: DeclarationReference,
     ) -> Result<()> {
-        self.resolver.step(0)?;
+        self.resolver.step()?;
         if function.package != declaration.package
             || declaration.package != self.resolver.source.root.package_id
         {
@@ -458,7 +452,7 @@ impl Engine<'_, '_> {
         Ok(())
     }
     fn function(&mut self, function: DeclarationReference) -> Result<Vec<Summary>> {
-        self.resolver.step(0)?;
+        self.resolver.step()?;
         if let Some(saved) = self.summaries.get(&function) {
             let mut count = saved.len();
             for summary in saved {
@@ -615,7 +609,7 @@ impl Engine<'_, '_> {
         state: &State,
         value: &Value,
     ) -> Result<()> {
-        self.resolver.step(0)?;
+        self.resolver.step()?;
         if value.ty != signature.result.ty {
             return Err(Failure::Category);
         }
@@ -683,7 +677,7 @@ impl Engine<'_, '_> {
         selected: &ReadProvenance,
         depth: usize,
     ) -> Result<()> {
-        self.resolver.step(depth)?;
+        self.resolver.step()?;
         let cell = state.cells.get(&id).ok_or(Failure::Authority)?;
         if !cell.origin.derives_from(selected) {
             return Err(Failure::Authority);
@@ -701,7 +695,7 @@ impl Engine<'_, '_> {
         Ok(())
     }
     fn freeze(&mut self, state: &State, value: &Value, depth: usize) -> Result<Summary> {
-        self.resolver.step(depth)?;
+        self.resolver.step()?;
         self.resolver
             .reserve_entries(1 + value.origin().map_or(0, |p| p.path.len()))?;
         let kind = match &value.kind {
@@ -743,7 +737,7 @@ impl Engine<'_, '_> {
         function: DeclarationReference,
         ty: TypeObjectDigest,
     ) -> Result<(DeclarationReference, Vec<(ReadViewField, TypeObjectDigest)>)> {
-        self.resolver.step(0)?;
+        self.resolver.step()?;
         let TypeForm::ReadViewApplied {
             declaration,
             arguments,
@@ -825,7 +819,7 @@ impl Engine<'_, '_> {
         function: DeclarationReference,
         depth: usize,
     ) -> Result<Value> {
-        self.resolver.step(depth)?;
+        self.resolver.step()?;
         let mut fields = BTreeMap::new();
         if matches!(
             self.resolver.object(ty)?.form,
@@ -889,7 +883,7 @@ impl Engine<'_, '_> {
         local: LocalValueReference,
         demand: Demand,
     ) -> Result<Value> {
-        self.resolver.step(0)?;
+        self.resolver.step()?;
         let slot = state.locals.get(&local).ok_or(Failure::Authority)?;
         if !slot.available {
             return Err(Failure::Authority);
@@ -1059,7 +1053,7 @@ impl Engine<'_, '_> {
         Ok(vec![Outcome { state, value }])
     }
     fn require(&mut self, value: &Value, demand: Demand) -> Result<()> {
-        self.resolver.step(0)?;
+        self.resolver.step()?;
         let admitted = match demand {
             Demand::Any => matches!(
                 value.kind,
@@ -1092,7 +1086,7 @@ impl Engine<'_, '_> {
         demand: Demand,
         depth: usize,
     ) -> Result<Vec<Outcome>> {
-        self.check_depth(depth)?;
+        self.resolver.step()?;
         let operation = self.expression(function, id)?;
         use ExpressionOperation as E;
         match operation {
@@ -1745,7 +1739,7 @@ impl Engine<'_, '_> {
         scope: ReadScopeArgument,
         depth: usize,
     ) -> Result<Value> {
-        self.resolver.step(depth)?;
+        self.resolver.step()?;
         let ValueKind::View { cell, .. } = source.kind else {
             return Err(Failure::Category);
         };
@@ -1824,7 +1818,7 @@ impl Engine<'_, '_> {
         step: &ReadPathStep,
         check_access: bool,
     ) -> Result<Value> {
-        self.resolver.step(0)?;
+        self.resolver.step()?;
         if let ReadPathStep::ViewReference { declaration, field } = step {
             return self
                 .view_field_inner(
@@ -2046,7 +2040,7 @@ impl Engine<'_, '_> {
         requirement_arguments: Vec<RequirementOperand>,
         effect_arguments: Vec<EffectRow>,
     ) -> Result<CallPlan> {
-        self.resolver.step(0)?;
+        self.resolver.step()?;
         let oracle = Oracle(self.resolver.source, Some(caller));
         let Some(f) = oracle.function(function) else {
             if !read_scope_arguments.is_empty()
@@ -2185,7 +2179,7 @@ impl Engine<'_, '_> {
         environment: &Environment,
         depth: usize,
     ) -> Result<ImplementationOperand> {
-        self.resolver.step(depth)?;
+        self.resolver.step()?;
         match operand {
             ImplementationOperand::Parameter { scope, parameter }
                 if environment.source == Context::Lexical(*scope) =>
@@ -2207,7 +2201,7 @@ impl Engine<'_, '_> {
                 let mut types = Vec::new();
                 let mut witnesses = Vec::new();
                 for ty in type_arguments {
-                    types.push(self.resolver.substitute(*ty, environment, depth + 1)?);
+                    types.push(self.resolver.substitute(*ty, environment)?);
                 }
                 for operand in implementations {
                     witnesses.push(self.apply_operand(operand, environment, depth + 1)?);
@@ -2232,7 +2226,7 @@ impl Engine<'_, '_> {
         arguments: Vec<ExpressionId>,
     ) -> Result<CallPlan> {
         let occurrence = self.occurrence(caller, OwnerKey::Expression(id));
-        let (actual, self_type, actuals) = self.resolver.admit_operand(&witness, occurrence, 0)?;
+        let (actual, self_type, actuals) = self.resolver.admit_operand(&witness, occurrence)?;
         if actual != contract {
             return Err(Failure::Authority);
         }
@@ -2329,10 +2323,7 @@ impl Engine<'_, '_> {
                     + mapping.read_scope_arguments.len(),
             )?;
             for ty in &mapping.type_arguments {
-                types.push(
-                    self.resolver
-                        .substitute(*ty, &implementation_environment, 0)?,
-                );
+                types.push(self.resolver.substitute(*ty, &implementation_environment)?);
             }
             for witness in &mapping.implementations {
                 witnesses.push(self.apply_operand(witness, &implementation_environment, 0)?);
@@ -2556,7 +2547,7 @@ impl Engine<'_, '_> {
         environment: &ReadViewEnvironment,
         depth: usize,
     ) -> Result<Value> {
-        self.resolver.step(depth)?;
+        self.resolver.step()?;
         let ty = self.resolver.substitute_view(summary.ty, environment, 0)?;
         match &summary.kind {
             SummaryKind::Data => Ok(Value {
@@ -2998,7 +2989,7 @@ impl Engine<'_, '_> {
         state: &State,
         depth: usize,
     ) -> Result<()> {
-        self.check_depth(depth)?;
+        self.resolver.step()?;
         let operation = self.expression(function, id)?;
         if operation.is_read_view_operation() {
             return Err(Failure::Unproved);
@@ -3076,7 +3067,7 @@ impl Engine<'_, '_> {
         state: &State,
         depth: usize,
     ) -> Result<TypeObjectDigest> {
-        self.check_depth(depth)?;
+        self.resolver.step()?;
         use ExpressionOperation as E;
         let operation = self.expression(function, id)?;
         match operation {

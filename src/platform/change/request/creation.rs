@@ -912,13 +912,7 @@ pub(super) fn collect_expression_symbols(
             }
             Visit::Expression(expression, depth) => (expression, depth),
         };
-        if depth > crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
-            return Err(request_error(
-                DiagnosticClass::Resource,
-                "change_authored_expression_depth",
-                "authored expression exceeds the maximum structural depth",
-            ));
-        }
+
         if let Some(symbol) = &expression.symbol {
             define_symbol(definitions, symbol, SymbolKind::Expression)?;
         } else {

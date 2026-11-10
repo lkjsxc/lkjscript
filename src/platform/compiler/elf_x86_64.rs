@@ -29,6 +29,7 @@ mod scalar_flow;
 mod scalar_lower;
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod scalar_pool_tests;
+mod stack;
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
 mod stack_tests;
 #[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
@@ -534,6 +535,7 @@ impl Emitter<'_> {
         self.a.load(Ax, R12, 0);
         self.a.group_wide(7, Ax, layout_extent(parameters, 1, 1)?);
         self.a.when(NE, self.runtime.argument);
+        stack::initialize(&mut self.a);
         phase::process_context(&mut self.a);
         for parameter in 0..parameters {
             self.a

@@ -134,8 +134,8 @@ fn native_forms_selection_preserves_exact_names_and_rejects_decoded_aliases_with
         let execution = consumer.cli(&command, true);
         if !detached {
             assert_eq!(
-                compact_field(compact_record(&execution, "execution"), "differential"),
-                "equal"
+                compact_field(compact_record(&execution, "execution"), "engine"),
+                "vm"
             );
         }
         let actual: Value = serde_json::from_slice(&std::fs::read(&result).unwrap()).unwrap();

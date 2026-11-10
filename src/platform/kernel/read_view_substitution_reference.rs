@@ -39,18 +39,17 @@ impl Resolver<'_> {
                     environment.types.ordinary[parameter],
                     constraints,
                     environment.types.caller,
-                    depth + 1,
                 )?;
             }
         } else {
-            self.admit_environment(&environment.types, depth, true)?;
+            self.admit_environment(&environment.types, true)?;
         }
         let parameters = self.scope_parameters(&environment.source_binder)?;
         if parameters.len() != environment.scopes.len() {
             return Err(Failure::Arity);
         }
         for parameter in &parameters {
-            self.step(depth)?;
+            self.step()?;
             let formal = ReadScopeReference {
                 binder: environment.source_binder,
                 parameter: parameter.id,
@@ -71,7 +70,7 @@ impl Resolver<'_> {
         environment: &ReadViewEnvironment,
         depth: usize,
     ) -> Result<TypeObjectDigest> {
-        self.step(depth)?;
+        self.step()?;
         let source_occurrence = self.declaration_occurrence(
             environment.source_binder.declaration(),
             environment.types.source,
@@ -196,7 +195,6 @@ impl Resolver<'_> {
                     .as_ref()
                     .ok_or(Failure::Authority)?,
                 environment.types.caller,
-                depth + 1,
             )?,
             TypeForm::AssociatedWitnessProjection {
                 contract,
@@ -212,7 +210,6 @@ impl Resolver<'_> {
                     .get(&parameter)
                     .ok_or(Failure::Authority)?,
                 environment.types.caller,
-                depth + 1,
             )?,
             TypeForm::RegionCap {
                 region,
@@ -250,7 +247,7 @@ impl Resolver<'_> {
             .chain(environment.types.contract_operand.iter())
         {
             count = count
-                .checked_add(self.operand_entries(operand, 0)?)
+                .checked_add(self.operand_entries(operand)?)
                 .ok_or(Failure::Capacity)?;
         }
         self.reserve_entries(count)?;
@@ -270,13 +267,9 @@ impl Resolver<'_> {
         environment: &ReadViewEnvironment,
         depth: usize,
     ) -> Result<TypeObjectDigest> {
-        self.step(depth)?;
+        self.step()?;
         self.read_view_member(contract, member)?;
-        if self
-            .admit_operand(operand, environment.types.caller, depth + 1)?
-            .0
-            != contract
-        {
+        if self.admit_operand(operand, environment.types.caller)?.0 != contract {
             return Err(Failure::Authority);
         }
         match operand {

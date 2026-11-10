@@ -218,7 +218,7 @@ impl DataSequences {
             if detached {
                 joined(execution);
             } else {
-                assert_eq!(compact_field(execution, "differential"), "equal");
+                assert_eq!(compact_field(execution, "engine"), "vm");
             }
             Some(serde_json::from_slice(&std::fs::read(result).unwrap()).unwrap())
         } else {
@@ -260,7 +260,7 @@ impl DataSequences {
         self.verify_identity();
         for row in self.consumer.source_batch(label, "data-trace", cases) {
             if let Some(execution) = row.iter().find(|record| record.operation == "execution") {
-                assert_eq!(compact_field(execution, "differential"), "equal");
+                assert_eq!(compact_field(execution, "engine"), "vm");
             }
         }
         self.verify_identity();

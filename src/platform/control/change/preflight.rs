@@ -2,7 +2,6 @@
 //! This runs before recursive authored collection, encoding, type cloning or semantic lowering.
 
 use super::*;
-use crate::platform::kernel::contract::{MAXIMUM_EXPRESSION_DEPTH, MAXIMUM_TYPE_DEPTH};
 
 impl Decoder {
     pub(super) fn preflight(&mut self) -> Result<Vec<String>, Diagnostic> {
@@ -111,14 +110,7 @@ impl Decoder {
             }
             expression_children.insert(symbol.clone(), children);
         }
-        let (order, _) = admit(
-            &self.expressions,
-            &expression_children,
-            MAXIMUM_EXPRESSION_DEPTH,
-            false,
-            |name| self.blocks.get(name).map_or(1, |body| body.depth),
-            |_| 1,
-        )?;
+        let (order, _) = admit(&self.expressions, &expression_children, false, |_| 1)?;
 
         let mut type_children = BTreeMap::new();
         for (symbol, record) in &self.types {
@@ -170,21 +162,14 @@ impl Decoder {
             }
             type_children.insert(symbol.clone(), children);
         }
-        let (_, sizes) = admit(
-            &self.types,
-            &type_children,
-            MAXIMUM_TYPE_DEPTH,
-            true,
-            |_| 1,
-            |name| {
-                let record = &self.types[name];
-                1 + if record.operation == "type.task-function" {
-                    optional(record, "effect").map_or(0, |row| self.effect_row_size(row))
-                } else {
-                    0
-                }
-            },
-        )?;
+        let (_, sizes) = admit(&self.types, &type_children, true, |name| {
+            let record = &self.types[name];
+            1 + if record.operation == "type.task-function" {
+                optional(record, "effect").map_or(0, |row| self.effect_row_size(row))
+            } else {
+                0
+            }
+        })?;
         self.type_sizes = sizes;
         Ok(order)
     }
@@ -195,13 +180,10 @@ type Children = BTreeMap<String, Vec<(String, SourceLocation)>>;
 fn admit(
     records: &BTreeMap<String, CompactRecord>,
     children: &Children,
-    maximum_depth: usize,
     types: bool,
-    own_depth: impl Fn(&str) -> usize,
     own_size: impl Fn(&str) -> usize,
 ) -> Result<(Vec<String>, BTreeMap<String, usize>), Diagnostic> {
     let mut states = BTreeMap::new();
-    let mut depths: BTreeMap<String, usize> = BTreeMap::new();
     let mut sizes: BTreeMap<String, usize> = BTreeMap::new();
     let mut order = Vec::new();
     let mut total_size = 0_usize;
@@ -210,11 +192,8 @@ fn admit(
         while let Some((name, exiting)) = stack.pop() {
             let record = &records[name];
             if exiting {
-                let mut depth = own_depth(name);
                 let mut size = own_size(name);
                 for (child, location) in &children[name] {
-                    let child_depth = depths.get(child).copied().unwrap_or(1);
-                    depth = depth.max(child_depth + 1);
                     size = size
                         .checked_add(sizes.get(child).copied().unwrap_or(1))
                         .ok_or_else(|| {
@@ -224,20 +203,6 @@ fn admit(
                                 "expanded input accounting overflowed",
                             )
                         })?;
-                    if depth > maximum_depth {
-                        return Err(structural::capacity(
-                            location,
-                            if types {
-                                "change_authored_type_depth"
-                            } else {
-                                "change_authored_expression_depth"
-                            },
-                            format!(
-                                "complete normalized {} exceeds maximum depth {maximum_depth}",
-                                if types { "type" } else { "expression" }
-                            ),
-                        ));
-                    }
                 }
                 total_size = total_size.checked_add(size).ok_or_else(|| {
                     structural::capacity(
@@ -246,7 +211,6 @@ fn admit(
                         "expanded input accounting overflowed",
                     )
                 })?;
-                depths.insert(name.to_owned(), depth);
                 sizes.insert(name.to_owned(), size);
                 states.insert(name, 2);
                 order.push(name.to_owned());

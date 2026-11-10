@@ -36,7 +36,7 @@ pub fn parse_run_batch(arguments: &[String]) -> Result<RunBatchOptions, Diagnost
 }
 
 /// Select memory authority explicitly before the source preparation worker starts.
-/// The ordinary framing, output, differential execution and cleanup checks still apply.
+/// The ordinary framing, output, production execution and cleanup checks still apply.
 pub fn parse_run_batch_in_memory(
     project: &crate::platform::MemProjectStore,
     arguments: &[String],
@@ -299,7 +299,7 @@ async fn finish_source_batch(
         &mut output,
         "batch",
         &[
-            ("mode", "source-differential".to_owned()),
+            ("mode", "source-vm".to_owned()),
             ("package-revision", root.package_revision.to_string()),
             (
                 "schema",
@@ -367,10 +367,6 @@ fn retain_joined_observations(error: &mut Diagnostic, receipt: &NormalizedObserv
         (
             "production-observation",
             observation_json(&receipt.command.production),
-        ),
-        (
-            "reference-observation",
-            observation_json(&receipt.command.reference),
         ),
         ("executor-observation", observation_json(&receipt.executor)),
     ] {
@@ -517,7 +513,7 @@ declarations.end
             );
             let records = parse_records("large source batch row", stdout.as_bytes()).unwrap();
             assert_eq!(field(&records, "execution", "value-location"), "batch-row");
-            assert_eq!(field(&records, "execution", "differential"), "equal");
+            assert_eq!(field(&records, "execution", "engine"), "vm");
             let execution = records
                 .iter()
                 .find(|record| record.operation == "execution")
@@ -528,32 +524,17 @@ declarations.end
                     .iter()
                     .any(|field| matches!(field.name.as_str(), "value" | "result-file"))
             );
-            for (name, live) in [
-                (
-                    "production-observation",
-                    &[
-                        "live_call_frames_after",
-                        "live_locals_after",
-                        "live_type_bindings_after",
-                        "live_operands_after",
-                        "live_transactions_after",
-                        "live_handles_after",
-                    ][..],
-                ),
-                (
-                    "reference-observation",
-                    &[
-                        "live_call_frames_after",
-                        "live_control_frames_after",
-                        "live_local_scopes_after",
-                        "live_type_scopes_after",
-                        "live_effect_scopes_after",
-                        "live_allowances_after",
-                        "live_transactions_after",
-                        "live_handles_after",
-                    ][..],
-                ),
-            ] {
+            for (name, live) in [(
+                "production-observation",
+                &[
+                    "live_call_frames_after",
+                    "live_locals_after",
+                    "live_type_bindings_after",
+                    "live_operands_after",
+                    "live_transactions_after",
+                    "live_handles_after",
+                ][..],
+            )] {
                 let observation: Value =
                     serde_json::from_str(field(&records, "execution", name)).unwrap();
                 assert_eq!(observation["capability_calls"], 0);
@@ -563,12 +544,6 @@ declarations.end
             }
             assert!(
                 field(&records, "execution", "production-instructions")
-                    .parse::<u64>()
-                    .unwrap()
-                    > 0
-            );
-            assert!(
-                field(&records, "execution", "reference-expressions")
                     .parse::<u64>()
                     .unwrap()
                     > 0

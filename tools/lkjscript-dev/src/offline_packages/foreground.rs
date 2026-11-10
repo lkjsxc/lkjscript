@@ -314,8 +314,8 @@ fn loops(context: &mut Context, consumer: &Consumer) -> Result<(), DevError> {
             // This control selects its quotas independently of ordinary unmetered defaults.
             descriptor["execution"] = json!({
                 "instruction_fuel": 10_000_000,
-                "maximum_call_depth": 4_096,
-                "maximum_value_stack": 1_000_000,
+
+
                 "maximum_allocated_bytes": 268_435_456,
                 "maximum_collection_items": 1_000_000,
                 "maximum_capability_calls": 100_000

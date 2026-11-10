@@ -1918,3 +1918,54 @@ fn preparation_policy_includes_unused_types_and_associated_declarations() {
     );
     assert!(requires_associated_preparation(&[&declared]));
 }
+
+#[test]
+fn canonical_raw_entries_reject_growing_nominals_before_instantiation() {
+    let mut source = crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+        r#"declarations.begin
+(units (module create nominal-growth
+  (record create Chain (visibility private)
+    (type-parameter create T) (field create value (type T)))
+  (function create inspect (visibility public) (effect pure)
+    (parameter create value (type (Chain I64))) (returns I64) (body (i64 0)))))
+declarations.end
+"#,
+    )
+    .unwrap();
+    let control = ExecutionControl::uncancelled();
+    check_inventory(&[&source], Limits::default(), &control).unwrap();
+    let declaration = named(&source, "Chain");
+    let DeclarationPayload::Record {
+        type_parameters,
+        fields,
+    } = payload(&mut source, declaration)
+    else {
+        unreachable!()
+    };
+    let parameter = type_parameters[0];
+    let field = fields[0];
+    let formal = add(&mut source, TypeForm::TypeParameter { parameter });
+    let nested = add(&mut source, TypeForm::List { item: formal });
+    let recursive = add(
+        &mut source,
+        TypeForm::Applied {
+            declaration,
+            arguments: vec![nested],
+        },
+    );
+    let OwnerRecord::Field(record) = source.owners.get_mut(&OwnerKey::Field(field)).unwrap() else {
+        unreachable!()
+    };
+    record.ty = recursive;
+    let preparation = check_inventory(&[&source], Limits::default(), &control).unwrap_err();
+    let closure = crate::platform::execution::normalized::NormalizedReferenceSchema::independently_admit_witness_source(&source).unwrap_err();
+    for error in [preparation, closure] {
+        assert_eq!(error.class, ExecutionFailureClass::Infrastructure);
+        assert_eq!(error.code, "reference_nominal_flow");
+        assert!(
+            error
+                .message
+                .contains("expanding raw nominal parameter cycle")
+        );
+    }
+}

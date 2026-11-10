@@ -795,9 +795,6 @@ impl Lowering<'_> {
     }
 
     fn ty(&mut self, id: usize, scope: &str, depth: usize) -> Result<String, Diagnostic> {
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(self.error(id, "inline type exceeds the supported type depth"));
-        }
         if let Ok(value) = self.block.atom(id) {
             let value = value.to_owned();
             let primitive = match value.as_str() {
@@ -1382,15 +1379,6 @@ impl Lowering<'_> {
         scope: &str,
         depth: usize,
     ) -> Result<String, Diagnostic> {
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            let mut diagnostic = Diagnostic::new(
-                DiagnosticClass::Resource,
-                "change_owned_operand_depth",
-                "implementation application exceeds witness-depth admission",
-            );
-            diagnostic.location = Some(self.block.syntax[id].location.clone());
-            return Err(diagnostic);
-        }
         if let SyntaxKind::Atom { value, .. } = &self.block.syntax[id].kind {
             let value = value.clone();
             return self.implementation_atom(&value, scope, id);

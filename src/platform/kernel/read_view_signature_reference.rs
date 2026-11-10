@@ -18,7 +18,7 @@ impl Resolver<'_> {
         &mut self,
         declaration: DeclarationReference,
     ) -> Result<Signature> {
-        self.step(0)?;
+        self.step()?;
         let function = Oracle(self.source, Some(declaration))
             .function(declaration)
             .ok_or(Failure::Authority)?;
@@ -48,7 +48,7 @@ impl Resolver<'_> {
         let mut parameters = Vec::with_capacity(function.parameters.len());
         let mut ids = BTreeSet::new();
         for id in &function.parameters {
-            self.step(0)?;
+            self.step()?;
             if !ids.insert(*id) {
                 return Err(Failure::Inventory);
             }
@@ -116,7 +116,7 @@ impl Resolver<'_> {
         contract: DeclarationReference,
         method: &OwnedMethod,
     ) -> Result<Signature> {
-        self.step(0)?;
+        self.step()?;
         let inventory = self.contract(contract)?;
         if inventory
             .methods
@@ -170,7 +170,7 @@ impl Resolver<'_> {
         result: CallableResult<usize>,
         effect: &FunctionEffect,
     ) -> Result<Signature> {
-        self.step(0)?;
+        self.step()?;
         let declaration = match binder {
             ReadScopeBinder::Declaration(d)
             | ReadScopeBinder::ContractMethod { contract: d, .. } => d,
@@ -196,7 +196,7 @@ impl Resolver<'_> {
         let mut categories = Vec::with_capacity(parameters.len());
         let mut prior_class = 0;
         for (ty, mode) in &parameters {
-            self.step(0)?;
+            self.step()?;
             self.admit_roots(&[*ty], occurrence, false)?;
             let category = self.read_view_category(*ty, occurrence)?;
             let class = match category {
@@ -229,7 +229,7 @@ impl Resolver<'_> {
         }
         let mut seen = BTreeSet::new();
         for (source, scope) in &source_scopes {
-            self.step(0)?;
+            self.step()?;
             if !seen.insert((*source, *scope))
                 || *source >= parameters.len()
                 || parameters[*source].1 != ParameterUse::Borrow
@@ -329,7 +329,7 @@ impl Resolver<'_> {
         &mut self,
         ty: TypeObjectDigest,
     ) -> Result<Option<ReadScopeArgument>> {
-        self.step(0)?;
+        self.step()?;
         Ok(match self.object(ty)?.form {
             TypeForm::ReadViewApplied { read_scope, .. }
             | TypeForm::AssociatedReadViewMember { read_scope, .. }

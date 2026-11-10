@@ -26,6 +26,17 @@ use std::process::ExitCode;
 use tokio::net::TcpListener;
 
 fn main() -> ExitCode {
+    match lkjscript::platform::stack::run("lkjscript", main_on_stack) {
+        Ok(result) => result,
+        Err(error) => write_failure(&Diagnostic::new(
+            lkjscript::platform::DiagnosticClass::Infrastructure,
+            "semantic_stack",
+            format!("cannot execute on semantic stack: {error}"),
+        )),
+    }
+}
+
+fn main_on_stack() -> ExitCode {
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
     if arguments.as_slice() == ["--version"] {
         return product_version();
@@ -112,10 +123,7 @@ fn main() -> ExitCode {
     ) {
         return unknown_operation(&arguments);
     }
-    let runtime = match tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-    {
+    let runtime = match semantic_runtime() {
         Ok(runtime) => runtime,
         Err(error) => {
             return write_failure(&Diagnostic::new(
@@ -134,6 +142,13 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => write_failure(&error),
     }
+}
+
+fn semantic_runtime() -> std::io::Result<tokio::runtime::Runtime> {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(lkjscript::platform::stack::reservation_bytes()?)
+        .build()
 }
 
 fn compact_data(arguments: &[String]) -> ExitCode {
@@ -362,10 +377,7 @@ fn finite_run_batch(arguments: &[String]) -> ExitCode {
         Ok(options) => options,
         Err(error) => return write_compact_failure("run", &error),
     };
-    let runtime = match tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-    {
+    let runtime = match semantic_runtime() {
         Ok(runtime) => runtime,
         Err(error) => {
             return write_compact_failure(
@@ -400,10 +412,7 @@ fn foreground_run(arguments: &[String]) -> ExitCode {
         Ok(options) => options,
         Err(error) => return write_compact_failure("run", &error),
     };
-    let runtime = match tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-    {
+    let runtime = match semantic_runtime() {
         Ok(runtime) => runtime,
         Err(error) => {
             return write_compact_failure(

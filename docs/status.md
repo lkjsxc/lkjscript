@@ -1,133 +1,62 @@
-# Current status
+# Status
 
-Updated 2026-11-09. Native raw-I64 graph slots: accepted and integrated into main.
-Accepted typed meaning is the sole editable program authority; maintained source
-proposals are adopted through public transactions.
+Updated 2026-11-10. Compiler graph:
+`rev_7eca6279f28d37e95c986dae91dbe58139a1e4e25948c6cb8a76c201effc4edc`.
 
-## Current capability and delivery
+## Works
 
-The [native raw-I64 implementation](decisions/20261109-native-i64-slots.md#acceptance-evidence-and-delivery)
-derives scalar local/operand representations after optimizer expansion. Exact I64
-Code parameters and results use a raw direct ABI, including direct tail calls.
-External, callable and compound boundaries retain their checked boxed adapters.
-A declined representation plan keeps boxed internal slots with the same direct
-ABI. Raw and empty locals are excluded from owner scans; uncertain boxed slots
-remain checked. Entry adaptation occurs once per activation and is bypassed by
-bytecode Jump(0).
+Ordinary commands execute once on the VM. Explicit graph tests retain reference
+comparison. `bash tools/check.sh` builds and runs the routine suite once; focused
+and slow selections require test-name filters. Historical gates, seals, receipts
+and release-publication machinery are retired. Twelve compiler probe modules
+share one public transaction and one immutable graph/program.
 
-Tested implementation tree: `9d71c3e6`, based on `7f7cdc77`.
-Implementation commit: `acf74027`.
-Delivery: Pushed to main; advertised and fetched `origin/main` independently matched `acf74027` at 2026-11-09T11:07:09.686Z.
-The canonical decision binds the complete frozen source, actual executable
-images, completed controls and allocation comparisons. Later documentation
-verification remains separate from implementation acceptance.
+Host semantic work uses stacks sized from physical memory; native executables
+raise their soft stack allowance within the inherited hard limit. Structural,
+expression, JSON/value, VM call/operand and parallel nesting guards are removed.
+Finite semantic checks reject growing instantiations and cyclic lexical authority.
 
-## Completed verification
+The compiler's dependency-count queue reduced digest-ordered task-type admission
+at depth 1024 from 335.3 s to 4.34 s in Rust-native execution; self-produced native
+took 3.32 s. The scale batch's sampled peak process RSS was 1.28 GiB.
 
-| Validation | Recorded outcome |
-| --- | --- |
-| Focused native representation, boundary, cleanup and cancellation controls | 23 passed; separate ignored allocation probe passed |
-| Combined maintained raw-source compiler control and independent audit | Passed; genuine generations, C2=C3, strict Ahost=A1=A2=A3 and independent behavior/mutation/negative controls |
-| Same-process C1/C2 raw controls | Passed; 17 frames per process, output survival and final owned mappings zero |
-| Staged bootstrap and typed verifier bridge | Passed on the frozen implementation tree |
-| Changed check | 29 passed fresh; 0 reused/unrun; root 3,093 passed, 0 failed, 22 ignored |
-| Fresh full check | 29 passed fresh; 0 reused/unrun; root 3,093 passed, 0 failed, 22 ignored |
-| Release target and aggregate acceptance | Passed; complete source/index seal, bound execution images and actual joined terminals accepted |
+`tools/selfhost/typed-input.lkjc` builds a catalogue with records, variants,
+matching, generic lists and structured errors on the evaluator. All 98 types match
+the maintained 26,868,750-byte carrier, Rust objects and cursor reader. Type bodies
+remain opaque; lookup scans the list. The selfhost README records size/token costs.
 
-## Allocation observations
+## Bootstrap
 
-At 4,096 and 8,192 iterations, the unchanged normalized-input scalar probe records
-6 Rust allocation requests per invocation for both the scalar and ordinary
-identity-call paths, down from 12,297 and 24,585. Bytes slicing records 4,102 and
-8,198, down from 16,393 and 32,777. The maintained backend is unchanged and matches
-these counts. Each measured run covers 12 processes, 36 invocations and 132
-observed frames, with independent VM/reference outputs, zero saturation flags
-and final owned mappings zero.
+Clean checkouts build the Rust seed from source and locked dependencies:
 
-The complete maintained raw-source compiler comparison records C1-Rust artifact
-requests decreasing from 872,780,680 to 97,298,484 and ELF requests from
-1,123,766,130 to 66,443,017. The artifact retry matches the first artifact
-invocation. C2-source requests remain 63,427,596 for artifact and 47,655,928 for
-ELF. These are passive per-invocation request counts including scratch and output
-promotion; they do not establish allocated bytes, RSS, peak memory, allocation
-category shares or wall-clock speedup.
+```sh
+cargo build --release --locked --bin lkjscript
+bash tools/selfhost/verify.sh
+```
 
-The maintained graph is unchanged: 81,458 live owners, 97 supplied types and
-61,470 retirements; the complete carrier is 26,640,313 bytes. LKJSG002 profile 3,
-LKJSRQ01 profile 2, Mode-0 profile 9, Mode-1 profile 8 and canonical schema epoch 1
-remain unchanged. This is a native representation improvement. Full Tier 2
-Milestone B remains open. Publication state: no release archive or production deployment published.
+`tools/selfhost/project` is the source seed. The Rust native emitter produces Linux
+x86-64 C1; C1 builds C2 and C2 builds C3 from the same raw source. The control checks
+C2 = C3, Ahost = A1 = A2 = A3, source mutations and independent behavior. Native
+support covers the maintained closure; new idiomatic components use the evaluator.
 
-## Language and capacity scope
+## Verification and remaining work
 
-The source compiler covers the maintained scalar/compound closure, structural
-records/fields, `List<I64>`, lexical control flow, direct monomorphic recursion,
-closed I64 list substitutions, exact intrinsic signatures and binary filters.
-FunctionValue, prefix Bind and Invoke support exact copyable captures, callable
-fields/results, ordinary indirect calls and custody-aware graph-tail frame reuse.
-Empty Bind preserves identity. Text and StaticText remain semantically distinct.
+The routine passed 3,571 tests in 1,053.43 s; 60 slow tests were ignored. Sampled
+peak process RSS was 7.06 GiB. A production-change test rebuild took 195 s, the
+later test-only rebuild 127 s, and the release product build 91 s. Focused lifecycle,
+reader/cache/mutation, public CLI and geometric depth/stack probes pass.
+All three maintained native controls passed in 2,159.24 s: C2 = C3 and
+Ahost = A1 = A2 = A3, independent behavior and source mutations, C1/C2 same-process
+cleanup, and the full semantic corpus including 100,001-expression sequences.
 
-Closed, nongeneric, acyclic, copyable Record/Variant values and exhaustive Match
-retain exact nominal identity, absence versus Unit and authored initializer order.
-ByteBuffer results, nested Match, branch-balanced disposal, reverse lexical
-cleanup and synchronous reads before/inside/after Match remain checked. General
-borrowed helpers and a loan spanning Match remain outside this profile.
+The ten-minute routine target remains open. Its largest case takes about 519 s
+checking sixteen complete custody fixtures across engines; a stage-preserving
+reducer is the next test improvement. Byte/item/work quotas, modeled allocation
+charges and format-width limits remain.
 
-Wide Sequence removes the selected child/owner/unit/instruction/reference limits
-and four repeated parent-copy paths. Its canonical record retains the complete
-million-child disk witness and independent execution/recovery results. That
-witness does not independently prove the removed 1M-runtime-owner threshold,
-individual 4 MiB ArtifactManifest, 10K artifact packages, 1M artifact segments or
-16 GiB bundle threshold. The >256 MiB codec/collector witness has separate scope.
-Public disk GraphRepository authoring is exercised; an executed CLI file-input
-crossing is not claimed.
+## Next action
 
-Package-source collection/publication and normalized preparation use reviewed
-optional policies. Exact finite allowances, complete semantic/custody proof,
-checked representations, physical allocation and atomic VM/shared attachment
-remain independent obligations.
-
-## Remaining work
-
-Next, measure immutable probe preparation in the canonical-unit control and
-align focused builds with the required workspace Cargo producer. The next
-semantic slice is closed, copyable `List<T>` admission and lowering across
-raw source, ELF and canonical artifacts.
-
-Tier 2 Milestone B remains open for OwnedRecord/OwnedChoice and affine
-deconstruction, general `List<T>`, owned witnesses and source-tied read views,
-lexical Regions, generic/recursive nominal values, general generic specialization,
-task/effectful callables and resource/owned captures.
-
-Opaque-child cleanup and selected semantic comparison/reference continuation
-routes are iterative. General structural/boxed-value construction, copying,
-comparison, serialization, destruction and failure cleanup remain open.
-Boxed-spine Clone admission is depth 256; type/AST/identity, owned-storage escape
-and codec paths keep separate bounds. Owned-record layout preparation retains
-its 64 MiB metadata default and depth-256 guard. Default call/value-stack policies,
-broader reference routes and generated non-tail native CALL growth are unchanged.
-
-Separate package/readiness/edge limits, the CompilationManifest aggregate,
-bounded exact builtin retention, untouched object domains, source/IR coordinates
-and storage/data/queue/HTTP/dev-tool families remain open. The accepted
-[native phase ABI](spec/native-phases.md) promotes the complete Bytes result before
-scratch disposal. Arbitrary-value promotion, finer subpass lifetimes and
-heap-backed native calls are not established.
-
-## Milestone records
-
-| Milestone | Implementation | Verification tree(s) | Canonical record |
-| --- | --- | --- | --- |
-| A — maintained raw-source self-compilation | `010ce014` | `7c4b670f` | [Seal](decisions/20261101-active-source-acceptance.json), [decision](decisions/20261101-active-source-self-compilation.md) |
-| C — same-process native scratch reclamation | `a1e4c9dd` | `43041af8` | [Seal](decisions/20261101-native-phase-acceptance.json), [decision](decisions/20261101-native-phase-reclamation.md) |
-| Closed pure callable expansion | `8526ed77` | `3de34681` | [Acceptance](decisions/20261101-closed-pure-callables-profile8.md#acceptance-and-mainline-delivery) |
-| Closed ordinary nominal expansion | `6bf7559a` | `25b21080`; retained compiler controls `2a30272f` | [Acceptance](decisions/20261103-closed-ordinary-nominal.md#acceptance-evidence-and-delivery) |
-| Wide Sequence capacity | `411886df` | `75ae1da2`; retained compiler controls `45fe92e4` | [Acceptance](decisions/20261107-wide-sequence-capacity.md#acceptance-evidence-and-delivery) |
-| Artifact linking projection reuse | `47e98941` | `0a4ef322` | [Acceptance](decisions/20261108-link-package-projection-reuse.md#acceptance-evidence-and-delivery) |
-| Linear source-directory merge | `0dbb9233` | `01c34060`; retained compiler controls `933f87a0` | [Acceptance and measurements](decisions/20261108-source-directory-merge.md#acceptance-evidence-and-delivery) |
-| Native raw-I64 graph slots | `acf74027` | `9d71c3e6` | [Record](decisions/20261109-native-i64-slots.md#acceptance-evidence-and-delivery) |
-
-Each implementation retains its exact scope. Same-process reclamation covers C1
-and C2 processes; C3 byte equality does not establish a separate C3 phase process.
-Prior source-directory timing, adoption and correction details remain in that
-canonical record.
+Extend the typed reader into structural-child decoding and reverse adjacency, compare its
+DAG pass with the cursor implementation, and use measured collection-update costs
+to choose a mutable collection primitive. Remove accounting and narrow compiler
+input to current meaning plus exact dependencies alongside that work.

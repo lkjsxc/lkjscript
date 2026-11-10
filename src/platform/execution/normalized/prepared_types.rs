@@ -21,8 +21,8 @@ use std::collections::{BTreeMap, BTreeSet};
 mod implementations;
 #[cfg(test)]
 pub(super) use implementations::associated_tests::prepared_associated_model;
-#[path = "prepared_product_depth.rs"]
-mod product_depth;
+#[path = "prepared_product_closure.rs"]
+mod product_closure;
 #[path = "prepared_shared_code.rs"]
 mod shared_code;
 #[path = "prepared_type_lookup.rs"]
@@ -473,7 +473,7 @@ fn complete_budgeted(
             program.owned_record_declarations.insert(layout.declaration);
         }
     }
-    product_depth::validate_program(program, work)?;
+    product_closure::validate_program(program, work)?;
     program.work.type_objects = program.types.len() as u64;
     let unresolved = unresolved_associated_types(&program.types, work)?;
     program.capture_safe_types = property_types(program, work, Property::Capture, &unresolved)?;
@@ -521,9 +521,7 @@ fn instantiated_type(
     work: &mut Budget<'_>,
 ) -> Result<bool, Diagnostic> {
     step(work)?;
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(missing());
-    }
+
     if let Some(closed) = known.get(&ty) {
         return Ok(*closed);
     }
@@ -757,9 +755,7 @@ fn complete_nominal_layouts(
             .collect::<Vec<_>>();
         while let Some((child, depth)) = roots.pop() {
             step(work)?;
-            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-                return Err(missing());
-            }
+
             if reached.contains(&child) {
                 continue;
             }
@@ -954,9 +950,7 @@ fn complete_read_view_layouts(
         let mut reached = BTreeSet::new();
         while let Some((root, depth)) = roots.pop() {
             step(work)?;
-            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-                return Err(missing());
-            }
+
             if reached.contains(&root) {
                 continue;
             }
@@ -1571,18 +1565,6 @@ fn function_scope_bindings(
         resolve_scope(scope, Some(&bindings))?;
     }
     Ok(bindings)
-}
-
-#[cfg(test)]
-pub(super) fn check_product_substitution(
-    mut types: BTreeMap<TypeObjectDigest, TypeObject>,
-    ty: TypeObjectDigest,
-    bindings: BTreeMap<TypeParameterId, TypeObjectDigest>,
-) -> Result<(), Diagnostic> {
-    let control = crate::platform::execution::ExecutionControl::uncancelled();
-    let mut work = Budget::new(&control);
-    substitute(&mut types, ty, &bindings, 0, &mut work)?;
-    product_depth::validate(&types, &mut work)
 }
 
 /// Test bridge for the independent canonical oracle. Inputs enter at the same
@@ -2338,9 +2320,7 @@ fn substitute_effect_type(
     work: &mut Budget<'_>,
 ) -> Result<TypeObjectDigest, Diagnostic> {
     step(work)?;
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(missing());
-    }
+
     let object = types.get(&ty).ok_or_else(missing)?;
     work.cloned_type(object)?;
     let mut object = object.clone();
@@ -2416,9 +2396,7 @@ fn reserve_implementation_operand(
     work: &mut Budget<'_>,
 ) -> Result<(), Diagnostic> {
     step(work)?;
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(missing());
-    }
+
     if let crate::platform::kernel::ImplementationOperand::Concrete {
         type_arguments,
         implementations,
@@ -2443,9 +2421,7 @@ fn substitute_implementation_effects(
     work: &mut Budget<'_>,
 ) -> Result<(), Diagnostic> {
     step(work)?;
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(missing());
-    }
+
     if let crate::platform::kernel::ImplementationOperand::Concrete {
         type_arguments,
         implementations,
@@ -2525,9 +2501,7 @@ fn substitute_inner(
     work: &mut Budget<'_>,
 ) -> Result<(TypeObjectDigest, bool), Diagnostic> {
     step(work)?;
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(missing());
-    }
+
     work.cloned_type(types.get(&ty).ok_or_else(missing)?)?;
     let mut object = types.get(&ty).cloned().ok_or_else(missing)?;
     let mut selected = false;
@@ -2935,44 +2909,6 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.code, "normalized_instantiation_scope");
-    }
-
-    #[test]
-    fn sequence_substitution_checks_the_complete_mixed_owned_nesting_depth() {
-        let parameter = TypeParameterId::migrate(b"prepared-sequence-depth", 0);
-        let mut types = BTreeMap::new();
-        let parameter_type = type_in(&mut types, TypeForm::TypeParameter { parameter });
-        let symbolic = type_in(
-            &mut types,
-            TypeForm::OwnedSequence {
-                item: parameter_type,
-            },
-        );
-        let mut closed = type_in(&mut types, TypeForm::OwnedI64Cell);
-        for depth in 0..crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH - 1 {
-            let form = match depth % 3 {
-                0 => TypeForm::OwnedSequence { item: closed },
-                1 => TypeForm::OwnedProduct {
-                    fields: vec![field(closed)],
-                },
-                _ => TypeForm::OwnedChoice {
-                    cases: vec![field(closed)],
-                },
-            };
-            closed = type_in(&mut types, form);
-        }
-        check_product_substitution(
-            types.clone(),
-            symbolic,
-            BTreeMap::from([(parameter, closed)]),
-        )
-        .unwrap();
-        closed = type_in(&mut types, TypeForm::OwnedSequence { item: closed });
-        let error =
-            check_product_substitution(types, symbolic, BTreeMap::from([(parameter, closed)]))
-                .unwrap_err();
-        assert_eq!(error.code, "normalized_product_depth");
-        assert_eq!(error.class, DiagnosticClass::Semantic);
     }
 
     #[test]

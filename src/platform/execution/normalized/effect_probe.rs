@@ -268,7 +268,6 @@ fn invoke(
     )?;
     let alias = value.clone();
     let healthy_policy = NormalizedRunPolicy {
-        maximum_call_depth: 64,
         ..Default::default()
     };
     let mut policy = healthy_policy;
@@ -556,6 +555,6 @@ pub(crate) fn observe(project: &Path) -> Result<Value, Diagnostic> {
             }
         }
         let iteration = super::task_iteration_probe::observe(&prepared)?;
-        Ok(json!({"source_bound":true,"package":prepared.package.to_string(),"revision":prepared.revision.to_string(),"artifact":prepared.artifact_bundle.to_string(),"preparation_nanoseconds":preparation_nanoseconds,"preparation":{"type_derivation_steps":prepared.program.work.type_derivation_steps,"type_metadata_bytes":prepared.program.work.type_metadata_bytes},"observations":observations,"iteration":iteration,"stack_bytes":STACK_BYTES,"maximum_call_depth_policy":64,"other_policies":"unchanged defaults","live_effects_replayed":false,"cleanup_complete":true}))
+        Ok(json!({"source_bound":true,"package":prepared.package.to_string(),"revision":prepared.revision.to_string(),"artifact":prepared.artifact_bundle.to_string(),"preparation_nanoseconds":preparation_nanoseconds,"preparation":{"type_derivation_steps":prepared.program.work.type_derivation_steps,"type_metadata_bytes":prepared.program.work.type_metadata_bytes},"observations":observations,"iteration":iteration,"stack_bytes":STACK_BYTES,"other_policies":"unchanged defaults","live_effects_replayed":false,"cleanup_complete":true}))
     }).map_err(|error| failure(error.to_string()))?.join().map_err(|_| failure("effect observation thread failed"))?
 }

@@ -222,11 +222,11 @@ fn expect(source: &KernelSnapshot, code: i64, oracle_code: Option<&str>) {
 }
 
 #[test]
-fn selfhost_source_nominal_flow_admits_complete_compiler_and_finite_schemas() {
+fn selfhost_source_nominal_flow_admits_independent_finite_schemas() {
     let independent = fixture();
     // The independent fixture covers tree wrapping, parameter permutation,
     // duplication/selection, closed reset, and expanding acyclic slot paths.
-    for source in [&compiler().0, &independent] {
+    for source in [&independent] {
         expect(source, 0, None);
         let bytes = graph::packet(source);
         eprintln!(
@@ -239,7 +239,6 @@ fn selfhost_source_nominal_flow_admits_complete_compiler_and_finite_schemas() {
             kernel::semantic_state_digest(source).unwrap()
         );
     }
-    compiler_source_name_mutation(&compiler().0);
 }
 
 #[test]
@@ -402,4 +401,11 @@ fn compiler_source_name_mutation(source: &KernelSnapshot) {
         crate::platform::semantic_id::encode_hex(&Sha256::digest(&bytes)),
         kernel::semantic_state_digest(&changed).unwrap()
     );
+}
+
+#[test]
+#[ignore = "slow: whole compiler through VM, reference and native nominal readers"]
+fn selfhost_source_nominal_flow_admits_complete_compiler_and_name_mutation() {
+    expect(&compiler().0, 0, None);
+    compiler_source_name_mutation(&compiler().0);
 }

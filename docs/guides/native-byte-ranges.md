@@ -91,6 +91,4 @@ slice removes a concrete payload copy; it does not establish general scoped borr
 region reclamation or whole-program zero-copy execution.
 
 The [language contract](../spec/language.md#immutable-byte-ranges-and-explicit-backing-detachment)
-owns semantics. The [campaign](../campaigns/20260930-byte-ranges.md) owns exact-source,
-predecessor, allocation, retention and native-execution evidence, including failed
-intermediate attempts rather than only the final passing result.
+owns semantics.

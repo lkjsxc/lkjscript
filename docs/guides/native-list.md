@@ -121,16 +121,10 @@ bytes/513 records, with the same structural/semantic validation counts and 34 cr
 drafting reduces proposal context here, not the replacement subtree or complete
 review artifact. These byte counts are not model-token, timing or monetary estimates.
 
-The [v0.1.49 literal-edit continuation](../campaigns/202609261118.md) now adds a maintained
-copied-executable regression for this same application. It freshly authors both libraries,
-exports and stages their exact transports, creates the site and changes only `page`'s default
-count from 10 to 25. The complete plan is 9,085 bytes with one updated expression and no
-created, deleted or retired owners. All 111 graph tests agree across evaluators, and both
-source-free snapshots pass the six default/explicit-count/rejection HTTP observations above.
-The old snapshot and operator template remain unchanged. This is a fresh fixture with the
-current standard and command-library scaffolds, not a byte-for-byte recreation of the older
-155,246-byte observation. The campaign's separate web-button comparison holds the exact base
-and input constant. Structural edits still use complete body replacement and validation.
+A literal edit can change `page`'s default count from 10 to 25 while retaining its
+declaration identity. Build a new snapshot to run the edited default; an existing
+snapshot continues to use its original code. Structural edits use complete body
+replacement and validation.
 
 ## Independent observations
 
@@ -155,6 +149,3 @@ accessibility, browser-compatibility or security certification.
 Two valid but deliberately wrong programs, with a weakened count bound and an
 off-by-one I64 limit, each trigger normalized_test_failed. Check stops at the
 first failing test; this is not a full failing-test inventory.
-
-The [campaign](../campaigns/202609250650.md) retains the initial syntax rejection,
-its correction, exact product source, independent inputs and release boundaries.

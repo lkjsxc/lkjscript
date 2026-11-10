@@ -87,7 +87,7 @@ fn owned_products_supported_depth_drops_iteratively_with_surviving_markers() {
     let child_marker = child.clone();
     let mut value = NormalizedValue::ByteBuffer(child);
     let mut markers = Vec::new();
-    for _ in 0..contract::MAXIMUM_TYPE_DEPTH {
+    for _ in 0..contract::FORMER_TYPE_DEPTH {
         ty = encode_type_object(
             &TypeObject::new(TypeForm::OwnedProduct {
                 fields: vec![StructuralTypeField {
@@ -104,7 +104,7 @@ fn owned_products_supported_depth_drops_iteratively_with_surviving_markers() {
         markers.push(product.clone());
         value = NormalizedValue::OwnedProduct(product);
     }
-    assert_eq!(products.live(), (contract::MAXIMUM_TYPE_DEPTH, 0));
+    assert_eq!(products.live(), (contract::FORMER_TYPE_DEPTH, 0));
     drop(value);
     assert_eq!(products.live(), (0, 0));
     assert_eq!(buffers.live(), (0, 0));
@@ -118,132 +118,6 @@ fn owned_products_supported_depth_drops_iteratively_with_surviving_markers() {
 
 // Adversarial type objects, not an authoring generator: the native workflows use
 // the retained literal requests. These shapes exercise shared-path admission.
-fn product_type_in(
-    types: &mut BTreeMap<TypeObjectDigest, crate::platform::kernel::TypeObject>,
-    fields: &[(&str, TypeObjectDigest)],
-) -> TypeObjectDigest {
-    use crate::platform::kernel::{StructuralTypeField, TypeObject, encode_type_object};
-    let object = TypeObject::new(TypeForm::OwnedProduct {
-        fields: fields
-            .iter()
-            .map(|(name, ty)| StructuralTypeField {
-                name: Name::new(*name).unwrap(),
-                ty: *ty,
-            })
-            .collect(),
-    })
-    .unwrap();
-    let digest = encode_type_object(&object).unwrap().0;
-    types.insert(digest, object);
-    digest
-}
-
-#[test]
-fn owned_products_shared_type_paths_cannot_hide_excessive_depth() {
-    let mut source = byte_buffer_tests::author_only(
-        r#"declarations.begin
-(units (module create depth (function create relay (visibility private) (effect pure)
-  (parameter create p (type (owned-product (field child ByteBuffer))) (use consume))
-  (returns (owned-product (field child ByteBuffer))) (body (local p)))))
-declarations.end"#,
-    )
-    .unwrap();
-    let original = source
-        .types
-        .iter()
-        .find_map(|(ty, t)| matches!(t.form, TypeForm::OwnedProduct { .. }).then_some(*ty))
-        .unwrap();
-    let shared_depth = 4;
-    let mut shared = original;
-    for _ in 1..shared_depth {
-        shared = product_type_in(&mut source.types, &[("child", shared)]);
-    }
-    let mut deep = shared;
-    for _ in shared_depth..crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH - 1 {
-        deep = product_type_in(&mut source.types, &[("child", deep)]);
-    }
-    deep = product_type_in(
-        &mut source.types,
-        &[("a", shared), ("middle", deep), ("z", shared)],
-    );
-    let set = |source: &mut crate::platform::kernel::KernelSnapshot, ty| {
-        for record in source.owners.values_mut() {
-            match record {
-                OwnerRecord::Parameter(p) => p.ty = ty,
-                OwnerRecord::Declaration(d) => {
-                    if let crate::platform::kernel::DeclarationPayload::Function(f) = &mut d.payload
-                    {
-                        f.result.ty = ty;
-                    }
-                }
-                _ => {}
-            }
-        }
-    };
-    set(&mut source, deep);
-    crate::platform::kernel::validate_full(&source).unwrap();
-    assert!(crate::platform::kernel::memory_reference::accepts(&source));
-    let excessive = product_type_in(
-        &mut source.types,
-        &[("a", shared), ("middle", deep), ("z", shared)],
-    );
-    set(&mut source, excessive);
-    let errors = crate::platform::kernel::validate_full(&source).unwrap_err();
-    assert!(
-        errors.iter().any(|e| e.code == "kernel_owned_product"),
-        "{errors:?}"
-    );
-    assert!(!crate::platform::kernel::memory_reference::accepts(&source));
-}
-
-#[test]
-fn owned_products_closed_generic_substitutions_enforce_full_depth_in_both_derivations() {
-    use crate::platform::kernel::{TypeObject, encode_type_object};
-    let source = byte_buffer_tests::author_only(include_str!(
-        "../../../../tests/fixtures/owned-products.lkjc"
-    ))
-    .unwrap();
-    let (parameter_type, parameter) = source
-        .types
-        .iter()
-        .find_map(|(ty, t)| match t.form {
-            TypeForm::TypeParameter { parameter } => Some((*ty, parameter)),
-            _ => None,
-        })
-        .unwrap();
-    let mut types = source.types.clone();
-    let symbolic = product_type_in(&mut types, &[("payload", parameter_type)]);
-    let buffer = TypeObject::new(TypeForm::ByteBuffer).unwrap();
-    let mut closed = encode_type_object(&buffer).unwrap().0;
-    types.insert(closed, buffer);
-    for _ in 0..crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH - 1 {
-        closed = product_type_in(&mut types, &[("payload", closed)]);
-    }
-    let bindings = BTreeMap::from([(parameter, closed)]);
-    super::super::prepared_types::check_product_substitution(
-        types.clone(),
-        symbolic,
-        bindings.clone(),
-    )
-    .unwrap();
-    super::super::reference_types::check_product_substitution(types.clone(), symbolic, bindings)
-        .unwrap();
-    closed = product_type_in(&mut types, &[("payload", closed)]);
-    let bindings = BTreeMap::from([(parameter, closed)]);
-    let error = super::super::prepared_types::check_product_substitution(
-        types.clone(),
-        symbolic,
-        bindings.clone(),
-    )
-    .unwrap_err();
-    assert_eq!(error.code, "normalized_product_depth");
-    assert_eq!(error.class, crate::platform::DiagnosticClass::Semantic);
-    let error =
-        super::super::reference_types::check_product_substitution(types, symbolic, bindings)
-            .unwrap_err();
-    assert_eq!(error.code, "reference_product_depth");
-    assert_ne!(error.class, ExecutionFailureClass::Resource);
-}
 
 #[test]
 fn owned_products_composition_nested_cleanup_and_tail_transfer() {

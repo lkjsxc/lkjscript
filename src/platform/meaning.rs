@@ -20,7 +20,6 @@ pub const GRAPH_CONTRACT_IDENTITY: &str = "lkjscript-meaning-graph";
 pub const MAXIMUM_MODULE_SEGMENT_BYTES: usize = 64 * 1_048_576;
 pub const MAXIMUM_MODULE_DECLARATIONS: usize = 100_000;
 pub const MAXIMUM_MODULE_IDENTITIES: usize = 2_000_000;
-pub const MAXIMUM_EXPRESSION_DEPTH: usize = 256;
 pub const MAXIMUM_DOCUMENTATION_BYTES: usize = 16 * 1_048_576;
 
 #[derive(
@@ -944,9 +943,6 @@ fn index_expression(
     output: &mut Vec<ExpressionIdentity>,
     bindings: &mut Vec<BindingIdentity>,
 ) -> Result<(), Diagnostic> {
-    if path.len() > MAXIMUM_EXPRESSION_DEPTH {
-        return Err(expression_limit());
-    }
     output.push(ExpressionIdentity {
         id: allocator.expression()?,
         path: path.clone(),

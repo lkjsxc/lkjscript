@@ -167,7 +167,7 @@ clones remain identity markers without read or ownership authority.
 
 Reserve storage before modeled creation and geometric growth. Pop reserves its
 result envelopes before detaching an element; replacement reserves its result
-before swapping. Existing item, storage, type-depth, preparation-work and
+before swapping. Existing item, storage, preparation-work and
 cancellation policies remain authoritative. Reservation refusal is an execution
 resource failure; it does not make otherwise valid meaning invalid.
 
@@ -177,8 +177,7 @@ replacement may restore it only from a valid prior sequence and an independently
 admitted replacement; untouched elements need no repeated prefix scan. Raw ingress
 and retained-value admission remain complete and independent.
 
-Finite structural nesting is intentional. Runtime length is dynamic, while element
-type depth remains bounded. Cleanup traverses sequence breadth iteratively without
+Runtime length is dynamic. Cleanup traverses sequence breadth iteratively without
 allocating a new teardown worklist or calling user methods. Every exit retains
 custody until children are released: ordinary returns, traps, cancellation, growth
 refusal, partially constructed results and interrupted task adoption. Scope guards

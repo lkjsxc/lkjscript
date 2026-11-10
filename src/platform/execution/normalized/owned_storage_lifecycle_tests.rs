@@ -61,28 +61,43 @@ fn owned_retirement_mixed_raw_capture_chain_releases_exactly_once() -> TestResul
 }
 
 #[test]
-fn owned_create_rejection_drains_deep_raw_unary_fields() -> TestResult {
-    let payload: Arc<str> = Arc::from("rejected-field-leaf");
-    let mut raw = NormalizedValue::Text(Arc::clone(&payload));
-    for _ in 0..20_000 {
-        raw = NormalizedValue::Option(Some(Box::new(raw)));
-    }
-    let result = thread::Builder::new()
-        // Admission still uses the separately bounded structural escape walk;
-        // this control targets the much deeper rejected-value teardown.
-        .stack_size(2 * 1024 * 1024)
-        .spawn(move || {
-            OwnedStorage::create(
-                ValueOrigin::default(),
-                TypeObjectDigest::from_bytes([212; 32]),
-                vec![raw],
-                &ExecutionControl::uncancelled(),
-                &mut |_| Ok(()),
-            )
-        })?
-        .join()
-        .map_err(|_| "rejected raw affine field worker panicked")?;
-    assert!(matches!(result, Err(error) if error.code == "normalized_value_depth"));
-    assert_eq!(Arc::strong_count(&payload), 1);
-    Ok(())
+fn owned_create_and_rejection_drain_deep_raw_unary_fields() -> TestResult {
+    crate::platform::stack::run("owned-raw-fields", || -> TestResult {
+        for depth in [256, 2048, 20_000] {
+            for refuse in [false, true] {
+                let payload: Arc<str> = Arc::from("raw-field-leaf");
+                let mut raw = NormalizedValue::Text(Arc::clone(&payload));
+                for _ in 0..depth {
+                    raw = NormalizedValue::Option(Some(Box::new(raw)));
+                }
+                let result = OwnedStorage::create(
+                    ValueOrigin::default(),
+                    TypeObjectDigest::from_bytes([212; 32]),
+                    vec![raw],
+                    &ExecutionControl::uncancelled(),
+                    &mut |_| {
+                        if refuse {
+                            Err(ExecutionError::resource(
+                                "test_allocation_failure",
+                                "injected allocation failure",
+                            ))
+                        } else {
+                            Ok(())
+                        }
+                    },
+                );
+                if refuse {
+                    assert!(
+                        matches!(result, Err(error) if error.code == "test_allocation_failure")
+                    );
+                } else {
+                    let value = result.unwrap();
+                    assert_eq!(Arc::strong_count(&payload), 2);
+                    drop(value);
+                }
+                assert_eq!(Arc::strong_count(&payload), 1);
+            }
+        }
+        Ok(())
+    })?
 }

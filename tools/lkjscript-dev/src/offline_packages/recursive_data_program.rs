@@ -1,5 +1,5 @@
 //! Typed recursive persistence requests, interpreted only by the copied executable.
-use crate::pure_tail_program::Request;
+use crate::compact_request::Request;
 use std::collections::BTreeMap;
 
 fn stored_key(r: &mut Request, s: &BTreeMap<String, String>) -> String {

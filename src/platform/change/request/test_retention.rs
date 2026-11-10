@@ -130,7 +130,7 @@ pub(super) fn retain<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>
             return Ok(false);
         }
         for ty in record.type_roots() {
-            if type_references_discarded_scope(lowerer, ty, &identities, &mut examined_types, 0)? {
+            if type_references_discarded_scope(lowerer, ty, &identities, &mut examined_types)? {
                 return Ok(false);
             }
         }
@@ -557,15 +557,7 @@ fn type_references_discarded_scope<B: CanonicalBaseRead + ?Sized, W: WitnessBase
     ty: TypeObjectDigest,
     identities: &BTreeMap<OwnerKey, OwnerKey>,
     examined: &mut BTreeSet<TypeObjectDigest>,
-    depth: usize,
 ) -> Result<bool, Diagnostic> {
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(request_error(
-            DiagnosticClass::Resource,
-            "change_literal_type_depth",
-            "test literal correspondence type traversal exceeds the structural-depth bound",
-        ));
-    }
     if !examined.insert(ty) {
         return Ok(false);
     }
@@ -587,13 +579,7 @@ fn type_references_discarded_scope<B: CanonicalBaseRead + ?Sized, W: WitnessBase
         _ => {}
     }
     for child in object.child_types() {
-        if type_references_discarded_scope(
-            lowerer,
-            child,
-            identities,
-            examined,
-            depth.saturating_add(1),
-        )? {
+        if type_references_discarded_scope(lowerer, child, identities, examined)? {
             return Ok(true);
         }
     }

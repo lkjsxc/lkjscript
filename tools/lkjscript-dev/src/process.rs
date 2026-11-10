@@ -104,10 +104,6 @@ impl ProcessControl {
     fn requested(&self) -> u8 {
         self.requested.load(Ordering::Acquire)
     }
-
-    pub(crate) fn cancelled(&self) -> bool {
-        self.requested() != CONTROL_NONE
-    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -160,27 +156,10 @@ struct ProcessCompletion {
 struct ProcessOptions<'a> {
     stdin_file: Option<(&'a Path, u64)>,
     close_stdout: bool,
-    program: launch::Program<'a>,
 }
 
 pub(crate) fn run(specification: &ProcessSpec, repository: &Path) -> ProcessObservation {
     run_configured(specification, repository, None, None)
-}
-
-pub(crate) fn run_selected(
-    specification: &ProcessSpec,
-    repository: &Path,
-    program: Option<&Path>,
-) -> ProcessObservation {
-    run_configured_output(
-        specification,
-        repository,
-        None,
-        ProcessOptions {
-            program: launch::Program::Selected(program),
-            ..ProcessOptions::default()
-        },
-    )
 }
 
 pub(crate) fn run_closed_stdout(
@@ -219,14 +198,6 @@ pub(crate) fn run_with_stdin_file(
         None,
         Some((stdin_path, maximum_stdin_bytes)),
     )
-}
-
-pub(crate) fn run_supervised(
-    specification: &ProcessSpec,
-    repository: &Path,
-    control: Option<&ProcessControl>,
-) -> ProcessObservation {
-    run_configured(specification, repository, control, None)
 }
 
 fn run_configured(
@@ -284,13 +255,7 @@ fn run_inner(
         Some((path, maximum)) => bounded_stdin(path, maximum)?,
         None => Stdio::null(),
     };
-    let child = match launch::spawn(
-        specification,
-        stdin,
-        stdout_pipe,
-        stderr_pipe,
-        options.program,
-    ) {
+    let child = match launch::spawn(specification, stdin, stdout_pipe, stderr_pipe) {
         Ok(child) => child,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return observation(

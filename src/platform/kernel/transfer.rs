@@ -1,4 +1,4 @@
-//! Bounded structural transfer obligations under exact lexical type assumptions.
+//! Structural transfer obligations under exact lexical type assumptions.
 //! This proves language meaning; it neither grants capabilities nor moves tokens.
 use super::owned_associated::{
     OwnedAssociatedAdmission, OwnedTypeOccurrence, TypeParameterContext,
@@ -355,28 +355,21 @@ fn admit_inner(
     read.validation_work()?;
     let mut derived_types = BTreeMap::new();
     let mut layout_budget = super::owned_record::LayoutBudget::default();
-    let mut pending = vec![(ty, 0usize)];
-    let mut depths = BTreeMap::new();
-    while let Some((current, depth)) = pending.pop() {
+    let mut pending = vec![ty];
+    let mut seen = BTreeSet::new();
+    while let Some(current) = pending.pop() {
         let applied_read = super::owned_contract::AppliedTypeRead {
             read,
             types: &derived_types,
         };
         let read: &dyn ExpressionRead = &applied_read;
         read.validation_work()?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(reject(
-                "transferable owned structure exceeds the type depth bound",
-            ));
-        }
-        if depths
-            .get(&current)
-            .is_some_and(|previous| *previous >= depth)
-        {
+
+        if seen.contains(&current) {
             continue;
         }
         read.validation_work()?;
-        depths.insert(current, depth);
+        seen.insert(current);
         let object = read
             .type_object(current)?
             .ok_or_else(|| reject("transfer type is absent"))?;
@@ -404,7 +397,7 @@ fn admit_inner(
                     .chain(layout.fields.into_iter().map(|(_, field_type)| field_type))
                 {
                     read.validation_work()?;
-                    pending.push((field_type, depth + 1));
+                    pending.push(field_type);
                 }
                 layout_budget.extend_types(&mut derived_types, layout.types)?;
             }
@@ -440,12 +433,12 @@ fn admit_inner(
             TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
                 for field in fields {
                     read.validation_work()?;
-                    pending.push((field.ty, depth + 1));
+                    pending.push(field.ty);
                 }
             }
             TypeForm::OwnedSequence { item } => {
                 read.validation_work()?;
-                pending.push((item, depth + 1));
+                pending.push(item);
             }
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. } => {

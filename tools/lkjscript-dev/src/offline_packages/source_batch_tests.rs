@@ -55,12 +55,10 @@ fn success(target: &str, observation: &Value, executor: &Value) -> String {
             "execution",
             &[
                 ("target", target.into()),
-                ("differential", "equal".into()),
+                ("engine", "vm".into()),
                 ("value-location", "batch-row".into()),
                 ("production-instructions", "7".into()),
-                ("reference-expressions", "11".into()),
                 ("production-observation", observation.to_string()),
-                ("reference-observation", observation.to_string()),
                 ("executor-observation", executor.to_string()),
             ],
         ),
@@ -195,15 +193,14 @@ fn equal_values_cannot_hide_wrong_target_binding_or_missing_tier_work() {
     for stdout in [
         success("second", &observed(), &joined()),
         success("first", &observed(), &joined()).replace("bundle=\"bundle\"", "bundle=\"foreign\""),
-        success("first", &observed(), &joined())
-            .replace("differential=\"equal\"", "differential=\"other\""),
+        success("first", &observed(), &joined()).replace("engine=\"vm\"", "engine=\"other\""),
     ] {
         let mut bad = outputs.clone();
         bad[0]["stdout"] = json!(stdout);
         assert!(rows(&encoded(&bad), &cases, &binding).is_err());
     }
     let mut empty_work = observed();
-    empty_work["expressions"] = json!(0);
+    empty_work["instructions"] = json!(0);
     let mut bad = outputs.clone();
     bad[0]["stdout"] = json!(success("first", &empty_work, &joined()));
     assert!(rows(&encoded(&bad), &cases, &binding).is_err());

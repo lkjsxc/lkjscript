@@ -76,6 +76,15 @@ impl StructuredExecutorHandle {
         thread::scope(|scope| {
             let child = thread::Builder::new()
                 .name("lkjscript-region".to_owned())
+                .stack_size(
+                    crate::platform::stack::reservation_bytes().map_err(|error| {
+                        ExecutionError::new(
+                            ExecutionFailureClass::Infrastructure,
+                            "normalized_parallel_worker",
+                            format!("cannot size structured worker stack: {error}"),
+                        )
+                    })?,
+                )
                 .spawn_scoped(scope, || {
                     let mut guard = CancelOnUnwind::new(control.clone());
                     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(invoke))

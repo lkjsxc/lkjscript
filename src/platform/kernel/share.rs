@@ -1,4 +1,4 @@
-//! Bounded structural immutable-sharing proof under exact declaration scopes.
+//! Structural immutable-sharing proof under exact declaration scopes.
 //! Sharing grants no transfer authority and never changes a backing owner's origin.
 use super::owned_associated::{
     OwnedAssociatedAdmission, OwnedTypeOccurrence, TypeParameterContext,
@@ -6,7 +6,7 @@ use super::owned_associated::{
 use super::*;
 use crate::platform::diagnostic::{Diagnostic, DiagnosticClass};
 use crate::platform::semantic_id::{DeclarationId, TypeParameterId};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 fn reject(message: impl Into<String>) -> Diagnostic {
     Diagnostic::new(
@@ -212,28 +212,21 @@ fn admit_inner(
     read.validation_work()?;
     let mut derived_types = BTreeMap::new();
     let mut layout_budget = super::owned_record::LayoutBudget::default();
-    let mut pending = vec![(ty, 0usize)];
-    let mut depths = BTreeMap::new();
-    while let Some((current, depth)) = pending.pop() {
+    let mut pending = vec![ty];
+    let mut seen = BTreeSet::new();
+    while let Some(current) = pending.pop() {
         let applied_read = super::owned_contract::AppliedTypeRead {
             read,
             types: &derived_types,
         };
         let read: &dyn ExpressionRead = &applied_read;
         read.validation_work()?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(reject(
-                "shareable owned structure exceeds the type depth bound",
-            ));
-        }
-        if depths
-            .get(&current)
-            .is_some_and(|previous| *previous >= depth)
-        {
+
+        if seen.contains(&current) {
             continue;
         }
         read.validation_work()?;
-        depths.insert(current, depth);
+        seen.insert(current);
         let object = read
             .type_object(current)?
             .ok_or_else(|| reject("share type is absent"))?;
@@ -255,7 +248,7 @@ fn admit_inner(
                     .chain(layout.fields.into_iter().map(|(_, field_type)| field_type))
                 {
                     read.validation_work()?;
-                    pending.push((field_type, depth + 1));
+                    pending.push(field_type);
                 }
                 layout_budget.extend_types(&mut derived_types, layout.types)?;
             }
@@ -303,7 +296,7 @@ fn admit_inner(
                     } else {
                         super::memory::direct_in(read, package, field.ty)?
                     };
-                    pending.push((field.ty, depth + 1));
+                    pending.push(field.ty);
                 }
                 if !owned {
                     return Err(reject(
@@ -313,7 +306,7 @@ fn admit_inner(
             }
             TypeForm::OwnedSequence { item } => {
                 read.validation_work()?;
-                pending.push((item, depth + 1));
+                pending.push(item);
             }
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. } => {
@@ -328,11 +321,11 @@ fn admit_inner(
                 &ordinary_assumptions,
             )? =>
             {
-                // Charge and bound ordinary argument metadata as well, including
+                // Inspect ordinary argument metadata as well, including
                 // phantom actuals; the ordinary proof checks all nominal members.
                 for child in object.child_types() {
                     read.validation_work()?;
-                    pending.push((child, depth + 1));
+                    pending.push(child);
                 }
             }
             _ => {

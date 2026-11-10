@@ -331,9 +331,7 @@ fn same_operands(
     if left.is_empty() {
         return Ok(true);
     }
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(capacity());
-    }
+
     for (a, b) in left.iter().zip(right) {
         budget.tick()?;
         let same = match (a, b) {
@@ -655,9 +653,7 @@ fn check_operand_roots(
     if operands.is_empty() {
         return Ok(());
     }
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(capacity());
-    }
+
     for operand in operands {
         check(None)?;
         if let ImplementationOperand::Concrete {

@@ -1,7 +1,7 @@
 //! Literal canonical controls for closure, prerequisite and parallel boundaries.
 //! Expected results come from the source records, not a production carrier.
 use super::*;
-use crate::platform::semantic_id::{ExpressionId, FieldId, ParameterId};
+use crate::platform::semantic_id::{BindingId, ExpressionId, FieldId, ParameterId};
 
 pub(super) fn expression(
     source: &mut KernelSnapshot,
@@ -110,6 +110,109 @@ fn associated_memory_closure_checks_untaken_orphan_and_shared_contexts() {
     *when_false = f.local;
     assert_eq!(
         Resolver::new(&shared).admit_canonical_closure(),
+        Err(Failure::Authority)
+    );
+}
+
+#[test]
+fn associated_memory_closure_rejects_orphan_expression_parent_cycle() {
+    use super::super::super::memory::associated_tests::{FlowKind, fixture as flow_fixture};
+    let mut f = flow_fixture(FlowKind::Direct);
+    let local = expression(
+        &mut f.source,
+        70,
+        ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(f.first),
+        },
+    );
+    let cycle = ExpressionId::migrate(SEED, 71);
+    expression(
+        &mut f.source,
+        71,
+        ExpressionOperation::Sequence {
+            items: vec![cycle, local],
+        },
+    );
+    // A broken upward walk exhausts this caller-selected test allowance; the
+    // semantic result must identify cyclic authority before that happens.
+    assert_eq!(
+        Resolver::with_limits(
+            &f.source,
+            Limits {
+                work: 10_000,
+                objects: 10_000,
+            },
+        )
+        .admit_canonical_closure(),
+        Err(Failure::Authority)
+    );
+}
+
+#[test]
+fn associated_memory_closure_rejects_binding_parent_cycle_and_keeps_lexical_scopes() {
+    use super::super::super::memory::associated_tests::{FlowKind, fixture as flow_fixture};
+    let mut f = flow_fixture(FlowKind::Direct);
+    let Some(OwnerRecord::Parameter(parameter)) =
+        f.source.owners.get(&OwnerKey::Parameter(f.first))
+    else {
+        unreachable!()
+    };
+    let ty = parameter.ty;
+    let initializer = expression(
+        &mut f.source,
+        72,
+        ExpressionOperation::Local {
+            value: LocalValueReference::FunctionParameter(f.first),
+        },
+    );
+    let binding = BindingId::migrate(SEED, 70);
+    f.source.owners.insert(
+        OwnerKey::Binding(binding),
+        OwnerRecord::Binding(BindingRecord {
+            header: OwnerHeader::new(OwnerKey::Binding(binding), OwnerKind::Binding),
+            name: name("scoped"),
+            kind: BindingKind::Let,
+            value: Some(initializer),
+            declared_type: Some(ty),
+        }),
+    );
+    let wrapper = expression(
+        &mut f.source,
+        73,
+        ExpressionOperation::Let {
+            bindings: vec![binding],
+            body: f.borrow,
+        },
+    );
+    function_mut(&mut f.source, f.caller).body = wrapper;
+    let limits = Limits {
+        work: 10_000,
+        objects: 10_000,
+    };
+    Resolver::with_limits(&f.source, limits)
+        .admit_canonical_closure()
+        .unwrap();
+
+    // Detach the Let from the function and make it its own binding initializer.
+    // Each edge still has one parent; only the complete upward walk finds the cycle.
+    function_mut(&mut f.source, f.caller).body = f.borrow;
+    f.source.owners.remove(&OwnerKey::Expression(initializer));
+    let unit = expression(&mut f.source, 74, ExpressionOperation::Unit {});
+    expression(
+        &mut f.source,
+        73,
+        ExpressionOperation::Let {
+            bindings: vec![binding],
+            body: unit,
+        },
+    );
+    let Some(OwnerRecord::Binding(record)) = f.source.owners.get_mut(&OwnerKey::Binding(binding))
+    else {
+        unreachable!()
+    };
+    record.value = Some(wrapper);
+    assert_eq!(
+        Resolver::with_limits(&f.source, limits).admit_canonical_closure(),
         Err(Failure::Authority)
     );
 }

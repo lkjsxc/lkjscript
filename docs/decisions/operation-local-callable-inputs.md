@@ -55,13 +55,9 @@ one-load identity, distinct call/proof entries, refusal without partial reuse an
 last-handle reclamation. Existing independent weighted-cycle, package, reference,
 ownership and finalized-public-harness obligations remain unchanged.
 
-[Measurements](../performance.md#operation-local-callable-transfer-inputs) separate
-read counts, modeled proof work and cumulative reserved metadata. The single-use
-case pays bookkeeping overhead. Reusing input projections does not bound the number
-of exact contexts or genuinely demanded paths. Lexical declaration lookups, type-object
-reads, complete validation and concrete preparation remain separate costs. No general
-polynomial bound, whole-program zero-copy behavior, execution speedup, lower RSS or
-API-cost saving follows from this change.
+Reusing input projections does not bound the number of exact contexts or genuinely
+demanded paths. Lexical declaration lookups, type-object reads, complete validation
+and concrete preparation remain separate costs.
 
 Canonical meaning, source/package encodings, compiler/artifact generations, CLI
 observation and shared-runtime observation remain unchanged. This derived proof

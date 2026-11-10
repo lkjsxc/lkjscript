@@ -1,9 +1,6 @@
 # An editable web app from one binary
 
-**Creation boundary:** public v0.1.47. `lkjscript capabilities new` must
-advertise `web`. This is not a retroactive addition to the immutable public
-v0.1.46 executable. [Current status](../status.md) owns publication
-state; the [campaign](../campaigns/202609251450.md) owns exact evidence.
+Use `lkjscript capabilities new` to inspect the `web` template.
 
 The `web` starter is an ordinary native application plus editable local UI
 modules. It does not require Node.js, a Rust toolchain, downloaded library sources,
@@ -147,10 +144,8 @@ the summary look smaller. Edits to control structure, referenced declarations, b
 kinds use ordinary complete body replacement and validation. Re-plan an older reviewed input
 before applying it with a runtime that normalizes the edit differently.
 
-This is an authoring improvement, not live reload: running old deployments and their artifacts
-remain unchanged. The [literal-edit campaign](../campaigns/202609261118.md) owns the measured
-comparison and negative tests. The feature was first included in the withheld v0.1.49 candidate,
-then published with the corrected shared runtime in v0.1.50; it is not in v0.1.48.
+A literal edit creates a new source revision and artifact. Existing deployments
+continue to serve the artifact selected when they started.
 
 The normal plan summary reports counts and commitments, not a literal before/after diff.
 The complete `.lkjplan` records exact owner-object digests, validation and impact evidence;
@@ -199,23 +194,6 @@ transfer/recovery procedure before moving data. A same-filesystem, stopped comma
 workflow tests complete-directory relocation, retained store identity and subsequent
 transactions; it does not establish a live cross-filesystem backup or migration
 protocol. This web starter remains stateless and creates no data directory.
-
-The [deployment continuation](../campaigns/202609261015.md) also tests an actual
-script-free Chromium session against moved old/new snapshot deployments. A reviewed
-title edit preserves its declaration identity; the old server remains unchanged,
-and after both snapshots move, the browser observes their independently selected
-titles. Unicode form input, themes, keyboard submission and reload pass without the
-authoring graph. This observation uses the development executable; finalized
-release-archive acceptance is a separate claim at the release evidence owner.
-
-A bounded independent observation created this template with development v0.1.47,
-removed the authoring graph and served its unchanged bundle with the anonymously
-acquired public v0.1.46 musl executable. Ordinary GET, Unicode text, escaping and
-dark-theme responses passed, followed by joined shutdown. That older executable
-still rejects `new --template web`: runtime compatibility does not add a creation
-recipe to an already published binary. The [campaign](../campaigns/202609251450.md)
-retains the exact binary relationship and does not generalize it to arbitrary
-future bundles.
 
 The deployment grants only the HTTP request-stream interface. Its listener is
 plaintext and loopback-only; it does not acquire host filesystem, outbound network,

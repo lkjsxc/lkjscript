@@ -383,17 +383,14 @@ struct Admission<'a, 't, 'r> {
 }
 
 impl<'a, 't> Admission<'a, 't, '_> {
-    fn step(&mut self, depth: usize) -> Result<(), Diagnostic> {
-        self.charge(1, depth)
+    fn step(&mut self) -> Result<(), Diagnostic> {
+        self.charge(1)
     }
 
-    fn charge(&mut self, count: usize, depth: usize) -> Result<(), Diagnostic> {
-        // The caller owns work permission. Type-depth admission is a separate
-        // current lifecycle boundary and does not become an aggregate work quota.
+    fn charge(&mut self, count: usize) -> Result<(), Diagnostic> {
+        // The caller owns work permission.
         (self.visit)(u64::try_from(count).map_err(|_| capacity())?)?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         Ok(())
     }
 
@@ -407,7 +404,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
         &mut self,
         reference: DeclarationReference,
     ) -> Result<Option<&'a PackageInterfaceOwner>, Diagnostic> {
-        self.step(0)?;
+        self.step()?;
         if reference.package == self.package {
             self.owners
                 .get(&OwnerKey::Declaration(reference.declaration))
@@ -489,11 +486,10 @@ impl<'a, 't> Admission<'a, 't, '_> {
         &mut self,
         context: &Context,
         parameter: TypeParameterId,
-        depth: usize,
     ) -> Result<TypeParameterConstraints, Diagnostic> {
-        self.step(depth)?;
+        self.step()?;
         let (occurrences, count) = self.formal_occurrences(context.reference, parameter)?;
-        self.charge(count, depth)?;
+        self.charge(count)?;
         if occurrences != 1 {
             return Err(reject(
                 "type parameter is outside its exact complete defining inventory",
@@ -516,18 +512,10 @@ impl<'a, 't> Admission<'a, 't, '_> {
         Ok(record.constraints)
     }
 
-    fn scope(
-        &mut self,
-        context: &Context,
-        actual: &ReadScopeArgument,
-        depth: usize,
-    ) -> Result<(), Diagnostic> {
-        self.step(depth)?;
+    fn scope(&mut self, context: &Context, actual: &ReadScopeArgument) -> Result<(), Diagnostic> {
+        self.step()?;
         if let ReadScopeArgument::Parameter(reference) = actual {
-            self.charge(
-                scope_inventory(self.package, &reference.binder, self.owners)?.len(),
-                depth,
-            )?;
+            self.charge(scope_inventory(self.package, &reference.binder, self.owners)?.len())?;
         }
         if let Some(binder) = &context.binder {
             validate_scope_argument_in_binder(
@@ -547,9 +535,8 @@ impl<'a, 't> Admission<'a, 't, '_> {
         context: &Context,
         ty: TypeObjectDigest,
         constraints: TypeParameterConstraints,
-        depth: usize,
     ) -> Result<(), Diagnostic> {
-        let properties = self.occurrence(context, ty, false, false, &mut BTreeSet::new(), depth)?;
+        let properties = self.occurrence(context, ty, false, false, &mut BTreeSet::new())?;
         if properties.category == Category::Deferred {
             return Ok(());
         }
@@ -591,9 +578,8 @@ impl<'a, 't> Admission<'a, 't, '_> {
         reference: DeclarationReference,
         parameters: &[TypeParameterId],
         arguments: &[TypeObjectDigest],
-        depth: usize,
     ) -> Result<(), Diagnostic> {
-        self.step(depth)?;
+        self.step()?;
         if parameters.len() != arguments.len() {
             return Err(reject(
                 "read-view nominal application has the wrong exact ordered arity",
@@ -610,10 +596,10 @@ impl<'a, 't> Admission<'a, 't, '_> {
             actuals: BTreeMap::new(),
         };
         for (parameter, argument) in parameters.iter().zip(arguments) {
-            self.step(depth)?;
+            self.step()?;
             // Every argument is visited, including phantom and unused actuals.
-            let constraints = self.formal(&defining, *parameter, depth)?;
-            self.constraints(context, *argument, constraints, depth + 1)?;
+            let constraints = self.formal(&defining, *parameter)?;
+            self.constraints(context, *argument, constraints)?;
         }
         Ok(())
     }
@@ -634,7 +620,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
         let caller = Rc::new(caller.clone());
         let mut actuals = BTreeMap::new();
         for (parameter, ty) in parameters.iter().zip(arguments) {
-            self.step(0)?;
+            self.step()?;
             if actuals
                 .insert(
                     *parameter,
@@ -657,13 +643,8 @@ impl<'a, 't> Admission<'a, 't, '_> {
         })
     }
 
-    fn associated(
-        &mut self,
-        context: &Context,
-        form: &TypeForm,
-        depth: usize,
-    ) -> Result<Properties, Diagnostic> {
-        self.step(depth)?;
+    fn associated(&mut self, context: &Context, form: &TypeForm) -> Result<Properties, Diagnostic> {
+        self.step()?;
         let (contract_reference, member, view, lexical) = match form {
             TypeForm::AssociatedContractMember { contract, member } => {
                 (*contract, *member, false, None)
@@ -673,7 +654,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
                 member,
                 read_scope,
             } => {
-                self.scope(context, read_scope, depth)?;
+                self.scope(context, read_scope)?;
                 (*contract, *member, true, None)
             }
             TypeForm::AssociatedWitnessProjection {
@@ -699,7 +680,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
                 if *scope != context.reference {
                     return Err(reject("view projection escaped its exact lexical binder"));
                 }
-                self.scope(context, read_scope, depth)?;
+                self.scope(context, read_scope)?;
                 (*contract, *member, true, Some(*parameter))
             }
             _ => {
@@ -744,10 +725,9 @@ impl<'a, 't> Admission<'a, 't, '_> {
                 false,
                 false,
                 &mut BTreeSet::new(),
-                depth + 1,
             )?;
             for ty in &witness.type_arguments {
-                self.occurrence(context, *ty, false, false, &mut BTreeSet::new(), depth + 1)?;
+                self.occurrence(context, *ty, false, false, &mut BTreeSet::new())?;
             }
         } else if contract_reference != context.reference
             || !matches!(context.binder, Some(ReadScopeBinder::ContractMethod { .. }))
@@ -810,9 +790,8 @@ impl<'a, 't> Admission<'a, 't, '_> {
         view_allowed: bool,
         projection_free: bool,
         nominal_path: &mut BTreeSet<DeclarationReference>,
-        depth: usize,
     ) -> Result<Properties, Diagnostic> {
-        self.step(depth)?;
+        self.step()?;
         let form = &self.object(ty)?.form;
         if let TypeForm::TypeParameter { parameter } = form
             && let Some(actual) = context.actuals.get(parameter)
@@ -823,7 +802,6 @@ impl<'a, 't> Admission<'a, 't, '_> {
                 view_allowed,
                 projection_free,
                 nominal_path,
-                depth + 1,
             );
         }
         let view = form.is_read_view();
@@ -852,7 +830,6 @@ impl<'a, 't> Admission<'a, 't, '_> {
                 false,
                 projection_free,
                 nominal_path,
-                depth + 1,
             )?);
         }
         for (index, property) in child_properties.iter().enumerate() {
@@ -908,7 +885,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
                         use crate::platform::kernel::RegionMode;
                         match mode {
                             RegionMode::Shared { scope } => {
-                                self.scope(context, scope, depth)?;
+                                self.scope(context, scope)?;
                                 Properties {
                                     category: Category::ReadView,
                                     transfer: false,
@@ -947,7 +924,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
             | TypeForm::Text
             | TypeForm::StaticText => Properties::ordinary(),
             TypeForm::TypeParameter { parameter } => {
-                let constraints = self.formal(context, *parameter, depth)?;
+                let constraints = self.formal(context, *parameter)?;
                 Properties {
                     category: if constraints.is_region() {
                         Category::RegionIdentity
@@ -1019,25 +996,20 @@ impl<'a, 't> Admission<'a, 't, '_> {
                     _ => &[],
                 },
                 nominal_path,
-                // Entering the declaration helper is not a representation edge. Its fields
-                // and actual type arguments each charge their real child edge below.
-                depth,
             )?,
             TypeForm::ReadViewApplied {
                 declaration,
                 arguments,
                 read_scope,
             } => {
-                self.scope(context, read_scope, depth)?;
-                self.view_application(context, *declaration, arguments, nominal_path, depth + 1)?;
+                self.scope(context, read_scope)?;
+                self.view_application(context, *declaration, arguments, nominal_path)?;
                 Properties::new(Category::ReadView)
             }
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. }
             | TypeForm::AssociatedReadViewMember { .. }
-            | TypeForm::AssociatedReadViewProjection { .. } => {
-                self.associated(context, form, depth + 1)?
-            }
+            | TypeForm::AssociatedReadViewProjection { .. } => self.associated(context, form)?,
             TypeForm::Secret
             | TypeForm::CapabilityResource { .. }
             | TypeForm::Stream { .. }
@@ -1053,9 +1025,8 @@ impl<'a, 't> Admission<'a, 't, '_> {
         reference: DeclarationReference,
         arguments: &[TypeObjectDigest],
         path: &mut BTreeSet<DeclarationReference>,
-        depth: usize,
     ) -> Result<Properties, Diagnostic> {
-        self.step(depth)?;
+        self.step()?;
         let Some(owner) = self.owner(reference)? else {
             return Ok(Properties::deferred());
         };
@@ -1084,7 +1055,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
             }
             return Ok(Properties::deferred());
         }
-        self.arguments(context, reference, parameters, arguments, depth)?;
+        self.arguments(context, reference, parameters, arguments)?;
         if !path.insert(reference) {
             if context.finite_layout || owned {
                 return Err(reject(
@@ -1101,7 +1072,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
         let mut capture = !owned;
         let mut deferred = false;
         for ty in roots {
-            let properties = self.occurrence(&defining, ty, false, false, path, depth + 1)?;
+            let properties = self.occurrence(&defining, ty, false, false, path)?;
             if properties.category == Category::RegionIdentity {
                 return Err(reject(
                     "region identity cannot occupy a nominal value field",
@@ -1155,7 +1126,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
                     .try_reserve_exact(fields.len())
                     .map_err(|_| capacity())?;
                 for id in fields {
-                    self.step(0)?;
+                    self.step()?;
                     let key = OwnerKey::Field(*id);
                     let owner = self
                         .owners
@@ -1176,7 +1147,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
                     .try_reserve_exact(cases.len())
                     .map_err(|_| capacity())?;
                 for id in cases {
-                    self.step(0)?;
+                    self.step()?;
                     let key = OwnerKey::Case(*id);
                     let owner = self
                         .owners
@@ -1206,9 +1177,8 @@ impl<'a, 't> Admission<'a, 't, '_> {
         reference: DeclarationReference,
         arguments: &[TypeObjectDigest],
         path: &mut BTreeSet<DeclarationReference>,
-        depth: usize,
     ) -> Result<(), Diagnostic> {
-        self.step(depth)?;
+        self.step()?;
         let Some(owner) = self.owner(reference)? else {
             return Ok(());
         };
@@ -1251,7 +1221,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
             self.deferred = true;
             return Ok(());
         }
-        self.arguments(context, reference, &view.type_parameters, arguments, depth)?;
+        self.arguments(context, reference, &view.type_parameters, arguments)?;
         if !path.insert(reference) {
             return Err(reject(
                 "nominal read-view dependency closure must be finite and acyclic",
@@ -1265,7 +1235,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
             ..context.clone()
         };
         for argument in arguments {
-            self.occurrence(&finite, *argument, false, false, path, depth + 1)?;
+            self.occurrence(&finite, *argument, false, false, path)?;
         }
         let defining = self.defining_context(
             &finite,
@@ -1274,7 +1244,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
             arguments,
             Some(ReadScopeBinder::Declaration(reference)),
         )?;
-        self.view_declaration(reference, view, Some(defining), path, depth + 1)?;
+        self.view_declaration(reference, view, Some(defining), path)?;
         path.remove(&reference);
         Ok(())
     }
@@ -1285,9 +1255,8 @@ impl<'a, 't> Admission<'a, 't, '_> {
         view: &ReadViewDeclaration,
         defining: Option<Context>,
         path: &mut BTreeSet<DeclarationReference>,
-        depth: usize,
     ) -> Result<(), Diagnostic> {
-        self.step(depth)?;
+        self.step()?;
         let key = OwnerKey::Declaration(reference.declaration);
         current(
             self.owners
@@ -1324,11 +1293,11 @@ impl<'a, 't> Admission<'a, 't, '_> {
         self.storage
             .reserve::<TypeParameterId>(view.type_parameters.len())?;
         for parameter in &view.type_parameters {
-            self.step(depth)?;
+            self.step()?;
             if !ids.insert(*parameter) {
                 return Err(reject("read-view type formal identity is duplicated"));
             }
-            let constraints = self.formal(&context, *parameter, depth)?;
+            let constraints = self.formal(&context, *parameter)?;
             if !(constraints.has_owned()
                 || matches!(
                     constraints,
@@ -1353,9 +1322,9 @@ impl<'a, 't> Admission<'a, 't, '_> {
             }
         }
         for (index, field) in view.fields.iter().enumerate() {
-            self.step(depth)?;
+            self.step()?;
             for previous in &view.fields[..index] {
-                self.step(depth)?;
+                self.step()?;
                 if previous.id == field.id || previous.name == field.name {
                     return Err(reject(
                         "read-view field identities and names must be independently unique",
@@ -1363,18 +1332,15 @@ impl<'a, 't> Admission<'a, 't, '_> {
                 }
             }
             match &field.kind {
-                ReadViewFieldKind::Ordinary => {
-                    self.metadata(&context, field.ty, path, depth + 1)?
-                }
+                ReadViewFieldKind::Ordinary => self.metadata(&context, field.ty, path)?,
                 ReadViewFieldKind::ReadReference { read_scope } => {
-                    self.scope(&context, read_scope, depth)?;
+                    self.scope(&context, read_scope)?;
                     if read_scope != &scope {
                         return Err(reject(
                             "read-reference field scope differs from its exact declaration formal",
                         ));
                     }
-                    let properties =
-                        self.occurrence(&context, field.ty, true, false, path, depth + 1)?;
+                    let properties = self.occurrence(&context, field.ty, true, false, path)?;
                     if properties.category == Category::ReadView {
                         let TypeForm::ReadViewApplied { read_scope, .. } =
                             &self.object(field.ty)?.form
@@ -1400,20 +1366,19 @@ impl<'a, 't> Admission<'a, 't, '_> {
         context: &Context,
         ty: TypeObjectDigest,
         path: &mut BTreeSet<DeclarationReference>,
-        depth: usize,
     ) -> Result<(), Diagnostic> {
-        self.step(depth)?;
+        self.step()?;
         let form = &self.object(ty)?.form;
         if let TypeForm::TypeParameter { parameter } = form
             && let Some(actual) = context.actuals.get(parameter)
         {
-            return self.metadata(&actual.context, actual.ty, path, depth + 1);
+            return self.metadata(&actual.context, actual.ty, path);
         }
         self.storage
             .reserve::<TypeObjectDigest>(self.object(ty)?.child_type_count())?;
         let children = self.object(ty)?.child_types();
         for child in children {
-            self.metadata(context, child, path, depth + 1)?;
+            self.metadata(context, child, path)?;
         }
         match form {
             TypeForm::Unit
@@ -1429,7 +1394,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
             | TypeForm::Option { .. }
             | TypeForm::Result { .. } => {}
             TypeForm::TypeParameter { parameter } => {
-                let constraints = self.formal(context, *parameter, depth)?;
+                let constraints = self.formal(context, *parameter)?;
                 if constraints.has_owned() || !constraints.requires_transfer() {
                     return Err(reject(
                         "ordinary view metadata formal lacks ordinary Transferable evidence",
@@ -1451,7 +1416,6 @@ impl<'a, 't> Admission<'a, 't, '_> {
                         _ => &[],
                     },
                     path,
-                    depth,
                 )?;
                 if properties.category == Category::Deferred {
                     return Ok(());
@@ -1482,7 +1446,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
                 let defining =
                     self.defining_context(context, *reference, parameters, arguments, None)?;
                 for field in self.nominal_fields(*reference)? {
-                    self.metadata(&defining, field, path, depth + 1)?;
+                    self.metadata(&defining, field, path)?;
                 }
             }
             _ => {
@@ -1501,7 +1465,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
         target: DeclarationReference,
         actuals: &[ReadScopeArgument],
     ) -> Result<(), Diagnostic> {
-        self.charge(actuals.len(), 0)?;
+        self.charge(actuals.len())?;
         if actuals.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
             return Err(capacity());
         }
@@ -1541,7 +1505,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
             if selected.next().is_some() {
                 return Err(reject("mapped contract method identity is duplicated"));
             }
-            self.charge(method.read_scope_parameters.len(), 0)?;
+            self.charge(method.read_scope_parameters.len())?;
             validate_scope_inventory(&method.read_scope_parameters)?;
             if !method.read_scope_parameters.is_empty() || !actuals.is_empty() {
                 current(owner, OwnerKey::Declaration(contract_reference.declaration))?;
@@ -1561,7 +1525,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
                         "mapped method scope is absent from its exact universal formal inventory",
                     ));
                 }
-                self.charge(method.read_scope_parameters.len(), 0)?;
+                self.charge(method.read_scope_parameters.len())?;
             }
         }
         if target.package == self.package
@@ -1572,7 +1536,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
             // A private mapped function is absent from the public projection.
             // Complete canonical source admission must discharge its signature;
             // this descriptive interface grants no callable or naming authority.
-            self.step(0)?;
+            self.step()?;
             self.deferred = true;
             return Ok(());
         }
@@ -1583,7 +1547,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
                     "mapped method target is not a named function signature",
                 ));
             };
-            self.charge(function.read_scope_parameters.len(), 0)?;
+            self.charge(function.read_scope_parameters.len())?;
             validate_scope_inventory(&function.read_scope_parameters)?;
             if actuals.len() != function.read_scope_parameters.len() {
                 return Err(reject(
@@ -1625,8 +1589,8 @@ impl<'a, 't> Admission<'a, 't, '_> {
             )?;
         }
         for (index, (id, ty, use_mode)) in parameters.iter().enumerate() {
-            self.step(0)?;
-            self.charge(index, 0)?;
+            self.step()?;
+            self.charge(index)?;
             if parameters[..index]
                 .iter()
                 .any(|(previous, _, _)| previous == id)
@@ -1634,7 +1598,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
                 return Err(reject("scoped signature parameter identity is duplicated"));
             }
             let view = self.object(*ty)?.form.is_read_view();
-            let properties = self.occurrence(context, *ty, view, false, &mut BTreeSet::new(), 0)?;
+            let properties = self.occurrence(context, *ty, view, false, &mut BTreeSet::new())?;
             if properties.category == Category::RegionIdentity {
                 return Err(reject("region identity cannot occupy a value parameter"));
             }
@@ -1643,8 +1607,8 @@ impl<'a, 't> Admission<'a, 't, '_> {
             }
         }
         for (index, source) in sources.iter().enumerate() {
-            self.step(0)?;
-            self.charge(index, 0)?;
+            self.step()?;
+            self.charge(index)?;
             if sources[..index]
                 .iter()
                 .any(|previous| previous.source == source.source && previous.scope == source.scope)
@@ -1653,7 +1617,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
                     "source relationship inventory repeats an exact parameter and scope pair",
                 ));
             }
-            self.scope(context, &source.scope, 0)?;
+            self.scope(context, &source.scope)?;
             let (_, ty, use_mode) = parameters
                 .iter()
                 .find(|(id, _, _)| *id == source.source)
@@ -1663,7 +1627,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
             if *use_mode != ParameterUse::Borrow {
                 return Err(reject("source relationships require a borrowed parameter"));
             }
-            let properties = self.occurrence(context, *ty, true, false, &mut BTreeSet::new(), 0)?;
+            let properties = self.occurrence(context, *ty, true, false, &mut BTreeSet::new())?;
             if !matches!(
                 properties.category,
                 Category::Owned | Category::ReadView | Category::Deferred
@@ -1681,14 +1645,8 @@ impl<'a, 't> Admission<'a, 't, '_> {
             }
         }
         let view_result = matches!(result.relation, ResultRelation::ViewFrom { .. });
-        let result_properties = self.occurrence(
-            context,
-            result.ty,
-            view_result,
-            false,
-            &mut BTreeSet::new(),
-            0,
-        )?;
+        let result_properties =
+            self.occurrence(context, result.ty, view_result, false, &mut BTreeSet::new())?;
         if result_properties.category == Category::RegionIdentity {
             return Err(reject("region identity cannot occupy a callable result"));
         }
@@ -1715,7 +1673,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
             ));
         }
         let source_properties =
-            self.occurrence(context, *source_ty, true, false, &mut BTreeSet::new(), 0)?;
+            self.occurrence(context, *source_ty, true, false, &mut BTreeSet::new())?;
         if !matches!(
             source_properties.category,
             Category::Owned | Category::ReadView | Category::Deferred
@@ -1736,7 +1694,7 @@ impl<'a, 't> Admission<'a, 't, '_> {
                 }
             }
             ResultRelation::ViewFrom { scope, .. } => {
-                self.scope(context, scope, 0)?;
+                self.scope(context, scope)?;
                 if result_properties.category != Category::ReadView
                     || view_scope(&self.object(result.ty)?.form) != Some(scope)
                 {
@@ -1840,7 +1798,7 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
             let mut path = BTreeSet::new();
             path.insert(reference);
             admission.storage.reserve::<DeclarationReference>(1)?;
-            admission.view_declaration(reference, view, None, &mut path, 0)?;
+            admission.view_declaration(reference, view, None, &mut path)?;
         }
         PackageInterfaceDeclarationPayload::Function(signature) => {
             let mut parameters = Vec::new();
@@ -1853,7 +1811,7 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
                 .try_reserve_exact(signature.parameters.len())
                 .map_err(|_| capacity())?;
             for id in &signature.parameters {
-                admission.step(0)?;
+                admission.step()?;
                 let owner = owners
                     .get(&OwnerKey::Parameter(*id))
                     .ok_or_else(|| reject("function parameter closure is incomplete"))?;
@@ -1888,17 +1846,16 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
                     false,
                     false,
                     &mut BTreeSet::new(),
-                    0,
                 )?;
                 for ty in &witness.type_arguments {
-                    admission.occurrence(&context, *ty, false, false, &mut BTreeSet::new(), 0)?;
+                    admission.occurrence(&context, *ty, false, false, &mut BTreeSet::new())?;
                 }
             }
         }
         PackageInterfaceDeclarationPayload::OwnedContract(contract) => {
             for (index, member) in contract.associated_types.iter().enumerate() {
-                admission.step(0)?;
-                admission.charge(index, 0)?;
+                admission.step()?;
+                admission.charge(index)?;
                 if contract.associated_types[..index]
                     .iter()
                     .any(|previous| previous.id == member.id || previous.name == member.name)
@@ -1964,7 +1921,7 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
                 return Err(capacity());
             }
             for pair in implementation.associated_types.windows(2) {
-                admission.step(0)?;
+                admission.step()?;
                 if pair[0].member >= pair[1].member {
                     return Err(reject(
                         "associated binding identities require a complete strictly ordered inventory",
@@ -1977,10 +1934,9 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
                 false,
                 false,
                 &mut BTreeSet::new(),
-                0,
             )?;
             for ty in &implementation.type_arguments {
-                admission.occurrence(&context, *ty, false, false, &mut BTreeSet::new(), 0)?;
+                admission.occurrence(&context, *ty, false, false, &mut BTreeSet::new())?;
             }
             for binding in &implementation.associated_types {
                 match &binding.value {
@@ -1991,7 +1947,6 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
                             false,
                             true,
                             &mut BTreeSet::new(),
-                            0,
                         )?;
                         if !matches!(property.category, Category::Owned | Category::Deferred) {
                             return Err(reject(
@@ -2028,7 +1983,7 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
                                 "family binding RHS does not apply its exact scope formal",
                             ));
                         }
-                        admission.occurrence(&context, *ty, true, true, &mut BTreeSet::new(), 0)?;
+                        admission.occurrence(&context, *ty, true, true, &mut BTreeSet::new())?;
                     }
                 }
             }
@@ -2039,15 +1994,14 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
                     false,
                     false,
                     &mut BTreeSet::new(),
-                    0,
                 )?;
                 for ty in &witness.type_arguments {
-                    admission.occurrence(&context, *ty, false, false, &mut BTreeSet::new(), 0)?;
+                    admission.occurrence(&context, *ty, false, false, &mut BTreeSet::new())?;
                 }
             }
             for method in &implementation.methods {
                 for ty in &method.type_arguments {
-                    admission.occurrence(&context, *ty, false, false, &mut BTreeSet::new(), 0)?;
+                    admission.occurrence(&context, *ty, false, false, &mut BTreeSet::new())?;
                 }
                 admission.mapping_scopes(
                     implementation.contract,
@@ -2064,7 +2018,6 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
                                 false,
                                 false,
                                 &mut BTreeSet::new(),
-                                0,
                             )?;
                         }
                     }
@@ -2075,7 +2028,7 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
         | PackageInterfaceDeclarationPayload::OwnedRecord { .. }
         | PackageInterfaceDeclarationPayload::Variant { .. } => {
             for ty in admission.nominal_fields(reference)? {
-                admission.occurrence(&context, ty, false, false, &mut BTreeSet::new(), 0)?;
+                admission.occurrence(&context, ty, false, false, &mut BTreeSet::new())?;
             }
         }
         PackageInterfaceDeclarationPayload::External(signature) => {
@@ -2085,10 +2038,9 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
                 false,
                 false,
                 &mut BTreeSet::new(),
-                0,
             )?;
             for id in &signature.parameters {
-                admission.step(0)?;
+                admission.step()?;
                 let owner = owners
                     .get(&OwnerKey::Parameter(*id))
                     .ok_or_else(|| reject("external parameter closure is incomplete"))?;
@@ -2100,19 +2052,12 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
                         "external parameter belongs to another exact declaration",
                     ));
                 }
-                admission.occurrence(
-                    &context,
-                    parameter.ty,
-                    false,
-                    false,
-                    &mut BTreeSet::new(),
-                    0,
-                )?;
+                admission.occurrence(&context, parameter.ty, false, false, &mut BTreeSet::new())?;
             }
         }
         PackageInterfaceDeclarationPayload::Interface { operations } => {
             for id in operations {
-                admission.step(0)?;
+                admission.step()?;
                 let owner = owners
                     .get(&OwnerKey::Operation(*id))
                     .ok_or_else(|| reject("interface operation closure is incomplete"))?;
@@ -2130,10 +2075,9 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
                     false,
                     false,
                     &mut BTreeSet::new(),
-                    0,
                 )?;
                 for parameter_id in &operation.parameters {
-                    admission.step(0)?;
+                    admission.step()?;
                     let owner = owners
                         .get(&OwnerKey::Parameter(*parameter_id))
                         .ok_or_else(|| reject("operation parameter closure is incomplete"))?;
@@ -2151,14 +2095,13 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
                         false,
                         false,
                         &mut BTreeSet::new(),
-                        0,
                     )?;
                 }
             }
         }
         PackageInterfaceDeclarationPayload::Component { ports, .. } => {
             for id in ports {
-                admission.step(0)?;
+                admission.step()?;
                 let owner = owners
                     .get(&OwnerKey::Port(*id))
                     .ok_or_else(|| reject("component port closure is incomplete"))?;
@@ -2176,12 +2119,11 @@ pub(crate) fn validate_declaration_resolved_metered<'a>(
                     false,
                     false,
                     &mut BTreeSet::new(),
-                    0,
                 )?;
             }
         }
         PackageInterfaceDeclarationPayload::Constant { ty } => {
-            admission.occurrence(&context, *ty, false, false, &mut BTreeSet::new(), 0)?;
+            admission.occurrence(&context, *ty, false, false, &mut BTreeSet::new())?;
         }
     }
     Ok(admission.deferred)
@@ -2210,8 +2152,8 @@ pub(crate) fn validate_region_read_resolved_metered<'a>(
         visit,
     };
     let context = admission.context(source, None)?;
-    admission.scope(&context, read_scope, 0)?;
-    let identity = admission.occurrence(&context, region, false, false, &mut BTreeSet::new(), 0)?;
+    admission.scope(&context, read_scope)?;
+    let identity = admission.occurrence(&context, region, false, false, &mut BTreeSet::new())?;
     if identity.category != Category::RegionIdentity {
         return Err(reject(
             "region read capability requires an exact region identity",
@@ -2244,11 +2186,11 @@ pub(crate) fn validate_view_application_resolved_metered<'a>(
         visit,
     };
     let context = admission.context(source, None)?;
-    admission.scope(&context, read_scope, 0)?;
+    admission.scope(&context, read_scope)?;
     // Unlike visible fields, type actuals never inherit direct view permission.
     for ty in arguments {
-        admission.occurrence(&context, *ty, false, false, &mut BTreeSet::new(), 0)?;
+        admission.occurrence(&context, *ty, false, false, &mut BTreeSet::new())?;
     }
-    admission.view_application(&context, reference, arguments, &mut BTreeSet::new(), 0)?;
+    admission.view_application(&context, reference, arguments, &mut BTreeSet::new())?;
     Ok(admission.deferred)
 }

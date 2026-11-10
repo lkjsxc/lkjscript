@@ -180,7 +180,7 @@ mod tests {
             .open("/dev/full")
             .unwrap();
         let (stderr, err) = Output::new(&spec.stderr_path, 16, false).unwrap();
-        let child = launch::spawn(&spec, Stdio::null(), out, err, launch::Program::Search).unwrap();
+        let child = launch::spawn(&spec, Stdio::null(), out, err).unwrap();
         let result = supervisor::run(child, stdout, stderr, &spec, Instant::now(), None);
         assert_eq!(
             result.completion.status,

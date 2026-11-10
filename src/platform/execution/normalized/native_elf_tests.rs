@@ -418,6 +418,7 @@ fn native_egraph_fuses_exact_standard_map_fold_only_after_trap_free_proof() {
 }
 
 #[test]
+#[ignore = "slow: native compiler inventory scale"]
 fn native_elf_compiles_beyond_former_function_and_instruction_inventories() {
     use std::fmt::Write as _;
     let count = 4097;

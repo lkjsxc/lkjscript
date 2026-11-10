@@ -163,7 +163,7 @@ pub(super) fn run_scalar(
 type FileInventory = BTreeMap<PathBuf, (u64, String)>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct RepositoryInventory {
+pub(super) struct RepositoryInventory {
     files: FileInventory,
     directories: BTreeSet<PathBuf>,
 }
@@ -273,10 +273,20 @@ impl RepositoryCopy {
         })
     }
 
+    pub(super) fn original_inventory(&self) -> RepositoryInventory {
+        self.before.clone()
+    }
+
     pub(super) fn verify_original(&self, original: &Path) -> Check<()> {
+        self.before.verify(original)
+    }
+}
+
+impl RepositoryInventory {
+    pub(super) fn verify(&self, original: &Path) -> Check<()> {
         equal(
             inventory(original)?,
-            self.before.clone(),
+            self.clone(),
             "maintained repository byte inventory after test",
         )
     }

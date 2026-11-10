@@ -14,7 +14,7 @@ struct ChildContext {
     policy: NormalizedRunPolicy,
     control: ExecutionControl,
     parent_domain: super::super::value::ValueOrigin,
-    structured_depth: usize,
+
     ancestor_depth: usize,
 }
 
@@ -246,12 +246,6 @@ impl Machine<'_> {
             ));
         }
         self.observation.parallel_scopes = self.observation.parallel_scopes.saturating_add(1);
-        if self.structured_depth >= parallel::MAXIMUM_STRUCTURED_DEPTH {
-            return Err(resource_error(
-                "normalized_parallel_depth",
-                "structured evaluator nesting exceeds its live-stack capacity",
-            ));
-        }
         if self.shared_budget.is_none() {
             self.charge_allocation(
                 (std::mem::size_of::<SharedBudget>() + 2 * std::mem::size_of::<usize>()) as u64,
@@ -321,7 +315,7 @@ impl Machine<'_> {
             policy: self.policy,
             control: control.clone(),
             parent_domain: source,
-            structured_depth: self.structured_depth + 1,
+
             ancestor_depth: self.ancestor_depth.saturating_add(self.frames.len()),
         };
         let left_budget = Arc::clone(&budget);
@@ -429,7 +423,7 @@ fn child(
         policy,
         control,
         parent_domain,
-        structured_depth,
+
         ancestor_depth,
     } = context;
     let program_owner = &program;
@@ -476,7 +470,7 @@ fn child(
         regions,
         region_scopes: Vec::new(),
         shared_budget: Some(budget),
-        structured_depth,
+
         ancestor_depth,
         memory_domain,
         program,

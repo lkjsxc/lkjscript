@@ -63,8 +63,7 @@ mod witness_dag_tests;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NormalizedRunPolicy {
     pub instruction_steps: Option<u64>,
-    pub maximum_call_depth: usize,
-    pub maximum_value_stack: usize,
+
     pub maximum_allocated_bytes: Option<u64>,
     pub maximum_collection_items: Option<u64>,
     pub maximum_capability_calls: Option<u64>,
@@ -74,8 +73,6 @@ impl From<crate::platform::execution::RunPolicy> for NormalizedRunPolicy {
     fn from(policy: crate::platform::execution::RunPolicy) -> Self {
         Self {
             instruction_steps: policy.instruction_fuel,
-            maximum_call_depth: policy.maximum_call_depth,
-            maximum_value_stack: policy.maximum_value_stack,
             maximum_allocated_bytes: policy.maximum_allocated_bytes,
             maximum_collection_items: policy.maximum_collection_items,
             maximum_capability_calls: policy.maximum_capability_calls,
@@ -420,7 +417,6 @@ impl<'a> NormalizedVm<'a> {
         control: &ExecutionControl,
     ) -> Result<NormalizedInvocation, ExecutionError> {
         let arguments = super::value::RawArguments::new(arguments);
-        validate_policy(self.policy)?;
         control.check()?;
         let list_work = super::list::Work::current();
         let map_work = super::map::Work::current();
@@ -429,7 +425,7 @@ impl<'a> NormalizedVm<'a> {
             regions: &regions,
             region_scopes: Vec::new(),
             shared_budget: None,
-            structured_depth: 0,
+
             ancestor_depth: 0,
             memory_domain: super::value::ValueOrigin::fresh().ok_or_else(|| {
                 resource_error(
@@ -684,7 +680,7 @@ struct Machine<'a> {
         crate::platform::execution::region::runtime::Identity,
     )>,
     shared_budget: Option<Arc<super::shared_budget::SharedBudget>>,
-    structured_depth: usize,
+
     ancestor_depth: usize,
     memory_domain: super::value::ValueOrigin,
     root_allowance: Option<Arc<[RequirementIndex]>>,
@@ -3989,15 +3985,6 @@ impl Machine<'_> {
         if arguments.len() != code.parameter_count as usize {
             return Err(type_error("code argument count is foreign"));
         }
-        if !tail
-            && self.frames.len().saturating_add(self.ancestor_depth)
-                >= self.policy.maximum_call_depth
-        {
-            return Err(resource_error(
-                "normalized_call_depth",
-                "normalized execution exceeded its call-depth budget",
-            ));
-        }
         let locals_bytes = (code.local_count as u64)
             .checked_mul(std::mem::size_of::<Option<CheckedValue>>() as u64)
             .ok_or_else(|| {
@@ -4630,12 +4617,6 @@ impl Machine<'_> {
     }
 
     fn push(&mut self, value: CheckedValue) -> Result<(), ExecutionError> {
-        if self.stack.len() >= self.policy.maximum_value_stack {
-            return Err(resource_error(
-                "normalized_value_stack",
-                "normalized execution exceeded its value-stack budget",
-            ));
-        }
         // Charge the additional proof carried by this operand placement. New frame
         // local buffers are charged when allocated; exact zero-growth self-tail
         // reuse retains the already reserved buffer without another local charge.
@@ -5879,16 +5860,6 @@ fn i64_pair(arguments: &[NormalizedValue]) -> Result<(i64, i64), ExecutionError>
     Ok((*left, *right))
 }
 
-fn validate_policy(policy: NormalizedRunPolicy) -> Result<(), ExecutionError> {
-    if policy.maximum_call_depth == 0 || policy.maximum_value_stack == 0 {
-        return Err(resource_error(
-            "normalized_run_policy",
-            "normalized call-depth and value-stack limits must be positive",
-        ));
-    }
-    Ok(())
-}
-
 fn capabilities_unbound() -> ExecutionError {
     ExecutionError::new(
         ExecutionFailureClass::Capability,
@@ -5937,9 +5908,7 @@ fn validate_runtime_implementation(
     *nodes = nodes
         .checked_add(1)
         .ok_or_else(|| type_error("implementation witness inventory overflow"))?;
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-        || *nodes > crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK
-    {
+    if *nodes > crate::platform::kernel::contract::MAXIMUM_VALIDATION_WORK {
         return Err(type_error(
             "implementation witness exceeds finite admission",
         ));
@@ -5955,10 +5924,7 @@ fn validate_runtime_implementation(
             "implementation witness differs from its admitted identity",
         ));
     }
-    if depth.saturating_add(canonical.depth) > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-    {
-        return Err(type_error("implementation DAG exceeds finite depth"));
-    }
+
     if !application.associated_types.is_empty() {
         let mut type_nodes = *nodes as u64;
         let result =

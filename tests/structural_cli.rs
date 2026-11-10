@@ -168,7 +168,7 @@ impl Public {
             arguments,
         ]);
         let execution = record(&records, "execution");
-        assert_eq!(field(execution, "differential"), "equal");
+        assert_eq!(field(execution, "engine"), "vm");
         serde_json::from_str(field(execution, "value")).unwrap()
     }
 }
@@ -556,39 +556,23 @@ fn copied_binary_admits_depth_and_unmetered_growth_and_enforces_explicit_identit
     let public = Public::new("minimal");
     let base = public.revision();
     let head = std::fs::read(public.project.join("HEAD")).unwrap();
-    for (name, flat, block, accepted) in [
-        ("block-1024", 0, 1024, true),
-        ("block-1025", 0, 1025, false),
-        ("mixed-1024", 512, 512, true),
-        ("mixed-1025", 513, 512, false),
-        ("flat-1024", 1023, 1, true),
-        ("flat-1025", 1024, 1, false),
-    ] {
-        let input = public.write(&format!("{name}.lkjc"), &depth_request(&base, flat, block));
-        if accepted {
+    // Planning traverses and drops each complete request without publishing it.
+    // Block, flat and mixed authoring cross the former 1,024-level boundary.
+    for depth in [256, 1_024, 4_096] {
+        for (form, flat, block) in [
+            ("block", 0, depth),
+            ("mixed", depth / 2, depth / 2),
+            ("flat", depth - 1, 1),
+        ] {
+            let name = format!("{form}-{depth}");
+            let input = public.write(&format!("{name}.lkjc"), &depth_request(&base, flat, block));
             public.plan(&input);
-        } else {
-            let errors = public.failure(&[
-                "--project",
-                path(&public.project),
-                "change",
-                "plan",
-                "--input-file",
-                path(&input),
-            ]);
-            assert!(
-                errors
-                    .iter()
-                    .filter(|record| record.operation == "diagnostic")
-                    .any(|record| field(record, "code").contains("depth")),
-                "{name}: {errors:#?}"
+            assert_eq!(
+                head,
+                std::fs::read(public.project.join("HEAD")).unwrap(),
+                "{name}"
             );
         }
-        assert_eq!(
-            head,
-            std::fs::read(public.project.join("HEAD")).unwrap(),
-            "{name}"
-        );
     }
 
     // The complete request exceeds the former identity default and is admitted without a

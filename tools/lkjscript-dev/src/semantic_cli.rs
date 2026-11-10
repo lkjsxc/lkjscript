@@ -335,8 +335,11 @@ pub(crate) fn runtime() -> Result<&'static tokio::runtime::Runtime, DevError> {
     static RUNTIME: OnceLock<Result<tokio::runtime::Runtime, String>> = OnceLock::new();
     RUNTIME
         .get_or_init(|| {
+            let stack = lkjscript::platform::stack::reservation_bytes()
+                .map_err(|error| error.to_string())?;
             tokio::runtime::Builder::new_multi_thread()
                 .worker_threads(2)
+                .thread_stack_size(stack)
                 .enable_all()
                 .build()
                 .map_err(|error| error.to_string())

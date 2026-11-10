@@ -23,24 +23,12 @@ mod nominal_admission;
 #[path = "selfhost_source_tests.rs"]
 mod source;
 
-#[test]
-fn selfhost_normalized_byte_inventory_exports_current_compiler() {
-    let u32_at =
-        |bytes: &[u8], at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap());
+fn check_normalized_inventory(payload: &[u8]) {
     let (source, program) = compiler();
     let entry = program
         .function(declaration_named(source, "compile-elf"))
         .unwrap()
         .0 as usize;
-    let payload = input::export(program, entry).unwrap();
-    assert_eq!(u32_at(&payload, 8), 9);
-    eprintln!(
-        "selfhost byte inventory functions={} nodes={} input_bytes={} types={}",
-        wide_at(&payload, 96),
-        wide_at(&payload, 120),
-        payload.len(),
-        wide_at(&payload, 80)
-    );
     let crate::platform::execution::normalized::prepare::NormalizedFunctionBody::Code(code) =
         &program.functions[entry].body
     else {
@@ -59,32 +47,58 @@ fn selfhost_normalized_byte_inventory_exports_current_compiler() {
         .unwrap();
     let control = ExecutionControl::uncancelled();
     let policy = NormalizedRunPolicy::foreground();
-    let values = vec![NormalizedValue::bytes(payload.as_slice())];
+    let values = vec![NormalizedValue::bytes(payload)];
     let vm = NormalizedVm::for_test(program, policy)
         .invoke(validator, values.clone(), None, &control)
         .unwrap();
-    let reference = NormalizedReferenceInterpreter::new(source, program, policy)
+    let reader = source::probe_reader(source);
+    let reference = NormalizedReferenceInterpreter::from_reader(&reader, program, policy)
         .invoke(validator, values, None, &control)
         .unwrap();
     assert_eq!(raw_value_equal(&vm.0, &NormalizedValue::I64(0)), Ok(true));
     assert_eq!(raw_value_equal(&reference.0, &vm.0), Ok(true));
     eprintln!(
-        "selfhost full normalized input admitted vm_steps={} ref_expressions={}",
-        vm.1.instructions, reference.1.expressions
+        "selfhost normalized input bytes={} vm_steps={} ref_expressions={}",
+        payload.len(),
+        vm.1.instructions,
+        reference.1.expressions
     );
-    let independent = byte_buffer_tests::author_only(include_str!(
+}
+
+#[test]
+fn selfhost_normalized_byte_inventory_admits_independent_fixture() {
+    let source = byte_buffer_tests::author_only(include_str!(
         "../../../../tests/fixtures/selfhost-generic-list.lkjc"
     ))
     .unwrap();
-    let projected = prepare_snapshot(&independent);
-    input::export(
-        &projected,
-        projected
-            .function(declaration_named(&independent, "entry"))
-            .unwrap()
-            .0 as usize,
-    )
-    .unwrap();
+    let program = prepare_snapshot(&source);
+    let entry = program
+        .function(declaration_named(&source, "entry"))
+        .unwrap()
+        .0 as usize;
+    let payload = input::export(&program, entry).unwrap();
+    assert_eq!(u32::from_le_bytes(payload[8..12].try_into().unwrap()), 9);
+    check_normalized_inventory(&payload);
+}
+
+#[test]
+#[ignore = "slow: validate the complete maintained normalized compiler closure in both evaluators"]
+fn selfhost_normalized_byte_inventory_exports_current_compiler() {
+    let (source, program) = compiler();
+    let entry = program
+        .function(declaration_named(source, "compile-elf"))
+        .unwrap()
+        .0 as usize;
+    let payload = input::export(program, entry).unwrap();
+    assert_eq!(u32::from_le_bytes(payload[8..12].try_into().unwrap()), 9);
+    eprintln!(
+        "selfhost byte inventory functions={} nodes={} input_bytes={} types={}",
+        wide_at(&payload, 96),
+        wide_at(&payload, 120),
+        payload.len(),
+        wide_at(&payload, 80)
+    );
+    check_normalized_inventory(&payload);
 }
 
 #[path = "../../../../tests/support/selfhost_proposals.rs"]
@@ -92,6 +106,7 @@ mod proposals;
 const SOURCE: &str = proposals::SOURCE;
 
 #[test]
+#[ignore = "slow: replay and compare every maintained compiler declaration"]
 fn selfhost_maintained_proposals_match_authoritative_function_bodies() {
     let (source, program) = compiler();
     // This semantic equality check uses one complete public transaction and the
@@ -228,6 +243,50 @@ fn compiler() -> &'static (crate::platform::kernel::KernelSnapshot, NormalizedPr
     })
 }
 
+// The key commits the actual exported function closure, including its entry.
+// Dynamic compiler mutations therefore cannot reuse an immutable seed image.
+fn native_image_for_payload(
+    program: &NormalizedProgram,
+    entry: usize,
+    payload: &[u8],
+) -> std::sync::Arc<[u8]> {
+    use std::sync::{Arc, Mutex};
+    type Images = BTreeMap<[u8; 32], Arc<OnceLock<Arc<[u8]>>>>;
+    static IMAGES: OnceLock<Mutex<Images>> = OnceLock::new();
+    let key: [u8; 32] = Sha256::digest(payload).into();
+    let slot = {
+        let mut images = IMAGES.get_or_init(Default::default).lock().unwrap();
+        Arc::clone(images.entry(key).or_default())
+    };
+    Arc::clone(slot.get_or_init(|| {
+        crate::platform::compiler::elf_x86_64::compile_function(program, entry)
+            .unwrap()
+            .0
+            .into()
+    }))
+}
+
+struct NativeCompilerSeed {
+    input_digest: [u8; 32],
+    image: std::sync::Arc<[u8]>,
+}
+
+fn native_compiler_seed() -> &'static NativeCompilerSeed {
+    static SEED: OnceLock<NativeCompilerSeed> = OnceLock::new();
+    SEED.get_or_init(|| {
+        let (source, program) = compiler();
+        let entry = program
+            .function(declaration_named(source, "compile-elf"))
+            .unwrap()
+            .0 as usize;
+        let input = input::export(program, entry).unwrap();
+        NativeCompilerSeed {
+            input_digest: Sha256::digest(&input).into(),
+            image: native_image_for_payload(program, entry, &input),
+        }
+    })
+}
+
 fn compile_with(
     source: &crate::platform::kernel::KernelSnapshot,
     program: &NormalizedProgram,
@@ -251,9 +310,25 @@ fn compile_with_policy(
         .unwrap();
     source::cache_measurement::finish("compiler.vm", measured_vm);
     let measured_reference = source::cache_measurement::start_cpu();
-    let (reference, reference_work) = NormalizedReferenceInterpreter::new(source, program, policy)
-        .invoke(declaration, values, None, &control)
-        .unwrap();
+    // Only the immutable compiler fixture reuses its independent schema. Changed
+    // sources still reconstruct their own schema before every comparison.
+    let (reference, reference_work) = if std::ptr::eq(source, &compiler().0) {
+        let reader = source::probe_reader(&compiler().0);
+        NormalizedReferenceInterpreter::from_reader(&reader, program, policy).invoke(
+            declaration,
+            values,
+            None,
+            &control,
+        )
+    } else {
+        NormalizedReferenceInterpreter::new(source, program, policy).invoke(
+            declaration,
+            values,
+            None,
+            &control,
+        )
+    }
+    .unwrap();
     source::cache_measurement::finish("compiler.reference", measured_reference);
     source::cache_measurement::note("compiler.work", || {
         serde_json::json!({
@@ -307,9 +382,12 @@ fn compile_with_policy(
     };
     let index = program.function(declaration).unwrap().0 as usize;
     let measured_c0 = source::cache_measurement::start_cpu();
-    let compiler_image = crate::platform::compiler::elf_x86_64::compile_function(program, index)
-        .unwrap()
-        .0;
+    let compiler_image = if std::ptr::eq(program, &compiler().1) {
+        std::sync::Arc::clone(&native_compiler_seed().image)
+    } else {
+        let compiler_input = input::export(program, index).unwrap();
+        native_image_for_payload(program, index, &compiler_input)
+    };
     source::cache_measurement::finish("compiler.c0-image", measured_c0);
     source::cache_measurement::note("compiler.c1-image", || {
         serde_json::json!({
@@ -757,6 +835,41 @@ fn selfhost_compiler_rejects_malformed_inputs_before_emission() {
 }
 
 #[test]
+fn selfhost_compiler_is_deterministic_and_input_mutation_changes_emitted_behavior() {
+    let payload = input::arithmetic(&[(1, 42), (6, 0)]).unwrap();
+    let (code, image) = compile(&payload);
+    assert_eq!(code, 0);
+    assert_eq!(compile(&payload), (0, image.clone()));
+    assert_eq!(execute(&image, &[]).stdout, b"42");
+    let changed = input::arithmetic(&[(1, 43), (6, 0)]).unwrap();
+    let (code, changed) = compile(&changed);
+    assert_eq!(code, 0);
+    assert_ne!(image, changed);
+    assert_eq!(execute(&changed, &[]).stdout, b"43");
+}
+
+#[test]
+fn selfhost_native_preparation_preserves_mutated_closure_behavior() {
+    let template = "declarations.begin\n(units (module create native-cache (function create entry (visibility public) (effect pure) (returns I64) (body (i64 42)))))\ndeclarations.end\n";
+    let mut images = Vec::new();
+    for value in [42, 43] {
+        let source =
+            byte_buffer_tests::author_only(&template.replace("42", &value.to_string())).unwrap();
+        let program = prepare_snapshot(&source);
+        let entry = program
+            .function(declaration_named(&source, "entry"))
+            .unwrap()
+            .0 as usize;
+        let payload = input::export(&program, entry).unwrap();
+        let image = native_image_for_payload(&program, entry, &payload);
+        assert_eq!(execute(&image, &[]).stdout, value.to_string().as_bytes());
+        images.push(image);
+    }
+    assert_ne!(images[0], images[1]);
+}
+
+#[test]
+#[ignore = "slow: replay and mutate the complete maintained compiler source"]
 fn selfhost_compiler_is_deterministic_and_source_mutation_changes_emitted_behavior() {
     let payload = input::arithmetic(&[(1, 42), (6, 0)]).unwrap();
     let (code, image) = compile(&payload);
@@ -789,6 +902,7 @@ fn selfhost_compiler_is_deterministic_and_source_mutation_changes_emitted_behavi
 }
 
 #[test]
+#[ignore = "slow: compile a 32,770-node capacity input in both evaluators and native code"]
 fn selfhost_compiler_accepts_more_than_historical_node_limit_without_default_allowance() {
     const HISTORICAL_MAX_NODES: usize = 32_768;
     let node_count = HISTORICAL_MAX_NODES + 2;

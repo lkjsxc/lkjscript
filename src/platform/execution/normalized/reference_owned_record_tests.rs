@@ -125,9 +125,33 @@ declarations.end"#,
             arguments: vec![cell],
         },
     );
+    let nested_parcel = intern(
+        &mut source,
+        TypeForm::Applied {
+            declaration: parcel_declaration,
+            arguments: vec![parcel],
+        },
+    );
     let schema = admit(&source).expect("generic nominal fields retain their declaration scopes");
     let scalar = TypeObject::new(TypeForm::I64).unwrap();
     let (scalar, _) = encode_type_object(&scalar).unwrap();
+    assert!(schema.is_owned_type(nested_parcel));
+    let nested_layout = schema.owned_record_layout(nested_parcel).unwrap();
+    assert_eq!(nested_layout.declaration, parcel_declaration);
+    assert_eq!(nested_layout.arguments.as_ref(), &[parcel]);
+    assert_eq!(nested_layout.fields.len(), 2);
+    assert_eq!(
+        nested_layout
+            .fields
+            .iter()
+            .map(|member| (member.reference, member.ty))
+            .collect::<std::collections::BTreeMap<_, _>>(),
+        std::collections::BTreeMap::from([
+            (field(&source, "Parcel", "value"), parcel),
+            (field(&source, "Parcel", "stamp"), scalar),
+        ]),
+        "finite repeated generic applications preserve every canonical field"
+    );
     let data = TypeObject::new(TypeForm::Applied {
         declaration: declaration(&source, "Data"),
         arguments: vec![scalar],
@@ -163,51 +187,6 @@ declarations.end"#,
 }
 
 #[test]
-fn canonical_owned_record_hidden_fields_share_the_structural_depth_boundary() {
-    let mut source = super::super::tests::byte_buffer_tests::author_only(
-        r#"declarations.begin
-(units (module create depth-reference
-  (owned-record create Leaf (visibility private) (field create value (type ByteBuffer)))
-  (owned-record create Wrapper (visibility private) (field create value (type Leaf)))))
-declarations.end"#,
-    )
-    .unwrap();
-    let wrapper = declaration(&source, "Wrapper");
-    let wrapper = intern(
-        &mut source,
-        TypeForm::Named {
-            declaration: wrapper,
-        },
-    );
-    let mut deep = wrapper;
-    for _ in 0..crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH - 3 {
-        deep = intern(&mut source, TypeForm::OwnedSequence { item: deep });
-    }
-    let product = |deep| TypeForm::OwnedProduct {
-        fields: vec![
-            StructuralTypeField {
-                name: crate::platform::kernel::Name::new("deep").unwrap(),
-                ty: deep,
-            },
-            StructuralTypeField {
-                name: crate::platform::kernel::Name::new("short").unwrap(),
-                ty: wrapper,
-            },
-        ],
-    };
-    intern(&mut source, product(deep));
-    admit(&source).expect("combined sequence/product/nominal path at the global boundary");
-    let deep = intern(&mut source, TypeForm::OwnedSequence { item: deep });
-    intern(&mut source, product(deep));
-    let error = admit(&source).unwrap_err();
-    assert_eq!(error.code, "reference_product_depth");
-    assert_ne!(
-        error.class,
-        crate::platform::execution::ExecutionFailureClass::Resource
-    );
-}
-
-#[test]
 fn canonical_owned_record_recursive_hidden_layout_rejects_independently() {
     let mut source = super::super::tests::byte_buffer_tests::author_only(
         r#"declarations.begin
@@ -230,10 +209,85 @@ declarations.end"#,
     };
     value.ty = recursive;
     let error = admit(&source).unwrap_err();
-    assert_ne!(
+    assert_eq!(
         error.class,
-        crate::platform::execution::ExecutionFailureClass::Resource
+        crate::platform::execution::ExecutionFailureClass::Infrastructure
     );
+    assert!(error.message.contains("cyclic raw Owned"), "{error:?}");
+}
+
+#[test]
+fn canonical_owned_record_growing_and_mutual_generic_layouts_reject_independently() {
+    let original = super::super::tests::byte_buffer_tests::author_only(
+        r#"declarations.begin
+(units (module create recursive-generic-reference
+  (owned-record create Owner (visibility private)
+    (type-parameter create T (constraint owned)) (field create value (type T)))
+  (owned-record create Other (visibility private)
+    (type-parameter create U (constraint owned)) (field create value (type U)))))
+declarations.end"#,
+    )
+    .unwrap();
+    admit(&original).unwrap();
+    for mutual in [false, true] {
+        let mut source = original.clone();
+        let owner = declaration(&source, "Owner");
+        let other = declaration(&source, "Other");
+        let value = field(&source, "Owner", "value");
+        let OwnerRecord::Field(record) = &source.owners[&OwnerKey::Field(value.field)] else {
+            unreachable!();
+        };
+        let parameter = record.ty;
+        let growing_argument = intern(&mut source, TypeForm::OwnedSequence { item: parameter });
+        let application = intern(
+            &mut source,
+            TypeForm::Applied {
+                declaration: if mutual { other } else { owner },
+                arguments: vec![growing_argument],
+            },
+        );
+        let recursive = intern(&mut source, TypeForm::OwnedSequence { item: application });
+        let OwnerRecord::Field(record) = source
+            .owners
+            .get_mut(&OwnerKey::Field(value.field))
+            .unwrap()
+        else {
+            unreachable!();
+        };
+        record.ty = recursive;
+        if mutual {
+            let value = field(&source, "Other", "value");
+            let OwnerRecord::Field(record) = &source.owners[&OwnerKey::Field(value.field)] else {
+                unreachable!();
+            };
+            let parameter = record.ty;
+            let recursive = intern(
+                &mut source,
+                TypeForm::Applied {
+                    declaration: owner,
+                    arguments: vec![parameter],
+                },
+            );
+            let OwnerRecord::Field(record) = source
+                .owners
+                .get_mut(&OwnerKey::Field(value.field))
+                .unwrap()
+            else {
+                unreachable!();
+            };
+            record.ty = recursive;
+        }
+        let error = admit(&source).unwrap_err();
+        assert_eq!(
+            error.class,
+            crate::platform::execution::ExecutionFailureClass::Infrastructure
+        );
+        assert!(
+            error.message.contains("cyclic raw Owned"),
+            "mutual={mutual}: {error:?}"
+        );
+        admit(&original).expect("failed derivation leaves independent healthy admission intact");
+    }
 }
 
 #[test]

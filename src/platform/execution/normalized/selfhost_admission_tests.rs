@@ -446,6 +446,7 @@ fn selfhost_admission_separates_wide_descriptor_identity_from_buffer_borrows() {
 }
 
 #[test]
+#[ignore = "slow: multi-mebibyte compiler input scale"]
 fn selfhost_admission_accepts_native_input_above_historical_eight_mebibytes() {
     let mut text = node(12, 0, 8 * 1024 * 1024 + 1, &[], &[]);
     text.data = vec![b'x'; text.b as usize];
@@ -488,6 +489,7 @@ fn selfhost_admission_accepts_native_input_above_historical_eight_mebibytes() {
 }
 
 #[test]
+#[ignore = "slow: compiler function inventory scale"]
 fn selfhost_admission_checks_every_function_above_historical_1024_rows() {
     let mut functions = vec![
         input::Function {

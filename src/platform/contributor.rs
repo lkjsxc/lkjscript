@@ -156,7 +156,7 @@ pub fn canonical_type_object_identity(form_json: &[u8]) -> Result<([u8; 32], Str
             "type identity input exceeds the canonical object bound",
         ));
     }
-    let form: TypeForm = serde_json::from_slice(form_json).map_err(|error| {
+    let form: TypeForm = super::json::deserialize(form_json).map_err(|error| {
         Diagnostic::new(
             DiagnosticClass::Source,
             "contributor_type_form",
@@ -264,7 +264,15 @@ pub fn nominal_session_state_probe(
         oracle.snapshots.values(),
     )
     .map_err(|error| Diagnostic::new(DiagnosticClass::Corrupt, error.code, error.message))?;
+    let stack = super::stack::reservation_bytes().map_err(|error| {
+        Diagnostic::new(
+            DiagnosticClass::Infrastructure,
+            "contributor_session_stack",
+            error.to_string(),
+        )
+    })?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(stack)
         .worker_threads(1)
         .enable_all()
         .build()

@@ -17,7 +17,7 @@ impl Resolver<'_> {
         active: &mut BTreeSet<TypeObjectDigest>,
         depth: usize,
     ) -> Result<bool> {
-        self.step(depth)?;
+        self.step()?;
         if active.contains(&ty) {
             return Err(Failure::Category);
         }
@@ -49,7 +49,7 @@ impl Resolver<'_> {
         self.admit_view_layout(declaration)?;
         let view = self.read_view_declaration(declaration)?;
         for actual in &arguments {
-            self.step(depth)?;
+            self.step()?;
             if self.contains_read_view(*actual)? {
                 return Err(Failure::Category);
             }
@@ -108,7 +108,7 @@ impl Resolver<'_> {
         Ok(true)
     }
     fn shareable_referent(&mut self, ty: TypeObjectDigest, occurrence: Occurrence) -> Result<bool> {
-        self.step(0)?;
+        self.step()?;
         let overlay = self.overlay();
         let oracle = Oracle(&overlay, occurrence.parameter_scope);
         match self.read_view_category(ty, occurrence)? {

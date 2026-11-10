@@ -154,7 +154,7 @@ substituted member types; it authenticates no phantom identity absent from its u
 An admitted finite-instantiation recursive nominal layout uses the existing active-reference
 markers keyed by the complete application. All ordered arguments precede its nominal marker;
 all substituted members are checked, including forbidden siblings following a back-reference.
-Recursive runtime values remain finite and obey the existing depth, item and byte limits. No
+Recursive runtime values remain finite and obey the existing item and byte limits. No
 encoding generation changes merely because the nominal type graph contains a cycle. Body-only
 dependency edits retain readability when the full layout is unchanged. A member name or type
 change may change that layout identity; incompatible bytes reject and are never coerced or

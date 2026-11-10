@@ -392,8 +392,8 @@ fn interface20_shared_layout_dag_is_bounded_without_enumerating_paths() {
 }
 
 #[test]
-fn interface20_owned_layout_depth_counts_hidden_edges_with_an_empty_leaf() {
-    let maximum = crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
+fn interface_owned_layout_crosses_former_depth_with_an_empty_leaf() {
+    let maximum = crate::platform::kernel::contract::FORMER_TYPE_DEPTH;
     for edge_count in [maximum, maximum + 1] {
         // An empty terminal nominal record contributes zero child edges. A chain
         // of 257 such declarations has exactly 256 hidden representation edges.
@@ -413,12 +413,6 @@ fn interface20_owned_layout_depth_counts_hidden_edges_with_an_empty_leaf() {
             store.stage(*key, bytes, &mut work).unwrap();
         }
         let result = validate_package_interface(package, built.root, &store, &mut work);
-        if edge_count == maximum {
-            result.unwrap();
-        } else {
-            let error = result.unwrap_err();
-            assert_eq!(error.class, DiagnosticClass::Resource);
-            assert_eq!(error.code, "package_interface_type_work");
-        }
+        result.unwrap();
     }
 }

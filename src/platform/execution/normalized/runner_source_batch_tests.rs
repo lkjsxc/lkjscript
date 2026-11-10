@@ -109,11 +109,8 @@ fn healthy(application: &PreparedApplication, input: i64, expected: i64) {
         serde_json::from_slice::<Value>(&receipt.command.result_json).unwrap(),
         json!(expected)
     );
-    assert_eq!(receipt.command.differential, "equal");
     assert!(receipt.command.production.instructions > 0);
-    assert!(receipt.command.reference.expressions > 0);
     production_quiescent(&json!(receipt.command.production));
-    reference_quiescent(&json!(receipt.command.reference));
     executor_quiescent(&json!(receipt.executor));
 }
 
@@ -173,7 +170,7 @@ fn reused_source_rows_refuse_empty_tasks_and_join_quota_failure_before_recovery(
 }
 
 #[test]
-fn every_reused_source_row_still_checks_the_independent_reference() {
+fn source_rows_execute_once_and_explicit_oracle_detects_mutation() {
     use super::super::prepare::{NormalizedFunctionBody, NormalizedInstruction};
     let mut forged = fixture().clone();
     let program = Arc::make_mut(&mut forged.program);
@@ -193,15 +190,30 @@ fn every_reused_source_row_still_checks_the_independent_reference() {
         "private test lane changes admitted production code only"
     );
     for input in [-7, 0, 8] {
-        let error = forged
+        let arguments = json!([input]).to_string();
+        let receipt = forged
             .run_observed(
                 &Name::new("pure").unwrap(),
-                json!([input]).to_string().as_bytes(),
+                arguments.as_bytes(),
                 NormalizedCommandPolicy::default(),
                 &ExecutionControl::uncancelled(),
             )
-            .err()
             .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Value>(&receipt.command.result_json).unwrap(),
+            json!(input + 43)
+        );
+        production_quiescent(&json!(receipt.command.production));
+        executor_quiescent(&json!(receipt.executor));
+        let error = super::differential::run_pure_command(
+            &forged.reference,
+            &forged.program,
+            &Name::new("pure").unwrap(),
+            arguments.as_bytes(),
+            NormalizedCommandPolicy::default(),
+            &ExecutionControl::uncancelled(),
+        )
+        .unwrap_err();
         assert_eq!(error.code, "normalized_runner_differential");
         for (label, check) in [
             ("production-observation", production_quiescent as fn(&Value)),

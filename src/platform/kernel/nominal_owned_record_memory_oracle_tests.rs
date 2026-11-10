@@ -413,41 +413,6 @@ fn nominal_reference_freezes_every_ancestor_and_rejects_structural_field_aliases
 }
 
 #[test]
-fn nominal_reference_counts_one_combined_layout_depth_through_record_and_sequence_edges() {
-    let baseline = source();
-    for extra in [0, 1] {
-        let mut changed = baseline.clone();
-        let object = TypeObject::new(TypeForm::Named {
-            declaration: reference(&baseline, "Empty"),
-        })
-        .unwrap();
-        let mut child = encode_type_object(&object).unwrap().0;
-        changed.types.insert(child, object);
-        for _ in 0..contract::MAXIMUM_TYPE_DEPTH - 1 + extra {
-            let object = TypeObject::new(TypeForm::OwnedSequence { item: child }).unwrap();
-            child = encode_type_object(&object).unwrap().0;
-            changed.types.insert(child, object);
-        }
-        let tagged = declaration(&baseline, "Tagged");
-        let field = changed
-            .owners
-            .values_mut()
-            .find_map(|owner| match owner {
-                OwnerRecord::Field(field) if field.declaration == tagged => Some(field),
-                _ => None,
-            })
-            .unwrap();
-        field.ty = child;
-        let oracle = Oracle(&changed, None);
-        assert_eq!(
-            oracle.product_shape(function(&baseline, "tagged").result.ty),
-            extra == 0,
-            "the declaration field edge and the structural sequence depth share one bound"
-        );
-    }
-}
-
-#[test]
 fn nominal_reference_reads_trusted_transitive_layout_without_granting_representation_access() {
     let mut snapshot = source();
     let package_b = PackageId::migrate(b"transitive-nominal-oracle", 1);

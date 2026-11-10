@@ -11,8 +11,6 @@
   },
   "execution": {
     "instruction_fuel": null,
-    "maximum_call_depth": 4096,
-    "maximum_value_stack": 1000000,
     "maximum_allocated_bytes": null,
     "maximum_collection_items": null,
     "maximum_capability_calls": null
@@ -32,17 +30,25 @@
     "maximum_live_streams": 1024
   },
   "configuration": {
-    "origin": { "kind": "text", "value": "http://127.0.0.1:8080" }
+    "origin": {
+      "kind": "text",
+      "value": "http://127.0.0.1:8080"
+    }
   },
   "secrets": [
-    { "name": "editor-authorization", "variable": "LKJSCRIPT_EDITOR_AUTHORIZATION" }
+    {
+      "name": "editor-authorization",
+      "variable": "LKJSCRIPT_EDITOR_AUTHORIZATION"
+    }
   ],
   "grants": [
     {
       "requirement": "config",
       "sharing_domain": "editor-config",
       "authority_revision": "2222222222222222222222222222222222222222222222222222222222222222",
-      "adapter": { "kind": "configuration" }
+      "adapter": {
+        "kind": "configuration"
+      }
     },
     {
       "requirement": "auth",
@@ -58,7 +64,9 @@
       "requirement": "streams",
       "sharing_domain": "editor-streams",
       "authority_revision": "9999999999999999999999999999999999999999999999999999999999999999",
-      "adapter": { "kind": "byte_stream" }
+      "adapter": {
+        "kind": "byte_stream"
+      }
     },
     {
       "requirement": "data",

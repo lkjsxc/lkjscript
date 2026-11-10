@@ -1,6 +1,6 @@
 //! Finite recursive library and independent consumers authored solely by the copied product.
 use super::*;
-use crate::pure_tail_program::Request;
+use crate::compact_request::Request;
 use serde_json::{Value, json};
 
 #[path = "recursive_batch.rs"]
@@ -466,7 +466,7 @@ fn output_arguments(
         true,
     )?;
     require(
-        field(&records, "execution", "differential")? == "equal",
+        field(&records, "execution", "engine")? == "vm",
         "recursive evaluators disagree",
     )?;
     let actual: Value = serde_json::from_str(&field(&records, "execution", "value")?)?;

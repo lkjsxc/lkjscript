@@ -8,10 +8,9 @@ observes authoritative registry/interface metadata and numeric adapter defaults,
 admits typed arguments, executes pure commands and publishes derived files.
 No Rust replacement for this capability-reference renderer has been integrated.
 Its strict grant-free artifact embedding uses `platform::native_tool::PureTool`,
-which is also used by the [repository-policy oracle](../native-policy/README.md)
-in differential tests. The required production no-Python gate now classifies
-observations directly in Rust. Preparation for this native guide program is shared
-only for immutable code; invocation state and cancellation remain per call.
+which public CLI tests also exercise with the
+[byte-classification example](../native-policy/README.md). Preparation for this native
+guide program shares immutable code; invocation state and cancellation remain per call.
 The separate [Rust documentation site](../../docs/guides/rust-site.md) renders
 embedded Markdown; it does not replace this capability-reference generator.
 

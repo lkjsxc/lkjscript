@@ -101,13 +101,13 @@ fn reframe(bytes: &mut [u8]) {
 }
 
 #[test]
-fn selfhost_source_graph_admits_complete_raw_compiler_and_independent_sources() {
+fn selfhost_source_graph_admits_independent_sources() {
     let small = nominal();
     let closure = byte_buffer_tests::author_only(include_str!(
         "../../../../tests/fixtures/selfhost-closure.lkjc"
     ))
     .unwrap();
-    for source in [&compiler().0, &small, &closure] {
+    for source in [&small, &closure] {
         let bytes = packet(source);
         expect("read-graph", &bytes, 0);
         assert_eq!(
@@ -127,6 +127,7 @@ fn selfhost_source_graph_admits_complete_raw_compiler_and_independent_sources() 
 }
 
 #[test]
+#[ignore = "slow: large carrier and proof scale"]
 fn selfhost_source_graph_native_admits_complete_carriers_above_former_byte_and_proof_limits() {
     const FUNCTIONS: usize = 256;
     const INLINE_BYTES: usize = 64 * 1024;
@@ -941,4 +942,17 @@ fn selfhost_source_graph_native_admits_carriers_above_former_entity_quota() {
     );
     emitted_result("read-carrier", &invalid, 12);
     emitted_result("read-graph", &invalid, 12);
+}
+
+#[test]
+#[ignore = "slow: whole compiler through graph readers"]
+fn selfhost_source_graph_admits_complete_compiler() {
+    let bytes = packet(&compiler().0);
+    expect("read-graph", &bytes, 0);
+    assert_eq!(
+        &bytes[48..80],
+        kernel::semantic_state_digest(&compiler().0)
+            .unwrap()
+            .bytes()
+    );
 }

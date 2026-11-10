@@ -367,7 +367,7 @@ fn prior_application_scan(
     work: &mut Work<'_>,
 ) -> Result<TypeObjectDigest, ExecutionError> {
     work.control.check()?;
-    if contains_associated(program, template, 0, work)? {
+    if contains_associated(program, template, work)? {
         return Err(reject());
     }
     scan_context(

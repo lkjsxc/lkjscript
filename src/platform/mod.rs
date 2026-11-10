@@ -77,6 +77,7 @@ pub mod semantic_fact;
 pub mod semantic_id;
 pub mod semantic_summary;
 pub mod session;
+pub mod stack;
 #[allow(
     dead_code,
     reason = "storage implementations remain private behind GraphRepository"

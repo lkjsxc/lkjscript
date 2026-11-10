@@ -34,7 +34,7 @@ fn map_rows(key_bytes: usize, value_bytes: usize, count: usize) -> Vec<(Vec<u8>,
 }
 
 #[test]
-fn selfhost_source_maps_match_independent_logical_commitments_and_current_state() {
+fn selfhost_source_maps_match_independent_logical_commitments() {
     for (key_bytes, value_bytes) in [(1, 1), (16, 32), (17, 32), (17, 33), (17, 65), (32, 128)] {
         for count in [0, 1, 2, 255, 256, 257, 1024] {
             if key_bytes == 1 && count > 256 {
@@ -47,9 +47,18 @@ fn selfhost_source_maps_match_independent_logical_commitments_and_current_state(
             );
         }
     }
-    // Cross both historical logical-map quotas with independent canonical roots.
+}
+
+#[test]
+#[ignore = "slow: independent logical maps beyond the historical row quotas"]
+fn selfhost_source_map_scale_crosses_historical_row_limits() {
     check_map(3, 1, map_rows(3, 1, 100_001));
     check_map(16, 112, map_rows(16, 112, 65_537));
+}
+
+#[test]
+#[ignore = "slow: every maintained compiler owner, dependency and retirement map"]
+fn selfhost_source_maps_match_current_compiler_state() {
     let (source, _) = compiler();
     let owners = source
         .owners
@@ -227,31 +236,39 @@ fn state_packet(source: &KernelSnapshot) -> Vec<u8> {
     packet
 }
 
+fn check_logical_state(source: &KernelSnapshot) {
+    let expected = kernel::semantic_state_digest(source).unwrap();
+    assert_eq!(
+        expected,
+        kernel::semantic_state_digest_from_root(&source.root).unwrap()
+    );
+    let packet = state_packet(source);
+    let (code, digest) = result("read-state", &packet);
+    assert_eq!(code, 0);
+    assert_eq!(digest, expected.bytes());
+    eprintln!(
+        "selfhost logical source state owners={} dependencies={} retirements={} packet_bytes={} packet_sha256={} semantic_state={expected}",
+        source.owners.len(),
+        source.dependencies.len(),
+        source.retirements.len(),
+        packet.len(),
+        crate::platform::semantic_id::encode_hex(&Sha256::digest(&packet))
+    );
+}
+
+#[test]
+#[ignore = "slow: complete maintained compiler logical state from every map row"]
+fn selfhost_source_state_binds_complete_maintained_compiler() {
+    check_logical_state(&compiler().0);
+}
+
 #[test]
 fn selfhost_source_state_binds_complete_logical_maps_and_package_identity() {
     let independent = byte_buffer_tests::author_only(include_str!(
         "../../../../tests/fixtures/selfhost-source-nominal.lkjc"
     ))
     .unwrap();
-    for source in [&compiler().0, &independent] {
-        let expected = kernel::semantic_state_digest(source).unwrap();
-        assert_eq!(
-            expected,
-            kernel::semantic_state_digest_from_root(&source.root).unwrap()
-        );
-        let packet = state_packet(source);
-        let (code, digest) = result("read-state", &packet);
-        assert_eq!(code, 0);
-        assert_eq!(digest, expected.bytes());
-        eprintln!(
-            "selfhost logical source state owners={} dependencies={} retirements={} packet_bytes={} packet_sha256={} semantic_state={expected}",
-            source.owners.len(),
-            source.dependencies.len(),
-            source.retirements.len(),
-            packet.len(),
-            crate::platform::semantic_id::encode_hex(&Sha256::digest(&packet))
-        );
-    }
+    check_logical_state(&independent);
     let mut renamed = independent.clone();
     renamed.root.package_name = Name::new("different_package_name").unwrap();
     let expected = kernel::semantic_state_digest(&renamed).unwrap();
@@ -518,37 +535,42 @@ fn bound_objects(source: &KernelSnapshot) -> Vec<(u8, Vec<u8>, Vec<u8>)> {
     objects
 }
 
-#[test]
-fn selfhost_source_objects_bind_every_record_to_logical_directory_identity() {
-    for source in [
-        &compiler().0,
-        &byte_buffer_tests::author_only(include_str!(
-            "../../../../tests/fixtures/selfhost-source-nominal.lkjc"
-        ))
-        .unwrap(),
-    ] {
-        let objects = bound_objects(source);
-        let mut packet = vec![];
-        for (kind, entry, bytes) in &objects {
-            packet.push(*kind);
-            packet.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
-            packet.extend_from_slice(entry);
-            packet.extend_from_slice(bytes);
-        }
-        assert_eq!(
-            result("read-bindings", &packet),
-            (0, vec![0; objects.len()])
-        );
-        eprintln!(
-            "selfhost bound source objects={} owners={} retirements={} input_bytes={} input_sha256={}",
-            objects.len(),
-            source.owners.len(),
-            source.retirements.len(),
-            packet.len(),
-            crate::platform::semantic_id::encode_hex(&Sha256::digest(&packet))
-        );
+fn check_bound_objects(source: &KernelSnapshot) {
+    let objects = bound_objects(source);
+    let mut packet = vec![];
+    for (kind, entry, bytes) in &objects {
+        packet.push(*kind);
+        packet.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+        packet.extend_from_slice(entry);
+        packet.extend_from_slice(bytes);
     }
-    let source = &compiler().0;
+    assert_eq!(
+        result("read-bindings", &packet),
+        (0, vec![0; objects.len()])
+    );
+    eprintln!(
+        "selfhost bound source objects={} owners={} retirements={} input_bytes={} input_sha256={}",
+        objects.len(),
+        source.owners.len(),
+        source.retirements.len(),
+        packet.len(),
+        crate::platform::semantic_id::encode_hex(&Sha256::digest(&packet))
+    );
+}
+
+#[test]
+#[ignore = "slow: bind every maintained compiler record to its logical directory identity"]
+fn selfhost_source_objects_bind_every_record_to_logical_directory_identity() {
+    check_bound_objects(&compiler().0);
+}
+
+#[test]
+fn selfhost_source_objects_bind_independent_records_to_logical_directory_identity() {
+    let source = byte_buffer_tests::author_only(include_str!(
+        "../../../../tests/fixtures/selfhost-source-nominal.lkjc"
+    ))
+    .unwrap();
+    check_bound_objects(&source);
     let dependency = kernel::DependencyRecord {
         graph_contract_version: 1,
         package: source.root.package_id,

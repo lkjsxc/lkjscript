@@ -184,17 +184,12 @@ fn sequence_element_eligibility_and_nesting_are_checked_even_when_empty() {
     }
 
     let mut nested = cell;
-    for _ in 0..contract::MAXIMUM_TYPE_DEPTH {
+    for _ in 0..contract::FORMER_TYPE_DEPTH {
         nested = intern(&mut snapshot, TypeForm::OwnedSequence { item: nested });
     }
     owned_product::validate(&snapshot, nested, None).unwrap();
     let excessive = intern(&mut snapshot, TypeForm::OwnedSequence { item: nested });
-    assert_eq!(
-        owned_product::validate(&snapshot, excessive, None)
-            .unwrap_err()
-            .code,
-        "kernel_owned_sequence"
-    );
+    owned_product::validate(&snapshot, excessive, None).unwrap();
 }
 
 #[test]

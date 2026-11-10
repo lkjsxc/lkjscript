@@ -416,7 +416,7 @@ fn append_callable_result<S: std::fmt::Display>(
             ],
         ),
     )?;
-    append_type(standard, path, result.ty, records, 0)
+    append_type(standard, path, result.ty, records)
 }
 
 fn append_owner_detail(
@@ -592,7 +592,7 @@ fn append_owner_detail(
                                 ],
                             ),
                         )?;
-                        append_type(standard, &type_path, parameter.ty, records, 0)?;
+                        append_type(standard, &type_path, parameter.ty, records)?;
                     }
                     append_callable_result(
                         standard,
@@ -683,11 +683,11 @@ fn append_owner_detail(
                             fields,
                         },
                     )?;
-                    append_type(standard, &type_path, binding.ty(), records, 0)?;
+                    append_type(standard, &type_path, binding.ty(), records)?;
                 }
-                append_type(standard, "self", i.self_type, records, 0)?;
+                append_type(standard, "self", i.self_type, records)?;
                 for (index, ty) in i.type_arguments.iter().enumerate() {
-                    append_type(standard, &format!("type-argument.{index}"), *ty, records, 0)?;
+                    append_type(standard, &format!("type-argument.{index}"), *ty, records)?;
                 }
                 for (index, prerequisite) in i.implementation_parameters.iter().enumerate() {
                     append_record(
@@ -720,7 +720,6 @@ fn append_owner_detail(
                         &format!("prerequisite.{}.self", prerequisite.id),
                         prerequisite.self_type,
                         records,
-                        0,
                     )?;
                     for (index, ty) in prerequisite.type_arguments.iter().enumerate() {
                         append_type(
@@ -728,7 +727,6 @@ fn append_owner_detail(
                             &format!("prerequisite.{}.type-argument.{index}", prerequisite.id),
                             *ty,
                             records,
-                            0,
                         )?;
                     }
                 }
@@ -762,7 +760,6 @@ fn append_owner_detail(
                             &format!("method.{}.type-argument.{index}", mapping.method),
                             *ty,
                             records,
-                            0,
                         )?;
                     }
                     for (index, scope) in mapping.read_scope_arguments.iter().enumerate() {
@@ -887,7 +884,7 @@ fn append_owner_detail(
                             fields,
                         },
                     )?;
-                    append_type(standard, &type_path, field.ty, records, 0)?;
+                    append_type(standard, &type_path, field.ty, records)?;
                 }
             }
             PackageInterfaceDeclarationPayload::Variant {
@@ -931,7 +928,7 @@ fn append_owner_detail(
                 )?;
                 append_type_parameters(standard, &signature.type_parameters, records)?;
                 append_parameters(standard, &signature.parameters, records)?;
-                append_type(standard, "result", signature.result, records, 0)?;
+                append_type(standard, "result", signature.result, records)?;
             }
             PackageInterfaceDeclarationPayload::Function(signature) => {
                 let effect = match signature.effect {
@@ -1022,7 +1019,6 @@ fn append_owner_detail(
                         &format!("implementation.{index}.self"),
                         witness.self_type,
                         records,
-                        0,
                     )?;
                     for (argument_index, ty) in witness.type_arguments.iter().enumerate() {
                         append_type(
@@ -1030,7 +1026,6 @@ fn append_owner_detail(
                             &format!("implementation.{index}.type-argument.{argument_index}"),
                             *ty,
                             records,
-                            0,
                         )?;
                     }
                 }
@@ -1080,7 +1075,7 @@ fn append_owner_detail(
                     records,
                     declaration_detail(declaration, "constant", 0, Some("pure")),
                 )?;
-                append_type(standard, "value", *ty, records, 0)?;
+                append_type(standard, "value", *ty, records)?;
             }
             PackageInterfaceDeclarationPayload::Component {
                 requirements,
@@ -1139,13 +1134,13 @@ fn append_implementation_operand(
     records: &mut Vec<DiscoveryRecord>,
 ) -> Result<(), Diagnostic> {
     use super::kernel::ImplementationOperand;
-    let mut pending = vec![(operand, String::from("-"), 0_usize)];
-    while let Some((operand, path, depth)) = pending.pop() {
-        if depth > 128 || records.len() >= BUILTIN_QUERY_MAXIMUM_ITEMS {
+    let mut pending = vec![(operand, String::from("-"))];
+    while let Some((operand, path)) = pending.pop() {
+        if records.len() >= BUILTIN_QUERY_MAXIMUM_ITEMS {
             return Err(discovery_error(
                 DiagnosticClass::Resource,
                 "builtin_type_projection_limit",
-                "package witness projection exceeded its depth or record bound",
+                "package witness projection exceeded its record bound",
             ));
         }
         let (kind, reference, parameter, types, operands) = match operand {
@@ -1190,7 +1185,6 @@ fn append_implementation_operand(
                 &format!("method.{method}.implementation.{index}.{path}.type-argument.{ordinal}"),
                 *ty,
                 records,
-                0,
             )?;
         }
         for (child, operand) in operands.iter().enumerate().rev() {
@@ -1201,7 +1195,6 @@ fn append_implementation_operand(
                 } else {
                     format!("{path}/{child}")
                 },
-                depth + 1,
             ));
         }
     }
@@ -1339,7 +1332,6 @@ fn append_child_detail(
                 &format!("field.{}", field.name),
                 field.ty,
                 records,
-                0,
             )?;
         }
         PackageInterfaceRecord::Case(case) => {
@@ -1353,13 +1345,7 @@ fn append_child_detail(
                 },
             )?;
             if let Some(payload) = case.payload {
-                append_type(
-                    standard,
-                    &format!("case.{}", case.name),
-                    payload,
-                    records,
-                    0,
-                )?;
+                append_type(standard, &format!("case.{}", case.name), payload, records)?;
             }
         }
         PackageInterfaceRecord::Operation(operation) => {
@@ -1391,7 +1377,7 @@ fn append_child_detail(
                 },
             )?;
             append_parameters(standard, &operation.parameters, records)?;
-            append_type(standard, "result", operation.result, records, 0)?;
+            append_type(standard, "result", operation.result, records)?;
         }
         PackageInterfaceRecord::Parameter(parameter) => {
             common.extend([
@@ -1417,7 +1403,6 @@ fn append_child_detail(
                 &format!("parameter.{}", parameter.name),
                 parameter.ty,
                 records,
-                0,
             )?;
         }
         PackageInterfaceRecord::Requirement(requirement) => {
@@ -1485,7 +1470,7 @@ fn append_child_detail(
                     fields: common,
                 },
             )?;
-            append_type(standard, "function", port.function_type, records, 0)?;
+            append_type(standard, "function", port.function_type, records)?;
         }
         PackageInterfaceRecord::Declaration(_)
         | PackageInterfaceRecord::RepresentationDeclaration(_) => {
@@ -1531,13 +1516,12 @@ fn append_type(
     path: &str,
     digest: TypeObjectDigest,
     records: &mut Vec<DiscoveryRecord>,
-    depth: usize,
 ) -> Result<(), Diagnostic> {
-    if depth > 128 || records.len() >= 10_000 {
+    if records.len() >= BUILTIN_QUERY_MAXIMUM_ITEMS {
         return Err(discovery_error(
             DiagnosticClass::Resource,
             "builtin_type_projection_limit",
-            "built-in type projection exceeded its depth or record bound",
+            "built-in type projection exceeded its record bound",
         ));
     }
     let ty = standard.interface_types.get(&digest).ok_or_else(|| {
@@ -1725,23 +1709,11 @@ fn append_type(
     match &ty.form {
         TypeForm::RegionBrand { .. } => {}
         TypeForm::Region { region } | TypeForm::RegionCap { region, .. } => {
-            append_type(
-                standard,
-                &format!("{path}.region"),
-                *region,
-                records,
-                depth + 1,
-            )?;
+            append_type(standard, &format!("{path}.region"), *region, records)?;
         }
         TypeForm::RelPtr { region, item } | TypeForm::RegionSlice { region, item } => {
-            append_type(
-                standard,
-                &format!("{path}.region"),
-                *region,
-                records,
-                depth + 1,
-            )?;
-            append_type(standard, &format!("{path}.item"), *item, records, depth + 1)?;
+            append_type(standard, &format!("{path}.region"), *region, records)?;
+            append_type(standard, &format!("{path}.item"), *item, records)?;
         }
         TypeForm::AssociatedContractMember { .. }
         | TypeForm::AssociatedWitnessProjection { .. }
@@ -1754,7 +1726,6 @@ fn append_type(
                     &format!("{path}.argument.{index}"),
                     *argument,
                     records,
-                    depth + 1,
                 )?;
             }
         }
@@ -1780,34 +1751,22 @@ fn append_type(
                         ],
                     ),
                 )?;
-                append_type(standard, &child, field.ty, records, depth + 1)?;
+                append_type(standard, &child, field.ty, records)?;
             }
         }
         TypeForm::List { item }
         | TypeForm::Option { item }
         | TypeForm::Stream { item }
         | TypeForm::OwnedSequence { item } => {
-            append_type(standard, &format!("{path}.item"), *item, records, depth + 1)?;
+            append_type(standard, &format!("{path}.item"), *item, records)?;
         }
         TypeForm::Map { key, value } => {
-            append_type(standard, &format!("{path}.key"), *key, records, depth + 1)?;
-            append_type(
-                standard,
-                &format!("{path}.value"),
-                *value,
-                records,
-                depth + 1,
-            )?;
+            append_type(standard, &format!("{path}.key"), *key, records)?;
+            append_type(standard, &format!("{path}.value"), *value, records)?;
         }
         TypeForm::Result { ok, error } => {
-            append_type(standard, &format!("{path}.ok"), *ok, records, depth + 1)?;
-            append_type(
-                standard,
-                &format!("{path}.error"),
-                *error,
-                records,
-                depth + 1,
-            )?;
+            append_type(standard, &format!("{path}.ok"), *ok, records)?;
+            append_type(standard, &format!("{path}.error"), *error, records)?;
         }
         TypeForm::Function { parameters, result }
         | TypeForm::TaskFunction {
@@ -1819,16 +1778,9 @@ fn append_type(
                     &format!("{path}.parameter.{index}"),
                     *parameter,
                     records,
-                    depth + 1,
                 )?;
             }
-            append_type(
-                standard,
-                &format!("{path}.result"),
-                *result,
-                records,
-                depth + 1,
-            )?;
+            append_type(standard, &format!("{path}.result"), *result, records)?;
         }
         TypeForm::Unit
         | TypeForm::Bool
@@ -2352,6 +2304,31 @@ mod tests {
     }
 
     #[test]
+    fn type_projection_crosses_the_former_depth_limit() {
+        crate::platform::stack::run("type-projection-depth", || {
+            for depth in [128, 512, 2_048] {
+                let mut fixture = InterfaceFixture::new();
+                let mut item = fixture.ty(TypeForm::I64);
+                for _ in 0..depth {
+                    item = fixture.ty(TypeForm::List { item });
+                }
+                let mut records = Vec::new();
+                append_type(&fixture.view(), "value", item, &mut records).unwrap();
+                assert_eq!(
+                    records
+                        .iter()
+                        .filter(|record| record.operation == "type")
+                        .count(),
+                    depth + 1
+                );
+                drop(records);
+                drop(fixture);
+            }
+        })
+        .unwrap();
+    }
+
+    #[test]
     fn interface_discovery_preserves_result_relations_and_unused_scope_inventories() {
         let mut fixture = InterfaceFixture::new();
         let function = fixture.reference(1);
@@ -2584,14 +2561,8 @@ mod tests {
             read_scope: scope_actual,
         });
         let mut type_records = vec![];
-        append_type(
-            &fixture.view(),
-            "application",
-            applied,
-            &mut type_records,
-            0,
-        )
-        .expect("phantom actual");
+        append_type(&fixture.view(), "application", applied, &mut type_records)
+            .expect("phantom actual");
         assert_eq!(select(&type_records, "type").len(), 2);
         assert_eq!(
             field(select(&type_records, "type")[1], "path"),
@@ -2921,7 +2892,7 @@ mod tests {
         for (form, name, has_witness, has_scope) in forms {
             let digest = fixture.ty(form);
             let mut records = vec![];
-            append_type(&fixture.view(), "root", digest, &mut records, 0)
+            append_type(&fixture.view(), "root", digest, &mut records)
                 .expect("exact symbolic type observation");
             let mut expected = vec![
                 ("path".to_owned(), "root".to_owned()),
@@ -2973,7 +2944,7 @@ mod tests {
             read_scope: lexical,
         });
         let mut records = vec![];
-        append_type(&fixture.view(), "root", other, &mut records, 0).expect("other exact witness");
+        append_type(&fixture.view(), "root", other, &mut records).expect("other exact witness");
         assert_eq!(field(&records[0], "parameter"), other_witness.to_string());
         assert_ne!(
             records, observations[3],

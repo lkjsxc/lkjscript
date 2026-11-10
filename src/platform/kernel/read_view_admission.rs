@@ -900,13 +900,7 @@ fn validate_nominal_inner(
     shareable: bool,
 ) -> Result<(), Diagnostic> {
     admission.step(read)?;
-    if depth > contract::MAXIMUM_TYPE_DEPTH {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "kernel_read_view_depth",
-            "view layout exceeds finite admission",
-        ));
-    }
+
     let layout = layout(read, ty, occurrence, admission)?;
     if active.contains(&layout.declaration) {
         return Err(reject("recursive nominal view layout is not admitted"));
@@ -997,13 +991,7 @@ pub(crate) fn contains(
     let mut seen = BTreeSet::new();
     while let Some((current, depth)) = pending.pop() {
         admission.step(read)?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "kernel_read_view_depth",
-                "view closure exceeds finite type admission",
-            ));
-        }
+
         if seen.contains(&current) {
             continue;
         }

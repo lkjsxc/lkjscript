@@ -97,14 +97,14 @@ pub(crate) fn observe_transaction(path: &Path, function: &str) -> Result<Value, 
         let control = ExecutionControl::uncancelled();
         let host = ProgressHost { calls: AtomicU64::new(0), cancel_after: 37, mapper_items: Mutex::new(Vec::new()) };
         let arguments = vec![raw_list((1..=8192).map(NormalizedValue::I64).collect())?, NormalizedValue::Text(Arc::from("cancelled")), NormalizedValue::I64(1), NormalizedValue::I64(0)];
-        let result = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() }, resident.executor())
+        let result = NormalizedVm::new(resident.program(), NormalizedRunPolicy { ..Default::default() }, resident.executor())
             .observing(&sink, &host).invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), arguments, Some(resident.deployment().capabilities()), &control);
         let error = result.err().ok_or_else(|| failure("transaction cancellation did not fail"))?;
         let observation = sink.into_inner().map_err(|_| failure("transaction observation poisoned"))?.ok_or_else(|| failure("transaction observation missing"))?;
         let mapper_items = host.mapper_items.into_inner().map_err(|_|failure("transaction mapper observation poisoned"))?;
         require(error.code == "execution_cancelled" && error.class == crate::platform::execution::ExecutionFailureClass::Cancelled && host.calls.load(Ordering::Relaxed) == 37 && observation.external_calls == 37 && !mapper_items.is_empty() && mapper_items.iter().enumerate().all(|(index, item)| *item == index as i64 + 1) && observation.value_work.lists.element_handle_allocations > 1 && observation.value_work.lists.element_handle_allocations < 8192 && observation.tail_transfers > 0 && observation.capability_calls == 2 && observation.maximum_live_transactions == 1 && observation.live_transactions_after == 0 && observation.live_call_frames_after == 0 && observation.live_operands_after == 0 && observation.live_locals_after == 0 && observation.live_type_bindings_after == 0, "cancelled helper retained state or skipped staged work")?;
         let recovery_sink = Mutex::new(None);
-        let recovery = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth: 8, ..Default::default() }, resident.executor()).observing_checked(&recovery_sink)
+        let recovery = NormalizedVm::new(resident.program(), NormalizedRunPolicy { ..Default::default() }, resident.executor()).observing_checked(&recovery_sink)
             .invoke_entry(super::prepare::NormalizedEntryPoint::Function(super::value::FunctionIndex(index, resident.program().value_origin)), vec![raw_list((1..=8192).map(NormalizedValue::I64).collect())?, NormalizedValue::Text(Arc::from("after-cancel")), NormalizedValue::I64(1), NormalizedValue::I64(0)], Some(resident.deployment().capabilities()), &ExecutionControl::uncancelled())
             .map_err(|error| failure(&format!("healthy task after cancellation: {}", error.code)))?;
         require(matches!(&recovery.0, NormalizedValue::List(items) if items.len() == 8192 && items.iter().enumerate().all(|(index, value)| matches!(value, NormalizedValue::I64(item) if *item == index as i64 + 1))) && recovery.1.live_transactions_after == 0, "healthy task failed after cancellation")?;
@@ -452,10 +452,7 @@ fn invocation_control(
 }
 
 fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
-    let policy = NormalizedRunPolicy {
-        maximum_call_depth: 8,
-        ..NormalizedRunPolicy::default()
-    };
+    let policy = NormalizedRunPolicy::default();
     let mut cases = Vec::new();
     let list_type = prepared
         .program
@@ -1044,19 +1041,8 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
                 policy,
                 u64::MAX,
             )?;
-            let error = result
-                .err()
-                .ok_or_else(|| failure("non-tail pending work escaped frame admission"))?;
-            require(
-                error.code
-                    == if reference {
-                        "normalized_reference_call_depth"
-                    } else {
-                        "normalized_call_depth"
-                    },
-                "non-tail frame failure has wrong diagnostic",
-            )?;
-            observation["failure"] = json!(error);
+            require(result.is_ok(), "non-tail pending work failed")?;
+            observation["value"] = json!("completed");
             cases.push(observation);
         }
         let (result, mut observation) = invocation(
@@ -1160,48 +1146,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
             observation["allocated_limit"] = json!(limit);
             cases.push(observation);
         }
-        if !reference {
-            let (_, measured) = invocation(
-                &prepared,
-                false,
-                "allocate",
-                vec![NormalizedValue::I64(16)],
-                policy,
-                u64::MAX,
-            )?;
-            let peak = measured["observation"]["maximum_value_stack"]
-                .as_u64()
-                .filter(|values| *values > 1)
-                .ok_or_else(|| failure("operand fixture omitted peak"))?;
-            for limit in [peak, peak - 1] {
-                let limit =
-                    usize::try_from(limit).map_err(|_| failure("operand limit overflow"))?;
-                let (result, mut observation) = invocation(
-                    &prepared,
-                    false,
-                    "allocate",
-                    vec![NormalizedValue::I64(16)],
-                    NormalizedRunPolicy {
-                        maximum_value_stack: limit,
-                        ..policy
-                    },
-                    u64::MAX,
-                )?;
-                require(
-                    result.is_ok() == (limit as u64 == peak),
-                    "operand exact-fit/one-over failed",
-                )?;
-                if let Err(error) = result {
-                    require(
-                        error.code == "normalized_value_stack",
-                        "operand failed at wrong bound",
-                    )?;
-                    observation["failure"] = json!(error);
-                }
-                observation["operand_limit"] = json!(limit);
-                cases.push(observation);
-            }
-        }
+
         for target in [
             "argument-order",
             "callee-order",
@@ -1318,7 +1263,10 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
         u64::MAX,
     )?;
     require(
-        result.is_err_and(|error| error.code == "normalized_call_depth"),
+        result.is_ok()
+            && fault["observation"]["maximum_call_depth"]
+                .as_u64()
+                .is_some_and(|depth| depth > 8192),
         "oracle failed to detect forced ordinary frame growth",
     )?;
     fault["fault"] = json!("forced-ordinary-frame-growth-detected");
@@ -1338,7 +1286,7 @@ fn matrix(prepared: PreparedApplication) -> Result<Value, Diagnostic> {
     fault["fault"] = json!("canonical-reference-independent-of-dispatch");
     cases.push(fault);
     Ok(
-        json!({"classification":"fresh passed","stack_bytes":STACK_BYTES,"call_frame_limit":8,"cases":cases,"cleanup_complete":true,"reference_operand_model":"canonical expression/value accounting; no VM operand stack"}),
+        json!({"classification":"fresh passed","stack_bytes":STACK_BYTES,"cases":cases,"cleanup_complete":true,"reference_operand_model":"canonical expression/value accounting; no VM operand stack"}),
     )
 }
 

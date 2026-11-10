@@ -1,5 +1,5 @@
 //! Public requests for two ordinary foreground consumers of the transported task library.
-use crate::pure_tail_program::Request;
+use crate::compact_request::Request;
 
 fn task(
     r: &mut Request,

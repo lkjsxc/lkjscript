@@ -972,7 +972,7 @@ mod tests {
             )
             .expect("run command");
         assert_eq!(run.result_json, b"\"hello\"");
-        assert_eq!(run.differential, "equal");
+        assert!(run.production.instructions > 0);
     }
 
     #[test]

@@ -99,7 +99,7 @@ fn native_map_entries_preserve_results_and_linear_projection_work_after_detachme
         ("maximum_allocated_bytes", "normalized_allocation"),
         ("maximum_collection_items", "normalized_collection_items"),
     ] {
-        let mut policy = json!({"instruction_fuel":null,"maximum_call_depth":4096,"maximum_value_stack":1000000});
+        let mut policy = json!({"instruction_fuel":null,});
         policy[field] = json!(1);
         let mut limited = BatchCase::failure(field, &json!([true, smoke, 3]), "resource", code);
         limited.execution = Some(policy);
@@ -115,7 +115,7 @@ fn native_map_entries_preserve_results_and_linear_projection_work_after_detachme
         206,
         "every original detached matrix/refusal/recovery row"
     );
-    // The same complete inventory exercises the source differential in the selected mode.
+    // The same complete inventory exercises the source VM in the selected mode.
     // Expectations and modeled work remain in this independent harness.
     let source_outputs =
         public.source_batch("map-matrix", &project, "map-entry-projection", &batch);

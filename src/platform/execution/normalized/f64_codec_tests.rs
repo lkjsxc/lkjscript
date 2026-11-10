@@ -286,8 +286,7 @@ fn f64_json_preflight_accepts_type_and_nonfinite_values_fail_before_payload_outp
     let fixture = fixture();
     let limits = JsonLimits::default();
     let control = ExecutionControl::uncancelled();
-    codec::require_json_encoding(&fixture.program, fixture.packet, false, limits, &control)
-        .unwrap();
+    codec::require_json_encoding(&fixture.program, fixture.packet, false, &control).unwrap();
     for bits in [
         0x7ff0_0000_0000_0000,
         0xfff0_0000_0000_0000,

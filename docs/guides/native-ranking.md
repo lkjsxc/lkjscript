@@ -91,10 +91,8 @@ The `top-buffered` command uses this alternative:
 ```
 
 It returns the same two entries as `top`. For standalone execution, set the
-descriptor's `target` to `top-buffered`. The [matched prototype measurements](../performance.md#native-buffered-selection)
-show improvements for small prefixes over varied/permuted inputs, but a slowdown
-for descending numeric input. Choose using the actual workload; neither function
-promises a universal speedup.
+descriptor's `target` to `top-buffered`. Compare both functions on the actual workload
+using identical inputs and complete expected outputs.
 
 ## Run the bundle with file input
 
@@ -136,14 +134,8 @@ moves away. No graph project or comparison implementation from the compiler
 checkout is needed at runtime.
 
 Two argument members leave room for 99,998 Text elements under the current
-100,000-item input bound; their encoded bytes must also fit one MiB. The measured
-example selects from that many distinct keys and returns 17 entries in 460 bytes. Another
-input contains 65,516 rows with 4,096 differently weighted keys; its complete top
-17 also matches an independent result. These are bounded correctness observations,
-not a latency or memory guarantee. The command still holds the full table.
-[Matched measurements](../performance.md#native-bounded-selection-2026-09-23)
-compare the earlier full-sort command with selection using identical input and
-result bytes, including zero-count and complete-result cases.
+100,000-item input bound; their encoded bytes must also fit one MiB. The command
+holds the full input table while selecting results.
 
 ## Transport the sorting library
 
@@ -215,10 +207,3 @@ This repair was exercised with the earlier full-sort library and a copied v0.1.4
 executable. Choosing newer library meaning
 is an explicit graph change; upgrading an executable alone does not perform it.
 The observation does not establish compatibility with every older executable.
-
-The [continuation](../campaigns/202609222330.md) preserves the earlier 39-command
-full-sort and dependency-repair observation separately from this selection
-successor. Selection passes native tests, all 2,548 small numeric input/count cases,
-and five requested counts over 511 consumer-owned nominal records after transport.
-These are ordinary native library/workflow examples; standard-library adoption
-and release acceptance have their own evidence.

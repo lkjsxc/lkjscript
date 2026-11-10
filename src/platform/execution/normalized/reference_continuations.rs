@@ -1031,17 +1031,6 @@ impl<'state, 'input> Machine<'state, 'input> {
                 .values()
                 .any(|value| value.raw().memory_owns_live_loans());
         if retained {
-            if self
-                .state
-                .call_depth
-                .saturating_add(self.state.ancestor_depth)
-                >= self.state.policy.maximum_call_depth
-            {
-                return Err(reference_resource(
-                    "normalized_reference_call_depth",
-                    "retained memory loan scope exceeded call-depth limit",
-                ));
-            }
             self.state.call_depth += 1;
             self.state.observation.maximum_call_depth =
                 self.state.observation.maximum_call_depth.max(

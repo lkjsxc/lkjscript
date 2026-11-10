@@ -1,340 +1,37 @@
 # Roadmap
 
-Build composable types, generics, traits, ownership, lifetimes, effects and
-concurrency around the accepted meaning graph. Reliable agent development is a
-secondary objective. [Direction](direction.md) owns durable architectural choices,
-[status](status.md) owns availability and unfinished publication, and
-[specifications](spec/) own language contracts. Completed delivery belongs to Git
-and release notes.
+`direction.md` owns outcomes and design hypotheses. `status.md` owns the executable
+next action and bootstrap route. This file describes dependencies, not acceptance
+campaigns.
 
-These priorities guide useful experiments. A complete capability needs ordinary
-public authoring, cross-package composition, independent admission and meaningful
-failure evidence. Memory safety, bounded checking and avoiding unnecessary copies
-remain baseline requirements.
+## Immediate
 
-## Compose ownership and generic contracts
+- Delete remaining modeled work/allocation accounting and unused policy branches,
+  keeping useful caller cancellation and actual failure reporting.
+- Narrow compiler input to validated current meaning and exact dependencies.
+  Extend the typed catalogue prototype into type decoding and one consuming pass.
+- Widen, segment or stream remaining chosen representation widths and page payloads.
+- Use routine timing to choose the next fixture-sharing or Rust build split.
 
-Use [nominal owned records](spec/owned-records.md) to let a library own its
-representation invariants. The standard FIFO names one affine `Fifo<T>` while its
-defining module retains all field-operation authority. Exact nominal identity,
-private layout admission and source-tied element reads must survive generic
-implementation witnesses, transports and detached artifacts. Empty and data-only
-records remain owned; representation changes do not silently retarget dependencies.
+## Compiler and core
 
-Use [mixed storage contracts](spec/owned-contract-parameters.md#indexed-ordinary-storage)
-to combine an exactly Owned Self with ordinary Transferable or
-CaptureSafeTransferable arguments. The
-[indexed-data library](../examples/indexed-data-storage/README.md) provides flat and
-private nominal chunked implementations of the same six-method
-interface. Admit ordinary category independently from transfer/capture obligations,
-including unused and phantom actuals. Stable reads and displaced ordinary values
-must survive storage destruction. The planner's integer and Boolean storage
-witnesses exercise all four combinations without a new borrowing mode. Exact
-availability and validation remain status-owned.
+The current self-hosted compiler is a working seed for its supported closure.
+Extend supported semantics alongside an idiomatic replacement. Keep source
+mutations, independent behavior checks and fixed points. Narrow compiler input to
+current validated meaning and exact dependencies; storage owns history.
 
-Use [scoped reads of owned children](spec/owned-borrows.md) to inspect products and
-choices through exact implementation witnesses, then consume the preserved owner.
-The acceptance witness combines a symbolic reader with independent buffer/scalar
-implementations, nested composites, exact package transports and detached artifacts.
-Loan provenance, cleanup and inactive branches require independent checking.
+Consolidate ordinary and owned data constructs after proving affinity, borrowed
+matching, generic collections and cleanup. Test capability/ownership and static
+witness hypotheses on their concrete cases before removing existing mechanisms.
+Keep the kernel explicit, deterministic and cancellable.
 
-Use [parameterized owned contracts](spec/owned-contract-parameters.md) to abstract
-over runtime-sized collections with structural owner-returning methods. The
-[worklist witness](guides/native-owned-worklists.md) composes flat and chunked
-storage, independent elements, cross-representation transfer and a native
-provisional graph validator. It builds on [owned sequences](spec/owned-sequences.md)
-without requiring a new nominal ownership system.
+## Retire responsibilities
 
-Use [source-tied borrowed results](spec/owned-read-results.md) to return read-only
-views through pure generic functions and owned-contract methods. The
-[selection witness](../examples/owned-read-results/README.md) exports IndexRead and
-first-max selection before concrete readers exist, then observes selected views,
-drains the original collection and reuses its owner. Exact source provenance and
-ordered cleanup cross each package and call boundary; availability remains
-[status-owned](status.md).
+Delete the predecessor when its replacement owns the complete behavior. Evaluate
+reference twins, service adapters and release machinery against their contribution
+to language work. Simplify publication toward an immutable base, checked candidate
+and atomic HEAD compare-and-swap with stale-base and crash recovery guarantees.
 
-Use [witness-selected associated Owned members](spec/associated-owned-types.md)
-for representation-specific borrowed blocks. The consumer-first
-[BlockRead witness](../examples/associated-blockread/README.md) selects flat and
-private nominal block shapes through exact witnesses; maintained planner stages
-use the same reader without changing random-access contracts. Associated Owned
-alone grants no Transfer or Share permission. The selected
-[source-tied first-order read-view families](spec/associated-read-views.md) have a
-local implementation with explicit source scopes and affine custody; validation,
-acceptance and publication remain [status-owned](status.md). General regions,
-higher-ranked view relationships, cursors and bounded value/region parameters
-remain subsequent workload-led steps.
-The explicit Item argument still serves unchanged ordinary element reads.
-
-Use [explicit generic implementation schemes](spec/generic-owned-implementations.md)
-to reuse storage and reader methods across independently authored owned items.
-The [native witness](../examples/generic-owned-implementations/README.md) exports
-flat/chunked schemes before cells, buffers and a nested product exist, preserving
-exact applications through source-tied reads, transfer and joined tasks. Require
-complete admission of mapped targets and finite cross-package callable flow.
-
-The selected composition milestone adds ordered implementation prerequisites and
-explicit mapped-function witnesses. The [adapter witness](../examples/composable-owned-implementations/README.md)
-maps the existing generic selector directly, nests independently selected readers,
-and forwards a consuming task's exact prerequisites. Every nested selection retains
-its identity, ownership modes, closed effects and borrowed-result provenance.
-Mapped operands are direct same-scheme prerequisites or finite concrete application
-trees containing no lexical witness parameter; eligible symbolic type arguments
-remain allowed. A conservative graph of potential method targets rejects lexical
-witness wrapping inside recursive components, including recursion made possible
-by unused same-contract alternatives. Unsupported construction and resource
-exhaustion remain distinct. Method-local schemes and inferred selection require
-separate designs.
-
-Keep implementation identity explicit and contracts independently checkable.
-Inference must retain boundary evidence; bounded proof-search exhaustion remains
-distinct from invalid meaning. Effect allowances, witnesses and deployment grants
-stay separate. Typed failures must compose with cancellation and resource completion.
-
-## Establish region custody and memory policies
-
-Use [borrowed tasks and joined parallel reads](spec/structured-parallel.md) to
-separate storage custody from scoped access. The
-[recursive reduction witness](../examples/scoped-parallel-reads/README.md) lends
-flat and chunked storage to nested readers, then drains and reuses the original
-owner. Shareable read admission and Transferable movement are independent
-obligations. Exact availability and acceptance remain [status-owned](status.md).
-
-Extend scoped access into explicit region custody. Define escape, cross-region
-roots, freezing, transfer and reclamation before selecting placement mechanisms.
-Compare unique regions, scoped aliases, local tracing for cycles and transitively
-immutable shared segments. A mandatory global tracing heap and universal Arc-style
-ownership are not architectural requirements.
-
-Relate moving storage to handles, pinning, roots and native safepoints. Region views
-should admit different storage implementations while retaining independently checked
-access rights. Reclamation does not complete I/O or commit a transaction. Preserve a
-collector-free path where the selected execution profile permits it.
-
-Measure copying, retained memory, pauses, throughput and preparation on matched
-workloads, including locality and large working sets. Allocation identity alone
-does not establish whole-program zero-copy behavior or a speedup.
-
-## Scale structured execution and the shared host
-
-Extend the [structured parallel contract](spec/structured-parallel.md) and
-[shared runtime](spec/shared-runtime.md) with explicit scheduling, pooling,
-readiness, drain and unload contracts. Share compatible immutable code and metadata;
-keep state, captures, grants, cancellation and accounting private to their owners.
-Isolates are authority/lifetime domains rather than permanent OS threads.
-
-Use retained cold/warm, overlap, cancellation and stop evidence to select root
-scheduling, local queues, batching and locality work. Reused auxiliary workers do
-not establish a total CPU bound, fairness or preemption. Blocking roots need a
-suspension/completion contract before joining a bounded CPU scheduler.
-Use [demand-driven idle worker custody](decisions/idle-worker-custody.md) to let
-independent open executors reuse receipt-joined workers without another physical
-start. Keep active jobs, grants, programs, cancellation and quotas private. Each
-worker retains one join owner through handoff and shutdown races; eligibility does
-not precede result cleanup. This is not fair CPU entitlement or root scheduling.
-Use [owner-local dispatch](decisions/owner-local-worker-dispatch.md) to separate
-physical custody from receipt-joined availability. Stable local dispatch and result
-completion use only their current owner state; cold misses, new starts, handoff and
-closure retain shared coordination. A directory entry is not availability, and
-failed cleanup never grants transfer. Measure contention, locality and retained
-owner metadata before selecting more complex queueing or retirement policies.
-Exact acceptance remains status-owned.
-
-Introduce typed bounded channels only with exact destination admission, capacity
-reservation, irrevocable acceptance, owner-returning refusal and joined receiver
-cleanup. Acceptance is distinct from processing completion. In-process custody
-does not establish distributed exactly-once delivery.
-
-## Reduce repeated preparation and semantic-development work
-
-Use [exact compiler-unit projection](decisions/exact-compiler-unit-projection.md)
-to separate independently checked children from their enclosing code-generation
-units. Keep both before and candidate ownership, removed-unit evidence and direct
-port validation. Share one projection between the semantic and compiler impact
-sets without weakening bounded reads or cache admission.
-
-Use [exact callable-cycle proof selection](decisions/context-scoped-callable-proof.md)
-to admit compact acyclic prerequisite DAGs without unfolding every typed path.
-All source operands remain independently admitted. Use
-[demanded recursive provenance](decisions/demanded-callable-provenance.md) to follow
-only exact paths that can feed declaration type slots, preserving all expanding
-cycles without merging same-shaped witnesses. Use
-[operation-local incoming call inputs](decisions/operation-local-callable-inputs.md)
-to read each demanded call once while preserving its distinct witness paths. Lexical
-declaration and type-object reads, plus large genuinely demanded path sets, remain
-separate proof costs. Use [operation-local lexical projections](decisions/operation-local-lexical-projections.md)
-to retain ordered implementation-parameter IDs without repeatedly cloning their
-whole declaration. Exact lexical owners, witness paths and type slots stay separate;
-modeled lookup work and retained metadata are additional measured costs. Retain exact
-substitutions, scopes, expansion adversaries and bounded refusal.
-
-Use [whole immutable prepared witness nodes](decisions/shared-prepared-witness-nodes.md)
-to share complete exact applications across catalogue entries, prerequisite edges
-and function bindings. Concrete DAG storage was already present; the full
-[recursive consumer](../examples/concrete-callable-proof/README.md) is now maintained
-as public coverage rather than described as an unsupported future capability.
-Keep selected identity, complete admission and owner-private execution state.
-Measure node storage, preparation and invocation separately without raising limits.
-
-Preserve the existing shared prepared instruction bodies for the same exact
-function, type arguments and closed effect/requirement context. Complete witness
-identities and resolved call-site bindings remain on separately admitted
-applications, including tail calls, function values and parallel children. This
-mechanism is implemented, not a new backlog item. Continue measuring retained
-instructions, application metadata and preparation on matched selections; sharing
-storage alone does not establish faster preparation or execution.
-
-Exact-self-tail execution now reuses local-slot buffers under the
-[language contract](spec/language.md), keeping fresh invocation identities, full
-admission, cancellation and custody checks. Physical-buffer and exact allocation
-controls and complete reference/VM results passed fresh full acceptance. The
-paired measurements did not establish a preparation or execution speedup. Continue
-measuring preparation, first invocation and repeated invocation separately;
-allocation reductions do not justify weaker performance thresholds.
-
-The CHECK8/CACHE4 Cargo-origin implementation passed clean-T full29 with 29 fresh
-gates and zero reuse; complete independent CHECK8 authentication passed 68,023
-checks. Origin admission covers direct
-Cargo build/test producers with declared outputs and their complete selected
-workspace inventory. It binds the whole input snapshot digest and physical target;
-existing declaration-granular incremental compilation and scaling contracts remain
-unchanged. Nonproducer workspace tests are serialized and context-rechecked without
-per-unit debug/test-origin admission; this run used a new empty governed target.
-Compiled-test origin admission remains a separate queued follow-up.
-
-The native-verification packing candidate now bounds both input and expected
-output while retaining complete ordered cases, independent oracles, existing
-quotas/refusals/recovery and joined cleanup. Its six packing controls and exact
-native checker case pass; one same-CLI comparison preserves all 18 ordered groups
-and reduces batch executions from 765 to 83. Preparation and total wall time fell
-in that diagnostic pair, while encoding time increased. Fresh full acceptance and
-mainline integration remain pending at the requested pause. Resume that acceptance
-boundary before extending this work or changing performance thresholds. Status
-owns the original measurements, retained resources and exact next action.
-
-Use [admission-local shared interface record maps](decisions/shared-dependency-interfaces.md)
-across importing snapshots. Each exact record map is materialized once per source
-admission; every load retains independent interface, body and composed-callable
-validation. The [diamond reader workload](guides/native-shared-dependencies.md)
-keeps distinct private implementations and ordered borrowing through shared imports.
-Flattened dependency type maps, cross-operation reuse and repeated validation remain
-separate costs. Measure them before extending sharing or changing admission limits.
-
-Use [reviewed candidate refresh](spec/concurrent-changes.md) as the foundation for
-larger concurrent-agent experiments and finer dependency capture. Distinct edited
-owners alone do not prove independence. Branch/tag, difference, merge, deletion and
-compaction need explicit retained-root and interruption contracts; a short serialized
-publication point remains acceptable.
-
-## Advance native execution, storage and self-hosting
-
-Derive dedicated-runtime programs and native executables from the same accepted
-meaning. Hosted native code may embed services; freestanding profiles reject
-unsupported services explicitly. Add targets with execution/distribution evidence.
-Wasm and other-language interoperability remain optional later work.
-
-Own persistence and typed data semantics. Separate durable transactions, revision
-history and heap reclamation. Investigate storage layout, batching, recovery and
-bounded caching on concrete workloads without requiring an external database engine.
-
-Move libraries, tools, compiler and runtime toward complete self-hosting, including
-possible removal of Rust. Replace a host boundary when its native successor owns
-the relevant semantics and failure behavior. Native development must remain usable
-without an external semantic generator.
-
-Use the native worklist-based dependency-graph validator as a tooling witness over
-provisional proposals. It validates all nodes and references before reachability;
-its owned working collection carries candidate identities. The native
-[dependency-component pass](../examples/dependency-components/README.md) additionally
-partitions all admitted nodes, including unreachable nodes, and distinguishes
-singleton self-loops. Explicit enter/leave frames keep graph depth out of the
-call stack; complete public results retain authored identity order across flat
-and chunked worklists. The first pass needs their LIFO behavior in addition to
-the checked ownership/type signature. Integrating these passes into the
-production compiler requires an explicit host boundary that retains ordinary
-admission and publication authority. Larger typed passes should justify storage,
-view and region abstractions through working-set and reclamation measurements.
-Use the [native dependency-first planner](../examples/dependency-plan/README.md)
-to condense complete proposals into explicit cyclic units, distinct component
-dependencies and earliest dependency-first stages. Preserve authored identities,
-complete unreachable validation and the separate scope of derived consistency
-checks. A stage is graph precedence, not parallel-execution or publication
-authority. Integrate this witness into a maintained compiler consumer only through
-an independently admitted boundary; exact availability remains status-owned.
-Use [ordinary data in owned sequences](guides/native-data-sequences.md) to separate
-container custody from element ownership. The planner's remaining counts, levels,
-visited flags and readiness indices use indexed owned working storage, with stable
-ordinary reads and explicit displaced values from replacement. Parameterize its
-working state over separate `IndexedData` integer and Boolean owners and retain the
-append-only readiness queue. Keep its complete
-independent result checker and current graph capacities. Measure preparation,
-storage growth and bounded per-update admission before selecting further compiler
-boundaries. [Nominal owned records](spec/owned-records.md) provide module-private
-representations, demonstrated by the standard FIFO. Exact BlockRead witnesses now
-support scoped stage traversal over the selected integer storage; general view
-relationships and region custody remain subsequent workload-led steps. Random
-updates retain their separate IndexedData contracts.
-The [owned metadata workload](../examples/owned-metadata-costs/README.md) separates
-ordinary list/map projection from packing, unpacking and borrowed metadata reads.
-Use its complete ingress checks and non-regressing cost ceilings.
-The [borrowed immutable metadata projection](decisions/borrowed-immutable-metadata.md)
-retains a live owned product's exact allocation-bound admission when selecting an
-ordinary immutable field. Raw input, packing and transfer still own independent
-admission. Use [checked consuming extraction](decisions/checked-owned-extraction.md)
-to retain ordinary field evidence while consuming an exactly admitted product or
-nominal record. Owned children keep their custody checks; undelivered fields
-retain a cleanup owner. Neither shape equality nor a type annotation authorizes
-skipped raw admission. Measure construction and extraction separately before
-extending reuse to another boundary.
-
-Use [checked map-entry projection](decisions/checked-map-entry-projection.md)
-to enumerate actual admitted immutable children without searching from the root
-for every key. Complete raw admission, independent reference execution and
-output reservations remain intact. Measure output construction separately before
-selecting a native fold or borrowed cursor; a private runtime iterator is not
-a new public borrowing contract.
-
-Use the native [generic consumer folds](../examples/map-entry-projection/consumer-fold/README.md)
-to study repeated loop and callback costs without adding a trusted cursor. The
-independently imported consumers cover both ordered scalar reduction and nested
-persistent histories, retaining every prior version across block boundaries.
-These are explicit library alternatives, not a replacement of the standard fold;
-small inputs and larger states retain separate cost and live-local obligations.
-
-Use the separately exported [native plan result checker](decisions/native-plan-result-checking.md)
-to check a claimed component partition and earliest stages against its complete
-proposal. The checker admits the source through the existing validator, but checks
-internal forward/reverse connectivity and level equations without the producer's
-SCC or readiness algorithms. Checked native planner entrypoints import that exact
-checker package before returning a valid plan or a source-invalid/capacity result.
-Complete-outcome checking retains exact diagnostic identity and precedence, rather
-than trusting negative producer reports. Internal failures stay failures.
-A report is ordinary data, not
-publication or execution authority; shared source admission and runtime machinery
-remain explicit trust boundaries. Prefer binding this checked interface to a real
-compiler consumer over adding another disconnected graph-analysis example.
-
-Use [native package planning](decisions/native-package-planning.md) to move both
-production cycle refusal and the compilation dependency plan into checked native
-code. Its maintained producer/checker and bounded embedding cover the existing
-10,000-package/100,000-edge closure ceiling. Retain complete structural and typed
-admission, real operation cancellation and independent artifact topology so loading
-the planner cannot recursively invoke itself. Measure cold preparation and native
-producer/checker costs on actual package operations before choosing the next
-compiler boundary. Status owns acceptance and delivery of this takeover. Keep resumable
-execution before a scheduler rewrite, measured custody needs before a region
-runtime, and a stable typed lowering boundary before a native backend.
-
-## Evidence and development cost
-
-Use independent expected results, rejected proposals with unchanged accepted state,
-and cleanup observations. Retain unfavorable performance results. Separate source
-acceptance, finalized distributed bytes and publication; reuse proof only while its
-bindings remain valid. Maintained applications are regression witnesses rather than
-an application-first backlog.
-
-Keep exact logs and receipts at verification/release owners. Reduce repeated context
-and overlapping verification while preserving required coverage. Claim API-cost
-improvements only from actual usage/billing measurements. Authorized experimental
-compatibility cuts do not authorize unrelated destruction or rewriting original
-publication and failed evidence.
+Retire Rust compiler, kernel, store and CLI responsibilities in complete steps.
+Keep tasks, structured parallelism, capabilities, regions and the shared runtime as
+language goals as platform adapters are removed.

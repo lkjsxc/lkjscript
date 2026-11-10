@@ -61,15 +61,12 @@ pub(super) fn inspect(
         }
     }
     let affinity = structural_class(schema, origin, value)?;
-    let mut stack = vec![(value, ty, 0_u16, true)];
+    let mut stack = vec![(value, ty, 0_usize, true)];
     let mut nodes = 0_u64;
     let mut items = 0_usize;
     while let Some((value, ty, depth, owner)) = stack.pop() {
         control.check().map_err(|_| "cancelled")?;
         nodes = nodes.checked_add(1).ok_or("oracle node overflow")?;
-        if depth > 256 {
-            return Err("oracle depth");
-        }
         let class = structural_class(schema, origin, value)?;
         if !owner && class != Affinity::Free {
             return Err("nested affine owner");

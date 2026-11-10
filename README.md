@@ -44,7 +44,7 @@ The installer requires standard shell tools, curl, sha256sum and tar. Its embedd
 hashes bind the downloaded archive and executable to the inspected script. It
 retains immutable runtime slots and leaves shell profiles and application data
 alone. See [installation and recovery](docs/spec/product-surface.md#local-runtime-installation)
-and [the release procedure](docs/release.md) for exact selection and offline use.
+for exact selection and offline use.
 
 In a fresh working directory, create a command application:
 
@@ -88,8 +88,7 @@ grammar, authority boundaries and limits. [Guides](docs/guides/) explain authori
 
 [Nominal owned records](docs/spec/owned-records.md) let a library expose an affine
 type while its defining module owns construction and field access. The standard
-[FIFO](docs/guides/native-owned-fifo.md) is the maintained consumer; current source
-acceptance and public availability are recorded separately in status.
+[FIFO](docs/guides/native-owned-fifo.md) is the maintained consumer.
 
 ## Inspect and change programs
 
@@ -125,38 +124,16 @@ and [function inspection](docs/generated/function-definition.md).
 
 ## Develop the language
 
-Use the pinned Rust toolchain and locked dependencies. Read
-[repository guidance](AGENTS.md), [architecture](docs/architecture.md) and
-[verification](docs/spec/verification.md) before changing the language.
+Use the pinned Rust toolchain and locked dependencies. Read [status](docs/status.md)
+and [repository guidance](AGENTS.md), then run:
 
-From the canonical checkout root, bootstrap a clean committed source with the
-[shared bootstrap command](tools/bootstrap-verifier.sh):
-
-```bash
-verifier_root=$(bash tools/bootstrap-verifier.sh)
-CARGO_TARGET_DIR="$PWD/target" "$verifier_root/lkjscript-dev" check changed --jobs 1 --machine
-CARGO_TARGET_DIR="$PWD/target" "$verifier_root/lkjscript-dev" check full --fresh --jobs 1 --machine
+```sh
+cargo build --locked --bin lkjscript
+bash tools/check.sh
+bash tools/check.sh focused FILTER
+bash tools/check.sh slow FILTER
 ```
 
-The command creates an owned cold target, builds the pinned verifier offline with
-locked dependencies in the optimized `bootstrap` profile, admits its exact fresh Cargo artifact and retains a byte-identical
-read-only executable. Original source, compiler/configuration context, command, process
-and Cargo records remain in `"$verifier_root/evidence"`. Fetch locked dependencies
-first if they are unavailable locally. `--output ABSENT_ABSOLUTE_ROOT` selects an
-explicit root; `--expected-source COMMIT` binds an expected commit;
-`--with-controller` also retains the release controller.
-
-Bootstrap refuses effective Cargo config files and inherited compiler, flags,
-profile or target overrides. Inherited settings are recorded as set/unset states
-and value hashes. Positive `CARGO_BUILD_JOBS` reaches the build child;
-`CARGO_ABOUT_VERSION` and `CARGO_ABOUT_ARCHIVE_SHA256` are recorded separately.
-Set build concurrency and checker `--jobs` independently.
-
-The verifier stays bound to its compile-time checkout. The normal check target
-independently needs a cold first CHECK8 run or authenticated matching unit origins;
-bootstrap neither clears nor certifies existing outputs. `changed` selects current
-Git-status paths, so a clean-tree run does not prove a committed change. See
-[verification](docs/spec/verification.md) for admission and
-[release acceptance](docs/release.md#coverage-and-admission) for source and final bytes.
-
-lkjscript is licensed under [Apache-2.0](LICENSE).
+[Verification](docs/spec/verification.md) defines the routine suite and explicit
+slow controls. [Direction](docs/direction.md) and [roadmap](docs/roadmap.md) describe
+the language work. State what ran, failed and was skipped.

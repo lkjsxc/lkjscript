@@ -93,7 +93,7 @@ pub(crate) fn observe(path: &Path, function: &str) -> Result<Value, Diagnostic> 
         let sink = Mutex::new(None);
         let host = AfterAppend(AtomicU64::new(0));
         let control = ExecutionControl::uncancelled();
-        let result = NormalizedVm::new(resident.program(), NormalizedRunPolicy { maximum_call_depth:64, ..Default::default() }, resident.executor())
+        let result = NormalizedVm::new(resident.program(), NormalizedRunPolicy::default(), resident.executor())
             .observing(&sink, &host).invoke_entry(NormalizedEntryPoint::Function(FunctionIndex(u32::try_from(index).map_err(|_| failure("function index overflow"))?, resident.program().value_origin)),
                 vec![value], Some(resident.deployment().capabilities()), &control);
         let error = result.err().ok_or_else(|| failure("cancelled traversal emitted a result"))?;

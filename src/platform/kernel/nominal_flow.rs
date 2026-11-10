@@ -60,9 +60,10 @@ impl Flow {
 
     fn path(&mut self, prefix: &[usize], child: usize) -> Result<Vec<usize>, Diagnostic> {
         self.reserve::<usize>(prefix.len().checked_add(1).ok_or_else(|| {
-            type_error(
-                "kernel_type_nominal_depth",
-                "nominal argument path overflow",
+            Diagnostic::new(
+                DiagnosticClass::Resource,
+                "kernel_type_nominal_path_extent",
+                "nominal argument path length overflow",
             )
         })?)?;
         let mut path = prefix.to_vec();
@@ -246,12 +247,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                 let mut seen = BTreeSet::new();
                 while let Some((ty, path)) = syntax.pop() {
                     self.consume_work()?;
-                    if path.len() > MAXIMUM_TYPE_DEPTH {
-                        return Err(type_error(
-                            "kernel_type_nominal_depth",
-                            "nominal syntax exceeds the structural type-depth limit",
-                        ));
-                    }
+
                     if seen.contains(&ty) {
                         continue;
                     }
@@ -291,12 +287,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
                             let mut visited = BTreeSet::new();
                             while let Some((ty, occurrence_path)) = occurrences.pop() {
                                 self.consume_work()?;
-                                if occurrence_path.len() > MAXIMUM_TYPE_DEPTH {
-                                    return Err(type_error(
-                                        "kernel_type_nominal_depth",
-                                        "nominal argument exceeds the structural type-depth limit",
-                                    ));
-                                }
+
                                 if visited.contains(&ty) {
                                     continue;
                                 }

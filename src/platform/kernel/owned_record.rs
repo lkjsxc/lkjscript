@@ -481,61 +481,6 @@ pub(crate) fn layout(
     })
 }
 
-/// Count one global path through syntactic children and fully instantiated owned
-/// representation fields. Independent local schema limits do not bound a combined path.
-pub(crate) fn validate_type_depth(
-    read: &(impl ExpressionRead + ?Sized),
-    ty: TypeObjectDigest,
-    initial_depth: usize,
-) -> Result<(), Diagnostic> {
-    let mut budget = LayoutBudget::default();
-    budget.reserve::<(TypeObjectDigest, usize)>(1)?;
-    let mut pending = vec![(ty, initial_depth)];
-    let mut depths = BTreeMap::new();
-    let mut derived_types = BTreeMap::new();
-    while let Some((current, depth)) = pending.pop() {
-        read.validation_work()?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Semantic,
-                "kernel_owned_record_depth",
-                "combined owned representation exceeds the type-depth bound",
-            ));
-        }
-        if depths
-            .get(&current)
-            .is_some_and(|previous| *previous >= depth)
-        {
-            continue;
-        }
-        if !depths.contains_key(&current) {
-            budget.reserve::<(TypeObjectDigest, usize)>(1)?;
-        }
-        depths.insert(current, depth);
-        let applied = super::owned_contract::AppliedTypeRead {
-            read,
-            types: &derived_types,
-        };
-        let read: &dyn ExpressionRead = &applied;
-        let object = read
-            .type_object(current)?
-            .ok_or_else(|| reject("missing owned representation child type"))?;
-        budget.reserve::<(TypeObjectDigest, usize)>(object.child_type_count())?;
-        for child in object.child_types() {
-            pending.push((child, depth + 1));
-        }
-        if is_owned(read, read.package_id(), current)? {
-            let layout = layout(read, current)?;
-            budget.reserve::<(TypeObjectDigest, usize)>(layout.fields.len())?;
-            for (_, child) in layout.fields {
-                pending.push((child, depth + 1));
-            }
-            budget.extend_types(&mut derived_types, layout.types)?;
-        }
-    }
-    Ok(())
-}
-
 pub(crate) fn require_access(
     read: &(impl ExpressionRead + ?Sized),
     ty: TypeObjectDigest,
@@ -598,7 +543,7 @@ fn validate_application_inner(
 ) -> Result<(), Diagnostic> {
     let (declaration, arguments) = nominal(read, ty)?;
     validate_definition_at(read, declaration, associated)?;
-    validate_type_depth(read, ty, 0)?;
+
     if let Some(occurrence) = occurrence {
         associated.validate_occurrence_at(read, &[ty], occurrence)?;
     }
@@ -697,7 +642,7 @@ fn validate_definition_at(
         }
         let occurrence =
             OwnedTypeOccurrence::representation(reference, field.header.contract_version);
-        validate_type_depth(read, field.ty, 1)?;
+
         associated.validate_occurrence_at(read, &[field.ty], occurrence)?;
         if read_view_admission::contains(read, field.ty, associated)? {
             return Err(reject("owned record fields cannot contain read views"));
@@ -720,7 +665,7 @@ fn validate_definition_at(
 
 /// Follow declaration references independently of argument substitution. Active
 /// declarations detect cycles; completed declarations let shared tails be proved
-/// once. Instantiated type depth remains a separate check over exact type objects.
+/// once.
 fn validate_representation_cycles(
     read: &(impl ExpressionRead + ?Sized),
     reference: DeclarationReference,

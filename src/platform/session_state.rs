@@ -54,17 +54,10 @@ impl<R: SessionShapeRead> Closure<'_, R> {
         &mut self,
         ty: TypeObjectDigest,
         bindings: &Bindings,
-        depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         self.step()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(session_resource(
-                "session_state_depth",
-                "retained state argument exceeds structural type depth",
-            ));
-        }
+
         let object = self.object(ty)?;
-        let next = depth + 1;
         let form = match object.form {
             TypeForm::ReadViewApplied { .. }
             | TypeForm::AssociatedReadViewMember { .. }
@@ -93,7 +86,7 @@ impl<R: SessionShapeRead> Closure<'_, R> {
                 self.reserve::<TypeObjectDigest>(arguments.len())?;
                 let arguments = arguments
                     .into_iter()
-                    .map(|ty| self.substitute(ty, bindings, next))
+                    .map(|ty| self.substitute(ty, bindings))
                     .collect::<Result<_, _>>()?;
                 TypeForm::Applied {
                     declaration,
@@ -108,52 +101,52 @@ impl<R: SessionShapeRead> Closure<'_, R> {
                         self.reserve::<u8>(field.name.as_str().len())?;
                         Ok(StructuralTypeField {
                             name: field.name,
-                            ty: self.substitute(field.ty, bindings, next)?,
+                            ty: self.substitute(field.ty, bindings)?,
                         })
                     })
                     .collect::<Result<_, Diagnostic>>()?;
                 TypeForm::StructuralRecord { fields }
             }
             TypeForm::Region { region } => TypeForm::Region {
-                region: self.substitute(region, bindings, next)?,
+                region: self.substitute(region, bindings)?,
             },
             TypeForm::RelPtr { region, item } => TypeForm::RelPtr {
-                region: self.substitute(region, bindings, next)?,
-                item: self.substitute(item, bindings, next)?,
+                region: self.substitute(region, bindings)?,
+                item: self.substitute(item, bindings)?,
             },
             TypeForm::RegionSlice { region, item } => TypeForm::RegionSlice {
-                region: self.substitute(region, bindings, next)?,
-                item: self.substitute(item, bindings, next)?,
+                region: self.substitute(region, bindings)?,
+                item: self.substitute(item, bindings)?,
             },
             TypeForm::RegionCap { region, mode } => TypeForm::RegionCap {
-                region: self.substitute(region, bindings, next)?,
+                region: self.substitute(region, bindings)?,
                 mode,
             },
             TypeForm::List { item } => TypeForm::List {
-                item: self.substitute(item, bindings, next)?,
+                item: self.substitute(item, bindings)?,
             },
             TypeForm::Option { item } => TypeForm::Option {
-                item: self.substitute(item, bindings, next)?,
+                item: self.substitute(item, bindings)?,
             },
             TypeForm::Stream { item } => TypeForm::Stream {
-                item: self.substitute(item, bindings, next)?,
+                item: self.substitute(item, bindings)?,
             },
             TypeForm::Map { key, value } => TypeForm::Map {
-                key: self.substitute(key, bindings, next)?,
-                value: self.substitute(value, bindings, next)?,
+                key: self.substitute(key, bindings)?,
+                value: self.substitute(value, bindings)?,
             },
             TypeForm::Result { ok, error } => TypeForm::Result {
-                ok: self.substitute(ok, bindings, next)?,
-                error: self.substitute(error, bindings, next)?,
+                ok: self.substitute(ok, bindings)?,
+                error: self.substitute(error, bindings)?,
             },
             TypeForm::Function { parameters, result } => {
                 self.reserve::<TypeObjectDigest>(parameters.len())?;
                 TypeForm::Function {
                     parameters: parameters
                         .into_iter()
-                        .map(|ty| self.substitute(ty, bindings, next))
+                        .map(|ty| self.substitute(ty, bindings))
                         .collect::<Result<_, _>>()?,
-                    result: self.substitute(result, bindings, next)?,
+                    result: self.substitute(result, bindings)?,
                 }
             }
             TypeForm::TaskFunction {
@@ -165,9 +158,9 @@ impl<R: SessionShapeRead> Closure<'_, R> {
                 TypeForm::TaskFunction {
                     parameters: parameters
                         .into_iter()
-                        .map(|ty| self.substitute(ty, bindings, next))
+                        .map(|ty| self.substitute(ty, bindings))
                         .collect::<Result<_, _>>()?,
-                    result: self.substitute(result, bindings, next)?,
+                    result: self.substitute(result, bindings)?,
                     effect,
                 }
             }
@@ -205,7 +198,7 @@ pub(super) fn validate<R: SessionShapeRead>(
         work: 0,
         bytes: 0,
     };
-    let root = closure.substitute(root, &Bindings::new(), 0)?;
+    let root = closure.substitute(root, &Bindings::new())?;
     let mut pending = Vec::new();
     closure.enqueue(&mut pending, root)?;
     let mut complete = BTreeSet::new();
@@ -262,7 +255,7 @@ pub(super) fn validate<R: SessionShapeRead>(
                 };
                 closure.reserve::<TypeObjectDigest>(members.len())?;
                 for member in members {
-                    let member = closure.substitute(member, &bindings, 0)?;
+                    let member = closure.substitute(member, &bindings)?;
                     closure.enqueue(&mut pending, member)?;
                 }
             }

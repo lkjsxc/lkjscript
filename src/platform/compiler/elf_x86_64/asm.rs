@@ -382,6 +382,7 @@ pub(super) const B: u8 = 2;
 pub(super) const AE: u8 = 3;
 pub(super) const E: u8 = 4;
 pub(super) const NE: u8 = 5;
+pub(super) const BE: u8 = 6;
 pub(super) const L: u8 = 12;
 pub(super) const GE: u8 = 13;
 pub(super) const LE: u8 = 14;

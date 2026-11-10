@@ -342,7 +342,7 @@ cyclic, duplicate-slot, noncanonical, or summary/fact-inconsistent ownership is 
 than partial output.
 
 The complete logical definition admits at most 4,096 body records, 16,384 combined structural and
-reference edges, 32,768 fact reads, depth 256, and 8 MiB of canonical logical encoding. Literal
+reference edges, 32,768 fact reads and 8 MiB of canonical logical encoding. Literal
 fragments are at most 8 KiB. Existing compact page bounds remain 50 default and 10,000 maximum
 emitted records, 1,536 minimum, 65,536 default, and 4 MiB maximum output bytes. Executable
 discovery reports the separately derived canonical-record, ownership, persistent-map, object-store,
@@ -728,16 +728,10 @@ logical-plan and receipt encoding without clamping or sentinel substitution.
 Finite admission precedes its owned work or allocation. Work observations saturate independently
 and mark their loss of exactness; they neither grant finite capacity nor reject an unmetered request.
 Input cursors, explicit syntax stacks and checked size arithmetic establish framing progress.
-Canonical expression/type depth and per-object representation bounds remain separate pending
-lifecycle cuts; removing an outer input quota does not remove those inner boundaries. Change
-processing still uses a joined worker with a 64 MiB host stack for the remaining recursive semantic
-owners. The [capacity ledger](../decisions/20261025-capacity-unbounding.md) records those outstanding
-worklist, object-envelope and map-overflow changes.
-
-Combined normalized expression depth, including flat ancestors around block roots, is admitted
-before recursive construction; the root has depth one and syntax wrapper lists add no semantic
-expression depth. The expression/type depth limits remain 1,024/256. These are finite preparation
-limits, not additional language meaning. Syntax and representative reference, type, scope and capacity
+Change processing uses a joined semantic worker with a virtual stack reservation equal to twice
+physical memory. Construction, checking, cloning and destruction occur within that operation.
+Expression and type admission has no project-defined depth ceiling. Checked per-object
+representation bounds remain. Syntax and representative reference, type, scope and capacity
 diagnostics retain original input path, byte, line and column locations, with downstream owner/path
 context where useful.
 
@@ -988,7 +982,7 @@ transitive closure. Dependency stage validates all canonical graphs, private bod
 and closed intrinsic signatures, then atomically installs closure-ready operational material without
 changing semantic HEAD. These operations use unbounded ordinary aggregate source work/read
 admission. `package.source-admission` discovery states the exact optional internal policy,
-visit/read metrics and separate remaining container, topology, object, depth and storage limits.
+visit/read metrics and separate remaining container, topology, object and storage limits.
 
 A successful dependency stage's `validation` record reports `contract`, `visits`,
 `visits-saturated`, `read-bytes` and `read-bytes-saturated`. Each true flag marks its numeric
@@ -1165,9 +1159,8 @@ neither failure nor missing stdout proves rollback or safe retry. A successfully
 file remains visible if later receipt delivery fails. Result-file publication and application
 transactions are separate authorities.
 
-Pure `run` execution records include `production-peak-call-frames`,
-`reference-peak-call-frames`, `production-tail-transfers`, and `reference-tail-transfers` as
-bounded unsigned integer scalars. Discovery's runners section describes their units, bounds, and
+Pure `run` execution records identify `engine=vm` and include
+`production-peak-call-frames` and `production-tail-transfers` as unsigned integer scalars. Discovery's runners section describes their units, bounds, and
 the derived pure-tail guarantee. Eligible pure graph calls retain constant control space under
 the existing budgets. Eligible terminal task calls also replace their control activation while
 preserving exact allowances, grants, resources and transaction continuations; pending non-tail
@@ -1175,7 +1168,7 @@ work retains ordinary call admission.
 Fuel, allocation, cancellation, and argument order remain binding. Failed execution emits a
 diagnostic without a successful value record or semantic `HEAD` change.
 
-The same record exposes `production-` and `reference-` observations with suffixes
+The same record exposes `production-` observations with suffixes
 `input-admission-nodes`, `raw-result-admission-nodes`, `constructor-child-visits`,
 `guard-descendants`, `classification-decisions`, `allocated-bytes`, `allocation-charges`, and
 `collection-items`.
@@ -1191,7 +1184,7 @@ Application numeric admission retains complete decimal tokens and correctly roun
 fraction and exponent spellings. It deliberately preserves `-0` and `-0.0`. I64 admission remains
 exact, including values above `2^53`, and rejects fraction/exponent spellings such as `1.0` and
 `1e0`. Decimal overflow such as `1e400` rejects. Control schemas, manifests and security inputs
-retain their strict integer policies. Byte/depth/item/string limits, duplicate fields, invalid
+retain their strict integer policies. Byte/item/string limits, duplicate fields, invalid
 strings and trailing input reject under both policies. Typed JSON built-ins and project/artifact
 commands use the same application policy.
 
@@ -1212,15 +1205,13 @@ This lower bound can reject an already oversized result with
 receive the final exact serialized-byte check. It is a boundary-output bound,
 not a whole-process memory cap or an internal language execution quota.
 
-Current defaults are 1 MiB of encoded bytes, 100,000 JSON items, depth 128 and
-1 MiB per decoded string. The pinned strict reader additionally admits at most
-127 nested array/object containers; the output encoder respects that same guard.
-`execution.foreground-limits` exposes these independent representation bounds.
-For example, a flat primitive-key/primitive-value Map fits the item bound at 33,333
-entries and exceeds it at 33,334. Byte-identical encodings within the bounds remain
-compatible. Previously emitted over-limit shapes now reject with
-`normalized_json_type` before result publication. This correction changes no graph,
-artifact or typed-data encoding and imposes no new internal execution quota.
+Current defaults are 1 MiB of encoded bytes, 100,000 JSON items and 1 MiB per
+decoded string. JSON parsing, typed conversion and typed-data encoding have no
+project-defined nesting ceiling. Semantic work and recursive value cleanup run
+on the host-sized stack reservation. `execution.foreground-limits` exposes the
+remaining byte, item and string controls. For example, a flat primitive-key /
+primitive-value Map fits the item control at 33,333 entries and exceeds it at
+33,334. Type eligibility traverses exact types with a visited set and cancellation.
 
 `capabilities --section runners` advertises the F64 arithmetic, comparison, parse/format,
 conversion and transport policies in `execution.f64`, `execution.f64-conversion` and
@@ -1237,10 +1228,10 @@ internal or typed-binary values. A transaction committed before later output fai
 committed; missing output supplies no rollback or retry evidence.
 
 Run selects an exact root target by current public name, requires command runner kind and a pure
-entry, executes once in the normalized VM and once in the canonical reference interpreter, and
-rejects disagreement. It emits the typed result plus bounded production/reference observations.
-Effectful or non-command targets receive an exact unsupported/grants-required diagnostic; effects
-are not duplicated. Run never advances authority.
+entry, and executes once in the normalized VM. It emits the typed result and actual
+production observations with `engine=vm`. Explicit compiler tests compare the VM
+with an independent interpreter. Effectful or non-command targets receive an exact
+unsupported/grants-required diagnostic. Run never advances authority.
 
 The deployment form selects only the descriptor's exact artifact Command target, with a closed
 pure or task function-backed port. It rejects positional targets, `--project`, duplicate/unknown
@@ -1268,17 +1259,15 @@ quota. The cumulative fields `instruction_fuel`, `maximum_allocated_bytes`,
 including zero and `u64::MAX`, as an exact finite allowance. Zero permits operations that
 consume nothing in that dimension and rejects the first positive charge with the dimension
 resource diagnostic; it is neither unlimited nor an invalid execution policy. Explicit null
-means unbounded. Ordinary project differential execution and source batch rows without an
-execution override also have no default cumulative quotas. `maximum_call_depth` and
-`maximum_value_stack` remain required positive structural limits in this slice. Single-value/
+means unbounded. Ordinary project VM execution and source batch rows without an
+execution override also have no default cumulative quotas. VM activations and operands grow with available storage. Single-value/
 container, preparation/codec and adapter limits and canonical per-grant quotas remain binding.
 The four cumulative observations each carry an independent saturation flag. Production JSON
 uses `instructions_saturated`, `allocated_bytes_saturated`, `collection_items_saturated`
 and `capability_calls_saturated`; the canonical reference uses `expressions_saturated`
 for its instruction-independent expression work and the same other three flag names.
-Compact project-run fields expose `production-instructions-saturated` and
-`reference-expressions-saturated`, plus production/reference `allocated-bytes-saturated`,
-`collection-items-saturated` and `capability-calls-saturated` fields. Compact check
+Compact project-run fields expose `production-instructions-saturated` and production
+`allocated-bytes-saturated`, `collection-items-saturated` and `capability-calls-saturated` fields. Compact check
 totals expose the production-instruction and reference-expression saturation flags.
 The `counter-semantics` value is
 `per-counter-saturation-flag-true-means-lower-bound`: a true flag means the associated
@@ -1286,7 +1275,7 @@ count is a lower bound, while an exactly reached `u64::MAX` remains unsaturated.
 Saturation never grants finite capacity or supplies allocation sizes or index proofs.
 Real storage arithmetic and explicit quota overflow still reject through checked admission.
 Resident descriptors require execution and runtime objects;
-instruction_fuel and both structural limits remain required inside execution. Each cumulative
+instruction_fuel remains required inside execution. Each cumulative
 quota may explicitly be null, and fresh HTTP recipes select four nulls. No old numeric limits
 are inserted for omitted optional fields. The named trusted foreground profile is reported only
 when all four cumulative quotas are absent. See [deployment security](deployment-security.md)

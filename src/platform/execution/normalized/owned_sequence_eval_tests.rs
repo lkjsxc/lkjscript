@@ -384,10 +384,7 @@ fn owned_sequence_evaluators_tail_destructure_and_nested_borrows_remain_bounded_
         let products = owned_product::StorageObservation::start();
         let cells = owned_i64_cell::StorageObservation::start();
         for count in [0_i64, 1, 17, 513] {
-            let mut policy = NormalizedRunPolicy::foreground();
-            // A missing graph-tail handoff fails before recursion can approach
-            // the host stack bound; correct execution stays below this limit.
-            policy.maximum_call_depth = 16;
+            let policy = NormalizedRunPolicy::foreground();
             let control = ExecutionControl::uncancelled();
             let arguments = vec![NormalizedValue::I64(count)];
             let (value, depth, frames, tails) = if reference {

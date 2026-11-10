@@ -347,19 +347,6 @@ fn owned_borrow_native_products_choices_and_recursive_borrowed_sources() {
                 Ok(true)
             );
         }
-        let (result, _) = run_clean(
-            reference,
-            &reader,
-            &program,
-            "product-main",
-            vec![NormalizedValue::I64(137)],
-            NormalizedRunPolicy {
-                maximum_call_depth: 8,
-                ..NormalizedRunPolicy::foreground()
-            },
-            &ExecutionControl::uncancelled(),
-        );
-        assert_eq!(result.unwrap_err().class, ExecutionFailureClass::Resource);
     }
 }
 

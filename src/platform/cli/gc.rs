@@ -4,13 +4,10 @@ use super::*;
 
 pub fn execute_gc(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {
     let project = memory::current();
-    std::thread::Builder::new()
-        .name("repository-compaction".into())
-        .stack_size(64 * 1_048_576)
-        .spawn(move || memory::with_project(project, || execute(arguments)))
-        .map_err(|error| internal_error(format!("cannot start compaction worker: {error}")))?
-        .join()
-        .map_err(|_| internal_error("compaction worker panicked"))?
+    crate::platform::stack::run("repository-compaction", move || {
+        memory::with_project(project, || execute(arguments))
+    })
+    .map_err(|error| internal_error(format!("cannot execute compaction: {error}")))?
 }
 
 fn execute(arguments: Vec<String>) -> Result<Vec<u8>, Diagnostic> {

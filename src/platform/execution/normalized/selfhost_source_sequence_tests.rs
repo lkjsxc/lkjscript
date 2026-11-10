@@ -547,13 +547,8 @@ fn verify_rejections(stages: &[(&str, &[u8])]) -> Check<()> {
     Ok(())
 }
 
-pub(super) fn verify_stages(
-    left_name: &str,
-    left: &[u8],
-    right_name: &str,
-    right: &[u8],
-) -> Check<()> {
-    let stages = [(left_name, left), (right_name, right)];
+pub(super) fn verify_stage(name: &str, image: &[u8]) -> Check<()> {
+    let stages = [(name, image)];
     for locals in [false, true] {
         let case = public_case(&proposal(100_001, 42, locals)?)?;
         verify_case(&stages, &case, 100_001, 42, locals, false)?;

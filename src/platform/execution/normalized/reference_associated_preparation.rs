@@ -567,9 +567,7 @@ impl<'a> Derivation<'a> {
         depth: usize,
     ) -> Result<TypeObjectDigest, ExecutionError> {
         self.budget.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         let object = self.types.get(&ty).ok_or_else(reject)?;
         self.budget.object(object)?;
         let form = object.form.clone();
@@ -1084,9 +1082,7 @@ impl<'a> Derivation<'a> {
         depth: usize,
     ) -> Result<Arc<Selection>, ExecutionError> {
         self.budget.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         let ImplementationOperand::Concrete {
             implementation,
             type_arguments,
@@ -1120,11 +1116,7 @@ impl<'a> Derivation<'a> {
                 caller.generation,
                 selected.requires_read_view_generation,
             )?;
-            if depth.saturating_add(selected.depth)
-                > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-            {
-                return Err(capacity());
-            }
+
             return Ok(Arc::clone(selected));
         };
         let owner = self.declaration(
@@ -1174,11 +1166,7 @@ impl<'a> Derivation<'a> {
             .map(|value| value.depth.saturating_add(1))
             .max()
             .unwrap_or(0);
-        if depth.saturating_add(subtree_depth)
-            > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-        {
-            return Err(capacity());
-        }
+
         if let Some(selected) = self.interned.get(&key) {
             return Ok(Arc::clone(selected));
         }
@@ -1404,9 +1392,7 @@ impl<'a> Derivation<'a> {
         depth: usize,
     ) -> Result<(), ExecutionError> {
         self.budget.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         let object = self.types.get(&ty).ok_or_else(reject)?;
         self.budget.object(object)?;
         let object = object.clone();
@@ -1465,9 +1451,7 @@ impl<'a> Derivation<'a> {
         assumptions: &Assumptions,
     ) -> Result<bool, ExecutionError> {
         self.budget.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         let object = self.types.get(&ty).ok_or_else(reject)?;
         self.budget.object(object)?;
         let form = object.form.clone();
@@ -2460,9 +2444,7 @@ impl<'a> Derivation<'a> {
         depth: usize,
     ) -> Result<bool, ExecutionError> {
         self.budget.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         let object = self.types.get(&ty).ok_or_else(reject)?;
         if object.form.is_associated() || matches!(object.form, TypeForm::ReadViewApplied { .. }) {
             return Ok(true);
@@ -2485,9 +2467,7 @@ impl<'a> Derivation<'a> {
         depth: usize,
     ) -> Result<bool, ExecutionError> {
         self.budget.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         let object = self.types.get(&ty).ok_or_else(reject)?;
         let mut view = matches!(
             object.form,
@@ -2601,9 +2581,7 @@ impl<'a> Derivation<'a> {
         depth: usize,
     ) -> Result<bool, ExecutionError> {
         self.budget.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         let mut view = self.read_view_contract(selected.contract)?;
         view |= self.read_view_type(selected.self_type, 0)?;
         for ty in &selected.arguments {
@@ -3025,7 +3003,6 @@ impl Proof {
         for selection in &self.selections {
             budget.tick()?;
             if selection.identity >= self.selections.len()
-                || selection.depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
                 || selection.parameters.len() != selection.actuals.len()
                 || selection.constraints.len() != selection.actuals.len()
                 || selection.prerequisite_parameters.len() != selection.prerequisites.len()
@@ -3352,9 +3329,7 @@ impl Proof {
         depth: usize,
     ) -> Result<(), ExecutionError> {
         budget.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-            || !self.contains_type(&selection.self_type)
-        {
+        if !self.contains_type(&selection.self_type) {
             return Err(reject());
         }
         for actual in &selection.arguments {
@@ -3516,6 +3491,7 @@ pub(in super::super) fn derive<'a>(
     control: &'a ExecutionControl,
 ) -> Result<Proof, ExecutionError> {
     let mut derivation = Derivation::new(snapshots, limits, control)?;
+    super::super::reference_nominal_flow::check(snapshots, control)?;
     let derivation_entry = derivation.budget.steps.observation();
     super::super::reference_schema::bind_associated_dependencies(
         snapshots,

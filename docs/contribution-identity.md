@@ -37,7 +37,5 @@ clones and source-bound evidence. Do not force-update branches or tags merely to
 change a displayed name. Preserve truthful historical execution records even
 when the display alias is normalized.
 
-The [owner-directed attribution campaign](campaigns/202609241627.md) records the
-request, the exact matched identities, independent display tests and the observed
-execution boundary. Git's maintained contract is documented in
+Git's maintained contract is documented in
 [gitmailmap](https://git-scm.com/docs/gitmailmap).

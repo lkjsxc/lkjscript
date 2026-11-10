@@ -148,7 +148,6 @@ pub(super) fn lower<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         ),
         selected,
         false,
-        0,
         &mut inventory,
     )?;
     if inventory.selected_owners.is_empty() || !inventory.parents.contains_key(&selected) {
@@ -504,14 +503,7 @@ fn reject_scoped_type<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized
     lowerer: &mut AuthoredLowerer<'_, B, W>,
     digest: TypeObjectDigest,
     examined: &mut BTreeSet<TypeObjectDigest>,
-    depth: usize,
 ) -> Result<(), Diagnostic> {
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(extract_resource(
-            "change_extract_type_depth",
-            "extraction type traversal exceeds the structural-depth bound",
-        ));
-    }
     if !examined.insert(digest) {
         return Ok(());
     }
@@ -533,7 +525,7 @@ fn reject_scoped_type<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized
         ));
     }
     for child in object.child_types() {
-        reject_scoped_type(lowerer, child, examined, depth.saturating_add(1))?;
+        reject_scoped_type(lowerer, child, examined)?;
     }
     lowerer.check_budget("extraction complete type scope analysis")
 }
@@ -546,15 +538,8 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     expected: OwnershipEntry,
     selected: ExpressionId,
     selected_ancestor: bool,
-    depth: usize,
     inventory: &mut BodyInventory,
 ) -> Result<(), Diagnostic> {
-    if depth > crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
-        return Err(extract_resource(
-            "change_extract_depth",
-            "function body exceeds the extraction structural-depth bound",
-        ));
-    }
     let owner = OwnerKey::Expression(expression);
     require_structural_owner(lowerer, owner, expected, inventory)?;
     let record = match lowerer
@@ -597,7 +582,7 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         .insert(expression, record.operation.clone());
     reject_scoped_operation(&record.operation)?;
     for digest in record.type_roots() {
-        reject_scoped_type(lowerer, digest, &mut inventory.examined_types, 0)?;
+        reject_scoped_type(lowerer, digest, &mut inventory.examined_types)?;
     }
     if let ExpressionOperation::Local { value } = record.operation {
         inventory.local_uses.push(LocalUse {
@@ -609,7 +594,6 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         return Ok(());
     }
 
-    let next = depth.saturating_add(1);
     match record.operation {
         ExpressionOperation::BorrowCall { .. }
         | ExpressionOperation::BorrowOwnedField { .. }
@@ -646,7 +630,6 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                     ordinal,
                     selected,
                     inside,
-                    next,
                     inventory,
                 )?;
             }
@@ -658,7 +641,6 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                 0,
                 selected,
                 inside,
-                next,
                 inventory,
             )?;
         }
@@ -671,7 +653,6 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                 0,
                 selected,
                 inside,
-                next,
                 inventory,
             )?;
             for (ordinal, arm) in arms.into_iter().enumerate() {
@@ -684,7 +665,6 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                         ordinal,
                         selected,
                         inside,
-                        next,
                         inventory,
                     )?;
                 }
@@ -696,7 +676,6 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                     ordinal,
                     selected,
                     inside,
-                    next,
                     inventory,
                 )?;
             }
@@ -711,7 +690,6 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                 0,
                 selected,
                 inside,
-                next,
                 inventory,
             )?;
             walk_expression_child(
@@ -722,7 +700,6 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                 0,
                 selected,
                 inside,
-                next,
                 inventory,
             )?;
         }
@@ -738,7 +715,6 @@ fn walk_expression<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
                     usize::try_from(child.ordinal).unwrap_or(usize::MAX),
                     selected,
                     inside,
-                    next,
                     inventory,
                 )?;
             }
@@ -756,7 +732,6 @@ fn walk_expression_child<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Si
     ordinal: usize,
     selected: ExpressionId,
     inside: bool,
-    depth: usize,
     inventory: &mut BodyInventory,
 ) -> Result<(), Diagnostic> {
     let ordinal = u32::try_from(ordinal).map_err(|_| {
@@ -775,7 +750,6 @@ fn walk_expression_child<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Si
         ),
         selected,
         inside,
-        depth,
         inventory,
     )
 }
@@ -789,7 +763,6 @@ fn walk_binding<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
     ordinal: usize,
     selected: ExpressionId,
     inside: bool,
-    depth: usize,
     inventory: &mut BodyInventory,
 ) -> Result<(), Diagnostic> {
     let ordinal = u32::try_from(ordinal).map_err(|_| {
@@ -839,7 +812,7 @@ fn walk_binding<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
         ));
     }
     if let Some(ty) = record.declared_type {
-        reject_scoped_type(lowerer, ty, &mut inventory.examined_types, 0)?;
+        reject_scoped_type(lowerer, ty, &mut inventory.examined_types)?;
     }
     inventory.owners.push(owner);
     if inside {
@@ -858,7 +831,6 @@ fn walk_binding<B: CanonicalBaseRead + ?Sized, W: WitnessBaseRead + ?Sized>(
             ),
             selected,
             inside,
-            depth,
             inventory,
         )?;
     }
@@ -1778,7 +1750,6 @@ fn require_acyclic_local_call_graph<B: CanonicalBaseRead + ?Sized>(
             &mut calls,
             expression_work,
             maximum_expression_work,
-            0,
         )?;
         pending.push((function, true));
         pending.extend(calls.into_iter().rev().map(|called| (called, false)));
@@ -1786,7 +1757,6 @@ fn require_acyclic_local_call_graph<B: CanonicalBaseRead + ?Sized>(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn collect_local_calls<B: CanonicalBaseRead + ?Sized>(
     reader: &CandidateRead<'_, B>,
     expression: ExpressionId,
@@ -1794,14 +1764,7 @@ fn collect_local_calls<B: CanonicalBaseRead + ?Sized>(
     calls: &mut BTreeSet<DeclarationId>,
     work: &mut BudgetCounter,
     maximum_work: Option<u64>,
-    depth: usize,
 ) -> Result<(), Diagnostic> {
-    if depth > crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
-        return Err(extract_resource(
-            "change_extract_call_graph_depth",
-            "local call-graph expression traversal exceeds the structural-depth bound",
-        ));
-    }
     work.charge(
         BudgetCounter::exact(1),
         maximum_work,
@@ -1829,62 +1792,36 @@ fn collect_local_calls<B: CanonicalBaseRead + ?Sized>(
     {
         calls.insert(reference.declaration);
     }
-    let next = depth.saturating_add(1);
     match record.operation {
         ExpressionOperation::Let { bindings, body } => {
             for binding in bindings {
-                collect_binding_local_calls(
-                    reader,
-                    binding,
-                    seen,
-                    calls,
-                    work,
-                    maximum_work,
-                    next,
-                )?;
+                collect_binding_local_calls(reader, binding, seen, calls, work, maximum_work)?;
             }
-            collect_local_calls(reader, body, seen, calls, work, maximum_work, next)?;
+            collect_local_calls(reader, body, seen, calls, work, maximum_work)?;
         }
         ExpressionOperation::Match { value, arms } => {
-            collect_local_calls(reader, value, seen, calls, work, maximum_work, next)?;
+            collect_local_calls(reader, value, seen, calls, work, maximum_work)?;
             for arm in arms {
                 if let Some(binding) = arm.payload_binding {
-                    collect_binding_local_calls(
-                        reader,
-                        binding,
-                        seen,
-                        calls,
-                        work,
-                        maximum_work,
-                        next,
-                    )?;
+                    collect_binding_local_calls(reader, binding, seen, calls, work, maximum_work)?;
                 }
-                collect_local_calls(reader, arm.body, seen, calls, work, maximum_work, next)?;
+                collect_local_calls(reader, arm.body, seen, calls, work, maximum_work)?;
             }
         }
         ExpressionOperation::Transaction { binding, body, .. }
         | ExpressionOperation::TransactionOutcome { binding, body, .. } => {
-            collect_binding_local_calls(reader, binding, seen, calls, work, maximum_work, next)?;
-            collect_local_calls(reader, body, seen, calls, work, maximum_work, next)?;
+            collect_binding_local_calls(reader, binding, seen, calls, work, maximum_work)?;
+            collect_local_calls(reader, body, seen, calls, work, maximum_work)?;
         }
         operation => {
             for child in ExpressionRecord::new(expression, operation)?.children() {
-                collect_local_calls(
-                    reader,
-                    child.expression,
-                    seen,
-                    calls,
-                    work,
-                    maximum_work,
-                    next,
-                )?;
+                collect_local_calls(reader, child.expression, seen, calls, work, maximum_work)?;
             }
         }
     }
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn collect_binding_local_calls<B: CanonicalBaseRead + ?Sized>(
     reader: &CandidateRead<'_, B>,
     binding: BindingId,
@@ -1892,7 +1829,6 @@ fn collect_binding_local_calls<B: CanonicalBaseRead + ?Sized>(
     calls: &mut BTreeSet<DeclarationId>,
     work: &mut BudgetCounter,
     maximum_work: Option<u64>,
-    depth: usize,
 ) -> Result<(), Diagnostic> {
     let owner = OwnerKey::Binding(binding);
     if !seen.insert(owner) {
@@ -1908,7 +1844,7 @@ fn collect_binding_local_calls<B: CanonicalBaseRead + ?Sized>(
         ));
     };
     if let Some(value) = record.value {
-        collect_local_calls(reader, value, seen, calls, work, maximum_work, depth)?;
+        collect_local_calls(reader, value, seen, calls, work, maximum_work)?;
     }
     Ok(())
 }

@@ -268,7 +268,7 @@ pub(super) fn validate(bindings: &ResolvedReferenceBindings) -> Result<(), Diagn
             .selector
             .parent
             .map_or(0usize, |parent| depths[parent.0 as usize] + 1);
-        if depth > 3 || previous.is_some_and(|prior| prior >= (depth, &owner.selector)) {
+        if previous.is_some_and(|prior| prior >= (depth, &owner.selector)) {
             return Err(invalid(
                 "reference owner paths are not in unique canonical order",
             ));

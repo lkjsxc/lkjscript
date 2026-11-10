@@ -287,7 +287,6 @@ pub const MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES: usize = 320;
 pub const MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS: u64 = 4_096;
 pub const MAXIMUM_FUNCTION_DEFINITION_EDGES: u64 = 16_384;
 pub const MAXIMUM_FUNCTION_DEFINITION_FACT_READS: u64 = 32_768;
-pub const MAXIMUM_FUNCTION_DEFINITION_DEPTH: u64 = 256;
 pub const MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES: usize = 8 * 1_048_576;
 pub const MAXIMUM_FUNCTION_DEFINITION_LITERAL_FRAGMENT_BYTES: usize = 8 * 1_024;
 
@@ -1784,7 +1783,7 @@ pub fn operation_descriptors() -> &'static [OperationDescriptor] {
         ),
         operation(
             PublicOperation::Run,
-            "Run a pure project target differentially, one deployed Command with joined cleanup, or finite pure source or artifact batches sharing immutable preparation with fresh execution lifetimes.",
+            "Run a pure project target once on the VM, one deployed Command with joined cleanup, or pure source or artifact batches sharing immutable preparation with fresh execution lifetimes.",
             "run TARGET [--arguments JSON | --arguments-file PATH] [--result-file PATH] | run --deployment PATH [--arguments JSON | --arguments-file PATH] [--result-file PATH] | run --deployment PATH --batch-input-file PATH --batch-result-file PATH | --project ABSOLUTE_PATH run TARGET --batch-input-file PATH --batch-result-file PATH",
             (ControlModel::RunRequest, ControlModel::RunResult),
             AuthorityEffect::ExternalRuntime,
@@ -3257,18 +3256,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Reduce repeated expanded type construction within the advertised request bound.",
         ),
         diagnostic(
-            "change_authored_type_depth",
-            DiagnosticClass::Resource,
-            "An expanded authored type exceeds the current type-depth bound.",
-            "Reduce nested type depth within the advertised admission.",
-        ),
-        diagnostic(
-            "change_authored_expression_depth",
-            DiagnosticClass::Resource,
-            "A normalized authored expression exceeds the combined flat and structural depth bound.",
-            "Reduce expression nesting including flat ancestors around structural roots.",
-        ),
-        diagnostic(
             "change_block_inventory",
             DiagnosticClass::Infrastructure,
             "Structural lowering lost an internally owned expression or required field.",
@@ -3279,12 +3266,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Source,
             "A compact owned field read scope does not select exactly one matching typed child binding.",
             "Supply one owned-binding edge at index zero whose field-name agrees with the selected field.",
-        ),
-        diagnostic(
-            "change_owned_operand_depth",
-            DiagnosticClass::Resource,
-            "A nested implementation application exceeds witness-depth admission.",
-            "Reduce nested prerequisite application depth within the advertised type-depth bound.",
         ),
         diagnostic(
             "change_owned_operand_capacity",
@@ -3638,7 +3619,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         extraction_resource_diagnostic("change_extract_affine_work"),
         extraction_semantic_diagnostic("change_extract_binding_escape"),
         extraction_resource_diagnostic("change_extract_body_count"),
-        extraction_resource_diagnostic("change_extract_call_graph_depth"),
         extraction_resource_diagnostic("change_extract_call_graph_work"),
         extraction_semantic_diagnostic("change_extract_call_kind"),
         extraction_semantic_diagnostic("change_extract_call_missing"),
@@ -3650,7 +3630,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
         extraction_semantic_diagnostic("change_extract_closure"),
         extraction_semantic_diagnostic("change_extract_conflict"),
         extraction_semantic_diagnostic("change_extract_dependency_missing"),
-        extraction_resource_diagnostic("change_extract_depth"),
         extraction_semantic_diagnostic("change_extract_existing_function"),
         extraction_resource_diagnostic("change_extract_expression_count"),
         extraction_semantic_diagnostic("change_extract_expression_foreign"),
@@ -4700,7 +4679,7 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "kernel_parallel_types",
             DiagnosticClass::Resource,
             "A closed child signature exceeds finite type-derivation capacity.",
-            "Reduce nested signature depth or distinct instantiated types; capacity exhaustion is not a semantic rejection.",
+            "Reduce distinct instantiated types; the current signature preparation limit counts derived types.",
         ),
         diagnostic(
             "kernel_parallel_context",
@@ -4847,12 +4826,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Author the complete product type and owner closure through the current product and rebuild derived artifacts.",
         ),
         diagnostic(
-            "normalized_product_depth",
-            DiagnosticClass::Semantic,
-            "Generic substitution produces a closed owned product beyond the structural type depth bound.",
-            "Use a shallower finite product type; increasing preparation work or runtime allocation quotas does not admit this shape.",
-        ),
-        diagnostic(
             "kernel_product_binding",
             DiagnosticClass::Semantic,
             "An unpack binding lacks its exact type or current graph authority.",
@@ -4869,12 +4842,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Resource,
             "Product field storage size arithmetic overflowed before allocation.",
             "Reduce the product size; allocation refusal does not roll back independent effects.",
-        ),
-        diagnostic(
-            "reference_product_depth",
-            DiagnosticClass::Infrastructure,
-            "Independent source derivation found a closed product beyond the structural depth bound.",
-            "Use a shallower finite product and preserve any disagreement with production admission.",
         ),
         diagnostic(
             "compiler_product_type",
@@ -4995,12 +4962,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Resource,
             "Structured nested ownership admission exceeds its finite traversal capacity.",
             "Reduce the payload/type closure; rejected transfer retains one cleanup custodian.",
-        ),
-        diagnostic(
-            "normalized_parallel_depth",
-            DiagnosticClass::Resource,
-            "Structured child nesting exceeds the evaluator's native-stack capacity.",
-            "Reduce simultaneous nested task groups; this capacity is independent of cumulative instruction quotas.",
         ),
         diagnostic(
             "normalized_parallel_origin",
@@ -5231,12 +5192,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Reduce concurrent live handles or raise the deployment-owned task resource limit where supported.",
         ),
         diagnostic(
-            "normalized_call_depth",
-            DiagnosticClass::Resource,
-            "Non-tail execution exceeded admitted live call frames.",
-            "Reduce pending non-tail recursion or express the loop with graph function tail calls.",
-        ),
-        diagnostic(
             "normalized_value_admission",
             DiagnosticClass::Infrastructure,
             "A raw runtime value failed its exact prepared shape, type, containment, or authority boundary.",
@@ -5441,10 +5396,10 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Reduce the declaration closure to expose a complete bounded cycle certificate.",
         ),
         diagnostic(
-            "kernel_type_nominal_depth",
-            DiagnosticClass::Semantic,
-            "A nominal structural type term exceeds the current type-depth limit.",
-            "Reduce structural nesting in the member or application arguments; nominal recurrence alone does not consume structural depth.",
+            "kernel_type_nominal_path_extent",
+            DiagnosticClass::Resource,
+            "A nominal argument path length overflowed addressable storage.",
+            "Preserve the input and report the path-length arithmetic failure.",
         ),
         diagnostic(
             "kernel_type_nominal_resource",
@@ -5469,18 +5424,6 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             DiagnosticClass::Resource,
             "Independent canonical type/layout derivation exceeds its metadata allocation budget.",
             "Reduce the concrete closure; preserve both evaluator observations when diagnosing the limit.",
-        ),
-        diagnostic(
-            "normalized_json_type_work",
-            DiagnosticClass::Resource,
-            "Whole-application JSON eligibility exceeds the existing work or depth limit.",
-            "Reduce the argument/member closure before retrying typed JSON conversion.",
-        ),
-        diagnostic(
-            "normalized_json_type_storage",
-            DiagnosticClass::Resource,
-            "Whole-application JSON eligibility exceeds its bounded temporary metadata allowance.",
-            "Reduce the concrete type closure; no partial value is returned.",
         ),
         diagnostic(
             "normalized_json_nonfinite",
@@ -5651,28 +5594,10 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Preserve the exact accepted graph and report the reference invariant failure.",
         ),
         diagnostic(
-            "normalized_value_depth",
-            DiagnosticClass::Resource,
-            "Raw production value admission exceeded depth 256 before installation.",
-            "Reduce input or adapter-result nesting and invoke again with the exact declared type.",
-        ),
-        diagnostic(
-            "normalized_reference_value_depth",
-            DiagnosticClass::Resource,
-            "Raw canonical-reference value admission exceeded depth 256 before installation.",
-            "Reduce input or host-result nesting and invoke again with the exact declared type.",
-        ),
-        diagnostic(
             "normalized_value_origin_exhausted",
             DiagnosticClass::Resource,
             "Preparation exhausted its process-local value identity space.",
             "Restart the owning process and prepare the same accepted artifact; never reuse a stale value identity.",
-        ),
-        diagnostic(
-            "normalized_reference_call_depth",
-            DiagnosticClass::Resource,
-            "Canonical non-tail execution exceeded admitted live call frames.",
-            "Reduce pending non-tail recursion or express the loop with graph function tail calls.",
         ),
         diagnostic(
             "normalized_instruction_steps",
@@ -6011,10 +5936,10 @@ pub fn diagnostic_descriptors() -> &'static [DiagnosticDescriptor] {
             "Reduce the accepted function definition before retrying projection.",
         ),
         diagnostic(
-            "definition_depth_limit",
+            "definition_depth_overflow",
             DiagnosticClass::Resource,
-            "A complete function body exceeds the fixed structural depth admission.",
-            "Reduce body nesting before retrying projection.",
+            "The observed function-body depth cannot be represented by the output counter.",
+            "Inspect the encoded extent and host representation.",
         ),
         diagnostic(
             "definition_logical_byte_limit",
@@ -8033,11 +7958,6 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     "reads",
                 ),
                 (
-                    "maximum-depth",
-                    MAXIMUM_FUNCTION_DEFINITION_DEPTH.to_string(),
-                    "depth",
-                ),
-                (
                     "maximum-logical-bytes",
                     MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES.to_string(),
                     "bytes",
@@ -8352,11 +8272,6 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                         super::super::execution::normalized::MAXIMUM_ADMISSION_ITEMS.to_string(),
                     ),
                     ("json-bytes", codec.maximum_bytes.to_string()),
-                    ("json-depth", codec.maximum_depth.to_string()),
-                    (
-                        "json-container-nesting",
-                        crate::platform::json::MAXIMUM_JSON_CONTAINER_NESTING.to_string(),
-                    ),
                     ("json-items", codec.maximum_items.to_string()),
                     ("json-string-bytes", codec.maximum_string_bytes.to_string()),
                     (
@@ -8420,7 +8335,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("success", "typed-result-encoded-and-owned-work-joined-and-adapters-closed".to_owned()),
                 ("cancellation", "SIGINT-SIGTERM-completion-first-on-ready-tie-then-joined-cancellation".to_owned()),
                 ("failure", "nonzero-no-automatic-retry-possibly-visible-effects-and-cleanup-notes".to_owned()),
-                ("project-route", "pure-differential-no-default-cumulative-quota".to_owned()),
+                ("project-route", "pure-vm-single-invocation".to_owned()),
             ])?);
             records.push(compact_record("execution.pure-batch", &[
                 ("selector", "run --deployment PATH --batch-input-file PATH --batch-result-file PATH".to_owned()),
@@ -8463,8 +8378,6 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("allocation-limit", "nonnegative-integer|absent"),
                 ("collection-limit", "nonnegative-integer|absent"),
                 ("capability-call-limit", "nonnegative-integer|absent"),
-                ("call-depth-limit", "positive-integer"),
-                ("value-stack-limit", "positive-integer"),
                 ("deadline-milliseconds", "positive-integer|absent"),
                 (
                     "counter-semantics",
@@ -8517,7 +8430,6 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
             )?);
             for (record, field, unit) in [
                 ("execution", "production-instructions", None),
-                ("execution", "reference-expressions", None),
                 (
                     "execution",
                     "production-allocated-bytes",
@@ -8525,21 +8437,10 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ),
                 (
                     "execution",
-                    "reference-allocated-bytes",
-                    Some("cumulative-byte"),
-                ),
-                (
-                    "execution",
                     "production-collection-items",
                     Some("cumulative-item"),
                 ),
-                (
-                    "execution",
-                    "reference-collection-items",
-                    Some("cumulative-item"),
-                ),
                 ("execution", "production-capability-calls", None),
-                ("execution", "reference-capability-calls", None),
                 ("tests", "production-instructions", None),
                 ("tests", "reference-expressions", None),
             ] {
@@ -8612,12 +8513,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ),
                 ],
             )?);
-            for name in [
-                "production-peak-call-frames",
-                "reference-peak-call-frames",
-                "production-tail-transfers",
-                "reference-tail-transfers",
-            ] {
+            for name in ["production-peak-call-frames", "production-tail-transfers"] {
                 records.push(compact_record(
                     "execution.observation",
                     &[
@@ -8657,7 +8553,6 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                         "internal-eligibility",
                         "constant-per-local-and-argument".to_owned(),
                     ),
-                    ("depth", "256".to_owned()),
                     (
                         "aggregate-items",
                         "unbounded-or-exact-caller-policy".to_owned(),
@@ -8928,111 +8823,109 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                     ("identity", "logical-flat-sequence-only".to_owned()),
                 ],
             )?);
-            for tier in ["production", "reference"] {
-                for (field, unit) in [
-                    ("input-admission-nodes", "raw-input-node"),
-                    ("raw-result-admission-nodes", "raw-result-node"),
-                    ("capture-admission-nodes", "capture-value-or-type-node"),
-                    ("constructor-child-visits", "checked-immediate-child"),
-                    ("guard-descendants", "internal-affinity-descendant"),
-                    ("classification-decisions", "internal-root-classification"),
-                    ("allocation-charges", "successful-nonzero-byte-charge"),
-                    (
-                        "type-derivation-steps",
-                        "preparation-type-layout-property-step",
-                    ),
-                    (
-                        "type-metadata-bytes",
-                        "preparation-type-layout-property-byte",
-                    ),
-                    ("map-node-visits", "physical-map-node-visits"),
-                    ("map-nodes-allocated", "physical-map-nodes-allocated"),
-                    (
-                        "map-entry-handles-allocated",
-                        "physical-map-entry-handles-allocated",
-                    ),
-                    (
-                        "map-entry-handle-copies",
-                        "physical-map-entry-handle-copies",
-                    ),
-                    ("map-key-bytes-copied", "physical-owned-key-bytes-copied"),
-                    ("list-node-visits", "physical-node-visits"),
-                    (
-                        "list-element-handle-copies",
-                        "physical-element-handle-copies",
-                    ),
-                    (
-                        "list-element-handle-allocations",
-                        "physical-element-handle-allocations",
-                    ),
-                    (
-                        "list-element-slots-reserved",
-                        "physical-element-slots-reserved",
-                    ),
-                    ("list-branch-slot-copies", "physical-branch-slot-copies"),
-                    (
-                        "list-branch-slots-reserved",
-                        "physical-branch-slots-reserved",
-                    ),
-                    ("list-nodes-allocated", "physical-nodes-allocated"),
-                    (
-                        "list-full-materializations",
-                        "physical-full-materializations",
-                    ),
-                    (
-                        "list-materialized-elements",
-                        "physical-materialized-elements",
-                    ),
-                ] {
-                    let mut observation = vec![
-                        ("record", "execution".to_owned()),
-                        ("field", format!("{tier}-{field}")),
-                        ("scalar", "nonnegative-integer".to_owned()),
-                        ("maximum", u64::MAX.to_string()),
-                        ("unit", unit.to_owned()),
-                        ("permission", "none".to_owned()),
-                    ];
-                    if field.starts_with("list-") {
-                        observation.push(("saturation-field", format!("{tier}-list-saturated")));
-                    }
-                    let preparation_saturation = match field {
-                        "type-derivation-steps" => Some("type-derivation-saturated"),
-                        "type-metadata-bytes" => Some("type-metadata-saturated"),
-                        _ => None,
-                    };
-                    if let Some(flag) = preparation_saturation {
-                        observation.push(("saturation-field", format!("{tier}-{flag}")));
-                    }
-                    records.push(compact_record("execution.observation", &observation)?);
-                    if let Some(flag) = preparation_saturation {
-                        records.push(compact_record(
-                            "execution.observation",
-                            &[
-                                ("record", "execution".to_owned()),
-                                ("field", format!("{tier}-{flag}")),
-                                ("scalar", "boolean".to_owned()),
-                                ("semantics", "false-exact-true-lower-bound".to_owned()),
-                                ("permission", "none".to_owned()),
-                            ],
-                        )?);
-                    }
+            for (field, unit) in [
+                ("input-admission-nodes", "raw-input-node"),
+                ("raw-result-admission-nodes", "raw-result-node"),
+                ("capture-admission-nodes", "capture-value-or-type-node"),
+                ("constructor-child-visits", "checked-immediate-child"),
+                ("guard-descendants", "internal-affinity-descendant"),
+                ("classification-decisions", "internal-root-classification"),
+                ("allocation-charges", "successful-nonzero-byte-charge"),
+                (
+                    "type-derivation-steps",
+                    "preparation-type-layout-property-step",
+                ),
+                (
+                    "type-metadata-bytes",
+                    "preparation-type-layout-property-byte",
+                ),
+                ("map-node-visits", "physical-map-node-visits"),
+                ("map-nodes-allocated", "physical-map-nodes-allocated"),
+                (
+                    "map-entry-handles-allocated",
+                    "physical-map-entry-handles-allocated",
+                ),
+                (
+                    "map-entry-handle-copies",
+                    "physical-map-entry-handle-copies",
+                ),
+                ("map-key-bytes-copied", "physical-owned-key-bytes-copied"),
+                ("list-node-visits", "physical-node-visits"),
+                (
+                    "list-element-handle-copies",
+                    "physical-element-handle-copies",
+                ),
+                (
+                    "list-element-handle-allocations",
+                    "physical-element-handle-allocations",
+                ),
+                (
+                    "list-element-slots-reserved",
+                    "physical-element-slots-reserved",
+                ),
+                ("list-branch-slot-copies", "physical-branch-slot-copies"),
+                (
+                    "list-branch-slots-reserved",
+                    "physical-branch-slots-reserved",
+                ),
+                ("list-nodes-allocated", "physical-nodes-allocated"),
+                (
+                    "list-full-materializations",
+                    "physical-full-materializations",
+                ),
+                (
+                    "list-materialized-elements",
+                    "physical-materialized-elements",
+                ),
+            ] {
+                let mut observation = vec![
+                    ("record", "execution".to_owned()),
+                    ("field", format!("production-{field}")),
+                    ("scalar", "nonnegative-integer".to_owned()),
+                    ("maximum", u64::MAX.to_string()),
+                    ("unit", unit.to_owned()),
+                    ("permission", "none".to_owned()),
+                ];
+                if field.starts_with("list-") {
+                    observation.push(("saturation-field", "production-list-saturated".to_owned()));
                 }
-                records.push(compact_record(
-                    "execution.observation",
-                    &[
-                        ("record", "execution".to_owned()),
-                        ("field", format!("{tier}-list-saturated")),
-                        ("scalar", "boolean".to_owned()),
-                        ("unit", "saturation-flag".to_owned()),
-                        (
-                            "semantics",
-                            "false-all-list-counters-exact-true-list-counters-are-lower-bounds"
-                                .to_owned(),
-                        ),
-                        ("permission", "none".to_owned()),
-                    ],
-                )?);
+                let preparation_saturation = match field {
+                    "type-derivation-steps" => Some("type-derivation-saturated"),
+                    "type-metadata-bytes" => Some("type-metadata-saturated"),
+                    _ => None,
+                };
+                if let Some(flag) = preparation_saturation {
+                    observation.push(("saturation-field", format!("production-{flag}")));
+                }
+                records.push(compact_record("execution.observation", &observation)?);
+                if let Some(flag) = preparation_saturation {
+                    records.push(compact_record(
+                        "execution.observation",
+                        &[
+                            ("record", "execution".to_owned()),
+                            ("field", format!("production-{flag}")),
+                            ("scalar", "boolean".to_owned()),
+                            ("semantics", "false-exact-true-lower-bound".to_owned()),
+                            ("permission", "none".to_owned()),
+                        ],
+                    )?);
+                }
             }
+            records.push(compact_record(
+                "execution.observation",
+                &[
+                    ("record", "execution".to_owned()),
+                    ("field", "production-list-saturated".to_owned()),
+                    ("scalar", "boolean".to_owned()),
+                    ("unit", "saturation-flag".to_owned()),
+                    (
+                        "semantics",
+                        "false-all-list-counters-exact-true-list-counters-are-lower-bounds"
+                            .to_owned(),
+                    ),
+                    ("permission", "none".to_owned()),
+                ],
+            )?);
         }
         RegistrySection::Deployment => {
             records.push(compact_record("deployment.shared-runtime", &[
@@ -9056,17 +8949,48 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("isolation", "trusted-runtime-not-process-sandbox-explicit-external-resources-may-be-shared".to_owned()),
                 ("lifecycle", "fixed-group-no-dynamic-cli-load-reload-or-individual-stop".to_owned()),
             ])?);
-            records.push(compact_record("deployment.foreground-policy", &[
-                ("execution-omitted", "trusted-no-cumulative-instruction-allocation-collection-capability-quota".to_owned()),
-                ("runtime-omitted", "no-deadline-default-bounded-cleanup-grace".to_owned()),
-                ("execution-runtime-null", "reject".to_owned()),
-                ("resident-execution-runtime", "required-objects-positive-live-limits-nullable-cumulative-quotas".to_owned()),
-                ("optional-execution-fields-omitted", "no-cumulative-quota-for-that-field".to_owned()),
-                ("topology", "listen-http-session-worker-required-null".to_owned()),
-                ("remaining-limits", "call-depth-value-stack-single-value-container-type-codec-adapter-and-canonical-grant".to_owned()),
-                ("frontier", "current-representation-and-admission-not-permanent-language-ceilings".to_owned()),
-                ("recovery", "retain-matching-executable-and-immutable-bundle-no-data-migration".to_owned()),
-            ])?);
+            records.push(compact_record(
+                "deployment.foreground-policy",
+                &[
+                    (
+                        "execution-omitted",
+                        "trusted-no-cumulative-instruction-allocation-collection-capability-quota"
+                            .to_owned(),
+                    ),
+                    (
+                        "runtime-omitted",
+                        "no-deadline-default-bounded-cleanup-grace".to_owned(),
+                    ),
+                    ("execution-runtime-null", "reject".to_owned()),
+                    (
+                        "resident-execution-runtime",
+                        "required-objects-positive-live-limits-nullable-cumulative-quotas"
+                            .to_owned(),
+                    ),
+                    (
+                        "optional-execution-fields-omitted",
+                        "no-cumulative-quota-for-that-field".to_owned(),
+                    ),
+                    (
+                        "topology",
+                        "listen-http-session-worker-required-null".to_owned(),
+                    ),
+                    (
+                        "remaining-limits",
+                        "single-value-container-type-codec-adapter-and-canonical-grant".to_owned(),
+                    ),
+                    (
+                        "frontier",
+                        "current-representation-and-admission-not-permanent-language-ceilings"
+                            .to_owned(),
+                    ),
+                    (
+                        "recovery",
+                        "retain-matching-executable-and-immutable-bundle-no-data-migration"
+                            .to_owned(),
+                    ),
+                ],
+            )?);
             records.push(compact_record("deployment.cumulative-quotas", &[
                 ("fields", "instruction_fuel,maximum_allocated_bytes,maximum_collection_items,maximum_capability_calls".to_owned()),
                 ("numeric", "nonnegative-u64".to_owned()),
@@ -9078,7 +9002,7 @@ fn section_records(section: RegistrySection) -> Result<Vec<String>, String> {
                 ("counter-scope", "one-invocation".to_owned()),
                 ("counter-overflow", "per-counter-saturation-flag-true-means-lower-bound".to_owned()),
                 ("new-http-recipe", "four-explicit-nulls".to_owned()),
-                ("live-controls", "deadlines-cancellation-depth-stack-concurrency-codecs-grants-streams-retained".to_owned()),
+                ("live-controls", "deadlines-cancellation-concurrency-codecs-grants-streams-retained".to_owned()),
                 ("memory", "cumulative-accounting-not-rss-or-live-heap-limit".to_owned()),
                 ("encoding", "materialize-all-selected-fields".to_owned()),
             ])?);
@@ -9476,16 +9400,6 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
             "identities",
         ),
         ("maximum-expanded-type-nodes", None, "nodes"),
-        (
-            "maximum-combined-expression-depth",
-            Some(crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH as u64),
-            "depth",
-        ),
-        (
-            "maximum-type-depth",
-            Some(crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH as u64),
-            "depth",
-        ),
     ] {
         records.push(compact_record(
             "change.expression-limit",
@@ -9639,7 +9553,7 @@ fn structural_expression_records(records: &mut Vec<String>) -> Result<(), String
         (
             "capacity",
             "whole-request",
-            "charge parentheses and atoms as tokens and lists/atoms as syntax nodes across blocks; admit resulting expression/binder/public identities and expanded type input/cache/copy work cumulatively; combined expression depth includes flat ancestors and starts at one; syntax wrappers add no semantic expression depth; authored defaults are unchanged",
+            "charge parentheses and atoms as tokens and lists/atoms as syntax nodes across blocks; admit resulting expression/binder/public identities and expanded type input/cache/copy work cumulatively across the whole request",
         ),
         (
             "compatibility",
@@ -10268,7 +10182,6 @@ mod tests {
         assert_eq!(MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS, 4_096);
         assert_eq!(MAXIMUM_FUNCTION_DEFINITION_EDGES, 16_384);
         assert_eq!(MAXIMUM_FUNCTION_DEFINITION_FACT_READS, 32_768);
-        assert_eq!(MAXIMUM_FUNCTION_DEFINITION_DEPTH, 256);
         assert_eq!(MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES, 8 * 1_048_576);
         assert_eq!(
             MAXIMUM_FUNCTION_DEFINITION_CANONICAL_RECORD_READS,
@@ -10306,7 +10219,6 @@ mod tests {
             "maximum-body-records value=4096",
             "maximum-structural-reference-edges value=16384",
             "maximum-fact-reads value=32768",
-            "maximum-depth value=256",
             "maximum-logical-bytes value=8388608",
             "maximum-map-pages",
             "maximum-map-bytes",

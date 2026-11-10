@@ -229,9 +229,7 @@ fn operands(
     values: &[crate::platform::kernel::ImplementationOperand],
     depth: usize,
 ) -> Result<(), ExecutionError> {
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH
-        || values.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN
-    {
+    if values.len() > crate::platform::kernel::contract::MAXIMUM_CHILDREN {
         return Err(reject());
     }
     for value in values {

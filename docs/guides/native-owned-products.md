@@ -39,10 +39,6 @@ released at exit. A borrowed product cannot be unpacked. Use a
 
 ## Inspecting metadata without dismantling the owner
 
-Development 0.1.63 adds metadata reads. The [continuation](../campaigns/20261001-owned-product-metadata.md)
-records accepted source, copied-product public workflows and the separate binary
-publication boundary. This feature is public in v0.1.64.
-
 ```text
 (function create tag (visibility public) (effect pure)
   (type-parameter create T (constraint owned))

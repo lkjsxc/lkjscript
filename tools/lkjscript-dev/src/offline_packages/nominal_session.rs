@@ -1,6 +1,6 @@
 //! Copied-product authorship of a concrete pair session; raw transport belongs to service.
 use super::*;
-use crate::pure_tail_program::Request;
+use crate::compact_request::Request;
 use serde_json::json;
 
 pub(super) fn discover(context: &mut Context, standard: &mut Package) -> Result<(), DevError> {
@@ -142,7 +142,7 @@ pub(super) fn workflow(context: &mut Context, standard: &mut Package) -> Result<
         let actual: serde_json::Value =
             serde_json::from_str(&field(&records, "execution", "value")?)?;
         require(
-            actual == expected && field(&records, "execution", "differential")? == "equal",
+            actual == expected && field(&records, "execution", "engine")? == "vm",
             "source-bound pair state transition differs",
         )?;
         context.receipt.nominal.state_steps.push(actual);
@@ -512,7 +512,7 @@ type.field parent=@Peer index=1 name=reason type=text
 pub(super) fn descriptor() -> serde_json::Value {
     json!({"artifact":"session.lkja","target":"live","listen":"127.0.0.1:0",
         "runtime":{"maximum_concurrent_tasks":4,"maximum_queued_tasks":8,"request_deadline_milliseconds":30000,"shutdown_grace_milliseconds":3000,"cancellation_grace_milliseconds":1000},
-        "execution":{"instruction_fuel":1000000,"maximum_call_depth":256,"maximum_value_stack":4096},"http":null,
+        "execution":{"instruction_fuel":1000000,},"http":null,
         "session":{"maximum_active_sessions":2,"maximum_pending_handshakes":2,"maximum_message_bytes":4096,"maximum_frame_bytes":4096,"maximum_header_bytes":8192,"maximum_headers":32,"maximum_inbound_mailbox_items":2,"maximum_inbound_mailbox_bytes":8192,"maximum_outbound_mailbox_items":8,"maximum_outbound_mailbox_bytes":8192,"maximum_state_nodes":1024,"maximum_state_bytes":4096,"maximum_transition_messages":8,"maximum_transition_bytes":8192,"tick_interval_milliseconds":1000,"idle_timeout_milliseconds":60000,"maximum_lifetime_milliseconds":86400000,"close_grace_milliseconds":1000,"cancellation_grace_milliseconds":1000,"maximum_process_buffer_bytes":1048576},
         "worker":null,"streams":{"maximum_chunk_bytes":4096,"maximum_buffered_chunks":4,"maximum_total_bytes":65536,"maximum_live_streams":16},"configuration":{},"secrets":[],
         "grants":[{"requirement":"streams","sharing_domain":"nominal-session-streams","authority_revision":"9999999999999999999999999999999999999999999999999999999999999999","adapter":{"kind":"byte_stream"}}]})

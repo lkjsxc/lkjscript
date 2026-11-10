@@ -38,11 +38,9 @@ finite-instantiation analysis follows them. Property proofs must inspect every r
 after a recurrence, and raw admission must inspect distinct nested values even when their exact
 type is shared. Uninhabited recursive records may be admitted without a finite constructor result.
 
-Typed layout bytes and logical graph generations change only if their corresponding encoding
-contract changes. Validation/witness compatibility must change when the acceptance proof changes.
-Persistence, copied public packages, strict loading, public retained sessions, scale observations,
-authoritative checks, and immutable delivery are required by
-[the campaign](../campaigns/202609110659.md); this decision does not report them as completed.
+Typed layout bytes and logical graph generations change only if their corresponding
+encoding contract changes. Validation/witness compatibility must change when the
+acceptance proof changes.
 
 The codec audit found that bounded layout/value walks had no active cancellation control and that
 decoder fallbacks swallowed every diagnostic class. Both independent typed codecs and typed JSON

@@ -54,11 +54,7 @@ fn substitute(
     depth: usize,
 ) -> Result<bool, Diagnostic> {
     reader.check()?;
-    if depth > crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
-        return Err(error(
-            "literal comparison exceeds complete body depth admission",
-        ));
-    }
+
     if let Some(value) = AuthoredLiteralValue::from_authored(&proposed.operation) {
         let Some(old) = AuthoredLiteralValue::from_authored(&previous.operation) else {
             return Ok(false);

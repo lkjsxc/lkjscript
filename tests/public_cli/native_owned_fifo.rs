@@ -70,7 +70,7 @@ fn native_owned_fifo_exact_generic_library_exhaustive_interleavings_and_source_f
             fifo.success_case(format!("{target}-{index}"), target, input, wanted)
         })
         .collect();
-    // The source reader also retains an actual ordinary differential process boundary.
+    // The source reader crosses the process boundary before the project is detached.
     fifo.consumer
         .source_batch("fifo-matrix", "fifo-cells", &rows);
     fifo.verify_identity();
@@ -148,9 +148,7 @@ fn native_owned_fifo_finite_fuel_refusal_joins_detached_custody_without_partial_
             "resource",
             "normalized_instruction_steps",
         );
-        limited.execution = Some(
-            json!({"instruction_fuel":fuel,"maximum_call_depth":4096,"maximum_value_stack":1000000}),
-        );
+        limited.execution = Some(json!({"instruction_fuel":fuel,}));
         cases.push(limited);
         cases.push(fifo.success_case(
             format!("after-fuel-{fuel}"),

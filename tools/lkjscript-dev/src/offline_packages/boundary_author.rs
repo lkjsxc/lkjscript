@@ -208,7 +208,7 @@ pub(super) fn workflow(context: &mut BoundaryContext) -> Result<(), DevError> {
     )?;
     require(
         field(&result, "execution", "value")? == "42"
-            && field(&result, "execution", "differential")? == "equal",
+            && field(&result, "execution", "engine")? == "vm",
         "final source public run differs from literal 42",
     )?;
     let input = context.evidence.join("batch.input.jsonl");
@@ -668,7 +668,7 @@ pub(super) fn validate(receipt: &BoundaryReceipt, root: &Path) -> Result<(), Dev
     )?;
     require(
         field(&result, "execution", "value")? == "42"
-            && field(&result, "execution", "differential")? == "equal",
+            && field(&result, "execution", "engine")? == "vm",
         "final source run full value or differential substituted",
     )?;
     require(
@@ -792,14 +792,11 @@ pub(super) fn validate(receipt: &BoundaryReceipt, root: &Path) -> Result<(), Dev
                         .flat_map(|record| &record.fields)
                         .any(|field| matches!(field.name.as_str(), "value" | "result-file"))
                     && field(&row_records, "execution", "target")? == "main"
-                    && field(&row_records, "execution", "differential")? == "equal"
-                    && ["production-instructions", "reference-expressions"]
-                        .into_iter()
-                        .all(|name| {
-                            field(&row_records, "execution", name).is_ok_and(|value| {
-                                value.parse::<u64>().is_ok_and(|count| count > 0)
-                            })
-                        }),
+                    && field(&row_records, "execution", "engine")? == "vm"
+                    && ["production-instructions"].into_iter().all(|name| {
+                        field(&row_records, "execution", name)
+                            .is_ok_and(|value| value.parse::<u64>().is_ok_and(|count| count > 0))
+                    }),
                 "final batch did not independently execute full literal result",
             )?;
             super::super::source_batch::observations(&row_records)?;

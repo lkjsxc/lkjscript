@@ -4,7 +4,6 @@ use crate::platform::execution::{ExecutionControl, ExecutionError, ExecutionFail
 use crate::platform::runtime::structured::StructuredExecutorHandle;
 
 // This bounds native evaluator nesting, independently of cumulative execution fuel.
-pub(super) const MAXIMUM_STRUCTURED_DEPTH: usize = 32;
 
 pub(super) struct Pair<L, R> {
     pub(super) left: L,

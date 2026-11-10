@@ -667,7 +667,7 @@ declarations.end"#,
         let leaf_marker = leaf.clone();
         let mut value = NormalizedValue::OwnedI64Cell(leaf);
         let mut markers = Vec::new();
-        for depth in 0..contract::MAXIMUM_TYPE_DEPTH {
+        for depth in 0..contract::FORMER_TYPE_DEPTH {
             let field = StructuralTypeField {
                 name: crate::platform::kernel::Name::new("child").unwrap(),
                 ty,
@@ -707,7 +707,7 @@ declarations.end"#,
         }
         crate::platform::kernel::validate_full(&source).unwrap();
         assert!(crate::platform::kernel::memory_reference::accepts(&source));
-        assert_eq!(composites.live(), (contract::MAXIMUM_TYPE_DEPTH, 0));
+        assert_eq!(composites.live(), (contract::FORMER_TYPE_DEPTH, 0));
         drop(value);
         assert_eq!(composites.live(), (0, 0));
         assert_eq!(cells.live(), (0, 0));

@@ -7,7 +7,7 @@ impl Resolver<'_> {
         &mut self,
         declaration: DeclarationReference,
     ) -> Result<bool> {
-        self.step(0)?;
+        self.step()?;
         let f = Oracle(self.source, Some(declaration))
             .function(declaration)
             .ok_or(Failure::Authority)?;
@@ -48,7 +48,7 @@ impl Resolver<'_> {
         let mut pending = vec![body];
         let mut seen = BTreeSet::new();
         while let Some(id) = pending.pop() {
-            self.step(0)?;
+            self.step()?;
             if seen.contains(&id) {
                 continue;
             }
@@ -124,7 +124,7 @@ impl Resolver<'_> {
             pending.extend(children.into_iter().map(|c| c.expression));
             if let ExpressionOperation::Let { bindings, .. } = &expression.operation {
                 for id in bindings {
-                    self.step(0)?;
+                    self.step()?;
                     let b = match self.source.owners.get(&OwnerKey::Binding(*id)) {
                         Some(OwnerRecord::Binding(b)) => b,
                         _ => return Err(Failure::Missing),

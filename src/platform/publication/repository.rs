@@ -2082,43 +2082,13 @@ fn add_candidate_type_root_count(count: &mut usize, additional: usize) -> Result
 fn candidate_operand_type_root_count(
     operands: &[crate::platform::kernel::ImplementationOperand],
 ) -> Result<usize, Diagnostic> {
-    use crate::platform::kernel::{ImplementationOperand, contract::MAXIMUM_TYPE_DEPTH};
-    // The projection's regular witness walker allocates traversal storage. Count with a
-    // fixed stack first, before that walker or the projected root vector is allocated.
-    let mut pending: [&[ImplementationOperand]; MAXIMUM_TYPE_DEPTH + 1] =
-        [&[]; MAXIMUM_TYPE_DEPTH + 1];
-    pending[0] = operands;
-    let mut depth = 0;
     let mut count = 0;
-    loop {
-        let Some((operand, rest)) = pending[depth].split_first() else {
-            if depth == 0 {
-                return Ok(count);
-            }
-            depth -= 1;
-            continue;
-        };
-        pending[depth] = rest;
-        if let ImplementationOperand::Concrete {
-            type_arguments,
-            implementations,
-            ..
-        } = operand
-        {
-            add_candidate_type_root_count(&mut count, type_arguments.len())?;
-            if !implementations.is_empty() {
-                depth += 1;
-                let slot = pending.get_mut(depth).ok_or_else(|| {
-                    repository_error(
-                        DiagnosticClass::Resource,
-                        "publication_repository_reference_visits_exhausted",
-                        "candidate witness projection exceeds its admitted depth",
-                    )
-                })?;
-                *slot = implementations;
-            }
+    for operand in operands {
+        for node in operand.walk() {
+            add_candidate_type_root_count(&mut count, node.type_arguments().len())?;
         }
     }
+    Ok(count)
 }
 
 fn admit_candidate_owner_type_roots(

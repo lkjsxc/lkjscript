@@ -203,7 +203,7 @@ fn native_text_join_matches_independent_ordered_values_before_and_after_source_r
             if detached {
                 super::native_indexed_data::joined(execution);
             } else {
-                assert_eq!(compact_field(execution, "differential"), "equal");
+                assert_eq!(compact_field(execution, "engine"), "vm");
             }
         }
         // Read the actual published row values after the shared reader has checked

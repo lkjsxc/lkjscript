@@ -174,13 +174,12 @@ different programs, descriptor/corruption rejection on cache hits, group bounds,
 cancelled admission, independent shutdown, continued sibling execution, and
 reclamation after the last owner across repeated start/stop cycles.
 
-The public tests use copied executables and ordinary authored applications after
-removing the authoring project. They cover four editor instances sharing two exact
-versions, private origins/secrets/data, per-instance execution failure, a
-separate-process persisted-state baseline, busy-sibling isolation, connected
-WebSocket shutdown, both Unix termination signals, failed later admission, bind
-conflict, closed readiness output and subsequent clean startup. The
-[campaign](../campaigns/202609281356.md) records actual runs and limitations.
+The [public tests](../../tests/public_cli/shared_runtime.rs) use copied executables
+and ordinary authored applications after removing the authoring project. They cover
+four editor instances sharing two exact versions, private origins/secrets/data,
+per-instance execution failure, a separate-process persisted-state baseline,
+busy-sibling isolation, connected WebSocket shutdown, both Unix termination signals,
+failed later admission, bind conflict, closed readiness output and subsequent clean startup.
 
 The next language boundary is explicit owned transfer and scoped read access,
 including package-level generic producer/transformer/consumer tests. Queue

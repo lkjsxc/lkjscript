@@ -10,7 +10,7 @@ use crate::platform::execution::normalized::prepare::{
     NormalizedCode, NormalizedFunctionBody, NormalizedInstruction as I, NormalizedVariantJump,
 };
 use crate::platform::execution::normalized::{
-    NormalizedCommandPolicy, NormalizedProgram, run_pure_command,
+    NormalizedCommandPolicy, NormalizedProgram, run_pure_command_differential as run_pure_command,
 };
 use crate::platform::kernel::{
     DeclarationReference, KernelSnapshot, Name, OwnerKey, OwnerRecord, TypeForm,

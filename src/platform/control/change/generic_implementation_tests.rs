@@ -172,12 +172,12 @@ expression.end
 }
 
 #[test]
-fn generic_implementation_compact_witness_depth_is_admitted_before_recursive_construction() {
+fn generic_implementation_compact_witnesses_cross_former_depth() {
     use std::fmt::Write;
     let declaration = format!("decl_{}", "44".repeat(16));
     let method = "method_85000000000000000000000000000004";
-    let maximum = crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
-    for depth in [maximum, maximum + 1, 4096] {
+    let maximum = crate::platform::kernel::contract::FORMER_TYPE_DEPTH;
+    for depth in [maximum, maximum * 2, maximum * 4] {
         let mut input = format!(
             "request base=rev_{}\nreplace.body function={declaration} body=$body\nexpression.method-call as=$body witness=concrete@{declaration}@%operand0 contract={declaration} method={method}\n",
             "83".repeat(32),
@@ -191,13 +191,7 @@ fn generic_implementation_compact_witness_depth_is_admitted_before_recursive_con
             writeln!(input, "implementation.argument parent=%operand{index} index=0 implementation={application}").unwrap();
         }
         let decoded = decode_compact_change("bounded-witness.lkjc", input.as_bytes());
-        if depth == maximum {
-            assert!(decoded.is_ok());
-        } else {
-            let errors = decoded.unwrap_err();
-            assert_eq!(errors[0].code, "change_owned_operand_depth");
-            assert_eq!(errors[0].class, DiagnosticClass::Resource);
-        }
+        assert!(decoded.is_ok(), "depth={depth}: {decoded:?}");
     }
 }
 

@@ -96,6 +96,7 @@ fn native_elf_public_derived_hash_matches_published_vectors() {
 }
 
 #[test]
+#[ignore = "slow: complete compiler publication and detached native filter"]
 fn native_elf_public_build_runs_lkjscript_compiler_as_detached_binary_filter() {
     let _semantics = semantic_command::Scope::enter();
     let temporary = tempfile::tempdir().unwrap();

@@ -65,8 +65,7 @@ pub fn exercise(public: &Native, descriptor: &std::path::Path) {
         );
     }
     let mut restricted: Value = serde_json::from_str(DESCRIPTORS[0].1).unwrap();
-    restricted["execution"] =
-        json!({"instruction_fuel":1,"maximum_call_depth":4096,"maximum_value_stack":1000000});
+    restricted["execution"] = json!({"instruction_fuel":1,});
     let restricted = public.input("outcome-refusal.deployment.json", &restricted.to_string());
     let absent = public.root.join("outcome-refusal-result.json");
     let failure = public.cli(

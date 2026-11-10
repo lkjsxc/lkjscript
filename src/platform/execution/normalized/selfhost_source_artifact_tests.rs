@@ -54,7 +54,7 @@ mod label_measurement;
 
 #[path = "native_phase_tests.rs"]
 mod phase;
-use artifact_support::{RepositoryCopy, run_filter, run_scalar};
+use artifact_support::{RepositoryCopy, RepositoryInventory, run_filter, run_scalar};
 
 type Check<T> = Result<T, String>;
 const FIXTURE: &str = include_str!("../../../../tests/fixtures/selfhost-source-artifact.lkjc");
@@ -856,7 +856,8 @@ fn admission_layer_result(name: &str, carrier: &[u8], diagnostic: i64) -> Check<
     let vm = NormalizedVm::for_test(program, policy)
         .invoke(entry, arguments.clone(), None, &control)
         .map_err(|error| format!("{name}: admission VM: {error:?}"))?;
-    let reference = NormalizedReferenceInterpreter::new(source, program, policy)
+    let reader = super::super::probe_reader(source);
+    let reference = NormalizedReferenceInterpreter::from_reader(&reader, program, policy)
         .invoke(entry, arguments, None, &control)
         .map_err(|error| format!("{name}: admission reference: {error:?}"))?;
     let expected = if diagnostic == 0 {
@@ -1345,18 +1346,18 @@ fn compiler_diagnostic_mutation(source: &KernelSnapshot) -> Check<InputCase> {
 }
 
 fn cheap_compiler_diagnostic_oracles(
-    case: &InputCase,
+    source: &KernelSnapshot,
     host: &HostOracle,
     expected: i64,
 ) -> Check<()> {
-    let entry = function_named(&case.source, "source-elf", "compile")?;
+    let entry = function_named(source, "source-elf", "compile")?;
     let request = vec![NormalizedValue::bytes(b"invalid request".as_slice())];
     let policy = NormalizedRunPolicy::foreground();
     let control = ExecutionControl::uncancelled();
     let vm = NormalizedVm::for_test(&host.program, policy)
         .invoke(entry, request.clone(), None, &control)
         .map_err(|error| format!("compiler mutation VM oracle: {error:?}"))?;
-    let reference = NormalizedReferenceInterpreter::new(&case.source, &host.program, policy)
+    let reference = NormalizedReferenceInterpreter::new(source, &host.program, policy)
         .invoke(entry, request, None, &control)
         .map_err(|error| format!("compiler mutation reference oracle: {error:?}"))?;
     equal(
@@ -1381,118 +1382,73 @@ fn cheap_compiler_diagnostic_oracles(
     )
 }
 
-fn stage_behavior_controls(c2: &[u8], c3: &[u8]) -> Check<()> {
+fn stage_behavior_controls(compiler: &[u8]) -> Check<()> {
     let case = fixture_case()?;
     let changed = mutated_case(&case.source)?;
-    let baseline2 = raw_outputs(
+    let baseline = raw_outputs(
         "C2-independent",
-        c2,
+        compiler,
         &case,
         "scalar-main",
         WHOLE_SOURCE_DEADLINE,
     )?;
-    let baseline3 = raw_outputs(
-        "C3-independent",
-        c3,
-        &case,
-        "scalar-main",
-        WHOLE_SOURCE_DEADLINE,
-    )?;
-    let changed2 = raw_outputs(
+    let mutation = raw_outputs(
         "C2-independent-mutated",
-        c2,
+        compiler,
         &changed,
         "scalar-main",
         WHOLE_SOURCE_DEADLINE,
-    )?;
-    let changed3 = raw_outputs(
-        "C3-independent-mutated",
-        c3,
-        &changed,
-        "scalar-main",
-        WHOLE_SOURCE_DEADLINE,
-    )?;
-    equal_bytes(
-        &baseline2.elf,
-        &baseline3.elf,
-        "C2/C3 independent program ELF",
-    )?;
-    equal_bytes(
-        &baseline2.artifact,
-        &baseline3.artifact,
-        "C2/C3 independent program artifact",
-    )?;
-    equal_bytes(
-        &changed2.elf,
-        &changed3.elf,
-        "C2/C3 mutated independent program ELF",
-    )?;
-    equal_bytes(
-        &changed2.artifact,
-        &changed3.artifact,
-        "C2/C3 mutated independent program artifact",
     )?;
     ensure(
-        baseline2.elf != changed2.elf && baseline2.artifact != changed2.artifact,
+        baseline.elf != mutation.elf && baseline.artifact != mutation.artifact,
         "independent 42-to-43 source mutation did not alter generated output",
     )?;
-    // Both raw-source generations have finished before independent target oracles.
+    // Generate source outputs before preparing independent target oracles.
     let host = host_oracle(&case)?;
     let changed_host = host_oracle(&changed)?;
-    for (label, output) in [("C2", baseline2), ("C3", baseline3)] {
-        let loaded = strict_artifact(
-            &format!("{label}-independent"),
-            &output.artifact,
-            &case,
-            &host,
-        )?;
+    for (label, input, oracle, output, expected) in [
+        ("C2-independent", &case, &host, &baseline, 42),
+        ("C2-mutated", &changed, &changed_host, &mutation, 43),
+    ] {
+        let loaded = strict_artifact(label, &output.artifact, input, oracle)?;
         scalar_behavior(
-            &format!("{label}-independent"),
-            &case,
-            &host,
+            label,
+            input,
+            oracle,
             loaded,
             &output.elf,
-            ("entry", 42),
+            ("entry", expected),
             WHOLE_SOURCE_DEADLINE,
         )?;
-    }
-    for (label, output) in [("C2", changed2), ("C3", changed3)] {
-        let loaded = strict_artifact(
-            &format!("{label}-mutated"),
-            &output.artifact,
-            &changed,
-            &changed_host,
-        )?;
-        scalar_behavior(
-            &format!("{label}-mutated"),
-            &changed,
-            &changed_host,
-            loaded,
-            &output.elf,
-            ("entry", 43),
-            WHOLE_SOURCE_DEADLINE,
-        )?;
-    }
-    reject_requests("C2-layer-negatives", c2, &case, WHOLE_SOURCE_DEADLINE)?;
-    reject_requests("C3-layer-negatives", c3, &case, WHOLE_SOURCE_DEADLINE)?;
-    stage_controls::verify("C2", c2, "C3", c3)?;
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    {
-        nominal_values::verify_stages("C2", c2, "C3", c3)?;
-        sequence::verify_stages("C2", c2, "C3", c3)?;
     }
     Ok(())
 }
 
-fn maintained_fixed_point(case: &InputCase) -> Check<()> {
+// One harness shares immutable preparation. Each control still launches fresh
+// native processes and executes its independent semantic or lifecycle oracles.
+// No repository handle or temporary directory escapes preparation.
+struct PreparedMaintained {
+    source: KernelSnapshot,
+    carrier: Vec<u8>,
+    host: HostOracle,
+    c1: Vec<u8>,
+    c2: Vec<u8>,
+    elf_request: Vec<u8>,
+    artifact_request: Vec<u8>,
+    original: RepositoryInventory,
+}
+
+fn prepare_fixed_point(
+    case: InputCase,
+    original: RepositoryInventory,
+) -> Check<PreparedMaintained> {
     let start = Instant::now();
     let elf_request = case.request("compile-source-elf", SourceOutputMode::Elf)?;
     let artifact_request =
         case.request("compile-source-elf", SourceOutputMode::CanonicalArtifact)?;
-    // C0 is the sole bootstrap: these writes target the exact isolated repository
-    // copy. Requests already bind the original S, core, revision, all owners and
-    // all supplied Types. C2/C3 receive no derived C0 data, files or environment.
-    let host = host_oracle(case)?;
+    // C0 writes only to the isolated repository copy. Self-produced stages get
+    // exact raw S, its target and output mode, with no derived C0 input.
+    let host = host_oracle(&case)?;
     let c1 = native_image(
         &host.program,
         function_named(&case.source, "source-elf", "compile")?,
@@ -1526,91 +1482,15 @@ fn maintained_fixed_point(case: &InputCase) -> Check<()> {
         WHOLE_SOURCE_DEADLINE,
     )?;
     for (label, bytes) in [("A1", &a1), ("A2", &a2), ("A3", &a3)] {
-        // Each generation independently re-enters the strict loader and complete
-        // unit/provenance inventory. Equality with another generation is not a seal.
-        strict_artifact(label, bytes, case, &host)?;
-    }
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    {
-        phase::verify_compiler(
-            "C1-Rust",
-            &c1,
-            &artifact_request,
-            &host.bytes,
-            &elf_request,
-            &c2,
-        )?;
-        phase::verify_compiler(
-            "C2-source",
-            &c2,
-            &artifact_request,
-            &host.bytes,
-            &elf_request,
-            &c3,
-        )?;
-    }
-    cheap_compiler_diagnostic_oracles(case, &host, 12)?;
-    stage_behavior_controls(&c2, &c3)?;
-
-    let mutant = compiler_diagnostic_mutation(&case.source)?;
-    ensure(
-        mutant.carrier != case.carrier,
-        "compiler S' raw source unchanged",
-    )?;
-    let mutant2 = raw_outputs(
-        "C2-compiler-S-prime",
-        &c2,
-        &mutant,
-        "compile-source-elf",
-        WHOLE_SOURCE_DEADLINE,
-    )?;
-    let mutant3 = raw_outputs(
-        "C3-compiler-S-prime",
-        &c3,
-        &mutant,
-        "compile-source-elf",
-        WHOLE_SOURCE_DEADLINE,
-    )?;
-    equal_bytes(
-        &mutant2.elf,
-        &mutant3.elf,
-        "C2/C3 compiler-source mutation ELF",
-    )?;
-    equal_bytes(
-        &mutant2.artifact,
-        &mutant3.artifact,
-        "C2/C3 compiler-source mutation artifact",
-    )?;
-    ensure(
-        mutant2.elf != c2 && mutant2.artifact != a2,
-        "compiler-source mutation did not affect outputs",
-    )?;
-    let mutant_host = host_oracle(&mutant)?;
-    strict_artifact("S-prime-via-C2", &mutant2.artifact, &mutant, &mutant_host)?;
-    strict_artifact("S-prime-via-C3", &mutant3.artifact, &mutant, &mutant_host)?;
-    cheap_compiler_diagnostic_oracles(&mutant, &mutant_host, 77)?;
-    for (label, image, diagnostic) in [
-        ("original-C2", c2.as_slice(), 12),
-        ("original-C3", c3.as_slice(), 12),
-        ("mutant-via-C2", mutant2.elf.as_slice(), 77),
-        ("mutant-via-C3", mutant3.elf.as_slice(), 77),
-    ] {
-        run_filter(
-            &format!("compiler-source-behavior/{label}"),
-            image,
-            b"invalid request",
-            diagnostic,
-            WHOLE_SOURCE_DEADLINE,
-        )?;
+        // Preserve every generation's complete strict unit/provenance check.
+        strict_artifact(label, bytes, &case, &host)?;
     }
     eprintln!(
-        "raw source maintained fixed point inner_equations_and_behavior_checked=true original_recheck=pending source_carrier_sha256={} \
-        elf_request_sha256={} artifact_request_sha256={} C1_sha256={} C2_sha256={} C3_sha256={} \
-        Ahost_sha256={} A1_sha256={} A2_sha256={} A3_sha256={} \
-        mutant_carrier_sha256={} mutant_elf_sha256={} mutant_artifact_sha256={} \
-        independent_behavior=42,43 compiler_mutation_diagnostic=77 elapsed_ms={} \
-        input_boundary=complete-raw-source request_profile=2 source_profile=3 environment=empty \
-        full_P_self=false same_process_reclamation={}",
+        "raw source maintained preparation C2_equals_C3=true Ahost_equals_A1_A2_A3=true \
+        source_carrier_sha256={} elf_request_sha256={} artifact_request_sha256={} \
+        C1_sha256={} C2_sha256={} C3_sha256={} Ahost_sha256={} \
+        A1_sha256={} A2_sha256={} A3_sha256={} elapsed_ms={} \
+        input_boundary=complete-raw-source request_profile=2 source_profile=3 environment=empty",
         sha256(&case.carrier),
         sha256(&elf_request),
         sha256(&artifact_request),
@@ -1621,21 +1501,24 @@ fn maintained_fixed_point(case: &InputCase) -> Check<()> {
         sha256(&a1),
         sha256(&a2),
         sha256(&a3),
-        sha256(&mutant.carrier),
-        sha256(&mutant2.elf),
-        sha256(&mutant2.artifact),
         start.elapsed().as_millis(),
-        cfg!(all(target_os = "linux", target_arch = "x86_64"))
     );
-    Ok(())
+    Ok(PreparedMaintained {
+        source: case.source,
+        carrier: case.carrier,
+        host,
+        c1,
+        c2,
+        elf_request,
+        artifact_request,
+        original,
+    })
 }
 
-#[test]
-#[ignore = "explicit maintained compiler acceptance: raw C1/C2/C3, artifacts, behavior and native phases; run separately"]
-fn selfhost_source_artifact_whole_maintained_raw_source_fixed_point() -> Check<()> {
+fn prepare_maintained() -> Check<PreparedMaintained> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/selfhost/project");
-    // Public opens can repair a damaged lock/catalog. Capture the healthy,
-    // quiescent original before any such call and reject a repair before C0.
+    // Capture original bytes before any public open, which could repair a
+    // damaged catalog. Both the initial read and the final read are checked.
     let copy = RepositoryCopy::create(&root)?;
     let first_read = (|| {
         InputCase::from_repository(
@@ -1655,45 +1538,159 @@ fn selfhost_source_artifact_whole_maintained_raw_source_fixed_point() -> Check<(
             ));
         }
     };
-
-    // Keep every ordinary inner failure as Result so original verification runs
-    // on success, semantic failure and native cancellation/deadline paths alike.
     let outcome = (|| {
         let copied = InputCase::from_repository(
             GraphRepository::open(&copy.path)
                 .map_err(|error| format!("isolated repository open: {error:?}"))?,
         )?;
         same_source(&copied, &original, "original/copy before C0")?;
-        maintained_fixed_point(&copied)
+        prepare_fixed_point(copied, copy.original_inventory())
     })();
     let unchanged_source = (|| {
         let after = InputCase::from_repository(
             GraphRepository::open(&root)
                 .map_err(|error| format!("maintained repository final read: {error:?}"))?,
         )?;
-        same_source(&after, &original, "original after fixed-point operation")
+        same_source(&after, &original, "original after fixed-point preparation")
     })();
-    // This is deliberately last: a final public read must not repair a catalog
-    // after the byte/directory inventory was already declared unchanged.
+    // Last, so a public final read cannot repair files after the inventory check.
     let unchanged_files = copy.verify_original(&root);
-    // Preserve the original failure too if repository invariants also fail.
     match (outcome, unchanged_files, unchanged_source) {
-        (Ok(()), Ok(()), Ok(())) => {
+        (Ok(prepared), Ok(()), Ok(())) => Ok(prepared),
+        (outcome, files, source) => Err(format!(
+            "maintained preparation outcome={:?}; original_file_inventory={files:?}; original_public_source={source:?}",
+            outcome.map(|_| ()),
+        )),
+    }
+    // The isolated disk copy is dropped on every return, including failure.
+}
+
+fn with_maintained_fixture(
+    label: &str,
+    operation: impl FnOnce(&PreparedMaintained) -> Check<()>,
+) -> Check<()> {
+    static PREPARED: std::sync::OnceLock<Check<PreparedMaintained>> = std::sync::OnceLock::new();
+    let fixture = PREPARED
+        .get_or_init(prepare_maintained)
+        .as_ref()
+        .map_err(Clone::clone)?;
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tools/selfhost/project");
+    fixture.original.verify(&root)?;
+    let start = Instant::now();
+    let outcome = operation(fixture);
+    // Controls use detached immutable data. Check exact original bytes after
+    // every success, returned failure and native deadline/cancellation path.
+    let unchanged = fixture.original.verify(&root);
+    match (outcome, unchanged) {
+        (Ok(()), Ok(())) => {
             eprintln!(
-                "raw source maintained fixed_point_component_passed=true original_repository_unchanged=true \
-                exact_source_carrier_sha256={} original_core_sha256={} package_revision={} \
-                full_P_self=false same_process_reclamation={}",
-                sha256(&original.carrier),
-                sha256(&original.canonical_core),
-                original.revision_digest,
-                cfg!(all(target_os = "linux", target_arch = "x86_64"))
+                "raw source maintained control={label} passed=true original_repository_unchanged=true \
+                source_carrier_sha256={} elapsed_ms={}",
+                sha256(&fixture.carrier),
+                start.elapsed().as_millis(),
             );
             Ok(())
         }
-        (outcome, files, source) => Err(format!(
-            "maintained acceptance outcome={outcome:?}; original_file_inventory={files:?}; original_public_source={source:?}"
+        (outcome, original) => Err(format!(
+            "maintained {label} outcome={outcome:?}; original_file_inventory={original:?}"
         )),
     }
+}
+
+fn maintained_behavior(fixture: &PreparedMaintained) -> Check<()> {
+    cheap_compiler_diagnostic_oracles(&fixture.source, &fixture.host, 12)?;
+    // C2=C3 was proved by preparation. Per-input controls execute the distinct
+    // stabilized compiler bytes once, with fresh invocations for every input.
+    stage_behavior_controls(&fixture.c2)?;
+    let mutant = compiler_diagnostic_mutation(&fixture.source)?;
+    ensure(
+        mutant.carrier != fixture.carrier,
+        "compiler S' raw source unchanged",
+    )?;
+    let output = raw_outputs(
+        "C2-compiler-S-prime",
+        &fixture.c2,
+        &mutant,
+        "compile-source-elf",
+        WHOLE_SOURCE_DEADLINE,
+    )?;
+    ensure(
+        output.elf != fixture.c2 && output.artifact != fixture.host.bytes,
+        "compiler-source mutation did not affect outputs",
+    )?;
+    let mutant_host = host_oracle(&mutant)?;
+    strict_artifact("S-prime-via-C2", &output.artifact, &mutant, &mutant_host)?;
+    cheap_compiler_diagnostic_oracles(&mutant.source, &mutant_host, 77)?;
+    for (label, image, diagnostic) in [
+        ("original-C2", fixture.c2.as_slice(), 12),
+        ("mutant-via-C2", output.elf.as_slice(), 77),
+    ] {
+        run_filter(
+            &format!("compiler-source-behavior/{label}"),
+            image,
+            b"invalid request",
+            diagnostic,
+            WHOLE_SOURCE_DEADLINE,
+        )?;
+    }
+    eprintln!(
+        "raw source maintained mutations independent_behavior=42,43 compiler_diagnostics=12,77 \
+        mutant_carrier_sha256={} mutant_elf_sha256={} mutant_artifact_sha256={}",
+        sha256(&mutant.carrier),
+        sha256(&output.elf),
+        sha256(&output.artifact),
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "slow: maintained raw C1/C2/C3 fixed point and independent program/compiler mutations"]
+fn selfhost_source_artifact_whole_maintained_raw_source_fixed_point() -> Check<()> {
+    with_maintained_fixture("fixed-point-and-mutations", maintained_behavior)
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[test]
+#[ignore = "slow: whole-compiler same-process allocation, cancellation and cleanup for C1 and C2"]
+fn selfhost_source_artifact_maintained_native_lifecycle() -> Check<()> {
+    with_maintained_fixture("native-lifecycle", |fixture| {
+        // Producer provenance matters here even if their bytes happen to match.
+        for (label, image) in [
+            ("C1-Rust", fixture.c1.as_slice()),
+            ("C2-source", fixture.c2.as_slice()),
+        ] {
+            phase::verify_compiler(
+                label,
+                image,
+                &fixture.artifact_request,
+                &fixture.host.bytes,
+                &fixture.elf_request,
+                &fixture.c2,
+            )?;
+        }
+        Ok(())
+    })
+}
+
+#[test]
+#[ignore = "slow: maintained compiler active, nominal, sequence and rejection corpora"]
+fn selfhost_source_artifact_maintained_semantic_corpus() -> Check<()> {
+    with_maintained_fixture("semantic-corpus", |fixture| {
+        let case = fixture_case()?;
+        reject_requests(
+            "C2-layer-negatives",
+            &fixture.c2,
+            &case,
+            WHOLE_SOURCE_DEADLINE,
+        )?;
+        stage_controls::verify("C2", &fixture.c2)?;
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        {
+            nominal_values::verify_stage("C2", &fixture.c2)?;
+            sequence::verify_stage("C2", &fixture.c2)?;
+        }
+        Ok(())
+    })
 }
 
 /// Optional measurement export, not a fixed-point or semantic acceptance result.

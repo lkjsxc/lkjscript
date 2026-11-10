@@ -116,10 +116,8 @@ pub(super) fn inventory(
                 let depth = selector
                     .parent
                     .map_or(0usize, |parent| depths[parent.0 as usize] + 1);
-                if depth > 3
-                    || previous.is_some_and(|(prior_depth, prior)| {
-                        (prior_depth, prior) >= (depth, selector)
-                    })
+                if previous
+                    .is_some_and(|(prior_depth, prior)| (prior_depth, prior) >= (depth, selector))
                 {
                     return Err(reference_error(
                         "change_reference_inventory",

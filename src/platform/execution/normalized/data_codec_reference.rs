@@ -22,7 +22,6 @@ const CHECKSUM_DOMAIN: &str = "lkjscript.data.typed-value-envelope.v1";
 const LAYOUT_DOMAIN: &str = "lkjscript.data.typed-layout.v1";
 const BYTE_LIMIT: usize = 4 * 1_048_576;
 const ITEM_LIMIT: usize = 1_000_000;
-const DEPTH_LIMIT: usize = 128;
 
 #[cfg(test)]
 pub(super) fn encode_typed(
@@ -40,14 +39,14 @@ pub(super) fn encode_typed_with_control(
     control: &ExecutionControl,
 ) -> Result<Vec<u8>, Diagnostic> {
     let mut escape = ReferenceEscapeCheck::new(control);
-    escape.value(value, 0)?;
-    ReferenceEscapeCheck::new(control).ty(program, ty, 0)?;
+    escape.value(value)?;
+    ReferenceEscapeCheck::new(control).ty(program, ty)?;
     let mut encoded = Vec::new();
     encoded.extend_from_slice(MAGIC);
     encoded.extend_from_slice(&VERSION.to_be_bytes());
     encoded.extend_from_slice(&layout_digest(program, ty, control)?);
     let mut budget = ReferenceBudget { items: 0, control };
-    write_value(program, ty, value, &mut encoded, &mut budget, 0)?;
+    write_value(program, ty, value, &mut encoded, &mut budget)?;
     ensure_payload_size(encoded.len())?;
     let checksum = digest(CHECKSUM_DOMAIN, &encoded);
     encoded.extend_from_slice(&checksum);
@@ -70,7 +69,7 @@ pub(super) fn decode_typed_with_control(
     ty: TypeObjectDigest,
     control: &ExecutionControl,
 ) -> Result<NormalizedValue, Diagnostic> {
-    ReferenceEscapeCheck::new(control).ty(program, ty, 0)?;
+    ReferenceEscapeCheck::new(control).ty(program, ty)?;
     if encoded.len() > BYTE_LIMIT {
         return Err(resource_error(
             "typed data value exceeds the canonical byte limit",
@@ -111,7 +110,7 @@ pub(super) fn decode_typed_with_control(
         ));
     }
     let mut budget = ReferenceBudget { items: 0, control };
-    let value = read_value(program, ty, &mut input, &mut budget, 0)?;
+    let value = read_value(program, ty, &mut input, &mut budget)?;
     if !input.is_finished() {
         return Err(corrupt_error(
             "normalized_data_value_trailing",
@@ -133,66 +132,41 @@ fn cancelled(control: &ExecutionControl) -> Result<(), Diagnostic> {
 /// In particular it does not use the production value/schema escape walker.
 struct ReferenceEscapeCheck<'a> {
     control: &'a ExecutionControl,
-    visits: u64,
-    ancestors: [Option<TypeObjectDigest>; 257],
+    seen: BTreeSet<TypeObjectDigest>,
 }
 
 impl<'a> ReferenceEscapeCheck<'a> {
     fn new(control: &'a ExecutionControl) -> Self {
         Self {
             control,
-            visits: 0,
-            ancestors: [None; 257],
+            seen: BTreeSet::new(),
         }
     }
 
-    fn enter(&mut self, depth: usize) -> Result<(), Diagnostic> {
+    fn value(&mut self, value: &NormalizedValue) -> Result<(), Diagnostic> {
         cancelled(self.control)?;
-        if depth > 256 {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "normalized_value_depth",
-                "view escape inspection exceeds finite value depth 256",
-            ));
-        }
-        self.visits = self
-            .visits
-            .checked_add(1)
-            .filter(|count| *count <= 1_000_001)
-            .ok_or_else(|| {
-                Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "normalized_collection_items",
-                    "view escape inspection exceeds finite admission items",
-                )
-            })?;
-        Ok(())
-    }
-
-    fn value(&mut self, value: &NormalizedValue, depth: usize) -> Result<(), Diagnostic> {
-        self.enter(depth)?;
         match value {
             NormalizedValue::ReadView(_)
             | NormalizedValue::RegionCap { .. }
             | NormalizedValue::RegionPointer { .. } => return Err(view_escape()),
             NormalizedValue::Record(NormalizedRecord::Nominal { fields, .. }) => {
                 for field in fields.iter() {
-                    self.value(field, depth + 1)?;
+                    self.value(field)?;
                 }
             }
             NormalizedValue::Record(NormalizedRecord::Structural { fields }) => {
                 for (_, field) in fields.iter() {
-                    self.value(field, depth + 1)?;
+                    self.value(field)?;
                 }
             }
-            NormalizedValue::List(items) => self.list(items, depth)?,
-            NormalizedValue::Map(entries) => self.map(entries, depth)?,
+            NormalizedValue::List(items) => self.list(items)?,
+            NormalizedValue::Map(entries) => self.map(entries)?,
             NormalizedValue::Variant { payload, .. } | NormalizedValue::Option(payload) => {
                 if let Some(payload) = payload {
-                    self.value(payload, depth + 1)?;
+                    self.value(payload)?;
                 }
             }
-            NormalizedValue::Result { value, .. } => self.value(value, depth + 1)?,
+            NormalizedValue::Result { value, .. } => self.value(value)?,
             NormalizedValue::Function {
                 read_scope_arguments,
                 bound_arguments,
@@ -203,7 +177,7 @@ impl<'a> ReferenceEscapeCheck<'a> {
                 }
                 if let Some(arguments) = bound_arguments {
                     for argument in arguments.iter() {
-                        self.value(argument, depth + 1)?;
+                        self.value(argument)?;
                     }
                 }
             }
@@ -227,19 +201,19 @@ impl<'a> ReferenceEscapeCheck<'a> {
     }
 
     #[inline(never)]
-    fn list(&mut self, items: &super::list::List, depth: usize) -> Result<(), Diagnostic> {
+    fn list(&mut self, items: &super::list::List) -> Result<(), Diagnostic> {
         let mut cursor = items.iter();
         for item in &mut cursor {
-            self.value(item, depth + 1)?;
+            self.value(item)?;
         }
         Ok(())
     }
 
     #[inline(never)]
-    fn map(&mut self, entries: &super::map::Map, depth: usize) -> Result<(), Diagnostic> {
+    fn map(&mut self, entries: &super::map::Map) -> Result<(), Diagnostic> {
         let mut cursor = entries.iter();
         for (_, item) in &mut cursor {
-            self.value(item, depth + 1)?;
+            self.value(item)?;
         }
         Ok(())
     }
@@ -248,13 +222,11 @@ impl<'a> ReferenceEscapeCheck<'a> {
         &mut self,
         program: &dyn NormalizedValueSchema,
         ty: TypeObjectDigest,
-        depth: usize,
     ) -> Result<(), Diagnostic> {
-        self.enter(depth)?;
-        if self.ancestors[..depth].contains(&Some(ty)) {
+        cancelled(self.control)?;
+        if !self.seen.insert(ty) {
             return Ok(());
         }
-        self.ancestors[depth] = Some(ty);
         let object = program.types().get(&ty).ok_or_else(|| {
             Diagnostic::new(
                 DiagnosticClass::Semantic,
@@ -274,7 +246,7 @@ impl<'a> ReferenceEscapeCheck<'a> {
             TypeForm::Named { .. } | TypeForm::Applied { .. } => {
                 if let TypeForm::Applied { arguments, .. } = &object.form {
                     for argument in arguments {
-                        self.ty(program, *argument, depth + 1)?;
+                        self.ty(program, *argument)?;
                     }
                 }
                 if let Some(index) = program.record_index(ty) {
@@ -283,10 +255,10 @@ impl<'a> ReferenceEscapeCheck<'a> {
                         .get(index)
                         .ok_or_else(escape_layout_error)?;
                     for argument in record.arguments.iter() {
-                        self.ty(program, *argument, depth + 1)?;
+                        self.ty(program, *argument)?;
                     }
                     for field in record.fields.iter() {
-                        self.ty(program, field.ty, depth + 1)?;
+                        self.ty(program, field.ty)?;
                     }
                 }
                 if let Some(index) = program.variant_index(ty) {
@@ -295,11 +267,11 @@ impl<'a> ReferenceEscapeCheck<'a> {
                         .get(index)
                         .ok_or_else(escape_layout_error)?;
                     for argument in variant.arguments.iter() {
-                        self.ty(program, *argument, depth + 1)?;
+                        self.ty(program, *argument)?;
                     }
                     for case in variant.cases.iter() {
                         if let Some(payload) = case.payload {
-                            self.ty(program, payload, depth + 1)?;
+                            self.ty(program, payload)?;
                         }
                     }
                 }
@@ -308,29 +280,29 @@ impl<'a> ReferenceEscapeCheck<'a> {
             | TypeForm::OwnedProduct { fields }
             | TypeForm::OwnedChoice { cases: fields } => {
                 for field in fields {
-                    self.ty(program, field.ty, depth + 1)?;
+                    self.ty(program, field.ty)?;
                 }
             }
             TypeForm::List { item }
             | TypeForm::Option { item }
             | TypeForm::OwnedSequence { item }
-            | TypeForm::Stream { item } => self.ty(program, *item, depth + 1)?,
+            | TypeForm::Stream { item } => self.ty(program, *item)?,
             TypeForm::Map { key, value }
             | TypeForm::Result {
                 ok: key,
                 error: value,
             } => {
-                self.ty(program, *key, depth + 1)?;
-                self.ty(program, *value, depth + 1)?;
+                self.ty(program, *key)?;
+                self.ty(program, *value)?;
             }
             TypeForm::Function { parameters, result }
             | TypeForm::TaskFunction {
                 parameters, result, ..
             } => {
                 for parameter in parameters {
-                    self.ty(program, *parameter, depth + 1)?;
+                    self.ty(program, *parameter)?;
                 }
-                self.ty(program, *result, depth + 1)?;
+                self.ty(program, *result)?;
             }
             TypeForm::AssociatedContractMember { .. }
             | TypeForm::AssociatedWitnessProjection { .. }
@@ -373,14 +345,7 @@ struct ReferenceBudget<'a> {
 }
 
 impl ReferenceBudget<'_> {
-    fn visit(&mut self, depth: usize, already_charged: bool) -> Result<(), Diagnostic> {
-        if depth > DEPTH_LIMIT {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "normalized_data_value_depth",
-                "typed data value exceeds the nesting-depth limit",
-            ));
-        }
+    fn visit(&mut self, already_charged: bool) -> Result<(), Diagnostic> {
         if already_charged {
             cancelled(self.control)
         } else {
@@ -404,9 +369,8 @@ fn write_value(
     value: &NormalizedValue,
     output: &mut Vec<u8>,
     budget: &mut ReferenceBudget,
-    depth: usize,
 ) -> Result<(), Diagnostic> {
-    budget.visit(depth, false)?;
+    budget.visit(false)?;
     match (form(program, ty)?, value) {
         (
             TypeForm::ReadViewApplied { .. }
@@ -437,20 +401,20 @@ fn write_value(
                 return Err(layout_error("structural record"));
             }
             for (field, (_, field_value)) in layout.iter().zip(values.iter()) {
-                write_value(program, field.ty, field_value, output, budget, depth + 1)?;
+                write_value(program, field.ty, field_value, output, budget)?;
             }
         }
         (TypeForm::Named { .. } | TypeForm::Applied { .. }, _) => {
-            write_nominal(program, ty, value, output, budget, depth)?;
+            write_nominal(program, ty, value, output, budget)?;
         }
         (TypeForm::List { item }, NormalizedValue::List(values)) => {
             write_length(output, values.len())?;
             for item_value in values.iter() {
-                write_value(program, *item, item_value, output, budget, depth + 1)?;
+                write_value(program, *item, item_value, output, budget)?;
             }
         }
         (TypeForm::Map { key, value: item }, NormalizedValue::Map(entries)) => {
-            write_map(program, (*key, *item), entries, output, budget, depth)?;
+            write_map(program, (*key, *item), entries, output, budget)?;
         }
         (TypeForm::StaticText, _) => return Err(unsupported("StaticText")),
         (TypeForm::Secret, _) => return Err(unsupported("Secret")),
@@ -478,13 +442,12 @@ fn write_map(
     entries: &super::map::Map,
     output: &mut Vec<u8>,
     budget: &mut ReferenceBudget,
-    depth: usize,
 ) -> Result<(), Diagnostic> {
     write_length(output, entries.len())?;
     let mut cursor = entries.iter();
     for (map_key, item_value) in &mut cursor {
-        write_key(program, key_type, map_key, output, budget, depth + 1)?;
-        write_value(program, item_type, item_value, output, budget, depth + 1)?;
+        write_key(program, key_type, map_key, output, budget)?;
+        write_value(program, item_type, item_value, output, budget)?;
     }
     Ok(())
 }
@@ -495,7 +458,6 @@ fn write_nominal(
     value: &NormalizedValue,
     output: &mut Vec<u8>,
     budget: &mut ReferenceBudget,
-    depth: usize,
 ) -> Result<(), Diagnostic> {
     if let Some((expected_index, record)) = find_record(program, ty) {
         if record.owned {
@@ -508,7 +470,7 @@ fn write_nominal(
             return Err(layout_error("nominal record"));
         }
         for (field, field_value) in record.fields.iter().zip(fields.iter()) {
-            write_value(program, field.ty, field_value, output, budget, depth + 1)?;
+            write_value(program, field.ty, field_value, output, budget)?;
         }
         return Ok(());
     }
@@ -531,14 +493,9 @@ fn write_nominal(
         write_bytes(output, &case.to_be_bytes())?;
         match (&selected.payload, payload) {
             (None, None) => Ok(()),
-            (Some(payload_type), Some(payload_value)) => write_value(
-                program,
-                *payload_type,
-                payload_value,
-                output,
-                budget,
-                depth + 1,
-            ),
+            (Some(payload_type), Some(payload_value)) => {
+                write_value(program, *payload_type, payload_value, output, budget)
+            }
             _ => Err(layout_error("variant payload")),
         }?;
         return Ok(());
@@ -551,9 +508,8 @@ fn read_value(
     ty: TypeObjectDigest,
     input: &mut ReferenceInput<'_>,
     budget: &mut ReferenceBudget,
-    depth: usize,
 ) -> Result<NormalizedValue, Diagnostic> {
-    read_reserved_value(program, ty, input, budget, depth, false)
+    read_reserved_value(program, ty, input, budget, false)
 }
 
 fn read_reserved_value(
@@ -561,10 +517,10 @@ fn read_reserved_value(
     ty: TypeObjectDigest,
     input: &mut ReferenceInput<'_>,
     budget: &mut ReferenceBudget<'_>,
-    depth: usize,
+
     already_charged: bool,
 ) -> Result<NormalizedValue, Diagnostic> {
-    budget.visit(depth, already_charged)?;
+    budget.visit(already_charged)?;
     match form(program, ty)? {
         TypeForm::RegionBrand { .. }
         | TypeForm::Region { .. }
@@ -619,7 +575,7 @@ fn read_reserved_value(
                 values
                     .try_push((
                         field.name.clone(),
-                        read_value(program, field.ty, input, budget, depth + 1)?,
+                        read_value(program, field.ty, input, budget)?,
                     ))
                     .map_err(child_storage_error)?;
             }
@@ -628,21 +584,14 @@ fn read_reserved_value(
             }))
         }
         TypeForm::Named { .. } | TypeForm::Applied { .. } => {
-            read_nominal(program, ty, input, budget, depth)
+            read_nominal(program, ty, input, budget)
         }
         TypeForm::List { item } => {
             let count = input.read_count("normalized_data_list_count")?;
             budget.charge(count)?;
             let mut values = Vec::with_capacity(count);
             for _ in 0..count {
-                values.push(read_reserved_value(
-                    program,
-                    *item,
-                    input,
-                    budget,
-                    depth + 1,
-                    true,
-                )?);
+                values.push(read_reserved_value(program, *item, input, budget, true)?);
             }
             Ok(NormalizedValue::list(values).map_err(|error| {
                 Diagnostic::new(
@@ -657,7 +606,7 @@ fn read_reserved_value(
             budget.charge(count.saturating_mul(2))?;
             let mut entries = BTreeMap::<NormalizedMapKey, NormalizedValue>::new();
             for _ in 0..count {
-                let key_value = read_reserved_value(program, *key, input, budget, depth + 1, true)?;
+                let key_value = read_reserved_value(program, *key, input, budget, true)?;
                 let map_key = NormalizedMapKey::from_value(key_value).ok_or_else(|| {
                     corrupt_error(
                         "normalized_data_map_key",
@@ -673,7 +622,7 @@ fn read_reserved_value(
                         "typed data map keys are duplicate or not in canonical order",
                     ));
                 }
-                let item = read_reserved_value(program, *value, input, budget, depth + 1, true)?;
+                let item = read_reserved_value(program, *value, input, budget, true)?;
                 entries.insert(map_key, item);
             }
             NormalizedValue::map_controlled(entries, budget.control)
@@ -701,7 +650,6 @@ fn read_nominal(
     ty: TypeObjectDigest,
     input: &mut ReferenceInput<'_>,
     budget: &mut ReferenceBudget,
-    depth: usize,
 ) -> Result<NormalizedValue, Diagnostic> {
     if let Some((layout, record)) = find_record(program, ty) {
         if record.owned {
@@ -711,7 +659,7 @@ fn read_nominal(
             ValuesBuilder::with_capacity(record.fields.len()).map_err(child_storage_error)?;
         for field in record.fields.iter() {
             fields
-                .try_push(read_value(program, field.ty, input, budget, depth + 1)?)
+                .try_push(read_value(program, field.ty, input, budget)?)
                 .map_err(child_storage_error)?;
         }
         return Ok(NormalizedValue::Record(NormalizedRecord::Nominal {
@@ -732,9 +680,7 @@ fn read_nominal(
             })?;
         let payload = selected
             .payload
-            .map(|payload_type| {
-                read_value(program, payload_type, input, budget, depth + 1).map(Box::new)
-            })
+            .map(|payload_type| read_value(program, payload_type, input, budget).map(Box::new))
             .transpose()?;
         return Ok(NormalizedValue::Variant {
             layout,
@@ -752,7 +698,7 @@ fn layout_digest(
 ) -> Result<[u8; 32], Diagnostic> {
     let mut description = Vec::new();
     let mut ancestors = BTreeSet::new();
-    describe_type(program, ty, &mut ancestors, &mut description, 0, control)?;
+    describe_type(program, ty, &mut ancestors, &mut description, control)?;
     Ok(digest(LAYOUT_DOMAIN, &description))
 }
 
@@ -761,17 +707,11 @@ fn describe_type(
     ty: TypeObjectDigest,
     ancestors: &mut BTreeSet<TypeObjectDigest>,
     description: &mut Vec<u8>,
-    depth: usize,
+
     control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
     cancelled(control)?;
-    if depth > DEPTH_LIMIT {
-        return Err(Diagnostic::new(
-            DiagnosticClass::Resource,
-            "normalized_data_layout_depth",
-            "typed data layout exceeds the nesting-depth limit",
-        ));
-    }
+
     write_bytes(description, &ty.bytes())?;
     match form(program, ty)? {
         TypeForm::RegionBrand { .. }
@@ -793,34 +733,19 @@ fn describe_type(
         TypeForm::Bytes => write_bytes(description, &[3])?,
         TypeForm::Text => write_bytes(description, &[4])?,
         TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } => {
-            describe_nominal_type(
-                program,
-                ty,
-                declaration,
-                ancestors,
-                description,
-                depth,
-                control,
-            )?;
+            describe_nominal_type(program, ty, declaration, ancestors, description, control)?;
         }
         TypeForm::StructuralRecord { fields } => {
             write_bytes(description, &[6])?;
             write_length(description, fields.len())?;
             for field in fields {
                 write_blob(description, field.name.as_str().as_bytes())?;
-                describe_type(
-                    program,
-                    field.ty,
-                    ancestors,
-                    description,
-                    depth + 1,
-                    control,
-                )?;
+                describe_type(program, field.ty, ancestors, description, control)?;
             }
         }
         TypeForm::List { item } => {
             write_bytes(description, &[7])?;
-            describe_type(program, *item, ancestors, description, depth + 1, control)?;
+            describe_type(program, *item, ancestors, description, control)?;
         }
         TypeForm::Map { key, value } => {
             if !matches!(
@@ -830,8 +755,8 @@ fn describe_type(
                 return Err(unsupported("unordered map key"));
             }
             write_bytes(description, &[8])?;
-            describe_type(program, *key, ancestors, description, depth + 1, control)?;
-            describe_type(program, *value, ancestors, description, depth + 1, control)?;
+            describe_type(program, *key, ancestors, description, control)?;
+            describe_type(program, *value, ancestors, description, control)?;
         }
         TypeForm::StaticText => return Err(unsupported("StaticText")),
         TypeForm::Secret => return Err(unsupported("Secret")),
@@ -866,7 +791,7 @@ fn describe_nominal_type(
     declaration: &DeclarationReference,
     ancestors: &mut BTreeSet<TypeObjectDigest>,
     description: &mut Vec<u8>,
-    depth: usize,
+
     control: &ExecutionControl,
 ) -> Result<(), Diagnostic> {
     match form(program, ty)? {
@@ -874,14 +799,7 @@ fn describe_nominal_type(
             write_bytes(description, &[9])?;
             write_length(description, arguments.len())?;
             for argument in arguments {
-                describe_type(
-                    program,
-                    *argument,
-                    ancestors,
-                    description,
-                    depth + 1,
-                    control,
-                )?;
+                describe_type(program, *argument, ancestors, description, control)?;
             }
         }
         _ => write_bytes(description, &[5])?,
@@ -903,14 +821,7 @@ fn describe_nominal_type(
             write_blob(description, field.reference.package.to_string().as_bytes())?;
             write_blob(description, field.reference.field.to_string().as_bytes())?;
             write_blob(description, field.name.as_str().as_bytes())?;
-            describe_type(
-                program,
-                field.ty,
-                ancestors,
-                description,
-                depth + 1,
-                control,
-            )?;
+            describe_type(program, field.ty, ancestors, description, control)?;
         }
     } else if let Some((_, variant)) = find_variant(program, ty) {
         write_bytes(description, &[1])?;
@@ -921,7 +832,7 @@ fn describe_nominal_type(
             write_blob(description, case.name.as_str().as_bytes())?;
             if let Some(payload) = case.payload {
                 write_bytes(description, &[1])?;
-                describe_type(program, payload, ancestors, description, depth + 1, control)?;
+                describe_type(program, payload, ancestors, description, control)?;
             } else {
                 write_bytes(description, &[0])?;
             }
@@ -995,9 +906,8 @@ fn write_key(
     key: &NormalizedMapKey,
     output: &mut Vec<u8>,
     budget: &mut ReferenceBudget,
-    depth: usize,
 ) -> Result<(), Diagnostic> {
-    budget.visit(depth, false)?;
+    budget.visit(false)?;
     match (form(program, ty)?, key) {
         (TypeForm::Bool, NormalizedMapKey::Bool(value)) => {
             write_bytes(output, &[u8::from(*value)])?;

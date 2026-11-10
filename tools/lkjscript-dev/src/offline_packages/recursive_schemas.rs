@@ -1,6 +1,6 @@
 //! Public discriminating schemas. All accepted owners are allocated by plan/apply.
 use super::*;
-use crate::pure_tail_program::Request;
+use crate::compact_request::Request;
 
 fn declaration(r: &mut Request, name: &str, kind: &str, parameters: &[&str]) {
     r.text.push_str(&format!(

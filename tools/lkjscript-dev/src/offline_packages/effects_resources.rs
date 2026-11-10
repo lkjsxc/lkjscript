@@ -16,7 +16,6 @@ pub(super) fn validate(parent: &Receipt, root: &Path) -> Result<(), DevError> {
             && resources["revision"] == effects.consumer_revision
             && resources["artifact"] == effects.artifact_bindings[0]["bundle"]
             && resources["stack_bytes"] == 2_097_152
-            && resources["maximum_call_depth_policy"] == 64
             && resources["other_policies"] == "unchanged defaults"
             && resources["live_effects_replayed"] == false
             && resources["cleanup_complete"] == true,

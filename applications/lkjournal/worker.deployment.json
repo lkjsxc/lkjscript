@@ -10,10 +10,7 @@
     "cancellation_grace_milliseconds": 5000
   },
   "execution": {
-    "instruction_fuel": 10000000,
-    "maximum_call_depth": 4096,
-    "maximum_value_stack": 1000000
-  },
+    "instruction_fuel": 10000000},
   "http": null,
   "session": null,
   "worker": {

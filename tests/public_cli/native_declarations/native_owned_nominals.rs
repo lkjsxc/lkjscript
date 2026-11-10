@@ -267,7 +267,7 @@ impl Nominals {
             if production {
                 joined(execution);
             } else {
-                assert_eq!(compact_field(execution, "differential"), "equal");
+                assert_eq!(compact_field(execution, "engine"), "vm");
             }
             Some(serde_json::from_slice(&std::fs::read(&result).unwrap()).unwrap())
         } else {
@@ -496,7 +496,7 @@ declarations.end
             if detached {
                 joined(execution);
             } else {
-                assert_eq!(compact_field(execution, "differential"), "equal");
+                assert_eq!(compact_field(execution, "engine"), "vm");
             }
         }
         for (file, digest) in &identities {
@@ -1055,7 +1055,7 @@ fn native_owned_nominals_transfer_traps_budget_join_cleanup_and_recovery() {
         nominal.verify_identity();
     }
     for fuel in [100, 4096] {
-        limited["execution"] = json!({"instruction_fuel":fuel,"maximum_call_depth":4096,"maximum_value_stack":1000000});
+        limited["execution"] = json!({"instruction_fuel":fuel,});
         nominal
             .consumer
             .input("limited.deployment.json", &limited.to_string());

@@ -1,4 +1,4 @@
-//! Opt-in observation of the unchanged global reader-image caches.
+//! Opt-in observation of immutable per-key reader-image preparation.
 //! The small common carrier is an internal timing fixture, not a substitute for
 //! complete-source admission, negative controls, or fresh raw C2/C3 stages.
 use super::*;
@@ -227,7 +227,7 @@ fn trial(round: &'static str, bytes: &[u8], expected: &[u8]) -> Vec<Vec<Value>> 
         "event": "trial",
         "round": round,
         "worker_count": ENTRIES.len(),
-        "cache_strategy": "global-map-lock-through-initialization-and-clone",
+        "cache_strategy": "per-key-once-lock-native-seed",
         "elapsed_ns": origin.elapsed().as_nanos().to_string(),
         "elapsed_scope": "thread creation, barrier, three existing reader calls and joins",
         "process_cpu_ticks": cpu_delta(process_cpu, cpu("/proc/self/stat")),
@@ -250,16 +250,15 @@ fn trial(round: &'static str, bytes: &[u8], expected: &[u8]) -> Vec<Vec<Value>> 
         assert_eq!(builds, usize::from(round == "cold"));
         if round == "cold" {
             assert_eq!(one(events, "self-produced.projection")["profile"], 9);
-            for phase in [
-                "compiler.vm",
-                "compiler.reference",
-                "compiler.c0-image",
-                "compiler.c1-execute",
-                "compiler.c1-image",
-                "compiler.result",
-            ] {
-                one(events, phase);
-            }
+            one(events, "self-produced.seed");
+            let preparation = events
+                .iter()
+                .filter(|event| {
+                    event["phase"] == "reader.native-result"
+                        && event["detail"]["producer"] == "compiler-seed"
+                })
+                .count();
+            assert_eq!(preparation, 1);
         }
         for event in events {
             emit(event);
@@ -331,9 +330,9 @@ fn selfhost_source_reader_cache_observes_three_distinct_cold_keys() {
     let cold = trial("cold", &bytes, &expected);
     for events in &cold[1..] {
         assert_eq!(
-            one(&cold[0], "compiler.c1-image"),
-            one(events, "compiler.c1-image"),
-            "the repeated C0-produced compiler executable has one exact identity",
+            one(&cold[0], "self-produced.seed"),
+            one(events, "self-produced.seed"),
+            "all reader projections use one exact native compiler seed identity",
         );
     }
     let warm = trial("warm", &bytes, &expected);

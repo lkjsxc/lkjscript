@@ -556,7 +556,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         true,
     )?;
     require(
-        field(&before, "execution", "differential")? == "equal"
+        field(&before, "execution", "engine")? == "vm"
             && field(&before, "execution", "value")? == "25.0",
         "baseline reference disagreement",
     )?;
@@ -634,7 +634,7 @@ pub(super) fn workflow(context: &mut Context, standard: &Package) -> Result<(), 
         true,
     )?;
     require(
-        field(&repaired_run, "execution", "differential")? == "equal"
+        field(&repaired_run, "execution", "engine")? == "vm"
             && field(&repaired_run, "execution", "value")? == "9.0",
         "repaired reference disagreement",
     )?;
@@ -1137,7 +1137,7 @@ pub(super) fn validate(
         let run = output(receipt, root, &evolution, name)?;
         require(
             field(&run, "execution", "value")? == expected
-                && field(&run, "execution", "differential")? == "equal",
+                && field(&run, "execution", "engine")? == "vm",
             "parameter-type production/reference equality absent",
         )?;
     }

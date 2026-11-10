@@ -1261,11 +1261,8 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
                 );
             }
         }
-        // The shared List handle ends the inline Box spine. Complete negative
-        // value inspection is iterative, so the outer aggregate no longer
-        // consumes one of the 256 permitted consecutive inline wrappers.
-        // A separate recursive nominal control reaches the 257-wrapper refusal
-        // without first exceeding structural type-identity depth.
+        // List admission checks each nested Option wrapper and preserves
+        // the complete finite payload through the shared collection handle.
         for depth in [255, 256] {
             let mut value = NormalizedValue::I64(1);
             for _ in 0..depth {
@@ -1309,7 +1306,7 @@ fn admission_limits_and_deterministic_cancellation_retain_progress_and_allow_reu
         assert_eq!(work.raw_result_admission_nodes, 0);
         println!(
             "{}",
-            serde_json::json!({"case":"admission-cancellation", "reference": reference, "work": work, "cleanup_owned":0, "exact_fit_items":8, "one_over_items":9, "exact_fit_bytes":allocated, "accepted_inline_depths":[255,256], "outer_list_resets_inline_depth":true})
+            serde_json::json!({"case":"admission-cancellation", "reference": reference, "work": work, "cleanup_owned":0, "exact_fit_items":8, "one_over_items":9, "exact_fit_bytes":allocated, "accepted_inline_depths":[255,256]})
         );
         assert_eq!(
             crate::platform::execution::normalized::structural_equality::assertions::equal(
@@ -1809,7 +1806,7 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
         }
         let cancelled = invoke(
             reference,
-            depth[240],
+            depth[257],
             NormalizedValue::Option(None),
             Default::default(),
             &ExecutionControl::cancel_after_capture_nodes(3),
@@ -1818,18 +1815,56 @@ fn constrained_raw_factory_checks_types_and_real_environments_before_body() {
         assert!(cancelled.2.capture_admission_nodes > 0);
         assert_eq!(cancelled.2.capture_admission_nodes, 3);
         assert_eq!(cancelled.1, 0);
-        let over = invoke(
+        let deep = invoke(
             reference,
             depth[257],
             NormalizedValue::Option(None),
             Default::default(),
             &control,
         );
-        assert_eq!(
-            over.0.unwrap_err().class,
-            crate::platform::execution::ExecutionFailureClass::Infrastructure
-        );
-        assert_eq!(over.1, 0);
+        let callable = deep
+            .0
+            .expect("finite capture-safe type beyond the former depth guard");
+        assert!(deep.1 > 0, "valid deep admission executes the factory body");
+        assert!(deep.2.capture_admission_nodes > 0);
+        assert!(deep.3 > 0);
+        let retained = callable.clone();
+        drop(callable);
+        let NormalizedValue::Function {
+            function,
+            type_arguments,
+            bound_arguments: Some(captured),
+            ..
+        } = &retained
+        else {
+            panic!("factory must return its captured constant function");
+        };
+        assert_eq!(function.1, program.value_origin);
+        assert_eq!(type_arguments.as_ref(), &[depth[257], unit]);
+        assert!(matches!(
+            captured.as_slice(),
+            [NormalizedValue::Option(None)]
+        ));
+        drop(retained);
+        for (bytes, accepted) in [(deep.3, true), (deep.3 - 1, false)] {
+            let checked = invoke(
+                reference,
+                depth[257],
+                NormalizedValue::Option(None),
+                super::super::NormalizedRunPolicy {
+                    maximum_allocated_bytes: Some(bytes),
+                    ..Default::default()
+                },
+                &control,
+            );
+            assert_eq!(checked.0.is_ok(), accepted);
+            if let Err(error) = checked.0 {
+                assert_eq!(
+                    error.class,
+                    crate::platform::execution::ExecutionFailureClass::Resource
+                );
+            }
+        }
         assert!(
             invoke(reference, safe_list, good(), Default::default(), &control)
                 .0

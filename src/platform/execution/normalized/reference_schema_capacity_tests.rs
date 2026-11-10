@@ -175,3 +175,77 @@ fn reference_capacity_dependency_topology_keeps_finite_policy_and_saturation_dis
     );
     Ok(())
 }
+
+fn raw_callable_fixture() -> Result<KernelSnapshot, String> {
+    crate::platform::execution::normalized::tests::byte_buffer_tests::author_only(
+        r#"declarations.begin
+(units (module create raw-callables
+  (function create recurse (visibility private) (effect pure)
+    (type-parameter create T) (returns Unit)
+    (body (call recurse (types T))))
+  (function create permute (visibility private) (effect pure)
+    (type-parameter create A) (type-parameter create B) (returns Unit)
+    (body (call permute (types B A))))
+  (function create entry (visibility public) (effect pure) (returns Unit)
+    (body (sequence (call recurse (types I64)) (call permute (types I64 Bool)))))))
+declarations.end
+"#,
+    )
+}
+
+#[test]
+fn raw_reference_callable_forwarding_and_permutation_are_finite() -> Result<(), String> {
+    let source = raw_callable_fixture()?;
+    NormalizedReferenceSchema::independently_admit_witness_source(&source)
+        .map_err(|error| format!("finite raw callable closure: {error:?}"))?;
+    Ok(())
+}
+
+#[test]
+fn raw_reference_callable_growth_rejects_before_instantiation() -> Result<(), String> {
+    let mut source = raw_callable_fixture()?;
+    let (parameter, body) = source
+        .owners
+        .values()
+        .find_map(|owner| match owner {
+            OwnerRecord::Declaration(owner) if owner.name.as_str() == "recurse" => {
+                let DeclarationPayload::Function(function) = &owner.payload else {
+                    return None;
+                };
+                Some((function.type_parameters[0], function.body))
+            }
+            _ => None,
+        })
+        .ok_or("raw recursive function is missing")?;
+    let formal = TypeObject::new(TypeForm::TypeParameter { parameter })
+        .map_err(|error| format!("formal: {error:?}"))?;
+    let formal_digest = encode_type_object(&formal)
+        .map_err(|error| format!("formal encoding: {error:?}"))?
+        .0;
+    source.types.insert(formal_digest, formal);
+    let list = TypeObject::new(TypeForm::List {
+        item: formal_digest,
+    })
+    .map_err(|error| format!("growing actual: {error:?}"))?;
+    let list_digest = encode_type_object(&list)
+        .map_err(|error| format!("growing actual encoding: {error:?}"))?
+        .0;
+    source.types.insert(list_digest, list);
+    let Some(OwnerRecord::Expression(expression)) =
+        source.owners.get_mut(&OwnerKey::Expression(body))
+    else {
+        return Err("raw recursive body is missing".to_owned());
+    };
+    let crate::platform::kernel::ExpressionOperation::Call { type_arguments, .. } =
+        &mut expression.operation
+    else {
+        return Err("raw recursive body is not a call".to_owned());
+    };
+    type_arguments[0] = list_digest;
+    let error = NormalizedReferenceSchema::independently_admit_witness_source(&source)
+        .err()
+        .ok_or("raw f<T> -> f<List<T>> growth was accepted")?;
+    assert_eq!(error.code, "kernel_associated_reference_growth");
+    assert_eq!(error.class, ExecutionFailureClass::Trap);
+    Ok(())
+}

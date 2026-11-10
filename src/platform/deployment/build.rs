@@ -49,7 +49,7 @@ impl BuildTemplate {
         decode_deployment(&bytes)?;
         // Preserve all non-artifact values, including omitted legacy policy fields.
         // Strict decoding above rejects duplicate/unknown fields before this projection.
-        let value = serde_json::from_slice(&bytes).map_err(|error| {
+        let value = crate::platform::json::deserialize(&bytes).map_err(|error| {
             deployment_error(
                 "deployment_build_json",
                 format!("invalid deployment JSON: {error}"),

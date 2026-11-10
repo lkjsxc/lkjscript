@@ -22,7 +22,7 @@ impl Scopes {
         resolver: &mut Resolver<'_>,
         binding: BindingId,
     ) -> Result<()> {
-        resolver.step(0)?;
+        resolver.step()?;
         let [container] = self
             .bindings
             .get(&binding)
@@ -58,7 +58,7 @@ impl Scopes {
     pub(super) fn build(resolver: &mut Resolver<'_>) -> Result<Self> {
         let mut scopes = Self::default();
         for (key, owner) in &resolver.source.owners {
-            resolver.step(0)?;
+            resolver.step()?;
             for root in owner.expression_roots() {
                 resolver.reserve_entries(1 + usize::from(!scopes.parents.contains_key(&root)))?;
                 scopes
@@ -151,56 +151,72 @@ impl Scopes {
         &self,
         resolver: &mut Resolver<'_>,
         id: ExpressionId,
-        depth: usize,
     ) -> Result<Option<DeclarationReference>> {
-        if depth > contract::MAXIMUM_EXPRESSION_DEPTH {
-            return Err(Failure::Capacity);
-        }
-        resolver.step(0)?;
-        let [parent] = self.parents.get(&id).ok_or(Failure::Authority)?.as_slice() else {
-            return Err(Failure::Authority);
-        };
-        match parent {
-            Parent::Expression(parent) => self.expression(resolver, *parent, depth + 1),
-            Parent::Owner(OwnerKey::Binding(binding)) => {
-                self.binding(resolver, *binding, depth + 1)
-            }
-            Parent::Owner(OwnerKey::Declaration(id)) => {
-                match resolver.source.owners.get(&OwnerKey::Declaration(*id)) {
-                    Some(OwnerRecord::Declaration(_)) => Ok(Some(DeclarationReference {
-                        package: resolver.source.root.package_id,
-                        declaration: *id,
-                    })),
-                    _ => Err(Failure::Authority),
-                }
-            }
-            Parent::Owner(OwnerKey::Port(port)) => {
-                match resolver.source.owners.get(&OwnerKey::Port(*port)) {
-                    Some(OwnerRecord::Port(p)) => Ok(Some(DeclarationReference {
-                        package: resolver.source.root.package_id,
-                        declaration: p.declaration,
-                    })),
-                    _ => Err(Failure::Authority),
-                }
-            }
-            _ => Err(Failure::Authority),
-        }
+        self.owner_scope(resolver, OwnerKey::Expression(id))
     }
 
     pub(super) fn binding(
         &self,
         resolver: &mut Resolver<'_>,
         id: BindingId,
-        depth: usize,
     ) -> Result<Option<DeclarationReference>> {
-        if depth > contract::MAXIMUM_EXPRESSION_DEPTH {
-            return Err(Failure::Capacity);
+        self.owner_scope(resolver, OwnerKey::Binding(id))
+    }
+
+    fn owner_scope(
+        &self,
+        resolver: &mut Resolver<'_>,
+        mut key: OwnerKey,
+    ) -> Result<Option<DeclarationReference>> {
+        let mut visited = BTreeSet::new();
+        loop {
+            resolver.step()?;
+            if visited.contains(&key) {
+                return Err(Failure::Authority);
+            }
+            resolver.reserve_entries(1)?;
+            visited.insert(key);
+            let parent = match key {
+                OwnerKey::Expression(id) => {
+                    let [parent] = self.parents.get(&id).ok_or(Failure::Authority)?.as_slice()
+                    else {
+                        return Err(Failure::Authority);
+                    };
+                    *parent
+                }
+                OwnerKey::Binding(id) => {
+                    let [container] = self.bindings.get(&id).ok_or(Failure::Authority)?.as_slice()
+                    else {
+                        return Err(Failure::Authority);
+                    };
+                    Parent::Expression(*container)
+                }
+                _ => return Err(Failure::Authority),
+            };
+            key = match parent {
+                Parent::Expression(parent) => OwnerKey::Expression(parent),
+                Parent::Owner(OwnerKey::Binding(binding)) => OwnerKey::Binding(binding),
+                Parent::Owner(OwnerKey::Declaration(id)) => {
+                    return match resolver.source.owners.get(&OwnerKey::Declaration(id)) {
+                        Some(OwnerRecord::Declaration(_)) => Ok(Some(DeclarationReference {
+                            package: resolver.source.root.package_id,
+                            declaration: id,
+                        })),
+                        _ => Err(Failure::Authority),
+                    };
+                }
+                Parent::Owner(OwnerKey::Port(port)) => {
+                    return match resolver.source.owners.get(&OwnerKey::Port(port)) {
+                        Some(OwnerRecord::Port(p)) => Ok(Some(DeclarationReference {
+                            package: resolver.source.root.package_id,
+                            declaration: p.declaration,
+                        })),
+                        _ => Err(Failure::Authority),
+                    };
+                }
+                _ => return Err(Failure::Authority),
+            };
         }
-        resolver.step(0)?;
-        let [container] = self.bindings.get(&id).ok_or(Failure::Authority)?.as_slice() else {
-            return Err(Failure::Authority);
-        };
-        self.expression(resolver, *container, depth + 1)
     }
 }
 
@@ -270,12 +286,12 @@ impl Resolver<'_> {
                 ParameterParent::Operation(_) => None,
             },
             OwnerRecord::Port(p) => Some(p.declaration),
-            OwnerRecord::Expression(e) => return scopes.expression(self, e.id, 0),
+            OwnerRecord::Expression(e) => return scopes.expression(self, e.id),
             OwnerRecord::Binding(_) => {
                 let OwnerKey::Binding(id) = key else {
                     return Err(Failure::Authority);
                 };
-                return scopes.binding(self, id, 0);
+                return scopes.binding(self, id);
             }
             _ => None,
         };
@@ -368,7 +384,7 @@ impl Resolver<'_> {
             self.admit_bindings(scope)?;
             self.lexical_inventory(scope)?;
             for mapping in &i.methods {
-                self.step(0)?;
+                self.step()?;
                 let f = Oracle(self.source, Some(mapping.function))
                     .function(mapping.function)
                     .ok_or(Failure::Authority)?;
@@ -379,7 +395,7 @@ impl Resolver<'_> {
                 }
                 self.reserve_entries(f.type_parameters.len() + f.implementation_parameters.len())?;
                 for operand in &mapping.implementations {
-                    let entries = self.operand_entries(operand, 0)?;
+                    let entries = self.operand_entries(operand)?;
                     self.reserve_entries(entries)?;
                 }
                 let environment = Environment {
@@ -499,7 +515,7 @@ impl Resolver<'_> {
                 }
                 self.reserve_entries(f.type_parameters.len() + f.implementation_parameters.len())?;
                 for operand in operands {
-                    let entries = self.operand_entries(operand, 0)?;
+                    let entries = self.operand_entries(operand)?;
                     self.reserve_entries(entries)?;
                 }
                 let environment = Environment {
@@ -602,14 +618,14 @@ impl Resolver<'_> {
                     let ty = if let Some(view_environment) = &view_environment {
                         self.substitute_view(p.ty, view_environment, 0)?
                     } else {
-                        self.substitute(p.ty, &environment, 0)?
+                        self.substitute(p.ty, &environment)?
                     };
                     self.admit_roots(&[ty], occurrence, false)?;
                 }
                 let result = if let Some(view_environment) = &view_environment {
                     self.substitute_view(f.result.ty, view_environment, 0)?
                 } else {
-                    self.substitute(f.result.ty, &environment, 0)?
+                    self.substitute(f.result.ty, &environment)?
                 };
                 self.admit_roots(&[result], occurrence, false)?;
                 Ok(Some(result))
@@ -621,7 +637,7 @@ impl Resolver<'_> {
                 read_scope_arguments,
                 ..
             } => {
-                let (selected, self_type, actuals) = self.admit_operand(witness, occurrence, 0)?;
+                let (selected, self_type, actuals) = self.admit_operand(witness, occurrence)?;
                 if selected != *contract {
                     return Err(Failure::Authority);
                 }
@@ -631,7 +647,7 @@ impl Resolver<'_> {
                     .iter()
                     .find(|m| m.id == *method)
                     .ok_or(Failure::Authority)?;
-                let entries = self.operand_entries(witness, 0)?;
+                let entries = self.operand_entries(witness)?;
                 self.reserve_entries(1 + c.type_parameters.len() + entries)?;
                 let environment = Environment {
                     ordinary: std::iter::once((c.self_parameter, self_type))
@@ -690,14 +706,14 @@ impl Resolver<'_> {
                     let ty = if let Some(view_environment) = &view_environment {
                         self.substitute_view(p.ty, view_environment, 0)?
                     } else {
-                        self.substitute(p.ty, &environment, 0)?
+                        self.substitute(p.ty, &environment)?
                     };
                     self.admit_roots(&[ty], occurrence, false)?;
                 }
                 let result = if let Some(view_environment) = &view_environment {
                     self.substitute_view(m.result.ty, view_environment, 0)?
                 } else {
-                    self.substitute(m.result.ty, &environment, 0)?
+                    self.substitute(m.result.ty, &environment)?
                 };
                 self.admit_roots(&[result], occurrence, false)?;
                 Ok(Some(result))
@@ -714,7 +730,7 @@ impl Resolver<'_> {
         let package = self.source.root.package_id;
         let mut results = BTreeMap::new();
         for (key, owner) in &self.source.owners {
-            self.step(0)?;
+            self.step()?;
             if owner.header().owner != *key {
                 return Err(Failure::Authority);
             }
@@ -777,7 +793,7 @@ impl Resolver<'_> {
                 && let Some(result) = results.get(&call)
             {
                 let scope = self.local_scope(&scopes, *key, owner)?;
-                let binding_scope = scopes.binding(self, binding, 0)?;
+                let binding_scope = scopes.binding(self, binding)?;
                 self.admit_roots(
                     &[*result],
                     self.occurrence_for(package, *key, scope, false),
@@ -814,7 +830,7 @@ impl Resolver<'_> {
                 .get(&revision)
                 .ok_or(Failure::Missing)?;
             for (key, owner) in interface.iter() {
-                self.step(0)?;
+                self.step()?;
                 if owner.header().owner != *key {
                     return Err(Failure::Authority);
                 }

@@ -267,20 +267,32 @@ impl NormalizedPreparedDeployment {
         resources: NormalizedDeploymentResourcePolicy,
         secrets: &SecretCatalog,
     ) -> Result<Self, Diagnostic> {
-        static TEST_RUNTIME: std::sync::OnceLock<tokio::runtime::Runtime> =
+        static TEST_RUNTIME: std::sync::OnceLock<Result<tokio::runtime::Runtime, String>> =
             std::sync::OnceLock::new();
-        let runtime = Handle::try_current().unwrap_or_else(|_| {
-            TEST_RUNTIME
+        let runtime = match Handle::try_current() {
+            Ok(runtime) => runtime,
+            Err(_) => TEST_RUNTIME
                 .get_or_init(|| {
+                    let stack = crate::platform::stack::reservation_bytes()
+                        .map_err(|error| error.to_string())?;
                     tokio::runtime::Builder::new_multi_thread()
                         .worker_threads(1)
                         .enable_all()
+                        .thread_stack_size(stack)
                         .build()
-                        .unwrap_or_else(|_| std::process::abort())
+                        .map_err(|error| error.to_string())
                 })
+                .as_ref()
+                .map_err(|error| {
+                    Diagnostic::new(
+                        DiagnosticClass::Infrastructure,
+                        "test_runtime",
+                        error.clone(),
+                    )
+                })?
                 .handle()
-                .clone()
-        });
+                .clone(),
+        };
         Self::prepare_inner(
             program,
             target,

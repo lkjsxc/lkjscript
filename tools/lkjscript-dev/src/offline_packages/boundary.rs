@@ -85,24 +85,6 @@ struct BoundaryProcess {
     observation: process::ProcessObservation,
 }
 
-impl BoundaryReceipt {
-    pub(crate) fn source_receipt_proof(&self) -> &evidence::FileProof {
-        &self.source_receipt
-    }
-    pub(crate) fn command_count(&self) -> usize {
-        self.processes.len() - self.runner_count()
-    }
-    pub(crate) fn runner_count(&self) -> usize {
-        self.processes
-            .iter()
-            .filter(|call| call.command.get(1).is_some_and(|arg| arg == "serve"))
-            .count()
-    }
-    pub(crate) fn request_count(&self) -> usize {
-        2
-    }
-}
-
 struct BoundaryContext {
     root: PathBuf,
     evidence: PathBuf,

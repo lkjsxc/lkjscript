@@ -24,7 +24,7 @@ mod instantiation_scratch;
 #[path = "reference_transfer_substitution.rs"]
 mod transfer_substitution;
 
-fn source_error(error: Diagnostic) -> ExecutionError {
+pub(super) fn source_error(error: Diagnostic) -> ExecutionError {
     use crate::platform::execution::ExecutionFailureClass;
     let class = match error.class {
         DiagnosticClass::Cancelled => ExecutionFailureClass::Cancelled,
@@ -88,7 +88,7 @@ impl NormalizedReferenceSchema {
         let mut schema = Self::default();
         schema.types.extend(snapshot.types.clone());
         schema.types.extend(snapshot.dependency_types.clone());
-        super::reference_types::complete(
+        super::reference_types::complete_raw(
             &mut schema,
             &[snapshot],
             &crate::platform::execution::ExecutionControl::uncancelled(),
@@ -489,9 +489,6 @@ impl NormalizedReferenceSchema {
         requirements: &super::reference_effects::RequirementBindings,
         depth: usize,
     ) -> Option<TypeObjectDigest> {
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return None;
-        }
         let descend = |ty| {
             self.instantiated_with_effects(
                 ty,

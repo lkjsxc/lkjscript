@@ -1,6 +1,6 @@
 //! Fresh transported iteration meaning. All looping and validation are ordinary graph records.
 use super::effects_program::{parameters, task};
-use crate::pure_tail_program::Request;
+use crate::compact_request::Request;
 use std::collections::BTreeMap;
 
 pub(super) fn producer(s: &BTreeMap<String, String>) -> String {

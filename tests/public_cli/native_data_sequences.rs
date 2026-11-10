@@ -362,7 +362,7 @@ fn native_data_sequences_bounds_and_fuel_refusals_join_cleanup_and_recover() {
     data.detach();
     let actions = oracle::burst(256);
     for fuel in [100, 4096] {
-        limited["execution"] = json!({"instruction_fuel":fuel,"maximum_call_depth":4096,"maximum_value_stack":1000000});
+        limited["execution"] = json!({"instruction_fuel":fuel,});
         assert_eq!(limited["target"], "data-trace");
         let mut refused = failure_case(
             "data-trace",

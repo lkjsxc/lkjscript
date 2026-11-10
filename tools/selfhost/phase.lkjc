@@ -29,6 +29,7 @@ declarations.begin
     (parameter create prefix (type (record (code I64) (bytes Bytes))))
     (returns (record (code I64) (bytes Bytes)))
     (body (let
+      (binding stack-code (call phase-code::stack))
       (binding start-code (call phase-code::start (local data) (local layout)))
       (binding allocate-code (call phase-code::allocate))
       (binding dispose-code (call phase-code::dispose))
@@ -38,7 +39,7 @@ declarations.begin
       (binding invoke-code (call phase-code::invoke (local data) (local layout)))
       (binding release-code (call phase-code::release))
       (binding trap-code (call phase-code::trap))
-      (in (if (call ci::both (call ci::both (call ci::both (call ci::both (call ci::both (call ci::both (call ci::both (call ci::both (call ci::both (call ci::both (call ci::eq (field (local prefix) (name code)) (i64 0)) (call ci::eq (call ci::length (field (local prefix) (name bytes))) (i64 49152))) (call fits (local start-code) (i64 512))) (call fits (local allocate-code) (i64 1024))) (call fits (local dispose-code) (i64 1024))) (call fits (local poll-code) (i64 256))) (call fits (local copy-code) (i64 512))) (call fits (local abort-code) (i64 256))) (call fits (local invoke-code) (i64 4096))) (call fits (local release-code) (i64 1024))) (call fits (local trap-code) (i64 7680)))
+      (in (if (call ci::both (call ci::both (call ci::both (call ci::both (call ci::both (call ci::both (call ci::both (call ci::both (call ci::both (call ci::both (call ci::eq (field (local prefix) (name code)) (i64 0)) (call ci::eq (call ci::length (field (local prefix) (name bytes))) (i64 49152))) (call fits (local start-code) (i64 512))) (call fits (local allocate-code) (i64 1024))) (call fits (local dispose-code) (i64 1024))) (call fits (local poll-code) (i64 256))) (call fits (local copy-code) (i64 512))) (call fits (local abort-code) (i64 256))) (call fits (local invoke-code) (i64 4096))) (call fits (local release-code) (i64 1024))) (call ci::both (call fits (local trap-code) (i64 6656)) (call fits (local stack-code) (i64 1024))))
         (let
           (binding empty (type ByteBuffer) (call ci::empty))
           (binding out-0 (type ByteBuffer) (call ci::append (field (local prefix) (name bytes)) (i64 0) (local empty)))
@@ -60,7 +61,9 @@ declarations.begin
           (binding out-8 (type ByteBuffer) (call ci::append (field (local release-code) (name bytes)) (i64 0) (local pad-7)))
           (binding pad-8 (type ByteBuffer) (call ci::pad (i64 57856) (i64 0) (local out-8)))
           (binding out-9 (type ByteBuffer) (call ci::append (field (local trap-code) (name bytes)) (i64 0) (local pad-8)))
-          (binding final (type ByteBuffer) (call ci::pad (i64 65536) (i64 0) (local out-9)))
+          (binding to-stack (type ByteBuffer) (call ci::pad (i64 64512) (i64 0) (local out-9)))
+          (binding with-stack (type ByteBuffer) (call ci::append (field (local stack-code) (name bytes)) (i64 0) (local to-stack)))
+          (binding final (type ByteBuffer) (call ci::pad (i64 65536) (i64 0) (local with-stack)))
           (in (record structural (field code (i64 0)) (field bytes (call ci::freeze (local final))))))
         (record structural (field code (i64 3)) (field bytes (call ci::text-bytes (text "")))))))))
 ))

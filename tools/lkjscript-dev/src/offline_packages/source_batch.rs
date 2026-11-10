@@ -235,12 +235,12 @@ pub(super) fn read(
             )?),
         "source batch ordinary smoke full result differs",
     )?;
-    for counter in ["production-instructions", "reference-expressions"] {
+    for counter in ["production-instructions"] {
         require(
             field(&smoke_records, "execution", counter)?
                 .parse::<u64>()
                 .is_ok_and(|count| count > 0),
-            "source batch ordinary smoke did no independent tier work",
+            "source batch ordinary smoke did not execute VM instructions",
         )?;
     }
     let mut expected_command = prefix;
@@ -295,7 +295,7 @@ pub(super) fn read(
     require(
         field(&summary, "result", "status")? == "success"
             && field(&summary, "result", "command")? == "run.batch"
-            && field(&summary, "batch", "mode")? == "source-differential"
+            && field(&summary, "batch", "mode")? == "source-vm"
             && field(&summary, "batch", "source-preparations")? == "1"
             && field(&summary, "batch", "package-revision")?
                 == bound["package_revision"].as_str().unwrap_or("")
@@ -420,8 +420,8 @@ fn validate_success(records: &[CompactRecord], target: &str) -> Result<(), DevEr
         field(records, "result", "status")? == "success"
             && field(records, "result", "command")? == "run"
             && field(records, "execution", "target")? == target
-            && field(records, "execution", "differential")? == "equal",
-        "source batch row result, exact target or differential differs",
+            && field(records, "execution", "engine")? == "vm",
+        "source batch row result, exact target or engine differs",
     )
 }
 
@@ -520,31 +520,18 @@ fn decode_result(bytes: &[u8]) -> Result<Value, DevError> {
     .map_err(|error| DevError::corrupt(error.to_string()))
 }
 
-fn observation(value: &Value, reference: bool) -> Result<(), DevError> {
-    let fields = if reference {
-        &[
-            "live_call_frames_after",
-            "live_control_frames_after",
-            "live_local_scopes_after",
-            "live_type_scopes_after",
-            "live_effect_scopes_after",
-            "live_allowances_after",
-            "live_transactions_after",
-            "live_handles_after",
-        ][..]
-    } else {
-        &[
-            "live_call_frames_after",
-            "live_locals_after",
-            "live_type_bindings_after",
-            "live_operands_after",
-            "live_transactions_after",
-            "live_handles_after",
-        ][..]
-    };
+fn observation(value: &Value) -> Result<(), DevError> {
+    let fields = [
+        "live_call_frames_after",
+        "live_locals_after",
+        "live_type_bindings_after",
+        "live_operands_after",
+        "live_transactions_after",
+        "live_handles_after",
+    ];
     require(
         fields.iter().all(|key| value[*key] == 0) && value["capability_calls"] == 0,
-        "source batch VM/reference resources not released",
+        "source batch VM resources not released",
     )
 }
 
@@ -558,29 +545,16 @@ fn executor(value: &Value) -> Result<(), DevError> {
 }
 
 pub(in crate::offline_packages) fn observations(records: &[CompactRecord]) -> Result<(), DevError> {
-    for (name, reference, counter) in [
-        ("production-observation", false, "instructions"),
-        ("reference-observation", true, "expressions"),
-    ] {
-        let value = decode_result(field(records, "execution", name)?.as_bytes())?;
-        observation(&value, reference)?;
-        let count = value[counter]
-            .as_u64()
-            .ok_or_else(|| DevError::corrupt("source batch tier counter is not unsigned"))?;
-        require(count > 0, "source batch tier did no independent work")?;
-        require(
-            field(
-                records,
-                "execution",
-                if reference {
-                    "reference-expressions"
-                } else {
-                    "production-instructions"
-                },
-            )? == count.to_string(),
-            "source batch tier counter differs from actual observation",
-        )?;
-    }
+    let value = decode_result(field(records, "execution", "production-observation")?.as_bytes())?;
+    observation(&value)?;
+    let count = value["instructions"]
+        .as_u64()
+        .ok_or_else(|| DevError::corrupt("source batch instruction count is not unsigned"))?;
+    require(count > 0, "source batch did not execute VM instructions")?;
+    require(
+        field(records, "execution", "production-instructions")? == count.to_string(),
+        "source batch instruction count differs from VM observation",
+    )?;
     executor(&decode_result(
         field(records, "execution", "executor-observation")?.as_bytes(),
     )?)
@@ -596,7 +570,7 @@ fn failure_observations(records: &[CompactRecord]) -> Result<(), DevError> {
                 "source batch duplicated failure observation",
             )?;
             let actual = decode_result(json.as_bytes())?;
-            observation(&actual, false)?;
+            observation(&actual)?;
             require(
                 actual["instructions"]
                     .as_u64()

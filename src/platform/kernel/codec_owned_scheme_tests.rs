@@ -274,7 +274,7 @@ fn prerequisite_declarations_maps_and_nested_arguments_bind_canonical_identity()
 }
 
 #[test]
-fn prerequisite_decoder_bounds_nested_input_before_native_stack_exhaustion() {
+fn prerequisite_decoder_roundtrips_deep_nested_operands() {
     // Independent wire construction exercises the decoder without using the recursive encoder.
     let configuration = bincode::config::standard();
     let prefix = bincode::encode_to_vec(
@@ -291,14 +291,18 @@ fn prerequisite_decoder_bounds_nested_input_before_native_stack_exhaustion() {
         configuration,
     )
     .unwrap();
-    for (depth, accepted) in [(256, true), (257, false), (4096, false)] {
+    for depth in [256, 257, 4096] {
         let mut bytes = prefix.repeat(depth);
         bytes.extend_from_slice(&leaf);
-        let decoded = bincode::decode_from_slice::<ImplementationOperand, _>(&bytes, configuration);
-        assert_eq!(decoded.is_ok(), accepted, "depth {depth}");
-        if let Ok((operand, consumed)) = decoded {
-            assert_eq!(consumed, bytes.len());
-            assert_eq!(operand.walk().count(), depth + 1);
-        }
+        let (operand, consumed) =
+            bincode::decode_from_slice::<ImplementationOperand, _>(&bytes, configuration)
+                .unwrap_or_else(|error| panic!("depth {depth}: {error}"));
+        assert_eq!(consumed, bytes.len());
+        assert_eq!(operand.walk().count(), depth + 1);
+        assert_eq!(
+            bincode::encode_to_vec(&operand, configuration).unwrap(),
+            bytes,
+            "depth {depth} canonical roundtrip"
+        );
     }
 }

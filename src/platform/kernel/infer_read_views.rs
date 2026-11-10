@@ -20,12 +20,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
     ) -> Result<TypeObjectDigest, Diagnostic> {
         self.consume_work()?;
         views::require_generation(consumer_generation)?;
-        if depth > MAXIMUM_EXPRESSION_DEPTH {
-            return Err(type_error(
-                "kernel_type_expression_depth",
-                "read-view inference exceeded its structural depth bound",
-            ));
-        }
+
         let occurrence = self.type_occurrence(context, consumer_generation);
         match operation {
             ExpressionOperation::CreateReadView {
@@ -649,12 +644,7 @@ impl<R: ExpressionRead> ExpressionValidator<'_, '_, R> {
         depth: usize,
     ) -> Result<TypeObjectDigest, Diagnostic> {
         self.consume_work()?;
-        if depth > MAXIMUM_EXPRESSION_DEPTH {
-            return Err(type_error(
-                "kernel_type_expression_depth",
-                "view reference initializer exceeded its structural depth bound",
-            ));
-        }
+
         let Some(OwnerRecord::Expression(record)) =
             self.read.owner(OwnerKey::Expression(expression))?
         else {

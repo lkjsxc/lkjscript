@@ -100,6 +100,4 @@ boundaries. Return ordinary data at command ports. Rebuild predecessor derived
 artifacts with the current compiler; accepted source graphs remain separate from
 operational data and running services.
 
-See the [specification](../spec/owned-choices.md) for the exact contract and the
-[continuation](../campaigns/20261002-owned-choices.md) for observed verification and
-delivery. Development source support does not establish a public binary release.
+See the [specification](../spec/owned-choices.md) for the exact contract.

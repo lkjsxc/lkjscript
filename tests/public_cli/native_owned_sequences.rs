@@ -184,20 +184,14 @@ fn expected(inputs: &[i64], marker: i64) -> Value {
 
 fn clean_execution(records: &[CompactRecord], calls: u64, parallel: bool) {
     let execution = compact_record(records, "execution");
-    if let Some(differential) = super::super::compact_field(execution, "differential") {
-        // Source batches separately validate actual VM/reference/executor cleanup;
-        // ordinary source runs retain these same differential work assertions.
+    if let Some(engine) = super::super::compact_field(execution, "engine") {
+        // Source batches separately validate actual VM/executor cleanup;
+        // ordinary source runs report the selected production engine.
         assert_eq!(calls, 0);
         assert!(!parallel);
-        assert_eq!(differential, "equal");
+        assert_eq!(engine, "vm");
         assert!(
             compact_field(execution, "production-instructions")
-                .parse::<u64>()
-                .unwrap()
-                > 0
-        );
-        assert!(
-            compact_field(execution, "reference-expressions")
                 .parse::<u64>()
                 .unwrap()
                 > 0

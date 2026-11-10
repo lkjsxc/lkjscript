@@ -1,6 +1,5 @@
 //! Negative guards for ordinary value boundaries. The value graph is traversed
-//! iteratively without a callable-environment depth ceiling. Structural type
-//! traversal retains its separate existing depth contract. These checks mint no
+//! iteratively, retaining exact visited types for recursive nominal data. These checks mint no
 //! value/category/provenance certificate and never acquire a read-view lease.
 
 use super::super::value_schema::NormalizedValueSchema;
@@ -10,131 +9,116 @@ use crate::platform::kernel::{TypeForm, TypeObjectDigest};
 
 struct TypeGuard<'a> {
     control: &'a ExecutionControl,
-    ancestors: [Option<TypeObjectDigest>; 257],
+    examined: std::collections::BTreeSet<TypeObjectDigest>,
 }
 
 impl TypeGuard<'_> {
-    // Traversal borrows existing storage and allocates no worklist or child buffer.
-    // The existing nesting bound limits host recursion. Width follows finite
-    // child iteration rather than an admission-work counter.
-    fn enter(&mut self, depth: u16) -> Result<(), ExecutionError> {
-        self.control.check()?;
-        if depth > 256 {
-            return Err(ExecutionError::resource(
-                "normalized_value_depth",
-                "view escape inspection exceeds finite value depth 256",
-            ));
-        }
-        Ok(())
-    }
-
     fn ty<S: NormalizedValueSchema + ?Sized>(
         &mut self,
         schema: &S,
         ty: TypeObjectDigest,
-        depth: u16,
     ) -> Result<(), ExecutionError> {
-        self.enter(depth)?;
-        // Ordinary recursive nominal data remains legal. An exact ancestor is
-        // already inspecting all of its outgoing edges, including inactive cases.
-        if self.ancestors[..usize::from(depth)].contains(&Some(ty)) {
-            return Ok(());
-        }
-        self.ancestors[usize::from(depth)] = Some(ty);
-        let object = schema.types().get(&ty).ok_or_else(|| {
-            ExecutionError::new(
-                crate::platform::execution::ExecutionFailureClass::Trap,
-                "normalized_value_admission",
-                "view escape inspection requires every exact type in the selected schema",
-            )
-        })?;
-        match &object.form {
-            TypeForm::ReadViewApplied { .. }
-            | TypeForm::AssociatedReadViewMember { .. }
-            | TypeForm::AssociatedReadViewProjection { .. } => return Err(escape()),
-            TypeForm::RegionBrand { .. }
-            | TypeForm::Region { .. }
-            | TypeForm::RelPtr { .. }
-            | TypeForm::RegionSlice { .. }
-            | TypeForm::RegionCap { .. } => {
-                return Err(ExecutionError::new(
-                    crate::platform::execution::ExecutionFailureClass::Trap,
-                    "normalized_region_escape",
-                    "a region-bound type cannot cross an unscoped value boundary",
-                ));
+        let mut pending = vec![ty];
+        while let Some(ty) = pending.pop() {
+            self.control.check()?;
+            if !self.examined.insert(ty) {
+                continue;
             }
-            TypeForm::Named { .. } | TypeForm::Applied { .. } => {
-                // Phantom actuals and inactive variant payloads are still occurrences.
-                if let TypeForm::Applied { arguments, .. } = &object.form {
-                    for child in arguments {
-                        self.ty(schema, *child, depth + 1)?;
-                    }
+            let object = schema.types().get(&ty).ok_or_else(|| {
+                ExecutionError::new(
+                    crate::platform::execution::ExecutionFailureClass::Trap,
+                    "normalized_value_admission",
+                    "view escape inspection requires every exact type in the selected schema",
+                )
+            })?;
+            match &object.form {
+                TypeForm::ReadViewApplied { .. }
+                | TypeForm::AssociatedReadViewMember { .. }
+                | TypeForm::AssociatedReadViewProjection { .. } => return Err(escape()),
+                TypeForm::RegionBrand { .. }
+                | TypeForm::Region { .. }
+                | TypeForm::RelPtr { .. }
+                | TypeForm::RegionSlice { .. }
+                | TypeForm::RegionCap { .. } => {
+                    return Err(ExecutionError::new(
+                        crate::platform::execution::ExecutionFailureClass::Trap,
+                        "normalized_region_escape",
+                        "a region-bound type cannot cross an unscoped value boundary",
+                    ));
                 }
-                if let Some(index) = schema.record_index(ty) {
-                    let record = schema.records().get(index).ok_or_else(layout_error)?;
-                    for child in record.arguments.iter() {
-                        self.ty(schema, *child, depth + 1)?;
+                TypeForm::Named { .. } | TypeForm::Applied { .. } => {
+                    // Phantom actuals and inactive variant payloads are still occurrences.
+                    if let TypeForm::Applied { arguments, .. } = &object.form {
+                        for child in arguments {
+                            pending.push(*child);
+                        }
                     }
-                    for field in record.fields.iter() {
-                        self.ty(schema, field.ty, depth + 1)?;
+                    if let Some(index) = schema.record_index(ty) {
+                        let record = schema.records().get(index).ok_or_else(layout_error)?;
+                        for child in record.arguments.iter() {
+                            pending.push(*child);
+                        }
+                        for field in record.fields.iter() {
+                            pending.push(field.ty);
+                        }
                     }
-                }
-                if let Some(index) = schema.variant_index(ty) {
-                    let variant = schema.variants().get(index).ok_or_else(layout_error)?;
-                    for child in variant.arguments.iter() {
-                        self.ty(schema, *child, depth + 1)?;
-                    }
-                    for case in variant.cases.iter() {
-                        if let Some(child) = case.payload {
-                            self.ty(schema, child, depth + 1)?;
+                    if let Some(index) = schema.variant_index(ty) {
+                        let variant = schema.variants().get(index).ok_or_else(layout_error)?;
+                        for child in variant.arguments.iter() {
+                            pending.push(*child);
+                        }
+                        for case in variant.cases.iter() {
+                            if let Some(child) = case.payload {
+                                pending.push(child);
+                            }
                         }
                     }
                 }
-            }
-            TypeForm::StructuralRecord { fields }
-            | TypeForm::OwnedProduct { fields }
-            | TypeForm::OwnedChoice { cases: fields } => {
-                for field in fields {
-                    self.ty(schema, field.ty, depth + 1)?;
+                TypeForm::StructuralRecord { fields }
+                | TypeForm::OwnedProduct { fields }
+                | TypeForm::OwnedChoice { cases: fields } => {
+                    for field in fields {
+                        pending.push(field.ty);
+                    }
                 }
-            }
-            TypeForm::List { item }
-            | TypeForm::Option { item }
-            | TypeForm::Stream { item }
-            | TypeForm::OwnedSequence { item } => self.ty(schema, *item, depth + 1)?,
-            TypeForm::Map { key, value }
-            | TypeForm::Result {
-                ok: key,
-                error: value,
-            } => {
-                self.ty(schema, *key, depth + 1)?;
-                self.ty(schema, *value, depth + 1)?;
-            }
-            TypeForm::Function { parameters, result }
-            | TypeForm::TaskFunction {
-                parameters, result, ..
-            } => {
-                for child in parameters {
-                    self.ty(schema, *child, depth + 1)?;
+                TypeForm::List { item }
+                | TypeForm::Option { item }
+                | TypeForm::Stream { item }
+                | TypeForm::OwnedSequence { item } => pending.push(*item),
+                TypeForm::Map { key, value }
+                | TypeForm::Result {
+                    ok: key,
+                    error: value,
+                } => {
+                    pending.push(*key);
+                    pending.push(*value);
                 }
-                self.ty(schema, *result, depth + 1)?;
+                TypeForm::Function { parameters, result }
+                | TypeForm::TaskFunction {
+                    parameters, result, ..
+                } => {
+                    for child in parameters {
+                        pending.push(*child);
+                    }
+                    pending.push(*result);
+                }
+                // Abstract non-view forms grant no boundary category certificate. Their
+                // substitution and exact consuming-context admission remain separate.
+                TypeForm::TypeParameter { .. }
+                | TypeForm::AssociatedContractMember { .. }
+                | TypeForm::AssociatedWitnessProjection { .. }
+                | TypeForm::Unit
+                | TypeForm::Bool
+                | TypeForm::I64
+                | TypeForm::F64
+                | TypeForm::Bytes
+                | TypeForm::Text
+                | TypeForm::StaticText
+                | TypeForm::Secret
+                | TypeForm::ByteBuffer
+                | TypeForm::OwnedI64Cell
+                | TypeForm::CapabilityResource { .. } => {}
             }
-            // Abstract non-view forms grant no boundary category certificate. Their
-            // substitution and exact consuming-context admission remain separate.
-            TypeForm::TypeParameter { .. }
-            | TypeForm::AssociatedContractMember { .. }
-            | TypeForm::AssociatedWitnessProjection { .. }
-            | TypeForm::Unit
-            | TypeForm::Bool
-            | TypeForm::I64
-            | TypeForm::F64
-            | TypeForm::Bytes
-            | TypeForm::Text
-            | TypeForm::StaticText
-            | TypeForm::Secret
-            | TypeForm::ByteBuffer
-            | TypeForm::OwnedI64Cell
-            | TypeForm::CapabilityResource { .. } => {}
         }
         Ok(())
     }
@@ -258,9 +242,9 @@ pub(in super::super) fn reject_read_view_type_escape<S: NormalizedValueSchema + 
 ) -> Result<(), ExecutionError> {
     TypeGuard {
         control,
-        ancestors: [None; 257],
+        examined: std::collections::BTreeSet::new(),
     }
-    .ty(schema, ty, 0)
+    .ty(schema, ty)
 }
 
 fn escape() -> ExecutionError {

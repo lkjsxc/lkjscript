@@ -1660,14 +1660,7 @@ impl ValueMeter {
     fn form(
         program: &NormalizedProgram,
         ty: TypeObjectDigest,
-        depth: usize,
     ) -> Result<&TypeForm, ExecutionError> {
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(ExecutionError::resource(
-                "session_state_depth",
-                "session state exceeds the exact type-depth bound",
-            ));
-        }
         program
             .types
             .get(&ty)
@@ -1713,7 +1706,7 @@ impl ValueMeter {
         self.charge(0)?;
         let mut cursor = values.iter();
         for (key, value) in &mut cursor {
-            let bytes = match (key, Self::form(program, key_type, depth + 1)?) {
+            let bytes = match (key, Self::form(program, key_type)?) {
                 (NormalizedMapKey::Bool(_), TypeForm::Bool) => 1,
                 (NormalizedMapKey::I64(_), TypeForm::I64) => 8,
                 (NormalizedMapKey::Bytes(value), TypeForm::Bytes) => value.len(),
@@ -1738,7 +1731,7 @@ impl ValueMeter {
         ty: TypeObjectDigest,
         depth: usize,
     ) -> Result<(), ExecutionError> {
-        let form = Self::form(program, ty, depth)?;
+        let form = Self::form(program, ty)?;
         match (value, form) {
             (NormalizedValue::Unit, TypeForm::Unit) => self.charge(0),
             (NormalizedValue::Bool(_), TypeForm::Bool) => self.charge(1),

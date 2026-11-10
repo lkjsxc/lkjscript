@@ -169,12 +169,6 @@ applied. The inbound listener is plaintext; this is not a public production depl
 
 ## Observed verification
 
-The [campaign](../campaigns/202609250807.md) owns the exact source relationship and
-original evidence. Final literals were freshly authored, imported, checked and built
-through copied public v0.1.44, without a compiler checkout. Six malformed proposals
-reject with an unchanged revision; two deliberately unescaped implementations fail
-the corresponding native tests.
-
 Independent HTTP checks complete **52 requests** across two detached lifecycles,
 including eight simultaneous clients, hostile strings, Unicode, repeated/empty
 parameters, expected 404s and an exact-bundle restart. Both shutdown receipts show

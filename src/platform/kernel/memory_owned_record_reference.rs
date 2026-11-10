@@ -19,7 +19,6 @@ impl Oracle<'_> {
         &self,
         declaration: DeclarationReference,
         active: &mut BTreeSet<DeclarationReference>,
-        depth: usize,
         remaining: &mut usize,
     ) -> Option<()> {
         let mut bytes = 0;
@@ -27,7 +26,6 @@ impl Oracle<'_> {
             declaration,
             active,
             &mut BTreeSet::new(),
-            depth,
             remaining,
             &mut bytes,
         )
@@ -38,11 +36,10 @@ impl Oracle<'_> {
         declaration: DeclarationReference,
         active: &mut BTreeSet<DeclarationReference>,
         admitted: &mut BTreeSet<DeclarationReference>,
-        depth: usize,
         remaining: &mut usize,
         bytes: &mut usize,
     ) -> Option<()> {
-        if depth > contract::MAXIMUM_TYPE_DEPTH || active.contains(&declaration) {
+        if active.contains(&declaration) {
             return None;
         }
         *remaining = remaining.checked_sub(1)?;
@@ -81,14 +78,7 @@ impl Oracle<'_> {
                 &object.form
                 && self.record_field_ids(*declaration).is_some()
             {
-                self.record_cycle_walk(
-                    *declaration,
-                    active,
-                    admitted,
-                    depth + 1,
-                    remaining,
-                    bytes,
-                )?;
+                self.record_cycle_walk(*declaration, active, admitted, remaining, bytes)?;
             }
             reserve_layout(
                 bytes,
@@ -370,9 +360,6 @@ impl Oracle<'_> {
         depth: usize,
         remaining: &mut usize,
     ) -> Option<bool> {
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return None;
-        }
         *remaining = remaining.checked_sub(1)?;
         match self.form(ty)? {
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Some(true),
@@ -456,9 +443,6 @@ impl Oracle<'_> {
             _ => {
                 let mut pending = vec![(ty, depth)];
                 while let Some((next, depth)) = pending.pop() {
-                    if depth > contract::MAXIMUM_TYPE_DEPTH {
-                        return None;
-                    }
                     *remaining = remaining.checked_sub(1)?;
                     let object = self
                         .0

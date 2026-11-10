@@ -755,10 +755,8 @@ fn map_admission_keeps_depth_and_exact_aggregate_policies_in_foreground() {
             let reader = boundary_reader(&snapshot, &schema);
             for reference in [false, true] {
                 let control = ExecutionControl::uncancelled();
-                // Opaque Map storage breaks the remaining inline Box spine;
-                // both 255 and 256 consecutive Option wrappers are admitted.
-                // The recursive nominal ingress control independently reaches
-                // the boxed-spine refusal without an overdeep structural type.
+                // Map payload admission follows each nested Option wrapper.
+                // These finite chains remain valid inside shared map storage.
                 for depth in [255, 256] {
                     let mut raw = NormalizedValue::I64(1);
                     for _ in 0..depth {
@@ -1116,20 +1114,9 @@ fn retained_map_state_preserves_exact_logical_storage_and_depth_boundaries() {
                 let excessive_type =
                     internal_type(&mut program, &mut schema, TypeForm::Option { item: ty });
                 let excessive = NormalizedValue::Option(Some(Box::new(value)));
-                // The retained-state probe first performs complete negative view
-                // admission on the exact type and value. This extra wrapper reaches
-                // that depth-256 bound before the retained-state meter starts.
-                let error = probe(&program, &excessive, excessive_type, usize::MAX, usize::MAX)
-                    .unwrap_err();
                 assert_eq!(
-                    error.class,
-                    crate::platform::execution::ExecutionFailureClass::Resource
-                );
-                assert_eq!(error.code, "normalized_value_depth");
-                assert!(
-                    error
-                        .message
-                        .contains("view escape inspection exceeds finite value depth 256")
+                    probe(&program, &excessive, excessive_type, usize::MAX, usize::MAX).unwrap(),
+                    (nodes + 1, bytes),
                 );
                 assert_eq!(
                     probe(&program, &retained, ty, nodes, bytes).unwrap(),

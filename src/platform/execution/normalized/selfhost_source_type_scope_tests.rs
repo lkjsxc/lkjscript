@@ -248,7 +248,7 @@ fn selfhost_source_type_scope_checks_every_supported_expression_type_root() {
     );
 }
 
-fn dag(count: u32, edges: &[(u32, u32)], work: u32, code: i64) {
+fn dag_input(count: u32, edges: &[(u32, u32)], work: u32) -> Vec<u8> {
     let mut bytes = vec![0; 80];
     bytes[..4].copy_from_slice(&count.to_le_bytes());
     bytes[4..8].copy_from_slice(&work.to_le_bytes());
@@ -257,6 +257,11 @@ fn dag(count: u32, edges: &[(u32, u32)], work: u32, code: i64) {
         bytes.extend_from_slice(&from.to_le_bytes());
         bytes.extend_from_slice(&to.to_le_bytes());
     }
+    bytes
+}
+
+fn dag(count: u32, edges: &[(u32, u32)], work: u32, code: i64) {
+    let bytes = dag_input(count, edges, work);
     assert_eq!(
         result("read-type-dag", &bytes),
         (
@@ -276,22 +281,43 @@ fn selfhost_source_type_dag_rejects_cycles_and_preserves_shared_subgraphs() {
     dag(0, &[], 0, 0);
     dag(1, &[], 0, 6);
     dag(100_001, &[], 0, 6); // Extent-valid count reaches the explicit policy.
-    dag(1, &[], 1, 0);
+    dag(1, &[], 1, 6);
+    dag(1, &[], 2, 0);
     dag(1, &[(0, 0)], 100, 17);
     dag(3, &[(0, 1), (1, 2), (2, 0)], 1000, 17);
     dag(4, &[(0, 1), (2, 3), (3, 2)], 1000, 17);
     dag(4, &[(0, 1), (0, 2), (1, 3), (2, 3)], 1000, 0);
     dag(5, &[(4, 1), (4, 2), (2, 0), (1, 0)], 1000, 0);
-    dag(2, &[(1, 0)], 6, 6);
-    dag(2, &[(1, 0)], 7, 0);
+    dag(2, &[(1, 0)], 10, 6);
+    dag(2, &[(1, 0)], 11, 0);
+    dag(3, &[(2, 1), (2, 1), (1, 0)], 1000, 0);
+    dag(2, &[(0, 1), (0, 1), (1, 0)], 1000, 17);
+    dag(2, &[(2, 0)], 100, 17);
 }
 
 #[test]
-fn selfhost_source_type_dag_has_exact_structural_depth_boundary() {
-    let admitted = (1..257).map(|node| (node, node - 1)).collect::<Vec<_>>();
-    dag(257, &admitted, 1_000_000, 0);
-    let rejected = (1..258).map(|node| (node, node - 1)).collect::<Vec<_>>();
-    dag(258, &rejected, 1_000_000, 17);
+#[ignore = "slow: selfhost type DAG depth scale"]
+fn selfhost_source_type_dag_crosses_former_structural_depth() {
+    for depth in [256, 512, 1024] {
+        let admitted = (1..=depth).map(|node| (node, node - 1)).collect::<Vec<_>>();
+        let start = std::time::Instant::now();
+        let input = dag_input(depth + 1, &admitted, u32::MAX);
+        if depth <= 512 {
+            assert_eq!(result("read-type-dag", &input), (0, vec![97; 32]));
+        } else {
+            let native = native_reader_image("read-type-dag");
+            let output =
+                source_reader_native_output("rust-native", "read-type-dag", &native, &input);
+            assert_eq!(output.status.code(), Some(0));
+            assert_eq!(output.stdout, vec![97; 32]);
+            assert!(output.stderr.is_empty());
+        }
+        emitted_result_bytes("read-type-dag", &input, 0, &[97; 32]);
+        eprintln!(
+            "selfhost type DAG depth={depth} elapsed_ms={}",
+            start.elapsed().as_millis()
+        );
+    }
 }
 
 #[test]

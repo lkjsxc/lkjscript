@@ -1,7 +1,6 @@
 # Explicit pure-function environments
 
-Status: accepted and implemented. BND-1–BND-6 and exact-target admission are recorded at the
-implementation boundary in the [evidence owner](../evidence/202609090021-pure-function-binding.json).
+Status: accepted and implemented.
 
 Configured reducers need to preserve ordinary runtime inputs while satisfying the existing reducer
 function type. Requiring every caller to carry configuration through fold state makes otherwise

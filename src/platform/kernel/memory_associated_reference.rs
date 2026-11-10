@@ -132,163 +132,163 @@ impl Oracle<'_> {
     pub(super) fn associated_invocation(&self, id: ExpressionId) -> Option<Invocation> {
         let caller = self.occurrence((self.0.root.package_id, OwnerKey::Expression(id)));
         let mut resolver = Resolver::new(self.0);
-        let (environment, parameters, result, result_borrow, arguments) =
-            match self.expression(id)? {
-                ExpressionOperation::Call {
-                    function,
-                    type_arguments,
-                    arguments,
-                    effect_arguments,
-                    requirement_arguments,
-                    ..
+        let (environment, parameters, result, result_borrow, arguments) = match self
+            .expression(id)?
+        {
+            ExpressionOperation::Call {
+                function,
+                type_arguments,
+                arguments,
+                effect_arguments,
+                requirement_arguments,
+                ..
+            }
+            | ExpressionOperation::ImplementationCall {
+                function,
+                type_arguments,
+                arguments,
+                effect_arguments,
+                requirement_arguments,
+                ..
+            } => {
+                let f = self.function(*function)?;
+                let operands = match self.expression(id)? {
+                    ExpressionOperation::ImplementationCall {
+                        implementations, ..
+                    } => implementations.as_slice(),
+                    _ => &[],
+                };
+                if !effect_arguments.is_empty()
+                    || !requirement_arguments.is_empty()
+                    || !f.effect_parameters.is_empty()
+                    || !f.requirement_parameters.is_empty()
+                    || f.type_parameters.len() != type_arguments.len()
+                    || f.implementation_parameters.len() != operands.len()
+                    || !self.valid_parameters(*function, &f)
+                    || operands
+                        .iter()
+                        .any(|operand| self.witness(operand.clone()).is_none())
+                {
+                    return None;
                 }
-                | ExpressionOperation::ImplementationCall {
-                    function,
-                    type_arguments,
-                    arguments,
-                    effect_arguments,
-                    requirement_arguments,
-                    ..
-                } => {
-                    let f = self.function(*function)?;
-                    let operands = match self.expression(id)? {
-                        ExpressionOperation::ImplementationCall {
-                            implementations, ..
-                        } => implementations.as_slice(),
-                        _ => &[],
-                    };
-                    if !effect_arguments.is_empty()
-                        || !requirement_arguments.is_empty()
-                        || !f.effect_parameters.is_empty()
-                        || !f.requirement_parameters.is_empty()
-                        || f.type_parameters.len() != type_arguments.len()
-                        || f.implementation_parameters.len() != operands.len()
-                        || !self.valid_parameters(*function, &f)
-                        || operands
-                            .iter()
-                            .any(|operand| self.witness(operand.clone()).is_none())
-                    {
+                let environment = Environment {
+                    ordinary: f
+                        .type_parameters
+                        .iter()
+                        .copied()
+                        .zip(type_arguments.iter().copied())
+                        .collect(),
+                    source: Context::Lexical(*function),
+                    caller,
+                    contract_operand: None,
+                    witnesses: f
+                        .implementation_parameters
+                        .iter()
+                        .map(|p| p.id)
+                        .zip(operands.iter().cloned())
+                        .collect(),
+                };
+                resolver.admit_application(&environment).ok()?;
+                let mut signature = self.signature(*function)?;
+                for p in &mut signature.0 {
+                    if p.parent != ParameterParent::Function(function.declaration) {
                         return None;
                     }
-                    let environment = Environment {
-                        ordinary: f
-                            .type_parameters
-                            .iter()
-                            .copied()
-                            .zip(type_arguments.iter().copied())
-                            .collect(),
-                        source: Context::Lexical(*function),
-                        caller,
-                        contract_operand: None,
-                        witnesses: f
-                            .implementation_parameters
-                            .iter()
-                            .map(|p| p.id)
-                            .zip(operands.iter().cloned())
-                            .collect(),
-                    };
-                    resolver.admit_application(&environment).ok()?;
-                    let mut signature = self.signature(*function)?;
-                    for p in &mut signature.0 {
-                        if p.parent != ParameterParent::Function(function.declaration) {
-                            return None;
-                        }
-                        resolver
-                            .admit_roots(
-                                &[p.ty],
-                                Oracle(self.0, Some(*function))
-                                    .occurrence((function.package, p.header.owner)),
-                                false,
-                            )
-                            .ok()?;
-                        p.ty = resolver.substitute(p.ty, &environment, 0).ok()?;
-                    }
-                    signature.1 = resolver.substitute(signature.1, &environment, 0).ok()?;
                     resolver
                         .admit_roots(
-                            &signature
-                                .0
-                                .iter()
-                                .map(|p| p.ty)
-                                .chain([signature.1])
-                                .collect::<Vec<_>>(),
-                            caller,
+                            &[p.ty],
+                            Oracle(self.0, Some(*function))
+                                .occurrence((function.package, p.header.owner)),
                             false,
                         )
                         .ok()?;
-                    let mut overlay = self.0.clone();
-                    overlay.types.extend(resolver.derived.clone());
-                    if !Oracle(&overlay, self.1).legal_signature(&signature) {
-                        return None;
-                    }
-                    let source = match owned_read_source(&f.result) {
-                        Some(source) => Some(f.parameters.iter().position(|id| *id == source)?),
-                        None => None,
-                    };
-                    let parameters = signature
-                        .0
-                        .iter()
-                        .map(|p| (p.ty, p.ty, p.use_mode))
-                        .collect();
-                    (
-                        environment,
-                        parameters,
-                        signature.1,
-                        source,
-                        arguments.clone(),
-                    )
+                    p.ty = resolver.substitute(p.ty, &environment).ok()?;
                 }
-                ExpressionOperation::MethodCall {
-                    witness,
-                    contract,
-                    method,
-                    arguments,
-                    ..
-                } => {
-                    // The old reference admits complete mapped method inventories;
-                    // the separate algebra retains exact supplied witness authority.
-                    self.witness(witness.clone())?;
-                    let (actual, self_type, actuals) =
-                        resolver.admit_operand(witness, caller, 0).ok()?;
-                    if actual != *contract {
-                        return None;
-                    }
-                    let c = self.contract(*contract)?;
-                    if c.type_parameters.len() != actuals.len() {
-                        return None;
-                    }
-                    let m = c.methods.iter().find(|m| m.id == *method)?;
-                    let environment = Environment {
-                        ordinary: std::iter::once((c.self_parameter, self_type))
-                            .chain(c.type_parameters.iter().copied().zip(actuals))
-                            .collect(),
-                        source: Context::Contract(*contract),
+                signature.1 = resolver.substitute(signature.1, &environment).ok()?;
+                resolver
+                    .admit_roots(
+                        &signature
+                            .0
+                            .iter()
+                            .map(|p| p.ty)
+                            .chain([signature.1])
+                            .collect::<Vec<_>>(),
                         caller,
-                        contract_operand: Some(witness.clone()),
-                        witnesses: BTreeMap::new(),
-                    };
-                    resolver.admit_application(&environment).ok()?;
-                    let parameters = m
-                        .parameters
-                        .iter()
-                        .map(|p| {
-                            let ty = resolver.substitute(p.ty, &environment, 0).ok()?;
-                            resolver.admit_roots(&[ty], caller, false).ok()?;
-                            Some((ty, ty, p.use_mode))
-                        })
-                        .collect::<Option<Vec<_>>>()?;
-                    let result = resolver.substitute(m.result.ty, &environment, 0).ok()?;
-                    resolver.admit_roots(&[result], caller, false).ok()?;
-                    (
-                        environment,
-                        parameters,
-                        result,
-                        owned_read_source(&m.result).map(|index| index as usize),
-                        arguments.clone(),
+                        false,
                     )
+                    .ok()?;
+                let mut overlay = self.0.clone();
+                overlay.types.extend(resolver.derived.clone());
+                if !Oracle(&overlay, self.1).legal_signature(&signature) {
+                    return None;
                 }
-                _ => return None,
-            };
+                let source = match owned_read_source(&f.result) {
+                    Some(source) => Some(f.parameters.iter().position(|id| *id == source)?),
+                    None => None,
+                };
+                let parameters = signature
+                    .0
+                    .iter()
+                    .map(|p| (p.ty, p.ty, p.use_mode))
+                    .collect();
+                (
+                    environment,
+                    parameters,
+                    signature.1,
+                    source,
+                    arguments.clone(),
+                )
+            }
+            ExpressionOperation::MethodCall {
+                witness,
+                contract,
+                method,
+                arguments,
+                ..
+            } => {
+                // The old reference admits complete mapped method inventories;
+                // the separate algebra retains exact supplied witness authority.
+                self.witness(witness.clone())?;
+                let (actual, self_type, actuals) = resolver.admit_operand(witness, caller).ok()?;
+                if actual != *contract {
+                    return None;
+                }
+                let c = self.contract(*contract)?;
+                if c.type_parameters.len() != actuals.len() {
+                    return None;
+                }
+                let m = c.methods.iter().find(|m| m.id == *method)?;
+                let environment = Environment {
+                    ordinary: std::iter::once((c.self_parameter, self_type))
+                        .chain(c.type_parameters.iter().copied().zip(actuals))
+                        .collect(),
+                    source: Context::Contract(*contract),
+                    caller,
+                    contract_operand: Some(witness.clone()),
+                    witnesses: BTreeMap::new(),
+                };
+                resolver.admit_application(&environment).ok()?;
+                let parameters = m
+                    .parameters
+                    .iter()
+                    .map(|p| {
+                        let ty = resolver.substitute(p.ty, &environment).ok()?;
+                        resolver.admit_roots(&[ty], caller, false).ok()?;
+                        Some((ty, ty, p.use_mode))
+                    })
+                    .collect::<Option<Vec<_>>>()?;
+                let result = resolver.substitute(m.result.ty, &environment).ok()?;
+                resolver.admit_roots(&[result], caller, false).ok()?;
+                (
+                    environment,
+                    parameters,
+                    result,
+                    owned_read_source(&m.result).map(|index| index as usize),
+                    arguments.clone(),
+                )
+            }
+            _ => return None,
+        };
         // Environment remains part of every resolver cache key until all roots
         // have been derived; only canonical objects cross into flow evaluation.
         let _ = environment;
@@ -375,10 +375,7 @@ impl<'a> Resolver<'a> {
             active_operands: BTreeSet::new(),
         }
     }
-    fn step(&mut self, depth: usize) -> Result<()> {
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(Failure::Capacity);
-        }
+    fn step(&mut self) -> Result<()> {
         self.remaining = self.remaining.checked_sub(1).ok_or(Failure::Capacity)?;
         Ok(())
     }
@@ -588,7 +585,7 @@ impl<'a> Resolver<'a> {
         scope: DeclarationReference,
         member: AssociatedTypeMemberId,
     ) -> Result<()> {
-        self.step(0)?;
+        self.step()?;
         self.current(self.declaration_occurrence(scope, Context::Contract(scope)))?;
         let c = self.contract(scope)?;
         if c.associated_types.len() > contract::MAXIMUM_CHILDREN {
@@ -611,7 +608,7 @@ impl<'a> Resolver<'a> {
         }
     }
     pub fn admit_form(&mut self, form: &TypeForm, occurrence: Occurrence) -> Result<()> {
-        self.step(0)?;
+        self.step()?;
         match form {
             TypeForm::AssociatedContractMember { contract, member } => {
                 self.current(occurrence)?;
@@ -731,17 +728,17 @@ impl<'a> Resolver<'a> {
         let mut seen = BTreeMap::new();
         let mut expanded = BTreeSet::new();
         while let Some((ty, here, depth)) = pending.pop() {
-            self.step(depth)?;
+            self.step()?;
             if seen
                 .get(&(ty, here))
-                .is_some_and(|previous| *previous >= depth)
+                .is_some_and(|previous| *previous >= depth.min(1))
             {
                 continue;
             }
             if !seen.contains_key(&(ty, here)) {
                 self.reserve_entries(1)?;
             }
-            seen.insert((ty, here), depth);
+            seen.insert((ty, here), depth.min(1));
             let children = self.object(ty)?.child_type_count();
             // The cloned object and child list both carry the raw child slots.
             self.reserve_entries(1 + children)?;
@@ -823,7 +820,7 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
     pub fn admit_bindings(&mut self, scope: DeclarationReference) -> Result<()> {
-        self.step(0)?;
+        self.step()?;
         let implementation = self.implementation(scope)?.clone();
         let contract = self.contract(implementation.contract)?.clone();
         if !contract.associated_types.is_empty() || !implementation.associated_types.is_empty() {
@@ -850,7 +847,7 @@ impl<'a> Resolver<'a> {
                 AssociatedTypeBindingValue::Owned { ty } => {
                     self.member(implementation.contract, binding.member)?;
                     self.admit_roots(&[*ty], occurrence, true)?;
-                    if !self.owned_type(*ty, occurrence, 0)? {
+                    if !self.owned_type(*ty, occurrence)? {
                         return Err(Failure::Category);
                     }
                 }
@@ -893,13 +890,8 @@ impl<'a> Resolver<'a> {
         result.types.extend(self.derived.clone());
         result
     }
-    pub fn owned_type(
-        &mut self,
-        ty: TypeObjectDigest,
-        occurrence: Occurrence,
-        depth: usize,
-    ) -> Result<bool> {
-        self.step(depth)?;
+    pub fn owned_type(&mut self, ty: TypeObjectDigest, occurrence: Occurrence) -> Result<bool> {
+        self.step()?;
         self.admit_roots(&[ty], occurrence, false)?;
         let form = self.object(ty)?.form.clone();
         match form {
@@ -917,7 +909,7 @@ impl<'a> Resolver<'a> {
                 Ok(p.constraints.has_owned())
             }
             TypeForm::OwnedSequence { item } => {
-                self.composite_child(item, occurrence, depth + 1)?;
+                self.composite_child(item, occurrence)?;
                 Ok(true)
             }
             TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
@@ -929,7 +921,7 @@ impl<'a> Resolver<'a> {
                 }
                 let mut owned = false;
                 for field in fields {
-                    owned |= self.composite_child(field.ty, occurrence, depth + 1)?;
+                    owned |= self.composite_child(field.ty, occurrence)?;
                 }
                 if owned {
                     Ok(true)
@@ -943,12 +935,7 @@ impl<'a> Resolver<'a> {
                     return Ok(false);
                 };
                 oracle
-                    .record_layout_acyclic(
-                        declaration,
-                        &mut BTreeSet::new(),
-                        depth,
-                        &mut self.remaining,
-                    )
+                    .record_layout_acyclic(declaration, &mut BTreeSet::new(), &mut self.remaining)
                     .ok_or(Failure::Unproved)?;
                 let arguments = match self.object(ty)?.form.clone() {
                     TypeForm::Applied { arguments, .. } => arguments,
@@ -961,25 +948,20 @@ impl<'a> Resolver<'a> {
                     let p = oracle
                         .type_parameter(declaration.package, *formal)
                         .ok_or(Failure::Authority)?;
-                    self.constraints(*actual, p.constraints, occurrence, depth + 1)?;
+                    self.constraints(*actual, p.constraints, occurrence)?;
                 }
                 let bindings = parameters.into_iter().zip(arguments).collect();
                 for (_, template) in fields {
-                    let field = self.replace(template, &bindings, depth + 1)?;
-                    self.composite_child(field, occurrence, depth + 1)?;
+                    let field = self.replace(template, &bindings)?;
+                    self.composite_child(field, occurrence)?;
                 }
                 Ok(true)
             }
             _ => Ok(false),
         }
     }
-    fn composite_child(
-        &mut self,
-        ty: TypeObjectDigest,
-        occurrence: Occurrence,
-        depth: usize,
-    ) -> Result<bool> {
-        if self.owned_type(ty, occurrence, depth)? {
+    fn composite_child(&mut self, ty: TypeObjectDigest, occurrence: Occurrence) -> Result<bool> {
+        if self.owned_type(ty, occurrence)? {
             return Ok(true);
         }
         let overlay = self.overlay();
@@ -994,11 +976,10 @@ impl<'a> Resolver<'a> {
         ty: TypeObjectDigest,
         bounds: TypeParameterConstraints,
         occurrence: Occurrence,
-        depth: usize,
     ) -> Result<()> {
-        self.step(depth)?;
+        self.step()?;
         self.admit_roots(&[ty], occurrence, false)?;
-        if bounds.has_owned() && !self.owned_type(ty, occurrence, depth + 1)? {
+        if bounds.has_owned() && !self.owned_type(ty, occurrence)? {
             return Err(Failure::Category);
         }
         // The existing independent structural transport/read/capture proofs have
@@ -1025,14 +1006,13 @@ impl<'a> Resolver<'a> {
         &mut self,
         operand: &ImplementationOperand,
         caller: Occurrence,
-        depth: usize,
     ) -> Result<(
         DeclarationReference,
         TypeObjectDigest,
         Vec<TypeObjectDigest>,
     )> {
-        self.step(depth)?;
-        let entries = self.operand_entries(operand, depth)?;
+        self.step()?;
+        let entries = self.operand_entries(operand)?;
         self.reserve_entries(
             entries
                 .checked_mul(2)
@@ -1043,14 +1023,14 @@ impl<'a> Resolver<'a> {
         if !self.active_operands.insert(key.clone()) {
             return Err(Failure::Authority);
         }
-        let result = self.operand_inner(operand, caller, depth);
+        let result = self.operand_inner(operand, caller);
         self.active_operands.remove(&key);
         result
     }
     // Count raw first-order tree cells without constructing a traversal stack
     // or cloning the operand. This is independent of selected witness meaning.
-    fn operand_entries(&mut self, operand: &ImplementationOperand, depth: usize) -> Result<usize> {
-        self.step(depth)?;
+    fn operand_entries(&mut self, operand: &ImplementationOperand) -> Result<usize> {
+        self.step()?;
         match operand {
             ImplementationOperand::Parameter { .. } => Ok(1),
             ImplementationOperand::Concrete {
@@ -1064,7 +1044,7 @@ impl<'a> Resolver<'a> {
                     .ok_or(Failure::Capacity)?;
                 for child in implementations {
                     count = count
-                        .checked_add(self.operand_entries(child, depth + 1)?)
+                        .checked_add(self.operand_entries(child)?)
                         .ok_or(Failure::Capacity)?;
                 }
                 Ok(count)
@@ -1075,7 +1055,6 @@ impl<'a> Resolver<'a> {
         &mut self,
         operand: &ImplementationOperand,
         caller: Occurrence,
-        depth: usize,
     ) -> Result<(
         DeclarationReference,
         TypeObjectDigest,
@@ -1097,7 +1076,6 @@ impl<'a> Resolver<'a> {
                     entry.self_type,
                     &entry.type_arguments,
                     caller,
-                    depth + 1,
                 )?;
                 Ok((
                     entry.contract,
@@ -1125,7 +1103,7 @@ impl<'a> Resolver<'a> {
                     if !formals.insert(*id) || !names.insert(&p.name) {
                         return Err(Failure::Inventory);
                     }
-                    self.constraints(*actual, p.constraints, caller, depth + 1)?;
+                    self.constraints(*actual, p.constraints, caller)?;
                 }
                 let bindings = i
                     .type_parameters
@@ -1152,29 +1130,27 @@ impl<'a> Resolver<'a> {
                     if !ids.insert(formal.id) || !names.insert(&formal.name) {
                         return Err(Failure::Inventory);
                     }
-                    let (contract, self_type, arguments) =
-                        self.admit_operand(actual, caller, depth + 1)?;
+                    let (contract, self_type, arguments) = self.admit_operand(actual, caller)?;
                     if contract != formal.contract {
                         return Err(Failure::Authority);
                     }
-                    let required_self =
-                        self.substitute_inner(formal.self_type, &environment, depth + 1)?;
+                    let required_self = self.substitute_inner(formal.self_type, &environment)?;
                     let required_arguments = formal
                         .type_arguments
                         .iter()
-                        .map(|t| self.substitute_inner(*t, &environment, depth + 1))
+                        .map(|t| self.substitute_inner(*t, &environment))
                         .collect::<Result<Vec<_>>>()?;
                     if self_type != required_self || arguments != required_arguments {
                         return Err(Failure::Authority);
                     }
                 }
-                let self_type = self.substitute_inner(i.self_type, &environment, depth + 1)?;
+                let self_type = self.substitute_inner(i.self_type, &environment)?;
                 let arguments = i
                     .type_arguments
                     .iter()
-                    .map(|t| self.substitute_inner(*t, &environment, depth + 1))
+                    .map(|t| self.substitute_inner(*t, &environment))
                     .collect::<Result<Vec<_>>>()?;
-                self.contract_actuals(i.contract, self_type, &arguments, caller, depth + 1)?;
+                self.contract_actuals(i.contract, self_type, &arguments, caller)?;
                 Ok((i.contract, self_type, arguments))
             }
         }
@@ -1185,9 +1161,8 @@ impl<'a> Resolver<'a> {
         self_type: TypeObjectDigest,
         arguments: &[TypeObjectDigest],
         caller: Occurrence,
-        depth: usize,
     ) -> Result<()> {
-        self.step(depth)?;
+        self.step()?;
         let contract = self.contract(scope)?.clone();
         if contract.type_parameters.len() != arguments.len() {
             return Err(Failure::Arity);
@@ -1199,24 +1174,19 @@ impl<'a> Resolver<'a> {
         if self_parameter.constraints != TypeParameterConstraints::Owned {
             return Err(Failure::Category);
         }
-        self.constraints(
-            self_type,
-            TypeParameterConstraints::Owned,
-            caller,
-            depth + 1,
-        )?;
+        self.constraints(self_type, TypeParameterConstraints::Owned, caller)?;
         let mut ids = BTreeSet::from([contract.self_parameter]);
         for (id, ty) in contract.type_parameters.iter().zip(arguments) {
             let p = oracle.scoped_parameter(*id).ok_or(Failure::Authority)?;
             if !ids.insert(*id) {
                 return Err(Failure::Inventory);
             }
-            self.constraints(*ty, p.constraints, caller, depth + 1)?;
+            self.constraints(*ty, p.constraints, caller)?;
         }
         Ok(())
     }
     fn intern(&mut self, form: TypeForm) -> Result<TypeObjectDigest> {
-        self.step(0)?;
+        self.step()?;
         let object = TypeObject::new(form).map_err(|_| Failure::Inventory)?;
         let digest = encode_type_object(&object)
             .map_err(|_| Failure::Inventory)?
@@ -1286,9 +1256,8 @@ impl<'a> Resolver<'a> {
         &mut self,
         ty: TypeObjectDigest,
         bindings: &BTreeMap<TypeParameterId, TypeObjectDigest>,
-        depth: usize,
     ) -> Result<TypeObjectDigest> {
-        self.step(depth)?;
+        self.step()?;
         let object = self.object(ty)?.clone();
         if let TypeForm::TypeParameter { parameter } = object.form {
             return bindings.get(&parameter).copied().ok_or(Failure::Authority);
@@ -1296,7 +1265,7 @@ impl<'a> Resolver<'a> {
         if object.form.is_associated() {
             return Err(Failure::BindingProjection);
         }
-        let form = self.children(object.form, |r, t| r.replace(t, bindings, depth + 1))?;
+        let form = self.children(object.form, |r, t| r.replace(t, bindings))?;
         self.intern(form)
     }
     fn select(
@@ -1305,12 +1274,11 @@ impl<'a> Resolver<'a> {
         member: AssociatedTypeMemberId,
         operand: &ImplementationOperand,
         caller: Occurrence,
-        depth: usize,
     ) -> Result<TypeObjectDigest> {
-        self.step(depth)?;
+        self.step()?;
         self.current(caller)?;
         self.member(contract, member)?;
-        if self.admit_operand(operand, caller, depth + 1)?.0 != contract {
+        if self.admit_operand(operand, caller)?.0 != contract {
             return Err(Failure::Authority);
         }
         match operand {
@@ -1365,7 +1333,7 @@ impl<'a> Resolver<'a> {
                 let AssociatedTypeBindingValue::Owned { ty } = &binding.value else {
                     return Err(Failure::Category);
                 };
-                self.replace(*ty, &bindings, depth + 1)
+                self.replace(*ty, &bindings)
             }
         }
     }
@@ -1373,18 +1341,17 @@ impl<'a> Resolver<'a> {
         &mut self,
         ty: TypeObjectDigest,
         environment: &Environment,
-        depth: usize,
     ) -> Result<TypeObjectDigest> {
         // Scope-aware derivation must be selected even when a view is hidden
         // under an old-form root. The old cache contains no scope map.
         if self.contains_read_view(ty)? {
             return Err(Failure::Unproved);
         }
-        self.admit_environment(environment, depth, false)?;
-        self.substitute_inner(ty, environment, depth)
+        self.admit_environment(environment, false)?;
+        self.substitute_inner(ty, environment)
     }
     pub fn admit_application(&mut self, environment: &Environment) -> Result<()> {
-        self.admit_environment(environment, 0, true)
+        self.admit_environment(environment, true)
     }
 
     // A scheme definition supplies its stored templates directly. This does not
@@ -1393,9 +1360,8 @@ impl<'a> Resolver<'a> {
         &mut self,
         ty: TypeObjectDigest,
         scope: DeclarationReference,
-        depth: usize,
     ) -> Result<TypeObjectDigest> {
-        self.step(depth)?;
+        self.step()?;
         self.admit_bindings(scope)?;
         let implementation = self.implementation(scope)?.clone();
         let contract = self.contract(implementation.contract)?.clone();
@@ -1416,16 +1382,15 @@ impl<'a> Resolver<'a> {
                     .zip(implementation.type_arguments),
             )
             .collect::<BTreeMap<_, _>>();
-        self.definition_inner(ty, scope, &ordinary, depth + 1)
+        self.definition_inner(ty, scope, &ordinary)
     }
     fn definition_inner(
         &mut self,
         ty: TypeObjectDigest,
         scope: DeclarationReference,
         ordinary: &BTreeMap<TypeParameterId, TypeObjectDigest>,
-        depth: usize,
     ) -> Result<TypeObjectDigest> {
-        self.step(depth)?;
+        self.step()?;
         match self.object(ty)?.form.clone() {
             TypeForm::TypeParameter { parameter } => {
                 ordinary.get(&parameter).copied().ok_or(Failure::Authority)
@@ -1448,19 +1413,14 @@ impl<'a> Resolver<'a> {
             TypeForm::AssociatedWitnessProjection { .. } => Err(Failure::Authority),
             form => {
                 let form = self.children(form, |resolver, child| {
-                    resolver.definition_inner(child, scope, ordinary, depth + 1)
+                    resolver.definition_inner(child, scope, ordinary)
                 })?;
                 self.intern(form)
             }
         }
     }
-    fn admit_environment(
-        &mut self,
-        environment: &Environment,
-        depth: usize,
-        complete: bool,
-    ) -> Result<()> {
-        self.step(depth)?;
+    fn admit_environment(&mut self, environment: &Environment, complete: bool) -> Result<()> {
+        self.step()?;
         let scope = match environment.source {
             Context::Contract(scope) | Context::Lexical(scope) => scope,
             Context::Forbidden => {
@@ -1529,7 +1489,6 @@ impl<'a> Resolver<'a> {
                 environment.ordinary[&p],
                 formal.constraints,
                 environment.caller,
-                depth + 1,
             )?;
         }
         for formal in witnesses {
@@ -1537,11 +1496,9 @@ impl<'a> Resolver<'a> {
                 continue;
             };
             let (contract, self_type, arguments) =
-                self.admit_operand(actual, environment.caller, depth + 1)?;
+                self.admit_operand(actual, environment.caller)?;
             if contract != formal.contract
-                || complete
-                    && self_type
-                        != self.substitute_inner(formal.self_type, environment, depth + 1)?
+                || complete && self_type != self.substitute_inner(formal.self_type, environment)?
             {
                 return Err(Failure::Authority);
             }
@@ -1549,7 +1506,7 @@ impl<'a> Resolver<'a> {
                 let expected = formal
                     .type_arguments
                     .iter()
-                    .map(|t| self.substitute_inner(*t, environment, depth + 1))
+                    .map(|t| self.substitute_inner(*t, environment))
                     .collect::<Result<Vec<_>>>()?;
                 if arguments != expected {
                     return Err(Failure::Authority);
@@ -1561,8 +1518,7 @@ impl<'a> Resolver<'a> {
                 .contract_operand
                 .as_ref()
                 .ok_or(Failure::Authority)?;
-            let (actual, self_type, arguments) =
-                self.admit_operand(operand, environment.caller, depth + 1)?;
+            let (actual, self_type, arguments) = self.admit_operand(operand, environment.caller)?;
             let contract = self.contract(scope)?;
             if actual != scope
                 || complete
@@ -1585,9 +1541,8 @@ impl<'a> Resolver<'a> {
         &mut self,
         ty: TypeObjectDigest,
         environment: &Environment,
-        depth: usize,
     ) -> Result<TypeObjectDigest> {
-        self.step(depth)?;
+        self.step()?;
         // Complete source/caller occurrence admission precedes a cached result.
         let source_scope = match environment.source {
             Context::Contract(s) | Context::Lexical(s) => Some(s),
@@ -1620,7 +1575,7 @@ impl<'a> Resolver<'a> {
                     .contract_operand
                     .as_ref()
                     .ok_or(Failure::Authority)?;
-                self.select(contract, member, operand, environment.caller, depth + 1)?
+                self.select(contract, member, operand, environment.caller)?
             }
             TypeForm::AssociatedWitnessProjection {
                 parameter,
@@ -1632,11 +1587,10 @@ impl<'a> Resolver<'a> {
                     .witnesses
                     .get(&parameter)
                     .ok_or(Failure::Authority)?;
-                self.select(contract, member, operand, environment.caller, depth + 1)?
+                self.select(contract, member, operand, environment.caller)?
             }
             form => {
-                let form =
-                    self.children(form, |r, t| r.substitute_inner(t, environment, depth + 1))?;
+                let form = self.children(form, |r, t| r.substitute_inner(t, environment))?;
                 self.intern(form)?
             }
         };
@@ -1650,7 +1604,7 @@ impl<'a> Resolver<'a> {
             .chain(environment.contract_operand.iter())
         {
             entries = entries
-                .checked_add(self.operand_entries(operand, 0)?)
+                .checked_add(self.operand_entries(operand)?)
                 .ok_or(Failure::Capacity)?;
         }
         self.reserve_entries(entries)?;

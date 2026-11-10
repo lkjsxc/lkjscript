@@ -59,12 +59,6 @@ oracles; pointer equality alone does not prove program behavior.
 
 ## Evidence and limits
 
-[Measurements](../performance.md#whole-prepared-witness-node-sharing) distinguish
-the retained witness-node/slot subset from conservative cumulative preparation
-reservations, process RSS, allocator traffic and invocation time. The change adds
-one allocation per unique complete node while removing redundant copies; it is not
-a claim that every workload is faster or allocates fewer physical blocks.
-
 No meaning-graph, interface, type-object, bytecode or artifact encoding is changed.
 This closes whole-node sharing within one preparation, not region custody, shared
 mutable application state, cross-snapshot interface sharing or all preparation

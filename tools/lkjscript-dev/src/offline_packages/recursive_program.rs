@@ -1,5 +1,5 @@
 //! Public compact requests for a separately authored reusable tree library.
-use crate::pure_tail_program::Request;
+use crate::compact_request::Request;
 use std::collections::BTreeMap;
 
 fn parameters(r: &mut Request, function: &str, names: &[&str]) {

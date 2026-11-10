@@ -6,12 +6,8 @@ They add no Rust implementation, intrinsic, new router or compiler syntax.
 The accepted meaning graph remains the editable authority; these declaration
 files are reproducible proposals, not a second synchronized source of truth.
 
-This is a deliberately small example library, not a complete web framework or a
-new built-in standard package. It demonstrates recursive nominal data, ordinary
-function composition, exact offline package transport and standalone execution.
-The [original execution record](../campaigns/202609242152.md) retains the initial
-partial experiment; the [completion record](../campaigns/202609242248.md) records
-the later independent detached matrix and actual native HTTP composition.
+This example library demonstrates recursive nominal data, ordinary function
+composition, exact offline package transport and standalone execution.
 
 ## Separate inline and block content
 
@@ -198,8 +194,3 @@ heading payload and a non-text heading payload. The separate article target succ
 after these failures. All 89 successful invocations report stopped admission, drained
 work, zero remaining tasks and no cleanup failures. These external runs use production
 execution only; the earlier 61/64 native checks own differential evaluator agreement.
-
-The initial failed drivers remain historical failures. Their single successful empty
-case has not been relabeled as the later matrix. The new acceptance uses a separately
-retained driver and source-free runtime directory; see the
-[completion record](../campaigns/202609242248.md) for exact boundaries.

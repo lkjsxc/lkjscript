@@ -170,11 +170,6 @@ impl ImplementationOperand {
             depth: usize,
             remaining: &mut usize,
         ) -> Result<ImplementationOperand, DecodeError> {
-            if depth > contract::MAXIMUM_TYPE_DEPTH {
-                return Err(DecodeError::Other(
-                    "implementation application exceeds its depth or node bound",
-                ));
-            }
             match u32::decode(decoder)? {
                 0 => {
                     let implementation = Decode::decode(decoder)?;

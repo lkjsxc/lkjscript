@@ -452,7 +452,7 @@ impl Packages {
             if detached {
                 joined(execution);
             } else {
-                assert_eq!(compact_field(execution, "differential"), "equal");
+                assert_eq!(compact_field(execution, "engine"), "vm");
             }
             let value = serde_json::from_slice(&std::fs::read(result).unwrap()).unwrap();
             (records, Some(value))
@@ -501,8 +501,8 @@ impl Packages {
             expected,
             "{target}, detached={detached}"
         );
-        // Completion follows the existing input checks, differential/cleanup
-        // assertions, child/pipe joins and full independently expected result.
+        // Completion follows the input and cleanup checks, child/pipe joins
+        // and full independently expected result.
         if let Some(progress) = progress {
             progress.complete();
         }
@@ -565,7 +565,7 @@ impl Packages {
             } else {
                 // The shared source reader also checks real VM/reference and
                 // executor cleanup without inventing a resident taskgroup receipt.
-                assert_eq!(compact_field(execution, "differential"), "equal");
+                assert_eq!(compact_field(execution, "engine"), "vm");
             }
             identity["event"] = json!("batch-row-validated");
             if let Some(progress) = &self.progress {
@@ -1115,7 +1115,7 @@ fn native_indexed_data_traps_refusals_cleanup_and_recovery() {
                 if detached {
                     joined(execution);
                 } else {
-                    assert_eq!(compact_field(execution, "differential"), "equal");
+                    assert_eq!(compact_field(execution, "engine"), "vm");
                 }
             } else {
                 let diagnostic = compact_record(records, "diagnostic");
@@ -1145,7 +1145,7 @@ fn native_indexed_data_traps_refusals_cleanup_and_recovery() {
         .join("indexed-integers.deployment.json");
     let mut descriptor: Value = serde_json::from_slice(&std::fs::read(original).unwrap()).unwrap();
     for fuel in [100, 4096] {
-        descriptor["execution"] = json!({"instruction_fuel":fuel,"maximum_call_depth":4096,"maximum_value_stack":1000000});
+        descriptor["execution"] = json!({"instruction_fuel":fuel,});
         packages
             .consumer
             .input("limited.deployment.json", &descriptor.to_string());

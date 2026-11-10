@@ -357,9 +357,7 @@ impl Derivation<'_> {
         depth: usize,
     ) -> Result<(), ExecutionError> {
         self.budget.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         if let ImplementationOperand::Concrete {
             type_arguments,
             implementations,
@@ -917,9 +915,7 @@ impl Derivation<'_> {
         depth: usize,
     ) -> Result<Arc<SymbolicSelection>, ExecutionError> {
         self.budget.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         match operand {
             ImplementationOperand::Parameter { scope, parameter } => {
                 if env.scope != Some(*scope) || !env.lexical {

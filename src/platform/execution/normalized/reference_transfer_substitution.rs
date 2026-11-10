@@ -14,13 +14,9 @@ struct Search<'a> {
 }
 
 impl Search<'_> {
-    fn step(&mut self, depth: usize) -> Result<(), ExecutionError> {
+    fn step(&mut self) -> Result<(), ExecutionError> {
         self.control.check()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(invalid(
-                "canonical transfer substitution exceeds type depth",
-            ));
-        }
+
         self.remaining = self.remaining.checked_sub(1).ok_or_else(|| {
             ExecutionError::resource(
                 "reference_transfer_substitution_work",
@@ -34,9 +30,8 @@ impl Search<'_> {
         &mut self,
         template: TypeObjectDigest,
         candidate: TypeObjectDigest,
-        depth: usize,
     ) -> Result<bool, ExecutionError> {
-        self.step(depth)?;
+        self.step()?;
         let schema = self.schema;
         let source = schema
             .types
@@ -55,17 +50,17 @@ impl Search<'_> {
         }
         Ok(match (&source.form, &target.form) {
             (TypeForm::Region { region: a }, TypeForm::Region { region: b }) => {
-                self.same(*a, *b, depth + 1)?
+                self.same(*a, *b)?
             }
             (TypeForm::RelPtr { region: a, item: x }, TypeForm::RelPtr { region: b, item: y })
             | (
                 TypeForm::RegionSlice { region: a, item: x },
                 TypeForm::RegionSlice { region: b, item: y },
-            ) => self.same(*a, *b, depth + 1)? && self.same(*x, *y, depth + 1)?,
+            ) => self.same(*a, *b)? && self.same(*x, *y)?,
             (
                 TypeForm::RegionCap { region: a, mode: x },
                 TypeForm::RegionCap { region: b, mode: y },
-            ) => x == y && self.same(*a, *b, depth + 1)?,
+            ) => x == y && self.same(*a, *b)?,
             (
                 TypeForm::ReadViewApplied {
                     declaration: a,
@@ -82,7 +77,7 @@ impl Search<'_> {
                     return Ok(false);
                 }
                 for (a, b) in x.iter().zip(y) {
-                    if !self.same(*a, *b, depth + 1)? {
+                    if !self.same(*a, *b)? {
                         return Ok(false);
                     }
                 }
@@ -91,12 +86,10 @@ impl Search<'_> {
             (TypeForm::List { item: a }, TypeForm::List { item: b })
             | (TypeForm::Option { item: a }, TypeForm::Option { item: b })
             | (TypeForm::OwnedSequence { item: a }, TypeForm::OwnedSequence { item: b })
-            | (TypeForm::Stream { item: a }, TypeForm::Stream { item: b }) => {
-                self.same(*a, *b, depth + 1)?
-            }
+            | (TypeForm::Stream { item: a }, TypeForm::Stream { item: b }) => self.same(*a, *b)?,
             (TypeForm::Map { key: a, value: x }, TypeForm::Map { key: b, value: y })
             | (TypeForm::Result { ok: a, error: x }, TypeForm::Result { ok: b, error: y }) => {
-                self.same(*a, *b, depth + 1)? && self.same(*x, *y, depth + 1)?
+                self.same(*a, *b)? && self.same(*x, *y)?
             }
             (
                 TypeForm::StructuralRecord { fields: a },
@@ -108,8 +101,8 @@ impl Search<'_> {
                     return Ok(false);
                 }
                 for (a, b) in a.iter().zip(b) {
-                    self.step(depth)?;
-                    if a.name != b.name || !self.same(a.ty, b.ty, depth + 1)? {
+                    self.step()?;
+                    if a.name != b.name || !self.same(a.ty, b.ty)? {
                         return Ok(false);
                     }
                 }
@@ -129,7 +122,7 @@ impl Search<'_> {
                     return Ok(false);
                 }
                 for (a, b) in x.iter().zip(y) {
-                    if !self.same(*a, *b, depth + 1)? {
+                    if !self.same(*a, *b)? {
                         return Ok(false);
                     }
                 }
@@ -149,11 +142,11 @@ impl Search<'_> {
                     return Ok(false);
                 }
                 for (a, b) in a.iter().zip(b) {
-                    if !self.same(*a, *b, depth + 1)? {
+                    if !self.same(*a, *b)? {
                         return Ok(false);
                     }
                 }
-                self.same(*x, *y, depth + 1)?
+                self.same(*x, *y)?
             }
             (
                 TypeForm::TaskFunction {
@@ -171,11 +164,11 @@ impl Search<'_> {
                     return Ok(false);
                 }
                 for (a, b) in a.iter().zip(b) {
-                    if !self.same(*a, *b, depth + 1)? {
+                    if !self.same(*a, *b)? {
                         return Ok(false);
                     }
                 }
-                self.same(*x, *y, depth + 1)?
+                self.same(*x, *y)?
             }
             (
                 TypeForm::AssociatedReadViewMember { .. }
@@ -208,7 +201,7 @@ impl Search<'_> {
         &mut self,
         template: TypeObjectDigest,
     ) -> Result<Option<TypeObjectDigest>, ExecutionError> {
-        self.step(0)?;
+        self.step()?;
         let source = self
             .schema
             .types
@@ -228,12 +221,12 @@ impl Search<'_> {
         }
         // Most invocations retain an already closed signature. Try its exact
         // identity before walking the ordered canonical inventory.
-        if self.same(template, template, 0)? {
+        if self.same(template, template)? {
             return Ok(Some(template));
         }
         let schema = self.schema;
         for candidate in schema.types.keys() {
-            if *candidate != template && self.same(template, *candidate, 0)? {
+            if *candidate != template && self.same(template, *candidate)? {
                 return Ok(Some(*candidate));
             }
         }

@@ -306,20 +306,6 @@ struct Failure {
     message: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct TransferredReceiptBinding {
-    pub(crate) receipt_bytes: u64,
-    pub(crate) receipt_sha256: String,
-    pub(crate) verifier_sha256: String,
-    pub(crate) candidate_sha256: String,
-    pub(crate) elapsed_nanoseconds: u64,
-    pub(crate) commands: u64,
-    pub(crate) runners: u64,
-    pub(crate) requests: u64,
-    pub(crate) cleanup_complete: bool,
-}
-
 #[derive(Debug)]
 struct AcceptanceFailure {
     class: &'static str,
@@ -549,169 +535,6 @@ pub(crate) fn command(arguments: impl Iterator<Item = OsString>) -> Result<u8, D
         0
     } else {
         1
-    })
-}
-
-pub(crate) fn read_transferred_receipt(
-    path: &Path,
-    candidate_path: &Path,
-    verifier_path: &Path,
-) -> Result<TransferredReceiptBinding, DevError> {
-    let metadata = fs::symlink_metadata(path).map_err(|error| {
-        DevError::infrastructure(format!(
-            "inspect transferred outbound HTTP receipt '{}': {error}",
-            path.display()
-        ))
-    })?;
-    if metadata.file_type().is_symlink()
-        || !metadata.is_file()
-        || metadata.len() > MAXIMUM_RECEIPT_BYTES
-    {
-        return Err(DevError::corrupt(
-            "transferred outbound HTTP receipt is unsafe or oversized",
-        ));
-    }
-    let bytes = process::read_bounded(path, MAXIMUM_RECEIPT_BYTES)?;
-    let receipt: AcceptanceReceipt = serde_json::from_slice(&bytes).map_err(|error| {
-        DevError::corrupt(format!("decode transferred outbound HTTP receipt: {error}"))
-    })?;
-    if evidence::encode_json(&receipt)? != bytes {
-        return Err(DevError::corrupt(
-            "transferred outbound HTTP receipt is not canonical evidence encoding",
-        ));
-    }
-    let expected_root = path
-        .parent()
-        .ok_or_else(|| DevError::corrupt("transferred outbound receipt has no parent"))?
-        .canonicalize()?;
-    let verifier = executable_observation(verifier_path, "transferred outbound verifier")?;
-    let candidate = executable_observation(candidate_path, "transferred outbound candidate")?;
-    let result = receipt
-        .result
-        .as_ref()
-        .ok_or_else(|| DevError::corrupt("passed outbound receipt omitted its result"))?;
-    let capabilities =
-        lkjscript::platform::contract::capabilities_snapshot().map_err(DevError::corrupt)?;
-    let cleanup_complete = receipt.cleanup.runner_cleanup_complete
-        && receipt.cleanup.oracle_cleanup_complete
-        && receipt.cleanup.isolated_root_removed
-        && !receipt.cleanup.raw_secret_values_retained;
-    if receipt.schema.identity != ACCEPTANCE_SCHEMA
-        || receipt.schema.version != ACCEPTANCE_SCHEMA_VERSION
-        || receipt.workflow != ACCEPTANCE_WORKFLOW
-        || receipt.status != AcceptanceStatus::Passed
-        || receipt.execution_context != "transferred"
-        || receipt.checkout_root.is_some()
-        || receipt.evidence_root != expected_root.display().to_string()
-        || !receipt.isolated_root_outside_checkout
-        || Path::new(&receipt.isolated_root).exists()
-        || receipt.environment_names != ["LANG", ROOT_ENVIRONMENT]
-        || receipt.verifier.sha256 != verifier.sha256
-        || receipt.verifier.byte_length != verifier.byte_length
-        || receipt.verifier.mode != verifier.mode
-        || receipt.candidate.sha256 != candidate.sha256
-        || receipt.candidate.byte_length != candidate.byte_length
-        || receipt.candidate.mode != candidate.mode
-        || receipt.verifier.verification_digest != verifier.verification_digest
-        || receipt.candidate.verification_digest != candidate.verification_digest
-        || receipt.copied_candidate.byte_length != candidate.byte_length
-        || receipt.copied_candidate.mode != candidate.mode
-        || receipt.copied_candidate.verification_digest != candidate.verification_digest
-        || !Path::new(&receipt.copied_candidate.file.path)
-            .starts_with(Path::new(&receipt.isolated_root))
-        || receipt.completed_unix_nanoseconds < receipt.started_unix_nanoseconds
-        || path.canonicalize()? != expected_root.join("receipt.json")
-        || receipt.copied_candidate.sha256 != candidate.sha256
-        || receipt.failure.is_some()
-        || !relay_route_topology_is_current(&result.topology)
-        || !route_miss_no_connection_is_current(&result.no_connection, &result.negative_cases)
-        || result.product_version != capabilities.product_version
-        || result.capabilities_digest != capabilities.digest
-        || !result.authority_unchanged
-        || !result.clean_incremental_equal
-        || !result.restart_equal
-        || result.startup_failures_without_ready != 1
-        || result.responses.len() != 17
-        || result.no_connection.len() != 7
-        || result.certificate.generator != "lkjscript-deterministic-ed25519-tls-fixture-1"
-        || result.artifact_sha256 != result.clean_artifact_sha256
-        || result.authority_before != result.authority_after
-        || !cleanup_complete
-    {
-        return Err(DevError::corrupt(
-            "transferred outbound HTTP receipt binding or acceptance mismatch",
-        ));
-    }
-    if receipt.commands.is_empty() || receipt.runners.is_empty() {
-        return Err(DevError::corrupt("HTTP command/runner evidence missing"));
-    }
-    for command in &receipt.commands {
-        evidence::verify_process_files(&expected_root, &command.process)?;
-        let passed = command.expected == "success";
-        if ![
-            "success",
-            "compact-failure",
-            "startup-failure-without-ready",
-        ]
-        .contains(&command.expected.as_str())
-            || (command.process.status == ProcessStatus::Passed) != passed
-            || command.command.first().map(Path::new)
-                != Some(Path::new(&receipt.copied_candidate.file.path))
-        {
-            return Err(DevError::corrupt(
-                "HTTP command expectation or executable mismatch",
-            ));
-        }
-    }
-    for runner in &receipt.runners {
-        evidence::verify_process_files(&expected_root, &runner.process)?;
-    }
-    Ok(TransferredReceiptBinding {
-        receipt_bytes: metadata.len(),
-        receipt_sha256: sha256_file(path, MAXIMUM_RECEIPT_BYTES)?,
-        verifier_sha256: verifier.sha256,
-        candidate_sha256: candidate.sha256,
-        elapsed_nanoseconds: receipt.elapsed_nanoseconds,
-        commands: receipt.commands.len() as u64,
-        runners: receipt.runners.len() as u64,
-        requests: result.responses.len() as u64,
-        cleanup_complete,
-    })
-}
-
-fn relay_route_topology_is_current(topology: &RelayRouteTopologyObservation) -> bool {
-    evidence::hex_identity(&topology.target, "target_", 32)
-        && evidence::hex_identity(&topology.route, "route_", 32)
-        && evidence::scoped_identity(&topology.component, "decl_")
-        && evidence::scoped_identity(&topology.port, "port_")
-        && topology.method == "GET"
-        && topology.path == "/relay-info"
-        && topology.route_count == 1
-        && evidence::hex_identity(&topology.route_set, "http_routes_", 64)
-        && topology.route_set.len() == 76
-        && topology.predecessor_port_absent
-        && topology.predecessor_predicate_absent
-}
-
-fn route_miss_no_connection_is_current(
-    observations: &[NoConnectionObservation],
-    negative_cases: &[String],
-) -> bool {
-    [
-        "route-miss-unknown",
-        "route-miss-case",
-        "route-miss-trailing",
-        "route-miss-percent",
-        "route-miss-method",
-        "route-miss-head",
-    ]
-    .into_iter()
-    .all(|name| {
-        negative_cases.iter().any(|case| case == name)
-            && observations.iter().any(|observation| {
-                observation.name == name
-                    && observation.connection_count_before == observation.connection_count_after
-            })
     })
 }
 
@@ -3649,14 +3472,6 @@ fn print_summary(
         );
     }
     Ok(())
-}
-
-#[cfg(test)]
-pub(crate) fn encode_transferred_test_fixture(
-    value: serde_json::Value,
-) -> Result<Vec<u8>, DevError> {
-    let receipt: AcceptanceReceipt = serde_json::from_value(value)?;
-    evidence::encode_json(&receipt)
 }
 
 #[cfg(test)]

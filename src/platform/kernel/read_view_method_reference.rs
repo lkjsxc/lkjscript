@@ -11,7 +11,7 @@ impl Resolver<'_> {
         method: MethodId,
         depth: usize,
     ) -> Result<TypeObjectDigest> {
-        self.step(depth)?;
+        self.step()?;
         self.admit_bindings(implementation)?;
         let i = self.implementation(implementation)?.clone();
         let c = self.contract(i.contract)?.clone();
@@ -45,7 +45,7 @@ impl Resolver<'_> {
         ordinary: &BTreeMap<TypeParameterId, TypeObjectDigest>,
         depth: usize,
     ) -> Result<TypeObjectDigest> {
-        self.step(depth)?;
+        self.step()?;
         let i = self.implementation(implementation)?.clone();
         let caller = self.declaration_occurrence(implementation, Context::Lexical(implementation));
         let caller_binder = ReadScopeBinder::ContractMethod {
@@ -185,7 +185,7 @@ impl Resolver<'_> {
         method: &OwnedMethod,
         mapping: &OwnedMethodImplementation,
     ) -> Result<()> {
-        self.step(0)?;
+        self.step()?;
         let i = self.implementation(implementation)?.clone();
         if mapping.method != method.id
             || i.methods.iter().filter(|m| m.method == method.id).count() != 1
@@ -256,7 +256,7 @@ impl Resolver<'_> {
         for ((expected_ty, expected_mode), (actual_ty, actual_mode)) in
             expected.parameters.iter().zip(&actual.parameters)
         {
-            self.step(0)?;
+            self.step()?;
             if expected_mode != actual_mode
                 || self.definition_view_type(*expected_ty, implementation, method.id, 0)?
                     != self.substitute_view(*actual_ty, &environment, 0)?

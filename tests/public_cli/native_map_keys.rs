@@ -71,13 +71,9 @@ fn native_map_keys_preserve_versions_and_project_without_payload_copies() {
                 assert_eq!(observation["value_work"]["maps"]["key_bytes_copied"], 0);
                 assert_eq!(observation["live_handles_after"], 0);
             } else {
-                assert_eq!(compact_field(execution, "differential"), "equal");
+                assert_eq!(compact_field(execution, "engine"), "vm");
                 assert_eq!(
                     compact_field(execution, "production-map-key-bytes-copied"),
-                    "0"
-                );
-                assert_eq!(
-                    compact_field(execution, "reference-map-key-bytes-copied"),
                     "0"
                 );
             }

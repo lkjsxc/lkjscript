@@ -23,10 +23,6 @@ impl VerificationDigest {
         hasher.update(bytes);
         Self(format!("verification_{}", hasher.finalize().to_hex()))
     }
-
-    pub(crate) fn as_str(&self) -> &str {
-        &self.0
-    }
 }
 
 impl fmt::Display for VerificationDigest {
@@ -271,14 +267,6 @@ pub(crate) fn digest_file(path: &Path) -> Result<(VerificationDigest, u64), DevE
         VerificationDigest(format!("verification_{}", hasher.finalize().to_hex())),
         observed,
     ))
-}
-
-pub(crate) fn synchronize_file(path: &Path) -> Result<(), DevError> {
-    File::open(path)
-        .and_then(|file| file.sync_all())
-        .map_err(|error| {
-            DevError::infrastructure(format!("synchronize '{}': {error}", path.display()))
-        })
 }
 
 pub(crate) fn relative(root: &Path, path: &Path) -> String {

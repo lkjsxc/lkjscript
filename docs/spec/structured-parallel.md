@@ -122,8 +122,8 @@ reservation move together; no invocation state or application authority follows.
 A bounded weak-owner catalogue coordinates custody without retaining programs or
 a permanent global executor. If neither idle custody nor new capacity is available,
 the job executes inline without waiting for another owner. Workers never run
-unrelated jobs while waiting for their own child. The finite
-structured nesting bound remains independent of cumulative quotas.
+unrelated jobs while waiting for their own child. Worker stacks use reservations
+sized from physical memory; nested groups share the invocation's control.
 
 Each job owns a shared handle to the admitted immutable program, its control and
 quota handles, exact application and sealed inputs. Program metadata and owned
@@ -165,8 +165,8 @@ all children and subsequent parent execution continue charging that ledger. A ne
 group cannot reset fuel or gain another allocation allowance. Charges precede modeled
 growth and are not refunded after cleanup. Generic substitution scratch and retained
 concrete child signatures are charged before allocation. The non-generic path needs
-no substitution map or concrete-signature vector. Call-depth policy includes active ancestor
-frames, and structured nesting has an independent finite native-stack bound.
+no substitution map or concrete-signature vector. Call frames grow with execution,
+and structured nesting has no project-defined depth quota.
 Cancellation and deadlines use the invocation control throughout the group. Ordinary
 trusted execution retains its existing unmetered cumulative-work default.
 

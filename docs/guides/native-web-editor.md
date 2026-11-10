@@ -169,8 +169,5 @@ and read the saved state before deciding to submit again.
 The [editor contract and limits](native-editor.md#save-conflict-and-failure-semantics)
 cover UTF-8 bounds, line endings, authentication, Origin, failure and corruption.
 
-This is one bounded shared note, not per-user accounts, sessions, multiple
-documents, rich text, autosave, a Wasm backend or a complete web framework.
-The existing stateless `web` starter remains independent and needs neither a
-credential nor a data store. The [campaign](../campaigns/202609261600.md) records
-the exact starter tests, failed trials and source-acceptance boundary.
+This starter serves one shared note. The stateless `web` starter remains
+independent and needs neither a credential nor a data store.

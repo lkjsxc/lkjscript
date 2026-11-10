@@ -30,10 +30,6 @@ mod requirements_queue;
 mod runtime_semantic;
 mod source_batch;
 
-#[cfg(test)]
-pub(crate) use boundary::BoundaryReceipt;
-pub(crate) use boundary::read_transferred_receipt;
-
 use crate::semantic_cli::{self, CallObservation};
 use crate::{error::DevError, evidence, process};
 use lkjscript::platform::contributor::{
@@ -48,9 +44,6 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant};
-
-// Covers the entire invocation, including cleanup, receipt publication and self-admission.
-pub(crate) const COMPLETE_PROCESS_TIMEOUT: Duration = Duration::from_secs(3_600);
 
 const MAXIMUM_CONTAINER_BYTES: u64 = 268_435_456;
 const MAXIMUM_EXECUTABLE_BYTES: u64 = 384 * 1024 * 1024;
@@ -720,8 +713,8 @@ impl Context {
             "fixed arithmetic result disagrees",
         )?;
         require(
-            field(&records, "execution", "differential")? == "equal",
-            "production/reference disagreement",
+            field(&records, "execution", "engine")? == "vm",
+            "ordinary run selected the wrong engine",
         )
     }
 
@@ -1329,7 +1322,7 @@ fn workflow(context: &mut Context) -> Result<(), DevError> {
     )?;
     require(
         field(&mapped, "execution", "value")? == "[7,8,10]"
-            && field(&mapped, "execution", "differential")? == "equal",
+            && field(&mapped, "execution", "engine")? == "vm",
         "offline returned private mapper lost its exact code closure",
     )?;
     context.receipt.observations.insert(
@@ -2370,12 +2363,6 @@ fn verify_observation_files(
 }
 
 #[cfg(test)]
-pub(crate) fn encode_semantic_test_fixture(value: serde_json::Value) -> Result<Vec<u8>, DevError> {
-    let receipt: Receipt = serde_json::from_value(value)?;
-    evidence::encode_json(&receipt)
-}
-
-#[cfg(test)]
 #[allow(clippy::unwrap_used, reason = "bounded hostile path fixtures")]
 mod tests {
     use super::*;
@@ -2460,13 +2447,13 @@ mod tests {
     #[test]
     fn map_project_reader_rejects_equal_results_from_substituted_sources() {
         // Source fields from the genuine copied-product count witness; the value
-        // and differential claim deliberately stay unchanged in every negative case.
+        // and engine selection deliberately stay unchanged in every negative case.
         let package = "pkg_99449ce93ce5e3d40de4f9a95b4889fa";
         let revision = "rev_677307ddcb888f47c8101360f08da824bae091b7b8d809f36a9696f556a507e4";
         let bundle =
             "artifact_bundle_7a053c0d859fc7ef5c30e4f4564a82387d8e9eb2f62c49fce614e2aac29c9227";
         let original = format!(
-            "authority package={package} revision={revision}\nartifact bundle={bundle}\nexecution target=count-keys value=4096 differential=equal\n"
+            "authority package={package} revision={revision}\nartifact bundle={bundle}\nexecution target=count-keys value=4096 engine=vm\n"
         );
         let records = parse_records("map-reader-source", original.as_bytes()).unwrap();
         maps::validate_project_source(&records, package, revision, bundle).unwrap();
@@ -2484,10 +2471,7 @@ mod tests {
             let fault = original.replace(field, replacement);
             let fault = parse_records("map-reader-substitution", fault.as_bytes()).unwrap();
             assert_eq!(super::field(&fault, "execution", "value").unwrap(), "4096");
-            assert_eq!(
-                super::field(&fault, "execution", "differential").unwrap(),
-                "equal"
-            );
+            assert_eq!(super::field(&fault, "execution", "engine").unwrap(), "vm");
             assert!(maps::validate_project_source(&fault, package, revision, bundle).is_err());
         }
         for omitted in ["authority", "artifact"] {

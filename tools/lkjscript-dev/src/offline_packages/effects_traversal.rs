@@ -1,6 +1,6 @@
 //! Ordinary graph requests shared by maintained adoption and the transported producer.
 use super::effects_program::{call, parameters, task};
-use crate::pure_tail_program::Request;
+use crate::compact_request::Request;
 use std::collections::BTreeMap;
 
 pub(super) fn iteration(r: &mut Request) {

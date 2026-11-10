@@ -846,13 +846,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             if root.is_none() {
                 self.tick()?;
             }
-            if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-                return Err(Diagnostic::new(
-                    DiagnosticClass::Resource,
-                    "kernel_callable_flow_type_depth",
-                    "view occurrence exceeds finite structural admission",
-                ));
-            }
+
             if visited.contains(&(package, ty)) {
                 continue;
             }
@@ -1258,13 +1252,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
             depth = depth.max(self.selections[child.0].depth + 1);
             has_parameters |= self.selections[child.0].has_parameters;
         }
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "kernel_callable_flow_witness_depth",
-                "exact prerequisite context exceeds bounded witness depth",
-            ));
-        }
+
         let width = prerequisites.len();
         let shape = Selection::Scheme {
             implementation,
@@ -1690,13 +1678,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
                     self.reserve::<TypeObjectDigest>(object.child_type_count())?;
                     for (index, child) in object.child_types().into_iter().enumerate() {
                         self.tick()?;
-                        if path.len() >= crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-                            return Err(Diagnostic::new(
-                                DiagnosticClass::Resource,
-                                "kernel_callable_flow_type_depth",
-                                "callable argument exceeds structural type depth",
-                            ));
-                        }
+
                         self.reserve::<usize>(path.len() + 1)?;
                         self.reserve::<(TypeObjectDigest, Vec<usize>)>(1)?;
                         let mut child_path = path.clone();
@@ -1722,13 +1704,7 @@ impl<R: CallableClosureRead + ?Sized> Analysis<'_, R> {
         depth: usize,
     ) -> Result<SelectionId, Diagnostic> {
         self.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(Diagnostic::new(
-                DiagnosticClass::Resource,
-                "kernel_callable_flow_witness_depth",
-                "applied witness exceeds bounded prerequisite depth",
-            ));
-        }
+
         match operand {
             ImplementationOperand::Concrete {
                 implementation,

@@ -390,12 +390,12 @@ fn associated_memory_reference_resolves_forwarded_empty_and_inserted_caller_actu
     let mut env = forwarded(&f);
     resolver.admit_application(&env).unwrap();
     assert_eq!(
-        resolver.substitute(f.source_projection, &env, 0),
+        resolver.substitute(f.source_projection, &env),
         Ok(f.caller_projection)
     );
     env.ordinary.clear();
     assert_eq!(
-        resolver.substitute(f.source_projection, &env, 0),
+        resolver.substitute(f.source_projection, &env),
         Ok(f.caller_projection)
     );
     assert_eq!(resolver.admit_application(&env), Err(Failure::Arity));
@@ -432,11 +432,8 @@ fn associated_memory_reference_resolves_forwarded_empty_and_inserted_caller_actu
     let mut resolver = Resolver::new(&f.source);
     let env = selected(&f, f.scheme, f.caller_projection);
     resolver.admit_application(&env).unwrap();
-    assert_eq!(
-        resolver.substitute(f.source_projection, &env, 0),
-        Ok(expected)
-    );
-    let result = resolver.substitute(outer, &env, 0).unwrap();
+    assert_eq!(resolver.substitute(f.source_projection, &env), Ok(expected));
+    let result = resolver.substitute(outer, &env).unwrap();
     assert_eq!(
         resolver.derived[&result].form,
         TypeForm::OwnedSequence { item: expected }
@@ -453,14 +450,14 @@ fn associated_memory_reference_retains_exact_witnesses_and_owned_only_category()
             let env = selected(&f, scheme, f.cell);
             resolver.admit_application(&env).unwrap();
             assert_eq!(
-                resolver.substitute(f.source_projection, &env, 0),
+                resolver.substitute(f.source_projection, &env),
                 Ok(if scheme == f.scheme { f.cell } else { f.buffer })
             );
         }
     }
     assert!(
         resolver
-            .owned_type(f.caller_projection, occurrence(f.caller_scope), 0)
+            .owned_type(f.caller_projection, occurrence(f.caller_scope))
             .unwrap()
     );
     resolver
@@ -468,7 +465,6 @@ fn associated_memory_reference_retains_exact_witnesses_and_owned_only_category()
             f.caller_projection,
             TypeParameterConstraints::Owned,
             occurrence(f.caller_scope),
-            0,
         )
         .unwrap();
     for bounds in [
@@ -477,7 +473,7 @@ fn associated_memory_reference_retains_exact_witnesses_and_owned_only_category()
         TypeParameterConstraints::CaptureSafeTransferable,
     ] {
         assert_eq!(
-            resolver.constraints(f.caller_projection, bounds, occurrence(f.caller_scope), 0),
+            resolver.constraints(f.caller_projection, bounds, occurrence(f.caller_scope)),
             Err(Failure::Category)
         );
     }
@@ -486,7 +482,6 @@ fn associated_memory_reference_retains_exact_witnesses_and_owned_only_category()
             f.cell,
             TypeParameterConstraints::OwnedTransferableShareable,
             occurrence(f.caller_scope),
-            0,
         )
         .unwrap();
 }
@@ -498,7 +493,7 @@ fn associated_memory_reference_rejects_occurrence_and_unused_binding_mutants() {
     let mut wrong = env.clone();
     wrong.source = Context::Lexical(f.caller_scope);
     assert_eq!(
-        Resolver::new(&f.source).substitute(f.source_projection, &wrong, 0),
+        Resolver::new(&f.source).substitute(f.source_projection, &wrong),
         Err(Failure::Arity)
     );
     let mut old = f.source.clone();
@@ -511,7 +506,7 @@ fn associated_memory_reference_rejects_occurrence_and_unused_binding_mutants() {
     };
     r.header.contract_version = 32;
     assert_eq!(
-        Resolver::new(&old).substitute(f.source_projection, &env, 0),
+        Resolver::new(&old).substitute(f.source_projection, &env),
         Err(Failure::Generation)
     );
     let mut absent = f.source.clone();
@@ -544,7 +539,7 @@ fn associated_memory_reference_rejects_occurrence_and_unused_binding_mutants() {
     );
     let env = selected(&f, f.other_scheme, f.scalar);
     assert_eq!(
-        Resolver::new(&f.source).substitute(f.source_projection, &env, 0),
+        Resolver::new(&f.source).substitute(f.source_projection, &env),
         Err(Failure::Category)
     );
     let mut foreign = f.source.clone();
@@ -600,7 +595,7 @@ fn associated_memory_reference_checks_unused_prerequisites_and_capacity_recovery
     };
     type_arguments[0] = f.scalar;
     assert_eq!(
-        Resolver::new(&f.source).substitute(f.source_projection, &broken, 0),
+        Resolver::new(&f.source).substitute(f.source_projection, &broken),
         Err(Failure::Category)
     );
     assert_eq!(
@@ -611,11 +606,11 @@ fn associated_memory_reference_checks_unused_prerequisites_and_capacity_recovery
                 objects: 1
             }
         )
-        .substitute(f.source_projection, &env, 0),
+        .substitute(f.source_projection, &env),
         Err(Failure::Capacity)
     );
     assert_eq!(
-        Resolver::new(&f.source).substitute(f.source_projection, &env, 0),
+        Resolver::new(&f.source).substitute(f.source_projection, &env),
         Ok(f.cell)
     );
 }

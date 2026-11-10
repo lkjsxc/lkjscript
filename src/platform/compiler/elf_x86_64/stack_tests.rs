@@ -85,3 +85,98 @@ fn native_elf_calls_align_stack_and_restore_every_argument_depth() {
         std::thread::sleep(std::time::Duration::from_millis(2));
     }
 }
+
+fn stack_probe(bytes: Vec<u8>, constrained: bool) -> std::process::Output {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("stack-probe");
+    crate::platform::owned_output::publish_executable_create_new(
+        &path,
+        &bytes,
+        None,
+        "native stack probe",
+    )
+    .unwrap();
+    let mut command = if constrained {
+        let mut command = std::process::Command::new("/usr/bin/prlimit");
+        command.args(["--stack=1048576:1048576", "--core=0", "--"]);
+        command.arg(&path);
+        command
+    } else {
+        let mut command = std::process::Command::new("/usr/bin/timeout");
+        command.arg("10").arg(&path);
+        command
+    };
+    command.env_clear().output().unwrap()
+}
+
+#[test]
+fn native_elf_stack_uses_physical_memory_and_respects_external_hard_limits() {
+    let mut a = Asm::new();
+    super::stack::initialize(&mut a);
+    a.group(5, Sp, 16);
+    a.imm(Di, 3);
+    a.mov(Si, Sp);
+    a.imm(Ax, 97);
+    a.syscall();
+    a.imm(Di, 1);
+    a.mov(Si, Sp);
+    a.imm(Dx, 16);
+    a.imm(Ax, 1);
+    a.syscall();
+    a.imm(Di, 0);
+    a.imm(Ax, 60);
+    a.syscall();
+    let bytes = elf(&a.finish().unwrap()).unwrap();
+    for constrained in [false, true] {
+        let output = stack_probe(bytes.clone(), constrained);
+        assert!(
+            output.status.success(),
+            "{:?}: {:?}",
+            output.status,
+            output.stderr
+        );
+        assert_eq!(output.stdout.len(), 16);
+        let soft = u64::from_le_bytes(output.stdout[..8].try_into().unwrap());
+        let hard = u64::from_le_bytes(output.stdout[8..].try_into().unwrap());
+        if constrained {
+            assert_eq!((soft, hard), (1_048_576, 1_048_576));
+        } else {
+            assert!(
+                soft >= (crate::platform::stack::reservation_bytes().unwrap() as u64).min(hard)
+            );
+        }
+    }
+}
+
+#[test]
+fn native_elf_non_tail_stack_growth_crosses_inherited_eight_mib() {
+    for depth in [2048_u64, 8192, 32768] {
+        let mut a = Asm::new();
+        let recursive = a.label();
+        let unwind = a.label();
+        super::stack::initialize(&mut a);
+        a.imm(Cx, depth);
+        a.call(recursive);
+        a.imm(Di, 0);
+        a.imm(Ax, 60);
+        a.syscall();
+        a.bind(recursive);
+        a.group(5, Sp, 512);
+        a.store(Sp, 0, Cx);
+        a.group(7, Cx, 0);
+        a.when(E, unwind);
+        a.group(5, Cx, 1);
+        a.call(recursive);
+        a.bind(unwind);
+        a.group(0, Sp, 512);
+        a.ret();
+        let output = stack_probe(elf(&a.finish().unwrap()).unwrap(), false);
+        assert!(
+            output.status.success(),
+            "depth={depth}: {:?} {:?}",
+            output.status,
+            output.stderr
+        );
+        eprintln!("native non-tail stack depth={depth} frame_payload_bytes=512");
+    }
+}

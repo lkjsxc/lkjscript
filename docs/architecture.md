@@ -87,152 +87,16 @@ dependency closure, cache selection/recovery, compilation, linking, artifact val
 preparation, and typed observations. `check`, `build`, and `run` do not duplicate compiler or
 linker decisions.
 
-## Derived release distribution path
+## Local builds and retained installation
 
-The repository has one tag-driven path for the sole current release target,
-`x86_64-unknown-linux-musl`:
+Cargo builds the development executable. The [verification command](spec/verification.md)
+owns routine, focused and explicitly selected slow checks. The maintained compiler
+bootstrap route is recorded in [status](status.md).
 
-```text
-locked source + typed target policy
-                  │
-                  ├─ host application verifier
-                  └─ exact static-musl product candidate
-                              │
-             fresh source full + target admission
-                              │
-              deterministic release handoff
-                 + byte-bound verifier handoff
-                              │
-        read-only no-checkout package/static verification
-             + five typed transferred behavioral owners
-                              │
-       no-checkout publication job with contents:write only
-                              │
-               immutable GitHub Release
-                              │
- independent exact/latest admission and small command lifecycles
-           + one within-pair five-owner behavioral suite
-```
-
-`tools/lkjscript-dev` owns one typed target policy, exact target build and admission, release
-preparation, strict archive/static verification, and application-verifier handoff. Target admission
-binds source and candidate identities to direct ELF inspection, two pinned networkless userland
-command lifecycles, transferable offline package composition and pure-tail execution, and the distributed HTTP, stateful HTTP,
-outbound HTTP, and standalone service oracles. A host
-build and the source-wide full receipt remain distinct from this exact-candidate evidence.
-
-The hosted workflow supplies exact runner context and two bounded transient handoffs. The release
-handoff owns the archive, checksum, and private release receipt. The verifier handoff binds the exact
-host `lkjscript-dev` bytes and six roles in private handoff version 4: release-verify, distributed-http, outbound-http,
-offline-packages, pure-tail, and stateful-http. Read-only jobs verify those
-bytes before restoring executable mode after artifact transport. The pre-publication job checks out
-no source, safely extracts and re-inspects the packaged candidate, then runs all five transferred
-behavioral owners through `release transferred run`. The publication job receives only the release handoff and is the only job with
-release-write authority. Post-publication verification downloads exact and latest assets
-anonymously. The pair owner independently performs strict admission and the small command lifecycle
-for each route, proves required byte/mode equality, then binds one freshly executed five-owner
-suite within that invocation. Latest records a bound observation of the exact route's full suite.
-The release owner has one finite behavioral inventory shared by target admission, verifier handoff,
-and transferred execution; each child owner validates its current complete receipt. The aggregate
-owns identities, orchestration, failure retention, and cleanup; application and language semantics
-stay in their original owners.
-
-The public release, transient artifacts, archive, manifest, checksum, receipts, asset digest, and
-attestation are derived distribution evidence. None can select or edit typed meaning, executable
-behavior, compilation semantics, or deployment data. The root package version and annotated tag
-bind the human-facing product snapshot while internal compatibility identities remain independently
-owned.
-Published content recovers through a new patch rather than mutation.
-
-Immutable `v0.1.28` closes this path at release-source commit
-`221beca0df7b31dbf10c9b22fe35c6db3af1b903`. A transferred job without a checkout runs distributed
-HTTP, outbound HTTP, offline packages, pure-tail execution, and stateful HTTP before the isolated
-publication job. Exact-version and latest downloads independently repeat all five owners after
-checksums, GitHub asset digests, release/asset attestations, strict package extraction, and static
-inspection. Their bytes are compared only after both complete behavioral runs.
-
-The public executable retains runtime configuration through graph-owned constrained generic
-factories, private helpers, exact offline closures, and standard function-constant/compose/fold/map.
-The fixed public witnesses prove independent retained callbacks, ordered 8,192-item mapping under
-unchanged defaults, and transactional wire/data equality with trap/cancellation recovery. Target
-admission additionally binds the exact candidate to the maintained service/worker oracle and both
-pinned userlands. Internal evaluator-thread and cancellation probes remain source/verifier-bound;
-they do not claim additional downloaded-target portability. Current semantic and maintained-consumer
-cutovers preceded this distribution repair. Exact source, candidate, receipt, artifact, and publication
-identities are retained in the
-[public milestone evidence](evidence/202609092050-capture-safe-public-milestone.json).
-
-Immutable `v0.1.8` remains an unclosed historical recovery point: its application checks passed,
-but its workflow rejected legitimately distinct fresh-project artifact identities. Recovery
-advanced additively through v0.1.9. Immutable `v0.1.16` and every other predecessor tag, release,
-asset, and attestation remain unchanged. Deployment 4 owns the strict interactive limits and
-topology. Project creation 4,
-HTTP-client-adapter 1, data-store 1, logical-backup 1, queue-data
-1, and all other unchanged identities remain independently owned. Distribution advanced without
-advancing semantic `HEAD`, deployment authority, or operational data.
-
-Bounded context remains a read projection of one exact repository view rather than a query store:
-
-```text
-exact local root + direction + depth
-                 │
-                 ▼
- pinned RepositoryView + canonical incoming/outgoing witness ranges
-                 │ validate owners, endpoints, edges, revision, admissions
-                 ▼
- complete bounded owner-distance map + unique canonical edge set
-                 │ owners by (depth, key), then relations by edge key
-                 ▼
- stateless pages ── continuation binds view, selector, section, and exclusive key
-```
-
-Package and foreign endpoints stop expansion. Every resumed page reconstructs the bounded logical
-result from immutable authority; no query index, frontier file, session, cache write, or mutable
-cursor exists.
-
-Function definition detail is a separate, narrower accepted-meaning projection:
-
-```text
-exact local pure/task function + accepted RepositoryView
-                         │
-                         ▼
- aggregate bounded point reader + structural ownership validation
-                         │ complete contract/body/reference/fact closure
-                         ▼
- canonical definition records + complete digest/counts
-                         │ header, contract, preorder body, references, facts
-                         ▼
- stateless pages ── icont_ binds view, function, contract, digest, section, key
-```
-
-The aggregate point reader shares one physical admission budget and reveals typed records and bound
-facts, never storage representation. Structural children are followed only within the selected
-function; named owners and types remain exact reference boundaries. Every page reconstructs and
-validates the complete closure. A contributor oracle independently reconstructs full typed
-authority and compares owner/fact/relation inventories without production traversal, ordering,
-rendering, paging, or token code. No source projection, body index, mutable session, application
-dumper, or `change` reader exists.
-
-Function extraction consumes that projection only as derived observation; accepted meaning remains
-the graph candidate prepared from typed intent:
-
-```text
-exact base + local function + proper expression root + private name
-                              │
-               independent bounded closure analysis
-                              │ captures / effect / requirements / affine provenance
-                              ▼
-stable moved owners ── reparent under generated helper
-original parent slot ── replace with generated direct call and local reads
-                              │
-                reviewed plan + exact reprepare
-                              ▼
-               one GraphRepository visibility change
-```
-
-Movable owners retain identity. Only free-local reads are rebound to generated parameters; the
-selected parent relation is replaced at the same evaluation position. Plans and oracle witnesses are
-derived and cannot select or advance semantic authority.
+`src/release_container` retains strict container and executable-linkage admission;
+`platform/installation` owns local runtime installation and selection. Their current
+interface is described in [product surface](spec/product-surface.md). Distribution
+work follows [the current release policy](release.md).
 
 ## Layer ownership
 
@@ -251,10 +115,10 @@ derived and cannot select or advance semantic authority.
 | Outbound HTTP boundary | `platform/http_client.rs`, normalized HTTP-client binding | exact endpoint parsing, DNS/address classes, TLS trust, HTTP/1.1 GET, independent limits, cancellation, cleanup, and structural capability codec | graph-selected destination/trust, redirects, retries, proxy, outbound WebSocket, or application response policy |
 | Operational data | `platform/data.rs`, normalized data/queue adapters, `platform/queue.rs`, `platform/queue/data.rs` | canonical typed data values, immutable store revisions, exact-base transactions, scans, logical backup/restore, private queue attempt tuples and one durable queue backend | program meaning, public raw lease authority, object bytes, deployment policy, or remote database service |
 | Standalone deployment | `platform/deployment.rs`, normalized deployment/adapters | one strict descriptor/schema inventory, starter HTTP defaults, artifact bundle loading, target/grant/preflight binding, adapter ownership, HTTP/interactive/worker lifecycle | project discovery, accepted publication, or application policy |
-| Native guide implementation and retained policy fixture | `tools/native-guides/project`, `tools/native-policy/project`, `platform/native_tool.rs` | still-native capability-reference rendering; independent policy predecessor used only by tests; shared strict grant-free embedding | registry/Git/filesystem authority, production policy classification, semantic publication, capability grants, or compiler self-hosting |
-| Contributor verification | `tools/lkjscript-dev` | Rust policy classification and bounded filesystem observation, gate DAG, fingerprints, classifications, logs, receipts, product/service evidence | product authority |
+| Native guide implementation and retained policy fixture | `tools/native-guides/project`, `tools/native-policy/project`, `platform/native_tool.rs` | native capability-reference rendering; byte-classification fixture for public CLI tests; shared strict grant-free embedding | registry/Git/filesystem authority, production policy classification, semantic publication, capability grants, or compiler self-hosting |
+| Contributor verification | `tools/check.sh`, `tools/lkjscript-dev` | routine and focused tests, explicit slow controls, standalone semantic probes | product authority |
 | Public documentation origin | `tools/lkjscript-site` | Rust-rendered compile-time allowlisted documents, bounded text search, read-only HTTP, source-revision metadata | compiler execution, workspace file access, project mutation, TLS termination, DNS or multi-tenant isolation |
-| Release distribution | `tools/lkjscript-dev` release tooling, `.github/workflows/release.yml` | deterministic package validation, transient handoff, immutable publication, anonymous transport verification | program meaning, compiler/runtime authority, or build provenance |
+| Local runtime installation | `src/release_container`, `platform/installation` | container validation, local installation and runtime selection | program meaning or compiler authority |
 
 The old `SemanticWorkspace`, predecessor repository writer, drafts, history/diff/merge workflows,
 project backup/restore, review projection, query indexes, predecessor artifact reader/runtime, and predecessor value
@@ -663,9 +527,9 @@ Core intrinsics combine checked children or return a checked projection. Arbitra
 results cross admission again. Raw runtime indexes carry a neutral, unpersisted preparation origin;
 that origin alone cannot certify a value. Failure destroys unadmitted owned data iteratively and
 releases invocation-owned resources; an adapter effect that already occurred remains visible.
-Pure commands and graph tests execute once in bytecode and once in the independently implemented
-reference interpreter with shared explicit limits; disagreement is failure. Live effects are not
-duplicated for differential acceptance.
+Ordinary commands execute once on the VM. Graph-owned checks compare VM results with
+the independent reference interpreter. Compiler differential tests create fresh invocations
+while sharing immutable probe preparation.
 
 Build output uses a sibling stage, file synchronization, create-new hard-link visibility, parent
 directory synchronization, and cleanup of only its owned stage. Existing files, directories,
@@ -716,40 +580,15 @@ normal completion, renewal-path execution, restart, failed readiness, backup/res
 It snapshots canonical graph authority before and after the live workflow. No deployment path opens
 or advances accepted semantic `HEAD`.
 
-The independent `distributed_http_application` product gate has no database or container
-dependency. It copies one candidate executable to a fresh root outside the checkout, creates and
-changes an HTTP project, checks and deterministically builds it, starts and restarts the service,
-sends raw loopback HTTP, exercises startup failures, and compares exact accepted-authority
-inventories. Its stable receipt binds the verifier and candidate bytes. An explicit absolute
-create-new evidence root selects transferred mode, in which the verifier resolves no compile-time
-checkout path. Product/full verification and the target-admission, pre-publication, and
-anonymous exact/latest paths all use this same owner.
+Standalone `lkjscript-dev distributed-http` copies an executable into an isolated root,
+authors an HTTP project through its public CLI, then checks build, startup, restart,
+loopback requests, failure cleanup and unchanged semantic authority.
 
-The distinct `outbound_http_application` owner copies the candidate into a fresh root, creates the
-closed relay-information recipe, exercises discovery/status/query/check/build/serve, and compares
-clean and exact-current artifacts. An independent raw HTTP/1.1/TLS oracle uses deterministic
-certificate fixtures and records exact wire requests while sharing no production endpoint parser,
-HTTP parser, response generator, or application assertions. It proves public/loopback address
-admission, mixed-answer rejection, TLS chain/hostname/validity failures, no redirect/retry,
-forbidden headers, response limits, timeout, inbound cancellation, malformed protocol, failed
-startup, restart, active shutdown, unchanged semantic authority, and complete cleanup without a
-live relay. Product/service/full, target admission, and future transferred release paths use this
-same non-cacheable owner.
-
-The separate `stateful_http_application` owner has the same contributor/transferred context seam and
-copies the candidate to a fresh root. It creates `minimal`, uses only executable discovery and
-public package export/staging to construct one bounded dependency/topology/BBS request and `data`
-deployment, plans and applies through the public CLI, compares clean and
-incremental artifacts, initializes an isolated store, then drives real BBS HTTP behavior through one
-`lkjscript serve` process. Each post has one primary fact and one `(created-at, id)` index fact;
-listing resolves both in one snapshot and create/update/delete maintain them in one transaction. It
-proves header and malformed-input behavior, stale expectations and rollback, schema divergence,
-restart persistence, backup/absent-root restore, corrupt/absent-root failed startup without
-readiness, and unchanged semantic authority. Its current receipt binds verifier/source/copied
-candidate identities, context, optional checkout, data authority, and complete cleanup. Service/full
-verification and target-admission, pre-publication, and anonymous exact/latest paths share this
-owner. The `lkjournal` service oracle remains a separate maintained workload, and distributed HTTP
-remains the faster stateless oracle.
+`lkjscript-dev outbound-http` uses independent local HTTP/TLS fixtures to check endpoint
+admission, certificate failures, protocol behavior, cancellation and cleanup.
+`lkjscript-dev stateful-http` exercises public BBS authoring and transactional data
+behavior, including stale expectations, restart, backup/restore and failed startup.
+These remain individually invoked development probes.
 
 The data authority itself is an independent deployment branch:
 
@@ -783,17 +622,8 @@ is evidence rather than program authority.
 Contributor-only `lkjscript-dev data-oracle` is outside that product dependency direction. It owns
 the PostgreSQL client and exact isolated PostgreSQL 16.15 container, constructs and exports neutral
 facts, invokes the first-party store only through its independent import side, binds copied BBS and
-service receipts, records resource samples, and removes its temporary authorities. Product,
-service, static-target, transferred, and release-candidate paths neither link that client nor start
-a database server.
-
-The release command lifecycle also copies the exact candidate into a fresh private root, creates a
-command project through that binary, and isolates a complete `lkjournal` authority copy. Candidate
-queries resolve `module service`, traverse incoming, outgoing, and both-direction contexts at
-multiple depths, resume multiple pages while changing item and byte limits, and compare complete
-owner-distance maps and relation sets with independently orchestrated one-hop public reads. Full
-in-process reconstruction plus the canonical relation extractor remains the implementation-disjoint
-semantic oracle. Complete inventories before and after success and selected failures must agree.
+service observations, records resource samples, and removes its temporary authorities.
+Other development probes run without this PostgreSQL oracle.
 
 ## Security and replaceability
 

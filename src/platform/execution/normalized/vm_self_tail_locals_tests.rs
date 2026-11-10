@@ -275,7 +275,7 @@ pub(super) fn machine<'a>(
         regions,
         region_scopes: Vec::new(),
         shared_budget: None,
-        structured_depth: 0,
+
         ancestor_depth: 0,
         memory_domain: ValueOrigin::fresh().ok_or_else(|| failure("identity exhausted"))?,
         root_allowance: None,

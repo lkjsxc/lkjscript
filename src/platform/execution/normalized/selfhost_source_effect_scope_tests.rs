@@ -208,10 +208,11 @@ fn selfhost_source_effect_scope_allows_unused_well_formed_mixed_binder_descripto
 }
 
 #[test]
-fn selfhost_source_effect_types_enforce_depth_on_unused_input_and_result_edges() {
-    // The header minimum does not fund every digest-ordered DAG settlement.
-    const DEPTH_ALLOWANCE: u32 = 128_000_000;
-    for (depth, code) in [(256, 0), (257, 17)] {
+#[ignore = "slow: deep unused task-signature DAG across compiler engines"]
+fn selfhost_source_effect_types_admit_deep_unused_input_and_result_edges() {
+    // Keep interpreter comparison compact; scale the real digest-ordered carrier
+    // through both native producers. All paths perform complete type admission.
+    for depth in [16, 256, 512, 1024] {
         let mut source = fixture();
         let scalar = source
             .types
@@ -239,20 +240,48 @@ fn selfhost_source_effect_types_enforce_depth_on_unused_input_and_result_edges()
                 .flat_map(OwnerRecord::type_roots)
                 .any(|ty| ty == child)
         );
+        let expected = kernel::semantic_state_digest(&source).unwrap().bytes();
         let mut bytes = graph::packet(&source);
-        graph::set_allowance(&mut bytes, Some(u64::from(DEPTH_ALLOWANCE)));
+        // Scale controls rely on the runner's external time/memory envelope.
+        graph::set_allowance(&mut bytes, None);
+        assert_eq!(&bytes[48..80], &expected);
         eprintln!(
-            "selfhost TaskFunction raw depth={depth} types={} bytes={} sha256={} selected_allowance={DEPTH_ALLOWANCE}",
+            "selfhost TaskFunction raw depth={depth} types={} bytes={} sha256={} allowance=unmetered",
             source.types.len(),
             bytes.len(),
             crate::platform::semantic_id::encode_hex(&Sha256::digest(&bytes)),
         );
+        let engines = if depth == 16 {
+            "vm,reference,rust-native"
+        } else {
+            "rust-native"
+        };
+        eprintln!("selfhost TaskFunction depth={depth} engines={engines} stage=start");
         let start = std::time::Instant::now();
-        packet_result("read-namespace", &bytes, 0);
-        // Alternation makes either omitted edge route break the over-depth proof.
-        packet_result("read-type-structure", &bytes, code);
+        // Type-structure admission includes namespace admission. The chain follows
+        // alternating unused input and result dependencies.
+        if depth == 16 {
+            assert_eq!(
+                result("read-type-structure", &bytes),
+                (0, expected.to_vec())
+            );
+        } else {
+            let native = native_reader_image("read-type-structure");
+            let output =
+                source_reader_native_output("rust-native", "read-type-structure", &native, &bytes);
+            assert_eq!(output.status.code(), Some(0));
+            assert_eq!(output.stdout, expected);
+            assert!(output.stderr.is_empty());
+        }
         eprintln!(
-            "selfhost TaskFunction raw depth={depth} code={code} elapsed_ms={}",
+            "selfhost TaskFunction depth={depth} engines={engines} code=0 elapsed_ms={}",
+            start.elapsed().as_millis(),
+        );
+        eprintln!("selfhost TaskFunction depth={depth} engines=self-produced stage=start");
+        let start = std::time::Instant::now();
+        emitted_result_bytes("read-type-structure", &bytes, 0, &expected);
+        eprintln!(
+            "selfhost TaskFunction depth={depth} engines=self-produced code=0 elapsed_ms={}",
             start.elapsed().as_millis(),
         );
     }

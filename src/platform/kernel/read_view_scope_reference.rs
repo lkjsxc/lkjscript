@@ -15,7 +15,7 @@ impl Resolver<'_> {
         &mut self,
         binder: &ReadScopeBinder,
     ) -> Result<Vec<ReadScopeParameter>> {
-        self.step(0)?;
+        self.step()?;
         let parameters = match binder {
             ReadScopeBinder::Declaration(declaration) => {
                 let oracle = Oracle(self.source, Some(*declaration));
@@ -106,7 +106,7 @@ impl Resolver<'_> {
         let mut ids = BTreeSet::new();
         let mut names = BTreeSet::new();
         for parameter in &parameters {
-            self.step(0)?;
+            self.step()?;
             if !ids.insert(parameter.id) || !names.insert(parameter.name.as_str()) {
                 return Err(Failure::Inventory);
             }
@@ -124,7 +124,7 @@ impl Resolver<'_> {
         binder: &ReadScopeBinder,
         occurrence: Occurrence,
     ) -> Result<()> {
-        self.step(0)?;
+        self.step()?;
         self.current_view(occurrence)?;
         match argument {
             ReadScopeArgument::Parameter(reference) => {
@@ -176,7 +176,7 @@ impl Resolver<'_> {
                 }
                 let scopes = closure::Scopes::build(self)?;
                 scopes.loan_generation(self, *binding)?;
-                if scopes.binding(self, *binding, 0)? != Some(*callable) {
+                if scopes.binding(self, *binding)? != Some(*callable) {
                     return Err(Failure::Authority);
                 }
             }
@@ -191,7 +191,7 @@ impl Resolver<'_> {
         source_binder: &ReadScopeBinder,
         caller_binder: &ReadScopeBinder,
     ) -> Result<ReadScopeArgument> {
-        self.step(0)?;
+        self.step()?;
         let source = match source_binder {
             ReadScopeBinder::Declaration(d)
             | ReadScopeBinder::ContractMethod { contract: d, .. }
@@ -247,7 +247,7 @@ impl ScopeRelations {
         child: ReadScopeArgument,
         parent: ReadScopeArgument,
     ) -> Result<()> {
-        resolver.step(0)?;
+        resolver.step()?;
         resolver.reserve_entries(1)?;
         self.edges.insert((child, parent));
         Ok(())
@@ -258,7 +258,7 @@ impl ScopeRelations {
         child: &ReadScopeArgument,
         parent: &ReadScopeArgument,
     ) -> Result<bool> {
-        resolver.step(0)?;
+        resolver.step()?;
         if child == parent {
             return Ok(true);
         }
@@ -266,12 +266,12 @@ impl ScopeRelations {
         let mut pending = vec![*child];
         let mut seen = BTreeSet::new();
         while let Some(current) = pending.pop() {
-            resolver.step(0)?;
+            resolver.step()?;
             if !seen.contains(&current) {
                 resolver.reserve_entries(1)?;
                 seen.insert(current);
                 for (from, to) in &self.edges {
-                    resolver.step(0)?;
+                    resolver.step()?;
                     if from == &current {
                         if to == parent {
                             return Ok(true);
@@ -314,7 +314,7 @@ pub(in super::super) struct ReadProvenance {
 }
 impl ReadProvenance {
     pub(super) fn extend(&self, resolver: &mut Resolver<'_>, step: ReadPathStep) -> Result<Self> {
-        resolver.step(0)?;
+        resolver.step()?;
         resolver.reserve_entries(self.path.len().checked_add(2).ok_or(Failure::Capacity)?)?;
         let mut path = self.path.clone();
         path.push(step);

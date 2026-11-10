@@ -122,54 +122,6 @@ fn runtime_dag_admission_reserves_before_memo_growth_and_rejects_changed_edges()
 }
 
 #[test]
-fn runtime_dag_depth_checks_the_full_shared_suffix_before_memo_skip() {
-    let maximum = crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH;
-    let program = prepared_duplicate_dag(maximum);
-    let root = program.implementation_applications.last().unwrap();
-    let control = ExecutionControl::uncancelled();
-    let mut visited = BTreeSet::new();
-    validate_runtime_implementation(
-        &program,
-        root,
-        &control,
-        0,
-        &mut 0,
-        &mut visited,
-        &mut |_| Ok(()),
-    )
-    .unwrap();
-    assert_eq!(visited.len(), maximum + 1);
-    // The suffix was visited on a shorter path. A new incoming edge still
-    // puts its complete shared suffix one past the depth capacity.
-    assert!(
-        validate_runtime_implementation(
-            &program,
-            root,
-            &control,
-            1,
-            &mut 0,
-            &mut visited,
-            &mut |_| panic!("depth refusal precedes memo allocation"),
-        )
-        .is_err()
-    );
-    let mut forged = root.clone();
-    Arc::make_mut(&mut forged).depth = 0;
-    assert!(
-        validate_runtime_implementation(
-            &program,
-            &forged,
-            &control,
-            0,
-            &mut 0,
-            &mut visited,
-            &mut |_| Ok(()),
-        )
-        .is_err()
-    );
-}
-
-#[test]
 fn runtime_witness_handles_reject_equal_copies_and_foreign_preparations_before_memo_skip() {
     let program = prepared_duplicate_dag(24);
     let other = prepared_duplicate_dag(24);

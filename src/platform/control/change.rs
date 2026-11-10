@@ -5805,15 +5805,6 @@ impl Decoder {
         text: &str,
         depth: usize,
     ) -> Result<AuthoredImplementationOperand, Diagnostic> {
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            let mut diagnostic = Diagnostic::new(
-                DiagnosticClass::Resource,
-                "change_owned_operand_depth",
-                "implementation application exceeds the witness-depth admission",
-            );
-            diagnostic.location = Some(record.location.clone());
-            return Err(diagnostic);
-        }
         self.expanded_implementation_work
             .observe(BudgetCounter::exact(1));
         let parts = text.split('@').collect::<Vec<_>>();

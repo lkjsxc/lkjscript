@@ -4,7 +4,9 @@
 use super::*;
 use crate::platform::builtin_standard::BuiltinStandard;
 use crate::platform::control::decode_compact_change_in_repository;
-use crate::platform::execution::normalized::{NormalizedRunObservation, run_pure_command};
+use crate::platform::execution::normalized::{
+    NormalizedRunObservation, run_pure_command_differential as run_pure_command,
+};
 use crate::platform::publication::ExportedPackageTransport;
 
 const CONSUMER: &str =

@@ -1,4 +1,8 @@
 //! Strict bounded JSON admission shared by public component boundaries.
+//!
+//! Rust embedders parse, use and destroy recursive JSON values inside
+//! [`crate::platform::stack::run`]. Return flat results such as encoded bytes from the
+//! closure so value destruction also uses the reserved semantic stack.
 
 use super::binary64::{Binary64, is_decimal};
 use super::diagnostic::{Diagnostic, DiagnosticClass};
@@ -7,12 +11,6 @@ use serde_json::{Map, Number};
 use std::fmt;
 
 pub const JSON_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
-
-// The pinned serde_json reader admits 127 nested arrays/objects before its
-// independent stack guard rejects. Typed output must fit the same reader even
-// when JsonLimits.maximum_depth allows a deeper value. Keep the reader enabled;
-// fixed 127/128-container tests detect a dependency change to this boundary.
-pub(crate) const MAXIMUM_JSON_CONTAINER_NESTING: usize = 127;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JsonIntegerPolicy {
@@ -29,7 +27,6 @@ pub enum JsonNumericPolicy {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct JsonLimits {
     pub maximum_bytes: usize,
-    pub maximum_depth: usize,
     pub maximum_items: usize,
     pub maximum_string_bytes: usize,
 }
@@ -38,11 +35,19 @@ impl Default for JsonLimits {
     fn default() -> Self {
         Self {
             maximum_bytes: 1_048_576,
-            maximum_depth: 128,
             maximum_items: 100_000,
             maximum_string_bytes: 1_048_576,
         }
     }
+}
+
+/// Deserialize a known shape on the caller's semantic stack. The type supplies its checks.
+pub(crate) fn deserialize<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> serde_json::Result<T> {
+    let mut decoder = serde_json::Deserializer::from_slice(bytes);
+    decoder.disable_recursion_limit();
+    let value = T::deserialize(&mut decoder)?;
+    decoder.end()?;
+    Ok(value)
 }
 
 pub fn decode_strict(bytes: &[u8], limits: JsonLimits) -> Result<serde_json::Value, Diagnostic> {
@@ -88,18 +93,16 @@ pub fn decode_strict_with_numeric_policy(
         JsonNumericPolicy::Integers(_) => (None, None),
     };
     let mut deserializer = serde_json::Deserializer::from_slice(masked.as_deref().unwrap_or(bytes));
+    deserializer.disable_recursion_limit();
     let mut state = DecodeState {
         limits,
         numeric_policy,
         numbers,
         items: 0,
     };
-    let value = StrictSeed {
-        state: &mut state,
-        depth: 0,
-    }
-    .deserialize(&mut deserializer)
-    .map_err(|error| json_error("json_decode", format!("strict JSON rejected: {error}")))?;
+    let value = StrictSeed { state: &mut state }
+        .deserialize(&mut deserializer)
+        .map_err(|error| json_error("json_decode", format!("strict JSON rejected: {error}")))?;
     deserializer.end().map_err(|error| {
         json_error("json_trailing", format!("JSON has trailing input: {error}"))
     })?;
@@ -192,7 +195,6 @@ struct DecodeState {
 
 struct StrictSeed<'a> {
     state: &'a mut DecodeState,
-    depth: usize,
 }
 
 impl<'de> DeserializeSeed<'de> for StrictSeed<'_> {
@@ -202,19 +204,12 @@ impl<'de> DeserializeSeed<'de> for StrictSeed<'_> {
     where
         D: serde::Deserializer<'de>,
     {
-        if self.depth > self.state.limits.maximum_depth {
-            return Err(D::Error::custom("JSON nesting depth limit exceeded"));
-        }
-        deserializer.deserialize_any(StrictVisitor {
-            state: self.state,
-            depth: self.depth,
-        })
+        deserializer.deserialize_any(StrictVisitor { state: self.state })
     }
 }
 
 struct StrictVisitor<'a> {
     state: &'a mut DecodeState,
-    depth: usize,
 }
 
 impl<'de> Visitor<'de> for StrictVisitor<'_> {
@@ -297,10 +292,7 @@ impl<'de> Visitor<'de> for StrictVisitor<'_> {
         A: SeqAccess<'de>,
     {
         let mut output = Vec::new();
-        while let Some(value) = sequence.next_element_seed(StrictSeed {
-            state: self.state,
-            depth: self.depth + 1,
-        })? {
+        while let Some(value) = sequence.next_element_seed(StrictSeed { state: self.state })? {
             self.state.items = self
                 .state
                 .items
@@ -328,10 +320,7 @@ impl<'de> Visitor<'de> for StrictVisitor<'_> {
                     "duplicate JSON object field '{key}'"
                 )));
             }
-            let value = input.next_value_seed(StrictSeed {
-                state: self.state,
-                depth: self.depth + 1,
-            })?;
+            let value = input.next_value_seed(StrictSeed { state: self.state })?;
             self.state.items = self
                 .state
                 .items
@@ -370,7 +359,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn duplicate_float_range_depth_and_trailing_reject() {
+    fn duplicate_float_range_and_trailing_reject() {
         for input in [
             br#"{"a":1,"a":2}"#.as_slice(),
             br#"1.5"#.as_slice(),
@@ -379,15 +368,6 @@ mod tests {
         ] {
             assert!(decode_strict(input, JsonLimits::default()).is_err());
         }
-        let error = decode_strict(
-            br#"[[[0]]]"#,
-            JsonLimits {
-                maximum_depth: 1,
-                ..JsonLimits::default()
-            },
-        )
-        .expect_err("depth rejects");
-        assert_eq!(error.code, "json_decode");
     }
 
     #[test]
@@ -526,13 +506,6 @@ mod tests {
                 },
             ),
             (
-                b"[[1.5]]".as_slice(),
-                JsonLimits {
-                    maximum_depth: 1,
-                    ..JsonLimits::default()
-                },
-            ),
-            (
                 b"[1.5,2.5]".as_slice(),
                 JsonLimits {
                     maximum_items: 1,
@@ -576,5 +549,44 @@ mod tests {
             )
             .is_err()
         );
+    }
+    #[test]
+    fn nested_json_lifecycle_has_no_project_depth_ceiling() {
+        crate::platform::stack::run("json-lifecycle", || {
+            for depth in [128, 512, 2048, 8192, 16384] {
+                let started = std::time::Instant::now();
+                let bytes = format!("{}7{}", "[".repeat(depth), "]".repeat(depth)).into_bytes();
+                for application in [false, true] {
+                    let value = if application {
+                        decode_application(&bytes, JsonLimits::default())
+                    } else {
+                        decode_strict(&bytes, JsonLimits::default())
+                    }
+                    .unwrap();
+                    let copy = value.clone();
+                    assert_eq!(value, copy);
+                    let typed: serde_json::Value = deserialize(&bytes).unwrap();
+                    assert_eq!(value, typed);
+                    drop(typed);
+                    assert_eq!(serde_json::to_vec(&copy).unwrap(), bytes);
+                    drop(copy);
+                    drop(value);
+                }
+                let mut malformed = bytes.clone();
+                malformed.pop();
+                assert!(deserialize::<serde_json::Value>(&malformed).is_err());
+                assert!(decode_application(&malformed, JsonLimits::default()).is_err());
+                let mut failed_sibling = Vec::from(b"[".as_slice());
+                failed_sibling.extend_from_slice(&bytes);
+                failed_sibling.extend_from_slice(br#",{"same":1,"same":2}]"#);
+                assert!(decode_strict(&failed_sibling, JsonLimits::default()).is_err());
+                eprintln!(
+                    "json lifecycle depth={depth} bytes={} elapsed_ms={}",
+                    bytes.len(),
+                    started.elapsed().as_millis()
+                );
+            }
+        })
+        .unwrap();
     }
 }

@@ -84,7 +84,6 @@ pub(crate) fn direct_at(
     occurrence: OwnedTypeOccurrence,
     associated: &OwnedAssociatedAdmission,
 ) -> Result<bool, Diagnostic> {
-    super::owned_product::validate_owning_type_depth(read, ty)?;
     associated.validate_occurrence_at(read, &[ty], occurrence)?;
     let object = read
         .type_object(ty)?
@@ -187,7 +186,6 @@ pub(crate) fn contains_at(
     occurrence: OwnedTypeOccurrence,
     associated: &OwnedAssociatedAdmission,
 ) -> Result<bool, Diagnostic> {
-    super::owned_product::validate_owning_type_depth(read, ty)?;
     associated.validate_occurrence_at(read, &[ty], occurrence)?;
     contains_inner(read, ty, Some(occurrence), associated)
 }
@@ -1878,9 +1876,7 @@ impl<R: ExpressionRead + ?Sized> Check<'_, R> {
         // Each subtree owns its result proof; a discarded earlier descriptor
         // cannot classify a later ordinary or Owned result as a view.
         self.produced_view.set(None);
-        if depth > contract::MAXIMUM_EXPRESSION_DEPTH {
-            return Err(reject("memory expression depth exceeded"));
-        }
+
         self.validation_work()?;
         let Some(OwnerRecord::Expression(e)) = self.owner(OwnerKey::Expression(id))? else {
             return Err(reject("missing memory expression"));
@@ -3581,9 +3577,6 @@ pub(crate) fn validate_owner_at(
     let generation = record.header().contract_version;
     let occurrence = owner_occurrence(read, key, record)?;
     if let Some(occurrence) = occurrence {
-        for ty in &roots {
-            super::owned_product::validate_owning_type_depth(read, *ty)?;
-        }
         if matches!(record, OwnerRecord::Declaration(declaration) if matches!(declaration.payload, DeclarationPayload::OwnedContract(_) | DeclarationPayload::OwnedImplementation(_)))
         {
             let OwnerKey::Declaration(declaration) = key else {

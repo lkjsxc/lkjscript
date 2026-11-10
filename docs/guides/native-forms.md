@@ -1,15 +1,8 @@
 # Bounded native form encoding and strict input
 
-This guide requires **v0.1.46 or a compatible successor**. The official immutable
-v0.1.45 binary does not recognize `core.bytes.from-list` or
-`core.bytes.to-text-result` and correctly rejects the new closure. Application
-use requires a compatible executable, not Cargo or a compiler checkout at runtime.
-The [original campaign](../campaigns/202609250926.md) owns the decoder observations.
-The [encoding continuation](../campaigns/202609261045.md) proves the new library on
-unchanged public v0.1.47, from fresh authorship through detached execution.
-The [durable editor](native-editor.md) consumes it for authenticated, conditional
-saves. Public v0.1.46 now supplies the required operations; the
-[release record](../release.md) retains its distinct distribution evidence.
+This guide uses `core.bytes.from-list` and `core.bytes.to-text-result` to author
+an ordinary native form library. Application use requires a compatible executable.
+The [durable editor](native-editor.md) consumes it for authenticated, conditional saves.
 
 ## A library, not a form-specific runtime primitive
 
@@ -163,8 +156,6 @@ lkjscript --project consumer run lookup \
 This returns `{"state":"present","value":""}`. No Bytes adaptation, network grant
 or secret is needed. Existing exact suppliers do not automatically acquire `lookup`:
 review and stage the new ordinary library before accepting consumers that use it.
-The [selection continuation](../campaigns/202609280200.md) owns source acceptance and
-published-runtime interoperability separately from the earlier codec evidence.
 
 ## Author and import through the public product
 
@@ -295,17 +286,6 @@ receiver admits exactly one Content-Type header with the literal value
 and duplicate headers return 415. That narrow fixture policy is not a general MIME
 parser. Other methods/paths return 404. Query fields do not replace body fields.
 
-The original decoder-only receiver closure passed 111 graph tests, including three
-new header policy tests; shared standard/library tests were not counted as new tests.
-The separate live observation covers 35 requests across two detached lifecycles,
-including eight concurrent clients, an exact-bundle restart and joined SIGINT
-shutdown. Its HTTP statuses are twenty 200, six 400, four 404, one 413 and four 415.
-Both shutdowns leave no active/queued tasks or cleanup failures. The same retained
-executable also passes a separate 688-case detached command oracle. These historical
-decoder observations remain at the
-[original campaign](../campaigns/202609250926.md); they are not reattributed to a later
-library revision, nor are they throughput, accessibility or live-browser claims.
-
 The encoding extension added 18 literal native tests. At that revision, its library,
 consumer and receiver closures passed 124, 125 and 129 graph tests respectively, with pure
 reference/VM agreement. The [maintained encoding workflows](../../tests/public_cli/native_form_encoding.rs)
@@ -316,17 +296,6 @@ They cover all ASCII characters, UTF-8 scalar boundaries, ordered duplicates,
 negative and maximum I64 bounds, exact output expansion and separator accounting.
 Invalid proposals and altered review tokens leave accepted meaning unchanged; a
 well-typed space-encoding mutation is detected by the literal native tests.
-
-A separate encoder/receiver composition sends 12 real loopback requests across two
-joined source-free server lifecycles: eight successful POSTs (four concurrent clients
-per lifecycle), two malformed bodies and two rejected content types. Neither the
-original library producer nor an application authoring graph is present. The encoder
-and receiver are ordinary native programs; the test's independent Rust client
-transports their bytes. This
-is not a claim of a native outbound HTTP client or browser end-to-end coverage.
-The then-unchanged durable editor was also checked against that newly authored exact
-supplier. [Encoding evidence](../campaigns/202609261045.md) retains the actual runtime,
-source identities, operational batch-boundary failure and corrected test scope.
 
 An additional observation uses the unchanged official v0.1.47 executable to create
 and review both ordinary packages, check their 124/125 tests, export/import, build,

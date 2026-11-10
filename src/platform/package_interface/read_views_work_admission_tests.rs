@@ -2,8 +2,7 @@ use super::*;
 use crate::platform::package_transport::source::SourceAllowance;
 
 #[test]
-fn read_view_interface_work_crosses_former_work_bound_and_preserves_depth_check()
--> Result<(), Diagnostic> {
+fn read_view_interface_work_crosses_former_work_and_depth_bounds() -> Result<(), Diagnostic> {
     let owners = BTreeMap::new();
     let types = BTreeMap::new();
     let mut resolve = |_| Ok(None);
@@ -21,16 +20,9 @@ fn read_view_interface_work_crosses_former_work_bound_and_preserves_depth_check(
         deferred: false,
         visit: &mut visit,
     };
-    admission.charge(10_000_001, 0)?;
-    admission.charge(10_000_001, 0)?;
-    let refused = admission.step(crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH + 1);
-    assert!(matches!(
-        refused,
-        Err(Diagnostic {
-            class: DiagnosticClass::Resource,
-            ..
-        })
-    ));
+    admission.charge(10_000_001)?;
+    admission.charge(10_000_001)?;
+    admission.step()?;
     assert_eq!(observed, 20_000_003);
     Ok(())
 }
@@ -61,8 +53,8 @@ fn read_view_interface_work_retains_the_callers_finite_refusal() -> Result<(), D
         deferred: false,
         visit: &mut visit,
     };
-    admission.charge(3, 0)?;
-    match admission.step(0) {
+    admission.charge(3)?;
+    match admission.step() {
         Err(error) => assert_eq!(error.code, "test_selected_view_work"),
         Ok(()) => return Err(reject("finite caller allowance was not enforced")),
     }

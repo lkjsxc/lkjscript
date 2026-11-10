@@ -991,15 +991,9 @@ fn run(
         );
         let execution = compact_record(&records, "execution");
         if lane == "project" {
-            assert_eq!(compact_field(execution, "differential"), "equal");
+            assert_eq!(compact_field(execution, "engine"), "vm");
             assert!(
                 compact_field(execution, "production-instructions")
-                    .parse::<u64>()
-                    .unwrap()
-                    > 0
-            );
-            assert!(
-                compact_field(execution, "reference-expressions")
                     .parse::<u64>()
                     .unwrap()
                     > 0
@@ -1062,8 +1056,8 @@ fn run_pure_batch(public: &Native, descriptor: &Path, lane: &str, label: &str, c
             request
         })
         .collect::<Vec<_>>();
-    // The source reader retains an ordinary differential run and source witness;
-    // both readers independently check full results, authority and actual cleanup.
+    // Source and artifact readers independently check full results, authority
+    // and actual cleanup.
     let records = if lane == "project" {
         public.source_batch(label, "readview", &requests)
     } else {
@@ -1095,8 +1089,8 @@ fn run_pure_batch(public: &Native, descriptor: &Path, lane: &str, label: &str, c
             let execution = compact_record(records, "execution");
             assert_eq!(compact_field(execution, "target"), case.target);
             if lane == "project" {
-                assert_eq!(compact_field(execution, "differential"), "equal");
-                for field in ["production-instructions", "reference-expressions"] {
+                assert_eq!(compact_field(execution, "engine"), "vm");
+                for field in ["production-instructions"] {
                     assert!(compact_field(execution, field).parse::<u64>().unwrap() > 0);
                 }
             } else {
@@ -1657,8 +1651,7 @@ fn native_associated_read_views_checked_traps_fuel_cleanup_and_subsequent_invoca
     }
     let mut limited: Value =
         serde_json::from_slice(&std::fs::read(&descriptors[0]).unwrap()).unwrap();
-    limited["execution"] =
-        json!({"instruction_fuel":100,"maximum_call_depth":4096,"maximum_value_stack":1000000});
+    limited["execution"] = json!({"instruction_fuel":100,});
     let descriptor = packages
         .application
         .input("limited.deployment.json", &limited.to_string());

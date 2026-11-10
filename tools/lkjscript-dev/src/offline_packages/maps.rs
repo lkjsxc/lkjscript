@@ -588,12 +588,11 @@ fn validate_result(
                 )?;
             } else {
                 require(
-                    field(output, "execution", "differential")? == "equal",
-                    "map project evaluators disagree",
+                    field(output, "execution", "engine")? == "vm",
+                    "map project selected the wrong engine",
                 )?;
                 if case.name == "count-4096" {
-                    for field_name in ["production-collection-items", "reference-collection-items"]
-                    {
+                    for field_name in ["production-collection-items"] {
                         let items: u64 =
                             field(output, "execution", field_name)?
                                 .parse()
@@ -608,7 +607,7 @@ fn validate_result(
                     // A growing map creates one entry per distinct key. The AVL height is
                     // below twice ceil(log2(n + 1)); allow three rotation nodes per edit.
                     // These observations supplement the carrier's independent pointer oracle.
-                    for tier in ["production", "reference"] {
+                    for tier in ["production"] {
                         let count = |name: &str| -> Result<u64, DevError> {
                             field(output, "execution", &format!("{tier}-map-{name}"))?
                                 .parse()

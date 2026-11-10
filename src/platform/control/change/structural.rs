@@ -64,7 +64,6 @@ impl PrivateSymbols {
 
 pub(super) struct Body {
     nodes: BTreeMap<usize, Node>,
-    pub depth: usize,
     root: usize,
 }
 
@@ -96,7 +95,7 @@ struct ScopeSyntax {
 }
 
 enum Work {
-    Expression { id: usize, depth: usize },
+    Expression { id: usize },
     Enter { name: String, symbol: String },
     Leave(String),
 }
@@ -107,18 +106,14 @@ pub(super) fn layout(
     symbols: &mut PrivateSymbols,
 ) -> Result<Body, Diagnostic> {
     let mut nodes = BTreeMap::new();
-    let mut work = vec![Work::Expression {
-        id: block.root,
-        depth: 1,
-    }];
+    let mut work = vec![Work::Expression { id: block.root }];
     let mut environment: BTreeMap<String, Vec<String>> = block
         .locals
         .iter()
         .map(|(name, value)| (name.clone(), vec![value.clone()]))
         .collect();
-    let mut maximum_depth = 0;
     while let Some(task) = work.pop() {
-        let (id, depth) = match task {
+        let id = match task {
             Work::Enter { name, symbol } => {
                 environment.entry(name).or_default().push(symbol);
                 continue;
@@ -129,16 +124,9 @@ pub(super) fn layout(
                 }
                 continue;
             }
-            Work::Expression { id, depth } => (id, depth),
+            Work::Expression { id } => id,
         };
-        if depth > crate::platform::kernel::contract::MAXIMUM_EXPRESSION_DEPTH {
-            return Err(capacity(
-                &block.syntax[id].location,
-                "change_authored_expression_depth",
-                "authored expression exceeds the maximum structural depth",
-            ));
-        }
-        maximum_depth = maximum_depth.max(depth);
+
         let items = block.list(id)?;
         let head = items.first().copied().ok_or_else(|| {
             block.error(
@@ -199,18 +187,12 @@ pub(super) fn layout(
                 arity(&block, args[2], body, 1)?;
                 node.children.extend([args[1], body[0]]);
                 work.push(Work::Leave(local_name.clone()));
-                work.push(Work::Expression {
-                    id: body[0],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: body[0] });
                 work.push(Work::Enter {
                     name: local_name,
                     symbol: local_symbol,
                 });
-                work.push(Work::Expression {
-                    id: args[1],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: args[1] });
                 scoped = true;
             }
             "region-alloc" | "region-read" | "region-write" | "region-freeze"
@@ -519,10 +501,7 @@ pub(super) fn layout(
                 arity(&block, args[binding_index + 1], body, 1)?;
                 node.children.push(body[0]);
                 work.push(Work::Leave(local_name.clone()));
-                work.push(Work::Expression {
-                    id: body[0],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: body[0] });
                 work.push(Work::Enter {
                     name: local_name,
                     symbol: local_symbol,
@@ -565,18 +544,12 @@ pub(super) fn layout(
                 arity(&block, args[2], body, 1)?;
                 node.children.push(body[0]);
                 work.push(Work::Leave(local_name.clone()));
-                work.push(Work::Expression {
-                    id: body[0],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: body[0] });
                 work.push(Work::Enter {
                     name: local_name,
                     symbol: local_symbol,
                 });
-                work.push(Work::Expression {
-                    id: args[0],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: args[0] });
                 scoped = true;
             }
             "borrow-owned-item" => {
@@ -612,22 +585,13 @@ pub(super) fn layout(
                 arity(&block, args[4], body, 1)?;
                 node.children.push(body[0]);
                 work.push(Work::Leave(local_name.clone()));
-                work.push(Work::Expression {
-                    id: body[0],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: body[0] });
                 work.push(Work::Enter {
                     name: local_name,
                     symbol: local_symbol,
                 });
-                work.push(Work::Expression {
-                    id: args[1],
-                    depth: depth + 1,
-                });
-                work.push(Work::Expression {
-                    id: index[0],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: args[1] });
+                work.push(Work::Expression { id: index[0] });
                 scoped = true;
             }
             "choose-owned" => {
@@ -677,16 +641,10 @@ pub(super) fn layout(
                 }
                 for (name, symbol, body) in branches.into_iter().rev() {
                     work.push(Work::Leave(name.clone()));
-                    work.push(Work::Expression {
-                        id: body,
-                        depth: depth + 1,
-                    });
+                    work.push(Work::Expression { id: body });
                     work.push(Work::Enter { name, symbol });
                 }
-                work.push(Work::Expression {
-                    id: args[1],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: args[1] });
                 scoped = true;
             }
             "borrow-owned-field" => {
@@ -722,18 +680,12 @@ pub(super) fn layout(
                 arity(&block, args[3], body, 1)?;
                 node.children.push(body[0]);
                 work.push(Work::Leave(local_name.clone()));
-                work.push(Work::Expression {
-                    id: body[0],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: body[0] });
                 work.push(Work::Enter {
                     name: local_name,
                     symbol: local_symbol,
                 });
-                work.push(Work::Expression {
-                    id: args[1],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: args[1] });
                 scoped = true;
             }
             "pack-owned" => {
@@ -788,17 +740,11 @@ pub(super) fn layout(
                 for (name, _) in &bindings {
                     work.push(Work::Leave(name.clone()));
                 }
-                work.push(Work::Expression {
-                    id: body[0],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: body[0] });
                 for (name, symbol) in bindings.into_iter().rev() {
                     work.push(Work::Enter { name, symbol });
                 }
-                work.push(Work::Expression {
-                    id: args[1],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: args[1] });
                 scoped = true;
             }
             "let" => {
@@ -848,16 +794,10 @@ pub(super) fn layout(
                 for (name, _, _) in &binding_actions {
                     work.push(Work::Leave(name.clone()));
                 }
-                work.push(Work::Expression {
-                    id: body[0],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: body[0] });
                 for (name, symbol, initializer) in binding_actions.into_iter().rev() {
                     work.push(Work::Enter { name, symbol });
-                    work.push(Work::Expression {
-                        id: initializer,
-                        depth: depth + 1,
-                    });
+                    work.push(Work::Expression { id: initializer });
                 }
                 scoped = true;
             }
@@ -968,18 +908,12 @@ pub(super) fn layout(
                     if let Some((name, _)) = &binding {
                         work.push(Work::Leave(name.clone()));
                     }
-                    work.push(Work::Expression {
-                        id: body,
-                        depth: depth + 1,
-                    });
+                    work.push(Work::Expression { id: body });
                     if let Some((name, symbol)) = binding {
                         work.push(Work::Enter { name, symbol });
                     }
                 }
-                work.push(Work::Expression {
-                    id: args[0],
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: args[0] });
                 scoped = true;
             }
             "capability-call" => {
@@ -1032,7 +966,6 @@ pub(super) fn layout(
                 work.push(Work::Leave(binder_name.as_str().to_owned()));
                 work.push(Work::Expression {
                     id: args[binder_index + 1],
-                    depth: depth + 1,
                 });
                 work.push(Work::Enter {
                     name: binder_name.as_str().to_owned(),
@@ -1050,17 +983,13 @@ pub(super) fn layout(
         }
         if !scoped {
             for child in node.children.iter().rev() {
-                work.push(Work::Expression {
-                    id: *child,
-                    depth: depth + 1,
-                });
+                work.push(Work::Expression { id: *child });
             }
         }
         nodes.insert(id, node);
     }
     Ok(Body {
         nodes,
-        depth: maximum_depth,
         root: block.root,
     })
 }
@@ -1385,22 +1314,6 @@ fn implementation_syntax(
     id: usize,
     field: &str,
 ) -> Result<ImplementationSyntax, Diagnostic> {
-    implementation_syntax_at(block, id, field, 1)
-}
-
-fn implementation_syntax_at(
-    block: &Block,
-    id: usize,
-    field: &str,
-    depth: usize,
-) -> Result<ImplementationSyntax, Diagnostic> {
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(capacity(
-            &block.syntax[id].location,
-            "change_owned_operand_depth",
-            "implementation application exceeds witness-depth admission",
-        ));
-    }
     if matches!(block.syntax[id].kind, SyntaxKind::Atom { .. }) {
         return Ok(ImplementationSyntax {
             reference: block.field(id, field)?,
@@ -1449,7 +1362,7 @@ fn implementation_syntax_at(
         } else {
             implementations = clause(block, *application, "implementations")?
                 .iter()
-                .map(|operand| implementation_syntax_at(block, *operand, field, depth + 1))
+                .map(|operand| implementation_syntax(block, *operand, field))
                 .collect::<Result<Vec<_>, _>>()?;
         }
     }

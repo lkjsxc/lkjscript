@@ -35,8 +35,8 @@ current semantic admission.
 
 Finite nesting composes with structural products, choices and sequences. Direct
 and mutual recursive owned-record representations, including recursion through
-owned collections, reject. Existing type-depth and bounded-preparation policies
-remain authoritative; resource exhaustion is distinct from invalid meaning.
+owned collections, reject. Existing preparation policies remain authoritative;
+resource exhaustion is distinct from invalid meaning.
 
 ## Representation authority and operations
 

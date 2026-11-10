@@ -106,9 +106,7 @@ impl Admission<'_> {
     ) -> Result<(), ExecutionError> {
         control.check()?;
         self.tick()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(type_error("view field closure is too deep"));
-        }
+
         let layout = self.layout(ty)?;
         if layout.arguments.len() != layout.type_parameters.len()
             || layout.arguments.len() != layout.type_parameter_constraints.len()
@@ -591,9 +589,7 @@ impl Machine<'_> {
             .len()
             .checked_add(1)
             .ok_or_else(|| type_error("read path length overflowed"))?;
-        if count > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(type_error("read reference path is too deep"));
-        }
+
         self.charge_allocation((count * std::mem::size_of::<ReadPathStep>()) as u64)?;
         let mut path = Vec::new();
         path.try_reserve_exact(count).map_err(|_| {
@@ -1862,7 +1858,7 @@ fn ordinary_type(
     depth: usize,
     control: &ExecutionControl,
 ) -> Result<(), ExecutionError> {
-    let mut ancestors = [None; crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH + 1];
+    let mut ancestors = Vec::new();
     let mut nodes = 0usize;
     ordinary_type_in(program, ty, depth, control, &mut ancestors, &mut nodes)
 }
@@ -1872,8 +1868,7 @@ fn ordinary_type_in(
     ty: TypeObjectDigest,
     depth: usize,
     control: &ExecutionControl,
-    ancestors: &mut [Option<TypeObjectDigest>;
-             crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH + 1],
+    ancestors: &mut Vec<TypeObjectDigest>,
     nodes: &mut usize,
 ) -> Result<(), ExecutionError> {
     control.check()?;
@@ -1886,13 +1881,11 @@ fn ordinary_type_in(
                 "view ordinary type admission exceeds finite capacity",
             )
         })?;
-    if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-        return Err(type_error("view ordinary field type is too deep"));
-    }
-    if ancestors[..depth].contains(&Some(ty)) {
+
+    if ancestors.contains(&ty) {
         return Ok(());
     }
-    ancestors[depth] = Some(ty);
+    ancestors.push(ty);
     if !program.ordinary_types.contains(&ty) || program.read_view_instances.contains_key(&ty) {
         return Err(type_error("view ordinary field contains live authority"));
     }
@@ -1956,6 +1949,7 @@ fn ordinary_type_in(
             ));
         }
     }
+    ancestors.pop();
     Ok(())
 }
 

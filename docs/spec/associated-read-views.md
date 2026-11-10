@@ -201,8 +201,8 @@ parents may have multiple read leases, but one finalizer owns their stored token
 Repeated refine-and-replace can make a deep DAG: final release uses reserved
 intrusive cleanup work and iterative traversal, with no allocation, recursive host
 destructor cascade or user callback. Ready-finalizer ownership transfers exactly
-once, including concurrent last-reader release. Nominal type-depth limits do not
-substitute for this runtime cleanup guarantee.
+once, including concurrent last-reader release. This cleanup guarantee covers deep
+runtime custody independently of the nominal type structure.
 
 Releasing a parent lease enqueues a ready finalizer rather than invoking it
 recursively. The same rule covers retained provenance/return-guard nodes, not only

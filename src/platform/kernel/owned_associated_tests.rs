@@ -712,7 +712,6 @@ fn owned_associated_binding_work_and_storage_exact_fit_and_one_less() {
     let limits = AssociatedAdmissionLimits {
         maximum_steps: Some(steps),
         maximum_metadata_bytes: Some(bytes),
-        maximum_depth: 256,
     };
     OwnedAssociatedAdmission::with_limits(limits)
         .validate_bindings(&f.source, f.scheme, &value)
@@ -808,57 +807,6 @@ fn owned_associated_real_control_cancels_inventory_and_healthy_retry() {
     OwnedAssociatedAdmission::new()
         .validate_bindings(&f.source, f.scheme, &implementation(&f, f.scheme))
         .expect("independent healthy retry");
-}
-
-#[test]
-fn owned_associated_shared_dag_revisits_greater_occurrence_depth() {
-    let mut f = fixture();
-    let shared = ty(&mut f.source, TypeForm::OwnedSequence { item: f.cell });
-    let deep = ty(&mut f.source, TypeForm::OwnedSequence { item: shared });
-    // LIFO traversal sees the shared node shallow first. Its deeper occurrence
-    // must still revisit the cell below it, which is three edges from this root.
-    let root = ty(
-        &mut f.source,
-        TypeForm::OwnedProduct {
-            fields: vec![
-                StructuralTypeField {
-                    name: name("deep"),
-                    ty: deep,
-                },
-                StructuralTypeField {
-                    name: name("shallow"),
-                    ty: shared,
-                },
-            ],
-        },
-    );
-    let limits = AssociatedAdmissionLimits {
-        maximum_depth: 3,
-        ..AssociatedAdmissionLimits::default()
-    };
-    OwnedAssociatedAdmission::with_limits(limits)
-        .validate_occurrences(
-            &f.source,
-            &[root],
-            AssociatedTypeContext::Forbidden,
-            GENERATION,
-        )
-        .expect("complete shared DAG fits three edges");
-    assert_eq!(
-        OwnedAssociatedAdmission::with_limits(AssociatedAdmissionLimits {
-            maximum_depth: 2,
-            ..limits
-        })
-        .validate_occurrences(
-            &f.source,
-            &[root],
-            AssociatedTypeContext::Forbidden,
-            GENERATION
-        )
-        .expect_err("shallow visitation cannot hide deeper descendants")
-        .class,
-        DiagnosticClass::Resource
-    );
 }
 
 struct RepresentationRead<'a> {
@@ -1568,7 +1516,6 @@ fn owned_associated_full_application_budget_is_cumulative_across_calls() {
     let limits = AssociatedAdmissionLimits {
         maximum_steps: Some(steps),
         maximum_metadata_bytes: Some(bytes),
-        maximum_depth: 256,
     };
     let associated = OwnedAssociatedAdmission::with_limits(limits);
     owned_contract::admit_function_application(
@@ -1838,7 +1785,7 @@ fn owned_associated_many_scalar_occurrences_fit_without_reusing_authority() {
 fn owned_associated_repeated_deep_walks_reuse_queue_storage_with_exact_contexts() {
     let mut f = fixture();
     let mut root = f.cell;
-    for _ in 0..contract::MAXIMUM_TYPE_DEPTH - 1 {
+    for _ in 0..contract::FORMER_TYPE_DEPTH - 1 {
         root = ty(
             &mut f.source,
             TypeForm::OwnedProduct {
@@ -1950,24 +1897,22 @@ fn owned_associated_nominal_absence_keeps_scope_independent_work_within_shared_s
                 .expect("explicit test allowance")
     );
 
-    // A shallower visit to Unit never suppresses a later depth refusal. Depth is
-    // checked before the shared absence key may skip a completed ordinary node.
-    let shallow = OwnedAssociatedAdmission::with_limits(AssociatedAdmissionLimits {
-        maximum_depth: 1,
-        ..limits
-    });
-    let depth = shallow
+    // A repeated scalar root shares completed ordinary-node work while preserving
+    // the same explicit metadata allowance and exact authority context.
+    let repeated = OwnedAssociatedAdmission::with_limits(limits);
+    repeated
         .validate_occurrences(
             &f.source,
             &[root, unit],
             AssociatedTypeContext::Forbidden,
             GENERATION,
         )
-        .unwrap_err();
-    assert_eq!(depth.class, DiagnosticClass::Resource);
-    assert_eq!(
-        depth.message,
-        "associated type traversal exceeds its depth admission"
+        .expect("repeated ordinary root fits the same metadata allowance");
+    assert!(
+        repeated.work().1
+            < limits
+                .maximum_metadata_bytes
+                .expect("explicit test allowance")
     );
 
     let (field, nominal) = last.unwrap();

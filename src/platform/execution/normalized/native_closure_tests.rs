@@ -68,10 +68,7 @@ fn require_output(output: &Output, expected: i64) -> std::result::Result<(), Str
 fn native_elf_callable_source_controls_agree_with_vm_and_canonical_reference()
 -> std::result::Result<(), String> {
     let (source, program) = closure_fixture()?;
-    let policy = NormalizedRunPolicy {
-        maximum_call_depth: 8,
-        ..NormalizedRunPolicy::default()
-    };
+    let policy = NormalizedRunPolicy::default();
     for (name, arguments, expected) in [
         ("indirect", vec![0], 100),
         ("indirect", vec![101], 201),

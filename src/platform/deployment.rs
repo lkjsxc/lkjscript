@@ -395,22 +395,6 @@ pub(crate) const DEPLOYMENT_SCHEMA_FIELDS: &[DeploymentSchemaField] = &[
         false,
         None,
     ),
-    schema_field(
-        "execution.maximum_call_depth",
-        "usize",
-        Some(1),
-        Some(usize::MAX as u64),
-        false,
-        None,
-    ),
-    schema_field(
-        "execution.maximum_value_stack",
-        "usize",
-        Some(1),
-        Some(usize::MAX as u64),
-        false,
-        None,
-    ),
     optional_schema_field(
         "execution.maximum_allocated_bytes",
         "null|u64",
@@ -2114,6 +2098,7 @@ pub fn decode_deployment(bytes: &[u8]) -> Result<DeploymentDescriptor, Diagnosti
         ));
     }
     let mut decoder = serde_json::Deserializer::from_slice(bytes);
+    decoder.disable_recursion_limit();
     let descriptor = DeploymentDescriptor::deserialize(&mut decoder).map_err(|error| {
         deployment_error(
             "deployment_json",
@@ -2139,7 +2124,6 @@ fn validate_raw_adapter_fields(bytes: &[u8]) -> Result<(), Diagnostic> {
         bytes,
         super::json::JsonLimits {
             maximum_bytes: MAXIMUM_DEPLOYMENT_BYTES,
-            maximum_depth: super::json::MAXIMUM_JSON_CONTAINER_NESTING,
             maximum_items: MAXIMUM_DEPLOYMENT_BYTES,
             maximum_string_bytes: MAXIMUM_DEPLOYMENT_BYTES,
         },
@@ -2268,14 +2252,6 @@ fn validate_descriptor(descriptor: &DeploymentDescriptor) -> Result<(), Diagnost
         && (descriptor.runtime.is_none() || descriptor.execution.is_none())
     {
         return Err(missing_resident_policy());
-    }
-    if descriptor.execution.is_some_and(|execution| {
-        execution.maximum_call_depth == 0 || execution.maximum_value_stack == 0
-    }) {
-        return Err(deployment_error(
-            "deployment_execution_limit",
-            "call depth and value stack limits must be positive",
-        ));
     }
     if let Some(http) = &descriptor.http {
         http.validate()?;
@@ -3073,8 +3049,6 @@ mod tests {
         assert_eq!(ordinary.maximum_capability_calls, None);
         let explicit = RunPolicy {
             instruction_fuel: Some(7),
-            maximum_call_depth: 19,
-            maximum_value_stack: 43,
             maximum_allocated_bytes: Some(11),
             maximum_collection_items: Some(13),
             maximum_capability_calls: Some(17),
@@ -3084,8 +3058,6 @@ mod tests {
         assert_eq!(normalized.maximum_allocated_bytes, Some(11));
         assert_eq!(normalized.maximum_collection_items, Some(13));
         assert_eq!(normalized.maximum_capability_calls, Some(17));
-        assert_eq!(normalized.maximum_call_depth, 19);
-        assert_eq!(normalized.maximum_value_stack, 43);
     }
 
     #[test]
@@ -3169,22 +3141,6 @@ mod tests {
                 .expect("explicit starter policy")
                 .instruction_fuel,
             None
-        );
-        assert_eq!(
-            first
-                .execution
-                .as_ref()
-                .expect("explicit starter policy")
-                .maximum_call_depth,
-            4_096
-        );
-        assert_eq!(
-            first
-                .execution
-                .as_ref()
-                .expect("explicit starter policy")
-                .maximum_value_stack,
-            1_000_000
         );
         let http = first.http.as_ref().expect("HTTP limits");
         assert_eq!(http.maximum_request_body_bytes, 8 * 1024 * 1024);

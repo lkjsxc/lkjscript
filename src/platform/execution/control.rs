@@ -64,8 +64,7 @@ pub struct RunPolicy {
     // Missing is an error; only explicit null disables an existing instruction quota.
     #[serde(deserialize_with = "required_quota")]
     pub instruction_fuel: Option<u64>,
-    pub maximum_call_depth: usize,
-    pub maximum_value_stack: usize,
+
     // Omitted cumulative fields impose no quota; callers may select each dimension.
     #[serde(default)]
     pub maximum_allocated_bytes: Option<u64>,
@@ -83,8 +82,6 @@ impl Default for RunPolicy {
     fn default() -> Self {
         Self {
             instruction_fuel: None,
-            maximum_call_depth: 4_096,
-            maximum_value_stack: 1_000_000,
             maximum_allocated_bytes: None,
             maximum_collection_items: None,
             maximum_capability_calls: None,
@@ -416,8 +413,6 @@ mod tests {
     fn default_cumulative_quotas_observe_former_thresholds_without_rejecting() {
         let policy = RunPolicy::default();
         assert_eq!(policy, RunPolicy::unmetered());
-        assert_eq!(policy.maximum_call_depth, 4_096);
-        assert_eq!(policy.maximum_value_stack, 1_000_000);
         for (selected, former) in [
             (policy.instruction_fuel, 10_000_000),
             (policy.maximum_allocated_bytes, 268_435_456),

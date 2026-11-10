@@ -1281,7 +1281,6 @@ type ReferenceBindings = BTreeMap<TypeParameterId, TypeObjectDigest>;
 type ReferenceVisit<'a> = (
     &'a NormalizedValue,
     TypeObjectDigest,
-    u16,
     bool,
     BindingOwner<ReferenceBindings>,
     bool,
@@ -1349,7 +1348,7 @@ impl ReferenceState<'_> {
             BindingOwner::try_new(bindings.clone()).map_err(|_| StorageFailure::Allocation)?;
         let mut visits = Vec::new();
         reserve(&mut visits, 1)?;
-        visits.push((datum, expected, 0, true, bindings, false));
+        visits.push((datum, expected, true, bindings, false));
         self.inspect_reference_values(visits, authority, input)
     }
 
@@ -1363,9 +1362,7 @@ impl ReferenceState<'_> {
         // The raw-admission subtotal is passive, with independent exactness.
         let mut admission_bytes = (0_u64, false);
         let mut capture_types = Vec::new();
-        while let Some((node, mut expected, depth, owner_position, bindings, captured)) =
-            visits.pop()
-        {
+        while let Some((node, mut expected, owner_position, bindings, captured)) = visits.pop() {
             self.control.check()?;
             let counter = if captured {
                 &mut self.observation.value_work.capture_admission_nodes
@@ -1381,12 +1378,6 @@ impl ReferenceState<'_> {
             } else if input {
                 self.control
                     .input_admission_node(self.observation.value_work.input_admission_nodes)?;
-            }
-            if depth > 256 {
-                return Err(reference_resource(
-                    "normalized_reference_value_depth",
-                    "reference inline Option/Result/Variant spine exceeds depth 256",
-                ));
             }
             let node_ownership = self.raw_ownership(node)?;
             if ownership.is_none() {
@@ -1431,18 +1422,6 @@ impl ReferenceState<'_> {
                     reject("raw boundary names an unknown type; use accepted canonical meaning")
                 })?
                 .form;
-            // Opaque carriers are shallow-cloned. Only a consecutive Box
-            // spine retains the remaining recursive Clone guard.
-            let next_depth = if matches!(
-                node,
-                NormalizedValue::Option(_)
-                    | NormalizedValue::Result { .. }
-                    | NormalizedValue::Variant { .. }
-            ) {
-                depth + 1
-            } else {
-                0
-            };
             match ty {
                 TypeForm::Unit if matches!(node, NormalizedValue::Unit) => {}
                 TypeForm::Bool if matches!(node, NormalizedValue::Bool(_)) => {}
@@ -1478,7 +1457,6 @@ impl ReferenceState<'_> {
                                 visits.push((
                                     child,
                                     field.ty,
-                                    next_depth,
                                     false,
                                     BindingOwner::clone(&bindings),
                                     captured,
@@ -1516,7 +1494,6 @@ impl ReferenceState<'_> {
                                     visits.push((
                                         payload,
                                         ty,
-                                        next_depth,
                                         owner_position
                                             && node_ownership == Ownership::AffineVariant
                                             && direct,
@@ -1569,7 +1546,6 @@ impl ReferenceState<'_> {
                         visits.push((
                             child,
                             field.ty,
-                            next_depth,
                             false,
                             BindingOwner::clone(&bindings),
                             captured,
@@ -1594,7 +1570,6 @@ impl ReferenceState<'_> {
                         visits.push((
                             child,
                             *item,
-                            next_depth,
                             false,
                             BindingOwner::clone(&bindings),
                             captured,
@@ -1617,7 +1592,6 @@ impl ReferenceState<'_> {
                         visits.push((
                             child,
                             *item,
-                            next_depth,
                             false,
                             BindingOwner::clone(&bindings),
                             captured,
@@ -1639,7 +1613,6 @@ impl ReferenceState<'_> {
                     visits.push((
                         value,
                         if *success { *ok } else { *error },
-                        next_depth,
                         false,
                         BindingOwner::clone(&bindings),
                         captured,
@@ -1692,7 +1665,6 @@ impl ReferenceState<'_> {
                         visits.push((
                             child,
                             *value,
-                            next_depth,
                             false,
                             BindingOwner::clone(&bindings),
                             captured,
@@ -1884,7 +1856,6 @@ impl ReferenceState<'_> {
                             visits.push((
                                 value,
                                 parameter.ty,
-                                next_depth,
                                 false,
                                 BindingOwner::clone(&actual_bindings),
                                 true,
@@ -2208,7 +2179,6 @@ impl ReferenceState<'_> {
         visits.push((
             value.raw(),
             parameter.ty,
-            0,
             false,
             BindingOwner::clone(&storage.bindings),
             true,
@@ -2356,12 +2326,12 @@ impl ReferenceState<'_> {
         bindings: &ReferenceBindings,
         checked: &mut Vec<TypeObjectDigest>,
     ) -> Result<(), ExecutionError> {
-        self.charge_allocation(std::mem::size_of::<(TypeObjectDigest, u16)>() as u64)?;
+        self.charge_allocation(std::mem::size_of::<TypeObjectDigest>() as u64)?;
         let schema = Arc::clone(&self.schema);
         let mut types = Vec::new();
         reserve(&mut types, 1)?;
-        types.push((root, 0_u16));
-        while let Some((mut ty, depth)) = types.pop() {
+        types.push(root);
+        while let Some(mut ty) = types.pop() {
             self.control.check()?;
             self.observation.value_work.capture_admission_nodes = self
                 .observation
@@ -2370,12 +2340,6 @@ impl ReferenceState<'_> {
                 .saturating_add(1);
             self.control
                 .capture_admission_node(self.observation.value_work.capture_admission_nodes)?;
-            if depth > 256 {
-                return Err(reference_resource(
-                    "normalized_reference_value_depth",
-                    "capture type exceeds depth 256",
-                ));
-            }
             if let Some(TypeForm::TypeParameter { parameter }) =
                 schema.types.get(&ty).map(|object| &object.form)
             {
@@ -2401,9 +2365,9 @@ impl ReferenceState<'_> {
                 .ok_or_else(|| reject("capture type is absent from canonical authority"))?
                 .form;
             let mut append = |child| -> Result<(), ExecutionError> {
-                self.charge_allocation(std::mem::size_of::<(TypeObjectDigest, u16)>() as u64)?;
+                self.charge_allocation(std::mem::size_of::<TypeObjectDigest>() as u64)?;
                 reserve(&mut types, 1)?;
-                types.push((child, depth + 1));
+                types.push(child);
                 Ok(())
             };
             match form {

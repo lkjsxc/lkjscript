@@ -413,7 +413,7 @@ declarations.end
     );
     let result = consumer.cli(&["run", "opaque-witness", "--arguments", "[]"], true);
     let execution = compact_record(&result, "execution");
-    assert_eq!(compact_field(execution, "differential"), "equal");
+    assert_eq!(compact_field(execution, "engine"), "vm");
     assert_eq!(
         serde_json::from_str::<Value>(compact_field(execution, "value")).unwrap(),
         json!(42)

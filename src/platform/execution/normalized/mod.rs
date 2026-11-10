@@ -34,6 +34,7 @@ mod queue;
 mod read_view_storage;
 mod reference;
 mod reference_effects;
+mod reference_nominal_flow;
 mod reference_schema;
 mod reference_types;
 mod task_iteration_probe;
@@ -46,6 +47,8 @@ mod region_value;
 mod resident;
 mod resource;
 mod runner;
+#[cfg(test)]
+pub(crate) use runner::differential::run_pure_command as run_pure_command_differential;
 mod secret;
 mod security;
 mod session;

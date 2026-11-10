@@ -169,8 +169,3 @@ the complete frequency table. To return bounded complete values, use the
 For a complete frequency table larger than one result, the
 [paging example](native-pagination.md) uses an ordinary generic window function
 and shows its reuse with an application-owned record type.
-
-The literal program and commands were exercised through a copied executable
-outside the compiler checkout. The [continuation record](../campaigns/202609222330.md)
-keeps exact source, inputs, outcomes and evidence scope. This is a public native
-workflow example, separate from maintained library adoption and release acceptance.

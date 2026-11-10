@@ -226,7 +226,7 @@ This returns `850` using the bundle's complete code closure. It requires no libr
 or consumer authoring project, package transport, or source request at runtime.
 The bundle needs a compatible lkjscript executable; it is not a self-contained
 machine executable. Deployment execution invokes production once and reports
-`verification=not-performed`; project checks and project runs supplied differential
+`verification=not-performed`; project checks supplied differential
 verification earlier. This pure command needs no capability grants.
 
 ## Read arguments from a file
@@ -281,13 +281,3 @@ missing parents and `..` traversal reject. Publication never overwrites a compet
 file. Destination inspection occurs before execution, but later disk/permission failures
 and races are still possible. For effectful commands, missing output does not imply
 rollback or make retry safe; a published file also survives a later stdout failure.
-
-The literal library and consumer were exercised with a copied official v0.1.40
-binary outside the compiler checkout, including unchanged drafting, empty input,
-multiplication/addition overflow, build after moving the producer, and execution
-after moving the consumer. The [continuation record](../campaigns/202609222330.md)
-owns that bounded tutorial observation. It is separate from release acceptance.
-The v0.1.42 development file-input observation freshly authors the same two native
-programs and returns `2048000` from 8,192 parcels through both project and detached
-bundle execution. Its 196,612-byte input includes a newline. The retained malformed,
-wrong-type and overflow inputs reject, and accepted HEAD stays unchanged.

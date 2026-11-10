@@ -254,9 +254,7 @@ pub(super) fn discharge_occurrences(
     let mut pending = roots.iter().map(|ty| (*ty, 0_usize)).collect::<Vec<_>>();
     while let Some((ty, depth)) = pending.pop() {
         admission.step()?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         let object = object(interface, ty)?;
         if object.form.is_associated() || view_scope(&object.form).is_some() {
             let mut resolve = |reference| closure.associated_owner(revision, reference).map(Some);
@@ -307,9 +305,7 @@ fn occurrences(
     pending.push((ty, root_view, 0_usize));
     while let Some((ty, permitted, depth)) = pending.pop() {
         admission.step()?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         let object = object(interface, ty)?;
         if view_scope(&object.form).is_some() && !permitted {
             return Err(reject(
@@ -979,9 +975,7 @@ fn ordinary_field(
     let mut visited = BTreeSet::new();
     while let Some((source, inventory, binder, ty, depth, environment)) = pending.pop() {
         admission.step()?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         admission.charge(environment.len())?;
         if !visited.insert((source.package, binder.declaration, ty, environment.clone())) {
             continue;
@@ -1345,9 +1339,7 @@ fn actual_parameters(
     let mut pending = vec![(ty, 0_usize)];
     while let Some((ty, depth)) = pending.pop() {
         admission.step()?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         let object = object(interface, ty)?;
         if let TypeForm::TypeParameter { parameter } = object.form {
             let Some(PackageInterfaceRecord::TypeParameter(record)) = interface
@@ -1426,9 +1418,7 @@ fn owned_permissions(
     let mut pending = vec![(revision, interface, binder, ty, 0_usize, Environment::new())];
     while let Some((source, inventory, binder, ty, depth, environment)) = pending.pop() {
         admission.step()?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         let ty_object = object(inventory, ty)?;
         match &ty_object.form {
             TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => {}
@@ -1616,9 +1606,6 @@ fn finite_layout(
                 active.remove(&reference);
             }
             Work::Type(package, ty, depth) => {
-                if depth > contract::MAXIMUM_TYPE_DEPTH {
-                    return Err(capacity());
-                }
                 let digest = closure
                     .packages
                     .get(&package)
@@ -1648,9 +1635,6 @@ fn finite_layout(
                 }
             }
             Work::Layout(package, reference, depth) => {
-                if depth > contract::MAXIMUM_TYPE_DEPTH {
-                    return Err(capacity());
-                }
                 if !active.insert(reference) {
                     return Err(reject(
                         "read-view nominal field dependency closure is recursive",
@@ -1753,9 +1737,7 @@ fn finite_actual(
     let mut pending = vec![(ty, 0_usize)];
     while let Some((ty, depth)) = pending.pop() {
         admission.step()?;
-        if depth > contract::MAXIMUM_TYPE_DEPTH {
-            return Err(capacity());
-        }
+
         let object = object(interface, ty)?;
         if let TypeForm::Named { declaration } | TypeForm::Applied { declaration, .. } = object.form
         {

@@ -318,13 +318,7 @@ impl<R: ExpressionRead> Flow<'_, R> {
                 } else {
                     for (index, child) in object.child_types().into_iter().enumerate() {
                         self.tick()?;
-                        if path.len() >= super::contract::MAXIMUM_TYPE_DEPTH {
-                            return Err(Diagnostic::new(
-                                DiagnosticClass::Resource,
-                                "kernel_callable_flow_type_depth",
-                                "callable argument exceeds the structural type-depth contract",
-                            ));
-                        }
+
                         self.reserve::<usize>(path.len() + 1)?;
                         self.reserve::<(TypeObjectDigest, Vec<usize>)>(1)?;
                         let mut child_path = path.clone();

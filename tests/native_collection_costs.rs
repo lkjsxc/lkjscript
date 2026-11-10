@@ -153,7 +153,7 @@ fn native_collection_selection_cost_matrix_is_observed_without_host_results() {
         );
     }
     deployment["execution"] = json!({"instruction_fuel":1,
-        "maximum_call_depth":4096,"maximum_value_stack":1000000});
+    });
     let restricted = public.input("restricted.deployment.json", &deployment.to_string());
     let arguments = public.input("restricted-arguments.json", "[2,[5,9],3]");
     let absent = public.root.join("refused-result.json");

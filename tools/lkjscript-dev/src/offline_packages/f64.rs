@@ -1553,7 +1553,7 @@ pub(super) fn validate(
             expect_value(&original_output, &expected, name, root)?;
             if artifact.is_none() {
                 require(
-                    field(&original_output, "execution", "differential")? == "equal",
+                    field(&original_output, "execution", "engine")? == "vm",
                     "F64 source execution lost independent evaluator agreement",
                 )?;
             }

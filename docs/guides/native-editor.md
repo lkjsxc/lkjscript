@@ -218,16 +218,13 @@ admitting null origins. Header presence alone is not a general security audit.
 
 ## Actual evidence and boundaries
 
-The [campaign](../campaigns/202609251211.md) retains exact source, executable and
-publication relationships, failed attempts and accepted originals. The maintained
-[public CLI workload](../../tests/public_cli/native_editor.rs) authors literal
-programs through copied public CLI operations, removes supplier/app projects before
-execution, and checks admission, conditional writes, two-process conflicts, an
-operational put failure, joined shutdown, source-free restart and fail-closed storage.
-It also compiles, checks and builds the unchanged GET UI consumer against the
-extended UI supplier, rather than assuming additive definitions preserve every
-consumer. Its separate corruption fixture changes only an owned disposable data
-store through another native command.
+The maintained [public CLI workload](../../tests/public_cli/native_editor.rs)
+authors literal programs through copied public CLI operations, removes supplier/app
+projects before execution, and checks admission, conditional writes, two-process
+conflicts, an operational put failure, joined shutdown, source-free restart and
+fail-closed storage. It also compiles, checks and builds the unchanged GET UI consumer
+against the extended UI supplier. Its separate corruption fixture changes only an
+owned disposable data store through another native command.
 
 Independent raw HTTP observations complete 36 requests, including 8 concurrent
 writers across 2 processes: exactly one save succeeds and seven drafts conflict.

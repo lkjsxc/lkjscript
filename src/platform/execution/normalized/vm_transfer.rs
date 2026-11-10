@@ -103,7 +103,7 @@ impl TransferArguments {
             return Err(reject());
         }
         let mut work = Work { control, nodes: 0 };
-        validate_type(program, application.result(), 0, &mut work)?;
+        validate_type(program, application.result(), &mut work)?;
         let mut seen_owned = false;
         for (index, (argument, parameter)) in
             arguments.iter().zip(selected.parameters.iter()).enumerate()
@@ -112,7 +112,7 @@ impl TransferArguments {
             if parameter.resource_requirement.is_some() {
                 return Err(reject());
             }
-            let memory = validate_type(program, ty, 0, &mut work)?;
+            let memory = validate_type(program, ty, &mut work)?;
             if seen_owned && !memory {
                 return Err(reject());
             }
@@ -126,7 +126,7 @@ impl TransferArguments {
             {
                 return Err(reject());
             }
-            inspect_value(program, argument, ty, source, 0, &mut work, ordinary)?;
+            inspect_value(program, argument, ty, source, &mut work, ordinary)?;
         }
         control.check()?;
         Ok(transfer)
@@ -162,7 +162,7 @@ impl TransferArguments {
         }
         let mut work = Work { control, nodes: 0 };
         for value in self.values.as_mut().ok_or_else(reject)? {
-            adopt_value(value, self.source, destination, 0, &mut work)?;
+            adopt_value(value, self.source, destination, &mut work)?;
         }
         control.check()?;
         Ok((
@@ -211,7 +211,7 @@ impl TransferArguments {
             return Err(reject());
         }
         let mut work = Work { control, nodes: 0 };
-        validate_type(program, application.result(), 0, &mut work)?;
+        validate_type(program, application.result(), &mut work)?;
         let mut seen_owned = false;
         for (index, (argument, parameter)) in values
             .into_iter()
@@ -231,14 +231,13 @@ impl TransferArguments {
                         return Err(reject());
                     }
                     let token = if mode == ParameterUse::Borrow {
-                        if !token.is_borrowed()
-                            || !validate_shareable_type(program, ty, 0, &mut work)?
+                        if !token.is_borrowed() || !validate_shareable_type(program, ty, &mut work)?
                         {
                             return Err(reject());
                         }
                         regions.borrow(&token, source, destination)?
                     } else {
-                        if !validate_type(program, ty, 0, &mut work)? {
+                        if !validate_type(program, ty, &mut work)? {
                             return Err(reject());
                         }
                         regions.transfer(token, source, destination)?
@@ -246,7 +245,7 @@ impl TransferArguments {
                     (NormalizedValue::RegionCap { ty, token }, None, true)
                 }
                 (ParameterUse::Borrow, ScopedArgument::Read { value, custody }) => {
-                    if !validate_shareable_type(program, ty, 0, &mut work)? {
+                    if !validate_shareable_type(program, ty, &mut work)? {
                         return Err(reject());
                     }
                     let lease = ScopedReadLease::seal(
@@ -269,7 +268,7 @@ impl TransferArguments {
                         scopes,
                     },
                 ) => {
-                    if !validate_shareable_type(program, ty, 0, &mut work)? {
+                    if !validate_shareable_type(program, ty, &mut work)? {
                         return Err(reject());
                     }
                     let lease = ScopedReadLease::seal_with_scopes(
@@ -293,7 +292,7 @@ impl TransferArguments {
                         custody,
                     },
                 ) => {
-                    if !validate_shareable_type(program, ty, 0, &mut work)? {
+                    if !validate_shareable_type(program, ty, &mut work)? {
                         return Err(reject());
                     }
                     let lease = ScopedReadLease::seal_view(
@@ -310,17 +309,17 @@ impl TransferArguments {
                     (value, Some(lease), true)
                 }
                 (ParameterUse::Consume, ScopedArgument::Value(value)) => {
-                    if !validate_type(program, ty, 0, &mut work)? {
+                    if !validate_type(program, ty, &mut work)? {
                         return Err(reject());
                     }
-                    inspect_value(program, &value, ty, source, 0, &mut work, ordinary)?;
+                    inspect_value(program, &value, ty, source, &mut work, ordinary)?;
                     (value, None, true)
                 }
                 (ParameterUse::Unrestricted, ScopedArgument::Value(value)) => {
-                    if validate_type(program, ty, 0, &mut work)? {
+                    if validate_type(program, ty, &mut work)? {
                         return Err(reject());
                     }
-                    inspect_value(program, &value, ty, source, 0, &mut work, ordinary)?;
+                    inspect_value(program, &value, ty, source, &mut work, ordinary)?;
                     (value, None, false)
                 }
                 _ => return Err(reject()),
@@ -368,7 +367,7 @@ impl TransferArguments {
                     value,
                     control,
                 )?,
-                None => adopt_value(value, self.source, destination, 0, &mut work)?,
+                None => adopt_value(value, self.source, destination, &mut work)?,
             }
             if leases.peek().is_some_and(|lease| lease.position() == index) {
                 leases.next();
@@ -471,13 +470,12 @@ impl TransferResult {
             return Err(reject());
         }
         let mut work = Work { control, nodes: 0 };
-        validate_type(program, transfer.ty, 0, &mut work)?;
+        validate_type(program, transfer.ty, &mut work)?;
         inspect_value(
             program,
             transfer.value.as_ref().ok_or_else(reject)?,
             transfer.ty,
             source,
-            0,
             &mut work,
             ordinary,
         )?;
@@ -523,7 +521,6 @@ impl TransferResult {
             self.value.as_mut().ok_or_else(reject)?,
             self.source,
             destination,
-            0,
             &mut work,
         )?;
         control.check()?;
@@ -550,7 +547,7 @@ pub(in super::super) fn admit_type(
     ty: TypeObjectDigest,
     control: &ExecutionControl,
 ) -> Result<bool, ExecutionError> {
-    validate_type(program, ty, 0, &mut Work { control, nodes: 0 })
+    validate_type(program, ty, &mut Work { control, nodes: 0 })
 }
 
 /// Read sharing is checked independently from moving, even though today's
@@ -560,14 +557,12 @@ pub(in super::super) fn admit_shareable_type(
     ty: TypeObjectDigest,
     control: &ExecutionControl,
 ) -> Result<bool, ExecutionError> {
-    validate_shareable_type(program, ty, 0, &mut Work { control, nodes: 0 })
+    validate_shareable_type(program, ty, &mut Work { control, nodes: 0 })
 }
 impl Work<'_> {
-    fn visit(&mut self, depth: usize) -> Result<(), ExecutionError> {
+    fn visit(&mut self) -> Result<(), ExecutionError> {
         self.control.check()?;
-        if depth > crate::platform::kernel::contract::MAXIMUM_TYPE_DEPTH {
-            return Err(reject());
-        }
+
         self.nodes = self
             .nodes
             .checked_add(1)
@@ -585,10 +580,9 @@ impl Work<'_> {
 fn validate_type(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
-    depth: usize,
     work: &mut Work<'_>,
 ) -> Result<bool, ExecutionError> {
-    work.visit(depth)?;
+    work.visit()?;
     if program.read_view_layout(ty).is_some()
         || program
             .types
@@ -599,10 +593,10 @@ fn validate_type(
     }
     if let Some(layout) = program.owned_record_layout(ty) {
         for argument in layout.arguments.iter() {
-            validate_type(program, *argument, depth + 1, work)?;
+            validate_type(program, *argument, work)?;
         }
         for field in layout.fields.iter() {
-            validate_type(program, field.ty, depth + 1, work)?;
+            validate_type(program, field.ty, work)?;
         }
         return Ok(true);
     }
@@ -631,13 +625,13 @@ fn validate_type(
         TypeForm::OwnedSequence { item } => {
             // Empty storage is still an owner and grants no exemption from the
             // complete concrete element contract, including unselected cases.
-            validate_type(program, *item, depth + 1, work)?;
+            validate_type(program, *item, work)?;
             Ok(true)
         }
         TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
             // Include unselected cases: an empty branch grants no hidden authority.
             for field in fields {
-                validate_type(program, field.ty, depth + 1, work)?;
+                validate_type(program, field.ty, work)?;
             }
             Ok(true)
         }
@@ -651,10 +645,9 @@ fn validate_type(
 fn validate_shareable_type(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
-    depth: usize,
     work: &mut Work<'_>,
 ) -> Result<bool, ExecutionError> {
-    work.visit(depth)?;
+    work.visit()?;
     if let Some(TypeForm::RegionCap {
         region,
         mode: crate::platform::kernel::RegionMode::Frozen,
@@ -689,7 +682,7 @@ fn validate_shareable_type(
             .iter()
             .zip(layout.type_parameter_constraints.iter())
         {
-            work.visit(depth + 1)?;
+            work.visit()?;
             let owned = program.is_owned_type(*argument);
             if !program.types.contains_key(argument)
                 || program.read_view_layout(*argument).is_some()
@@ -701,10 +694,10 @@ fn validate_shareable_type(
                 return Err(reject());
             }
             if constraint.requires_transfer() {
-                validate_type(program, *argument, depth + 1, work)?;
+                validate_type(program, *argument, work)?;
             }
             if constraint.requires_share()
-                && !validate_shareable_owned_child(program, *argument, depth + 1, work)?
+                && !validate_shareable_owned_child(program, *argument, work)?
             {
                 return Err(reject());
             }
@@ -712,13 +705,13 @@ fn validate_shareable_type(
         for field in layout.fields.iter() {
             match field.kind {
                 crate::platform::kernel::ReadViewFieldKind::Ordinary => {
-                    if validate_type(program, field.ty, depth + 1, work)? {
+                    if validate_type(program, field.ty, work)? {
                         return Err(reject());
                     }
                 }
                 crate::platform::kernel::ReadViewFieldKind::ReadReference { read_scope } => {
                     if read_scope != layout.read_scope
-                        || !validate_shareable_type(program, field.ty, depth + 1, work)?
+                        || !validate_shareable_type(program, field.ty, work)?
                     {
                         return Err(reject());
                     }
@@ -734,22 +727,22 @@ fn validate_shareable_type(
     }
     if let Some(layout) = program.owned_record_layout(ty) {
         for argument in layout.arguments.iter() {
-            validate_shareable_owned_child(program, *argument, depth + 1, work)?;
+            validate_shareable_owned_child(program, *argument, work)?;
         }
         for field in layout.fields.iter() {
-            validate_shareable_owned_child(program, field.ty, depth + 1, work)?;
+            validate_shareable_owned_child(program, field.ty, work)?;
         }
         return Ok(true);
     }
     match &program.types.get(&ty).ok_or_else(reject)?.form {
         TypeForm::ByteBuffer | TypeForm::OwnedI64Cell => Ok(true),
         TypeForm::OwnedSequence { item } => {
-            validate_shareable_owned_child(program, *item, depth + 1, work)?;
+            validate_shareable_owned_child(program, *item, work)?;
             Ok(true)
         }
         TypeForm::OwnedProduct { fields } | TypeForm::OwnedChoice { cases: fields } => {
             for field in fields {
-                validate_shareable_owned_child(program, field.ty, depth + 1, work)?;
+                validate_shareable_owned_child(program, field.ty, work)?;
             }
             Ok(true)
         }
@@ -761,7 +754,6 @@ fn validate_shareable_type(
 fn validate_shareable_owned_child(
     program: &NormalizedProgram,
     ty: TypeObjectDigest,
-    depth: usize,
     work: &mut Work<'_>,
 ) -> Result<bool, ExecutionError> {
     if program.read_view_layout(ty).is_some()
@@ -772,7 +764,7 @@ fn validate_shareable_owned_child(
     {
         return Err(reject());
     }
-    validate_shareable_type(program, ty, depth, work)
+    validate_shareable_type(program, ty, work)
 }
 
 fn inspect_value(
@@ -780,11 +772,10 @@ fn inspect_value(
     value: &NormalizedValue,
     ty: TypeObjectDigest,
     source: ValueOrigin,
-    depth: usize,
     work: &mut Work<'_>,
     ordinary: &mut impl FnMut(&NormalizedValue, TypeObjectDigest) -> Result<(), ExecutionError>,
 ) -> Result<(), ExecutionError> {
-    work.visit(depth)?;
+    work.visit()?;
     if matches!(value, NormalizedValue::ReadView(_)) {
         return Err(reject());
     }
@@ -803,7 +794,7 @@ fn inspect_value(
         {
             token.inspect_transfer(source, |values| {
                 for value in values {
-                    inspect_value(program, value, *item, source, depth + 1, work, ordinary)?;
+                    inspect_value(program, value, *item, source, work, ordinary)?;
                 }
                 Ok(())
             })
@@ -816,7 +807,7 @@ fn inspect_value(
                     return Err(reject());
                 }
                 for (value, field) in values.iter().zip(fields) {
-                    inspect_value(program, value, field.ty, source, depth + 1, work, ordinary)?;
+                    inspect_value(program, value, field.ty, source, work, ordinary)?;
                 }
                 Ok(())
             })
@@ -831,7 +822,7 @@ fn inspect_value(
                     return Err(reject());
                 }
                 for (value, field) in values.iter().zip(layout.fields.iter()) {
-                    inspect_value(program, value, field.ty, source, depth + 1, work, ordinary)?;
+                    inspect_value(program, value, field.ty, source, work, ordinary)?;
                 }
                 Ok(())
             })
@@ -841,15 +832,7 @@ fn inspect_value(
         {
             let selected = cases.get(token.case() as usize).ok_or_else(reject)?;
             token.inspect_transfer(source, |payload| {
-                inspect_value(
-                    program,
-                    payload,
-                    selected.ty,
-                    source,
-                    depth + 1,
-                    work,
-                    ordinary,
-                )
+                inspect_value(program, payload, selected.ty, source, work, ordinary)
             })
         }
         _ if value.memory_form().is_none() && program.comparable_types.contains(&ty) => {
@@ -873,10 +856,9 @@ fn adopt_value(
     value: &mut NormalizedValue,
     source: ValueOrigin,
     destination: ValueOrigin,
-    depth: usize,
     work: &mut Work<'_>,
 ) -> Result<(), ExecutionError> {
-    work.visit(depth)?;
+    work.visit()?;
     match value {
         NormalizedValue::ReadView(_) => Err(reject()),
         NormalizedValue::ByteBuffer(token) => token.adopt_transfer(source, destination),
@@ -884,7 +866,7 @@ fn adopt_value(
         NormalizedValue::OwnedSequence(token) => {
             token.adopt_transfer(source, destination, |values| {
                 for value in values {
-                    adopt_value(value, source, destination, depth + 1, work)?;
+                    adopt_value(value, source, destination, work)?;
                 }
                 Ok(())
             })
@@ -892,14 +874,14 @@ fn adopt_value(
         NormalizedValue::OwnedProduct(token) => {
             token.adopt_transfer(source, destination, |fields| {
                 for field in fields {
-                    adopt_value(field, source, destination, depth + 1, work)?;
+                    adopt_value(field, source, destination, work)?;
                 }
                 Ok(())
             })
         }
         NormalizedValue::OwnedChoice(token) => {
             token.adopt_transfer(source, destination, |payload| {
-                adopt_value(payload, source, destination, depth + 1, work)
+                adopt_value(payload, source, destination, work)
             })
         }
         _ => Ok(()), // Ordinary immutable metadata keeps its exact prepared-program identities.

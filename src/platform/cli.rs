@@ -1,4 +1,8 @@
 //! Strict, bounded public graph-native command projection.
+//!
+//! Linked Rust callers run complete command operations through [`crate::platform::stack::run`],
+//! keeping construction, use and destruction of recursive values inside its closure.
+//! The built-in command binaries establish this boundary before dispatch.
 
 mod gc;
 mod history;
@@ -34,13 +38,12 @@ use super::contract::{
     FUNCTION_DEFINITION_PROJECTION_CONTRACT_IDENTITY,
     FUNCTION_DEFINITION_PROJECTION_CONTRACT_VERSION, FUNCTION_DEFINITION_RECORD_KEY_DOMAIN,
     FUNCTION_DEFINITION_RESPONSE_FIELDS, MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS,
-    MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES, MAXIMUM_FUNCTION_DEFINITION_DEPTH,
-    MAXIMUM_FUNCTION_DEFINITION_EDGES, MAXIMUM_FUNCTION_DEFINITION_FACT_READS,
-    MAXIMUM_FUNCTION_DEFINITION_ITEMS, MAXIMUM_FUNCTION_DEFINITION_LITERAL_FRAGMENT_BYTES,
-    MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES, MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES,
-    MINIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES, PublicOperation, RegistrySection,
-    capabilities_snapshot, diagnostic_class_name, generated_documents, operation_descriptors,
-    operation_record,
+    MAXIMUM_FUNCTION_DEFINITION_CONTINUATION_BYTES, MAXIMUM_FUNCTION_DEFINITION_EDGES,
+    MAXIMUM_FUNCTION_DEFINITION_FACT_READS, MAXIMUM_FUNCTION_DEFINITION_ITEMS,
+    MAXIMUM_FUNCTION_DEFINITION_LITERAL_FRAGMENT_BYTES, MAXIMUM_FUNCTION_DEFINITION_LOGICAL_BYTES,
+    MAXIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES, MINIMUM_FUNCTION_DEFINITION_OUTPUT_BYTES,
+    PublicOperation, RegistrySection, capabilities_snapshot, diagnostic_class_name,
+    generated_documents, operation_descriptors, operation_record,
 };
 #[cfg(test)]
 use super::control::decode_compact_change;
@@ -1117,14 +1120,6 @@ fn foreground_receipt_output(
                     limit(receipt.policy.maximum_capability_calls),
                 ),
                 (
-                    "call-depth-limit",
-                    receipt.policy.maximum_call_depth.to_string(),
-                ),
-                (
-                    "value-stack-limit",
-                    receipt.policy.maximum_value_stack.to_string(),
-                ),
-                (
                     "deadline-milliseconds",
                     limit(receipt.deadline_milliseconds),
                 ),
@@ -1230,7 +1225,7 @@ fn source_run_receipt_output(
     let mut execution = vec![
         ("target", run.target.as_str().to_owned()),
         result.field,
-        ("differential", run.differential.to_owned()),
+        ("engine", "vm".to_owned()),
         (
             "production-instructions",
             run.production.instructions.to_string(),
@@ -1240,28 +1235,12 @@ fn source_run_receipt_output(
             run.production.instructions_saturated.to_string(),
         ),
         (
-            "reference-expressions",
-            run.reference.expressions.to_string(),
-        ),
-        (
-            "reference-expressions-saturated",
-            run.reference.expressions_saturated.to_string(),
-        ),
-        (
             "production-peak-call-frames",
             run.production.maximum_call_depth.to_string(),
         ),
         (
-            "reference-peak-call-frames",
-            run.reference.maximum_call_depth.to_string(),
-        ),
-        (
             "production-tail-transfers",
             run.production.tail_transfers.to_string(),
-        ),
-        (
-            "reference-tail-transfers",
-            run.reference.tail_transfers.to_string(),
         ),
         (
             "production-input-admission-nodes",
@@ -1423,22 +1402,6 @@ fn source_run_receipt_output(
             run.production.type_metadata_saturated.to_string(),
         ),
         (
-            "reference-type-derivation-steps",
-            run.reference.type_derivation_steps.to_string(),
-        ),
-        (
-            "reference-type-derivation-saturated",
-            run.reference.type_derivation_saturated.to_string(),
-        ),
-        (
-            "reference-type-metadata-bytes",
-            run.reference.type_metadata_bytes.to_string(),
-        ),
-        (
-            "reference-type-metadata-saturated",
-            run.reference.type_metadata_saturated.to_string(),
-        ),
-        (
             "production-collection-items",
             run.production.collection_items.to_string(),
         ),
@@ -1458,176 +1421,12 @@ fn source_run_receipt_output(
             "production-allocation-charges",
             run.production.allocation_charges.to_string(),
         ),
-        (
-            "reference-input-admission-nodes",
-            run.reference.value_work.input_admission_nodes.to_string(),
-        ),
-        (
-            "reference-raw-result-admission-nodes",
-            run.reference
-                .value_work
-                .raw_result_admission_nodes
-                .to_string(),
-        ),
-        (
-            "reference-constructor-child-visits",
-            run.reference
-                .value_work
-                .constructor_child_visits
-                .to_string(),
-        ),
-        (
-            "reference-capture-admission-nodes",
-            run.reference.value_work.capture_admission_nodes.to_string(),
-        ),
-        (
-            "reference-guard-descendants",
-            run.reference
-                .value_work
-                .internal_guard_descendant_visits
-                .to_string(),
-        ),
-        (
-            "reference-classification-decisions",
-            run.reference
-                .value_work
-                .classification_decisions
-                .to_string(),
-        ),
-        (
-            "reference-list-node-visits",
-            run.reference.value_work.lists.node_visits.to_string(),
-        ),
-        (
-            "reference-list-element-handle-copies",
-            run.reference
-                .value_work
-                .lists
-                .element_handle_copies
-                .to_string(),
-        ),
-        (
-            "reference-list-element-handle-allocations",
-            run.reference
-                .value_work
-                .lists
-                .element_handle_allocations
-                .to_string(),
-        ),
-        (
-            "reference-list-element-slots-reserved",
-            run.reference
-                .value_work
-                .lists
-                .element_slots_reserved
-                .to_string(),
-        ),
-        (
-            "reference-list-branch-slot-copies",
-            run.reference
-                .value_work
-                .lists
-                .branch_slot_copies
-                .to_string(),
-        ),
-        (
-            "reference-list-branch-slots-reserved",
-            run.reference
-                .value_work
-                .lists
-                .branch_slots_reserved
-                .to_string(),
-        ),
-        (
-            "reference-list-nodes-allocated",
-            run.reference.value_work.lists.nodes_allocated.to_string(),
-        ),
-        (
-            "reference-list-full-materializations",
-            run.reference
-                .value_work
-                .lists
-                .full_materializations
-                .to_string(),
-        ),
-        (
-            "reference-list-materialized-elements",
-            run.reference
-                .value_work
-                .lists
-                .materialized_elements
-                .to_string(),
-        ),
-        (
-            "reference-list-saturated",
-            run.reference.value_work.lists.saturated.to_string(),
-        ),
-        (
-            "reference-allocated-bytes",
-            run.reference.allocated_bytes.to_string(),
-        ),
-        (
-            "reference-allocated-bytes-saturated",
-            run.reference.allocated_bytes_saturated.to_string(),
-        ),
-        (
-            "reference-map-node-visits",
-            run.reference.value_work.maps.node_visits.to_string(),
-        ),
-        (
-            "reference-map-nodes-allocated",
-            run.reference.value_work.maps.nodes_allocated.to_string(),
-        ),
-        (
-            "reference-map-entry-handles-allocated",
-            run.reference
-                .value_work
-                .maps
-                .entry_handles_allocated
-                .to_string(),
-        ),
-        (
-            "reference-map-entry-handle-copies",
-            run.reference
-                .value_work
-                .maps
-                .entry_handle_copies
-                .to_string(),
-        ),
-        (
-            "reference-map-key-bytes-copied",
-            run.reference.value_work.maps.key_bytes_copied.to_string(),
-        ),
-        (
-            "reference-allocation-charges",
-            run.reference.allocation_charges.to_string(),
-        ),
-        (
-            "reference-collection-items",
-            run.reference.collection_items.to_string(),
-        ),
-        (
-            "reference-collection-items-saturated",
-            run.reference.collection_items_saturated.to_string(),
-        ),
-        (
-            "reference-capability-calls",
-            run.reference.capability_calls.to_string(),
-        ),
-        (
-            "reference-capability-calls-saturated",
-            run.reference.capability_calls_saturated.to_string(),
-        ),
     ];
     if let Some(executor) = executor {
         execution.extend([
             (
                 "production-observation",
                 source_batch::observation_json(&run.production)?,
-            ),
-            (
-                "reference-observation",
-                source_batch::observation_json(&run.reference)?,
             ),
             (
                 "executor-observation",
@@ -2367,21 +2166,15 @@ struct ChangeCommandRequest {
 /// engine. Compact records and direct flags converge before plan comparison, repository access,
 /// preparation, response generation, or publication.
 pub fn execute_change(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>> {
-    // The adapter admits the full mixed tree before recursive semantic owners run. Keep their
-    // supported 1,024-expression / 256-type depth usable on a bounded stack, including debug
-    // builds. The request and every partially built tree stay on this worker until it is joined.
     let project = memory::current();
-    std::thread::Builder::new()
-        .name("change-request".to_owned())
-        .stack_size(64 * 1_048_576)
-        .spawn(move || memory::with_project(project, || execute_change_on_stack(arguments)))
-        .map_err(|error| {
-            single_diagnostic(internal_error(format!(
-                "cannot start change request worker: {error}"
-            )))
-        })?
-        .join()
-        .map_err(|_| single_diagnostic(internal_error("change request worker panicked")))?
+    crate::platform::stack::run("change-request", move || {
+        memory::with_project(project, || execute_change_on_stack(arguments))
+    })
+    .map_err(|error| {
+        single_diagnostic(internal_error(format!(
+            "cannot execute change request: {error}"
+        )))
+    })?
 }
 
 fn execute_change_on_stack(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>> {
@@ -5621,15 +5414,6 @@ impl<'reader, 'view, 'cancel> DefinitionMaterializer<'reader, 'view, 'cancel> {
     }
 
     fn admit_body_record(&mut self, depth: u64) -> Result<(), Diagnostic> {
-        if depth > MAXIMUM_FUNCTION_DEFINITION_DEPTH {
-            return Err(owner_inspection_error(
-                DiagnosticClass::Resource,
-                "definition_depth_limit",
-                format!(
-                    "definition body depth {depth} exceeds {MAXIMUM_FUNCTION_DEFINITION_DEPTH}"
-                ),
-            ));
-        }
         let next = self.body_records.checked_add(1).ok_or_else(|| {
             owner_inspection_error(
                 DiagnosticClass::Resource,
@@ -8778,7 +8562,7 @@ fn definition_child_depth(depth: u64) -> Result<u64, Diagnostic> {
     depth.checked_add(1).ok_or_else(|| {
         owner_inspection_error(
             DiagnosticClass::Resource,
-            "definition_depth_limit",
+            "definition_depth_overflow",
             "definition body depth accounting overflowed",
         )
     })
@@ -11064,7 +10848,7 @@ mod tests {
 
         materializer.body_records = MAXIMUM_FUNCTION_DEFINITION_BODY_RECORDS - 1;
         materializer
-            .admit_body_record(MAXIMUM_FUNCTION_DEFINITION_DEPTH)
+            .admit_body_record(256)
             .expect("exact body/depth admission");
         assert_eq!(
             materializer.body_records,
@@ -11072,19 +10856,16 @@ mod tests {
         );
         assert_eq!(
             materializer
-                .admit_body_record(MAXIMUM_FUNCTION_DEFINITION_DEPTH)
+                .admit_body_record(256)
                 .expect_err("one-over body records")
                 .code,
             "definition_body_record_limit"
         );
         materializer.body_records = 0;
-        assert_eq!(
-            materializer
-                .admit_body_record(MAXIMUM_FUNCTION_DEFINITION_DEPTH + 1)
-                .expect_err("one-over body depth")
-                .code,
-            "definition_depth_limit"
-        );
+        for depth in [256, 512, 1_024] {
+            materializer.admit_body_record(depth).unwrap();
+            assert_eq!(materializer.maximum_depth, depth);
+        }
         materializer.structural_edges = MAXIMUM_FUNCTION_DEFINITION_EDGES;
         materializer
             .require_edge_total(MAXIMUM_FUNCTION_DEFINITION_EDGES, 0)

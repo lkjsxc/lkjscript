@@ -354,19 +354,6 @@ fn recursive_instances_properties_ingress_and_codec_limits_are_independent() {
             .invoke(entries[0], vec![value], None, &control)
             .is_err()
     );
-    let mut deep = leaf(&program, roots[0], NormalizedValue::I64(1));
-    for _ in 0..63 {
-        deep = branch(&program, roots[0], vec![deep]);
-    }
-    data_codec::encode_typed(&program, &deep, roots[0]).unwrap();
-    let excessive = branch(&program, roots[0], vec![deep]);
-    assert_eq!(
-        data_codec::encode_typed(&program, &excessive, roots[0])
-            .unwrap_err()
-            .class,
-        crate::platform::DiagnosticClass::Resource
-    );
-    assert!(data_codec_reference::encode_typed(&bound, &excessive, roots[0]).is_err());
     for after in [1, program.work.type_derivation_steps / 2] {
         assert_eq!(
             NormalizedProgram::prepare_with_control(
@@ -415,7 +402,7 @@ fn recursive_instances_properties_ingress_and_codec_limits_are_independent() {
         .is_err()
     );
     println!(
-        "recursive instances={} production-steps={} production-bytes={} reference-steps={} reference-bytes={} raw-second-value=checked forbidden-sibling=checked codec-depth=127/129",
+        "recursive instances={} production-steps={} production-bytes={} reference-steps={} reference-bytes={} raw-second-value=checked forbidden-sibling=checked codec-roundtrip=checked",
         program.variant_instances.len(),
         program.work.type_derivation_steps,
         program.work.type_metadata_bytes,
@@ -827,7 +814,7 @@ fn inline_variant_spine_fixture() -> (KernelSnapshot, TypeObjectDigest, Declarat
 }
 
 #[test]
-fn raw_recursive_variant_box_spines_preserve_depth_refusal_and_reuse() {
+fn raw_recursive_variant_box_spines_cross_former_depth_and_reuse() {
     let (snapshot, chain_type, entry) = inline_variant_spine_fixture();
     let program = prepare_snapshot(&snapshot);
     let schema = reference_schema::NormalizedReferenceSchema::reconstruct([&snapshot]).unwrap();
@@ -897,32 +884,11 @@ fn raw_recursive_variant_box_spines_preserve_depth_refusal_and_reuse() {
     };
     for reference in [false, true] {
         let control = ExecutionControl::uncancelled();
-        for depth in [0, 255, 256] {
+        for depth in [0, 256, 1024, 4096] {
             let (result, work) = invoke(reference, depth, &control);
             assert!(matches!(result.unwrap(), NormalizedValue::Unit));
             assert_eq!(work.input_admission_nodes, depth + 1);
         }
-        let (result, work) = invoke(reference, 257, &control);
-        let error = result.unwrap_err();
-        assert_eq!(error.class, ExecutionFailureClass::Resource);
-        assert_eq!(
-            error.code,
-            if reference {
-                "normalized_reference_value_depth"
-            } else {
-                "normalized_value_depth"
-            }
-        );
-        assert_eq!(
-            error.message,
-            if reference {
-                "invocation input reference value admission: reference inline Option/Result/Variant spine exceeds depth 256"
-            } else {
-                "invocation input value admission: inline Option/Result/Variant spine exceeds depth 256"
-            }
-        );
-        assert_eq!(work.input_admission_nodes, 258);
-        assert_eq!(work.raw_result_admission_nodes, 0);
         // Cancellation after real typed progress must also drain rejected raw
         // ownership; a subsequent invocation reuses the same admitted program.
         let (cancelled, work) = invoke(

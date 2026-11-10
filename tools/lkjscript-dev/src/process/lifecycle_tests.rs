@@ -113,7 +113,7 @@ fn exact_limits_and_final_bursts_preserve_both_streams() {
 #[test]
 fn all_shared_routes_clean_sampled_separate_groups_and_reap_the_direct_child() {
     let root = tempfile::tempdir().unwrap();
-    for mode in 0..4 {
+    for mode in 0..3 {
         let script =
             format!("setsid sleep 5 & printf '%s %s' $$ $! > ids-{mode}; sleep 0.06; exit 0");
         let mut spec = fixture(root.path(), &format!("route-{mode}"), &script);
@@ -122,8 +122,7 @@ fn all_shared_routes_clean_sampled_separate_groups_and_reap_the_direct_child() {
         spec.timeout = Duration::from_secs(2);
         let result = match mode {
             0 => run(&spec, root.path()),
-            1 => run_selected(&spec, root.path(), Some(Path::new("/bin/sh"))),
-            2 => run_controlled(&spec, root.path(), &ProcessControl::default()),
+            1 => run_controlled(&spec, root.path(), &ProcessControl::default()),
             _ => {
                 let stdin = root.path().join("input");
                 std::fs::write(&stdin, b"").unwrap();

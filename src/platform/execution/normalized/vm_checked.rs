@@ -1190,7 +1190,6 @@ type Bindings = BTreeMap<crate::platform::semantic_id::TypeParameterId, TypeObje
 type Visit<'a> = (
     &'a NormalizedValue,
     TypeObjectDigest,
-    usize,
     bool,
     BindingOwner<Bindings>,
     bool,
@@ -1310,7 +1309,7 @@ impl Admission<'_> {
         self.allocate(std::mem::size_of::<Visit<'_>>() as u64)?;
         let mut pending = Vec::new();
         reserve(&mut pending, 1)?;
-        pending.push((argument.raw(), parameter.ty, 0, false, bindings, true));
+        pending.push((argument.raw(), parameter.ty, false, bindings, true));
         self.inspect_pending(pending, None, false)?;
         self.control.check()?;
         argument.class = Class::Retained(index);
@@ -1388,21 +1387,15 @@ impl Admission<'_> {
     ) -> Result<(), ExecutionError> {
         let program = self.program;
         let control = self.control;
-        self.allocate(std::mem::size_of::<(TypeObjectDigest, usize)>() as u64)?;
+        self.allocate(std::mem::size_of::<TypeObjectDigest>() as u64)?;
         let mut pending = Vec::new();
         reserve(&mut pending, 1)?;
-        pending.push((ty, 0_usize));
-        while let Some((ty, depth)) = pending.pop() {
+        pending.push(ty);
+        while let Some(ty) = pending.pop() {
             self.control.check()?;
             self.work.capture_admission_nodes = self.work.capture_admission_nodes.saturating_add(1);
             self.control
                 .capture_admission_node(self.work.capture_admission_nodes)?;
-            if depth > 256 {
-                return Err(resource_error(
-                    "normalized_value_depth",
-                    "capture type exceeds depth 256",
-                ));
-            }
             let ty = self.parameter(ty, bindings)?;
             let identity = self
                 .type_identity(ty, bindings)?
@@ -1424,9 +1417,9 @@ impl Admission<'_> {
             })?;
             let mut append = |child| -> Result<(), ExecutionError> {
                 self.control.check()?;
-                self.allocate(std::mem::size_of::<(TypeObjectDigest, usize)>() as u64)?;
+                self.allocate(std::mem::size_of::<TypeObjectDigest>() as u64)?;
                 reserve(&mut pending, 1)?;
-                pending.push((child, depth + 1));
+                pending.push(child);
                 Ok(())
             };
             match &object.form {
@@ -1582,7 +1575,7 @@ impl Admission<'_> {
             .map_err(|_| StorageFailure::Allocation)?;
         let mut pending = Vec::new();
         reserve(&mut pending, 1)?;
-        pending.push((raw, ty, 0, true, bindings, false));
+        pending.push((raw, ty, true, bindings, false));
         self.inspect_pending(pending, authority, input)
     }
 
@@ -1595,7 +1588,7 @@ impl Admission<'_> {
         let mut root_class = None;
         let mut root_identity = None;
         let mut capture_types = Vec::new();
-        while let Some((value, ty, depth, affine_allowed, bindings, capture)) = pending.pop() {
+        while let Some((value, ty, affine_allowed, bindings, capture)) = pending.pop() {
             self.control.check()?;
             if capture {
                 self.work.capture_admission_nodes =
@@ -1610,24 +1603,6 @@ impl Admission<'_> {
                 self.work.raw_result_admission_nodes =
                     self.work.raw_result_admission_nodes.saturating_add(1);
             }
-            if depth > 256 {
-                return Err(resource_error(
-                    "normalized_value_depth",
-                    "inline Option/Result/Variant spine exceeds depth 256",
-                ));
-            }
-            // Only Box-backed inline wrappers still recurse during Clone.
-            // Opaque Function/Record/List/Map ownership breaks that spine.
-            let next_depth = if matches!(
-                value,
-                NormalizedValue::Option(_)
-                    | NormalizedValue::Result { .. }
-                    | NormalizedValue::Variant { .. }
-            ) {
-                depth + 1
-            } else {
-                0
-            };
             let class = self.classify(value)?;
             if root_class.is_none() {
                 root_class = Some(class);
@@ -1977,7 +1952,6 @@ impl Admission<'_> {
                             pending.push((
                                 child,
                                 parameter.ty,
-                                0,
                                 false,
                                 BindingOwner::clone(&substitutions),
                                 true,
@@ -1993,14 +1967,7 @@ impl Admission<'_> {
             }
             for (child, ty, allowed) in children.into_iter().rev() {
                 reserve(&mut pending, 1)?;
-                pending.push((
-                    child,
-                    ty,
-                    next_depth,
-                    allowed,
-                    BindingOwner::clone(&bindings),
-                    capture,
-                ));
+                pending.push((child, ty, allowed, BindingOwner::clone(&bindings), capture));
             }
         }
         let root_class = root_class.ok_or_else(|| {
@@ -2055,22 +2022,18 @@ impl Admission<'_> {
             let scratch = type_scratch::bound(self.program, ty, self.control)?;
             self.allocate(scratch)?;
         }
-        Ok(self.type_identity_reserved(ty, bindings, 0))
+        Ok(self.type_identity_reserved(ty, bindings))
     }
 
     fn type_identity_reserved(
         &self,
         ty: TypeObjectDigest,
         bindings: &BTreeMap<crate::platform::semantic_id::TypeParameterId, TypeObjectDigest>,
-        depth: usize,
     ) -> Option<TypeObjectDigest> {
-        if depth > 256 {
-            return None;
-        }
         if bindings.is_empty() {
             return self.program.types.contains_key(&ty).then_some(ty);
         }
-        let descend = |ty| self.type_identity_reserved(ty, bindings, depth + 1);
+        let descend = |ty| self.type_identity_reserved(ty, bindings);
         let form = match &self.program.types.get(&ty)?.form {
             TypeForm::Applied {
                 declaration,

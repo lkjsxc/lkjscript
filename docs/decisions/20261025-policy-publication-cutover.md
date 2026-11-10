@@ -144,15 +144,13 @@ The new semantic state is
 `semantic_state_66d01c7280e302fa390e1449e148893c23b0aea46b1fb7c7dc9033cc81a318ec`,
 with 35,952 owners, 41 types and 24,864 retirements. This changed semantic inventory belongs to
 source adoption, not the receipt-only republication. Maintained proposal replay subsequently
-matched all 641 canonical units and the native backend closure. The focused Tier 1 measurement
-observed Mode0 profile6 C2 = C3 and Mode1 profile5 artifact C1 = C2 = C3; exact image hashes,
-measurement scope and remaining fixture/gate obligations are recorded in the
-[capacity ledger](20261025-capacity-unbounding.md). These observations do not establish raw-source
-Tier 2 self-compilation or final staged-tree acceptance.
+matched all 641 canonical units and the native backend closure.
 
-The [source adoption evidence](20261028-selfhost-adoption-evidence.json) retains the accepted
-revision, publication and reader executable hashes, changed parameter identities, transport
-digest and focused native outputs separately from the receipt republication evidence.
+Current policy and publication behavior is specified in
+[concurrent changes](../spec/concurrent-changes.md) and
+[semantic storage](../spec/semantic-storage.md). The
+[self-hosting contract](../spec/selfhosting.md) and
+[verification commands](../spec/verification.md) define current bootstrap checks.
 
 The retirement-binding negative fixture, atomic memory replay and remaining definition-field
 descriptor corrections passed their focused controls, including all 641 canonical units and

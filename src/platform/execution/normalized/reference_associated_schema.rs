@@ -408,7 +408,7 @@ pub(super) fn core_with_limits(
         &mut schema.variant_instances,
     )?;
     closure.sequence_elements()?;
-    closure.product_depths(
+    closure.product_closure(
         &schema.records,
         &schema.record_instances,
         &schema.owned_record_declarations,

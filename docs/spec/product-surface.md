@@ -30,8 +30,8 @@ including `v` and dots. Signs, whitespace, suffixes, build metadata, ranges and
 wildcards reject. These are canonical identity and containment rules, not a
 compatibility claim. Tag validation does not parse machine integers or privilege
 one component. A matching product selection requires the whole exact identifier.
-The single release-container validator owns this spelling for production,
-verifier handoff and runtime installation.
+The release-container validator owns this spelling for container admission and
+local runtime installation.
 
 Use exact contract identities and their declared admission rules, accepted package
 closures, executable capability discovery and actual tested behavior to determine
@@ -147,14 +147,12 @@ claim protection against a hostile administrator or an attacker controlling the 
 One production release-container owner admits bounded gzip (128 MiB), tar (256 MiB), and canonical
 manifest (1 MiB), exact five-member inventory, metadata, digests and actual static ELF. It rejects
 extensions, links, devices, traversal, duplicates, truncation, invalid checksums and trailing data.
-Historical producer identities are admitted independently of the current release owner's stricter
-pinned toolchain/notice/provenance policy. Current content uses the explicit
+Container metadata records its producer identity. Current content uses the explicit
 `format: "lkjscript-release-content-1"` encoding identity. It binds the intended product version/tag,
 actual source commit, target/build policy and command, toolchain and lock inputs, executable,
 licenses/notices and deterministic packaging facts. It contains no publication mode or annotated
-tag object. The intended tag is a content constraint, not a claim that a remote tag exists. Candidate
-acceptance, transfer, publication authorization and later controller attempts do not change these
-bytes. Native installation reports `neutral/unverified-publication`.
+tag object. The intended tag is a content constraint, not a claim that a remote tag exists.
+Native installation reports `neutral/unverified-publication`.
 
 The strictly decoded historical encoding remains readable, including its original field order and
 canonical nullable annotated tag object. Its `dry-run` and `release` labels remain declarations with
@@ -163,19 +161,12 @@ mixed encoding, unknown fields, a missing neutral discriminator or a reinterpret
 Installed historical manifests and receipts remain unchanged. Different archive identities at one
 tag conflict, including legacy and neutral archives that happen to contain the same executable.
 
-Older managers reject the neutral encoding. The exact generated bootstrap extracts and runs the
-new manager, which admits both supported encodings; retain that manager's pinned installed path
-when selecting a predecessor. Installation is idempotent for unchanged archive bytes and never
-replaces a conflicting immutable slot. Rejected admission leaves the existing selection available.
-This format transition changes neither application data nor graph, compiler or program-artifact
-generations.
+Installation is idempotent for unchanged archive bytes and never replaces a conflicting
+immutable slot. Rejected admission leaves the existing selection available.
 
-Current public release metadata contains product name/version plus exact source, target, toolchain,
-candidate, linkage, notice, archive, checksum, and integrity evidence. The release content discriminator
-selects a container reader; it is not another public language/runtime version. It is the limited
-distribution compatibility exception to otherwise private compatibility identities. Private
-first-party handoffs and receipts may retain independently owned compatibility state, but new public
-metadata cannot copy unrelated internal identities or select a historical production writer.
+Retained container metadata describes product name/version, source, target, toolchain,
+executable linkage, notices and archive digests. Its content discriminator selects the
+container reader. The format and executable discovery remain separate from graph authority.
 
 ## Internal and historical boundary
 
@@ -185,26 +176,16 @@ values, codecs, and digest domains. They continue to reject malformed, stale, fo
 noncanonical, corrupt, and predecessor input. Hiding those values from public projections cannot
 weaken their validation or binding.
 
-Completed campaigns, durable decisions, structured evidence, immutable releases, and frozen
-receipts retain terminology and identities that were true for their time. They are not current
-product discovery. Source-owned internal constants and tests are likewise outside the product
-projection.
+Git records earlier terminology and identities. Current specifications and executable
+discovery describe the maintained product surface.
 
-## Current documentation ownership and audit
+## Current documentation and verification
 
-Current product prose consists of the root README; status, architecture, roadmap, security, and
-release documents; all current specifications; generated public guides; the maintained standard
-package and `lkjournal` guides; maintained deployment descriptors; and hosted release parsing.
-The removed diff/merge specification is explicitly historical and excluded. Generated guides are
-written and verified only by the executable.
+Current product prose includes the root README, entry documents, specifications,
+generated public guides and maintained project guides. The executable owns public
+guide generation and verification through its `capabilities --generate-docs` and
+`--verify-generated` operations.
 
-`lkjscript-dev policy product-surface` owns the bounded audit for those files and the distributed
-executable. It scans the two classified current documentation directories and an explicit file
-set, executes the exact version query plus every maintained capability command/section focus, and
-probes predecessor discovery requests. Historical, decision, evidence, campaign, and internal
-source paths are excluded by classification. There are no content exceptions inside the current
-boundary.
-
-The cutover is direct: predecessor option, section, descriptor, event, review, generated-guide, and
-public-metadata shapes reject or are absent. There is no compatibility alias, dual writer,
-generation selector, fallback reader for current input, or replacement subsystem edition.
+The [routine suite](verification.md) runs the tests for version output, capability
+discovery, current formats and generated-guide consistency. Source review keeps
+other prose aligned with the code.
