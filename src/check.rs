@@ -166,7 +166,7 @@ enum Root {
     Parameter(usize),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 struct Origin {
     root: Root,
     projections: Vec<Projection>,
@@ -185,20 +185,20 @@ fn overlaps(a: &Origin, b: &Origin) -> bool {
     a.root == b.root && path_overlaps(&a.projections, &b.projections)
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 struct Loan {
     holder: Place,
     target: Origin,
     mutable: bool,
     parents: Vec<Place>,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 struct Tag {
     target: Origin,
     witness: Place,
     variant: usize,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 struct State {
     live: Vec<bool>,
     moved: Vec<Place>,

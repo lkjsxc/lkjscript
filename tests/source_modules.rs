@@ -302,7 +302,13 @@ fn compiler_bundle_never_substitutes_hidden_library_bytes() {
     let error = source::parse_bundle(&bundle).and_then(|p| elaborate::elaborate(&p));
     // The supplied bytes intentionally omit valid_utf8 required by string.rs.
     // Resolving that import must fail; substituting embedded bytes would hide it.
-    assert_eq!(error.unwrap_err().code, "E_IMPORT");
+    assert_eq!(
+        error
+            .err()
+            .expect("supplied library missing required byte helpers must fail resolution")
+            .code,
+        "E_IMPORT"
+    );
 }
 
 #[test]

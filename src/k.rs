@@ -1,5 +1,5 @@
 //! Explicit, monomorphic meaning. Only CheckedProgram reaches a backend.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum TypeKind {
     Unit,
     Bool,
@@ -38,29 +38,29 @@ pub enum TypeKind {
     Str,
     World,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Field {
     pub name: String,
     pub ty: usize,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Variant {
     pub name: String,
     pub fields: Vec<Field>,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Type {
     pub name: String,
     pub kind: TypeKind,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Projection {
     Deref,
     Field(usize),
     VariantField(usize, usize),
     Index(usize),
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Place {
     pub local: usize,
     pub projections: Vec<Projection>,
@@ -73,13 +73,13 @@ impl Place {
         }
     }
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Local {
     pub name: String,
     pub ty: usize,
     pub mutable: bool,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Op {
     /// Immutable UTF-8 bytes with module-long storage. The checker validates bytes.
     Text {
@@ -177,12 +177,12 @@ pub enum Op {
         message: String,
     },
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Instruction {
     pub op: Op,
     pub line: usize,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum ReturnSource {
     /// Reference leaves in a parameter value, after the declared dereferences.
     /// Projected sources currently require shared leaves; exclusive reborrows
@@ -193,7 +193,7 @@ pub enum ReturnSource {
     },
     Static,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Function {
     pub file: usize,
     pub name: String,
@@ -204,7 +204,7 @@ pub struct Function {
     pub body: Vec<Instruction>,
     pub test: bool,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Program {
     pub types: Vec<Type>,
     pub functions: Vec<Function>,
