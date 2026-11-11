@@ -859,5 +859,22 @@
     "rust": true,
     "rustAccept": false,
     "pending": false
+  },
+  {
+    "id": "type_alias_constructor",
+    "file": "pass/type_alias_constructor.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "type_alias_tied_arguments",
+    "file": "fail/type_alias_tied_arguments.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
   }
 ]

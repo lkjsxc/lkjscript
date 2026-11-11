@@ -1,7 +1,9 @@
 //! Rust-compatible syntax to explicit K. Inference lives here; K trusts none of it.
 mod borrow_cleanup;
+mod constructors;
 mod derive_check;
 mod generic_check;
+mod inference;
 mod integers;
 mod operators;
 mod patterns;
@@ -2284,125 +2286,38 @@ impl Builder<'_, '_> {
         expected: Option<usize>,
         span: a::Span,
     ) -> Result<(usize, usize)> {
-        let (enum_name, variant) = path
-            .name
-            .rsplit_once("::")
-            .unwrap_or(("", path.name.as_str()));
-        let ty = if let Some(t) = expected {
-            if matches!(self.compiler.types[t].kind, k::TypeKind::Enum { .. }) {
-                if !enum_name.is_empty() {
-                    let mut sub = self.sub.clone();
-                    if let Some((_, args)) = self.compiler.applications.get(&t) {
-                        if let Some(def) = self
-                            .compiler
-                            .source
-                            .enums
-                            .iter()
-                            .find(|e| qualified(&e.module, &e.name) == enum_name)
-                        {
-                            for (parameter, argument) in
-                                def.generics.iter().filter(|g| !g.lifetime).zip(args)
-                            {
-                                sub.insert(parameter.name.clone(), *argument);
-                            }
-                        }
-                    }
-                    let named = self.compiler.named_type(
-                        &a::Path {
-                            declaration: path.declaration,
-                            name: enum_name.to_string(),
-                            args: path.args.clone(),
-                        },
-                        &sub,
-                        span,
-                    )?;
-                    if named != t {
-                        return Err(err(
-                            span,
-                            "E_TYPE",
-                            "variant names a different enum declaration",
-                        ));
-                    }
-                }
-                t
-            } else {
-                return Err(err(span, "E_TYPE", "variant requires an enum result type"));
-            }
-        } else if !enum_name.is_empty() {
-            self.compiler.named_type(
-                &a::Path {
-                    declaration: None,
-                    name: enum_name.to_string(),
-                    args: path.args.clone(),
-                },
-                &self.sub,
+        let name = self.variant_name(path).ok_or_else(|| {
+            err(
                 span,
-            )?
-        } else {
-            return Err(err(span, "E_TYPE", "variant requires a result type"));
+                "E_TYPE",
+                "variant requires a resolved enum declaration",
+            )
+        })?;
+        let mut target = self
+            .constructor_target(path, expected, span)?
+            .ok_or_else(|| {
+                err(
+                    span,
+                    "E_TYPE",
+                    "variant requires a resolved enum declaration",
+                )
+            })?;
+        if !matches!(
+            self.compiler.source.declarations[target.declaration].item,
+            a::Item::Enum(_)
+        ) {
+            return Err(err(span, "E_TYPE", "variant requires an enum declaration"));
+        }
+        self.constrain_constructor_target(&mut target, span)?;
+        let ty = self.finish_constructor(target, span)?;
+        let k::TypeKind::Enum { variants, .. } = &self.compiler.types[ty].kind else {
+            unreachable!()
         };
-        if let k::TypeKind::Enum { variants, .. } = &self.compiler.types[ty].kind {
-            let tag = variants
-                .iter()
-                .position(|v| v.name == variant)
-                .ok_or_else(|| err(span, "E_TYPE", "unknown variant"))?;
-            Ok((ty, tag))
-        } else {
-            Err(err(span, "E_TYPE", "variant requires enum"))
-        }
-    }
-    fn infer_type(
-        &mut self,
-        pattern: usize,
-        actual: usize,
-        sub: &mut BTreeMap<String, usize>,
-    ) -> Result<()> {
-        match self.compiler.source.types[pattern].kind.clone() {
-            a::Type::Path(p) => {
-                if p.args.is_empty()
-                    && self
-                        .compiler
-                        .names
-                        .is_type_parameter(&p, self.compiler.source.types[pattern].span)
-                {
-                    if let Some(existing) = sub.get(&p.name) {
-                        if *existing != actual {
-                            return Err(err(
-                                self.compiler.source.types[pattern].span,
-                                "E_TYPE",
-                                "generic arguments disagree",
-                            ));
-                        }
-                    } else {
-                        sub.insert(p.name, actual);
-                    }
-                } else if let Some((name, arguments)) =
-                    self.compiler.applications.get(&actual).cloned()
-                {
-                    let ps=p.args.iter().filter(|id|!matches!(&self.compiler.source.types[**id].kind,a::Type::Path(p) if p.name.starts_with('\''))).copied().collect::<Vec<_>>();
-                    if p.name == name && ps.len() == arguments.len() {
-                        for i in 0..ps.len() {
-                            self.infer_type(ps[i], arguments[i], sub)?;
-                        }
-                    }
-                } else if p.args.len() == 1 {
-                    let inner = match self.compiler.types[actual].kind {
-                        k::TypeKind::Vec { inner } | k::TypeKind::Box { inner } => Some(inner),
-                        _ => None,
-                    };
-                    if let Some(inner) = inner {
-                        self.infer_type(p.args[0], inner, sub)?;
-                    }
-                }
-            }
-            a::Type::Ref { inner, .. } => {
-                if let k::TypeKind::Ref { inner: t, .. } = self.compiler.types[actual].kind {
-                    self.infer_type(inner, t, sub)?;
-                }
-            }
-            _ => {}
-        }
-        Ok(())
+        let tag = variants
+            .iter()
+            .position(|variant| variant.name == name)
+            .ok_or_else(|| err(span, "E_TYPE", "unknown enum variant"))?;
+        Ok((ty, tag))
     }
     fn call(
         &mut self,
@@ -2655,7 +2570,9 @@ impl Builder<'_, '_> {
                 let impls = self.compiler.source.impls.clone();
                 for im in impls {
                     let mut sub = BTreeMap::new();
-                    self.infer_type(im.target, t, &mut sub)?;
+                    if !self.infer_type_matches(im.target, t, &mut sub)? {
+                        continue;
+                    }
                     sub.insert("Self".to_string(), t);
                     if self.compiler.resolve(im.target, &sub).ok() == Some(t) {
                         if !self.trait_available(&im, t) {
@@ -2742,7 +2659,9 @@ impl Builder<'_, '_> {
                 continue;
             }
             let mut substitutions = BTreeMap::new();
-            self.infer_type(implementation.target, base, &mut substitutions)?;
+            if !self.infer_type_matches(implementation.target, base, &mut substitutions)? {
+                continue;
+            }
             substitutions.insert("Self".to_string(), base);
             if self
                 .compiler
@@ -3086,7 +3005,9 @@ impl Builder<'_, '_> {
                 let impls = self.compiler.source.impls.clone();
                 for im in impls {
                     let mut sub = BTreeMap::new();
-                    self.infer_type(im.target, base, &mut sub)?;
+                    if !self.infer_type_matches(im.target, base, &mut sub)? {
+                        continue;
+                    }
                     sub.insert("Self".to_string(), base);
                     if let Ok(t) = self.compiler.resolve(im.target, &sub) {
                         if t == base {
@@ -3186,72 +3107,90 @@ impl Builder<'_, '_> {
         {
             return Ok(value);
         }
-        let definition = self
-            .compiler
-            .source
-            .structs
-            .iter()
-            .find(|s| qualified(&s.module, &s.name) == path.name)
-            .cloned()
-            .ok_or_else(|| err(span, "E_TYPE", "unknown struct"))?;
-        let mut sub = self.sub.clone();
-        if let Some(t) = expected {
-            if let Some((owner, args)) = self.compiler.applications.get(&t) {
-                if owner != &qualified(&definition.module, &definition.name) {
-                    return Err(err(
-                        span,
-                        "E_TYPE",
-                        "struct constructor names a different declaration",
-                    ));
-                }
-                for (parameter, argument) in
-                    definition.generics.iter().filter(|g| !g.lifetime).zip(args)
-                {
-                    sub.insert(parameter.name.clone(), *argument);
-                }
-            }
-        }
-        let mut values = Vec::new();
-        for (name, expr) in fields {
-            let field = definition
+        let mut target = self
+            .constructor_target(path, expected, span)?
+            .ok_or_else(|| err(span, "E_TYPE", "constructor requires a struct declaration"))?;
+        let a::Item::Struct(index) = self.compiler.source.declarations[target.declaration].item
+        else {
+            return Err(err(
+                span,
+                "E_TYPE",
+                "constructor requires a struct declaration",
+            ));
+        };
+        self.constrain_constructor_target(&mut target, span)?;
+        let definition = self.compiler.source.structs[index].clone();
+        let mut positions = Vec::new();
+        let mut supplied = vec![false; definition.fields.len()];
+        for (name, _) in fields {
+            let index = definition
                 .fields
                 .iter()
-                .find(|f| f.name == *name)
-                .ok_or_else(|| err(span, "E_TYPE", "unknown field"))?;
-            self.compiler
-                .declared_field_access(&definition, field, self.scope, span)?;
-            let hint = self.compiler.resolve(field.ty, &sub).ok();
-            let value = self.expr(*expr, hint)?;
-            self.infer_type(field.ty, value.1, &mut sub)?;
-            values.push((name.clone(), value.0));
-        }
-        let ty = match expected {
-            Some(t) if matches!(self.compiler.types[t].kind, k::TypeKind::Struct { .. }) => t,
-            _ => self.compiler.named_type(path, &sub, span)?,
-        };
-        let expected_fields = match &self.compiler.types[ty].kind {
-            k::TypeKind::Struct { fields, .. } => fields.clone(),
-            _ => return Err(err(span, "E_TYPE", "constructor requires a struct")),
-        };
-        if fields.len() != expected_fields.len() {
-            return Err(err(span, "E_TYPE", "constructor field count differs"));
-        }
-        let mut ordered = Vec::new();
-        for field in expected_fields {
-            let hits = values
-                .iter()
-                .filter(|(name, _)| *name == field.name)
-                .collect::<Vec<_>>();
-            if hits.len() != 1 {
-                return Err(err(span, "E_TYPE", "missing or duplicate field"));
+                .position(|field| field.name == *name)
+                .ok_or_else(|| err(span, "E_TYPE", &format!("unknown field {name}")))?;
+            if supplied[index] {
+                return Err(err(span, "E_TYPE", &format!("duplicate field {name}")));
             }
-            ordered.push(hits[0].1);
+            supplied[index] = true;
+            self.compiler.declared_field_access(
+                &definition,
+                &definition.fields[index],
+                self.scope,
+                span,
+            )?;
+            positions.push(index);
+        }
+        if supplied.iter().any(|supplied| !supplied) {
+            return Err(err(span, "E_TYPE", "struct constructor is missing fields"));
+        }
+        // Infer from known types before evaluating initializers. Unsuffixed
+        // literals then receive the same constraints regardless of field order.
+        for ((_, expression), field) in fields.iter().zip(&positions) {
+            if matches!(
+                self.compiler.source.exprs[*expression].kind,
+                a::Expr::Method { .. }
+            ) {
+                continue;
+            }
+            if let Some(hint) = self.hint(*expression) {
+                self.infer_type(
+                    definition.fields[*field].ty,
+                    hint,
+                    &mut target.substitutions,
+                )?;
+            }
+        }
+        let mut ordered = vec![None; definition.fields.len()];
+        for ((_, expression), field) in fields.iter().zip(positions) {
+            let pattern = definition.fields[field].ty;
+            let hint = self
+                .compiler
+                .resolve_if_known(pattern, &target.substitutions)?;
+            let value = self.expr(*expression, hint)?;
+            self.infer_type(pattern, value.1, &mut target.substitutions)?;
+            ordered[field] = Some(value);
+        }
+        let ty = self.finish_constructor(target, span)?;
+        let k::TypeKind::Struct { fields, .. } = &self.compiler.types[ty].kind else {
+            unreachable!()
+        };
+        let mut values = Vec::new();
+        for (value, field) in ordered.into_iter().zip(fields) {
+            let (local, actual) = value.expect("all struct fields supplied");
+            if actual != field.ty {
+                return Err(err(
+                    span,
+                    "E_TYPE",
+                    &format!("struct field {} type differs", field.name),
+                ));
+            }
+            values.push(local);
         }
         let dst = self.temp(ty);
         self.emit(
             k::Op::Struct {
                 dst,
-                fields: ordered,
+                fields: values,
             },
             span.line,
         );

@@ -1,22 +1,35 @@
 //! Source variant shapes and declaration-ordered enum payload construction.
-use super::{Builder, Result, a, err, k, qualified};
+use super::{Builder, Result, a, err, k};
 use std::collections::BTreeMap;
 
 impl Builder<'_, '_> {
     pub(super) fn enum_definition(&self, ty: usize, span: a::Span) -> Result<usize> {
-        let (name, _) = self
-            .compiler
-            .applications
-            .get(&ty)
-            .ok_or_else(|| err(span, "E_TYPE", "enum declaration identity is missing"))?;
-        let declaration = self
-            .compiler
-            .declaration_names
-            .get(name)
-            .ok_or_else(|| err(span, "E_TYPE", "enum declaration identity is missing"))?;
-        match self.compiler.source.declarations[*declaration].item {
+        let declaration = self.nominal_declaration(ty, span)?;
+        match self.compiler.source.declarations[declaration].item {
             a::Item::Enum(index) => Ok(index),
             _ => Err(err(span, "E_TYPE", "variant requires an enum declaration")),
+        }
+    }
+
+    pub(super) fn variant_name(&self, path: &a::Path) -> Option<String> {
+        let owner = if let Some(declaration) = path.declaration {
+            if !matches!(
+                self.compiler.source.declarations[declaration].item,
+                a::Item::Enum(_) | a::Item::Alias(_)
+            ) {
+                return None;
+            }
+            self.compiler.source.declarations[declaration].name.as_str()
+        } else if path.name.starts_with("Self::") {
+            "Self"
+        } else {
+            return None;
+        };
+        let name = path.name.strip_prefix(owner)?.strip_prefix("::")?;
+        if name.contains("::") {
+            None
+        } else {
+            Some(name.to_string())
         }
     }
 
@@ -49,52 +62,30 @@ impl Builder<'_, '_> {
         path: &a::Path,
         values: &[(String, usize)],
         style: a::VariantStyle,
-        mut expected: Option<usize>,
+        expected: Option<usize>,
         span: a::Span,
     ) -> Result<Option<(usize, usize)>> {
-        let name = path.name.rsplit("::").next().unwrap();
-        let direct =
-            path.declaration
-                .and_then(|id| match self.compiler.source.declarations[id].item {
-                    a::Item::Enum(index) => Some(index),
-                    _ => None,
-                });
-        let (index, tag) = if let Some(index) = direct {
-            let definition = &self.compiler.source.enums[index];
-            let prefix = format!("{}::", qualified(&definition.module, &definition.name));
-            let Some(name) = path.name.strip_prefix(&prefix) else {
-                return Ok(None);
-            };
-            let Some(tag) = definition
-                .variants
-                .iter()
-                .position(|variant| variant.name == name)
-            else {
-                return Ok(None);
-            };
-            (index, tag)
-        } else if path.declaration.is_none() && path.name.starts_with("Self::") {
-            let ty = *self
-                .sub
-                .get("Self")
-                .ok_or_else(|| err(span, "E_TYPE", "Self has no concrete type"))?;
-            let index = self.enum_definition(ty, span)?;
-            let Some(tag) = self.compiler.source.enums[index]
-                .variants
-                .iter()
-                .position(|variant| variant.name == name)
-            else {
-                return Ok(None);
-            };
-            expected = Some(ty);
-            (index, tag)
-        } else if let Ok((ty, tag)) = self.variant(path, expected, span) {
-            let index = self.enum_definition(ty, span)?;
-            expected = Some(ty);
-            (index, tag)
-        } else {
+        let Some(name) = self.variant_name(path) else {
             return Ok(None);
         };
+        let Some(mut target) = self.constructor_target(path, expected, span)? else {
+            return Ok(None);
+        };
+        let a::Item::Enum(index) = self.compiler.source.declarations[target.declaration].item
+        else {
+            return Ok(None);
+        };
+        let Some(tag) = self.compiler.source.enums[index]
+            .variants
+            .iter()
+            .position(|variant| variant.name == name)
+        else {
+            if style == a::VariantStyle::Named {
+                return Err(err(span, "E_TYPE", "unknown enum variant"));
+            }
+            return Ok(None);
+        };
+        self.constrain_constructor_target(&mut target, span)?;
         let definition = self.compiler.source.enums[index].clone();
         let variant = &definition.variants[tag];
         if variant.style != style && !(style == a::VariantStyle::Named && variant.fields.is_empty())
@@ -133,42 +124,6 @@ impl Builder<'_, '_> {
         if supplied.iter().any(|found| !found) {
             return Err(err(span, "E_TYPE", "variant constructor is missing fields"));
         }
-        let parameters: Vec<_> = definition.generics.iter().filter(|p| !p.lifetime).collect();
-        let mut substitutions = BTreeMap::new();
-        if let Some(ty) = expected {
-            if self.enum_definition(ty, span)? != index {
-                return Err(err(
-                    span,
-                    "E_TYPE",
-                    "variant names a different enum declaration",
-                ));
-            }
-            let (_, arguments) = &self.compiler.applications[&ty];
-            for (parameter, argument) in parameters.iter().zip(arguments) {
-                substitutions.insert(parameter.name.clone(), *argument);
-            }
-        }
-        let type_args: Vec<_> = path.args.iter().copied().filter(|id| !matches!(&self.compiler.source.types[*id].kind, a::Type::Path(p) if p.name.starts_with('\''))).collect();
-        // Alias applications have already selected their concrete enum above.
-        if direct.is_some() && !type_args.is_empty() {
-            if type_args.len() != parameters.len() {
-                return Err(err(span, "E_TYPE", "wrong number of enum type arguments"));
-            }
-            for (parameter, argument) in parameters.iter().zip(type_args) {
-                let ty = self.compiler.resolve(argument, &self.sub)?;
-                if substitutions
-                    .get(&parameter.name)
-                    .is_some_and(|expected| *expected != ty)
-                {
-                    return Err(err(
-                        span,
-                        "E_TYPE",
-                        "explicit enum type arguments differ from expected type",
-                    ));
-                }
-                substitutions.insert(parameter.name.clone(), ty);
-            }
-        }
         // Known field types constrain unsuffixed literals without evaluating any
         // initializer out of source order.
         for ((_, expression), field) in values.iter().zip(&positions) {
@@ -180,34 +135,20 @@ impl Builder<'_, '_> {
                 continue;
             }
             if let Some(hint) = self.hint(*expression) {
-                self.infer_type(variant.fields[*field].ty, hint, &mut substitutions)?;
+                self.infer_type(variant.fields[*field].ty, hint, &mut target.substitutions)?;
             }
         }
         let mut ordered = vec![None; variant.fields.len()];
         for ((_, expression), field) in values.iter().zip(positions) {
             let declared = variant.fields[field].ty;
-            let hint = self.compiler.resolve(declared, &substitutions).ok();
+            let hint = self
+                .compiler
+                .resolve_if_known(declared, &target.substitutions)?;
             let value = self.expr(*expression, hint)?;
-            self.infer_type(declared, value.1, &mut substitutions)?;
+            self.infer_type(declared, value.1, &mut target.substitutions)?;
             ordered[field] = Some(value);
         }
-        let owner = qualified(&definition.module, &definition.name);
-        let ty = self.compiler.named_type(
-            &a::Path {
-                declaration: self.compiler.declaration_names.get(&owner).copied(),
-                name: owner,
-                args: Vec::new(),
-            },
-            &substitutions,
-            span,
-        )?;
-        if expected.is_some_and(|expected| expected != ty) {
-            return Err(err(
-                span,
-                "E_TYPE",
-                "variant constructor result type differs",
-            ));
-        }
+        let ty = self.finish_constructor(target, span)?;
         let k::TypeKind::Enum { variants, .. } = &self.compiler.types[ty].kind else {
             unreachable!()
         };
