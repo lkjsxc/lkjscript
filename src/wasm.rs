@@ -1,6 +1,6 @@
 //! WebAssembly 3.0 memory64 encoding. The checked K program is the input.
 use crate::k::{CheckedProgram, Function, Op, Place, Program, Projection, TypeKind};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::encoding::{sleb, uleb};
 
@@ -64,7 +64,82 @@ fn trap_if(out: &mut Vec<u8>, code: i64, line: usize) {
 const ALLOC: usize = 1;
 const FREE: usize = 2;
 const DROP_RUN: usize = 3;
-const FIRST_USER: usize = 4;
+const UTF8_VALIDATE: usize = 4;
+const FIRST_USER: usize = 5;
+
+// The immutable region precedes the allocator. Each distinct literal has a
+// header-pointer cell, a {data, length, capacity} header, then eight-byte u8 slots.
+// A text reference uses the same outer cell as an ordinary shared slice reference.
+// No owned value points to this region, so neither copying nor cleanup frees it.
+struct TextPool {
+    offsets: BTreeMap<Vec<u8>, u64>,
+    data: Vec<u8>,
+}
+impl TextPool {
+    fn collect(program: &Program) -> Result<Self, String> {
+        let mut pool = Self {
+            offsets: BTreeMap::new(),
+            data: Vec::new(),
+        };
+        for function in &program.functions {
+            for instruction in &function.body {
+                if let Op::Text { bytes, .. } = &instruction.op {
+                    if pool.offsets.contains_key(bytes) {
+                        continue;
+                    }
+                    let length = u64::try_from(bytes.len())
+                        .map_err(|_| "text length exceeds the memory64 representation")?;
+                    let extent = length
+                        .checked_mul(8)
+                        .and_then(|size| size.checked_add(32))
+                        .ok_or("static text extent exceeds the memory64 representation")?;
+                    let address = pool.heap_start()?;
+                    address
+                        .checked_add(extent)
+                        .ok_or("static text address exceeds the memory64 representation")?;
+                    let extent = usize::try_from(extent)
+                        .map_err(|_| "static text extent exceeds the host representation")?;
+                    let size = pool
+                        .data
+                        .len()
+                        .checked_add(extent)
+                        .ok_or("static text size exceeds the host representation")?;
+                    if size > u32::MAX as usize {
+                        return Err(
+                            "WebAssembly data section exceeds its u32 byte-length representation"
+                                .to_string(),
+                        );
+                    }
+                    pool.data
+                        .try_reserve(extent)
+                        .map_err(|_| "allocation failed while encoding static text")?;
+                    for value in [address + 8, address + 32, length, length] {
+                        pool.data.extend_from_slice(&value.to_le_bytes());
+                    }
+                    for byte in bytes {
+                        pool.data.extend_from_slice(&u64::from(*byte).to_le_bytes());
+                    }
+                    pool.offsets.insert(bytes.clone(), address);
+                }
+            }
+        }
+        Ok(pool)
+    }
+
+    fn heap_start(&self) -> Result<u64, String> {
+        u64::try_from(self.data.len())
+            .ok()
+            .and_then(|size| size.checked_add(8))
+            .ok_or_else(|| "static text address exceeds the memory64 representation".to_string())
+    }
+
+    fn pages(&self) -> Result<u64, String> {
+        self.heap_start()?
+            .checked_add(65535)
+            .map(|extent| extent >> 16)
+            .ok_or_else(|| "static text pages exceed the memory64 representation".to_string())
+    }
+}
 
 struct Body<'a> {
     program: &'a Program,
@@ -76,6 +151,7 @@ struct Body<'a> {
     frame_bytes: u64,
     controls: Vec<u8>,
     messages: &'a [String],
+    texts: &'a TextPool,
 }
 impl<'a> Body<'a> {
     fn read(&mut self, local: usize) {
@@ -141,7 +217,6 @@ impl<'a> Body<'a> {
                         TypeKind::Vec { inner }
                         | TypeKind::Slice { inner, .. }
                         | TypeKind::Array { inner, .. } => inner,
-                        TypeKind::String => crate::k::U8,
                         _ => unreachable!("K index type"),
                     };
                     tee(&mut self.bytes, self.scratch + 4);
@@ -452,6 +527,10 @@ impl<'a> Body<'a> {
             }
             Op::Float { dst, bits } => {
                 constant(&mut self.bytes, *bits as i64);
+                self.write(*dst);
+            }
+            Op::Text { dst, bytes } => {
+                constant(&mut self.bytes, self.texts.offsets[bytes] as i64);
                 self.write(*dst);
             }
             Op::Unit { dst } => {
@@ -944,6 +1023,43 @@ impl<'a> Body<'a> {
                 self.write(dst);
             }
 
+            "str_as_bytes" => {
+                // Both shared views retain the original header cell and origin.
+                self.read(args[0]);
+                self.write(dst);
+            }
+            "str_len" => {
+                self.read(args[0]);
+                load(&mut self.bytes, 0);
+                load(&mut self.bytes, 8);
+                self.write(dst);
+            }
+            "str_from_utf8" => {
+                self.read(args[0]);
+                call(&mut self.bytes, UTF8_VALIDATE);
+                set(&mut self.bytes, self.scratch + 4);
+                constant(&mut self.bytes, 16);
+                call(&mut self.bytes, ALLOC);
+                self.write(dst);
+                get(&mut self.bytes, self.scratch + 4);
+                self.bytes.push(0x50);
+                begin_if(&mut self.bytes);
+                self.read(dst);
+                constant(&mut self.bytes, 1);
+                store(&mut self.bytes, 0);
+                self.read(dst);
+                constant(&mut self.bytes, 8);
+                call(&mut self.bytes, ALLOC);
+                store(&mut self.bytes, 8);
+                self.bytes.push(0x05);
+                self.read(dst);
+                constant(&mut self.bytes, 0);
+                store(&mut self.bytes, 0);
+                self.read(dst);
+                self.read(args[0]);
+                store(&mut self.bytes, 8);
+                self.bytes.push(0x0b);
+            }
             "vec_len" => {
                 self.read(args[0]);
                 if matches!(
@@ -980,7 +1096,6 @@ fn heap_type(kind: &TypeKind) -> bool {
             | TypeKind::Enum { .. }
             | TypeKind::Box { .. }
             | TypeKind::Vec { .. }
-            | TypeKind::String
             | TypeKind::Slice { .. }
             | TypeKind::Array { .. }
     )
@@ -1118,6 +1233,106 @@ fn deallocator() -> Vec<u8> {
     b
 }
 
+// Validate a shared byte slice before creating a text view. Continuation state
+// encodes the shortest form, excludes surrogates, and caps scalars at U+10FFFF.
+// The byte slots and extent are already covered by checked slice construction.
+fn utf8_validator() -> Vec<u8> {
+    // 0=input, 1=data, 2=length, 3=index, 4=remaining, 5=low, 6=high, 7=byte.
+    let mut b = vec![1, 7, 0x7e];
+    get(&mut b, 0);
+    load(&mut b, 0);
+    set(&mut b, 1);
+    get(&mut b, 1);
+    load(&mut b, 8);
+    set(&mut b, 2);
+    get(&mut b, 1);
+    load(&mut b, 0);
+    set(&mut b, 1);
+    b.extend_from_slice(&[0x02, 0x40, 0x03, 0x40]);
+    get(&mut b, 3);
+    get(&mut b, 2);
+    b.push(0x5a);
+    b.extend_from_slice(&[0x0d, 1]);
+    get(&mut b, 1);
+    get(&mut b, 3);
+    constant(&mut b, 8);
+    b.push(0x7e);
+    b.push(0x7c);
+    load(&mut b, 0);
+    set(&mut b, 7);
+    get(&mut b, 4);
+    constant(&mut b, 0);
+    b.push(0x52);
+    begin_if(&mut b);
+    get(&mut b, 7);
+    get(&mut b, 5);
+    b.push(0x54);
+    get(&mut b, 7);
+    get(&mut b, 6);
+    b.push(0x56);
+    b.push(0x72);
+    begin_if(&mut b);
+    constant(&mut b, 0);
+    b.push(0x0f);
+    b.push(0x0b);
+    get(&mut b, 4);
+    constant(&mut b, 1);
+    b.push(0x7d);
+    set(&mut b, 4);
+    constant(&mut b, 128);
+    set(&mut b, 5);
+    constant(&mut b, 191);
+    set(&mut b, 6);
+    b.push(0x05);
+    get(&mut b, 7);
+    constant(&mut b, 128);
+    b.push(0x5a);
+    begin_if(&mut b);
+    constant(&mut b, 128);
+    set(&mut b, 5);
+    constant(&mut b, 191);
+    set(&mut b, 6);
+    for (low, high, remaining) in [(194, 223, 1), (224, 239, 2), (240, 244, 3)] {
+        get(&mut b, 7);
+        constant(&mut b, low);
+        b.push(0x5a);
+        get(&mut b, 7);
+        constant(&mut b, high);
+        b.push(0x58);
+        b.push(0x71);
+        begin_if(&mut b);
+        constant(&mut b, remaining);
+        set(&mut b, 4);
+        if remaining > 1 {
+            for (first, bound, local) in if remaining == 2 {
+                [(224, 160, 5), (237, 159, 6)]
+            } else {
+                [(240, 144, 5), (244, 143, 6)]
+            } {
+                get(&mut b, 7);
+                constant(&mut b, first);
+                b.push(0x51);
+                begin_if(&mut b);
+                constant(&mut b, bound);
+                set(&mut b, local);
+                b.push(0x0b);
+            }
+        }
+        b.push(0x05);
+    }
+    constant(&mut b, 0);
+    b.push(0x0f);
+    b.extend_from_slice(&[0x0b, 0x0b, 0x0b, 0x0b, 0x0b]);
+    get(&mut b, 3);
+    constant(&mut b, 1);
+    b.push(0x7c);
+    set(&mut b, 3);
+    b.extend_from_slice(&[0x0c, 0, 0x0b, 0x0b]);
+    get(&mut b, 4);
+    b.extend_from_slice(&[0x50, 0xad, 0x0b]);
+    b
+}
+
 fn copy_fields(b: &mut Vec<u8>, program: &Program, fields: &[crate::k::Field], first: u64) {
     for (i, field) in fields.iter().enumerate() {
         let offset = (first + i as u64) * 8;
@@ -1178,11 +1393,8 @@ fn copy_helper(program: &Program, ty: usize) -> Vec<u8> {
             call(&mut b, helper_index(program, *inner, true));
             store(&mut b, 0);
         }
-        TypeKind::Vec { .. } | TypeKind::Array { .. } | TypeKind::String => {
-            let inner = match kind {
-                TypeKind::Vec { inner } | TypeKind::Array { inner, .. } => *inner,
-                _ => crate::k::U8,
-            };
+        TypeKind::Vec { inner } | TypeKind::Array { inner, .. } => {
+            let inner = *inner;
             get(&mut b, 0);
             load(&mut b, 0);
             set(&mut b, 2);
@@ -1459,11 +1671,8 @@ fn drop_step(program: &Program, ty: usize, destructor: Option<usize>) -> Vec<u8>
                 b.push(0x0b);
             }
         }
-        TypeKind::Vec { .. } | TypeKind::Array { .. } | TypeKind::String => {
-            let inner = match kind {
-                TypeKind::Vec { inner } | TypeKind::Array { inner, .. } => *inner,
-                _ => crate::k::U8,
-            };
+        TypeKind::Vec { inner } | TypeKind::Array { inner, .. } => {
+            let inner = *inner;
             if heap_type(&program.types[inner].kind) {
                 b.extend_from_slice(&[0x02, 0x40, 0x03, 0x40]);
                 get(&mut b, 0);
@@ -1564,7 +1773,10 @@ fn local_layout(program: &Program, function: &Function) -> Result<LocalLayout, S
     for (at, instruction) in function.body.iter().enumerate() {
         loop_at[at] = current_loop;
         match &instruction.op {
-            Op::Int { dst, .. } | Op::Float { dst, .. } | Op::Unit { dst } => {
+            Op::Int { dst, .. }
+            | Op::Float { dst, .. }
+            | Op::Text { dst, .. }
+            | Op::Unit { dst } => {
                 touch_local(&mut ranges, *dst, at);
             }
             Op::Read { dst, place, .. }
@@ -1733,6 +1945,7 @@ fn function_body(
     program: &Program,
     function: &Function,
     messages: &[String],
+    texts: &TextPool,
 ) -> Result<Vec<u8>, String> {
     let layout = local_layout(program, function)?;
     let mut body = Body {
@@ -1745,6 +1958,7 @@ fn function_body(
         frame_bytes: layout.frame_bytes,
         controls: Vec::new(),
         messages,
+        texts,
     };
     uleb(&mut body.bytes, 1);
     uleb(
@@ -1778,6 +1992,7 @@ fn function_body(
 }
 pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     let program = checked.program();
+    let texts = TextPool::collect(program)?;
     let mut destructors = vec![None; program.types.len()];
     for (owner, function) in &program.destructors {
         destructors[*owner] = Some(*function);
@@ -1824,8 +2039,9 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     let mut functions = Vec::new();
     uleb(
         &mut functions,
-        (program.functions.len() + 3 + program.types.len() * 3) as u64,
+        (program.functions.len() + 4 + program.types.len() * 3) as u64,
     );
+    uleb(&mut functions, 1);
     uleb(&mut functions, 1);
     uleb(&mut functions, 1);
     uleb(&mut functions, 1);
@@ -1843,9 +2059,11 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     let mut tables = vec![1, 0x70, 0];
     uleb(&mut tables, program.types.len() as u64);
     section(&mut out, 4, &tables)?;
-    section(&mut out, 5, &[1, 4, 1])?;
+    let mut memory = vec![1, 4];
+    uleb(&mut memory, texts.pages()?);
+    section(&mut out, 5, &memory)?;
     let mut globals = vec![2, 0x7e, 1];
-    constant(&mut globals, 8);
+    constant(&mut globals, texts.heap_start()? as i64);
     globals.push(0x0b);
     globals.extend_from_slice(&[0x7e, 1]);
     constant(&mut globals, 0);
@@ -1872,7 +2090,7 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     let mut code = Vec::new();
     uleb(
         &mut code,
-        (program.functions.len() + 3 + program.types.len() * 3) as u64,
+        (program.functions.len() + 4 + program.types.len() * 3) as u64,
     );
     let alloc = allocator();
     uleb(&mut code, alloc.len() as u64);
@@ -1883,8 +2101,11 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     let dispatcher = drop_dispatcher();
     uleb(&mut code, dispatcher.len() as u64);
     code.extend_from_slice(&dispatcher);
+    let validator = utf8_validator();
+    uleb(&mut code, validator.len() as u64);
+    code.extend_from_slice(&validator);
     for f in &program.functions {
-        let body = function_body(program, f, &messages)?;
+        let body = function_body(program, f, &messages, &texts)?;
         uleb(&mut code, body.len() as u64);
         code.extend_from_slice(&body);
     }
@@ -1905,6 +2126,14 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
         code.extend_from_slice(&body);
     }
     section(&mut out, 10, &code)?;
+    if !texts.data.is_empty() {
+        let mut data = vec![1, 0];
+        constant(&mut data, 8);
+        data.push(0x0b);
+        uleb(&mut data, texts.data.len() as u64);
+        data.extend_from_slice(&texts.data);
+        section(&mut out, 11, &data)?;
+    }
     let mut names = Vec::new();
     uleb(
         &mut names,
@@ -1918,6 +2147,8 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     text(&mut names, "memory::release");
     uleb(&mut names, DROP_RUN as u64);
     text(&mut names, "drop::walk");
+    uleb(&mut names, UTF8_VALIDATE as u64);
+    text(&mut names, "str::valid_utf8");
     let mut i = 0;
     while i < program.functions.len() {
         uleb(&mut names, (FIRST_USER + i) as u64);

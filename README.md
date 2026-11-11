@@ -21,8 +21,9 @@ generics/traits, arrays, slices, Box and Vec. The source standard library loads 
 identity, imports, visibility and prelude shadowing. `compiler::compile` accepts
 an explicit source/library bundle. Structural cleanup uses growing frames and
 local lowering spills excess live values into memory64 storage. Generic bodies are
-checked under declared constraints, and the production binary encoders execute
-under lkjscript. Complete generic witness/lifetime contracts, text views, closures,
+checked under declared constraints. Immutable UTF-8 text and source-owned String
+copying/appending execute, as do the production binary encoders and shared
+canonical-name helper. Complete generic witness/lifetime contracts, closures,
 World, task scopes and compiler self-compilation remain unfinished.
 
 Generation one is preserved on the `generation-one` branch. Its compiler, store,

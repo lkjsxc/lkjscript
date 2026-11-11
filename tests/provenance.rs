@@ -101,7 +101,7 @@ fn program(types: Vec<k::Type>, locals: Vec<k::Local>, ops: Vec<k::Op>) -> k::Pr
             name: "transfer".to_string(),
             params: 1,
             result: 8,
-            return_source: Some(0),
+            return_source: Some(k::ReturnSource::Parameter(0)),
             locals,
             body: ops
                 .into_iter()

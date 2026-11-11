@@ -44,13 +44,16 @@ Custom Drop runs before owned fields, including on early return/break; temporary
 receivers are cleaned at the end of their statement. Source cannot call Drop
 directly. Traps terminate the program without cleanup or recovery.
 
-References are local/parameter conventions and projected results. Mutable
+References have local, parameter, or immutable static provenance. Mutable
 references are exclusive; fields can be borrowed disjointly. A view aggregate
-contains references from exactly one source root. A projected result names one
+contains references from at most one dynamic source root, with static leaves
+allowed alongside it. A projected result names one
 borrowed parameter as its source, using explicit lifetime annotation or Rust
 elision (including receiver elision). A result cannot select between unrelated
-input sources. Borrow endings and cleanup are explicit in K. Whole-array/Vec slice
-projections, view structs and implicit mutable reborrowing are implemented.
+input sources. Static leaves can share a shorter dynamic source lifetime without
+losing their individual provenance. Borrow endings and cleanup are explicit in K.
+Whole-array/Vec slice projections, view structs and implicit mutable reborrowing
+are implemented.
 
 Every initialized reference leaf has checked source provenance. Inactive enum
 alternatives carry explicit absence evidence. Moves, construction, assignment,
@@ -65,6 +68,31 @@ or clear it, but changing that origin is rejected with `E_BORROW`. The compariso
 includes projections, not just the parameter root. This conservative restriction
 prevents a callee from silently invalidating the caller's lifetime assumptions;
 explicit write contracts remain required for more general view mutation.
+
+## Immutable text
+
+String literals produce shared UTF-8 text views with immutable module-long storage.
+The unsized `str` referent is used through `&str`; bare or mutable text is not
+implemented. Text provides byte `len`, `is_empty`, `as_bytes` and source-owned
+`to_string`. Byte projections preserve the original static or borrowed origin,
+including after a local reference carrier is destroyed. No byte mutation or owned
+destruction can reach literal storage.
+
+`std::str::from_utf8(&[u8])` validates bytes at the trusted runtime boundary and
+returns the source Result with `Ok(&str)` or `Err(Utf8Error)`. The error is an
+opaque marker; byte-position/error-length reporting is not implemented. Successful
+conversion borrows the original storage. No unchecked source conversion exists.
+String keeps its private Vec bytes and implements copying, `push_str`,
+`to_string` and `as_str` using source functions and checked views. `as_str`
+currently validates on conversion; retained UTF-8 evidence for avoiding that scan
+remains future work.
+
+The explicit static-lifetime subset covers wholly static function outputs,
+including view aggregates. K records `ReturnSource::Static` and checks every live
+reference leaf. Static constraints on inputs, local annotations, fields, aliases,
+bounds, or mixed static/dynamic result leaves are named unsupported until per-leaf
+lifetime contracts exist. Validation includes unused definitions and dead source.
+Ordinary dynamic outputs may contain static literals with their lifetime shortened.
 
 ## Generic declarations and traits
 
@@ -96,7 +124,10 @@ external mutation-contract closure.
 
 K is a monomorphic program of explicit types, function signatures, local slots,
 places, instructions and structured control. It distinguishes copies, moves,
-borrows and drops. A function declares the input source of a returned view.
+borrows and drops. A function declares a parameter or immutable static source for
+returned views. Literal instructions carry bytes that the K checker validates as
+UTF-8, independently of source parsing. Text K serializes those bytes as hexadecimal
+and static result contracts as `from static`.
 Concrete trait method selection is represented by an explicit function call.
 K has a readable/writable text form accepted by `check` for direct tests.
 
@@ -154,8 +185,11 @@ self-compilation.
 The production unsigned/signed LEB128 encoders live in `src/encoding.rs` and are
 used directly by the emitter. That exact source also compiles and executes under
 lkjscript, with byte-level boundary vectors and behavior-changing source mutations.
-This is an executing compiler component; the full compiler dependency closure
-and fixed point remain unfinished.
+The same production canonical-name helper in `src/names.rs` is used by resolution,
+generic validation and elaboration, and executes with the source String library.
+Its tests compare complete output bytes and require valid/invalid source mutations
+to change behavior or produce an attributed diagnostic. These are executing
+compiler components; the full dependency closure and fixed point remain unfinished.
 
 `src/check.rs` is the K checker; `src/k.rs` defines its inputs and checked result.
 `src/wasm.rs` contains lowering/emission plus allocation and collection internals.

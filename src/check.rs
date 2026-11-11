@@ -130,7 +130,6 @@ fn heap_type(kind: &TypeKind) -> bool {
             | TypeKind::Vec { .. }
             | TypeKind::Array { .. }
             | TypeKind::Box { .. }
-            | TypeKind::String
     )
 }
 
@@ -150,6 +149,8 @@ fn is_prefix(a: &[Projection], b: &[Projection]) -> bool {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Root {
+    /// Immutable storage that lives for the entire module instance.
+    Static,
     Local(usize),
     Parameter(usize),
 }
@@ -228,7 +229,7 @@ fn origin(state: &State, place: &Place) -> (Origin, Vec<Place>) {
     loop {
         let local = match result.root {
             Root::Local(local) => local,
-            Root::Parameter(_) => return (result, parents),
+            Root::Parameter(_) | Root::Static => return (result, parents),
         };
         let mut found = None;
         for i in 0..result.projections.len() {
@@ -329,12 +330,24 @@ fn exclusive_variants(a: &Place, b: &Place) -> bool {
     false
 }
 fn common_origin(loans: &[Loan], line: usize) -> Result<Option<(Origin, Vec<Place>)>, Diagnostic> {
-    let Some(first) = loans.first() else {
+    // Static leaves can share any shorter dynamic lifetime. Keep every leaf in
+    // the provenance inventory while computing the dynamic root of a view.
+    let first = loans
+        .iter()
+        .find(|loan| loan.target.root != Root::Static)
+        .or_else(|| loans.first());
+    let Some(first) = first else {
         return Ok(None);
     };
     let mut common = first.target.clone();
     let mut parents = first.parents.clone();
-    for loan in &loans[1..] {
+    for loan in loans {
+        if loan.target.root == Root::Static {
+            if loan.mutable {
+                return Err(error(line, "E_BORROW", "static storage is immutable"));
+            }
+            continue;
+        }
         if loan.target.root != common.root {
             return Err(error(
                 line,
@@ -457,7 +470,7 @@ fn storage_place(target: &Origin, fallback: &Place) -> Place {
             local,
             projections: target.projections.clone(),
         },
-        Root::Parameter(_) => fallback.clone(),
+        Root::Parameter(_) | Root::Static => fallback.clone(),
     }
 }
 /// K does not yet declare cross-parameter write effects. A write into external
@@ -605,6 +618,9 @@ fn access(
         prefix.projections.push(projection.clone());
     }
     let (target, parents) = origin(state, place);
+    if write && target.root == Root::Static {
+        return Err(error(line, "E_BORROW", "static storage is immutable"));
+    }
     if let Root::Local(local) = target.root {
         if !state.live[local] {
             return Err(error(line, "E_MOVE", "borrow points to a moved owner"));
@@ -758,7 +774,34 @@ fn check_intrinsic(
             _ => t,
         }
     };
+    let text_ref = |t: usize| {
+        matches!(types[t].kind,
+        TypeKind::Ref { inner, mutable: false } if matches!(types[inner].kind, TypeKind::Str))
+    };
+    let bytes_ref = |t: usize| {
+        matches!(types[t].kind,
+        TypeKind::Ref { inner, mutable: false } if matches!(types[inner].kind,
+            TypeKind::Slice { inner: U8, mutable: false }))
+    };
     let valid = match name {
+        "str_len" => ts.len() == 1 && text_ref(ts[0]) && dt == U64,
+        "str_as_bytes" => ts.len() == 1 && text_ref(ts[0]) && bytes_ref(dt),
+        "str_from_utf8" => {
+            ts.len() == 1
+                && bytes_ref(ts[0])
+                && match &types[dt].kind {
+                    TypeKind::Enum { variants, .. }
+                        if variants.len() == 2
+                            && variants[0].fields.len() == 1
+                            && variants[1].fields.len() == 1 =>
+                    {
+                        text_ref(variants[0].fields[0].ty)
+                            && matches!(&types[variants[1].fields[0].ty].kind,
+                        TypeKind::Struct { fields, copy: true } if fields.is_empty())
+                    }
+                    _ => false,
+                }
+        }
         "assert" => ts == vec![BOOL] && dt == UNIT,
         "vec_new" => ts.is_empty() && matches!(types[dt].kind, TypeKind::Vec { .. }),
         "vec_len" => {
@@ -767,10 +810,7 @@ fn check_intrinsic(
                 && matches!(types[ts[0]].kind, TypeKind::Ref { .. })
                 && matches!(
                     types[inner(ts[0])].kind,
-                    TypeKind::Array { .. }
-                        | TypeKind::Vec { .. }
-                        | TypeKind::Slice { .. }
-                        | TypeKind::String
+                    TypeKind::Array { .. } | TypeKind::Vec { .. } | TypeKind::Slice { .. }
                 )
         }
         "vec_push" => {
@@ -855,6 +895,20 @@ fn check_shape(
             .ok_or_else(|| error(line, "E_TYPE", "invalid place projection"))
     };
     match &instruction.op {
+        Op::Text { dst, bytes } => {
+            if !matches!(types[ty(*dst)?].kind, TypeKind::Ref { inner, mutable: false }
+                if matches!(types[inner].kind, TypeKind::Str))
+            {
+                return Err(error(
+                    line,
+                    "E_TYPE",
+                    "text literal requires an immutable text reference",
+                ));
+            }
+            if std::str::from_utf8(bytes).is_err() {
+                return Err(error(line, "E_TYPE", "text literal contains invalid UTF-8"));
+            }
+        }
         Op::Int { dst, value } => match &types[ty(*dst)?].kind {
             TypeKind::Bool if *value == 0 || *value == 1 => {}
             TypeKind::Int { bits, signed } => {
@@ -1305,6 +1359,18 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
             continue;
         }
         match &instruction.op {
+            Op::Text { dst, .. } => {
+                put(&mut state, *dst, line)?;
+                state.loans.push(Loan {
+                    holder: Place::local(*dst),
+                    target: Origin {
+                        root: Root::Static,
+                        projections: Vec::new(),
+                    },
+                    mutable: false,
+                    parents: Vec::new(),
+                });
+            }
             Op::Int { dst, .. } | Op::Float { dst, .. } | Op::Unit { dst } => {
                 put(&mut state, *dst, line)?
             }
@@ -1488,13 +1554,21 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     loans: Vec::new(),
                     absent: Vec::new(),
                 };
-                let source = if let Some(source) = callee.return_source {
-                    let source = Place::local(args[source]);
-                    let incoming =
-                        carried_provenance(&state, types, function, &source, &source, line)?;
-                    common_origin(&incoming.loans, line)?
-                } else {
-                    None
+                let source = match callee.return_source {
+                    Some(ReturnSource::Parameter(source)) => {
+                        let source = Place::local(args[source]);
+                        let incoming =
+                            carried_provenance(&state, types, function, &source, &source, line)?;
+                        common_origin(&incoming.loans, line)?
+                    }
+                    Some(ReturnSource::Static) => Some((
+                        Origin {
+                            root: Root::Static,
+                            projections: Vec::new(),
+                        },
+                        Vec::new(),
+                    )),
+                    None => None,
                 };
                 for (projections, mutable) in reference_paths(types, callee.result) {
                     let holder = Place {
@@ -1502,6 +1576,13 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                         projections,
                     };
                     if let Some((target, parents)) = &source {
+                        if mutable && target.root == Root::Static {
+                            return Err(error(
+                                line,
+                                "E_BORROW",
+                                "static storage cannot supply an exclusive result",
+                            ));
+                        }
                         returned.loans.push(Loan {
                             holder,
                             target: target.clone(),
@@ -1606,7 +1687,23 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 }
             }
             Op::Intrinsic { dst, name, args } => {
-                if name == "replace" || name == "clone" {
+                if name == "str_as_bytes" || name == "str_from_utf8" {
+                    let source = Place::local(args[0]);
+                    let destination = Place {
+                        local: *dst,
+                        projections: if name == "str_from_utf8" {
+                            vec![Projection::VariantField(0, 0)]
+                        } else {
+                            Vec::new()
+                        },
+                    };
+                    let returned =
+                        carried_provenance(&state, types, function, &source, &destination, line)?;
+                    call_borrows(&mut state, types, function, args, line)?;
+                    consume(&mut state, types, function, args[0], line)?;
+                    put(&mut state, *dst, line)?;
+                    install_provenance(&mut state, returned);
+                } else if name == "replace" || name == "clone" {
                     let place = Place {
                         local: args[0],
                         projections: vec![Projection::Deref],
@@ -1681,12 +1778,20 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 let provenance =
                     carried_provenance(&state, types, function, &returned, &returned, line)?;
                 for loan in &provenance.loans {
-                    if !matches!(loan.target.root, Root::Parameter(source) if Some(source) == function.return_source)
-                    {
+                    let allowed = match (function.return_source, &loan.target.root) {
+                        (Some(ReturnSource::Parameter(expected)), Root::Parameter(actual)) => {
+                            expected == *actual
+                        }
+                        (Some(ReturnSource::Parameter(_) | ReturnSource::Static), Root::Static) => {
+                            !loan.mutable
+                        }
+                        _ => false,
+                    };
+                    if !allowed {
                         return Err(error(
                             line,
                             "E_BORROW",
-                            "returned view differs from its declared source parameter",
+                            "returned view differs from its declared source",
                         ));
                     }
                 }
@@ -1808,6 +1913,35 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
             }
         }
     }
+    for ty in types {
+        match &ty.kind {
+            TypeKind::Ref {
+                inner,
+                mutable: true,
+            } if matches!(types[*inner].kind, TypeKind::Str) => {
+                return Err(error(
+                    1,
+                    "E_UNSUPPORTED",
+                    "mutable text views are not implemented",
+                ));
+            }
+            TypeKind::Box { inner } | TypeKind::Vec { inner } | TypeKind::Slice { inner, .. }
+                if matches!(types[*inner].kind, TypeKind::Str) =>
+            {
+                return Err(error(
+                    1,
+                    "E_TYPE",
+                    "unsized text cannot be an owned or collection element",
+                ));
+            }
+            _ => {}
+        }
+        for child in direct_children(&ty.kind) {
+            if matches!(types[child].kind, TypeKind::Str) {
+                return Err(error(1, "E_TYPE", "unsized text cannot be stored by value"));
+            }
+        }
+    }
     let mut colors = vec![0u8; types.len()];
     for start in 0..types.len() {
         if colors[start] != 0 {
@@ -1874,11 +2008,14 @@ pub fn check(program: Program) -> Result<CheckedProgram, Diagnostic> {
             if local.ty >= program.types.len() {
                 return Err(error(1, "E_K", "unknown local type"));
             }
-            if matches!(program.types[local.ty].kind, TypeKind::Slice { .. }) {
+            if matches!(
+                program.types[local.ty].kind,
+                TypeKind::Slice { .. } | TypeKind::Str
+            ) {
                 return Err(error(
                     1,
                     "E_UNSUPPORTED",
-                    "bare slice values need a borrowed slice type",
+                    "unsized values need a borrowed type",
                 ));
             }
         }
@@ -1889,15 +2026,32 @@ pub fn check(program: Program) -> Result<CheckedProgram, Diagnostic> {
                 "test function must take no arguments and return unit",
             ));
         }
+        if matches!(
+            program.types[function.result].kind,
+            TypeKind::Slice { .. } | TypeKind::Str
+        ) {
+            return Err(error(
+                1,
+                "E_UNSUPPORTED",
+                "unsized results need a borrowed type",
+            ));
+        }
         if let Some(source) = function.return_source {
-            if source >= function.params
-                || !is_view(&program.types, function.locals[source].ty)
-                || !is_view(&program.types, function.result)
-            {
+            let valid = is_view(&program.types, function.result)
+                && match source {
+                    ReturnSource::Parameter(source) => {
+                        source < function.params
+                            && is_view(&program.types, function.locals[source].ty)
+                    }
+                    ReturnSource::Static => reference_paths(&program.types, function.result)
+                        .iter()
+                        .all(|(_, mutable)| !mutable),
+                };
+            if !valid {
                 return Err(error(
                     1,
                     "E_BORROW",
-                    "invalid returned-view source parameter",
+                    "invalid returned-view source contract",
                 ));
             }
         }
@@ -1967,7 +2121,7 @@ mod tests {
         ops: Vec<Op>,
     ) -> Program {
         let return_source = if is_view(&types, result) && params > 0 {
-            Some(0)
+            Some(ReturnSource::Parameter(0))
         } else {
             None
         };
@@ -3040,7 +3194,7 @@ mod tests {
                 Op::Return { src: 2 },
             ],
         );
-        p.functions[0].return_source = Some(0);
+        p.functions[0].return_source = Some(ReturnSource::Parameter(0));
         rejection(p, "E_BORROW");
     }
 

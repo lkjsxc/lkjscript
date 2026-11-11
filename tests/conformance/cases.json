@@ -662,5 +662,31 @@
     "value": "42",
     "rust": true,
     "pending": false
+  },
+  {
+    "id": "immutable_text",
+    "file": "pass/immutable_text.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "owned_text_escape",
+    "file": "fail/owned_text_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "text_bytes_mutation",
+    "file": "fail/text_bytes_mutation.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
   }
 ]

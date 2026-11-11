@@ -1,5 +1,6 @@
 //! Module and declaration identity. Later phases consume resolved paths, never bare-name guesses.
 use crate::ast::*;
+use crate::names::qualified;
 use std::collections::{BTreeMap, BTreeSet};
 
 type Result<T> = std::result::Result<T, Diagnostic>;
@@ -23,13 +24,6 @@ pub struct Resolver<'a> {
     generic_ranges: Vec<(Span, Vec<String>)>,
 }
 
-pub fn qualified(module: &str, name: &str) -> String {
-    if module.is_empty() {
-        name.to_string()
-    } else {
-        format!("{module}::{name}")
-    }
-}
 fn within(program: &Program, mut scope: ModuleId, ancestor: ModuleId) -> bool {
     loop {
         if scope == ancestor {
@@ -296,7 +290,11 @@ impl<'a> Resolver<'a> {
         }
         if matches!(
             path,
-            "std::mem::replace" | "std::mem::drop" | "mem::replace" | "std::thread::scope"
+            "std::mem::replace"
+                | "std::mem::drop"
+                | "mem::replace"
+                | "std::thread::scope"
+                | "std::str::from_utf8"
         ) && !self
             .names
             .contains_key(&(scope, parts[0].to_string(), Namespace::Type))
@@ -344,6 +342,7 @@ impl<'a> Resolver<'a> {
                 "boxed::Box" => Some("Box"),
                 "mem::replace" => Some("std::mem::replace"),
                 "mem::drop" => Some("std::mem::drop"),
+                "str::from_utf8" => Some("std::str::from_utf8"),
                 _ => None,
             };
             if let Some(name) = intrinsic {
@@ -402,6 +401,7 @@ impl<'a> Resolver<'a> {
                             | "std::mem::drop"
                             | "scope"
                             | "std::thread::scope"
+                            | "std::str::from_utf8"
                     ))
             {
                 return Ok(Some((path.to_string(), None)));
@@ -644,6 +644,23 @@ impl Resolver<'_> {
     pub fn prelude_type(&self, name: &str, span: Span) -> Result<String> {
         let scope = self.modules.get("$std::prelude").copied().unwrap_or(0);
         self.type_name(scope, name, span)
+    }
+    pub fn library_type(&self, module: &str, name: &str, span: Span) -> Result<Path> {
+        let module = qualified("$std", module);
+        let scope = self.modules.get(&module).copied().ok_or_else(|| {
+            Diagnostic::new(
+                span,
+                "E_NAME",
+                &format!("source library module {module} is missing"),
+            )
+        })?;
+        let mut path = Path {
+            declaration: None,
+            name: name.to_string(),
+            args: Vec::new(),
+        };
+        self.resolve_path(scope, &mut path, Namespace::Type, span)?;
+        Ok(path)
     }
     pub fn sequence_function(&self, span: Span) -> Result<String> {
         let scope = self.modules.get("$std::sequence").copied().unwrap_or(0);

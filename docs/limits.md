@@ -23,6 +23,12 @@
 - Node/V8 has its own memory, module, function, parameter and call-stack limits.
   Node is the only generated-code engine currently implemented; an owned machine
   and native backend have not landed.
+- Immutable text literals share a deduplicated static region before the heap.
+  Their extents, addresses, initial pages and Wasm data-section sizes are checked
+  against actual target representations. Byte elements still occupy eight-byte
+  slots. Text projection creates no temporary descriptor; checked UTF-8 conversion
+  is linear in the byte length and String::as_str currently repeats that check.
+  Static constraints on individual source reference leaves remain unsupported.
 - The allocator reuses blocks without splitting or coalescing. Values commonly
   occupy eight-byte slots. Fragmentation and layout efficiency remain bootstrap
   implementation choices to improve from actual workloads.

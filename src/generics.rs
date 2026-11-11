@@ -1,6 +1,7 @@
 //! Global source rules for coherence and finite generic instantiation.
 //! The executable K checker still checks concrete function and witness types.
 use crate::ast::*;
+use crate::names::qualified;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug)]
@@ -10,13 +11,6 @@ enum Term {
     Named(String, Vec<usize>),
 }
 
-fn qualified(module: &str, name: &str) -> String {
-    if module.is_empty() {
-        name.to_string()
-    } else {
-        format!("{module}::{name}")
-    }
-}
 fn push(terms: &mut Vec<Term>, term: Term) -> usize {
     let n = terms.len();
     terms.push(term);
@@ -1468,7 +1462,12 @@ fn trait_requirements(
         let mut children = Vec::new();
         let mut structural = true;
         match &ty.kind {
-            TypeKind::Unit | TypeKind::Bool | TypeKind::Int { .. } | TypeKind::String => {}
+            TypeKind::Unit | TypeKind::Bool | TypeKind::Int { .. } => {}
+            TypeKind::Str => {
+                if !automatic {
+                    return None;
+                }
+            }
             TypeKind::F64 => {
                 if bound == "Ord" || bound == "Eq" {
                     return None;

@@ -28,6 +28,7 @@ enum Work {
     },
     Reference {
         mutable: bool,
+        span: a::Span,
     },
     Slice,
     Array {
@@ -128,7 +129,10 @@ impl Compiler<'_> {
                             span: node.span,
                         }),
                         a::Type::Ref { mutable, inner, .. } => {
-                            work.pending.push(Work::Reference { mutable: *mutable });
+                            work.pending.push(Work::Reference {
+                                mutable: *mutable,
+                                span: node.span,
+                            });
                             work.pending.push(Work::Source {
                                 id: *inner,
                                 environment,
@@ -225,8 +229,15 @@ impl Compiler<'_> {
                     let args = work.take_values(arguments);
                     self.apply_named_type(path, args, environment, span, &mut work)?;
                 }
-                Work::Reference { mutable } => {
+                Work::Reference { mutable, span } => {
                     let inner = work.values.pop().expect("reference child");
+                    if mutable && matches!(self.types[inner].kind, k::TypeKind::Str) {
+                        return Err(err(
+                            span,
+                            "E_UNSUPPORTED",
+                            "mutable str views are not implemented",
+                        ));
+                    }
                     work.values.push(self.reference(inner, mutable));
                 }
                 Work::Slice => {
@@ -390,6 +401,14 @@ impl Compiler<'_> {
                 k::TypeKind::Box { inner: args[0] }
             };
             work.values.push(self.intern(String::new(), kind));
+            return Ok(());
+        }
+        if path.declaration.is_none() && path.name == "str" {
+            if !args.is_empty() {
+                return Err(err(span, "E_TYPE", "str takes no type arguments"));
+            }
+            work.values
+                .push(self.intern(String::new(), k::TypeKind::Str));
             return Ok(());
         }
         if path.declaration.is_none() && path.name == "World" {

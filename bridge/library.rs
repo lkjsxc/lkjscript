@@ -10,6 +10,7 @@ pub fn standard_library() -> Vec<SourceInput> {
         ("$std/sequence.rs", include_str!("../library/sequence.rs")),
         ("$std/bytes.rs", include_str!("../library/bytes.rs")),
         ("$std/string.rs", include_str!("../library/string.rs")),
+        ("$std/str.rs", include_str!("../library/str.rs")),
         (
             "$std/ordered_map.rs",
             include_str!("../library/ordered_map.rs"),

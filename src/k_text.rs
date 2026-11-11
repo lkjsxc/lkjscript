@@ -207,6 +207,29 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
         .parse::<usize>()
         .map_err(|_| error(line, "invalid source line"))?;
     let op = match word(words, 1, line)? {
+        "text" => {
+            exact(words, 4, line)?;
+            let encoded = word(words, 3, line)?.as_bytes();
+            if encoded.len() % 2 != 0 {
+                return Err(error(
+                    line,
+                    "text bytes require pairs of hexadecimal digits",
+                ));
+            }
+            let mut bytes = Vec::new();
+            for pair in encoded.chunks_exact(2) {
+                let pair = std::str::from_utf8(pair)
+                    .map_err(|_| error(line, "invalid text byte encoding"))?;
+                bytes.push(
+                    u8::from_str_radix(pair, 16)
+                        .map_err(|_| error(line, "invalid text byte encoding"))?,
+                );
+            }
+            Op::Text {
+                dst: number(words, 2, line)?,
+                bytes,
+            }
+        }
         "int" => {
             exact(words, 4, line)?;
             Op::Int {
@@ -414,9 +437,9 @@ pub fn read(text: &str) -> Result<Program> {
                         exact(&words, 3, line)?;
                         TypeKind::F64
                     }
-                    "string" => {
+                    "str" => {
                         exact(&words, 3, line)?;
-                        TypeKind::String
+                        TypeKind::Str
                     }
                     "world" => {
                         exact(&words, 3, line)?;
@@ -505,7 +528,11 @@ pub fn read(text: &str) -> Result<Program> {
                             at += 2;
                         }
                         "from" if return_source.is_none() => {
-                            return_source = Some(number(&words, at + 1, line)?);
+                            return_source = Some(if word(&words, at + 1, line)? == "static" {
+                                ReturnSource::Static
+                            } else {
+                                ReturnSource::Parameter(number(&words, at + 1, line)?)
+                            });
                             at += 2;
                         }
                         _ => return Err(error(line, "unknown or repeated function flag")),
@@ -580,6 +607,13 @@ fn write_place(text: &mut String, place: &Place) {
 fn write_instruction(text: &mut String, instruction: &Instruction) {
     text.push_str(&format!("@{} ", instruction.line));
     match &instruction.op {
+        Op::Text { dst, bytes } => {
+            let mut encoded = String::new();
+            for byte in bytes {
+                encoded.push_str(&format!("{byte:02x}"));
+            }
+            text.push_str(&format!("text {dst} {}", quoted(&encoded)));
+        }
         Op::Int { dst, value } => text.push_str(&format!("int {dst} {value}")),
         Op::Float { dst, bits } => text.push_str(&format!("float {dst} {bits}")),
         Op::Unit { dst } => text.push_str(&format!("unit {dst}")),
@@ -679,7 +713,7 @@ pub fn write(program: &Program) -> String {
             TypeKind::Unit => text.push_str("unit"),
             TypeKind::Bool => text.push_str("bool"),
             TypeKind::F64 => text.push_str("f64"),
-            TypeKind::String => text.push_str("string"),
+            TypeKind::Str => text.push_str("str"),
             TypeKind::World => text.push_str("world"),
             TypeKind::Int { bits, signed } => text.push_str(&format!(
                 "int {bits} {}",
@@ -729,7 +763,10 @@ pub fn write(program: &Program) -> String {
             text.push_str(&format!(" file {}", function.file));
         }
         if let Some(source) = function.return_source {
-            text.push_str(&format!(" from {source}"));
+            match source {
+                ReturnSource::Parameter(source) => text.push_str(&format!(" from {source}")),
+                ReturnSource::Static => text.push_str(" from static"),
+            }
         }
         if function.test {
             text.push_str(" test");

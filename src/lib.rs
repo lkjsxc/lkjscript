@@ -6,6 +6,7 @@ pub mod encoding;
 pub mod generics;
 pub mod k;
 pub mod k_text;
+pub mod names;
 pub mod resolve;
 pub mod source;
 pub mod syntax;

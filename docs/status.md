@@ -41,9 +41,18 @@ library bytes affect emitted behavior; missing inputs are errors. This is a
 working compiler-core boundary, not a self-hosting claim.
 
 The source library implements Option/Result, bytes/UTF-8, String, vector ordering
-and a sorted-vector BTreeMap (logarithmic lookup, linear insertion/removal). Its
-integration tests load actual source bundles under lkjscript and use the same
-components under rustc.
+and a sorted-vector BTreeMap (logarithmic lookup, linear insertion/removal). String
+copying, appending and text projection use source functions. Immutable &str values
+support literals, byte length/projection and checked UTF-8 conversion; no second
+owned String representation was introduced. Integration tests load actual source
+bundles under lkjscript and use the same components under rustc.
+
+K text literals carry checked UTF-8 bytes and immutable static provenance. Function
+results explicitly name a parameter or static source. Static/dynamic leaves can
+share a shorter dynamic lifetime; static requirements on individual source leaves,
+inputs, fields, locals and bounds remain named unsupported. Trait implementations
+cannot weaken a declared static result. Checked runtime conversion returns an
+opaque Utf8Error marker on invalid bytes; String::as_str currently revalidates.
 
 Lowering reuses physical locals and spills excess live values into memory64 frames.
 Address-taken values have stable frame slots. Structural destruction uses a growing
@@ -55,21 +64,34 @@ compile and execute through the ordinary source-bundle pipeline. Tests compare
 every encoded byte for 34 unsigned and 63 signed boundary inputs, include fixed
 known vectors, and require a behavior-changing source mutation to alter the
 artifact and result. An invalid mutation fails with the original source filename.
-This is one executing compiler component. It still uses emitter-provided Vec
-memory primitives and Node; it is not a compiler-core fixed point.
+The exact production canonical-name helper in src/names.rs is now shared by
+resolution, generic validation and elaboration and executes with the source String
+library. Complete byte comparisons include empty, ASCII/control, NUL, multibyte,
+maximum Unicode and roughly 5.6 KiB inputs. Separator and ill-typed mutations
+change generated behavior or reject with names.rs diagnostics. These executing
+components still use emitter-provided memory primitives and Node; they do not
+establish a compiler-core fixed point.
 
 ## Current verification
 
-The final integrated 2026-11-11 gate passes **178 Cargo tests** and reports
-**71 conformance passes, eight pending, zero failures; 64 rustc comparisons**.
-Formatting, Clippy, build and conformance are included. Elapsed: **15.483 s**.
+The integrated 2026-11-11 text milestone gate passes **211 Cargo tests** and reports
+**74 conformance passes, eight pending, zero failures; 67 rustc comparisons**.
+Formatting, Clippy, build and conformance are included. Elapsed: **13.198 s**.
 
 The suite includes 19 provenance tests, 28 generic-definition tests, 20 module
 tests, source-bundle and executing-component mutations, parser/embedding capacity
 cases, two 30,000-local shapes, deep destruction/order and allocation reuse.
 Direct K fixtures reach the checker without frontend filtering. Rejections use
 the intended semantic errors; source-level replacement/clone escapes and generic
-definition/type-argument failures are also compared with rustc.
+definition/type-argument failures are also compared with rustc. Text adds 27
+checker/source tests, two direct-K backend tests and three production component
+tests. The backend validates 72,458 byte inputs against Rust, including every
+one/two-byte sequence and longer UTF-8 boundaries, through K checking, emission,
+Node instantiation and execution. Static-region bytes remain unchanged across
+1,000 allocation/drop cycles; a literal pool exceeding one page loads correctly.
+These are regression observations without peak RSS measurement. A numeric lexer
+regression also prevents usize/isize suffixes or hexadecimal e digits from being
+mistaken for decimal exponents or absorbing adjacent signs.
 
 The eight closure/callback/task conformance cases remain explicitly pending.
 Structural Send/Sync checks do not establish a task runtime. No World-backed
@@ -158,22 +180,20 @@ reject. External view writes need explicit mutation contracts before their
 symbolic source relationships can change.
 
 The normal CLI starts from `src/lib.rs` and follows its real modules. The current
-whole-crate check stops at `src/wasm.rs:1967` with `E_PARSE` on a range pattern
+whole-crate check stops at `src/wasm.rs:2198` with `E_PARSE` on a range pattern
 (`..=`). No complete compiler-core closure is accepted, and no W1/W2,
-N1/N2 or owned bootstrap seed exists. Strings/views, formatting, map/set APIs,
-derives, closures, patterns and ownership layouts remain real dependency work.
+N1/N2 or owned bootstrap seed exists. Text/collection operations beyond the implemented subset, formatting, map/set
+APIs, derives, closures, patterns and ownership layouts remain dependency work.
 
-The next concrete ownership vertical is immutable text/literals and the minimum
-source-owned copying/appending needed to consolidate and execute the duplicated
-`qualified(module, name) -> String` helper in resolve, generics and elaborate.
-Current probes reject `&str` as an unknown type and string literals as unsupported;
-the existing source String/UTF-8/Vec implementation supplies the owned half.
-Implement static literal provenance, immutable UTF-8 text and borrowed byte
-projection; implement copying and `push_str` as source loops. Replace this helper's
-formatting with those operations, share one production implementation under both
-compilers, compare full output bytes, and mutate its separator in supplied source.
-Reject local-owned-string view escapes and invalid direct-K static UTF-8. Avoid
-a second owned-string representation or host-generated compiler results.
+The next concrete ownership vertical is integer range patterns and the production
+JSON string encoder used by Wasm trap metadata. Implement typed literal endpoints,
+open/inclusive/exclusive bounds, first-arm execution and interval-based exhaustive
+coverage over the full integer domain. Reject malformed, empty, overflowing or
+unsupported bounds with their intended diagnostics, including unused/dead arms.
+Extract the existing encoder into a shared source component using byte loops and
+Vec::push; run it through SourceBundle, compare every output byte and JSON decode,
+and mutate its control-byte range. This removes an actual emitter dependency and
+exercises the new semantics rather than reporting a higher parse-only file count.
 
 Other observations include missing borrowed collection iteration, `while let`,
 and repeated Vec initialization. Add these when they close the next actual

@@ -23,6 +23,29 @@ impl String {
         }
     }
 
+    pub fn from_str(value: &str) -> String {
+        let mut result = String::new();
+        result.push_str(value);
+        result
+    }
+
+    pub fn push_str(&mut self, value: &str) {
+        let bytes = value.as_bytes();
+        let mut index: usize = 0;
+        while index < bytes.len() {
+            self.bytes.push(bytes[index]);
+            index = index + 1;
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        String::from_str(self.as_str())
+    }
+
+    pub fn as_str(&self) -> &str {
+        std::str::from_utf8(self.bytes.as_slice()).unwrap()
+    }
+
     pub fn len(&self) -> usize {
         self.bytes.len()
     }

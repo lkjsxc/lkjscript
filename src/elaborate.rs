@@ -1,22 +1,17 @@
 //! Rust-compatible syntax to explicit K. Inference lives here; K trusts none of it.
 mod generic_check;
+mod static_lifetimes;
 mod type_resolve;
 
 use crate::ast as a;
 use crate::check::{is_copy, place_type};
 use crate::k;
+use crate::names::qualified;
 use std::collections::BTreeMap;
 
 type Result<T> = std::result::Result<T, a::Diagnostic>;
 fn err(span: a::Span, code: &str, message: &str) -> a::Diagnostic {
     a::Diagnostic::new(span, code, message)
-}
-fn qualified(module: &str, name: &str) -> String {
-    if module.is_empty() {
-        name.to_string()
-    } else {
-        format!("{module}::{name}")
-    }
 }
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum TypeKey {
@@ -27,6 +22,7 @@ enum TypeKey {
     Vec(usize),
     Box(usize),
     World,
+    Str,
     Nominal(a::DeclarationId, Vec<usize>),
 }
 #[derive(Clone)]
@@ -53,7 +49,9 @@ struct Compiler<'a> {
 pub fn elaborate(source: &a::Program) -> Result<k::Program> {
     let resolved = crate::resolve::resolve(source)?;
     let source = &resolved;
+    static_lifetimes::annotations(source)?;
     crate::generics::validate(source)?;
+    static_lifetimes::outputs(source)?;
     generic_check::validate(source)?;
     let mut c = Compiler::new(source)?;
     let empty = BTreeMap::new();
@@ -278,6 +276,7 @@ impl Compiler<'_> {
             k::TypeKind::Vec { inner } => (TypeKey::Vec(*inner), format!("Vec<t{inner}>")),
             k::TypeKind::Box { inner } => (TypeKey::Box(*inner), format!("Box<t{inner}>")),
             k::TypeKind::World => (TypeKey::World, "World".to_string()),
+            k::TypeKind::Str => (TypeKey::Str, "str".to_string()),
             _ => unreachable!("only structural types use intern"),
         };
         if let Some(id) = self.type_keys.get(&key) {
@@ -358,9 +357,12 @@ impl Compiler<'_> {
         source: &a::Function,
         locals: &[k::Local],
         result: usize,
-    ) -> Result<Option<usize>> {
+    ) -> Result<Option<k::ReturnSource>> {
         if !self.has_view(result) {
             return Ok(None);
+        }
+        if static_lifetimes::has_static(self.source, source.result) {
+            return Ok(Some(k::ReturnSource::Static));
         }
         let lifetimes = self.lifetimes(source.result);
         if lifetimes.len() > 1 {
@@ -395,7 +397,7 @@ impl Compiler<'_> {
                 "returned view selects more than one source input",
             ));
         }
-        Ok(candidates.first().copied())
+        Ok(candidates.first().copied().map(k::ReturnSource::Parameter))
     }
     fn instantiate(&mut self, index: usize, mut sub: BTreeMap<String, usize>) -> Result<usize> {
         self.prepare_associated(index, &mut sub)?;
@@ -761,6 +763,7 @@ impl Builder<'_, '_> {
         }
         match &op {
             k::Op::Int { dst, .. }
+            | k::Op::Text { dst, .. }
             | k::Op::Float { dst, .. }
             | k::Op::Unit { dst }
             | k::Op::Borrow { dst, .. }
@@ -1424,6 +1427,19 @@ impl Builder<'_, '_> {
         let line = node.span.line;
         match node.kind {
             a::Expr::Int(text) => self.integer(&text, expected, false, node.span),
+            a::Expr::String(text) => {
+                let inner = self.compiler.intern(String::new(), k::TypeKind::Str);
+                let ty = self.compiler.reference(inner, false);
+                let dst = self.temp(ty);
+                self.emit(
+                    k::Op::Text {
+                        dst,
+                        bytes: text.into_bytes(),
+                    },
+                    line,
+                );
+                Ok((dst, ty))
+            }
             a::Expr::Bool(value) => {
                 let d = self.temp(k::BOOL);
                 self.emit(
@@ -2404,6 +2420,50 @@ impl Builder<'_, '_> {
                 "structured task scopes are not implemented yet",
             ));
         }
+        if path.declaration.is_none() && path.name == "std::str::from_utf8" {
+            if !path.args.is_empty() {
+                return Err(err(span, "E_TYPE", "from_utf8 takes no generic arguments"));
+            }
+            if args.len() != 1 {
+                return Err(err(span, "E_TYPE", "from_utf8 requires one byte slice"));
+            }
+            let slice = self.compiler.intern(
+                String::new(),
+                k::TypeKind::Slice {
+                    inner: k::U8,
+                    mutable: false,
+                },
+            );
+            let bytes = self.compiler.reference(slice, false);
+            let value = self.expr(args[0], Some(bytes))?;
+            if value.1 != bytes {
+                return Err(err(span, "E_TYPE", "from_utf8 requires &[u8]"));
+            }
+            let text_inner = self.compiler.intern(String::new(), k::TypeKind::Str);
+            let text = self.compiler.reference(text_inner, false);
+            let error_path = self.compiler.names.library_type("str", "Utf8Error", span)?;
+            let error = self
+                .compiler
+                .named_type(&error_path, &BTreeMap::new(), span)?;
+            let result_path = self
+                .compiler
+                .names
+                .library_type("prelude", "Result", span)?;
+            let mut sub = BTreeMap::new();
+            sub.insert("T".to_string(), text);
+            sub.insert("E".to_string(), error);
+            let result = self.compiler.named_type(&result_path, &sub, span)?;
+            let dst = self.temp(result);
+            self.emit(
+                k::Op::Intrinsic {
+                    dst,
+                    name: "str_from_utf8".to_string(),
+                    args: vec![value.0],
+                },
+                line,
+            );
+            return Ok((dst, result));
+        }
         if path.declaration.is_none()
             && (path.name == "std::mem::replace" || path.name == "mem::replace")
         {
@@ -2693,6 +2753,120 @@ impl Builder<'_, '_> {
         Ok(false)
     }
 
+    fn text_method(
+        &mut self,
+        target: k::Place,
+        name: &str,
+        args: &[usize],
+        span: a::Span,
+    ) -> Result<(usize, usize)> {
+        if !args.is_empty() {
+            return Err(err(span, "E_TYPE", "text method takes no arguments"));
+        }
+        let receiver = self.borrow(target, false, span.line)?.0;
+        if name == "to_string" {
+            let path = self.compiler.names.library_type("string", "String", span)?;
+            let string = self.compiler.named_type(&path, &BTreeMap::new(), span)?;
+            let mut sub = BTreeMap::new();
+            sub.insert("Self".to_string(), string);
+            let mut selected = None;
+            for implementation in self.compiler.source.impls.clone() {
+                if implementation.trait_ty.is_none()
+                    && self.compiler.resolve(implementation.target, &sub).ok() == Some(string)
+                {
+                    for index in implementation.methods {
+                        let function = &self.compiler.source.functions[index];
+                        if function.name == "from_str"
+                            && function.params.first().is_none_or(|p| p.name != "self")
+                        {
+                            if selected.replace(index).is_some() {
+                                return Err(err(
+                                    span,
+                                    "E_TRAIT",
+                                    "ambiguous source String::from_str",
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+            let index = selected
+                .ok_or_else(|| err(span, "E_NAME", "source library String::from_str is missing"))?;
+            self.compiler.method_access(index, self.scope, span)?;
+            let function = self.compiler.instantiate(index, sub)?;
+            let contract = &self.compiler.functions[function];
+            if contract.params != 1
+                || contract.locals[0].ty != self.ty(receiver)
+                || contract.result != string
+            {
+                return Err(err(
+                    span,
+                    "E_TYPE",
+                    "source String::from_str must take &str and return String",
+                ));
+            }
+            let dst = self.temp(string);
+            self.emit(
+                k::Op::Call {
+                    dst,
+                    function,
+                    args: vec![receiver],
+                },
+                span.line,
+            );
+            return Ok((dst, string));
+        }
+        let ty = if name == "as_bytes" {
+            let slice = self.compiler.intern(
+                String::new(),
+                k::TypeKind::Slice {
+                    inner: k::U8,
+                    mutable: false,
+                },
+            );
+            self.compiler.reference(slice, false)
+        } else {
+            k::U64
+        };
+        let dst = self.temp(ty);
+        self.emit(
+            k::Op::Intrinsic {
+                dst,
+                name: if name == "as_bytes" {
+                    "str_as_bytes"
+                } else {
+                    "str_len"
+                }
+                .to_string(),
+                args: vec![receiver],
+            },
+            span.line,
+        );
+        if name == "is_empty" {
+            let zero = self.temp(k::U64);
+            self.emit(
+                k::Op::Int {
+                    dst: zero,
+                    value: 0,
+                },
+                span.line,
+            );
+            let result = self.temp(k::BOOL);
+            self.emit(
+                k::Op::Binary {
+                    dst: result,
+                    op: "==".to_string(),
+                    left: dst,
+                    right: zero,
+                },
+                span.line,
+            );
+            Ok((result, k::BOOL))
+        } else {
+            Ok((dst, ty))
+        }
+    }
+
     fn method(
         &mut self,
         receiver: usize,
@@ -2712,6 +2886,18 @@ impl Builder<'_, '_> {
         }
         if let Some(value) = self.generic_method(&target, base, name, _types, args, span)? {
             return Ok(value);
+        }
+        if matches!(self.compiler.types[base].kind, k::TypeKind::Str)
+            && matches!(name, "len" | "is_empty" | "as_bytes" | "to_string")
+        {
+            if !_types.is_empty() {
+                return Err(err(
+                    span,
+                    "E_TYPE",
+                    "text methods take no generic arguments",
+                ));
+            }
+            return self.text_method(target, name, args, span);
         }
         match name {
             "as_slice" | "as_mut_slice"
@@ -2750,10 +2936,7 @@ impl Builder<'_, '_> {
             "len"
                 if matches!(
                     self.compiler.types[base].kind,
-                    k::TypeKind::Vec { .. }
-                        | k::TypeKind::Slice { .. }
-                        | k::TypeKind::Array { .. }
-                        | k::TypeKind::String
+                    k::TypeKind::Vec { .. } | k::TypeKind::Slice { .. } | k::TypeKind::Array { .. }
                 ) =>
             {
                 if !args.is_empty() {

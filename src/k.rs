@@ -3,16 +3,39 @@
 pub enum TypeKind {
     Unit,
     Bool,
-    Int { bits: u8, signed: bool },
+    Int {
+        bits: u8,
+        signed: bool,
+    },
     F64,
-    Struct { fields: Vec<Field>, copy: bool },
-    Enum { variants: Vec<Variant>, copy: bool },
-    Ref { inner: usize, mutable: bool },
-    Slice { inner: usize, mutable: bool },
-    Array { inner: usize, len: usize },
-    Vec { inner: usize },
-    Box { inner: usize },
-    String,
+    Struct {
+        fields: Vec<Field>,
+        copy: bool,
+    },
+    Enum {
+        variants: Vec<Variant>,
+        copy: bool,
+    },
+    Ref {
+        inner: usize,
+        mutable: bool,
+    },
+    Slice {
+        inner: usize,
+        mutable: bool,
+    },
+    Array {
+        inner: usize,
+        len: usize,
+    },
+    Vec {
+        inner: usize,
+    },
+    Box {
+        inner: usize,
+    },
+    /// Unsized immutable UTF-8 text; stored values use a shared Ref.
+    Str,
     World,
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -58,6 +81,11 @@ pub struct Local {
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum Op {
+    /// Immutable UTF-8 bytes with module-long storage. The checker validates bytes.
+    Text {
+        dst: usize,
+        bytes: Vec<u8>,
+    },
     Int {
         dst: usize,
         value: i64,
@@ -154,13 +182,18 @@ pub struct Instruction {
     pub op: Op,
     pub line: usize,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReturnSource {
+    Parameter(usize),
+    Static,
+}
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     pub file: usize,
     pub name: String,
     pub params: usize,
     pub result: usize,
-    pub return_source: Option<usize>,
+    pub return_source: Option<ReturnSource>,
     pub locals: Vec<Local>,
     pub body: Vec<Instruction>,
     pub test: bool,
