@@ -688,5 +688,40 @@
     "rust": true,
     "rustAccept": false,
     "pending": false
+  },
+  {
+    "id": "integer_range_patterns",
+    "file": "pass/integer_range_patterns.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "overflowing_range_pattern",
+    "file": "fail/overflowing_range_pattern.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "nonexhaustive_integer_ranges",
+    "file": "fail/nonexhaustive_integer_ranges.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "unused_generic_match_body",
+    "file": "fail/unused_generic_match_body.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
   }
 ]

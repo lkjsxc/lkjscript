@@ -1,5 +1,7 @@
 //! Rust-compatible syntax to explicit K. Inference lives here; K trusts none of it.
 mod generic_check;
+mod integers;
+mod patterns;
 mod static_lifetimes;
 mod type_resolve;
 
@@ -1358,66 +1360,14 @@ impl Builder<'_, '_> {
         negative: bool,
         span: a::Span,
     ) -> Result<(usize, usize)> {
-        let mut digits = text.replace('_', "");
-        let mut ty = expected.unwrap_or(k::I32);
-        let suffixes = [
-            "usize", "isize", "u64", "i64", "u32", "i32", "u16", "i16", "u8", "i8",
-        ];
-        for suffix in suffixes {
-            if digits.ends_with(suffix) {
-                ty = *self
-                    .compiler
-                    .type_names
-                    .get(suffix)
-                    .ok_or_else(|| err(span, "E_TYPE", "unknown integer suffix"))?;
-                digits.truncate(digits.len() - suffix.len());
-                break;
-            }
-        }
-        let radix = if digits.starts_with("0x") {
-            16
-        } else if digits.starts_with("0b") {
-            2
-        } else if digits.starts_with("0o") {
-            8
-        } else {
-            10
-        };
-        let magnitude =
-            u64::from_str_radix(if radix == 10 { &digits } else { &digits[2..] }, radix)
-                .map_err(|_| err(span, "E_TYPE", "integer literal exceeds its representation"))?;
-        let (bits, signed) = match self.compiler.types[ty].kind {
-            k::TypeKind::Int { bits, signed } => (bits, signed),
-            _ => {
-                return Err(err(
-                    span,
-                    "E_TYPE",
-                    "integer literal requires an integer type",
-                ));
-            }
-        };
-        if negative && !signed {
-            return Err(err(span, "E_TYPE", "unsigned integers cannot be negated"));
-        }
-        let maximum = if signed {
-            if negative {
-                1_u64 << (bits - 1)
-            } else {
-                (1_u64 << (bits - 1)) - 1
-            }
-        } else if bits == 64 {
-            u64::MAX
-        } else {
-            (1_u64 << bits) - 1
-        };
-        if magnitude > maximum {
-            return Err(err(span, "E_TYPE", "integer literal does not fit its type"));
-        }
-        let value = if negative {
-            0_u64.wrapping_sub(magnitude) as i64
-        } else {
-            magnitude as i64
-        };
+        let (value, ty) = integers::literal(
+            &self.compiler.types,
+            &self.compiler.type_names,
+            text,
+            expected,
+            negative,
+            span,
+        )?;
         let dst = self.temp(ty);
         self.emit(k::Op::Int { dst, value }, span.line);
         Ok((dst, ty))
@@ -3364,50 +3314,61 @@ impl Builder<'_, '_> {
         expected: Option<usize>,
         span: a::Span,
     ) -> Result<(usize, usize)> {
-        let (scrutinee, original_ty) = self.expr(value, None)?;
+        let hint = if let Some(hint) = self.hint(value) {
+            Some(hint)
+        } else {
+            self.pattern_hint(arms).map(|inner| {
+                if let a::Expr::Borrow { mutable, .. } = self.compiler.source.exprs[value].kind {
+                    self.compiler.reference(inner, mutable)
+                } else {
+                    inner
+                }
+            })
+        };
+        let (scrutinee, original_ty) = self.expr(value, hint)?;
         let (ty, borrowed, mutable) = match self.compiler.types[original_ty].kind {
             k::TypeKind::Ref { inner, mutable } => (inner, true, mutable),
             _ => (original_ty, false, false),
         };
+        let (patterns, exhaustive) = self.match_patterns(ty, arms)?;
+        if !exhaustive {
+            return Err(err(span, "E_TYPE", "match is not exhaustive"));
+        }
         let start = self.live.len();
         let base = self.snapshot();
         let binding_count = self.bindings.len();
         let mut result: Option<usize> = None;
         let mut exit_state: Option<Snapshot> = None;
         let mut open = 0;
-        let mut exhaustive = false;
         let mut default_seen = false;
-        let mut tags = Vec::new();
-        for arm in arms {
-            if arm.guard.is_some() {
-                return Err(err(
-                    arm.span,
-                    "E_UNSUPPORTED",
-                    "match guards are not implemented yet",
-                ));
-            }
+        for (index, arm) in arms.iter().enumerate() {
             let pattern = self.compiler.source.patterns[arm.pattern].clone();
             let mut fields = Vec::new();
+            let mut binding_default = false;
             let condition = match pattern.kind {
-                a::Pattern::Wild => {
-                    exhaustive = true;
-                    default_seen = true;
-                    None
-                }
-                a::Pattern::Bind { .. } => {
-                    exhaustive = true;
-                    default_seen = true;
-                    let v = self.read(k::Place::local(scrutinee), span.line)?;
-                    self.bind(arm.pattern, v, span.line)?;
-                    None
+                a::Pattern::Wild | a::Pattern::Bind { .. } => {
+                    binding_default = matches!(pattern.kind, a::Pattern::Bind { .. });
+                    if index + 1 == arms.len() {
+                        default_seen = true;
+                        None
+                    } else {
+                        let condition = self.temp(k::BOOL);
+                        self.emit(
+                            k::Op::Int {
+                                dst: condition,
+                                value: 1,
+                            },
+                            arm.span.line,
+                        );
+                        Some(condition)
+                    }
                 }
                 a::Pattern::Variant {
-                    path,
-                    fields: patterns,
+                    path: _,
+                    fields: field_patterns,
                 } => {
-                    let (_, tag) = self.variant(&path, Some(ty), arm.span)?;
-                    tags.push(tag);
-                    for (i, p) in patterns.iter().enumerate() {
+                    let tag = patterns[index].tag.expect("validated variant");
+                    for (i, p) in field_patterns.iter().enumerate() {
                         fields.push((*p, k::Projection::VariantField(tag, i)));
                     }
                     let c = self.temp(k::BOOL);
@@ -3421,9 +3382,8 @@ impl Builder<'_, '_> {
                     );
                     Some(c)
                 }
-                a::Pattern::Path(path) => {
-                    let (_, tag) = self.variant(&path, Some(ty), arm.span)?;
-                    tags.push(tag);
+                a::Pattern::Path(_) => {
+                    let tag = patterns[index].tag.expect("validated variant");
                     let c = self.temp(k::BOOL);
                     self.emit(
                         k::Op::TagTest {
@@ -3436,7 +3396,7 @@ impl Builder<'_, '_> {
                     Some(c)
                 }
                 a::Pattern::Literal(expr) => {
-                    let l = self.read(k::Place::local(scrutinee), span.line)?.0;
+                    let l = self.scalar_match_read(scrutinee, borrowed, span.line)?;
                     let r = self.expr(expr, Some(ty))?.0;
                     let c = self.temp(k::BOOL);
                     self.emit(
@@ -3450,6 +3410,13 @@ impl Builder<'_, '_> {
                     );
                     Some(c)
                 }
+                a::Pattern::Range { .. } => Some(self.range_condition(
+                    scrutinee,
+                    borrowed,
+                    ty,
+                    patterns[index].range.expect("validated range"),
+                    arm.span.line,
+                )?),
                 _ => {
                     return Err(err(
                         pattern.span,
@@ -3461,6 +3428,10 @@ impl Builder<'_, '_> {
             if let Some(c) = condition {
                 self.emit(k::Op::If { condition: c }, span.line);
                 open += 1;
+            }
+            if binding_default {
+                let value = self.read(k::Place::local(scrutinee), arm.span.line)?;
+                self.bind(arm.pattern, value, arm.span.line)?;
             }
             for (pattern, projection) in fields {
                 let mut projections = Vec::new();
@@ -3521,16 +3492,6 @@ impl Builder<'_, '_> {
             } else {
                 break;
             }
-        }
-        if let k::TypeKind::Enum { variants, .. } = &self.compiler.types[ty].kind {
-            tags.sort_unstable();
-            tags.dedup();
-            if tags.len() == variants.len() {
-                exhaustive = true;
-            }
-        }
-        if !exhaustive {
-            return Err(err(span, "E_TYPE", "match is not exhaustive"));
         }
         if open > 0 {
             if !default_seen {

@@ -2309,10 +2309,69 @@ impl Parser {
         }
         Ok(self.add_pattern(Pattern::Or(arms), self.finish_span(span)))
     }
+    fn pattern_bound(&mut self) -> Result<ExprId, Diagnostic> {
+        let span = self.token().span;
+        let negative = self.take("-");
+        let value =
+            if self.token().kind == TokenKind::Ident && !self.is("true") && !self.is("false")
+                || self.is("::")
+            {
+                let path = self.value_path()?;
+                self.add_expr(Expr::Path(path), self.finish_span(span))
+            } else {
+                self.literal()?
+            };
+        if negative {
+            Ok(self.add_expr(
+                Expr::Unary {
+                    op: "-".to_string(),
+                    value,
+                },
+                self.finish_span(span),
+            ))
+        } else {
+            Ok(value)
+        }
+    }
+    fn pattern_range(
+        &mut self,
+        start: Option<ExprId>,
+        span: Span,
+    ) -> Result<PatternId, Diagnostic> {
+        let inclusive = self.take("..=");
+        if !inclusive {
+            self.expect("..")?;
+        }
+        let end = if self.expression_end() || self.is("|") || self.is("if") || self.is("=") {
+            None
+        } else {
+            Some(self.pattern_bound()?)
+        };
+        if inclusive && end.is_none() {
+            return Err(self.err("inclusive range pattern needs an end"));
+        }
+        if start.is_none() && end.is_none() {
+            return Err(self.unsupported("full range pattern; use _"));
+        }
+        if !self.expression_end() && !self.is("|") && !self.is("if") && !self.is("=") {
+            return Err(self.unsupported("range endpoint expressions"));
+        }
+        Ok(self.add_pattern(
+            Pattern::Range {
+                start,
+                end,
+                inclusive,
+            },
+            self.finish_span(span),
+        ))
+    }
     fn pattern_atom(&mut self) -> Result<PatternId, Diagnostic> {
         let span = self.token().span;
         if self.take("_") {
             return Ok(self.add_pattern(Pattern::Wild, span));
+        }
+        if self.is("..") || self.is("..=") {
+            return self.pattern_range(None, span);
         }
         if self.take("&") {
             let mutable = self.take("mut");
@@ -2335,29 +2394,29 @@ impl Parser {
             }
             return Ok(self.add_pattern(Pattern::Tuple(fields), self.finish_span(span)));
         }
-        if self.take("-") {
-            let value = self.literal()?;
-            let value = self.add_expr(
-                Expr::Unary {
-                    op: "-".to_string(),
-                    value,
-                },
-                self.finish_span(span),
-            );
-            return Ok(self.add_pattern(Pattern::Literal(value), self.finish_span(span)));
-        }
-        if self.token().kind == TokenKind::Number
+        if self.is("-")
+            || self.token().kind == TokenKind::Number
             || self.token().kind == TokenKind::String
             || self.token().kind == TokenKind::Char
             || self.is("true")
             || self.is("false")
         {
-            let value = self.literal()?;
+            let value = self.pattern_bound()?;
+            if self.is("..") || self.is("..=") {
+                return self.pattern_range(Some(value), span);
+            }
             return Ok(self.add_pattern(Pattern::Literal(value), self.finish_span(span)));
         }
         let by_ref = self.take("ref");
         let mutable = self.take("mut");
         let path = self.value_path()?;
+        if self.is("..") || self.is("..=") {
+            if by_ref || mutable {
+                return Err(self.unsupported("binding range endpoint"));
+            }
+            let value = self.add_expr(Expr::Path(path), self.finish_span(span));
+            return self.pattern_range(Some(value), span);
+        }
         if self.take("(") {
             let mut fields = Vec::new();
             while !self.is(")") {
@@ -2406,8 +2465,8 @@ impl Parser {
                 self.finish_span(span),
             ));
         }
-        if self.is("@") || self.is("..") || self.is("..=") {
-            return Err(self.unsupported("binding or range pattern"));
+        if self.is("@") {
+            return Err(self.unsupported("binding pattern with @"));
         }
         let is_path = path.name.contains("::") || path.name.as_bytes()[0].is_ascii_uppercase();
         let kind = if is_path {

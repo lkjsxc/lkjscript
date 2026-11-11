@@ -378,6 +378,11 @@ pub enum Pattern {
     },
     Path(Path),
     Literal(ExprId),
+    Range {
+        start: Option<ExprId>,
+        end: Option<ExprId>,
+        inclusive: bool,
+    },
     Tuple(Vec<PatternId>),
     Variant {
         path: Path,
