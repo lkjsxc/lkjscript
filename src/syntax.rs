@@ -420,6 +420,53 @@ pub fn parse_file(
     result
 }
 
+enum TypeFrame {
+    Parse,
+    Reference {
+        mutable: bool,
+        lifetime: String,
+        span: Span,
+    },
+    Array {
+        span: Span,
+    },
+    List {
+        span: Span,
+        items: Vec<TypeId>,
+        comma: bool,
+        pending: bool,
+        kind: TypeListKind,
+    },
+    FunctionResult {
+        span: Span,
+        params: Vec<TypeId>,
+        path: Option<Path>,
+    },
+    Path {
+        span: Span,
+        path: Path,
+        position: TypePathPosition,
+    },
+    Arguments {
+        span: Span,
+        path: Path,
+        turbofish: bool,
+        pending: bool,
+    },
+}
+
+enum TypeListKind {
+    Tuple,
+    Function,
+    Callable(Path),
+}
+
+enum TypePathPosition {
+    Part,
+    Arguments,
+    Turbofish,
+}
+
 struct Parser {
     tokens: Vec<Token>,
     at: usize,
@@ -822,16 +869,13 @@ impl Parser {
         }
         Ok(())
     }
-    fn path(&mut self, type_context: bool) -> Result<Path, Diagnostic> {
+    fn value_path(&mut self) -> Result<Path, Diagnostic> {
         let absolute = self.take("::");
         let mut name = self.ident()?;
         if absolute {
             name = format!("::{name}");
         }
         let mut args = Vec::new();
-        if type_context && self.is("<") {
-            args = self.generic_args()?;
-        }
         while self.take("::") {
             if self.is("<") {
                 if !args.is_empty() {
@@ -845,12 +889,6 @@ impl Parser {
             let part = self.ident()?;
             name.push_str("::");
             name.push_str(&part);
-            if type_context && self.is("<") {
-                if !args.is_empty() {
-                    return Err(self.unsupported("multiple generic argument lists in one path"));
-                }
-                args = self.generic_args()?;
-            }
         }
         self.capability_path(&name)?;
         Ok(Path {
@@ -888,104 +926,316 @@ impl Parser {
         }
         Ok(())
     }
-    fn ty(&mut self) -> Result<TypeId, Diagnostic> {
-        let span = self.token().span;
-        let mut refs = Vec::new();
-        while self.take("&") || self.take("&&") {
-            let double = self.tokens[self.at - 1].text == "&&";
-            if double {
-                refs.push((false, String::new(), span));
-            }
-            let lifetime = if self.token().kind == TokenKind::Lifetime {
-                let s = self.token().text.clone();
-                self.at += 1;
-                s
-            } else {
-                String::new()
-            };
-            let mutable = self.take("mut");
-            refs.push((mutable, lifetime, span));
-        }
-        let mut id;
-        if self.take("_") {
-            id = 0;
-        } else if self.take("!") {
-            id = self.add_type(Type::Never, span);
-        } else if self.take("[") {
-            let inner = self.ty()?;
-            if self.take(";") {
-                if self.token().kind != TokenKind::Number {
-                    return Err(self.unsupported("non-literal array length"));
-                }
-                let len = self.token().text.clone();
-                self.at += 1;
-                self.expect("]")?;
-                id = self.add_type(Type::Array { inner, len }, self.finish_span(span));
-            } else {
-                self.expect("]")?;
-                id = self.add_type(Type::Slice(inner), self.finish_span(span));
-            }
-        } else if self.take("(") {
-            let mut items = Vec::new();
-            let mut comma = false;
-            while !self.is(")") {
-                items.push(self.ty()?);
-                if !self.take(",") {
-                    break;
-                }
-                comma = true;
-            }
-            self.expect(")")?;
-            if items.len() == 1 && !comma {
-                id = items[0];
-            } else {
-                id = self.add_type(Type::Tuple(items), self.finish_span(span));
-            }
-        } else if self.take("fn") {
-            self.expect("(")?;
-            let mut params = Vec::new();
-            while !self.is(")") {
-                params.push(self.ty()?);
-                if !self.take(",") {
-                    break;
-                }
-            }
-            self.expect(")")?;
-            let result = if self.take("->") { self.ty()? } else { 1 };
-            id = self.add_type(Type::Function { params, result }, self.finish_span(span));
-        } else {
-            if self.is("dyn") || self.is("impl") || self.is("*") || self.is("for") {
-                return Err(self.unsupported(&self.token().text));
-            }
-            let mut path = self.path(true)?;
-            if (path.name == "Fn" || path.name == "FnMut" || path.name == "FnOnce")
-                && self.take("(")
-            {
-                let mut params = Vec::new();
-                while !self.is(")") {
-                    params.push(self.ty()?);
-                    if !self.take(",") {
-                        break;
-                    }
-                }
-                self.expect(")")?;
-                let result = if self.take("->") { self.ty()? } else { 1 };
+
+    fn callable_type(
+        &mut self,
+        span: Span,
+        params: Vec<TypeId>,
+        path: Option<Path>,
+        result: TypeId,
+    ) -> TypeId {
+        match path {
+            Some(mut path) => {
                 let tuple = self.add_type(Type::Tuple(params), self.finish_span(span));
                 path.args = vec![tuple, result];
+                self.add_type(Type::Path(path), self.finish_span(span))
             }
-            id = self.add_type(Type::Path(path), self.finish_span(span));
+            None => self.add_type(Type::Function { params, result }, self.finish_span(span)),
         }
-        while let Some((mutable, lifetime, reference_span)) = refs.pop() {
-            id = self.add_type(
-                Type::Ref {
+    }
+
+    // Every input-shaped type edge is a continuation on this heap stack.
+    // Arena indices are returned between frames; neither parsing nor dropping
+    // nested types relies on the embedding thread's native stack size.
+    fn ty(&mut self) -> Result<TypeId, Diagnostic> {
+        let mut frames = vec![TypeFrame::Parse];
+        let mut value = 0;
+        while let Some(frame) = frames.pop() {
+            match frame {
+                TypeFrame::Parse => {
+                    let span = self.token().span;
+                    while self.take("&") || self.take("&&") {
+                        if self.tokens[self.at - 1].text == "&&" {
+                            frames.push(TypeFrame::Reference {
+                                mutable: false,
+                                lifetime: String::new(),
+                                span,
+                            });
+                        }
+                        let lifetime = if self.token().kind == TokenKind::Lifetime {
+                            let name = self.token().text.clone();
+                            self.at += 1;
+                            name
+                        } else {
+                            String::new()
+                        };
+                        let mutable = self.take("mut");
+                        frames.push(TypeFrame::Reference {
+                            mutable,
+                            lifetime,
+                            span,
+                        });
+                    }
+                    if self.take("_") {
+                        value = 0;
+                    } else if self.take("!") {
+                        value = self.add_type(Type::Never, span);
+                    } else if self.take("[") {
+                        frames.push(TypeFrame::Array { span });
+                        frames.push(TypeFrame::Parse);
+                    } else if self.take("(") {
+                        frames.push(TypeFrame::List {
+                            span,
+                            items: Vec::new(),
+                            comma: false,
+                            pending: false,
+                            kind: TypeListKind::Tuple,
+                        });
+                    } else if self.take("fn") {
+                        self.expect("(")?;
+                        frames.push(TypeFrame::List {
+                            span,
+                            items: Vec::new(),
+                            comma: false,
+                            pending: false,
+                            kind: TypeListKind::Function,
+                        });
+                    } else {
+                        if self.is("dyn") || self.is("impl") || self.is("*") || self.is("for") {
+                            return Err(self.unsupported(&self.token().text));
+                        }
+                        let absolute = self.take("::");
+                        let mut name = self.ident()?;
+                        if absolute {
+                            name = format!("::{name}");
+                        }
+                        frames.push(TypeFrame::Path {
+                            span,
+                            path: Path {
+                                declaration: None,
+                                name,
+                                args: Vec::new(),
+                            },
+                            position: TypePathPosition::Part,
+                        });
+                    }
+                }
+                TypeFrame::Reference {
                     mutable,
                     lifetime,
-                    inner: id,
-                },
-                self.finish_span(reference_span),
-            );
+                    span,
+                } => {
+                    value = self.add_type(
+                        Type::Ref {
+                            mutable,
+                            lifetime,
+                            inner: value,
+                        },
+                        self.finish_span(span),
+                    );
+                }
+                TypeFrame::Array { span } => {
+                    if self.take(";") {
+                        if self.token().kind != TokenKind::Number {
+                            return Err(self.unsupported("non-literal array length"));
+                        }
+                        let len = self.token().text.clone();
+                        self.at += 1;
+                        self.expect("]")?;
+                        value = self
+                            .add_type(Type::Array { inner: value, len }, self.finish_span(span));
+                    } else {
+                        self.expect("]")?;
+                        value = self.add_type(Type::Slice(value), self.finish_span(span));
+                    }
+                }
+                TypeFrame::List {
+                    span,
+                    mut items,
+                    mut comma,
+                    pending,
+                    kind,
+                } => {
+                    let mut closed = false;
+                    if pending {
+                        items.push(value);
+                        if self.take(",") {
+                            comma = true;
+                        } else {
+                            self.expect(")")?;
+                            closed = true;
+                        }
+                    }
+                    if !closed {
+                        closed = self.take(")");
+                    }
+                    if !closed {
+                        frames.push(TypeFrame::List {
+                            span,
+                            items,
+                            comma,
+                            pending: true,
+                            kind,
+                        });
+                        frames.push(TypeFrame::Parse);
+                        continue;
+                    }
+                    let path = match kind {
+                        TypeListKind::Tuple => {
+                            value = if items.len() == 1 && !comma {
+                                items[0]
+                            } else {
+                                self.add_type(Type::Tuple(items), self.finish_span(span))
+                            };
+                            continue;
+                        }
+                        TypeListKind::Function => None,
+                        TypeListKind::Callable(path) => Some(path),
+                    };
+                    if self.take("->") {
+                        frames.push(TypeFrame::FunctionResult {
+                            span,
+                            params: items,
+                            path,
+                        });
+                        frames.push(TypeFrame::Parse);
+                    } else {
+                        value = self.callable_type(span, items, path, 1);
+                    }
+                }
+                TypeFrame::FunctionResult { span, params, path } => {
+                    value = self.callable_type(span, params, path, value);
+                }
+                TypeFrame::Path {
+                    span,
+                    mut path,
+                    position,
+                } => {
+                    let mut complete = false;
+                    let allow_arguments = match position {
+                        TypePathPosition::Part => true,
+                        TypePathPosition::Arguments => false,
+                        TypePathPosition::Turbofish => {
+                            if self.take("::") {
+                                path.name.push_str("::");
+                                path.name.push_str(&self.ident()?);
+                                true
+                            } else {
+                                complete = true;
+                                false
+                            }
+                        }
+                    };
+                    if allow_arguments && self.is("<") {
+                        if !path.args.is_empty() {
+                            return Err(
+                                self.unsupported("multiple generic argument lists in one path")
+                            );
+                        }
+                        self.at += 1;
+                        frames.push(TypeFrame::Arguments {
+                            span,
+                            path,
+                            turbofish: false,
+                            pending: false,
+                        });
+                        continue;
+                    }
+                    if !complete && self.take("::") {
+                        if self.is("<") {
+                            if !path.args.is_empty() {
+                                return Err(
+                                    self.unsupported("multiple generic argument lists in one path")
+                                );
+                            }
+                            self.at += 1;
+                            frames.push(TypeFrame::Arguments {
+                                span,
+                                path,
+                                turbofish: true,
+                                pending: false,
+                            });
+                        } else {
+                            path.name.push_str("::");
+                            path.name.push_str(&self.ident()?);
+                            frames.push(TypeFrame::Path {
+                                span,
+                                path,
+                                position: TypePathPosition::Part,
+                            });
+                        }
+                        continue;
+                    }
+                    self.capability_path(&path.name)?;
+                    if (path.name == "Fn" || path.name == "FnMut" || path.name == "FnOnce")
+                        && self.take("(")
+                    {
+                        frames.push(TypeFrame::List {
+                            span,
+                            items: Vec::new(),
+                            comma: false,
+                            pending: false,
+                            kind: TypeListKind::Callable(path),
+                        });
+                    } else {
+                        value = self.add_type(Type::Path(path), self.finish_span(span));
+                    }
+                }
+                TypeFrame::Arguments {
+                    span,
+                    mut path,
+                    turbofish,
+                    pending,
+                } => {
+                    let mut parsed = pending;
+                    if pending {
+                        path.args.push(value);
+                    } else if self.token().kind == TokenKind::Lifetime {
+                        let lifetime_span = self.token().span;
+                        let name = self.token().text.clone();
+                        self.at += 1;
+                        path.args.push(self.add_type(
+                            Type::Path(Path {
+                                declaration: None,
+                                name,
+                                args: Vec::new(),
+                            }),
+                            lifetime_span,
+                        ));
+                        parsed = true;
+                    } else if !self.at_gt() {
+                        frames.push(TypeFrame::Arguments {
+                            span,
+                            path,
+                            turbofish,
+                            pending: true,
+                        });
+                        frames.push(TypeFrame::Parse);
+                        continue;
+                    }
+                    if parsed && self.take(",") && !self.at_gt() {
+                        frames.push(TypeFrame::Arguments {
+                            span,
+                            path,
+                            turbofish,
+                            pending: false,
+                        });
+                        continue;
+                    }
+                    self.gt()?;
+                    frames.push(TypeFrame::Path {
+                        span,
+                        path,
+                        position: if turbofish {
+                            TypePathPosition::Turbofish
+                        } else {
+                            TypePathPosition::Arguments
+                        },
+                    });
+                }
+            }
         }
-        Ok(id)
+        Ok(value)
     }
     fn function(&mut self, attrs: Vec<Attribute>, public: Visibility) -> Result<usize, Diagnostic> {
         let span = self.token().span;
@@ -1906,7 +2156,7 @@ impl Parser {
         if self.token().kind != TokenKind::Ident && !self.is("::") {
             return Err(self.err("expected an expression"));
         }
-        let path = self.path(false)?;
+        let path = self.value_path()?;
         if self.take("!") {
             if path.name == "println"
                 || path.name == "print"
@@ -2098,7 +2348,7 @@ impl Parser {
         }
         let by_ref = self.take("ref");
         let mutable = self.take("mut");
-        let path = self.path(false)?;
+        let path = self.value_path()?;
         if self.take("(") {
             let mut fields = Vec::new();
             while !self.is(")") {
