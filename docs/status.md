@@ -9,10 +9,17 @@ Running deployments are independent and unchanged.
 ## Works
 
 Functions, checked fixed-width integers and f64, structs/enums, matches, loops,
-concrete generic instances, associated types and prerequisite bounds execute on
-Node. Ownership includes moves, partial initialization, custom Drop, disjoint
-mutable fields, one-source views, array/slice projections and reborrowing.
-Ambient I/O and direct source calls to Drop are rejected.
+generic instances, associated types and prerequisite bounds execute on Node.
+Ownership includes moves, partial initialization, custom Drop, disjoint mutable
+fields, one-source views, array/slice projections and reborrowing.
+Ambient I/O and direct calls to actual destructor functions are rejected.
+
+Generic free functions, impl methods and trait defaults are checked under rigid
+parameters and declared contracts, independently of specialization or reachability.
+The production elaborator and K checker are reused. Bounds, affine ownership,
+associated identities and explicit method type arguments are enforced; inherent
+methods and user traits do not become builtin Clone/Drop/Copy by spelling.
+Concrete associated-result selection executes successfully.
 
 Every initialized reference leaf has provenance or explicit inactive-variant
 absence evidence. Moves, construction, cloning, replacement, field assignment,
@@ -43,25 +50,37 @@ Address-taken values have stable frame slots. Structural destruction uses a grow
 explicit stack, including custom Drop, partial moves and recursive Box/Vec values.
 Copy helpers and explicit recursive source calls still use the engine stack.
 
+The exact production unsigned/signed LEB128 encoders in `src/encoding.rs` now
+compile and execute through the ordinary source-bundle pipeline. Tests compare
+every encoded byte for 34 unsigned and 63 signed boundary inputs, include fixed
+known vectors, and require a behavior-changing source mutation to alter the
+artifact and result. An invalid mutation fails with the original source filename.
+This is one executing compiler component. It still uses emitter-provided Vec
+memory primitives and Node; it is not a compiler-core fixed point.
+
 ## Current verification
 
-The integrated 2026-11-11 gate passes **141 Cargo tests** and reports
-**64 conformance passes, eight pending, zero failures; 57 rustc comparisons**.
-Formatting, Clippy, build and conformance are included. Elapsed: **12.663 s**.
+The final integrated 2026-11-11 gate passes **178 Cargo tests** and reports
+**71 conformance passes, eight pending, zero failures; 64 rustc comparisons**.
+Formatting, Clippy, build and conformance are included. Elapsed: **13.961 s**.
 
-Coverage includes direct-K provenance attacks/valid transfers; multi-file sibling
-names, aliases, privacy, imports/re-exports, local prelude/intrinsic shadowing,
-trait use and original-file diagnostics; source-bundle mutations; two 30,000-local
-shapes; loop liveness; 20,000-node structures; destructor order; and allocation
-reuse. The eight pending closure/callback/task cases remain pending. Structural
-Send/Sync checks do not establish a task runtime. No World-backed I/O or
-concurrency execution pass is claimed.
+The suite includes 19 provenance tests, 28 generic-definition tests, 20 module
+tests, source-bundle and executing-component mutations, parser/embedding capacity
+cases, two 30,000-local shapes, deep destruction/order and allocation reuse.
+Direct K fixtures reach the checker without frontend filtering. Rejections use
+the intended semantic errors; source-level replacement/clone escapes and generic
+definition/type-argument failures are also compared with rustc.
+
+The eight closure/callback/task conformance cases remain explicitly pending.
+Structural Send/Sync checks do not establish a task runtime. No World-backed
+I/O or concurrency execution pass is claimed.
 
 ## Capacity observations
 
-These 2026-11-11 debug CLI runs include parse, resolve/elaborate, check, emit, Node
-load/compile, execution and cleanup. Each is one end-to-end observation; peak RSS
-was not measured.
+These 2026-11-11 debug CLI observations were taken after the backend repair,
+before the following generic/type-frame changes. They include parse,
+resolve/elaborate, check, emit, Node load/compile, execution and cleanup.
+Each is one end-to-end observation; peak RSS was not measured.
 
 | Input | Result | Elapsed |
 | --- | ---: | ---: |
@@ -75,8 +94,8 @@ first call and 9,109,504 after its second, then stayed unchanged through calls
 three to five. The allocator still does not split/coalesce blocks; stable reuse
 after initial placement does not establish absence of fragmentation.
 
-Nested Box measurements cover parse, resolve/elaborate, check and K serialization,
-not emission/execution. Structural keys and compact names remove the earlier
+Nested Box measurements after structural interning at `368cbb37` cover parse,
+resolve/elaborate, check and K serialization, not emission/execution. Structural keys and compact names remove the earlier
 approximately quadratic expanded-name output for this input shape:
 
 | Depth | Source bytes | K-text bytes |
@@ -86,10 +105,31 @@ approximately quadratic expanded-name output for this input shape:
 | 512 | 2,598 | 26,533 |
 | 1,024 | 5,158 | 39,433 |
 
-On an isolated 2 MiB thread, parsing depth-256 Box types still overflows. With
-syntax independently prepared on a larger test thread, elaboration also overflows;
-resolution and K checking complete independently. The CLI stack shim does not
-repair embedding. Explicit parser/elaborator frames remain required.
+The subsequent parser/type-elaborator repairs replace the independently observed
+depth-256 stack failures with explicit work frames. On an explicit 2 MiB thread:
+
+- Parsing and AST destruction pass at depth 16,384; routine regressions cover
+  eight simple/mixed shapes at depths 512 and 8,192, including malformed input.
+- The ordinary compiler-core entry compiles builtin Box and transparent-alias
+  graphs at depths 512 and 2,048 through emission; Node loads them and executes
+  the scalar probe. An uncalled `consume` function carries the deep parameter type.
+- User-defined Box types and reverse-ordered nominal fields pass at depth 512.
+- A recursive alias/nominal/Box program builds, executes and cleans 1,000 nodes.
+- Alias-only cycles reject semantically; no depth/fuel threshold was introduced.
+
+Other expression/pattern parsing, elaboration and generic inference paths remain
+outside this stack repair. Complete stack independence is not established.
+
+Reference containment in K is now one reverse-edge graph propagation rather than
+a fresh transitive scan for each container. Directly constructed nested-Box K
+type tables gave the following single debug-library observations (K check only;
+no source parsing, elaboration, emission or execution):
+
+| Types in Box chain | Before | After |
+| ---: | ---: | ---: |
+| 1,024 | 5.583 ms | 0.274 ms |
+| 4,096 | 85.892 ms | 0.942 ms |
+| 8,192 | 345.529 ms | 1.848 ms |
 
 ### Earlier evidence and its original scope
 
@@ -109,28 +149,41 @@ complete compiler benchmarks or an owned-engine result.
 
 ## Missing and next work
 
-Generic/witness selection and finite-instantiation checking still precede
-monomorphic K. Uninstantiated generic bodies are not yet fully checked under their
-declared parameters. The immediate semantic task is reused elaboration/K checking
-with rigid parameters and declared trait/associated-type contracts, without a
-second expression checker or an arbitrary instantiation budget.
+Executable K is still monomorphic. Generic validation records declared method
+evidence internally, but complete witness-bearing generic K and serialized
+contract closure are unfinished. Reference content hidden inside arbitrary type
+parameters still requires concrete K provenance validation. Deeply dependent
+associated-witness chains are not comprehensively normalized; unresolved cases
+reject. External view writes need explicit mutation contracts before their
+symbolic source relationships can change.
 
-The normal CLI loads the compiler crate and reaches actual syntax barriers. The
-latest attempt reports an unsupported range pattern in `src/wasm.rs`. No complete
-compiler-core source closure is accepted. Strings/views, formatting, map/set APIs,
+The normal CLI starts from `src/lib.rs` and follows its real modules. The current
+whole-crate check stops at `src/wasm.rs:1967` with `E_PARSE` on a range pattern
+(`..=`). No complete compiler-core closure is accepted, and no W1/W2,
+N1/N2 or owned bootstrap seed exists. Strings/views, formatting, map/set APIs,
 derives, closures, patterns and ownership layouts remain real dependency work.
-No W1/W2, N1/N2 or committed owned bootstrap image exists.
 
-Execute an actual production compiler component through the ordinary source-bundle
-path, retaining the same implementation in the bootstrap compiler, then extend
-that verified closure. In parallel, replace demonstrated nested-type parser and
-elaborator recursion with explicit frames without changing source validity.
+The next concrete ownership vertical is immutable text/literals and the minimum
+source-owned copying/appending needed to consolidate and execute the duplicated
+`qualified(module, name) -> String` helper in resolve, generics and elaborate.
+Current probes reject `&str` as an unknown type and string literals as unsupported;
+the existing source String/UTF-8/Vec implementation supplies the owned half.
+Implement static literal provenance, immutable UTF-8 text and borrowed byte
+projection; implement copying and `push_str` as source loops. Replace this helper's
+formatting with those operations, share one production implementation under both
+compilers, compare full output bytes, and mutate its separator in supplied source.
+Reject local-owned-string view escapes and invalid direct-K static UTF-8. Avoid
+a second owned-string representation or host-generated compiler results.
+
+Other observations include missing borrowed collection iteration, `while let`,
+and repeated Vec initialization. Add these when they close the next actual
+component dependency. Keep the successful encoding component and extend its
+production closure rather than counting parsed files.
 
 Vec/Box/allocation internals remain in the emitter. The one-source view model,
-views-in-owned-containers restriction, write contracts, closures, explicit World
-capabilities, tasks, CLI ownership and an owned/native execution route remain
-unfinished. Add useful semantics when compiler needs repeatedly exceed the subset;
-do not flatten every abstraction into a private compiler dialect.
+views-in-owned-containers restriction, closures, explicit World capabilities,
+tasks, CLI ownership and an owned/native execution route remain unfinished.
+Choose generally useful semantics over repeated compiler-only source contortions.
 
 ## Bootstrap
 

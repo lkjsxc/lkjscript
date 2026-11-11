@@ -4,10 +4,11 @@
   allocation arithmetic must fit their representation; overflow is an error.
 - Allocation and virtual-memory reservation depend on the host's address space,
   physical memory and swap. The Rust bootstrap grows its main stack on demand,
-  preserving the host hard extent. This is a CLI accommodation: parsing and
-  elaboration of nested generic types can still overflow a small embedded-thread
-  stack. Depth 256 nested Box types reproduced both stage failures on a 2 MiB
-  thread; explicit type-parser and elaborator work frames are the next repair.
+  preserving the host hard extent. Type parsing and type resolution now use
+  explicit work frames, including generic arguments, aliases and nominal fields.
+  Other expression/pattern parsing, elaboration and inference paths still use
+  native recursion; complete compiler stack independence is not established.
+  Embedding tests use an explicit 2 MiB stack, separately from the CLI shim.
 - WebAssembly vector counts, section lengths, function indices and local indices
   are u32 even with memory64. Emission reports format overflow rather than
   truncating. Memory64 addresses obey their page/address-space encoding.
@@ -25,10 +26,11 @@
 - The allocator reuses blocks without splitting or coalescing. Values commonly
   occupy eight-byte slots. Fragmentation and layout efficiency remain bootstrap
   implementation choices to improve from actual workloads.
-- Generic definition/witness contracts and external view-mutation contracts remain
-  incomplete. Those semantic restrictions are distinct from capacity constraints.
-  Structural type interning avoids expanded-name growth; it does not remove all
-  recursive compiler traversals or establish linear whole-compiler complexity.
+- Complete generic witness/lifetime contracts and external view-mutation contracts
+  remain incomplete; generic bodies are checked under declared rigid assumptions. Those semantic restrictions are distinct from capacity constraints.
+  Structural interning avoids expanded-name growth and reference containment is
+  solved once over the type graph. These do not establish linear whole-compiler
+  complexity or eliminate every recursive traversal.
 
 Test-runner time, RSS and output envelopes stop test processes only. They do not
 define accepted programs. No language quotas, step counters or depth thresholds

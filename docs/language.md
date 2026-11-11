@@ -76,10 +76,21 @@ parameter-flow strongly connected components reject expanding instantiation.
 Aliases participate in these checks. Bounds with extra type arguments remain
 unsupported. Method calls resolve to concrete function applications.
 
-The current first vertical instantiates generics and resolves witnesses before K.
-K therefore checks concrete programs, not yet the generic/witness contracts.
-Moving those explicit contracts into K and instantiating after the gate remains
-necessary to complete the intended single-checker architecture.
+Generic function, impl-method and trait-default bodies are checked even when
+never instantiated. Definition checking reuses production elaboration and K
+ownership/type checking under rigid parameter identities and declared trait
+contracts. It does not sample concrete parameter types. Bounds, associated-type
+relationships, method signatures and explicit method type arguments are checked;
+unreachable expressions must still type-check. User traits named Copy, Clone or
+Drop do not acquire builtin semantics by spelling. Derived Copy on a generic
+layout is conditional on its fields.
+
+The emitted program remains monomorphic. The generic validation context names
+declared evidence, but a complete independently replayable generic/witness K
+contract is unfinished. Reference-bearing content hidden inside arbitrary type
+parameters is not fully modeled at this generic boundary; concrete specializations
+still receive full K provenance checks. This is not complete generic lifetime or
+external mutation-contract closure.
 
 ## K and checking
 
@@ -139,6 +150,12 @@ and memory operations remain trusted intrinsics until their source layer lands.
 `compiler::check_bundle` uses the same production checking pipeline. These entries
 perform no host I/O. Their existence and input-mutation tests do not establish
 self-compilation.
+
+The production unsigned/signed LEB128 encoders live in `src/encoding.rs` and are
+used directly by the emitter. That exact source also compiles and executes under
+lkjscript, with byte-level boundary vectors and behavior-changing source mutations.
+This is an executing compiler component; the full compiler dependency closure
+and fixed point remain unfinished.
 
 `src/check.rs` is the K checker; `src/k.rs` defines its inputs and checked result.
 `src/wasm.rs` contains lowering/emission plus allocation and collection internals.
