@@ -4,6 +4,7 @@ mod integers;
 mod patterns;
 mod static_lifetimes;
 mod type_resolve;
+mod variants;
 
 use crate::ast as a;
 use crate::check::{is_copy, place_type};
@@ -1053,6 +1054,21 @@ impl Builder<'_, '_> {
             );
         }
     }
+    fn bind_name(&mut self, name: String, mutable: bool, value: (usize, usize), line: usize) {
+        let dst = self.local(value.1, &name, mutable);
+        self.emit(
+            k::Op::Assign {
+                place: k::Place::local(dst),
+                src: value.0,
+            },
+            line,
+        );
+        if matches!(self.compiler.types[value.1].kind, k::TypeKind::Ref { .. }) {
+            self.ref_bindings.push((name.clone(), dst));
+        }
+        self.bindings.push((name, dst));
+    }
+
     fn bind(&mut self, pattern: usize, value: (usize, usize), line: usize) -> Result<()> {
         let p = self.compiler.source.patterns[pattern].clone();
         match p.kind {
@@ -1067,18 +1083,7 @@ impl Builder<'_, '_> {
                 } else {
                     value
                 };
-                let dst = self.local(val.1, &name, mutable);
-                self.emit(
-                    k::Op::Assign {
-                        place: k::Place::local(dst),
-                        src: val.0,
-                    },
-                    line,
-                );
-                if matches!(self.compiler.types[val.1].kind, k::TypeKind::Ref { .. }) {
-                    self.ref_bindings.push((name.clone(), dst));
-                }
-                self.bindings.push((name, dst));
+                self.bind_name(name, mutable, val, line);
                 Ok(())
             }
             a::Pattern::Wild => {
@@ -1444,21 +1449,10 @@ impl Builder<'_, '_> {
                     let t = self.compiler.resolve(constant.ty, &self.sub)?;
                     return self.expr(constant.value, Some(t));
                 }
-                if path.name.contains("::")
-                    || ["None", "Some", "Ok", "Err"].contains(&path.name.as_str())
+                if let Some(value) =
+                    self.construct_variant(&path, &[], a::VariantStyle::Unit, expected, node.span)?
                 {
-                    if let Ok((ty, tag)) = self.variant(&path, expected, node.span) {
-                        let d = self.temp(ty);
-                        self.emit(
-                            k::Op::Variant {
-                                dst: d,
-                                variant: tag,
-                                fields: Vec::new(),
-                            },
-                            line,
-                        );
-                        return Ok((d, ty));
-                    }
+                    return Ok(value);
                 }
                 Err(err(
                     node.span,
@@ -2504,28 +2498,15 @@ impl Builder<'_, '_> {
             );
             return Ok((dst, ty));
         }
-        if let Ok((ty, tag)) = self.variant(&path, expected, span) {
-            let fields = match &self.compiler.types[ty].kind {
-                k::TypeKind::Enum { variants, .. } => variants[tag].fields.clone(),
-                _ => Vec::new(),
-            };
-            if fields.len() != args.len() {
-                return Err(err(span, "E_TYPE", "variant field count differs"));
-            }
-            let mut values = Vec::new();
-            for i in 0..args.len() {
-                values.push(self.expr(args[i], Some(fields[i].ty))?.0);
-            }
-            let dst = self.temp(ty);
-            self.emit(
-                k::Op::Variant {
-                    dst,
-                    variant: tag,
-                    fields: values,
-                },
-                line,
-            );
-            return Ok((dst, ty));
+        let fields: Vec<_> = args
+            .iter()
+            .enumerate()
+            .map(|(index, expression)| (index.to_string(), *expression))
+            .collect();
+        if let Some(value) =
+            self.construct_variant(&path, &fields, a::VariantStyle::Tuple, expected, span)?
+        {
+            return Ok(value);
         }
         if let Some(s) = self
             .compiler
@@ -3103,6 +3084,11 @@ impl Builder<'_, '_> {
         expected: Option<usize>,
         span: a::Span,
     ) -> Result<(usize, usize)> {
+        if let Some(value) =
+            self.construct_variant(path, fields, a::VariantStyle::Named, expected, span)?
+        {
+            return Ok(value);
+        }
         let definition = self
             .compiler
             .source
@@ -3315,7 +3301,21 @@ impl Builder<'_, '_> {
                 }
             })
         };
-        let (scrutinee, original_ty) = self.expr(value, hint)?;
+        let existing = match &self.compiler.source.exprs[value].kind {
+            a::Expr::Path(path) => self.binding(&path.name).is_some(),
+            a::Expr::Field { .. } | a::Expr::Index { .. } => true,
+            a::Expr::Unary { op, .. } => op == "*",
+            _ => false,
+        };
+        let original = if existing {
+            self.place(value)?
+        } else {
+            let (local, _) = self.expr(value, hint)?;
+            self.function.locals[local].mutable = true;
+            k::Place::local(local)
+        };
+        let original_ty = place_type(&self.compiler.types, self.function, &original)
+            .ok_or_else(|| err(span, "E_TYPE", "invalid match scrutinee place"))?;
         let (ty, borrowed, mutable) = match self.compiler.types[original_ty].kind {
             k::TypeKind::Ref { inner, mutable } => (inner, true, mutable),
             _ => (original_ty, false, false),
@@ -3324,6 +3324,49 @@ impl Builder<'_, '_> {
         if !exhaustive {
             return Err(err(span, "E_TYPE", "match is not exhaustive"));
         }
+        let moving = self.match_moves(original_ty, ty, borrowed, arms, &patterns);
+        let (explicit_borrow, explicit_mutable) = self.explicit_match_borrows(arms);
+        if moving && explicit_borrow && existing {
+            return Err(err(
+                span,
+                "E_UNSUPPORTED",
+                "mixed affine moves and explicit ref match bindings need branch-specific place contracts",
+            ));
+        }
+        let (scrutinee, field_base, default_base, cleanup_scrutinee) = if existing && !moving {
+            let mut data = original.clone();
+            if borrowed {
+                data.projections.push(k::Projection::Deref);
+            }
+            if original.projections.is_empty() {
+                (original.local, data, original.clone(), false)
+            } else {
+                let reference = self
+                    .borrow(data, explicit_mutable || borrowed && mutable, span.line)?
+                    .0;
+                let data = k::Place {
+                    local: reference,
+                    projections: vec![k::Projection::Deref],
+                };
+                let default = if borrowed {
+                    original.clone()
+                } else {
+                    data.clone()
+                };
+                (reference, data, default, true)
+            }
+        } else {
+            let local = if existing {
+                self.read(original, span.line)?.0
+            } else {
+                original.local
+            };
+            let mut data = k::Place::local(local);
+            if borrowed {
+                data.projections.push(k::Projection::Deref);
+            }
+            (local, data, k::Place::local(local), true)
+        };
         let start = self.live.len();
         let base = self.snapshot();
         let binding_count = self.bindings.len();
@@ -3353,14 +3396,9 @@ impl Builder<'_, '_> {
                         Some(condition)
                     }
                 }
-                a::Pattern::Variant {
-                    path: _,
-                    fields: field_patterns,
-                } => {
+                a::Pattern::Variant { .. } | a::Pattern::Struct { .. } => {
                     let tag = patterns[index].tag.expect("validated variant");
-                    for (i, p) in field_patterns.iter().enumerate() {
-                        fields.push((*p, k::Projection::VariantField(tag, i)));
-                    }
+                    fields = patterns[index].fields.clone();
                     let c = self.temp(k::BOOL);
                     self.emit(
                         k::Op::TagTest {
@@ -3386,7 +3424,7 @@ impl Builder<'_, '_> {
                     Some(c)
                 }
                 a::Pattern::Literal(expr) => {
-                    let l = self.scalar_match_read(scrutinee, borrowed, span.line)?;
+                    let l = self.read(field_base.clone(), span.line)?.0;
                     let r = self.expr(expr, Some(ty))?.0;
                     let c = self.temp(k::BOOL);
                     self.emit(
@@ -3401,8 +3439,7 @@ impl Builder<'_, '_> {
                     Some(c)
                 }
                 a::Pattern::Range { .. } => Some(self.range_condition(
-                    scrutinee,
-                    borrowed,
+                    field_base.clone(),
                     ty,
                     patterns[index].range.expect("validated range"),
                     arm.span.line,
@@ -3420,31 +3457,17 @@ impl Builder<'_, '_> {
                 open += 1;
             }
             if binding_default {
-                let value = self.read(k::Place::local(scrutinee), arm.span.line)?;
-                self.bind(arm.pattern, value, arm.span.line)?;
+                self.bind_match_place(arm.pattern, default_base.clone(), None, arm.span.line)?;
             }
             for (pattern, projection) in fields {
-                let mut projections = Vec::new();
-                if borrowed {
-                    projections.push(k::Projection::Deref);
-                }
-                projections.push(projection);
-                let place = k::Place {
-                    local: scrutinee,
-                    projections,
-                };
-                if matches!(
-                    self.compiler.source.patterns[pattern].kind,
-                    a::Pattern::Wild
-                ) {
-                    continue;
-                }
-                let v = if borrowed {
-                    self.borrow(place, mutable, span.line)?
-                } else {
-                    self.read(place, span.line)?
-                };
-                self.bind(pattern, v, span.line)?;
+                let mut place = field_base.clone();
+                place.projections.push(projection);
+                self.bind_match_place(
+                    pattern,
+                    place,
+                    if borrowed { Some(mutable) } else { None },
+                    span.line,
+                )?;
             }
             let v = self.expr(arm.value, expected.or(result.map(|i| self.ty(i))))?;
             if self.reachable {
@@ -3463,7 +3486,7 @@ impl Builder<'_, '_> {
                     span.line,
                 );
                 self.cleanup(start, Some(target), span.line);
-                if self.live[scrutinee] {
+                if cleanup_scrutinee && self.live[scrutinee] {
                     self.emit(
                         k::Op::Drop {
                             place: k::Place::local(scrutinee),

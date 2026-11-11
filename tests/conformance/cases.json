@@ -725,11 +725,28 @@
     "pending": false
   },
   {
+    "id": "named_enum_fields",
+    "file": "pass/named_enum_fields.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
     "id": "generic_parameter_scope",
     "file": "pass/generic_parameter_scope.rs",
     "kind": "run",
     "value": "42",
     "rust": true,
+    "pending": false
+  },
+  {
+    "id": "named_variant_tuple",
+    "file": "fail/named_variant_tuple.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
     "pending": false
   },
   {

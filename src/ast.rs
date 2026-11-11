@@ -132,11 +132,18 @@ pub struct Struct {
     pub span: Span,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VariantStyle {
+    Unit,
+    Tuple,
+    Named,
+}
+
 #[derive(Clone, Debug)]
 pub struct Variant {
     pub name: String,
     pub fields: Vec<Field>,
-    pub named: bool,
+    pub style: VariantStyle,
     pub discriminant: Option<ExprId>,
     pub span: Span,
 }

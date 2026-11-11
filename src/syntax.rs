@@ -1394,15 +1394,25 @@ impl Parser {
         while !self.is("}") {
             let start = self.token().span;
             let variant_name = self.ident()?;
-            let mut named = false;
+            let mut style = VariantStyle::Unit;
             let fields = if self.take("(") {
+                style = VariantStyle::Tuple;
                 self.fields(false, ")")?
             } else if self.take("{") {
-                named = true;
+                style = VariantStyle::Named;
                 self.fields(true, "}")?
             } else {
                 Vec::new()
             };
+            for field in &fields {
+                if field.public != Visibility::Private {
+                    return Err(Diagnostic::new(
+                        field.span,
+                        "E_PARSE",
+                        "enum variant fields inherit the enum visibility",
+                    ));
+                }
+            }
             let discriminant = if self.take("=") {
                 Some(self.expr(true)?)
             } else {
@@ -1411,7 +1421,7 @@ impl Parser {
             variants.push(Variant {
                 name: variant_name,
                 fields,
-                named,
+                style,
                 discriminant,
                 span: self.finish_span(start),
             });

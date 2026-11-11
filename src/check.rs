@@ -137,7 +137,18 @@ fn path_overlaps(a: &[Projection], b: &[Projection]) -> bool {
     let n = a.len().min(b.len());
     for i in 0..n {
         if a[i] != b[i] {
-            return !matches!((&a[i], &b[i]), (Projection::Field(_), Projection::Field(_)));
+            // Enum field access separately requires a checked tag. Distinct
+            // fields of that same variant are disjoint; different variants
+            // may reuse their payload storage.
+            return match (&a[i], &b[i]) {
+                (Projection::Field(_), Projection::Field(_)) => false,
+                (Projection::VariantField(left, _), Projection::VariantField(right, _))
+                    if left == right =>
+                {
+                    false
+                }
+                _ => true,
+            };
         }
     }
     true

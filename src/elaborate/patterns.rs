@@ -12,6 +12,7 @@ pub(super) struct IntegerRange {
 pub(super) struct ArmPattern {
     pub(super) range: Option<IntegerRange>,
     pub(super) tag: Option<usize>,
+    pub(super) fields: Vec<(usize, k::Projection)>,
 }
 
 #[derive(Clone, Copy)]
@@ -239,6 +240,7 @@ impl Builder<'_, '_> {
                 }
                 a::Pattern::Variant { path, fields } => {
                     let (_, tag) = self.variant(&path, Some(ty), arm.span)?;
+                    self.variant_style(ty, tag, a::VariantStyle::Tuple, pattern.span)?;
                     let k::TypeKind::Enum { variants, .. } = &self.compiler.types[ty].kind else {
                         unreachable!()
                     };
@@ -250,11 +252,61 @@ impl Builder<'_, '_> {
                         ));
                     }
                     self.irrefutable_fields(&fields)?;
+                    for (index, field) in fields.into_iter().enumerate() {
+                        info.fields
+                            .push((field, k::Projection::VariantField(tag, index)));
+                    }
+                    tags.push(tag);
+                    info.tag = Some(tag);
+                }
+                a::Pattern::Struct { path, fields, rest } => {
+                    let (_, tag) = self.variant(&path, Some(ty), arm.span)?;
+                    self.variant_style(ty, tag, a::VariantStyle::Named, pattern.span)?;
+                    let k::TypeKind::Enum { variants, .. } = &self.compiler.types[ty].kind else {
+                        unreachable!()
+                    };
+                    let declared = &variants[tag].fields;
+                    let indices: std::collections::BTreeMap<_, _> = declared
+                        .iter()
+                        .enumerate()
+                        .map(|(index, field)| (field.name.as_str(), index))
+                        .collect();
+                    let mut seen = vec![false; declared.len()];
+                    let mut bindings = Vec::new();
+                    for (name, field_pattern) in fields {
+                        let index = indices.get(name.as_str()).copied().ok_or_else(|| {
+                            err(
+                                pattern.span,
+                                "E_TYPE",
+                                &format!("unknown variant pattern field {name}"),
+                            )
+                        })?;
+                        if seen[index] {
+                            return Err(err(
+                                pattern.span,
+                                "E_TYPE",
+                                &format!("duplicate variant pattern field {name}"),
+                            ));
+                        }
+                        seen[index] = true;
+                        bindings.push(field_pattern);
+                        info.fields
+                            .push((field_pattern, k::Projection::VariantField(tag, index)));
+                    }
+                    if !rest && seen.iter().any(|present| !present) {
+                        return Err(err(
+                            pattern.span,
+                            "E_TYPE",
+                            "variant pattern is missing fields",
+                        ));
+                    }
+                    self.irrefutable_fields(&bindings)?;
                     tags.push(tag);
                     info.tag = Some(tag);
                 }
                 a::Pattern::Path(path) => {
                     let (_, tag) = self.variant(&path, Some(ty), arm.span)?;
+                    self.variant_style(ty, tag, a::VariantStyle::Unit, pattern.span)?;
                     let k::TypeKind::Enum { variants, .. } = &self.compiler.types[ty].kind else {
                         unreachable!()
                     };
@@ -290,27 +342,9 @@ impl Builder<'_, '_> {
         Ok((prepared, exhaustive))
     }
 
-    pub(super) fn scalar_match_read(
-        &mut self,
-        scrutinee: usize,
-        borrowed: bool,
-        line: usize,
-    ) -> Result<usize> {
-        let place = k::Place {
-            local: scrutinee,
-            projections: if borrowed {
-                vec![k::Projection::Deref]
-            } else {
-                Vec::new()
-            },
-        };
-        self.read(place, line).map(|value| value.0)
-    }
-
     pub(super) fn range_condition(
         &mut self,
-        scrutinee: usize,
-        borrowed: bool,
+        place: k::Place,
         ty: usize,
         range: IntegerRange,
         line: usize,
@@ -321,7 +355,7 @@ impl Builder<'_, '_> {
             (range.end, if range.inclusive { "<=" } else { "<" }),
         ] {
             if let Some(value) = bound {
-                let left = self.scalar_match_read(scrutinee, borrowed, line)?;
+                let left = self.read(place.clone(), line)?.0;
                 let right = self.temp(ty);
                 self.emit(k::Op::Int { dst: right, value }, line);
                 let condition = self.temp(k::BOOL);
@@ -352,5 +386,158 @@ impl Builder<'_, '_> {
         } else {
             Ok(conditions[0])
         }
+    }
+}
+
+impl Builder<'_, '_> {
+    fn binding_moves(&self, pattern: usize, ty: usize, borrowed: bool) -> bool {
+        let mut pending = vec![(pattern, ty)];
+        while let Some((pattern, ty)) = pending.pop() {
+            match &self.compiler.source.patterns[pattern].kind {
+                a::Pattern::Bind { by_ref: false, .. }
+                    if !borrowed && !super::is_copy(&self.compiler.types, ty) =>
+                {
+                    return true;
+                }
+                a::Pattern::Tuple(fields) => {
+                    if let k::TypeKind::Struct { fields: types, .. } = &self.compiler.types[ty].kind
+                    {
+                        for (pattern, field) in fields.iter().zip(types) {
+                            pending.push((*pattern, field.ty));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
+    pub(super) fn match_moves(
+        &self,
+        original: usize,
+        ty: usize,
+        borrowed: bool,
+        arms: &[a::Arm],
+        patterns: &[ArmPattern],
+    ) -> bool {
+        for (arm, info) in arms.iter().zip(patterns) {
+            if matches!(
+                self.compiler.source.patterns[arm.pattern].kind,
+                a::Pattern::Bind { .. }
+            ) && self.binding_moves(arm.pattern, original, false)
+            {
+                return true;
+            }
+            for (pattern, projection) in &info.fields {
+                if let k::Projection::VariantField(tag, index) = projection {
+                    if let k::TypeKind::Enum { variants, .. } = &self.compiler.types[ty].kind {
+                        if self.binding_moves(*pattern, variants[*tag].fields[*index].ty, borrowed)
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    pub(super) fn explicit_match_borrows(&self, arms: &[a::Arm]) -> (bool, bool) {
+        let mut shared = false;
+        let mut mutable = false;
+        let mut pending: Vec<_> = arms.iter().map(|arm| arm.pattern).collect();
+        while let Some(pattern) = pending.pop() {
+            match &self.compiler.source.patterns[pattern].kind {
+                a::Pattern::Bind {
+                    by_ref: true,
+                    ref_mut,
+                    ..
+                } => {
+                    shared = true;
+                    mutable |= *ref_mut;
+                }
+                a::Pattern::Tuple(fields) | a::Pattern::Variant { fields, .. } => {
+                    pending.extend_from_slice(fields)
+                }
+                a::Pattern::Struct { fields, .. } => {
+                    pending.extend(fields.iter().map(|(_, pattern)| *pattern))
+                }
+                _ => {}
+            }
+        }
+        (shared, mutable)
+    }
+
+    /// Bind directly from the selected storage place. Explicit ref bindings must
+    /// never borrow a temporary made by copying or moving the payload first.
+    pub(super) fn bind_match_place(
+        &mut self,
+        pattern: usize,
+        place: k::Place,
+        borrowed: Option<bool>,
+        line: usize,
+    ) -> Result<()> {
+        let mut pending = vec![(pattern, place, borrowed)];
+        while let Some((pattern, place, borrowed)) = pending.pop() {
+            let node = self.compiler.source.patterns[pattern].clone();
+            match node.kind {
+                a::Pattern::Wild => {}
+                a::Pattern::Bind {
+                    name,
+                    mutable,
+                    by_ref,
+                    ref_mut,
+                } => {
+                    let value = if by_ref {
+                        self.borrow(place, ref_mut, line)?
+                    } else if let Some(mutable) = borrowed {
+                        self.borrow(place, mutable, line)?
+                    } else {
+                        self.read(place, line)?
+                    };
+                    self.bind_name(name, mutable, value, line);
+                }
+                a::Pattern::Tuple(fields) => {
+                    let ty = super::place_type(&self.compiler.types, self.function, &place)
+                        .ok_or_else(|| err(node.span, "E_TYPE", "invalid tuple binding place"))?;
+                    let k::TypeKind::Struct {
+                        fields: declared, ..
+                    } = &self.compiler.types[ty].kind
+                    else {
+                        return Err(err(
+                            node.span,
+                            "E_TYPE",
+                            "tuple pattern requires a tuple field",
+                        ));
+                    };
+                    if fields.len() != declared.len()
+                        || declared
+                            .iter()
+                            .enumerate()
+                            .any(|(index, field)| field.name != index.to_string())
+                    {
+                        return Err(err(
+                            node.span,
+                            "E_TYPE",
+                            "tuple pattern field count or shape differs",
+                        ));
+                    }
+                    for (index, pattern) in fields.into_iter().enumerate().rev() {
+                        let mut field = place.clone();
+                        field.projections.push(k::Projection::Field(index));
+                        pending.push((pattern, field, borrowed));
+                    }
+                }
+                _ => {
+                    return Err(err(
+                        node.span,
+                        "E_UNSUPPORTED",
+                        "nested refutable match patterns are not implemented",
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 }
