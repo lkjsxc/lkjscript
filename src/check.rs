@@ -190,6 +190,7 @@ struct State {
     live: Vec<bool>,
     moved: Vec<Place>,
     loans: Vec<Loan>,
+    absent_references: Vec<Place>,
     tags: Vec<Tag>,
     predicates: BTreeMap<usize, Tag>,
     reachable: bool,
@@ -374,42 +375,62 @@ fn validate_view(loans: &[Loan], line: usize) -> Result<(), Diagnostic> {
     }
     Ok(())
 }
-fn carried_loans(
+/// Complete provenance of a value, including reference leaves in inactive
+/// enum alternatives. Absence is evidence, not a missing loan entry.
+struct Provenance {
+    loans: Vec<Loan>,
+    absent: Vec<Place>,
+}
+fn carried_provenance(
     state: &State,
     types: &[Type],
     function: &Function,
     from: &Place,
     to: &Place,
     line: usize,
-) -> Result<Vec<Loan>, Diagnostic> {
+) -> Result<Provenance, Diagnostic> {
     let value_ty = place_type(types, function, from).unwrap();
     let paths = reference_paths(types, value_ty);
+    let mut result = Provenance {
+        loans: Vec::new(),
+        absent: Vec::new(),
+    };
     if paths.is_empty() {
-        return Ok(Vec::new());
+        return Ok(result);
     }
     let target = origin(state, from).0;
-    let mut loans = Vec::new();
-    if let Root::Local(local) = target.root {
-        let base = Place {
-            local,
-            projections: target.projections.clone(),
-        };
-        for loan in &state.loans {
-            if within(&loan.holder, &base) {
+    for (path, mutable) in paths {
+        let mut holder = to.clone();
+        holder.projections.extend_from_slice(&path);
+        if let Root::Local(local) = target.root {
+            let mut source = Place {
+                local,
+                projections: target.projections.clone(),
+            };
+            source.projections.extend_from_slice(&path);
+            if let Some(loan) = state.loans.iter().find(|loan| loan.holder == source) {
                 let mut next = loan.clone();
-                next.holder = rebase(&loan.holder, &base, to);
-                loans.push(next);
+                next.holder = holder;
+                result.loans.push(next);
+            } else if path
+                .iter()
+                .any(|p| matches!(p, Projection::VariantField(_, _)))
+                && state.absent_references.contains(&source)
+            {
+                result.absent.push(holder);
+            } else {
+                return Err(error(
+                    line,
+                    "E_BORROW",
+                    "reference-bearing value has incomplete source provenance",
+                ));
             }
-        }
-    } else {
-        for (path, mutable) in paths {
+        } else {
             let mut source = from.clone();
             source.projections.extend_from_slice(&path);
             source.projections.push(Projection::Deref);
             let (target, parents) = origin(state, &source);
-            let mut holder = to.clone();
-            holder.projections.extend_from_slice(&path);
-            loans.push(Loan {
+            result.loans.push(Loan {
                 holder,
                 target,
                 mutable,
@@ -417,14 +438,66 @@ fn carried_loans(
             });
         }
     }
-    if matches!(types[value_ty].kind, TypeKind::Ref { .. }) && loans.is_empty() {
-        return Err(error(
-            line,
-            "E_BORROW",
-            "reference value has no source lifetime",
-        ));
+    Ok(result)
+}
+fn remove_provenance(state: &mut State, place: &Place) {
+    state.loans.retain(|loan| !within(&loan.holder, place));
+    state
+        .absent_references
+        .retain(|absent| !within(absent, place));
+}
+fn install_provenance(state: &mut State, value: Provenance) {
+    state.loans.extend(value.loans);
+    state.absent_references.extend(value.absent);
+}
+fn storage_place(target: &Origin, fallback: &Place) -> Place {
+    match target.root {
+        Root::Local(local) => Place {
+            local,
+            projections: target.projections.clone(),
+        },
+        Root::Parameter(_) => fallback.clone(),
     }
-    Ok(loans)
+}
+/// K does not yet declare cross-parameter write effects. A write into external
+/// view storage may clear leaves or retain their exact existing origins, but
+/// cannot silently change the caller's lifetime/projection contract.
+fn check_external_write(
+    target: &Origin,
+    destination: &Place,
+    value: &Provenance,
+    line: usize,
+) -> Result<(), Diagnostic> {
+    if !matches!(target.root, Root::Parameter(_)) {
+        return Ok(());
+    }
+    for loan in &value.loans {
+        let mut expected = target.clone();
+        expected
+            .projections
+            .extend_from_slice(&loan.holder.projections[destination.projections.len()..]);
+        expected.projections.push(Projection::Deref);
+        if loan.target != expected {
+            return Err(error(
+                line,
+                "E_BORROW",
+                "write changes external view provenance without a declared mutation contract",
+            ));
+        }
+    }
+    Ok(())
+}
+fn validate_stored_view(state: &State, target: &Origin, line: usize) -> Result<(), Diagnostic> {
+    if let Root::Local(local) = target.root {
+        let loans: Vec<Loan> = state
+            .loans
+            .iter()
+            .filter(|loan| loan.holder.local == local)
+            .cloned()
+            .collect();
+        validate_view(&loans, line)?;
+    }
+    Ok(())
 }
 fn remap_parents(state: &mut State, from: &Place, to: &Place) {
     for loan in &mut state.loans {
@@ -506,6 +579,14 @@ fn access(
     }
     let mut prefix = Place::local(place.local);
     for projection in &place.projections {
+        if matches!(projection, Projection::Deref)
+            && matches!(
+                types[place_type(types, function, &prefix).unwrap()].kind,
+                TypeKind::Ref { .. }
+            )
+        {
+            let _ = carried_provenance(state, types, function, &prefix, &prefix, line)?;
+        }
         if let Projection::Index(index) = projection {
             if !state.live[*index] {
                 return Err(error(line, "E_MOVE", "index is uninitialized or moved"));
@@ -585,7 +666,7 @@ fn consume(
 ) -> Result<(), Diagnostic> {
     access(state, types, function, &Place::local(local), true, 0, line)?;
     state.live[local] = false;
-    state.loans.retain(|loan| loan.holder.local != local);
+    remove_provenance(state, &Place::local(local));
     state.moved.retain(|place| place.local != local);
     invalidate(state, &Origin::local(local));
     state.predicates.remove(&local);
@@ -610,7 +691,11 @@ fn merge(mut a: State, b: State, line: usize) -> Result<State, Diagnostic> {
     if !b.reachable {
         return Ok(a);
     }
-    if a.live != b.live || !same_set(&a.moved, &b.moved) || !same_set(&a.loans, &b.loans) {
+    if a.live != b.live
+        || !same_set(&a.moved, &b.moved)
+        || !same_set(&a.loans, &b.loans)
+        || !same_set(&a.absent_references, &b.absent_references)
+    {
         return Err(error(
             line,
             "E_MOVE",
@@ -720,10 +805,6 @@ fn check_intrinsic(
         "replace" => {
             ts.len() == 2
                 && ts[1] == dt
-                && !matches!(
-                    types[dt].kind,
-                    TypeKind::Ref { .. } | TypeKind::Slice { .. }
-                )
                 && matches!(types[ts[0]].kind, TypeKind::Ref { inner, mutable: true } if inner == dt)
         }
         "box_new" => {
@@ -909,18 +990,6 @@ fn check_shape(
             if place_ty(place)? != ty(*src)? {
                 return Err(error(line, "E_TYPE", "assignment type differs"));
             }
-            if !place.projections.is_empty()
-                && matches!(
-                    types[ty(*src)?].kind,
-                    TypeKind::Ref { .. } | TypeKind::Slice { .. }
-                )
-            {
-                return Err(error(
-                    line,
-                    "E_UNSUPPORTED",
-                    "assigning a reference through a projection needs view provenance support",
-                ));
-            }
             if !place.projections.is_empty() && !place_writable(types, function, place) {
                 return Err(error(
                     line,
@@ -1090,6 +1159,8 @@ fn call_borrows(
     let mut used = Vec::new();
     let mut changed = Vec::new();
     for arg in args {
+        let value = Place::local(*arg);
+        let _ = carried_provenance(state, types, function, &value, &value, line)?;
         let ty = function.locals[*arg].ty;
         if let TypeKind::Ref { mutable, .. } = types[ty].kind {
             let place = Place {
@@ -1138,6 +1209,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
         live: vec![false; function.locals.len()],
         moved: Vec::new(),
         loans: Vec::new(),
+        absent_references: Vec::new(),
         tags: Vec::new(),
         predicates: BTreeMap::new(),
         reachable: true,
@@ -1246,14 +1318,14 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 };
                 let destination = Place::local(*dst);
                 let mut carried =
-                    carried_loans(&state, types, function, place, &destination, line)?;
+                    carried_provenance(&state, types, function, place, &destination, line)?;
                 if *moving {
                     remap_parents(&mut state, place, &destination);
-                    remap_carried(&mut carried, place, &destination);
+                    remap_carried(&mut carried.loans, place, &destination);
                     if place.projections.is_empty() {
                         consume(&mut state, types, function, place.local, line)?;
                     } else {
-                        state.loans.retain(|loan| !within(&loan.holder, place));
+                        remove_provenance(&mut state, place);
                         invalidate(&mut state, &target);
                         state.moved.push(place.clone());
                     }
@@ -1262,7 +1334,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 if let Some(tag) = predicate {
                     state.predicates.insert(*dst, tag);
                 }
-                state.loans.extend(carried);
+                install_provenance(&mut state, carried);
                 if let Some(variant) = known_tag {
                     set_tag(
                         &mut state,
@@ -1319,11 +1391,14 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     ));
                 }
                 let source = Place::local(*src);
-                let mut carried = carried_loans(&state, types, function, &source, place, line)?;
+                let destination = storage_place(&target, place);
+                let mut carried =
+                    carried_provenance(&state, types, function, &source, &destination, line)?;
+                check_external_write(&target, &destination, &carried, line)?;
                 let known_tag = tag_at(&state, &Origin::local(*src), &Place::local(*src));
                 let predicate = state.predicates.get(src).cloned();
-                remap_parents(&mut state, &source, place);
-                remap_carried(&mut carried, &source, place);
+                remap_parents(&mut state, &source, &destination);
+                remap_carried(&mut carried.loans, &source, &destination);
                 consume(&mut state, types, function, *src, line)?;
                 invalidate(&mut state, &target);
                 state.live[place.local] = true;
@@ -1331,8 +1406,11 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     !(moved.local == place.local
                         && is_prefix(&place.projections, &moved.projections))
                 });
-                state.loans.retain(|old| !within(&old.holder, place));
-                state.loans.extend(carried);
+                if matches!(target.root, Root::Local(_)) {
+                    remove_provenance(&mut state, &destination);
+                    install_provenance(&mut state, carried);
+                    validate_stored_view(&state, &target, line)?;
+                }
                 if place.projections.is_empty() {
                     state.predicates.remove(&place.local);
                     if let Some(tag) = predicate {
@@ -1374,7 +1452,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                         }
                     }
                 }
-                state.loans.retain(|loan| !within(&loan.holder, place));
+                remove_provenance(&mut state, place);
                 if place.projections.is_empty() {
                     state.moved.retain(|moved| moved.local != place.local);
                     consume(&mut state, types, function, place.local, line)?;
@@ -1404,25 +1482,43 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 function: called,
                 args,
             } => {
-                let target = &program.functions[*called];
-                let mut returned = Vec::new();
-                if let Some(source) = target.return_source {
+                let callee = &program.functions[*called];
+                let mut returned = Provenance {
+                    loans: Vec::new(),
+                    absent: Vec::new(),
+                };
+                let source = if let Some(source) = callee.return_source {
                     let source = Place::local(args[source]);
-                    let incoming = carried_loans(&state, types, function, &source, &source, line)?;
-                    if let Some((target, parents)) = common_origin(&incoming, line)? {
-                        for (projections, mutable) in
-                            reference_paths(types, target_type(program, *called))
-                        {
-                            returned.push(Loan {
-                                holder: Place {
-                                    local: *dst,
-                                    projections,
-                                },
-                                target: target.clone(),
-                                mutable,
-                                parents: parents.clone(),
-                            });
-                        }
+                    let incoming =
+                        carried_provenance(&state, types, function, &source, &source, line)?;
+                    common_origin(&incoming.loans, line)?
+                } else {
+                    None
+                };
+                for (projections, mutable) in reference_paths(types, callee.result) {
+                    let holder = Place {
+                        local: *dst,
+                        projections,
+                    };
+                    if let Some((target, parents)) = &source {
+                        returned.loans.push(Loan {
+                            holder,
+                            target: target.clone(),
+                            mutable,
+                            parents: parents.clone(),
+                        });
+                    } else if holder
+                        .projections
+                        .iter()
+                        .any(|p| matches!(p, Projection::VariantField(_, _)))
+                    {
+                        returned.absent.push(holder);
+                    } else {
+                        return Err(error(
+                            line,
+                            "E_BORROW",
+                            "call result reference has no source provenance",
+                        ));
                     }
                 }
                 call_borrows(&mut state, types, function, args, line)?;
@@ -1430,10 +1526,13 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     consume(&mut state, types, function, *arg, line)?;
                 }
                 put(&mut state, *dst, line)?;
-                state.loans.extend(returned);
+                install_provenance(&mut state, returned);
             }
             Op::Struct { dst, fields } | Op::Variant { dst, fields, .. } => {
-                let mut carried = Vec::new();
+                let mut carried = Provenance {
+                    loans: Vec::new(),
+                    absent: Vec::new(),
+                };
                 let mut transfers = Vec::new();
                 for (i, field) in fields.iter().enumerate() {
                     let projection = match instruction.op {
@@ -1445,19 +1544,33 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                         projections: vec![projection],
                     };
                     let from = Place::local(*field);
-                    carried.extend(carried_loans(&state, types, function, &from, &to, line)?);
+                    let field_value =
+                        carried_provenance(&state, types, function, &from, &to, line)?;
+                    carried.loans.extend(field_value.loans);
+                    carried.absent.extend(field_value.absent);
                     transfers.push((from, to));
                 }
-                validate_view(&carried, line)?;
+                if let Op::Variant { variant, .. } = instruction.op {
+                    for (projections, _) in reference_paths(types, function.locals[*dst].ty) {
+                        if matches!(projections.first(), Some(Projection::VariantField(tag, _)) if *tag != variant)
+                        {
+                            carried.absent.push(Place {
+                                local: *dst,
+                                projections,
+                            });
+                        }
+                    }
+                }
+                validate_view(&carried.loans, line)?;
                 for (from, to) in &transfers {
                     remap_parents(&mut state, from, to);
-                    remap_carried(&mut carried, from, to);
+                    remap_carried(&mut carried.loans, from, to);
                 }
                 for field in fields {
                     consume(&mut state, types, function, *field, line)?;
                 }
                 put(&mut state, *dst, line)?;
-                state.loans.extend(carried);
+                install_provenance(&mut state, carried);
                 if let Op::Variant { variant, .. } = instruction.op {
                     set_tag(
                         &mut state,
@@ -1491,15 +1604,82 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     );
                 }
             }
-            Op::Intrinsic { dst, args, .. } => {
-                call_borrows(&mut state, types, function, args, line)?;
-                for arg in args {
-                    consume(&mut state, types, function, *arg, line)?;
+            Op::Intrinsic { dst, name, args } => {
+                if name == "replace" || name == "clone" {
+                    let place = Place {
+                        local: args[0],
+                        projections: vec![Projection::Deref],
+                    };
+                    let target = origin(&state, &place).0;
+                    let stored = storage_place(&target, &place);
+                    let destination = Place::local(*dst);
+                    let mut returned =
+                        carried_provenance(&state, types, function, &place, &destination, line)?;
+                    let old_tag = tag_at(&state, &target, &stored);
+                    let incoming = if name == "replace" {
+                        let source = Place::local(args[1]);
+                        let value =
+                            carried_provenance(&state, types, function, &source, &stored, line)?;
+                        check_external_write(&target, &stored, &value, line)?;
+                        let tag = tag_at(&state, &Origin::local(args[1]), &source);
+                        Some((source, value, tag))
+                    } else {
+                        None
+                    };
+                    call_borrows(&mut state, types, function, args, line)?;
+                    if let Some((source, mut value, tag)) = incoming {
+                        remap_parents(&mut state, &stored, &destination);
+                        remap_carried(&mut returned.loans, &stored, &destination);
+                        remap_parents(&mut state, &source, &stored);
+                        remap_carried(&mut value.loans, &source, &stored);
+                        for arg in args {
+                            consume(&mut state, types, function, *arg, line)?;
+                        }
+                        if matches!(target.root, Root::Local(_)) {
+                            remove_provenance(&mut state, &stored);
+                            install_provenance(&mut state, value);
+                            validate_stored_view(&state, &target, line)?;
+                        }
+                        if let Some(variant) = tag {
+                            set_tag(
+                                &mut state,
+                                Tag {
+                                    target: target.clone(),
+                                    witness: stored,
+                                    variant,
+                                },
+                            );
+                        }
+                    } else {
+                        for arg in args {
+                            consume(&mut state, types, function, *arg, line)?;
+                        }
+                    }
+                    put(&mut state, *dst, line)?;
+                    install_provenance(&mut state, returned);
+                    if let Some(variant) = old_tag {
+                        set_tag(
+                            &mut state,
+                            Tag {
+                                target: Origin::local(*dst),
+                                witness: destination,
+                                variant,
+                            },
+                        );
+                    }
+                } else {
+                    call_borrows(&mut state, types, function, args, line)?;
+                    for arg in args {
+                        consume(&mut state, types, function, *arg, line)?;
+                    }
+                    put(&mut state, *dst, line)?;
                 }
-                put(&mut state, *dst, line)?;
             }
             Op::Return { src } => {
-                for loan in state.loans.iter().filter(|loan| loan.holder.local == *src) {
+                let returned = Place::local(*src);
+                let provenance =
+                    carried_provenance(&state, types, function, &returned, &returned, line)?;
+                for loan in &provenance.loans {
                     if !matches!(loan.target.root, Root::Parameter(source) if Some(source) == function.return_source)
                     {
                         return Err(error(
@@ -1508,14 +1688,6 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                             "returned view differs from its declared source parameter",
                         ));
                     }
-                }
-                if matches!(types[function.result].kind, TypeKind::Ref { .. })
-                    && !state
-                        .loans
-                        .iter()
-                        .any(|loan| loan.holder == Place::local(*src))
-                {
-                    return Err(error(line, "E_BORROW", "returned reference has no source"));
                 }
                 consume(&mut state, types, function, *src, line)?;
                 if state.live.iter().any(|live| *live) {
@@ -1551,9 +1723,6 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
         return Err(error(1, "E_K", "function reaches end without return"));
     }
     Ok(())
-}
-fn target_type(program: &Program, function: usize) -> usize {
-    program.functions[function].result
 }
 
 fn direct_children(kind: &TypeKind) -> Vec<usize> {

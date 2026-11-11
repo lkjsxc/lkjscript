@@ -33,7 +33,17 @@ vector comparison helper automatically; general module loading is still missing.
 
 ## Verification and measurements
 
-On this host (Rust 1.97.0, Node 24.18.1), the incremental full check takes
+The 2026-11-11 provenance repair passes **113 Cargo tests** and the full gate
+(**64 conformance pass, eight pending, zero fail; 57 rustc comparisons**). The
+clean isolated build/gate took 4.121 s. Nineteen new tests exercise returned and
+installed replacement values, cloning, direct and projected reference assignment,
+empty enum alternatives, exclusive/disjoint valid uses, and external writes.
+Direct K fixtures reach the checker without frontend filtering. External view
+writes with changed symbolic leaf origins are deliberately rejected until K has
+mutation contracts; clearing or retaining their exact origins remains supported.
+
+Earlier measurements at `aff27e54` on this host (Rust 1.97.0, Node 24.18.1):
+the incremental full check took
 **1.724 s**; rebuilding into a fresh Cargo target takes **3.994 s**. Both include
 formatting, **94 Cargo tests**, Clippy, build and conformance.
 Conformance: **64 pass, 8 explicitly pending, 0 fail**, including **57 rustc

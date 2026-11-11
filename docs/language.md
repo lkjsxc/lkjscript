@@ -35,6 +35,20 @@ elision (including receiver elision). A result cannot select between unrelated
 input sources. Borrow endings and cleanup are explicit in K. Whole-array/Vec slice
 projections, view structs and implicit mutable reborrowing are implemented.
 
+Every initialized reference leaf has checked source provenance. Inactive enum
+alternatives carry explicit absence evidence. Moves, construction, assignment,
+cloning and replacement preserve this inventory; return checks its completeness.
+Replacement transfers the old value's provenance to its result and installs the
+new value's provenance in the destination, including through local borrows.
+Reference-field writes recheck the enclosing view's source and exclusivity.
+
+K does not yet express cross-parameter mutation contracts. Writes through an
+external parameter may retain the exact symbolic origin of each reference leaf
+or clear it, but changing that origin is rejected with `E_BORROW`. The comparison
+includes projections, not just the parameter root. This conservative restriction
+prevents a callee from silently invalidating the caller's lifetime assumptions;
+explicit write contracts remain required for more general view mutation.
+
 ## Generic declarations and traits
 
 Traits describe methods and associated types. Implementations must be unique;
