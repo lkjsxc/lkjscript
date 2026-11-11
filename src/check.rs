@@ -277,8 +277,12 @@ fn origin(state: &State, place: &Place) -> (Origin, Vec<Place>) {
     }
 }
 fn affects_tag(target: &Origin, tag: &Tag) -> bool {
+    // Changing payload storage leaves its enclosing discriminant intact. Both
+    // the enum target and the reference carrier witness are invalidated only by
+    // an operation on that storage or one of its ancestors.
     (target.projections.len() <= tag.target.projections.len() && overlaps(target, &tag.target))
-        || overlaps(target, &holder_origin(&tag.witness))
+        || (target.projections.len() <= tag.witness.projections.len()
+            && overlaps(target, &holder_origin(&tag.witness)))
 }
 fn invalidate(state: &mut State, target: &Origin) {
     state.tags.retain(|tag| !affects_tag(target, tag));
@@ -3364,6 +3368,189 @@ mod tests {
             ],
         });
         rejection(p, "E_MOVE");
+    }
+
+    fn enum_payload_operations(replace_field: bool, mutation: Option<bool>) -> Program {
+        let mut types = primitives();
+        types.push(Type {
+            name: "PayloadBox".to_string(),
+            kind: TypeKind::Box { inner: I64 },
+        });
+        types.push(Type {
+            name: "Packet".to_string(),
+            kind: TypeKind::Enum {
+                copy: false,
+                variants: vec![
+                    Variant {
+                        name: "Data".to_string(),
+                        fields: vec![
+                            Field {
+                                name: "payload".to_string(),
+                                ty: 7,
+                            },
+                            Field {
+                                name: "tag".to_string(),
+                                ty: I64,
+                            },
+                        ],
+                    },
+                    Variant {
+                        name: "End".to_string(),
+                        fields: Vec::new(),
+                    },
+                ],
+            },
+        });
+        types.push(Type {
+            name: "PacketBorrow".to_string(),
+            kind: TypeKind::Ref {
+                inner: 8,
+                mutable: true,
+            },
+        });
+        let mut body = vec![
+            Op::TagTest {
+                dst: 1,
+                src: 0,
+                variant: 0,
+            },
+            Op::If { condition: 1 },
+        ];
+        if replace_field {
+            body.extend([
+                Op::Int { dst: 7, value: 42 },
+                Op::Assign {
+                    place: Place {
+                        local: 0,
+                        projections: vec![Projection::VariantField(0, 1)],
+                    },
+                    src: 7,
+                },
+            ]);
+        }
+        if let Some(before_branch) = mutation {
+            let at = if before_branch { 1 } else { 2 };
+            body.splice(
+                at..at,
+                [
+                    Op::Borrow {
+                        dst: 5,
+                        place: Place::local(0),
+                        mutable: true,
+                    },
+                    Op::Call {
+                        dst: 6,
+                        function: 1,
+                        args: vec![5],
+                    },
+                    Op::Drop {
+                        place: Place::local(6),
+                    },
+                ],
+            );
+        }
+        body.extend([
+            Op::Read {
+                dst: 2,
+                place: Place {
+                    local: 0,
+                    projections: vec![Projection::VariantField(0, 0)],
+                },
+                moving: true,
+            },
+            Op::Read {
+                dst: 3,
+                place: Place {
+                    local: 0,
+                    projections: vec![Projection::VariantField(0, 1)],
+                },
+                moving: false,
+            },
+            Op::Drop {
+                place: Place::local(2),
+            },
+            Op::Drop {
+                place: Place::local(0),
+            },
+            Op::Return { src: 3 },
+            Op::Else,
+            Op::Drop {
+                place: Place::local(0),
+            },
+            Op::Int { dst: 4, value: 0 },
+            Op::Return { src: 4 },
+            Op::End,
+        ]);
+        let mut p = program(
+            types,
+            vec![
+                local(8, true),
+                local(BOOL, false),
+                local(7, false),
+                local(I64, false),
+                local(I64, false),
+                local(9, false),
+                local(UNIT, false),
+                local(I64, false),
+            ],
+            1,
+            I64,
+            body,
+        );
+        p.functions.push(Function {
+            file: 0,
+            name: "mutate_packet".to_string(),
+            params: 1,
+            result: UNIT,
+            return_source: None,
+            locals: vec![local(9, false), local(UNIT, false)],
+            body: vec![
+                op(Op::Drop {
+                    place: Place::local(0),
+                }),
+                op(Op::Unit { dst: 1 }),
+                op(Op::Return { src: 1 }),
+            ],
+            test: false,
+        });
+        p
+    }
+
+    #[test]
+    fn payload_moves_and_field_writes_preserve_the_enclosing_enum_tag() {
+        for replace in [false, true] {
+            check(enum_payload_operations(replace, None)).unwrap();
+        }
+        let mut dropped = enum_payload_operations(false, None);
+        let operation = dropped.functions[0]
+            .body
+            .iter_mut()
+            .find(|instruction| matches!(instruction.op, Op::Read { dst: 2, .. }))
+            .unwrap();
+        operation.op = Op::Drop {
+            place: Place {
+                local: 0,
+                projections: vec![Projection::VariantField(0, 0)],
+            },
+        };
+        dropped.functions[0].body.retain(|instruction| {
+            !matches!(&instruction.op, Op::Drop { place } if *place == Place::local(2))
+        });
+        check(dropped).unwrap();
+    }
+
+    #[test]
+    fn whole_enum_mutation_invalidates_both_saved_predicates_and_proven_tags() {
+        for before_branch in [false, true] {
+            let failure = check(enum_payload_operations(false, Some(before_branch)))
+                .err()
+                .unwrap();
+            assert_eq!(failure.code, "E_TYPE");
+            assert!(
+                failure.message.contains("matching checked tag"),
+                "{failure:?}"
+            );
+        }
     }
 
     #[test]

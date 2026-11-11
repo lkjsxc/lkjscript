@@ -834,5 +834,13 @@
     "rust": true,
     "rustAccept": false,
     "pending": false
+  },
+  {
+    "id": "enum_partial_fields",
+    "file": "pass/enum_partial_fields.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
   }
 ]
