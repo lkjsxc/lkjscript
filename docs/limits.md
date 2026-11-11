@@ -6,8 +6,9 @@
   physical memory and swap. The Rust bootstrap grows its main stack on demand,
   preserving the host hard extent. Type parsing and type resolution now use
   explicit work frames, including generic arguments, aliases and nominal fields.
-  Other expression/pattern parsing, elaboration and inference paths still use
-  native recursion; complete compiler stack independence is not established.
+  Alias-aware structural type inference also uses explicit frames and separate
+  lexical environments. Other expression/pattern parsing, elaboration and
+  trait/signature traversals still use native recursion; complete compiler stack independence is not established.
   Embedding tests use an explicit 2 MiB stack, separately from the CLI shim.
 - WebAssembly vector counts, section lengths, function indices and local indices
   are u32 even with memory64. Emission reports format overflow rather than
@@ -35,6 +36,9 @@
   K return projections are explicit vector entries, including cyclic reference
   paths. Validation follows the explicit entries; a numeric repetition count
   cannot expand a short contract into a long projection walk.
+- Source Vec cloning and equality use linear element loops; their total work
+  also includes each selected element operation. This does not bound the stack
+  or cost of recursive element implementations. No new scale claim is made.
 - The allocator reuses blocks without splitting or coalescing. Values commonly
   occupy eight-byte slots. Fragmentation and layout efficiency remain bootstrap
   implementation choices to improve from actual workloads.

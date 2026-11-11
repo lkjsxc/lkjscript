@@ -180,19 +180,15 @@ pub fn direct()->i64{Wrapper{value:0i64}.score()}
 
 #[test]
 fn concrete_specialization_still_requires_an_executable_clone() {
-    for source in [
-        "fn copied<T:Clone>(value:&T)->T{value.clone()} fn probe(){let value:Vec<i64> = Vec::new();let copy=copied(&value);}",
-        "#[derive(Clone)] struct Item{value:Vec<i64>} fn copied<T:Clone>(value:&T)->T{value.clone()} fn probe(){let value=Item{value:Vec::new()};let copy=copied(&value);}",
-    ] {
-        let error = check(source)
-            .err()
-            .expect("abstract Clone cannot supply an executable body");
-        assert_eq!(error.code, "E_UNSUPPORTED", "{error:?}");
-        assert!(
-            error.message.contains("executable implementation"),
-            "{error:?}"
-        );
-    }
+    let source = "#[derive(Clone)] struct Item{value:Vec<i64>} fn copied<T:Clone>(value:&T)->T{value.clone()} fn probe(){let value=Item{value:Vec::new()};let copy=copied(&value);}";
+    let error = check(source)
+        .err()
+        .expect("abstract Clone cannot supply an executable derived body");
+    assert_eq!(error.code, "E_UNSUPPORTED", "{error:?}");
+    assert!(
+        error.message.contains("executable implementation"),
+        "{error:?}"
+    );
 }
 
 #[test]

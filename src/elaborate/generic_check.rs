@@ -1052,6 +1052,13 @@ impl super::Builder<'_, '_> {
                 );
             }
         }
+        if matches!(self.compiler.types[base].kind, k::TypeKind::Vec { .. })
+            && ((identity == &TraitIdentity::Builtin("Clone".to_string()) && name == "clone")
+                || (identity == &TraitIdentity::Builtin("PartialEq".to_string())
+                    && matches!(name.as_str(), "eq" | "ne")))
+        {
+            return self.vector_trait_method(target, base, &name, types, args, span);
+        }
         if identity == &TraitIdentity::Builtin("Clone".to_string()) && name == "clone" {
             if !types.is_empty() || !args.is_empty() {
                 return Err(err(

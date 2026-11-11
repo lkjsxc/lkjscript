@@ -836,14 +836,6 @@
     "pending": false
   },
   {
-    "id": "enum_partial_fields",
-    "file": "pass/enum_partial_fields.rs",
-    "kind": "run",
-    "value": "42",
-    "rust": true,
-    "pending": false
-  },
-  {
     "id": "block_statement_prefix",
     "file": "pass/block_statement_prefix.rs",
     "kind": "run",
@@ -875,6 +867,22 @@
     "code": "E_TYPE",
     "rust": true,
     "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "vector_source_traits",
+    "file": "pass/vector_source_traits.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "enum_partial_fields",
+    "file": "pass/enum_partial_fields.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
     "pending": false
   }
 ]

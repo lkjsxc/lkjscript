@@ -38,6 +38,13 @@ and patterns preserve declaration identity, written evaluation order, typed fiel
 layout and actual storage for ref/ref mut bindings. Distinct fields of the same
 proven variant are disjoint. Nonmoving matches preserve owner/destructor timing;
 mixed affine moves and explicit refs on an existing place remain named unsupported.
+Payload moves and field writes preserve the enclosing enum tag; whole-enum or
+witness mutation invalidates saved predicates and proven tags.
+
+Statement and match-arm parsing distinguishes unparenthesized block forms from
+ordinary value expressions. Implicit block statements require unit; explicit
+semicolons discard values with cleanup. Ordinary code after return is checked
+just like unused generic bodies.
 
 Every initialized reference leaf has provenance or explicit inactive-variant
 absence evidence. Moves, construction, cloning, replacement, field assignment,
@@ -61,7 +68,11 @@ are structural, with compact diagnostic names. Generic parameters are resolved
 by their original lexical/file scopes rather than global name guesses. An
 unrelated enum E no longer changes the source Result implementation, qualified
 crate::T is not substituted by parameter T, and str cannot become an inferred
-parameter in a call.
+parameter in a call. Alias constructors follow the resolved struct or enum, with
+fresh parameters, lexical inference and underlying privacy. Alias-aware type
+inference uses explicit work frames. Partially known nested alias targets still
+need explicit arguments or field annotations in some Rust-valid programs; the
+unchanged boundary fixture and both working annotations remain in the suite.
 
 `compiler::compile(&SourceBundle)` takes declared source/library bytes and returns
 Wasm bytes or diagnostics without host I/O. The CLI uses the same production
@@ -69,8 +80,12 @@ checking pipeline. Bootstrap byte packing is in `bridge/library.rs`. Supplied
 library bytes affect emitted behavior; missing inputs are errors. This is a
 working compiler-core boundary, not a self-hosting claim.
 
-The source library implements Option/Result, bytes/UTF-8, String, vector ordering
-and a sorted-vector BTreeMap (logarithmic lookup, linear insertion/removal). String
+The source library implements Option/Result, bytes/UTF-8, String, vector cloning,
+equality and ordering, and a sorted-vector BTreeMap (logarithmic lookup, linear
+insertion/removal). Vec cloning invokes element Clone; equality uses element ==
+and whole-vector inequality negates that result. Equality no longer requires Ord.
+Direct operations and retained generic calls resolve the same source functions;
+missing library inputs, altered signatures or missing element bounds reject. String
 Clone, clone_from, PartialEq/Eq, appending and text projection use source functions.
 Clone copies known-valid bytes and clone_from reuses available target capacity.
 Immutable &str values
@@ -111,9 +126,9 @@ original filename. The former emitter-local quoting loop is removed.
 
 ## Current verification
 
-The integrated 2026-11-11 String/witness/provenance milestone gate passes **304 Cargo tests**
-and reports **91 conformance passes, eight pending, zero failures; 84 rustc comparisons**.
-Formatting, Clippy, build and conformance are included. Elapsed: **17.546 s**.
+The integrated 2026-11-11 block/alias/vector milestone gate passes **329 Cargo tests**
+and reports **97 conformance passes, eight pending, zero failures; 90 rustc comparisons**.
+Formatting, Clippy, build and conformance are included. Elapsed: **18.976 s**.
 
 The suite includes 19 provenance tests, 28 generic-definition tests, 20 module
 tests, source-bundle and executing-component mutations, parser/embedding capacity
@@ -156,6 +171,18 @@ with Rust. Twelve projected-return groups include 16 same-source Rust/Node probe
 direct K forged-source rejection, carrier destruction, reference-parent retention,
 branch reassignment and loop exits. Paths of lengths 1, 2 and 64 through a cyclic
 K reference type check and round-trip; those paths were not executed or scaled.
+
+Seven block-statement groups include 34 same-source rustc/Node observations,
+unit obligations, explicit-semicolon destructor behavior and invalid dead code.
+Seven alias-constructor groups include 27 same-source runtime observations,
+14 Rust-matched rejections and one explicitly retained Rust-valid inference
+boundary. Nine Vec-trait groups cover complete String bytes after original-owner
+cleanup, nested independent clones, affine method selection/destructor order,
+floats, trait scope and source-helper mutations that change artifacts and results.
+Lawful element implementations use Rust Vec as an oracle; deliberately inconsistent
+eq/ne implementations compare the exact source helper and the specified lkjscript
+rule. Two direct K groups distinguish payload operations from invalidating whole
+enum mutations, including mutation before and after a tag branch.
 
 The eight closure/callback/task conformance cases remain explicitly pending.
 Structural Send/Sync checks do not establish a task runtime. No World-backed
@@ -203,8 +230,10 @@ depth-256 stack failures with explicit work frames. On an explicit 2 MiB thread:
 - A recursive alias/nominal/Box program builds, executes and cleans 1,000 nodes.
 - Alias-only cycles reject semantically; no depth/fuel threshold was introduced.
 
-Other expression/pattern parsing, elaboration and generic inference paths remain
-outside this stack repair. Complete stack independence is not established.
+Alias-aware structural type inference now also uses explicit work frames; no
+new depth measurement is claimed for it. Other expression/pattern parsing,
+elaboration and trait/signature traversals remain outside this stack repair.
+Complete stack independence is not established.
 
 Reference containment in K is now one reverse-edge graph propagation rather than
 a fresh transitive scan for each container. Directly constructed nested-Box K
@@ -251,9 +280,9 @@ parameter in `map(|(p, _)| p)`. Range patterns no longer cause the earlier stop.
 N1/N2 or owned bootstrap seed exists. Text/collection operations beyond the implemented subset, formatting, map/set
 APIs, derives, closures, patterns and ownership layouts remain dependency work.
 
-Named-field enum construction and matching and source String traits are implemented.
-The next production K dependencies are source Option contracts, executable derived
-Clone/equality and their vector operations. K and private checker-state Debug
+Named-field enum construction and matching, alias constructors, source String
+traits and source Vec cloning/equality are implemented. The next production K
+dependencies are source Option contracts and executable derived Clone/equality. K and private checker-state Debug
 derives had no production formatting consumers; they have been removed, with all
 affected structural test comparisons retained and failures rendered through text K.
 This removes an unnecessary formatter dependency without discarding compiler

@@ -673,18 +673,38 @@ impl Resolver<'_> {
         self.resolve_path(scope, &mut path, Namespace::Type, span)?;
         Ok(path)
     }
-    pub fn sequence_function(&self, span: Span) -> Result<String> {
-        let scope = self.modules.get("$std::sequence").copied().unwrap_or(0);
-        self.value_path(
+    pub fn sequence_function(&self, name: &str, span: Span) -> Result<usize> {
+        let scope = self.modules.get("$std::sequence").copied().ok_or_else(|| {
+            Diagnostic::new(
+                span,
+                "E_UNSUPPORTED",
+                "source sequence library is not loaded",
+            )
+        })?;
+        let path = self.value_path(
             scope,
             &Path {
                 declaration: None,
-                name: "__lkj_vec_compare".to_string(),
+                name: name.to_string(),
                 args: Vec::new(),
             },
             span,
-        )
-        .map(|p| p.name)
+        )?;
+        let declaration = path.declaration.ok_or_else(|| {
+            Diagnostic::new(
+                span,
+                "E_NAME",
+                "source sequence helper is not a declaration",
+            )
+        })?;
+        match self.declarations[declaration].item {
+            Item::Function(index) => Ok(index),
+            _ => Err(Diagnostic::new(
+                span,
+                "E_TYPE",
+                "source sequence helper is not a function",
+            )),
+        }
     }
     pub fn trait_in_scope(&self, scope: ModuleId, declaration: DeclarationId) -> bool {
         self.names.iter().any(|((owner, _, namespace), binding)| {

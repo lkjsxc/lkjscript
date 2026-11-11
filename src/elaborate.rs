@@ -7,6 +7,7 @@ mod inference;
 mod integers;
 mod operators;
 mod patterns;
+mod sequences;
 mod static_lifetimes;
 mod type_resolve;
 mod variants;
@@ -1898,20 +1899,10 @@ impl Builder<'_, '_> {
                 "vector ordering currently requires integer or bool elements",
             ));
         }
-        let helper = self.compiler.names.sequence_function(span)?;
         let index = self
             .compiler
-            .source
-            .functions
-            .iter()
-            .position(|f| qualified(&f.module, &f.name) == helper)
-            .ok_or_else(|| {
-                err(
-                    span,
-                    "E_UNSUPPORTED",
-                    "source sequence library is not loaded",
-                )
-            })?;
+            .names
+            .sequence_function("__lkj_vec_compare", span)?;
         let mut sub = BTreeMap::new();
         sub.insert("T".to_string(), inner);
         let function = self.compiler.instantiate(index, sub)?;
@@ -2866,6 +2857,12 @@ impl Builder<'_, '_> {
                 ));
             }
             return self.text_method(target, name, args, span);
+        }
+        if matches!(self.compiler.types[base].kind, k::TypeKind::Vec { .. })
+            && matches!(name, "clone" | "eq" | "ne")
+            && (selection.is_some() || self.vector_builtin_available(base, name, span)?)
+        {
+            return self.vector_trait_method(&target, base, name, _types, args, span);
         }
         match name {
             "as_slice" | "as_mut_slice"

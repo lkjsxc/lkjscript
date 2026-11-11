@@ -18,6 +18,16 @@ continue advances the iterator; an inclusive maximum endpoint does not overflow.
 Assertions, panic and the implemented vec forms are fixed syntax. Named
 diagnostics reject unsupported constructs.
 
+Unparenthesized block forms in statement position end before a following binary
+operator, call or index that can start a new expression; dot and question-mark
+postfixes continue the expression. Parentheses select ordinary value-expression
+parsing, as do initializers, arguments, returns and operator right-hand sides.
+Match arms use the same block boundary and require commas after grouped or
+postfix expressions. An implicit block statement must produce unit unless it
+diverges; an explicit semicolon may discard any value with ordinary cleanup.
+Statements and tails after an unconditional return are still checked. Parser
+support for if let, while let and question-mark does not establish their execution.
+
 Integer and byte literal patterns support inclusive, half-open and open ranges:
 `a..=b`, `a..b`, `a..`, `..b` and `..=b`. Endpoints share ordinary integer literal
 type, suffix, radix, sign and overflow checks. Empty/reversed ranges reject.
@@ -56,6 +66,16 @@ qualified `crate`/`self`/`super` paths and prelude priority. Private, `pub(self)
 fields, methods and re-exports. Unsupported visibility forms are rejected. Local
 declarations shadow prelude items and intrinsic spellings. Aliases preserve
 nominal identity; identically spelled sibling declarations remain distinct.
+Struct and enum construction follows the resolved declaration through transparent
+alias chains and imports, preserving visibility, field privacy and evaluation
+order. Constructor parameters have fresh bindings separate from the caller.
+Explicit, omitted and inferred alias arguments can constrain fixed, reordered
+and nested field types. A type alias does not introduce a tuple constructor in
+the value namespace; a use alias can refer to the original tuple constructor.
+Partially known nested alias targets do not yet propagate every expected type
+before literal defaulting: for Alias<T> = Holder<Pair<T, u8>>, an unannotated
+nested Pair field can require Alias::<i64> or an explicit u8 literal. This is an
+inference limitation, with an actionable diagnostic, not an invalid source type.
 Generic parameter binding uses its original lexical/file scope. It shadows an
 unrelated declaration, while qualified paths keep their declaration identity.
 Substitution, inference, coherence and implementation selection do not turn a
@@ -186,8 +206,19 @@ unimplemented. Copy cloning, shared-reference copying and explicit source method
 bodies execute through checked K. Builtin method calls still require an executable
 implementation: implicit clone_from/ne method bodies, scalar eq/ne methods and
 source trait-default execution remain named unsupported. The != operator fallback
-is implemented independently. Generated derives, vector cloning and the remaining
-builtin operations are compiler-closure work.
+is implemented independently. Generated derives and the remaining builtin
+operations are compiler-closure work.
+
+Vec<T> cloning uses the source helper constrained by T: Clone; each element
+executes its selected Clone implementation. Vec equality requires T: PartialEq,
+without Ord, and compares lengths followed by element == in order. Vec != and
+ne negate that whole-vector result; they do not call element ne. Nested vectors,
+source String, floats and explicit affine element implementations follow these
+rules. Direct methods, operators and retained generic calls use the same source
+helpers. Helper lookup names the actual library declaration, validates its
+signature and checks the operation's element constraint independently of the
+supplied helper header. Ordinary method lookup diagnoses competing visible
+source traits. Vec clone_from default-body execution remains unsupported.
 
 The emitted program remains monomorphic. The generic validation context names
 declared evidence, but a complete independently replayable generic/witness K
@@ -224,7 +255,10 @@ K has a readable/writable text form accepted by `check` for direct tests.
 
 The checker validates all type references, signatures and operation shapes,
 including dead code, then checks ownership through each function. Variant payload
-access needs a proven tag. A loop back edge must reproduce entry ownership state.
+access needs a proven tag. Moving, dropping or replacing a payload field preserves
+the enclosing discriminant proof; replacing the enum, its tag witness or an
+ancestor invalidates it, including predicates saved before a branch. A loop back
+edge must reproduce entry ownership state.
 Return and break edges must carry correct live owners and loans; no fixed-point
 iteration is used. Local storage or a local reference carrier cannot become the
 source of an escaping view. The checker performs no source inference or trait
@@ -259,7 +293,10 @@ No generated engine implements a step counter or per-operation allowance.
 ## Source library, trusted modules and imports
 
 The source library implements Option/Result, byte operations, UTF-8 validation,
-String, vector ordering for integer/bool elements, and part of the BTreeMap API.
+String, vector cloning and equality, ordering for integer/bool elements, and part
+of the BTreeMap API. Vector cloning and equality execute ordinary source loops
+using the element Clone or PartialEq contract; allocation/storage still use the
+existing memory primitives.
 BTreeMap uses sorted Vec entries with logarithmic lookup and linear insertion or
 removal. String constructors validate bytes and its private representation is
 protected across modules. The library loads through ordinary module scopes.

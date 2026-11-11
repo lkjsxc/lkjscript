@@ -265,7 +265,7 @@ impl Builder<'_, '_> {
                     }
                     let (right_place, _) = self.equality_referent(right_place, right_type);
                     let right = self.borrow(right_place, false, span.line)?.0;
-                    self.vector_compare_values(operation, left, right, inner, span)?
+                    self.vector_equality_values(operation, left, right, inner, span)?
                 }
                 _ => {
                     return Err(err(

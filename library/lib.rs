@@ -8,7 +8,7 @@ pub use ordered_map::BTreeMap;
 mod string;
 pub use string::{FromUtf8Error, String};
 mod sequence;
-pub use sequence::__lkj_vec_compare;
+pub use sequence::{__lkj_vec_clone, __lkj_vec_compare, __lkj_vec_equal};
 
 pub mod collections {
     pub use crate::BTreeMap;
