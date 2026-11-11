@@ -602,5 +602,65 @@
     "code": "E_TYPE",
     "rust": true,
     "pending": false
+  },
+  {
+    "id": "replaced_view_escape",
+    "file": "fail/replaced_view_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "cloned_view_escape",
+    "file": "fail/cloned_view_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "replace_views",
+    "file": "pass/replace_views.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "unused_generic_body",
+    "file": "fail/unused_generic_body.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "generic_explicit_method_type",
+    "file": "fail/generic_explicit_method_type.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "generic_associated_result",
+    "file": "pass/generic_associated_result.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "inherent_clone",
+    "file": "pass/inherent_clone.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
   }
 ]

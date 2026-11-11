@@ -1,4 +1,7 @@
 //! Rust-compatible syntax to explicit K. Inference lives here; K trusts none of it.
+mod generic_check;
+mod type_resolve;
+
 use crate::ast as a;
 use crate::check::{is_copy, place_type};
 use crate::k;
@@ -44,61 +47,16 @@ struct Compiler<'a> {
     applications: BTreeMap<usize, (String, Vec<usize>)>,
     destructors: Vec<(usize, usize)>,
     uses: BTreeMap<(a::FileId, String), Vec<usize>>,
+    contracts: Option<generic_check::Contracts>,
 }
 
 pub fn elaborate(source: &a::Program) -> Result<k::Program> {
     let resolved = crate::resolve::resolve(source)?;
     let source = &resolved;
     crate::generics::validate(source)?;
-    let mut c = Compiler {
-        source,
-        names: crate::resolve::Resolver::new(source)?,
-        types: k::primitives(),
-        type_names: BTreeMap::new(),
-        type_keys: BTreeMap::new(),
-        declaration_names: source
-            .declarations
-            .iter()
-            .enumerate()
-            .map(|(id, d)| (d.name.clone(), id))
-            .collect(),
-        functions: Vec::new(),
-        instances: Vec::new(),
-        instance_names: BTreeMap::new(),
-        applications: BTreeMap::new(),
-        destructors: Vec::new(),
-        uses: BTreeMap::new(),
-    };
-    for i in 0..c.types.len() {
-        c.type_names.insert(c.types[i].name.clone(), i);
-    }
-    for (name, bits, signed) in [
-        ("u64", 64, false),
-        ("isize", 64, true),
-        ("u16", 16, false),
-        ("u32", 32, false),
-        ("i8", 8, true),
-        ("i16", 16, true),
-    ] {
-        let id = c.types.len();
-        c.types.push(k::Type {
-            name: name.to_string(),
-            kind: k::TypeKind::Int { bits, signed },
-        });
-        c.type_names.insert(name.to_string(), id);
-    }
+    generic_check::validate(source)?;
+    let mut c = Compiler::new(source)?;
     let empty = BTreeMap::new();
-    for node in &source.exprs {
-        if let a::Expr::Path(path) = &node.kind {
-            c.uses
-                .entry((node.span.file, path.name.clone()))
-                .or_default()
-                .push(node.span.start);
-        }
-    }
-    for positions in c.uses.values_mut() {
-        positions.sort_unstable();
-    }
     for s in &source.structs {
         if s.generics.is_empty() {
             let _ = c.named_type(
@@ -165,6 +123,61 @@ pub fn elaborate(source: &a::Program) -> Result<k::Program> {
         functions: c.functions,
         destructors: c.destructors,
     })
+}
+
+impl<'a> Compiler<'a> {
+    fn new(source: &'a a::Program) -> Result<Self> {
+        let mut c = Compiler {
+            source,
+            names: crate::resolve::Resolver::new(source)?,
+            types: k::primitives(),
+            type_names: BTreeMap::new(),
+            type_keys: BTreeMap::new(),
+            declaration_names: source
+                .declarations
+                .iter()
+                .enumerate()
+                .map(|(id, d)| (d.name.clone(), id))
+                .collect(),
+            functions: Vec::new(),
+            instances: Vec::new(),
+            instance_names: BTreeMap::new(),
+            applications: BTreeMap::new(),
+            destructors: Vec::new(),
+            uses: BTreeMap::new(),
+            contracts: None,
+        };
+        for i in 0..c.types.len() {
+            c.type_names.insert(c.types[i].name.clone(), i);
+        }
+        for (name, bits, signed) in [
+            ("u64", 64, false),
+            ("isize", 64, true),
+            ("u16", 16, false),
+            ("u32", 32, false),
+            ("i8", 8, true),
+            ("i16", 16, true),
+        ] {
+            let id = c.types.len();
+            c.types.push(k::Type {
+                name: name.to_string(),
+                kind: k::TypeKind::Int { bits, signed },
+            });
+            c.type_names.insert(name.to_string(), id);
+        }
+        for node in &source.exprs {
+            if let a::Expr::Path(path) = &node.kind {
+                c.uses
+                    .entry((node.span.file, path.name.clone()))
+                    .or_default()
+                    .push(node.span.start);
+            }
+        }
+        for positions in c.uses.values_mut() {
+            positions.sort_unstable();
+        }
+        Ok(c)
+    }
 }
 
 impl Compiler<'_> {
@@ -237,12 +250,6 @@ impl Compiler<'_> {
         Ok(())
     }
 
-    fn type_text(&self, id: usize) -> String {
-        match &self.source.types[id].kind {
-            a::Type::Path(p) => p.name.clone(),
-            _ => format!("{id}"),
-        }
-    }
     fn intern(&mut self, _description: String, kind: k::TypeKind) -> usize {
         let (key, name) = match &kind {
             k::TypeKind::Ref { inner, mutable } => (
@@ -291,252 +298,6 @@ impl Compiler<'_> {
             ),
             k::TypeKind::Ref { inner, mutable },
         )
-    }
-    fn resolve(&mut self, id: usize, sub: &BTreeMap<String, usize>) -> Result<usize> {
-        let node = self.source.types[id].clone();
-        match node.kind {
-            a::Type::Infer => Err(err(node.span, "E_TYPE", "type needs an annotation")),
-            a::Type::Path(p) => self.named_type(&p, sub, node.span),
-            a::Type::Ref { mutable, inner, .. } => {
-                let inner = self.resolve(inner, sub)?;
-                Ok(self.reference(inner, mutable))
-            }
-            a::Type::Tuple(fields) => {
-                if fields.is_empty() {
-                    return Ok(k::UNIT);
-                }
-                let mut fs = Vec::new();
-                let mut names = Vec::new();
-                for i in 0..fields.len() {
-                    let t = self.resolve(fields[i], sub)?;
-                    fs.push(k::Field {
-                        name: i.to_string(),
-                        ty: t,
-                    });
-                    names.push(self.types[t].name.clone());
-                }
-                let copy = fs.iter().all(|f| is_copy(&self.types, f.ty));
-                Ok(self.intern(
-                    format!("({})", names.join(",")),
-                    k::TypeKind::Struct { fields: fs, copy },
-                ))
-            }
-            a::Type::Slice(inner) => {
-                let t = self.resolve(inner, sub)?;
-                Ok(self.intern(
-                    format!("[{}]", self.types[t].name),
-                    k::TypeKind::Slice {
-                        inner: t,
-                        mutable: false,
-                    },
-                ))
-            }
-            a::Type::Array { inner, len } => {
-                let inner = self.resolve(inner, sub)?;
-                let len = len.replace('_', "").parse::<usize>().map_err(|_| {
-                    err(
-                        node.span,
-                        "E_TYPE",
-                        "array length must be an integer literal",
-                    )
-                })?;
-                Ok(self.intern(
-                    format!("[{};{}]", self.types[inner].name, len),
-                    k::TypeKind::Array { inner, len },
-                ))
-            }
-            a::Type::Never => Ok(k::UNIT),
-            _ => Err(err(
-                node.span,
-                "E_UNSUPPORTED",
-                "this type form is not implemented yet",
-            )),
-        }
-    }
-    fn named_type(
-        &mut self,
-        path: &a::Path,
-        sub: &BTreeMap<String, usize>,
-        span: a::Span,
-    ) -> Result<usize> {
-        if let Some(id) = sub.get(&path.name) {
-            return Ok(*id);
-        }
-        let name = path.name.as_str();
-        if path.args.is_empty() && path.declaration.is_none() {
-            if let Some(id) = self.type_names.get(&path.name) {
-                return Ok(*id);
-            }
-        }
-        let mut args = Vec::new();
-        for arg in &path.args {
-            if !matches!(&self.source.types[*arg].kind,a::Type::Path(p) if p.name.starts_with("'"))
-            {
-                args.push(self.resolve(*arg, sub)?);
-            }
-        }
-        if args.is_empty() {
-            let mut parameters = Vec::new();
-            if let Some(s) = self
-                .source
-                .structs
-                .iter()
-                .find(|s| qualified(&s.module, &s.name) == path.name)
-            {
-                parameters = s.generics.clone();
-            }
-            if let Some(e) = self
-                .source
-                .enums
-                .iter()
-                .find(|e| qualified(&e.module, &e.name) == path.name)
-            {
-                parameters = e.generics.clone();
-            }
-            for p in &parameters {
-                if !p.lifetime {
-                    if let Some(t) = sub.get(&p.name) {
-                        args.push(*t);
-                    }
-                }
-            }
-        }
-        let description = if args.is_empty() {
-            path.name.clone()
-        } else {
-            format!(
-                "{}<{}>",
-                path.name,
-                args.iter()
-                    .map(|t| format!("t{t}"))
-                    .collect::<Vec<_>>()
-                    .join(",")
-            )
-        };
-        if path.declaration.is_none() && (name == "Vec" || name == "Box") {
-            if args.len() != 1 {
-                return Err(err(span, "E_TYPE", "collection requires one type argument"));
-            }
-            return Ok(self.intern(
-                description,
-                if name == "Vec" {
-                    k::TypeKind::Vec { inner: args[0] }
-                } else {
-                    k::TypeKind::Box { inner: args[0] }
-                },
-            ));
-        }
-        if path.declaration.is_none() && name == "World" {
-            return Ok(self.intern(description, k::TypeKind::World));
-        }
-        let declaration = path
-            .declaration
-            .or_else(|| self.declaration_names.get(&path.name).copied())
-            .ok_or_else(|| err(span, "E_TYPE", &format!("unknown type {}", path.name)))?;
-        let key = TypeKey::Nominal(declaration, args.clone());
-        if let Some(id) = self.type_keys.get(&key) {
-            return Ok(*id);
-        }
-        if let Some(s) = self
-            .source
-            .structs
-            .iter()
-            .find(|s| qualified(&s.module, &s.name) == path.name)
-            .cloned()
-        {
-            let params: Vec<_> = s.generics.iter().filter(|g| !g.lifetime).collect();
-            if args.len() != params.len() {
-                return Err(err(span, "E_TYPE", "wrong number of type arguments"));
-            }
-            let mut bound = sub.clone();
-            for i in 0..args.len() {
-                bound.insert(params[i].name.clone(), args[i]);
-            }
-            let id = self.types.len();
-            self.type_keys.insert(key.clone(), id);
-            self.types.push(k::Type {
-                name: description,
-                kind: k::TypeKind::Unit,
-            });
-            let mut fields = Vec::new();
-            for f in s.fields {
-                fields.push(k::Field {
-                    name: f.name,
-                    ty: self.resolve(f.ty, &bound)?,
-                });
-            }
-            let copy = s
-                .attrs
-                .iter()
-                .any(|a| a.name == "derive" && a.args.iter().any(|s| s == "Copy"));
-            if copy && fields.iter().any(|f| !is_copy(&self.types, f.ty)) {
-                return Err(err(span, "E_TYPE", "Copy requires Copy fields"));
-            }
-            self.types[id].kind = k::TypeKind::Struct { fields, copy };
-            self.applications.insert(id, (path.name.clone(), args));
-            return Ok(id);
-        }
-        if let Some(e) = self
-            .source
-            .enums
-            .iter()
-            .find(|e| qualified(&e.module, &e.name) == path.name)
-            .cloned()
-        {
-            let params: Vec<_> = e.generics.iter().filter(|g| !g.lifetime).collect();
-            if args.len() != params.len() {
-                return Err(err(span, "E_TYPE", "wrong number of type arguments"));
-            }
-            let mut bound = sub.clone();
-            for i in 0..args.len() {
-                bound.insert(params[i].name.clone(), args[i]);
-            }
-            let id = self.types.len();
-            self.type_keys.insert(key.clone(), id);
-            self.types.push(k::Type {
-                name: description,
-                kind: k::TypeKind::Unit,
-            });
-            let mut variants = Vec::new();
-            for v in e.variants {
-                let mut fields = Vec::new();
-                for f in v.fields {
-                    fields.push(k::Field {
-                        name: f.name,
-                        ty: self.resolve(f.ty, &bound)?,
-                    });
-                }
-                variants.push(k::Variant {
-                    name: v.name,
-                    fields,
-                });
-            }
-            let copy = e
-                .attrs
-                .iter()
-                .any(|a| a.name == "derive" && a.args.iter().any(|s| s == "Copy"));
-            self.types[id].kind = k::TypeKind::Enum { variants, copy };
-            self.applications.insert(id, (path.name.clone(), args));
-            return Ok(id);
-        }
-        if let Some(alias) = self
-            .source
-            .aliases
-            .iter()
-            .find(|a| qualified(&a.module, &a.name) == path.name)
-            .cloned()
-        {
-            let parameters: Vec<_> = alias.generics.iter().filter(|g| !g.lifetime).collect();
-            if parameters.len() != args.len() {
-                return Err(err(span, "E_TYPE", "wrong number of alias type arguments"));
-            }
-            let mut bound = sub.clone();
-            for (parameter, argument) in parameters.iter().zip(args) {
-                bound.insert(parameter.name.clone(), argument);
-            }
-            return self.resolve(alias.ty, &bound);
-        }
-        Err(err(span, "E_TYPE", &format!("unknown type {}", path.name)))
     }
     fn has_view(&self, ty: usize) -> bool {
         let mut todo = vec![ty];
@@ -636,7 +397,8 @@ impl Compiler<'_> {
         }
         Ok(candidates.first().copied())
     }
-    fn instantiate(&mut self, index: usize, sub: BTreeMap<String, usize>) -> Result<usize> {
+    fn instantiate(&mut self, index: usize, mut sub: BTreeMap<String, usize>) -> Result<usize> {
+        self.prepare_associated(index, &mut sub)?;
         let source = self.source.functions[index].clone();
         let key = (
             index,
@@ -707,8 +469,11 @@ impl Compiler<'_> {
                 .get(&parameter.name)
                 .ok_or_else(|| err(parameter.span, "E_TYPE", "cannot infer generic argument"))?;
             for id in &parameter.bounds {
-                let bound = match &self.source.types[*id].kind {
-                    a::Type::Path(p) if p.args.is_empty() => p.name.as_str(),
+                let (bound, identity) = match &self.source.types[*id].kind {
+                    a::Type::Path(p) if p.args.is_empty() => (
+                        p.name.as_str(),
+                        crate::generics::bound_identity(self.source, p),
+                    ),
                     _ => {
                         return Err(err(
                             parameter.span,
@@ -717,13 +482,7 @@ impl Compiler<'_> {
                         ));
                     }
                 };
-                if !crate::generics::satisfies(
-                    self.source,
-                    &self.types,
-                    &self.applications,
-                    ty,
-                    bound,
-                ) {
+                if !self.satisfies_identity(ty, &identity) {
                     return Err(err(
                         parameter.span,
                         "E_TRAIT",
@@ -744,7 +503,12 @@ impl Compiler<'_> {
         let impls = self.source.impls.clone();
         for im in impls {
             if let Some(trait_ty) = im.trait_ty {
-                if self.type_text(trait_ty) == "Drop" {
+                let builtin_drop = matches!(
+                    &self.source.types[trait_ty].kind,
+                    a::Type::Path(path) if crate::generics::bound_identity(self.source, path)
+                        == crate::generics::TraitIdentity::Builtin("Drop".to_string())
+                );
+                if builtin_drop {
                     let mut sub = BTreeMap::new();
                     let pattern = match self.source.types[im.target].kind.clone() {
                         a::Type::Path(p) => p,
@@ -1153,6 +917,13 @@ impl Builder<'_, '_> {
                 }
                 None
             }
+            a::Expr::Unary { op, value } if op == "*" => {
+                let ty = self.hint(value)?;
+                match self.compiler.types[ty].kind {
+                    k::TypeKind::Ref { inner, .. } | k::TypeKind::Box { inner } => Some(inner),
+                    _ => None,
+                }
+            }
             a::Expr::Field { value, name } => {
                 let mut t = self.hint(value)?;
                 while let k::TypeKind::Ref { inner, .. } | k::TypeKind::Box { inner } =
@@ -1372,9 +1143,17 @@ impl Builder<'_, '_> {
         let block = self.compiler.source.blocks[id].clone();
         let start = self.live.len();
         let bindings = self.bindings.len();
+        let mut checking_dead = false;
         for stmt in block.statements {
             if !self.reachable {
-                break;
+                if self.compiler.contracts.is_none() {
+                    break;
+                }
+                checking_dead = true;
+                self.reachable = true;
+                for live in &mut self.live {
+                    *live = true;
+                }
             }
             let end = match &stmt {
                 a::Stmt::Let { span, .. } => span.end,
@@ -1431,8 +1210,30 @@ impl Builder<'_, '_> {
                     ));
                 }
             }
+            if checking_dead {
+                self.reachable = false;
+            }
             if self.reachable {
                 self.end_unused_borrows(start, end, block.span.end, block.span.line);
+            }
+        }
+        if !self.reachable && self.compiler.contracts.is_some() {
+            if let Some(tail) = block.tail {
+                self.reachable = true;
+                for live in &mut self.live {
+                    *live = true;
+                }
+                let value = self.expr(tail, expected)?;
+                if let Some(ty) = expected {
+                    if value.1 != ty {
+                        return Err(err(
+                            block.span,
+                            "E_TYPE",
+                            "unreachable tail expression type differs",
+                        ));
+                    }
+                }
+                self.reachable = false;
             }
         }
         let result = if self.reachable {
@@ -1745,6 +1546,11 @@ impl Builder<'_, '_> {
                     return self.short_circuit(&op, left, right, line);
                 }
                 if ["==", "!=", "<", "<=", ">", ">="].contains(&op.as_str()) {
+                    if self.compiler.contracts.is_some() {
+                        if let Some(value) = self.generic_comparison(&op, left, right, node.span)? {
+                            return Ok(value);
+                        }
+                    }
                     if let Some(t) = self.hint(left).or_else(|| self.hint(right)) {
                         if let k::TypeKind::Vec { inner } = self.compiler.types[t].kind {
                             return self.vector_compare(&op, left, right, inner, node.span);
@@ -2857,6 +2663,36 @@ impl Builder<'_, '_> {
         );
         Ok((dst, ty))
     }
+    fn has_declared_method(&mut self, base: usize, name: &str) -> Result<bool> {
+        let implementations = self.compiler.source.impls.clone();
+        for implementation in implementations {
+            if !implementation
+                .methods
+                .iter()
+                .any(|method| self.compiler.source.functions[*method].name == name)
+            {
+                continue;
+            }
+            let mut substitutions = BTreeMap::new();
+            self.infer_type(implementation.target, base, &mut substitutions)?;
+            substitutions.insert("Self".to_string(), base);
+            if self
+                .compiler
+                .resolve(implementation.target, &substitutions)
+                .ok()
+                == Some(base)
+                && self.trait_available(&implementation, base)
+                && self
+                    .compiler
+                    .bounds(&implementation.generics, &substitutions)
+                    .is_ok()
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     fn method(
         &mut self,
         receiver: usize,
@@ -2873,6 +2709,9 @@ impl Builder<'_, '_> {
         while let k::TypeKind::Ref { inner, .. } = self.compiler.types[base].kind {
             target.projections.push(k::Projection::Deref);
             base = inner;
+        }
+        if let Some(value) = self.generic_method(&target, base, name, _types, args, span)? {
+            return Ok(value);
         }
         match name {
             "as_slice" | "as_mut_slice"
@@ -2984,7 +2823,7 @@ impl Builder<'_, '_> {
                 );
                 Ok((dst, ty))
             }
-            "clone" => {
+            "clone" if !self.has_declared_method(base, name)? => {
                 if !args.is_empty() {
                     return Err(err(span, "E_TYPE", "clone takes no arguments"));
                 }
@@ -3009,6 +2848,7 @@ impl Builder<'_, '_> {
             }
             _ => {
                 let mut candidates = Vec::new();
+                let mut inherent_candidates = Vec::new();
                 let mut unavailable_trait = false;
                 let mut private_trait = false;
                 let impls = self.compiler.source.impls.clone();
@@ -3041,11 +2881,18 @@ impl Builder<'_, '_> {
                             self.compiler.bounds(&im.generics, &sub)?;
                             for method in &im.methods {
                                 if self.compiler.source.functions[*method].name == name {
-                                    candidates.push((*method, sub.clone()));
+                                    if im.trait_ty.is_none() {
+                                        inherent_candidates.push((*method, sub.clone()));
+                                    } else {
+                                        candidates.push((*method, sub.clone()));
+                                    }
                                 }
                             }
                         }
                     }
+                }
+                if !inherent_candidates.is_empty() {
+                    candidates = inherent_candidates;
                 }
                 if candidates.is_empty() && unavailable_trait {
                     return Err(err(
@@ -3077,6 +2924,20 @@ impl Builder<'_, '_> {
                 self.compiler.method_access(index, self.scope, span)?;
                 let f = self.compiler.source.functions[index].clone();
                 sub.insert("Self".to_string(), base);
+                let parameters: Vec<_> = f
+                    .generics
+                    .iter()
+                    .filter(|parameter| !parameter.lifetime)
+                    .collect();
+                if !_types.is_empty() {
+                    if _types.len() != parameters.len() {
+                        return Err(err(span, "E_TYPE", "wrong generic method argument count"));
+                    }
+                    for (parameter, argument) in parameters.iter().zip(_types) {
+                        let ty = self.compiler.resolve(*argument, &self.sub)?;
+                        sub.insert(parameter.name.clone(), ty);
+                    }
+                }
                 let mut values = Vec::new();
                 if f.params.is_empty() {
                     return Err(err(span, "E_TYPE", "method has no receiver"));
@@ -3091,8 +2952,11 @@ impl Builder<'_, '_> {
                     return Err(err(span, "E_TYPE", "method argument count differs"));
                 }
                 for i in 0..args.len() {
-                    let t = self.compiler.resolve(f.params[i + 1].ty, &sub)?;
-                    values.push(self.expr(args[i], Some(t))?.0);
+                    let pattern = f.params[i + 1].ty;
+                    let expected = self.compiler.resolve(pattern, &sub).ok();
+                    let value = self.expr(args[i], expected)?;
+                    self.infer_type(pattern, value.1, &mut sub)?;
+                    values.push(value.0);
                 }
                 let function = self.compiler.instantiate(index, sub)?;
                 let t = self.compiler.functions[function].result;

@@ -129,7 +129,7 @@ fn run(child_stack: host_stack::Limits) -> Result<(), String> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() == 2 && args[1] == "trusted" {
         println!(
-            "K checker: src/check.rs\nmemory and collections: src/wasm.rs\nbootstrap host: bridge/main.rs\nNode host: bridge/run.mjs"
+            "source syntax: src/ast.rs, src/syntax.rs\nsource loading and resolution: src/source.rs, src/resolve.rs\ngeneric contracts: src/generics.rs, src/elaborate/generic_check.rs\nsource lowering: src/elaborate.rs\nK representation and checker: src/k.rs, src/check.rs\nlowering, memory and collections: src/wasm.rs\nbinary encoding: src/encoding.rs\ncompiler-core boundary: src/compiler.rs\nbootstrap host and inputs: bridge/main.rs, bridge/library.rs\nNode host: bridge/run.mjs"
         );
         return Ok(());
     }

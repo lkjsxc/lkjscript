@@ -1,7 +1,7 @@
 //! Global source rules for coherence and finite generic instantiation.
 //! The executable K checker still checks concrete function and witness types.
 use crate::ast::*;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug)]
 enum Term {
@@ -1218,10 +1218,53 @@ fn impl_arguments(
     Some(env)
 }
 
+/// Builtin predicates and source trait declarations have distinct identities,
+/// even when a declaration uses a builtin's short spelling.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum TraitIdentity {
+    Builtin(String),
+    Declared(usize),
+    Unknown(String),
+}
+pub(crate) fn bound_identity(source: &Program, path: &Path) -> TraitIdentity {
+    if let Some(declaration) = path.declaration {
+        return match source.declarations.get(declaration).map(|item| item.item) {
+            Some(Item::Trait(index)) => TraitIdentity::Declared(index),
+            _ => TraitIdentity::Unknown(path.name.clone()),
+        };
+    }
+    if !source.resolved {
+        if let Some(index) = source
+            .traits
+            .iter()
+            .position(|item| qualified(&item.module, &item.name) == path.name)
+        {
+            return TraitIdentity::Declared(index);
+        }
+    }
+    if matches!(
+        path.name.as_str(),
+        "Copy"
+            | "Clone"
+            | "Data"
+            | "Send"
+            | "Sync"
+            | "Ord"
+            | "Eq"
+            | "PartialEq"
+            | "PartialOrd"
+            | "Drop"
+    ) {
+        TraitIdentity::Builtin(path.name.clone())
+    } else {
+        TraitIdentity::Unknown(path.name.clone())
+    }
+}
+
 #[derive(Clone)]
 struct Goal {
     ty: usize,
-    bound: String,
+    bound: TraitIdentity,
 }
 struct Requirements {
     children: Vec<Goal>,
@@ -1277,22 +1320,91 @@ fn add_bound(source: &Program, id: TypeId, ty: usize, children: &mut Vec<Goal>) 
         }
         children.push(Goal {
             ty,
-            bound: path.name.as_str().to_string(),
+            bound: bound_identity(source, path),
         });
         true
     } else {
         false
     }
 }
+pub(crate) struct ImplementationWitness {
+    pub(crate) implementation: usize,
+    pub(crate) substitutions: BTreeMap<String, usize>,
+}
+fn select_implementation(
+    source: &Program,
+    types: &[crate::k::Type],
+    applications: &BTreeMap<usize, (String, Vec<usize>)>,
+    ty: usize,
+    bound: &TraitIdentity,
+) -> Option<ImplementationWitness> {
+    let mut selected = None;
+    for (index, implementation) in source.impls.iter().enumerate() {
+        let trait_type = match implementation.trait_ty {
+            Some(ty) => ty,
+            None => continue,
+        };
+        let path = match &source.types[trait_type].kind {
+            Type::Path(path) if path.args.is_empty() => path,
+            _ => continue,
+        };
+        if bound_identity(source, path) != *bound {
+            continue;
+        }
+        if let Some(substitutions) = impl_arguments(source, types, applications, implementation, ty)
+        {
+            if selected.is_some() {
+                return None;
+            }
+            selected = Some(ImplementationWitness {
+                implementation: index,
+                substitutions,
+            });
+        }
+    }
+    selected
+}
+pub(crate) fn implementation_witness(
+    source: &Program,
+    types: &[crate::k::Type],
+    applications: &BTreeMap<usize, (String, Vec<usize>)>,
+    ty: usize,
+    bound: &TraitIdentity,
+    rigid: &BTreeMap<usize, BTreeSet<TraitIdentity>>,
+) -> Option<ImplementationWitness> {
+    if !satisfies_under(source, types, applications, ty, bound, rigid) {
+        return None;
+    }
+    select_implementation(source, types, applications, ty, bound)
+}
+
 fn trait_requirements(
     source: &Program,
     types: &[crate::k::Type],
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     goal: &Goal,
+    rigid: &BTreeMap<usize, BTreeSet<TraitIdentity>>,
 ) -> Option<Requirements> {
     use crate::k::TypeKind;
     let ty = types.get(goal.ty)?;
-    let bound = goal.bound.as_str();
+    if let Some(assumptions) = rigid.get(&goal.ty) {
+        if assumptions.contains(&goal.bound) {
+            return Some(Requirements {
+                children: Vec::new(),
+                structural: true,
+            });
+        }
+        // An opaque parameter has no inferred builtin properties. User blanket
+        // implementations can still prove declared traits through prerequisites.
+        if matches!(goal.bound, TraitIdentity::Builtin(_)) {
+            return None;
+        }
+    }
+    let bound = match &goal.bound {
+        TraitIdentity::Builtin(name) => name.as_str(),
+        TraitIdentity::Declared(_) => "",
+        TraitIdentity::Unknown(_) => return None,
+    };
     if bound == "Copy" {
         return if crate::check::is_copy(types, goal.ty) {
             Some(Requirements {
@@ -1304,14 +1416,43 @@ fn trait_requirements(
         };
     }
     if bound == "Data" {
-        return if crate::check::is_data(types, goal.ty) {
-            Some(Requirements {
-                children: Vec::new(),
-                structural: true,
-            })
-        } else {
-            None
-        };
+        let mut children = Vec::new();
+        match &ty.kind {
+            TypeKind::World => return None,
+            TypeKind::Ref { inner, .. }
+            | TypeKind::Slice { inner, .. }
+            | TypeKind::Vec { inner }
+            | TypeKind::Box { inner }
+            | TypeKind::Array { inner, .. } => {
+                children.push(Goal {
+                    ty: *inner,
+                    bound: goal.bound.clone(),
+                });
+            }
+            TypeKind::Struct { fields, .. } => {
+                for field in fields {
+                    children.push(Goal {
+                        ty: field.ty,
+                        bound: goal.bound.clone(),
+                    });
+                }
+            }
+            TypeKind::Enum { variants, .. } => {
+                for variant in variants {
+                    for field in &variant.fields {
+                        children.push(Goal {
+                            ty: field.ty,
+                            bound: goal.bound.clone(),
+                        });
+                    }
+                }
+            }
+            _ => {}
+        }
+        return Some(Requirements {
+            children,
+            structural: true,
+        });
     }
     if bound == "Clone" && crate::check::is_copy(types, goal.ty) {
         return Some(Requirements {
@@ -1339,7 +1480,7 @@ fn trait_requirements(
             TypeKind::Vec { inner } | TypeKind::Box { inner } | TypeKind::Array { inner, .. } => {
                 children.push(Goal {
                     ty: *inner,
-                    bound: bound.to_string(),
+                    bound: goal.bound.clone(),
                 })
             }
             TypeKind::Ref { inner, mutable } | TypeKind::Slice { inner, mutable } => {
@@ -1355,7 +1496,7 @@ fn trait_requirements(
                     };
                     children.push(Goal {
                         ty: *inner,
-                        bound: child_bound.to_string(),
+                        bound: TraitIdentity::Builtin(child_bound.to_string()),
                     });
                 }
             }
@@ -1370,7 +1511,7 @@ fn trait_requirements(
                     for field in fields {
                         children.push(Goal {
                             ty: field.ty,
-                            bound: bound.to_string(),
+                            bound: goal.bound.clone(),
                         });
                     }
                 } else {
@@ -1383,7 +1524,7 @@ fn trait_requirements(
                         for field in &variant.fields {
                             children.push(Goal {
                                 ty: field.ty,
-                                bound: bound.to_string(),
+                                bound: goal.bound.clone(),
                             });
                         }
                     }
@@ -1399,27 +1540,9 @@ fn trait_requirements(
             });
         }
     }
-    let mut selected = None;
-    for implementation in &source.impls {
-        let trait_ty = match implementation.trait_ty {
-            Some(t) => t,
-            None => continue,
-        };
-        let trait_name = match &source.types[trait_ty].kind {
-            Type::Path(path) if path.args.is_empty() => path.name.as_str(),
-            _ => continue,
-        };
-        if trait_name != bound {
-            continue;
-        }
-        if let Some(env) = impl_arguments(source, types, applications, implementation, goal.ty) {
-            if selected.is_some() {
-                return None;
-            }
-            selected = Some((implementation, env));
-        }
-    }
-    let (implementation, env) = selected?;
+    let selected = select_implementation(source, types, applications, goal.ty, &goal.bound)?;
+    let implementation = &source.impls[selected.implementation];
+    let env = selected.substitutions;
     let mut children = Vec::new();
     for param in &implementation.generics {
         if param.lifetime {
@@ -1432,12 +1555,10 @@ fn trait_requirements(
             }
         }
     }
-    for declaration in &source.traits {
-        if qualified(&declaration.module, &declaration.name) == bound {
-            for constraint in &declaration.bounds {
-                if !add_bound(source, *constraint, goal.ty, &mut children) {
-                    return None;
-                }
+    if let TraitIdentity::Declared(index) = goal.bound {
+        for constraint in &source.traits[index].bounds {
+            if !add_bound(source, *constraint, goal.ty, &mut children) {
+                return None;
             }
         }
     }
@@ -1457,15 +1578,42 @@ pub fn satisfies(
     ty: usize,
     bound: &str,
 ) -> bool {
-    if bound.contains('<') || bound.contains('(') {
-        return false;
-    }
+    let identity = if let Some(index) = source
+        .traits
+        .iter()
+        .position(|item| qualified(&item.module, &item.name) == bound)
+    {
+        TraitIdentity::Declared(index)
+    } else {
+        TraitIdentity::Builtin(bound.to_string())
+    };
+    satisfies_resolved(source, types, applications, ty, &identity)
+}
+
+pub(crate) fn satisfies_resolved(
+    source: &Program,
+    types: &[crate::k::Type],
+    applications: &BTreeMap<usize, (String, Vec<usize>)>,
+    ty: usize,
+    bound: &TraitIdentity,
+) -> bool {
+    satisfies_under(source, types, applications, ty, bound, &BTreeMap::new())
+}
+
+pub(crate) fn satisfies_under(
+    source: &Program,
+    types: &[crate::k::Type],
+    applications: &BTreeMap<usize, (String, Vec<usize>)>,
+    ty: usize,
+    bound: &TraitIdentity,
+    rigid: &BTreeMap<usize, BTreeSet<TraitIdentity>>,
+) -> bool {
     let first = Goal {
         ty,
-        bound: bound.to_string(),
+        bound: bound.clone(),
     };
-    let mut state: BTreeMap<(usize, String), u8> = BTreeMap::new();
-    let mut structural: BTreeMap<(usize, String), bool> = BTreeMap::new();
+    let mut state: BTreeMap<(usize, TraitIdentity), u8> = BTreeMap::new();
+    let mut structural: BTreeMap<(usize, TraitIdentity), bool> = BTreeMap::new();
     let mut tasks = vec![(first.clone(), false, Vec::<Goal>::new())];
     while let Some((goal, finish, children)) = tasks.pop() {
         let key = (goal.ty, goal.bound.clone());
@@ -1494,7 +1642,7 @@ pub fn satisfies(
             }
             continue;
         }
-        match trait_requirements(source, types, applications, &goal) {
+        match trait_requirements(source, types, applications, &goal, rigid) {
             None => {
                 state.insert(key, 1);
             }

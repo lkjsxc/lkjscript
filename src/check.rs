@@ -1747,23 +1747,35 @@ fn direct_children(kind: &TypeKind) -> Vec<usize> {
     children
 }
 
-fn contains_view(types: &[Type], initial: usize) -> bool {
-    let mut seen = vec![false; types.len()];
-    let mut pending = vec![initial];
-    while let Some(ty) = pending.pop() {
-        if seen[ty] {
-            continue;
-        }
-        seen[ty] = true;
-        match &types[ty].kind {
-            TypeKind::Ref { .. } | TypeKind::Slice { .. } => return true,
-            TypeKind::Box { inner } | TypeKind::Vec { inner } | TypeKind::Array { inner, .. } => {
-                pending.push(*inner)
+/// Solve reference containment once over the type graph. Recursive owned types
+/// are allowed; a reference seed propagates to every transitive container.
+fn reference_containment(types: &[Type]) -> Vec<bool> {
+    let mut contains = vec![false; types.len()];
+    let mut parents = vec![Vec::new(); types.len()];
+    let mut pending = Vec::new();
+    for (parent, ty) in types.iter().enumerate() {
+        let mut children = direct_children(&ty.kind);
+        match ty.kind {
+            TypeKind::Ref { .. } | TypeKind::Slice { .. } => {
+                contains[parent] = true;
+                pending.push(parent);
             }
-            kind => pending.extend(direct_children(kind)),
+            TypeKind::Box { inner } | TypeKind::Vec { inner } => children.push(inner),
+            _ => {}
+        }
+        for child in children {
+            parents[child].push(parent);
         }
     }
-    false
+    while let Some(child) = pending.pop() {
+        for parent in &parents[child] {
+            if !contains[*parent] {
+                contains[*parent] = true;
+                pending.push(*parent);
+            }
+        }
+    }
+    contains
 }
 
 fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
@@ -1824,11 +1836,12 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
             }
         }
     }
+    let contains_reference = reference_containment(types);
     for i in 0..types.len() {
         if matches!(
             types[i].kind,
             TypeKind::Box { .. } | TypeKind::Vec { .. } | TypeKind::Array { .. }
-        ) && contains_view(types, i)
+        ) && contains_reference[i]
         {
             return Err(error(
                 1,
@@ -2196,6 +2209,52 @@ mod tests {
             ),
             "E_BORROW",
         );
+    }
+
+    #[test]
+    fn recursive_containers_preserve_the_reference_storage_rule() {
+        for reference in [false, true] {
+            let mut types = primitives();
+            types.push(Type {
+                name: "Node".to_string(),
+                kind: TypeKind::Struct {
+                    fields: vec![
+                        Field {
+                            name: "next".to_string(),
+                            ty: 8,
+                        },
+                        Field {
+                            name: "value".to_string(),
+                            ty: if reference { 9 } else { I64 },
+                        },
+                    ],
+                    copy: false,
+                },
+            });
+            types.push(Type {
+                name: "BoxNode".to_string(),
+                kind: TypeKind::Box { inner: 7 },
+            });
+            types.push(Type {
+                name: "Reference".to_string(),
+                kind: TypeKind::Ref {
+                    inner: I64,
+                    mutable: false,
+                },
+            });
+            let value = program(
+                types,
+                vec![local(I64, false)],
+                0,
+                I64,
+                vec![Op::Int { dst: 0, value: 42 }, Op::Return { src: 0 }],
+            );
+            if reference {
+                rejection(value, "E_BORROW");
+            } else {
+                assert!(check(value).is_ok());
+            }
+        }
     }
 
     #[test]
