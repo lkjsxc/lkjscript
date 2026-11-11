@@ -95,7 +95,7 @@ and memory operations remain trusted intrinsics until their source layer lands.
 
 `src/check.rs` is the K checker; `src/k.rs` defines its inputs and checked result.
 `src/wasm.rs` contains lowering/emission plus allocation and collection internals.
-`bridge/main.rs` supplies bootstrap file/process/command-line access;
+`bridge/main.rs` supplies bootstrap file/process/command-line access and the trusted Linux main-stack shim;
 `bridge/run.mjs` instantiates on Node. `lkjscript trusted` lists these boundaries.
 
 Generated modules import only `lkjscript.trap(code: i64, line: i64)`.

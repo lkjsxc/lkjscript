@@ -3,8 +3,9 @@
 - Extents and indices use 64-bit values on the supported 64-bit host. Values and
   allocation arithmetic must fit their representation; overflow is an error.
 - Allocation and virtual-memory reservation depend on the host's address space,
-  physical memory and swap. The Rust bootstrap reserves its native stack from
-  physical memory plus swap. Some parser/elaborator paths still use that stack;
+  physical memory and swap. The Rust bootstrap grows its main stack on demand,
+  sizing its soft extent from physical memory plus swap while preserving the
+  host hard stack extent. Some parser/elaborator paths still use that stack;
   fully explicit work stacks remain work.
 - WebAssembly vector counts, section lengths, function indices and local indices
   are u32 even with memory64. Emission reports format overflow rather than

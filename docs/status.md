@@ -33,12 +33,13 @@ vector comparison helper automatically; general module loading is still missing.
 
 ## Verification and measurements
 
-On this host (Rust 1.98.0, Node 24.18.1), the incremental full check takes
-**1.648 s**; rebuilding into a fresh Cargo target takes **3.845 s**. Both include
-formatting, **93 Cargo tests**, Clippy, build and conformance.
+On this host (Rust 1.97.0, Node 24.18.1), the incremental full check takes
+**1.724 s**; rebuilding into a fresh Cargo target takes **3.994 s**. Both include
+formatting, **94 Cargo tests**, Clippy, build and conformance.
 Conformance: **64 pass, 8 explicitly pending, 0 fail**, including **57 rustc
 comparisons**. The Cargo tests include 31 adversarial K checks, seven K-text tests,
-195 arithmetic edge comparisons and source-library integration. A formerly
+195 arithmetic edge comparisons, source-library integration and a regression
+for bootstrap startup under an external address-space constraint. A formerly
 implemented case becoming unsupported fails the suite.
 
 All non-closure ownership/borrow/trait design cases pass, including view structs,
@@ -54,14 +55,14 @@ modules, including comments and blank lines):
 | Component | Lines | Tokens |
 | --- | ---: | ---: |
 | Compiler, all nine src modules | 12,125 | 89,127 |
-| Current trusted base | 3,761 | 29,926 |
+| Current trusted base | 3,811 | 30,348 |
 | Source standard library | 372 | 2,347 |
-| Rust and Node host bridges | 215 | 2,143 |
+| Rust and Node host bridges | 265 | 2,565 |
 
 The trusted-base count covers K definitions/checker, the emitter containing the
 memory/collection implementation, and both host bridges. It overlaps the compiler
 and bridge rows; there is no machine yet. Including inline tests, src totals
-13,969 lines / 101,598 tokens and the trusted-base files total 4,999 / 36,839.
+13,969 lines / 101,598 tokens and the trusted-base files total 5,049 / 37,261.
 
 Release compiler capacity probes check through K; they do not emit or run their
 large modules. RSS is sampled peak resident memory:
@@ -77,6 +78,8 @@ The Vec probe checks length and retained values across growth above 4 GiB
 addresses; its linear memory grew to 8 GiB plus one page. Geometric predecessors
 were also exercised. Large-local attempts initially hit the runner's external
 20-second timeout; sparse active predicates removed the quadratic checker scan.
+A separate bootstrap probe checked 50,000 nested unary operators under an external
+1 GiB address-space constraint in 0.276 s, growing its main stack to 766 MiB.
 The 100-million-frame recursion probe is skipped until heap-frame execution exists.
 
 `fib(35) = 9227465`: generated WebAssembly on Node takes **25.702 ms**;
@@ -107,6 +110,10 @@ routine gate. `lkjscript run file.rs --entry probe` prints the scalar result.
 `lkjscript build file.rs -o file.wasm` emits a module.
 `lkjscript check file.k` checks hand-written K; `lkjscript k file.rs` prints K.
 `lkjscript trusted` lists the current trusted implementation boundaries.
+
+The trusted Linux host shim grows the main stack on demand, preserves the host
+hard stack extent and restores the original extent in children before exec. This
+avoids the eager pthread reservation that prevented startup on GitHub runners.
 
 Cargo is the bootstrap compiler/build bridge. Move bridge/main.rs host operations
 behind World and compile that entry in the language; replace bridge/run.mjs with

@@ -4,6 +4,60 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
+/// Linux-only bootstrap host code; source programs cannot call these operations.
+#[allow(unsafe_code)]
+mod host_stack {
+    use std::io;
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    #[derive(Clone, Copy)]
+    #[repr(C)]
+    pub struct Limits {
+        current: u64,
+        maximum: u64,
+    }
+    const RLIMIT_STACK: i32 = 3;
+    unsafe extern "C" {
+        fn getrlimit(resource: i32, limits: *mut Limits) -> i32;
+        fn setrlimit(resource: i32, limits: *const Limits) -> i32;
+    }
+
+    pub fn configure(memory: usize) -> io::Result<Limits> {
+        let mut original = Limits {
+            current: 0,
+            maximum: 0,
+        };
+        // Linux x86-64 rlimit is two u64 fields; the pointer is valid and writable.
+        if unsafe { getrlimit(RLIMIT_STACK, &mut original) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let growing = Limits {
+            current: (memory as u64).max(original.current).min(original.maximum),
+            maximum: original.maximum,
+        };
+        // Preserve the host's hard extent. Linux commits stack pages on growth.
+        if unsafe { setrlimit(RLIMIT_STACK, &growing) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(original)
+    }
+
+    pub fn restore_in_child(command: &mut Command, original: Limits) {
+        // Only an async-signal-safe syscall and error capture run after fork.
+        // Node must not inherit an enormous default pthread stack reservation.
+        unsafe {
+            command.pre_exec(move || {
+                if setrlimit(RLIMIT_STACK, &original) == 0 {
+                    Ok(())
+                } else {
+                    Err(io::Error::last_os_error())
+                }
+            });
+        }
+    }
+}
+
 fn report(path: &str, problem: Diagnostic) -> String {
     format!(
         "{path}:{}:{}: {} {}",
@@ -29,15 +83,21 @@ fn option(args: &[String], name: &str) -> Option<String> {
         .find(|pair| pair[0] == name)
         .map(|pair| pair[1].clone())
 }
-fn execute(module: &Path, entry: &str, kind: &str) -> Result<(), String> {
+fn execute(
+    module: &Path,
+    entry: &str,
+    kind: &str,
+    child_stack: host_stack::Limits,
+) -> Result<(), String> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let output = Command::new("node")
+    let mut command = Command::new("node");
+    command
         .arg(root.join("bridge/run.mjs"))
         .arg(module)
         .arg(entry)
-        .arg(kind)
-        .output()
-        .map_err(|e| format!("E_HOST Node: {e}"))?;
+        .arg(kind);
+    host_stack::restore_in_child(&mut command, child_stack);
+    let output = command.output().map_err(|e| format!("E_HOST Node: {e}"))?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
@@ -53,7 +113,7 @@ fn result_kind(program: &k::Program, function: &k::Function) -> &'static str {
         _ => "i64",
     }
 }
-fn run() -> Result<(), String> {
+fn run(child_stack: host_stack::Limits) -> Result<(), String> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() == 2 && args[1] == "trusted" {
         println!(
@@ -99,7 +159,7 @@ fn run() -> Result<(), String> {
         let mut result = Ok(());
         for function in &program.functions {
             if function.test {
-                if let Err(e) = execute(&output, &function.name, "unit") {
+                if let Err(e) = execute(&output, &function.name, "unit", child_stack) {
                     result = Err(e);
                     break;
                 }
@@ -122,7 +182,7 @@ fn run() -> Result<(), String> {
         if function.params != 0 {
             Err("E_ENTRY entry arguments are not implemented yet".to_string())
         } else {
-            execute(&output, &entry, result_kind(program, function))
+            execute(&output, &entry, result_kind(program, function), child_stack)
         }
     } else {
         Ok(())
@@ -133,8 +193,8 @@ fn run() -> Result<(), String> {
     result
 }
 fn main() -> ExitCode {
-    // Reserve a native bootstrap stack from this host's physical memory and swap.
-    // Reservation is virtual; pages are committed by the operating system on use.
+    // Grow the main Linux stack from physical memory and swap, preserving the
+    // host hard extent. Unlike a pthread stack, its mapping expands on demand.
     let memory = fs::read_to_string("/proc/meminfo").ok().and_then(|s| {
         let mut total = 0_usize;
         for line in s.lines() {
@@ -150,24 +210,14 @@ fn main() -> ExitCode {
         }
         if total == 0 { None } else { Some(total) }
     });
-    let mut thread = std::thread::Builder::new().name("lkjscript".to_string());
-    if let Some(memory) = memory {
-        thread = thread.stack_size(memory);
-    }
-    match thread.spawn(run) {
-        Ok(job) => match job.join() {
-            Ok(Ok(())) => ExitCode::SUCCESS,
-            Ok(Err(e)) => {
-                eprintln!("{e}");
-                ExitCode::FAILURE
-            }
-            Err(_) => {
-                eprintln!("E_HOST compiler thread failed");
-                ExitCode::FAILURE
-            }
-        },
-        Err(e) => {
-            eprintln!("E_HOST {e}");
+    let result = memory
+        .ok_or_else(|| "E_HOST cannot read memory and swap extents from /proc/meminfo".to_string())
+        .and_then(|memory| host_stack::configure(memory).map_err(|error| format!("E_HOST {error}")))
+        .and_then(run);
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("{error}");
             ExitCode::FAILURE
         }
     }
