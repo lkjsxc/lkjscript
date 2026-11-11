@@ -11,7 +11,9 @@
   are u32 even with memory64. Emission reports format overflow rather than
   truncating. Memory64 addresses are 64-bit and obey its page/address-space format.
 - Node/V8 has its own memory, module, local-count, function-count and call-stack
-  limits. Recursive generated copy/drop helpers also use that call stack. Node is
+  limits. Copy helpers and explicit recursive source calls use that stack; structural
+  cleanup uses explicit growing frames. Locals reuse physical slots and spill into
+  memory64 frames, so source-local count is not an engine-local count. Node is
   the only generated-code engine currently implemented; our machine and native
   backend have not landed.
 

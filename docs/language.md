@@ -86,7 +86,13 @@ The backend emits memory64 WebAssembly. Integer and pointer slots are i64; f64
 uses its bit representation in slots and canonical NaNs after arithmetic.
 Collection indexing checks bounds. Traps report a code and source line. The
 reusable first-fit allocator and structural/custom drop release owned fields,
-arrays, boxes and vector elements. Recursive helpers use the engine stack.
+arrays, boxes and vector elements. Cleanup uses an explicit growing DFS stack,
+preserving custom-destructor-before-children and declaration/element order. Copy
+helpers and explicit recursive source calls still use the engine stack.
+
+Lowering reuses physical locals across nonoverlapping lifetimes and spills excess
+live values into memory64 frames. Address-taken values have stable frame slots.
+The physical-local pool is an optimization, not an acceptance limit.
 
 Structs use field slots; enums add a tag. Vec and array storage has data, length
 and capacity slots. Whole-storage slice projections borrow that header without a

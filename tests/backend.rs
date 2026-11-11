@@ -414,3 +414,192 @@ fn function_exports_have_a_separate_namespace() {
     ",
     );
 }
+
+#[test]
+fn transient_and_simultaneously_live_locals_do_not_exhaust_engine_locals() {
+    use std::fmt::Write as _;
+    for retain_all in [false, true] {
+        let mut source = String::from("pub fn probe() -> i64 {\n");
+        let count = 30_000;
+        for i in 0..count {
+            writeln!(source, "let v{i}: i64 = {i};").unwrap();
+        }
+        let expected = if retain_all {
+            source.push_str("let mut total: i64 = 0;\n");
+            for i in 0..count {
+                writeln!(source, "total = total + v{i};").unwrap();
+            }
+            source.push_str("total\n}");
+            count * (count - 1) / 2
+        } else {
+            writeln!(source, "v{}\n}}", count - 1).unwrap();
+            count - 1
+        };
+        let ast = syntax::parse(&source).unwrap();
+        let checked = check::check(elaborate::elaborate(&ast).unwrap()).unwrap();
+        run_node(
+            &wasm::emit(&checked).unwrap(),
+            &format!(
+                "if(instance.exports['fn:probe']()!=={expected}n)throw Error('local spill result');"
+            ),
+        );
+    }
+}
+
+#[test]
+fn local_reuse_preserves_loop_entries_aliases_and_branch_values() {
+    use std::fmt::Write as _;
+    let mut source =
+        String::from("fn probe() -> i64 { let mut borrowed: i64 = 2; let mut total: i64 = 0;\n");
+    // Enough simultaneously live locals to exercise the frame path. The loop
+    // uses each value near its beginning, so its later iterations test liveness
+    // beyond the last textual read, through nested loops and both if arms.
+    for i in 0..100 {
+        writeln!(source, "let v{i}: i64 = {i};").unwrap();
+    }
+    source.push_str("let r = &mut borrowed; let mut outer: i64 = 0; while outer < 3 {\n");
+    for i in 0..100 {
+        writeln!(source, "total = total + v{i};").unwrap();
+    }
+    source.push_str(
+        "let mut inner: i64 = 0;
+         while inner < 2 {
+             if outer == 1 { *r = *r + 3; } else { *r = *r + 1; }
+             inner = inner + 1;
+         }
+         outer = outer + 1;
+         }
+         total + *r
+         }",
+    );
+    let ast = syntax::parse(&source).unwrap();
+    let checked = check::check(elaborate::elaborate(&ast).unwrap()).unwrap();
+    run_node(
+        &wasm::emit(&checked).unwrap(),
+        "
+        if(instance.exports['fn:probe']()!==14862n)throw Error('loop/frame result');
+        const before=instance.exports.memory.buffer.byteLength;
+        for(let i=0;i<100;i++)
+            if(instance.exports['fn:probe']()!==14862n)throw Error('frame reuse');
+        if(instance.exports.memory.buffer.byteLength!==before)throw Error('frame leak');
+        ",
+    );
+}
+
+#[test]
+fn automatic_cleanup_walks_deep_boxes_vectors_and_partial_moves() {
+    for source in [
+        r#"
+        enum List { End, Next(i64, Box<List>) }
+        struct Pair { first: Box<List>, second: Box<List> }
+        fn probe() -> i64 {
+            let mut list = List::End;
+            let mut i: i64 = 0;
+            while i < 20000 {
+                list = List::Next(i, Box::new(list));
+                i = i + 1;
+            }
+            let pair = Pair { first: Box::new(list), second: Box::new(List::End) };
+            let moved = pair.first;
+            i
+        }
+        "#,
+        r#"
+        enum List { End, Next(Vec<List>) }
+        fn probe() -> i64 {
+            let mut list = List::End;
+            let mut i: i64 = 0;
+            while i < 20000 {
+                let mut child: Vec<List> = Vec::new();
+                child.push(list);
+                list = List::Next(child);
+                i = i + 1;
+            }
+            i
+        }
+        "#,
+    ] {
+        let ast = syntax::parse(source).unwrap();
+        let checked = check::check(elaborate::elaborate(&ast).unwrap()).unwrap();
+        run_node(
+            &wasm::emit(&checked).unwrap(),
+            "if(instance.exports['fn:probe']()!==20000n)throw Error('recursive cleanup');",
+        );
+    }
+}
+
+#[test]
+fn deep_cleanup_runs_custom_drop_before_children_and_reuses_frames() {
+    let source = r#"
+        struct Node { ready: i64, next: List }
+        enum List { End, Next(Box<Node>) }
+        impl Drop for Node {
+            fn drop(&mut self) {
+                assert_eq!(self.ready, 1);
+                match &mut self.next {
+                    List::End => {},
+                    List::Next(child) => { child.ready = 1; }
+                }
+            }
+        }
+        fn probe() -> i64 {
+            let mut list = List::End;
+            let mut i: i64 = 0;
+            while i < 20000 {
+                list = List::Next(Box::new(Node { ready: 0, next: list }));
+                i = i + 1;
+            }
+            match &mut list {
+                List::End => {},
+                List::Next(head) => { head.ready = 1; }
+            }
+            i
+        }
+    "#;
+    let ast = syntax::parse(source).unwrap();
+    let checked = check::check(elaborate::elaborate(&ast).unwrap()).unwrap();
+    run_node(
+        &wasm::emit(&checked).unwrap(),
+        "
+        if(instance.exports['fn:probe']()!==20000n)throw Error('custom cleanup');
+        // The first-fit allocator retains differently sized free blocks. One
+        // reuse changes their placement; subsequent identical work must plateau.
+        if(instance.exports['fn:probe']()!==20000n)throw Error('custom cleanup reuse');
+        const size=instance.exports.memory.buffer.byteLength;
+        if(instance.exports['fn:probe']()!==20000n)throw Error('custom cleanup repeat');
+        if(instance.exports.memory.buffer.byteLength!==size)throw Error('cleanup frames leaked');
+        ",
+    );
+}
+
+#[test]
+fn iterative_cleanup_preserves_field_and_element_order() {
+    for construction in [
+        "let pair = Pair { first: Mark { value: 1 }, second: Mark { value: 2 } };",
+        "let values: [Mark; 2] = [Mark { value: 1 }, Mark { value: 2 }];",
+        "let mut values: Vec<Mark> = Vec::new(); values.push(Mark { value: 1 }); values.push(Mark { value: 2 });",
+    ] {
+        let source = format!(
+            "struct Mark {{ value: i64 }}
+             impl Drop for Mark {{
+                 fn drop(&mut self) {{
+                     if self.value == 1 {{ panic!(\"first\"); }}
+                     else {{ panic!(\"second\"); }}
+                 }}
+             }}
+             struct Pair {{ first: Mark, second: Mark }}
+             fn probe() -> i64 {{ {construction} 0 }}"
+        );
+        let ast = syntax::parse(&source).unwrap();
+        let checked = check::check(elaborate::elaborate(&ast).unwrap()).unwrap();
+        run_node(
+            &wasm::emit(&checked).unwrap(),
+            "
+            let failure='';
+            try { instance.exports['fn:probe'](); } catch(e) { failure=e.message; }
+            // The first marker traps on line 4; the second traps on line 5.
+            if(failure!=='trap 16:4')throw Error('wrong first destructor: '+failure);
+            ",
+        );
+    }
+}

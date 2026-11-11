@@ -1,5 +1,6 @@
 //! WebAssembly 3.0 memory64 encoding. The checked K program is the input.
 use crate::k::{CheckedProgram, Function, Op, Place, Program, Projection, TypeKind};
+use std::collections::BTreeSet;
 
 fn uleb(out: &mut Vec<u8>, mut value: u64) {
     loop {
@@ -81,45 +82,51 @@ fn trap_if(out: &mut Vec<u8>, code: i64, line: usize) {
 }
 const ALLOC: usize = 1;
 const FREE: usize = 2;
-const FIRST_USER: usize = 3;
+const DROP_RUN: usize = 3;
+const FIRST_USER: usize = 4;
 
 struct Body<'a> {
     program: &'a Program,
     function: &'a Function,
     bytes: Vec<u8>,
-    cells: Vec<Option<usize>>,
+    slots: Vec<Slot>,
     scratch: usize,
+    frame: usize,
+    frame_bytes: u64,
     controls: Vec<u8>,
     messages: &'a [String],
 }
 impl<'a> Body<'a> {
     fn read(&mut self, local: usize) {
-        match self.cells[local] {
-            Some(cell) => {
-                get(&mut self.bytes, cell);
-                load(&mut self.bytes, 0);
+        match self.slots[local] {
+            Slot::Frame(offset) => {
+                get(&mut self.bytes, self.frame);
+                load(&mut self.bytes, offset);
             }
-            None => get(&mut self.bytes, local),
+            Slot::Register(register) => get(&mut self.bytes, register),
         }
     }
     fn write(&mut self, local: usize) {
-        match self.cells[local] {
-            Some(cell) => {
+        match self.slots[local] {
+            Slot::Frame(offset) => {
                 set(&mut self.bytes, self.scratch + 7);
-                get(&mut self.bytes, cell);
+                get(&mut self.bytes, self.frame);
                 get(&mut self.bytes, self.scratch + 7);
-                store(&mut self.bytes, 0);
+                store(&mut self.bytes, offset);
             }
-            None => set(&mut self.bytes, local),
+            Slot::Register(register) => set(&mut self.bytes, register),
         }
     }
     fn address(&mut self, place: &Place, line: usize) -> usize {
         let mut ty = self.function.locals[place.local].ty;
         if place.projections.is_empty() {
-            get(
-                &mut self.bytes,
-                self.cells[place.local].expect("address-taken local has a cell"),
-            );
+            let offset = match self.slots[place.local] {
+                Slot::Frame(offset) => offset,
+                Slot::Register(_) => unreachable!("address-taken local has a frame slot"),
+            };
+            get(&mut self.bytes, self.frame);
+            constant(&mut self.bytes, offset as i64);
+            self.bytes.push(0x7c);
             return ty;
         }
         self.read(place.local);
@@ -523,6 +530,11 @@ impl<'a> Body<'a> {
                 }
             }
             Op::Drop { place } => {
+                if place.projections.is_empty()
+                    && !heap_type(&self.program.types[self.function.locals[place.local].ty].kind)
+                {
+                    return Ok(());
+                }
                 let ty = self.read_place(place, line);
                 call(&mut self.bytes, helper_index(self.program, ty, false));
                 self.bytes.push(0x1a);
@@ -641,12 +653,10 @@ impl<'a> Body<'a> {
             Op::Return { src } => {
                 self.read(*src);
                 set(&mut self.bytes, self.scratch + 6);
-                for cell in &self.cells {
-                    if let Some(cell) = cell {
-                        get(&mut self.bytes, *cell);
-                        call(&mut self.bytes, FREE);
-                        self.bytes.push(0x1a);
-                    }
+                if self.frame_bytes != 0 {
+                    get(&mut self.bytes, self.frame);
+                    call(&mut self.bytes, FREE);
+                    self.bytes.push(0x1a);
                 }
                 get(&mut self.bytes, self.scratch + 6);
                 self.bytes.push(0x0f);
@@ -1126,40 +1136,23 @@ fn deallocator() -> Vec<u8> {
     b.push(0x0b);
     b
 }
-fn field_operations(
-    bytes: &mut Vec<u8>,
-    program: &Program,
-    fields: &[crate::k::Field],
-    first: u64,
-    copying: bool,
-) {
-    let mut i = 0;
-    while i < fields.len() {
+
+fn copy_fields(b: &mut Vec<u8>, program: &Program, fields: &[crate::k::Field], first: u64) {
+    for (i, field) in fields.iter().enumerate() {
         let offset = (first + i as u64) * 8;
-        if copying {
-            get(bytes, 1);
-        }
-        get(bytes, 0);
-        load(bytes, offset);
-        call(bytes, helper_index(program, fields[i].ty, copying));
-        if copying {
-            store(bytes, offset);
-        } else {
-            bytes.push(0x1a);
-        }
-        i += 1;
+        get(b, 1);
+        get(b, 0);
+        load(b, offset);
+        call(b, helper_index(program, field.ty, true));
+        store(b, offset);
     }
 }
 
-fn type_helper(program: &Program, ty: usize, copying: bool, destructor: Option<usize>) -> Vec<u8> {
+fn copy_helper(program: &Program, ty: usize) -> Vec<u8> {
     let mut b = vec![1, 5, 0x7e];
     let kind = &program.types[ty].kind;
     if !heap_type(kind) {
-        if copying {
-            get(&mut b, 0);
-        } else {
-            constant(&mut b, 0);
-        }
+        get(&mut b, 0);
         b.push(0x0b);
         return b;
     }
@@ -1169,73 +1162,40 @@ fn type_helper(program: &Program, ty: usize, copying: bool, destructor: Option<u
     constant(&mut b, 0);
     b.push(0x0f);
     b.push(0x0b);
-    if !copying {
-        if let Some(function) = destructor {
-            constant(&mut b, 8);
-            call(&mut b, ALLOC);
-            set(&mut b, 5);
-            get(&mut b, 5);
-            get(&mut b, 0);
-            store(&mut b, 0);
-            get(&mut b, 5);
-            call(&mut b, FIRST_USER + function);
-            b.push(0x1a);
-            get(&mut b, 5);
-            load(&mut b, 0);
-            set(&mut b, 0);
-            get(&mut b, 5);
-            call(&mut b, FREE);
-            b.push(0x1a);
-        }
-    }
-
     match kind {
         TypeKind::Struct { fields, .. } => {
-            if copying {
-                constant(&mut b, fields.len().max(1) as i64 * 8);
-                call(&mut b, ALLOC);
-                set(&mut b, 1);
-            }
-            field_operations(&mut b, program, fields, 0, copying);
+            constant(&mut b, fields.len().max(1) as i64 * 8);
+            call(&mut b, ALLOC);
+            set(&mut b, 1);
+            copy_fields(&mut b, program, fields, 0);
         }
         TypeKind::Enum { variants, .. } => {
             get(&mut b, 0);
             load(&mut b, 0);
             set(&mut b, 2);
-            let mut variant = 0;
-            while variant < variants.len() {
+            for (variant, value) in variants.iter().enumerate() {
                 get(&mut b, 2);
                 constant(&mut b, variant as i64);
                 b.push(0x51);
                 begin_if(&mut b);
-                let fields = &variants[variant].fields;
-                if copying {
-                    constant(&mut b, (fields.len() + 1) as i64 * 8);
-                    call(&mut b, ALLOC);
-                    set(&mut b, 1);
-                    get(&mut b, 1);
-                    get(&mut b, 2);
-                    store(&mut b, 0);
-                }
-                field_operations(&mut b, program, fields, 1, copying);
+                constant(&mut b, (value.fields.len() + 1) as i64 * 8);
+                call(&mut b, ALLOC);
+                set(&mut b, 1);
+                get(&mut b, 1);
+                get(&mut b, 2);
+                store(&mut b, 0);
+                copy_fields(&mut b, program, &value.fields, 1);
                 b.push(0x0b);
-                variant += 1;
             }
         }
         TypeKind::Box { inner } => {
-            if copying {
-                constant(&mut b, 8);
-                call(&mut b, ALLOC);
-                tee(&mut b, 1);
-            }
+            constant(&mut b, 8);
+            call(&mut b, ALLOC);
+            tee(&mut b, 1);
             get(&mut b, 0);
             load(&mut b, 0);
-            call(&mut b, helper_index(program, *inner, copying));
-            if copying {
-                store(&mut b, 0);
-            } else {
-                b.push(0x1a);
-            }
+            call(&mut b, helper_index(program, *inner, true));
+            store(&mut b, 0);
         }
         TypeKind::Vec { .. } | TypeKind::Array { .. } | TypeKind::String => {
             let inner = match kind {
@@ -1248,25 +1208,23 @@ fn type_helper(program: &Program, ty: usize, copying: bool, destructor: Option<u
             get(&mut b, 0);
             load(&mut b, 8);
             set(&mut b, 3);
-            if copying {
-                constant(&mut b, 24);
-                call(&mut b, ALLOC);
-                set(&mut b, 1);
-                get(&mut b, 3);
-                constant(&mut b, 8);
-                b.push(0x7e);
-                call(&mut b, ALLOC);
-                set(&mut b, 5);
-                get(&mut b, 1);
-                get(&mut b, 5);
-                store(&mut b, 0);
-                get(&mut b, 1);
-                get(&mut b, 3);
-                store(&mut b, 8);
-                get(&mut b, 1);
-                get(&mut b, 3);
-                store(&mut b, 16);
-            }
+            constant(&mut b, 24);
+            call(&mut b, ALLOC);
+            set(&mut b, 1);
+            get(&mut b, 3);
+            constant(&mut b, 8);
+            b.push(0x7e);
+            call(&mut b, ALLOC);
+            set(&mut b, 5);
+            get(&mut b, 1);
+            get(&mut b, 5);
+            store(&mut b, 0);
+            get(&mut b, 1);
+            get(&mut b, 3);
+            store(&mut b, 8);
+            get(&mut b, 1);
+            get(&mut b, 3);
+            store(&mut b, 16);
             constant(&mut b, 0);
             set(&mut b, 4);
             b.extend_from_slice(&[0x02, 0x40, 0x03, 0x40]);
@@ -1274,59 +1232,520 @@ fn type_helper(program: &Program, ty: usize, copying: bool, destructor: Option<u
             get(&mut b, 3);
             b.push(0x5a);
             b.extend_from_slice(&[0x0d, 1]);
-            if copying {
-                get(&mut b, 5);
-                get(&mut b, 4);
-                constant(&mut b, 8);
-                b.push(0x7e);
-                b.push(0x7c);
-            }
+            get(&mut b, 5);
+            get(&mut b, 4);
+            constant(&mut b, 8);
+            b.push(0x7e);
+            b.push(0x7c);
             get(&mut b, 2);
             get(&mut b, 4);
             constant(&mut b, 8);
             b.push(0x7e);
             b.push(0x7c);
             load(&mut b, 0);
-            call(&mut b, helper_index(program, inner, copying));
-            if copying {
-                store(&mut b, 0);
-            } else {
-                b.push(0x1a);
-            }
+            call(&mut b, helper_index(program, inner, true));
+            store(&mut b, 0);
             get(&mut b, 4);
             constant(&mut b, 1);
             b.push(0x7c);
             set(&mut b, 4);
             b.extend_from_slice(&[0x0c, 0, 0x0b, 0x0b]);
-            if !copying {
-                get(&mut b, 2);
-                call(&mut b, FREE);
-                b.push(0x1a);
-            }
         }
         TypeKind::Slice { .. } => {
-            if copying {
-                constant(&mut b, 16);
-                call(&mut b, ALLOC);
-                set(&mut b, 1);
-                get(&mut b, 1);
-                get(&mut b, 0);
-                constant(&mut b, 16);
-                b.extend_from_slice(&[0xfc, 10, 0, 0]);
-            }
+            constant(&mut b, 16);
+            call(&mut b, ALLOC);
+            set(&mut b, 1);
+            get(&mut b, 1);
+            get(&mut b, 0);
+            constant(&mut b, 16);
+            b.extend_from_slice(&[0xfc, 10, 0, 0]);
         }
         _ => unreachable!(),
     }
-    if copying {
-        get(&mut b, 1);
-    } else {
-        get(&mut b, 0);
-        call(&mut b, FREE);
-        b.push(0x1a);
-        constant(&mut b, 0);
-    }
+    get(&mut b, 1);
     b.push(0x0b);
     b
+}
+
+// A cleanup frame is { value, type, next_child, child_type }, each one i64.
+// One growable stack holds the active depth-first path. The dispatcher calls a
+// resumable step; zero means complete, otherwise the result is the next child.
+// A custom destructor is an ordinary call before the first child. Its &mut self
+// points at the value slot, which remains stable until that call returns.
+// Reentrant cleanup gets its own stack.
+fn drop_dispatcher() -> Vec<u8> {
+    // 0 base, 1 top byte offset, 2 capacity bytes, 3 child, 4 child type,
+    // 5 replacement base, 6 replacement capacity, 7 current frame.
+    let mut b = vec![1, 7, 0x7e];
+    constant(&mut b, 32);
+    set(&mut b, 2);
+    b.extend_from_slice(&[0x03, 0x40]);
+    get(&mut b, 0);
+    get(&mut b, 1);
+    b.push(0x7c);
+    tee(&mut b, 7);
+    get(&mut b, 7);
+    load(&mut b, 8);
+    b.push(0xa7);
+    b.extend_from_slice(&[0x11, 1, 0]); // call_indirect (i64) -> i64, table 0
+    set(&mut b, 3);
+    get(&mut b, 3);
+    b.push(0x50);
+    begin_if(&mut b);
+    get(&mut b, 1);
+    b.push(0x50);
+    begin_if(&mut b);
+    get(&mut b, 0);
+    call(&mut b, FREE);
+    b.push(0x0f);
+    b.push(0x0b);
+    get(&mut b, 1);
+    constant(&mut b, 32);
+    b.push(0x7d);
+    set(&mut b, 1);
+    b.push(0x05);
+    get(&mut b, 7);
+    load(&mut b, 24);
+    set(&mut b, 4);
+    get(&mut b, 1);
+    constant(&mut b, 32);
+    b.push(0x7c);
+    set(&mut b, 1);
+    get(&mut b, 1);
+    get(&mut b, 2);
+    b.push(0x51);
+    begin_if(&mut b);
+    get(&mut b, 2);
+    constant(&mut b, 2);
+    b.push(0x7e);
+    tee(&mut b, 6);
+    get(&mut b, 2);
+    b.push(0x54);
+    trap_if(&mut b, 6, 0);
+    get(&mut b, 6);
+    call(&mut b, ALLOC);
+    set(&mut b, 5);
+    get(&mut b, 5);
+    get(&mut b, 0);
+    get(&mut b, 2);
+    b.extend_from_slice(&[0xfc, 10, 0, 0]);
+    get(&mut b, 0);
+    call(&mut b, FREE);
+    b.push(0x1a);
+    get(&mut b, 5);
+    set(&mut b, 0);
+    get(&mut b, 6);
+    set(&mut b, 2);
+    b.push(0x0b);
+    get(&mut b, 0);
+    get(&mut b, 1);
+    b.push(0x7c);
+    set(&mut b, 7);
+    get(&mut b, 7);
+    get(&mut b, 3);
+    store(&mut b, 0);
+    get(&mut b, 7);
+    get(&mut b, 4);
+    store(&mut b, 8);
+    get(&mut b, 7);
+    constant(&mut b, 0);
+    store(&mut b, 16);
+    b.push(0x0b);
+    b.extend_from_slice(&[0x0c, 0, 0x0b]);
+    constant(&mut b, 0);
+    b.push(0x0b);
+    b
+}
+
+fn drop_start(program: &Program, ty: usize) -> Vec<u8> {
+    let mut b = vec![1, 1, 0x7e];
+    if !heap_type(&program.types[ty].kind) {
+        constant(&mut b, 0);
+        b.push(0x0b);
+        return b;
+    }
+    get(&mut b, 0);
+    b.push(0x50);
+    begin_if(&mut b);
+    constant(&mut b, 0);
+    b.push(0x0f);
+    b.push(0x0b);
+    constant(&mut b, 32);
+    call(&mut b, ALLOC);
+    set(&mut b, 1);
+    get(&mut b, 1);
+    get(&mut b, 0);
+    store(&mut b, 0);
+    get(&mut b, 1);
+    constant(&mut b, ty as i64);
+    store(&mut b, 8);
+    get(&mut b, 1);
+    constant(&mut b, 0);
+    store(&mut b, 16);
+    get(&mut b, 1);
+    constant(&mut b, 0);
+    store(&mut b, 24);
+    get(&mut b, 1);
+    call(&mut b, DROP_RUN);
+    b.push(0x0b);
+    b
+}
+
+// The child's value is on the operand stack, and the parent continuation was
+// already advanced. Zero marks a moved field, so continue to its next sibling.
+fn yield_drop_child(b: &mut Vec<u8>, ty: usize) {
+    set(b, 3);
+    get(b, 3);
+    b.push(0x50);
+    b.push(0x45);
+    begin_if(b);
+    get(b, 0);
+    constant(b, ty as i64);
+    store(b, 24);
+    get(b, 3);
+    b.push(0x0f);
+    b.push(0x0b);
+}
+
+fn drop_fields(b: &mut Vec<u8>, program: &Program, fields: &[crate::k::Field], first: u64) {
+    let mut next = 1;
+    for (i, field) in fields.iter().enumerate() {
+        if heap_type(&program.types[field.ty].kind) {
+            get(b, 0);
+            load(b, 16);
+            constant(b, next);
+            b.push(0x51);
+            begin_if(b);
+            get(b, 0);
+            constant(b, next + 1);
+            store(b, 16);
+            get(b, 1);
+            load(b, (first + i as u64) * 8);
+            yield_drop_child(b, field.ty);
+            b.push(0x0b);
+            next += 1;
+        }
+    }
+}
+
+fn drop_step(program: &Program, ty: usize, destructor: Option<usize>) -> Vec<u8> {
+    let mut b = vec![1, 4, 0x7e];
+    let kind = &program.types[ty].kind;
+    get(&mut b, 0);
+    load(&mut b, 16);
+    b.push(0x50);
+    begin_if(&mut b);
+    if let Some(function) = destructor {
+        get(&mut b, 0);
+        call(&mut b, FIRST_USER + function);
+        b.push(0x1a);
+    }
+    get(&mut b, 0);
+    constant(&mut b, 1);
+    store(&mut b, 16);
+    b.push(0x0b);
+    get(&mut b, 0);
+    load(&mut b, 0);
+    set(&mut b, 1);
+    match kind {
+        TypeKind::Struct { fields, .. } => drop_fields(&mut b, program, fields, 0),
+        TypeKind::Enum { variants, .. } => {
+            get(&mut b, 1);
+            load(&mut b, 0);
+            set(&mut b, 2);
+            for (variant, value) in variants.iter().enumerate() {
+                get(&mut b, 2);
+                constant(&mut b, variant as i64);
+                b.push(0x51);
+                begin_if(&mut b);
+                drop_fields(&mut b, program, &value.fields, 1);
+                b.push(0x0b);
+            }
+        }
+        TypeKind::Box { inner } => {
+            if heap_type(&program.types[*inner].kind) {
+                get(&mut b, 0);
+                load(&mut b, 16);
+                constant(&mut b, 1);
+                b.push(0x51);
+                begin_if(&mut b);
+                get(&mut b, 0);
+                constant(&mut b, 2);
+                store(&mut b, 16);
+                get(&mut b, 1);
+                load(&mut b, 0);
+                yield_drop_child(&mut b, *inner);
+                b.push(0x0b);
+            }
+        }
+        TypeKind::Vec { .. } | TypeKind::Array { .. } | TypeKind::String => {
+            let inner = match kind {
+                TypeKind::Vec { inner } | TypeKind::Array { inner, .. } => *inner,
+                _ => crate::k::U8,
+            };
+            if heap_type(&program.types[inner].kind) {
+                b.extend_from_slice(&[0x02, 0x40, 0x03, 0x40]);
+                get(&mut b, 0);
+                load(&mut b, 16);
+                set(&mut b, 2);
+                get(&mut b, 2);
+                constant(&mut b, 1);
+                b.push(0x7d);
+                set(&mut b, 3);
+                get(&mut b, 3);
+                get(&mut b, 1);
+                load(&mut b, 8);
+                b.push(0x5a);
+                b.extend_from_slice(&[0x0d, 1]);
+                get(&mut b, 0);
+                get(&mut b, 2);
+                constant(&mut b, 1);
+                b.push(0x7c);
+                store(&mut b, 16);
+                get(&mut b, 1);
+                load(&mut b, 0);
+                get(&mut b, 3);
+                constant(&mut b, 8);
+                b.push(0x7e);
+                b.push(0x7c);
+                load(&mut b, 0);
+                yield_drop_child(&mut b, inner);
+                b.extend_from_slice(&[0x0c, 0, 0x0b, 0x0b]);
+            }
+            get(&mut b, 1);
+            load(&mut b, 0);
+            call(&mut b, FREE);
+            b.push(0x1a);
+        }
+        _ => {}
+    }
+    if heap_type(kind) {
+        get(&mut b, 1);
+        call(&mut b, FREE);
+        b.push(0x1a);
+    }
+    constant(&mut b, 0);
+    b.push(0x0b);
+    b
+}
+
+fn drop_step_index(program: &Program, ty: usize) -> usize {
+    FIRST_USER + program.functions.len() + program.types.len() * 2 + ty
+}
+
+// This pool is a lowering/performance choice, never an acceptance limit.
+// Further simultaneously live values spill to a growing memory64 frame.
+const REGISTER_POOL: usize = 64;
+
+#[derive(Clone, Copy)]
+enum Slot {
+    Register(usize),
+    Frame(u64),
+}
+
+struct LocalLayout {
+    slots: Vec<Slot>,
+    registers: usize,
+    frame_bytes: u64,
+}
+
+struct LiveLoop {
+    start: usize,
+    end: usize,
+    parent: Option<usize>,
+}
+
+fn touch_local(ranges: &mut [(usize, usize)], local: usize, at: usize) {
+    ranges[local].0 = ranges[local].0.min(at);
+    ranges[local].1 = at;
+}
+
+fn touch_place(ranges: &mut [(usize, usize)], place: &Place, at: usize) {
+    touch_local(ranges, place.local, at);
+    for projection in &place.projections {
+        if let Projection::Index(local) = projection {
+            touch_local(ranges, *local, at);
+        }
+    }
+}
+
+// Conservative intervals include definitions and uses, and extend values entering
+// a loop through its back edge. Address-taken slots remain stable for the entire
+// invocation, including uses through aliases not spelled as a local access.
+fn local_layout(program: &Program, function: &Function) -> Result<LocalLayout, String> {
+    let n = function.locals.len();
+    let mut addressed = vec![false; n];
+    let mut ranges = vec![(usize::MAX, 0); n];
+    let mut loops: Vec<LiveLoop> = Vec::new();
+    let mut loop_at = vec![None; function.body.len()];
+    let mut controls = Vec::new();
+    let mut current_loop = None;
+    for (at, instruction) in function.body.iter().enumerate() {
+        loop_at[at] = current_loop;
+        match &instruction.op {
+            Op::Int { dst, .. } | Op::Float { dst, .. } | Op::Unit { dst } => {
+                touch_local(&mut ranges, *dst, at);
+            }
+            Op::Read { dst, place, .. }
+            | Op::Borrow { dst, place, .. }
+            | Op::SliceBorrow { dst, place, .. } => {
+                touch_local(&mut ranges, *dst, at);
+                touch_place(&mut ranges, place, at);
+                if matches!(instruction.op, Op::Borrow { .. } | Op::SliceBorrow { .. })
+                    && place.projections.is_empty()
+                {
+                    addressed[place.local] = true;
+                }
+            }
+            Op::Array { dst, elements }
+            | Op::Struct {
+                dst,
+                fields: elements,
+            }
+            | Op::Variant {
+                dst,
+                fields: elements,
+                ..
+            }
+            | Op::Call {
+                dst,
+                args: elements,
+                ..
+            }
+            | Op::Intrinsic {
+                dst,
+                args: elements,
+                ..
+            } => {
+                touch_local(&mut ranges, *dst, at);
+                for local in elements {
+                    touch_local(&mut ranges, *local, at);
+                }
+            }
+            Op::Assign { place, src } => {
+                touch_place(&mut ranges, place, at);
+                touch_local(&mut ranges, *src, at);
+            }
+            Op::Drop { place } => {
+                if !place.projections.is_empty()
+                    || heap_type(&program.types[function.locals[place.local].ty].kind)
+                {
+                    touch_place(&mut ranges, place, at);
+                }
+            }
+            Op::Unary { dst, src, .. }
+            | Op::Discriminant { dst, src }
+            | Op::TagTest { dst, src, .. } => {
+                touch_local(&mut ranges, *dst, at);
+                touch_local(&mut ranges, *src, at);
+            }
+            Op::Binary {
+                dst, left, right, ..
+            } => {
+                touch_local(&mut ranges, *dst, at);
+                touch_local(&mut ranges, *left, at);
+                touch_local(&mut ranges, *right, at);
+            }
+            Op::If { condition } => {
+                touch_local(&mut ranges, *condition, at);
+                controls.push(None);
+            }
+            Op::Loop => {
+                let id = loops.len();
+                loops.push(LiveLoop {
+                    start: at,
+                    end: at,
+                    parent: current_loop,
+                });
+                controls.push(Some(id));
+                current_loop = Some(id);
+            }
+            Op::End => {
+                if let Some(id) = controls.pop().expect("checked structured control") {
+                    loops[id].end = at;
+                    current_loop = loops[id].parent;
+                }
+            }
+            Op::Return { src } => touch_local(&mut ranges, *src, at),
+            Op::Else | Op::Break | Op::Continue | Op::Trap { .. } => {}
+        }
+    }
+    let mut slots = vec![Slot::Register(0); n];
+    let mut frame_words = 0_u64;
+    let mut starts = Vec::new();
+    for local in 0..n {
+        if addressed[local] {
+            slots[local] = Slot::Frame(
+                frame_words
+                    .checked_mul(8)
+                    .ok_or("local frame extent overflow")?,
+            );
+            frame_words = frame_words
+                .checked_add(1)
+                .ok_or("local frame extent overflow")?;
+        } else if local < function.params {
+            slots[local] = Slot::Register(local);
+        } else if ranges[local].0 != usize::MAX {
+            let first = ranges[local].0;
+            let mut enclosing = loop_at[ranges[local].1];
+            while let Some(id) = enclosing {
+                if first >= loops[id].start {
+                    break;
+                }
+                ranges[local].1 = ranges[local].1.max(loops[id].end);
+                enclosing = loops[id].parent;
+            }
+            starts.push((first, local));
+        }
+    }
+    starts.sort_unstable();
+    let mut active = BTreeSet::new();
+    let mut available_registers = Vec::new();
+    let mut available_frames = Vec::new();
+    let mut registers = function.params;
+    for (first, local) in starts {
+        while let Some(&(last, previous)) = active.first() {
+            if last >= first {
+                break;
+            }
+            active.pop_first();
+            match slots[previous] {
+                Slot::Register(register) => available_registers.push(register),
+                Slot::Frame(offset) => available_frames.push(offset),
+            }
+        }
+        slots[local] = if let Some(register) = available_registers.pop() {
+            Slot::Register(register)
+        } else if registers - function.params < REGISTER_POOL {
+            let register = registers;
+            registers += 1;
+            Slot::Register(register)
+        } else if let Some(offset) = available_frames.pop() {
+            Slot::Frame(offset)
+        } else {
+            let offset = frame_words
+                .checked_mul(8)
+                .ok_or("local frame extent overflow")?;
+            frame_words = frame_words
+                .checked_add(1)
+                .ok_or("local frame extent overflow")?;
+            Slot::Frame(offset)
+        };
+        active.insert((ranges[local].1, local));
+    }
+    let frame_bytes = frame_words
+        .checked_mul(8)
+        .ok_or("local frame extent overflow")?;
+    if registers > u32::MAX as usize - 9 {
+        return Err(
+            "WebAssembly parameter/local indices exceed the u32 representation".to_string(),
+        );
+    }
+    Ok(LocalLayout {
+        slots,
+        registers,
+        frame_bytes,
+    })
 }
 
 fn function_body(
@@ -1334,49 +1753,43 @@ fn function_body(
     function: &Function,
     messages: &[String],
 ) -> Result<Vec<u8>, String> {
-    let n = function.locals.len();
-    if n > u32::MAX as usize - 8 {
-        return Err("WebAssembly local indices exceed the u32 representation".to_string());
-    }
-    let mut cells = vec![None; n];
-    let mut extra = 8;
-    for instruction in &function.body {
-        if let Op::Borrow { place, .. } | Op::SliceBorrow { place, .. } = &instruction.op {
-            if place.projections.is_empty() && cells[place.local].is_none() {
-                cells[place.local] = Some(n + extra);
-                extra += 1;
-            }
-        }
-    }
-    if n + extra > u32::MAX as usize {
-        return Err("WebAssembly local indices exceed the u32 representation".to_string());
-    }
+    let layout = local_layout(program, function)?;
     let mut body = Body {
         program,
         function,
         bytes: Vec::new(),
-        cells,
-        scratch: n,
+        slots: layout.slots,
+        scratch: layout.registers,
+        frame: layout.registers + 8,
+        frame_bytes: layout.frame_bytes,
         controls: Vec::new(),
         messages,
     };
     uleb(&mut body.bytes, 1);
-    uleb(&mut body.bytes, (n - function.params + extra) as u64);
+    uleb(
+        &mut body.bytes,
+        (layout.registers - function.params + 9) as u64,
+    );
     body.bytes.push(0x7e);
-    let mut i = 0;
-    while i < n {
-        if let Some(cell) = body.cells[i] {
-            constant(&mut body.bytes, 8);
-            call(&mut body.bytes, ALLOC);
-            set(&mut body.bytes, cell);
-            get(&mut body.bytes, cell);
-            get(&mut body.bytes, i);
-            store(&mut body.bytes, 0);
+    if layout.frame_bytes != 0 {
+        constant(&mut body.bytes, layout.frame_bytes as i64);
+        call(&mut body.bytes, ALLOC);
+        set(&mut body.bytes, body.frame);
+        for i in 0..function.params {
+            if let Slot::Frame(offset) = body.slots[i] {
+                get(&mut body.bytes, body.frame);
+                get(&mut body.bytes, i);
+                store(&mut body.bytes, offset);
+            }
         }
-        i += 1;
     }
     for instruction in &function.body {
         body.emit(&instruction.op, instruction.line)?;
+    }
+    if layout.frame_bytes != 0 {
+        get(&mut body.bytes, body.frame);
+        call(&mut body.bytes, FREE);
+        body.bytes.push(0x1a);
     }
     constant(&mut body.bytes, 0);
     body.bytes.push(0x0b);
@@ -1398,7 +1811,7 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
             }
         }
     }
-    if program.functions.len() as u64 + program.types.len() as u64 * 2 + FIRST_USER as u64
+    if program.functions.len() as u64 + program.types.len() as u64 * 3 + FIRST_USER as u64
         > u32::MAX as u64
     {
         return Err("WebAssembly function indices exceed the u32 representation".to_string());
@@ -1430,8 +1843,9 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     let mut functions = Vec::new();
     uleb(
         &mut functions,
-        (program.functions.len() + 2 + program.types.len() * 2) as u64,
+        (program.functions.len() + 3 + program.types.len() * 3) as u64,
     );
+    uleb(&mut functions, 1);
     uleb(&mut functions, 1);
     uleb(&mut functions, 1);
     for f in &program.functions {
@@ -1441,10 +1855,13 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
         }
         uleb(&mut functions, (index + 1) as u64);
     }
-    for _ in 0..program.types.len() * 2 {
+    for _ in 0..program.types.len() * 3 {
         uleb(&mut functions, 1);
     }
     section(&mut out, 3, &functions)?;
+    let mut tables = vec![1, 0x70, 0];
+    uleb(&mut tables, program.types.len() as u64);
+    section(&mut out, 4, &tables)?;
     section(&mut out, 5, &[1, 4, 1])?;
     let mut globals = vec![2, 0x7e, 1];
     constant(&mut globals, 8);
@@ -1465,10 +1882,16 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
         i += 1;
     }
     section(&mut out, 7, &exports)?;
+    let mut elements = vec![1, 0, 0x41, 0, 0x0b];
+    uleb(&mut elements, program.types.len() as u64);
+    for ty in 0..program.types.len() {
+        uleb(&mut elements, drop_step_index(program, ty) as u64);
+    }
+    section(&mut out, 9, &elements)?;
     let mut code = Vec::new();
     uleb(
         &mut code,
-        (program.functions.len() + 2 + program.types.len() * 2) as u64,
+        (program.functions.len() + 3 + program.types.len() * 3) as u64,
     );
     let alloc = allocator();
     uleb(&mut code, alloc.len() as u64);
@@ -1476,6 +1899,9 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     let free = deallocator();
     uleb(&mut code, free.len() as u64);
     code.extend_from_slice(&free);
+    let dispatcher = drop_dispatcher();
+    uleb(&mut code, dispatcher.len() as u64);
+    code.extend_from_slice(&dispatcher);
     for f in &program.functions {
         let body = function_body(program, f, &messages)?;
         uleb(&mut code, body.len() as u64);
@@ -1483,16 +1909,25 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     }
     for ty in 0..program.types.len() {
         for copying in [false, true] {
-            let body = type_helper(program, ty, copying, destructors[ty]);
+            let body = if copying {
+                copy_helper(program, ty)
+            } else {
+                drop_start(program, ty)
+            };
             uleb(&mut code, body.len() as u64);
             code.extend_from_slice(&body);
         }
+    }
+    for (ty, destructor) in destructors.iter().enumerate() {
+        let body = drop_step(program, ty, *destructor);
+        uleb(&mut code, body.len() as u64);
+        code.extend_from_slice(&body);
     }
     section(&mut out, 10, &code)?;
     let mut names = Vec::new();
     uleb(
         &mut names,
-        (program.functions.len() + FIRST_USER + program.types.len() * 2) as u64,
+        (program.functions.len() + FIRST_USER + program.types.len() * 3) as u64,
     );
     uleb(&mut names, 0);
     text(&mut names, "trap");
@@ -1500,6 +1935,8 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     text(&mut names, "memory::allocate");
     uleb(&mut names, FREE as u64);
     text(&mut names, "memory::release");
+    uleb(&mut names, DROP_RUN as u64);
+    text(&mut names, "drop::walk");
     let mut i = 0;
     while i < program.functions.len() {
         uleb(&mut names, (FIRST_USER + i) as u64);
@@ -1518,6 +1955,13 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
                 ),
             );
         }
+    }
+    for ty in 0..program.types.len() {
+        uleb(&mut names, drop_step_index(program, ty) as u64);
+        text(
+            &mut names,
+            &format!("drop::step<{}>", program.types[ty].name),
+        );
     }
     let mut custom = Vec::new();
     text(&mut custom, "name");

@@ -33,6 +33,13 @@ vector comparison helper automatically; general module loading is still missing.
 
 ## Verification and measurements
 
+The backend repair adds five tests for local reuse/spills, loop/alias behavior,
+deep Box/Vec/custom cleanup, destruction order and allocation reuse. Both 30,000
+successive locals (result 29999, 0.253 s) and 20,000-node automatic list destruction
+(result 20000, 0.023 s) now complete parse through emission, Node loading, execution
+and cleanup. These are individual debug CLI observations; peak RSS was not measured.
+Copy helpers and explicit recursive source calls still use the engine stack.
+
 The 2026-11-11 provenance repair passes **113 Cargo tests** and the full gate
 (**64 conformance pass, eight pending, zero fail; 57 rustc comparisons**). The
 clean isolated build/gate took 4.121 s. Nineteen new tests exercise returned and
@@ -108,8 +115,8 @@ Vec, Box, allocation, copy and structural drop still live in the emitter.
 Moving their internals into trusted source memory modules remains milestone 2
 work. String constructors validate UTF-8, but privacy/module enforcement must
 land before the type can promise that invariant to all clients. Allocation
-reuses blocks without splitting/coalescing yet. Recursive helpers still use the
-engine stack. Full witness-bearing K, parameterized trait bounds, closures, World,
+reuses blocks without splitting/coalescing yet. Copy helpers and explicit recursive source calls still use the
+engine stack; structural destruction uses explicit growing frames. Full witness-bearing K, parameterized trait bounds, closures, World,
 capability transcripts and structured task scopes remain missing. Query/signature
 views and the two owned execution engines are later work.
 
