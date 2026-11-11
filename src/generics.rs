@@ -1224,6 +1224,16 @@ pub(crate) enum TraitIdentity {
     Declared(usize),
     Unknown(String),
 }
+/// Builtin supertrait contracts shared by assumptions and derive validation.
+pub(crate) fn builtin_parents(name: &str) -> &'static [&'static str] {
+    match name {
+        "Copy" => &["Clone"],
+        "Ord" => &["Eq", "PartialOrd", "PartialEq"],
+        "Eq" | "PartialOrd" => &["PartialEq"],
+        _ => &[],
+    }
+}
+
 pub(crate) fn bound_identity(source: &Program, path: &Path) -> TraitIdentity {
     if let Some(declaration) = path.declaration {
         return match source.declarations.get(declaration).map(|item| item.item) {
@@ -1267,6 +1277,46 @@ struct Goal {
 struct Requirements {
     children: Vec<Goal>,
     structural: bool,
+}
+
+/// A derived implementation covers its nominal constructor. Reuse the same
+/// normalized terms as ordinary coherence, without looking up a short spelling.
+pub(crate) fn derived_coherence(
+    source: &Program,
+    declaration: DeclarationId,
+    bound: &str,
+) -> Result<(), Diagnostic> {
+    let owner = &source.declarations[declaration];
+    for implementation in &source.impls {
+        let Some(trait_ty) = implementation.trait_ty else {
+            continue;
+        };
+        let Type::Path(path) = &source.types[trait_ty].kind else {
+            continue;
+        };
+        if bound_identity(source, path) != TraitIdentity::Builtin(bound.to_string()) {
+            continue;
+        }
+        let mut terms = Vec::new();
+        let mut next = 0;
+        let environment = variables(source, &implementation.generics, &mut terms, &mut next);
+        let target = signature_type(source, implementation.target, &environment, &mut terms)?;
+        let overlaps = match &terms[target] {
+            Term::Named(name, _) => *name == owner.name,
+            Term::Variable(_) | Term::Unknown => true,
+        };
+        if overlaps {
+            return Err(Diagnostic::new(
+                implementation.span,
+                "E_TRAIT",
+                &format!(
+                    "explicit {bound} implementation overlaps derive for {}",
+                    owner.name
+                ),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn derived(
@@ -1449,12 +1499,6 @@ fn trait_requirements(
         }
         return Some(Requirements {
             children,
-            structural: true,
-        });
-    }
-    if bound == "Clone" && crate::check::is_copy(types, goal.ty) {
-        return Some(Requirements {
-            children: Vec::new(),
             structural: true,
         });
     }

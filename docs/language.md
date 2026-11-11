@@ -29,6 +29,21 @@ references read the referent and preserve mutable-reference reborrowing.
 Named/runtime endpoints, guards, or-patterns and nested refutable patterns remain
 explicitly unsupported.
 
+Enums retain distinct unit, tuple and named-field variant shapes. Named constructors
+evaluate initializers in written order and store payloads in declaration order.
+Named patterns support reordered fields, renamed/shorthand bindings, wildcards and
+rest patterns. Constructor and pattern fields are checked for names, completeness,
+duplicates, type and declared shape. Unit/empty-tuple variants also accept empty
+braces, as in the common Rust subset. Enum fields inherit enum visibility; explicit
+field visibility is invalid. Nonempty tuple numeric-brace syntax remains unsupported.
+
+Explicit ref/ref mut match bindings refer to the original storage. Nonmoving
+matches preserve the owner, mutability and destructor timing. Distinct fields of
+one proven enum variant may be mutably borrowed together; other tags or the same
+field do not gain disjointness. Existing-place matches combining affine moves and
+explicit reference bindings are named unsupported until place-based tag witnesses
+and branch-specific partial-move/cleanup contracts are available.
+
 Source bundles declare their root, source files and optional source-library root.
 The owned loader handles inline modules, file modules (`child.rs` or
 `child/mod.rs`) and nested directories. Missing, ambiguous and duplicate inputs
@@ -41,6 +56,10 @@ qualified `crate`/`self`/`super` paths and prelude priority. Private, `pub(self)
 fields, methods and re-exports. Unsupported visibility forms are rejected. Local
 declarations shadow prelude items and intrinsic spellings. Aliases preserve
 nominal identity; identically spelled sibling declarations remain distinct.
+Generic parameter binding uses its original lexical/file scope. It shadows an
+unrelated declaration, while qualified paths keep their declaration identity.
+Substitution, inference, coherence and implementation selection do not turn a
+resolved nominal type or an intrinsic type such as str into a same-spelled parameter.
 
 Types and instances use structural keys built from declaration/child-type IDs
 and substitutions. Printable names are diagnostic labels with compact child IDs;
@@ -123,6 +142,29 @@ relationships, method signatures and explicit method type arguments are checked;
 unreachable expressions must still type-check. User traits named Copy, Clone or
 Drop do not acquire builtin semantics by spelling. Derived Copy on a generic
 layout is conditional on its fields.
+
+Copy, Clone, PartialEq, Eq, PartialOrd and Ord derive declarations have their
+structural field requirements checked even when unused. Generic derive checks use
+rigid parameters with the required conditional assumptions, not a sample concrete
+type. Supertrait evidence is required; duplicate derives and overlapping explicit
+implementations reject. The current overlap rule is conservative about conditional
+implementations, like ordinary implementation coherence. Unsupported derives,
+including Debug, receive E_UNSUPPORTED instead of being ignored.
+
+Explicit builtin Clone and PartialEq implementations on source nominal structs
+and enums are checked against the
+clone/clone_from and eq/ne signatures, including required methods, receiver modes,
+argument/result types and generic arity. Eq requires PartialEq evidence. User
+traits with the same names remain different declarations. Explicit builtin Copy,
+Ord, PartialOrd, Data, Send and Sync implementations remain named unsupported;
+Copy derives and the existing structural automatic predicates retain their rules.
+
+These declaration checks are not complete executable derive support. Clone calls
+for affine derived values and derived aggregate comparison operators remain
+unimplemented. Copy cloning and explicit source method bodies execute through the
+existing checked path. The complete generated Clone/comparison operations, their
+library dependencies and general builtin witness contracts remain compiler-closure
+work.
 
 The emitted program remains monomorphic. The generic validation context names
 declared evidence, but a complete independently replayable generic/witness K

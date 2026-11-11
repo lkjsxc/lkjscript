@@ -47,11 +47,12 @@ pub(super) fn validate(source: &a::Program) -> Result<()> {
             roots.push(index);
         }
     }
+    let mut compiler = Compiler::new(source)?;
+    compiler.contracts = Some(Contracts::default());
+    super::derive_check::validate(&mut compiler)?;
     if roots.is_empty() {
         return Ok(());
     }
-    let mut compiler = Compiler::new(source)?;
-    compiler.contracts = Some(Contracts::default());
     let mut checked_roots = BTreeSet::new();
     for index in roots {
         let substitutions = compiler.definition_parameters(index)?;
@@ -150,7 +151,7 @@ impl Compiler<'_> {
         id
     }
 
-    fn declare_parameters(
+    pub(super) fn declare_parameters(
         &mut self,
         parameters: &[a::GenericParam],
         substitutions: &mut BTreeMap<String, usize>,
@@ -179,6 +180,20 @@ impl Compiler<'_> {
             }
         }
         Ok(())
+    }
+
+    pub(super) fn assume_builtin(&mut self, ty: usize, name: &str) {
+        let assumptions = self.contracts.as_mut().unwrap().rigid.get_mut(&ty).unwrap();
+        assumptions.insert(TraitIdentity::Builtin(name.to_string()));
+        for parent in crate::generics::builtin_parents(name) {
+            assumptions.insert(TraitIdentity::Builtin((*parent).to_string()));
+        }
+        if name == "Copy" {
+            self.types[ty].kind = k::TypeKind::Struct {
+                fields: Vec::new(),
+                copy: true,
+            };
+        }
     }
 
     fn assume_bound(
@@ -220,26 +235,8 @@ impl Compiler<'_> {
                 TraitIdentity::Builtin(name) => name.as_str(),
                 _ => "",
             };
-            let parents: &[&str] = match builtin {
-                "Copy" => &["Clone"],
-                "Ord" => &["Eq", "PartialOrd", "PartialEq"],
-                "Eq" | "PartialOrd" => &["PartialEq"],
-                _ => &[],
-            };
-            for parent in parents {
-                self.contracts
-                    .as_mut()
-                    .unwrap()
-                    .rigid
-                    .get_mut(&ty)
-                    .unwrap()
-                    .insert(TraitIdentity::Builtin((*parent).to_string()));
-            }
-            if builtin == "Copy" {
-                self.types[ty].kind = k::TypeKind::Struct {
-                    fields: Vec::new(),
-                    copy: true,
-                };
+            if !builtin.is_empty() {
+                self.assume_builtin(ty, builtin);
             }
             let trait_index = match identity {
                 TraitIdentity::Declared(index) => Some(index),

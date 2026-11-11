@@ -750,12 +750,38 @@
     "pending": false
   },
   {
+    "id": "unused_invalid_derive",
+    "file": "fail/unused_invalid_derive.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "builtin_clone_signature",
+    "file": "fail/builtin_clone_signature.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
+  },
+  {
     "id": "text_type_identity",
     "file": "fail/text_type_identity.rs",
     "kind": "reject",
     "code": "E_TYPE",
     "rust": true,
     "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "explicit_clone_equality",
+    "file": "pass/explicit_clone_equality.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
     "pending": false
   }
 ]

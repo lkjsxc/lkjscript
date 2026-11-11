@@ -1,4 +1,5 @@
 //! Rust-compatible syntax to explicit K. Inference lives here; K trusts none of it.
+mod derive_check;
 mod generic_check;
 mod integers;
 mod patterns;

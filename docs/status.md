@@ -19,12 +19,20 @@ parameters and declared contracts, independently of specialization or reachabili
 The production elaborator and K checker are reused. Bounds, affine ownership,
 associated identities and explicit method type arguments are enforced; inherent
 methods and user traits do not become builtin Clone/Drop/Copy by spelling.
-Concrete associated-result selection executes successfully.
+Concrete associated-result selection executes successfully. Derive declarations
+now check all structural field and supertrait obligations, including unused
+generic layouts. Explicit builtin Clone/PartialEq signatures and Eq evidence are
+validated; unsupported derives/overrides are named. Executable affine derives and
+aggregate comparison lowering remain unfinished.
 
 Integer range patterns support typed inclusive/half-open/open bounds and exact
 interval-based exhaustiveness. Borrowed scalar matches read through references.
 All arms are checked, even after an unconditional default; affine default bindings
-retain first-arm execution and exactly-once cleanup.
+retain first-arm execution and exactly-once cleanup. Named-field enum constructors
+and patterns preserve declaration identity, written evaluation order, typed field
+layout and actual storage for ref/ref mut bindings. Distinct fields of the same
+proven variant are disjoint. Nonmoving matches preserve owner/destructor timing;
+mixed affine moves and explicit refs on an existing place remain named unsupported.
 
 Every initialized reference leaf has provenance or explicit inactive-variant
 absence evidence. Moves, construction, cloning, replacement, field assignment,
@@ -37,7 +45,11 @@ Files, modules and declarations have explicit identities. The loader owns file
 discovery; resolution handles lexical/qualified names, aliases, imports, visibility
 and prelude shadowing. The library uses ordinary module scopes. Private String
 bytes cannot be constructed or accessed by outside clients. Type/instance keys
-are structural, with compact diagnostic names.
+are structural, with compact diagnostic names. Generic parameters are resolved
+by their original lexical/file scopes rather than global name guesses. An
+unrelated enum E no longer changes the source Result implementation, qualified
+crate::T is not substituted by parameter T, and str cannot become an inferred
+parameter in a call.
 
 `compiler::compile(&SourceBundle)` takes declared source/library bytes and returns
 Wasm bytes or diagnostics without host I/O. The CLI uses the same production
@@ -85,9 +97,9 @@ original filename. The former emitter-local quoting loop is removed.
 
 ## Current verification
 
-The integrated 2026-11-11 range/JSON milestone gate passes **228 Cargo tests** and
-reports **78 conformance passes, eight pending, zero failures; 71 rustc comparisons**.
-Formatting, Clippy, build and conformance are included. Elapsed: **14.339 s**.
+The integrated 2026-11-11 enum/scope/derive milestone gate passes **264 Cargo tests**
+and reports **85 conformance passes, eight pending, zero failures; 78 rustc comparisons**.
+Formatting, Clippy, build and conformance are included. Elapsed: **16.674 s**.
 
 The suite includes 19 provenance tests, 28 generic-definition tests, 20 module
 tests, source-bundle and executing-component mutations, parser/embedding capacity
@@ -109,6 +121,14 @@ with rustc and lkjscript. They cover every u8/i8 value, selected i64/u64 extrema
 borrows, mutable-reference reuse, inference, overlap/order and affine cleanup.
 Invalid bounds, coverage gaps and invalid unreachable generic arms reject for the
 intended reason. Wide-domain boundary samples are not exhaustive 64-bit testing.
+
+Twelve named-enum test groups include 14 same-source rustc/Node execution probes
+over three files, plus direct K alias/tag checks and intended semantic rejections.
+Nine generic-scope groups exercise library shadowing, original-file scopes,
+qualified nominal identity, disjoint implementation coherence and actual trait
+witness selection. Fifteen derive groups check unused field obligations,
+conditional generic validation, supertraits, explicit builtin method contracts,
+coherence, original-file diagnostics and named unsupported boundaries.
 
 The eight closure/callback/task conformance cases remain explicitly pending.
 Structural Send/Sync checks do not establish a task runtime. No World-backed
@@ -202,14 +222,21 @@ parameter in `map(|(p, _)| p)`. Range patterns no longer cause the earlier stop.
 N1/N2 or owned bootstrap seed exists. Text/collection operations beyond the implemented subset, formatting, map/set
 APIs, derives, closures, patterns and ownership layouts remain dependency work.
 
-The next concrete dependency is named-field enum construction and matching, used
-throughout the production K representation. The ordinary check of src/k.rs now
-reaches TypeKind::Int construction and reports E_TYPE unknown struct. Implement
-that general enum operation with declaration identity, typed fields, ownership,
-borrowed projections and tag-checked matching. Use the exact production module
-for representation/constructor execution when its full declared dependencies are
-supported. Inspect derive obligations explicitly; do not discard unsupported
-semantics or report constructor execution as ownership of the K checker.
+Named-field enum construction and matching are implemented. The next production
+K dependency is executable derived Clone/equality and their source String/Vec
+contracts. A fresh ordinary check of src/k.rs now stops at src/k.rs:43:5 with
+E_TRAIT: derive Clone requires the name field to implement Clone (source String
+has no Clone implementation yet). Debug derives are also still declared and are
+explicitly unsupported rather than silently ignored. Decide which diagnostics actually need
+Debug as part of the production closure; implement the needed behavior or make a
+deliberate production refactor with its callers. Do not discard attributes merely
+to claim acceptance. Clone/equality are actual checker/emitter dependencies, so
+constructor-only execution would not establish representation-module closure.
+
+A concrete ownership follow-through is place-based tag witnesses and branch
+partial-move/cleanup contracts for mixed affine and explicit-reference matches.
+The current supported cases bind real storage and retain the established
+consuming path; the unsupported combination is not simulated with moved copies.
 
 Other observations include missing borrowed collection iteration, `while let`,
 and repeated Vec initialization. Add these when they close the next actual
