@@ -1,8 +1,11 @@
 pub mod ast;
 pub mod check;
+pub mod compiler;
 pub mod elaborate;
 pub mod generics;
 pub mod k;
 pub mod k_text;
+pub mod resolve;
+pub mod source;
 pub mod syntax;
 pub mod wasm;

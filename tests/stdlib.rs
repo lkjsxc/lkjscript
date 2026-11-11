@@ -1,5 +1,7 @@
-//! Existing Rust library behavior and Node execution are compared on the same probes.
-use lkjscript::{check, elaborate, syntax, wasm};
+#[path = "../bridge/library.rs"]
+mod bootstrap_library;
+// Existing Rust library behavior and Node execution are compared on the same probes.
+use lkjscript::{check, elaborate, source, wasm};
 use std::io::Write;
 use std::process::{Command, Stdio};
 
@@ -15,15 +17,23 @@ mod rust_map;
 mod rust_prelude;
 pub use rust_prelude::{Option, Result};
 
-fn compile(source: &str, library: &str) -> Vec<u8> {
-    let all = format!(
-        "{}\n{library}\n{source}",
-        include_str!("../library/prelude.rs")
-    );
-    let parsed = syntax::parse(&all).unwrap();
+fn compile(text: &str, _library: &str) -> Vec<u8> {
+    let text = format!("use std::bytes::*; use std::collections::BTreeMap;\n{text}");
+    let mut files = bootstrap_library::standard_library();
+    files.push(source::SourceInput {
+        path: "probe.rs".to_string(),
+        text,
+    });
+    let bundle = source::SourceBundle {
+        root: "probe.rs".to_string(),
+        library: Some("$std/lib.rs".to_string()),
+        files,
+    };
+    let parsed = source::parse_bundle(&bundle).unwrap();
     let program = elaborate::elaborate(&parsed).unwrap();
     wasm::emit(&check::check(program).unwrap()).unwrap()
 }
+
 fn run_node(bytes: &[u8], entry: &str, expected: i64) {
     let code = format!(
         "const chunks=[];process.stdin.on('data',b=>chunks.push(b));\

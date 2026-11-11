@@ -1,25 +1,41 @@
 # lkjscript, generation two
 
-Read `docs/status.md`, inspect Git and live jobs, then implement the next action.
-The language design comes first, reliable agent development second. Own the
-compiler, runtime, tools and persistence, eventually without a Rust toolchain.
+Read `docs/status.md`, inspect Git and live jobs, then implement the next concrete
+action. Language quality comes first, reliable agent development second. Own the
+compiler, runtime, library and tools, eventually without Rust or Node. Applications
+are probes; historical architecture and backward compatibility are not goals.
 
-The compiler uses a Rust-compatible subset of lkjscript. Parse, elaborate to
-explicit K, check once, lower and emit WebAssembly. Only checked K reaches a
-backend. Keep the trusted modules small. Rust and Node are bootstrap bridges
-and independent test oracles. Unsupported syntax must produce a diagnostic.
+Rust-compatible source, explicit checked meaning and memory64 WebAssembly are
+current strategies. Reconsider them when measured obstacles justify an executable
+transition. Preserve the current runnable path while replacing its parts. The
+first self-compilation target is the complete compiler core with declared source,
+library and host-buffer inputs, not a syntax-only file count or a second toy core.
 
-No arbitrary resource ceilings, work accounting or policy plumbing. Use growing
-collections, explicit stacks and 64-bit extents. Record representation and engine
-constraints in `docs/limits.md`. Keep checked arithmetic and ownership sound.
+Use one authoritative contract at each semantic boundary. Resolve declarations
+once in their lexical modules; check generic definitions under their declared
+constraints; verify explicit concrete K before emission. Dynamic bounds, overflow
+and artifact validation remain necessary. Unsupported syntax gets a diagnostic.
+Keep the trusted implementation and outstanding obligations explicit.
 
-Work in this checkout only. Preserve the read-only `.generation-one` worktree
-for specific ports. Do not modify running deployments or neighboring checkouts.
-Use English, no Python, ordinary compiler words, and short command output.
-Run `bash tools/check.sh` after coherent changes; keep it under a minute.
-Commit small and push main directly. No force pushes, history rewrites, releases,
-credential changes or protection changes. All routine decisions are delegated.
+No arbitrary acceptance ceilings, work accounting or policy plumbing. Choose
+growing representations and explicit stacks; keep checked arithmetic and ownership
+sound. Record actual representation and engine constraints in `docs/limits.md`.
+Measure the stages that actually ran, including engine loading and cleanup.
 
-`docs/language.md` is the single specification. Status records working behavior,
-broken or missing pieces, bootstrap, measurements and the next action. Git is
-history; do not add decision records, session diaries or duplicate implementations.
+Work in this checkout only. Preserve the read-only `.generation-one` worktree for
+specific reference. Do not modify deployments or neighboring checkouts. Use
+English, no Python, ordinary compiler words, and focused command output. Coordinate
+parallel edits by file ownership. Use unique MCP operation IDs and recover unknown
+operations before repeating mutations.
+
+Run `bash tools/check.sh` after coherent changes and before publishing them. A
+sub-minute routine gate is a performance objective, never a coverage or language
+acceptance limit. Keep expensive scale/fixed-point probes separate when useful.
+Commit small, recheck upstream, push main directly and inspect CI. Do not force
+push, rewrite shared history, publish releases, or change credentials/protections.
+All ordinary technical decisions are delegated; continue without routine approvals.
+
+`docs/language.md` specifies implemented semantics. `docs/status.md` records current
+behavior, remaining dependencies, evidence and the next action. `docs/direction.md`
+records the selected strategy. Git preserves history; avoid session diaries,
+duplicate specifications and permanent superseded production implementations.

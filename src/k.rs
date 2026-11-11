@@ -156,6 +156,7 @@ pub struct Instruction {
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
+    pub file: usize,
     pub name: String,
     pub params: usize,
     pub result: usize,

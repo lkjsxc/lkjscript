@@ -1,5 +1,8 @@
 //! Flat syntax trees. Edges are arena indices, so dropping a deeply nested source is iterative.
 
+pub type FileId = usize;
+pub type ModuleId = usize;
+pub type DeclarationId = usize;
 pub type TypeId = usize;
 pub type ExprId = usize;
 pub type BlockId = usize;
@@ -7,6 +10,7 @@ pub type PatternId = usize;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Span {
+    pub file: FileId,
     pub start: usize,
     pub end: usize,
     pub line: usize,
@@ -15,6 +19,8 @@ pub struct Span {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Diagnostic {
+    pub path: String,
+    pub file: FileId,
     pub line: usize,
     pub column: usize,
     pub code: String,
@@ -24,6 +30,8 @@ pub struct Diagnostic {
 impl Diagnostic {
     pub fn new(span: Span, code: &str, message: &str) -> Diagnostic {
         Diagnostic {
+            path: String::new(),
+            file: span.file,
             line: span.line,
             column: span.column,
             code: code.to_string(),
@@ -34,6 +42,7 @@ impl Diagnostic {
 
 #[derive(Clone, Debug)]
 pub struct Path {
+    pub declaration: Option<DeclarationId>,
     pub name: String,
     pub args: Vec<TypeId>,
 }
@@ -62,6 +71,7 @@ pub enum Type {
 
 #[derive(Clone, Debug)]
 pub struct TypeNode {
+    pub scope: ModuleId,
     pub kind: Type,
     pub span: Span,
 }
@@ -98,7 +108,7 @@ pub struct Function {
     pub result: TypeId,
     pub body: Option<BlockId>,
     pub attrs: Vec<Attribute>,
-    pub public: bool,
+    pub public: Visibility,
     pub span: Span,
 }
 
@@ -106,7 +116,7 @@ pub struct Function {
 pub struct Field {
     pub name: String,
     pub ty: TypeId,
-    pub public: bool,
+    pub public: Visibility,
     pub span: Span,
 }
 
@@ -118,7 +128,7 @@ pub struct Struct {
     pub fields: Vec<Field>,
     pub tuple: bool,
     pub attrs: Vec<Attribute>,
-    pub public: bool,
+    pub public: Visibility,
     pub span: Span,
 }
 
@@ -138,7 +148,7 @@ pub struct Enum {
     pub generics: Vec<GenericParam>,
     pub variants: Vec<Variant>,
     pub attrs: Vec<Attribute>,
-    pub public: bool,
+    pub public: Visibility,
     pub span: Span,
 }
 
@@ -158,7 +168,7 @@ pub struct Trait {
     pub bounds: Vec<TypeId>,
     pub methods: Vec<usize>,
     pub associated: Vec<AssociatedType>,
-    pub public: bool,
+    pub public: Visibility,
     pub span: Span,
 }
 
@@ -179,17 +189,18 @@ pub struct Use {
     pub path: String,
     pub alias: String,
     pub glob: bool,
-    pub public: bool,
+    pub public: Visibility,
     pub span: Span,
 }
 
 #[derive(Clone, Debug)]
 pub struct Module {
+    pub scope: ModuleId,
     pub name: String,
     pub parent: String,
     pub items: Vec<Item>,
     pub external: bool,
-    pub public: bool,
+    pub public: Visibility,
     pub span: Span,
 }
 
@@ -199,7 +210,7 @@ pub struct Alias {
     pub module: String,
     pub generics: Vec<GenericParam>,
     pub ty: TypeId,
-    pub public: bool,
+    pub public: Visibility,
     pub span: Span,
 }
 
@@ -209,11 +220,11 @@ pub struct Constant {
     pub module: String,
     pub ty: TypeId,
     pub value: ExprId,
-    pub public: bool,
+    pub public: Visibility,
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Item {
     Function(usize),
     Struct(usize),
@@ -343,6 +354,7 @@ pub enum Expr {
 
 #[derive(Clone, Debug)]
 pub struct ExprNode {
+    pub scope: ModuleId,
     pub kind: Expr,
     pub span: Span,
 }
@@ -385,6 +397,7 @@ pub enum Pattern {
 
 #[derive(Clone, Debug)]
 pub struct PatternNode {
+    pub scope: ModuleId,
     pub kind: Pattern,
     pub span: Span,
 }
@@ -408,8 +421,40 @@ pub struct Block {
     pub span: Span,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Visibility {
+    Private,
+    Parent,
+    Crate,
+    Public,
+}
+
+#[derive(Clone, Debug)]
+pub struct SourceFile {
+    pub path: String,
+    pub crate_root: ModuleId,
+}
+#[derive(Clone, Debug)]
+pub struct ModuleScope {
+    pub path: String,
+    pub parent: Option<ModuleId>,
+    pub crate_root: ModuleId,
+}
+#[derive(Clone, Debug)]
+pub struct Declaration {
+    pub name: String,
+    pub scope: ModuleId,
+    pub item: Item,
+    pub public: Visibility,
+    pub span: Span,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Program {
+    pub files: Vec<SourceFile>,
+    pub scopes: Vec<ModuleScope>,
+    pub declarations: Vec<Declaration>,
+    pub resolved: bool,
     pub types: Vec<TypeNode>,
     pub exprs: Vec<ExprNode>,
     pub patterns: Vec<PatternNode>,

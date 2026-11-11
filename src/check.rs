@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 fn error(line: usize, code: &str, message: &str) -> Diagnostic {
     Diagnostic::new(
         Span {
+            file: 0,
             line,
             column: 1,
             start: 0,
@@ -1923,7 +1924,10 @@ pub fn check(program: Program) -> Result<CheckedProgram, Diagnostic> {
         }
     }
     for function in &program.functions {
-        check_function(&program, function)?;
+        check_function(&program, function).map_err(|mut problem| {
+            problem.file = function.file;
+            problem
+        })?;
     }
     Ok(CheckedProgram { program })
 }
@@ -1958,6 +1962,7 @@ mod tests {
             destructors: Vec::new(),
             types,
             functions: vec![Function {
+                file: 0,
                 return_source,
                 name: "probe".to_string(),
                 params,
@@ -2057,6 +2062,7 @@ mod tests {
             ],
         );
         p.functions.push(Function {
+            file: 0,
             return_source: None,
             name: "bad".to_string(),
             params: 1,
@@ -2092,6 +2098,7 @@ mod tests {
             ],
         );
         p.functions.push(Function {
+            file: 0,
             return_source: None,
             name: "take".to_string(),
             params: 1,
@@ -2642,6 +2649,7 @@ mod tests {
             ],
         );
         p.functions.push(Function {
+            file: 0,
             return_source: None,
             name: "mutate".to_string(),
             params: 1,
@@ -3057,6 +3065,7 @@ mod tests {
         );
         p.destructors.push((8, 1));
         p.functions.push(Function {
+            file: 0,
             name: "drop".to_string(),
             params: 1,
             result: UNIT,

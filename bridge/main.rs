@@ -1,5 +1,6 @@
 //! Rust-only bootstrap host. Replace by lkjscript World once the compiler self-compiles.
-use lkjscript::{ast::Diagnostic, check, elaborate, k, k_text, syntax, wasm};
+use lkjscript::{ast::Diagnostic, check, compiler, k, k_text, source, wasm};
+mod library;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -59,24 +60,35 @@ mod host_stack {
 }
 
 fn report(path: &str, problem: Diagnostic) -> String {
+    let path = if problem.path.is_empty() {
+        path
+    } else {
+        &problem.path
+    };
     format!(
         "{path}:{}:{}: {} {}",
         problem.line, problem.column, problem.code, problem.message
     )
 }
 fn compile(path: &str) -> Result<k::CheckedProgram, String> {
-    let mut source = fs::read_to_string(path).map_err(|e| format!("{path}:1:1: E_IO {e}"))?;
+    let source = fs::read_to_string(path).map_err(|e| format!("{path}:1:1: E_IO {e}"))?;
     if Path::new(path).extension().is_some_and(|ext| ext == "k") {
         return check::check(k_text::read(&source).map_err(|e| report(path, e))?)
             .map_err(|e| report(path, e));
     }
-    source.push('\n');
-    source.push_str(include_str!("../library/prelude.rs"));
-    source.push('\n');
-    source.push_str(include_str!("../library/sequence.rs"));
-    let parsed = syntax::parse(&source).map_err(|e| report(path, e))?;
-    let program = elaborate::elaborate(&parsed).map_err(|e| report(path, e))?;
-    check::check(program).map_err(|e| report(path, e))
+    let library = library::standard_library();
+    let parsed = source::load(path, Some("$std/lib.rs"), &mut |file| {
+        if let Some(input) = library.iter().find(|input| input.path == file) {
+            return Ok(Some(input.text.clone()));
+        }
+        match fs::read_to_string(file) {
+            Ok(text) => Ok(Some(text)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error.to_string()),
+        }
+    })
+    .map_err(|e| report(path, e))?;
+    compiler::check_source(&parsed).map_err(|problem| report(path, problem))
 }
 fn option(args: &[String], name: &str) -> Option<String> {
     args.windows(2)

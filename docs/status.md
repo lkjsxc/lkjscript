@@ -1,149 +1,147 @@
 # Status
 
-Generation two is a runnable bootstrap. Milestone 0 is complete; milestones 1 and
-2 are partial; whole-compiler self-check and both fixed points remain unestablished.
-Generation one is preserved on `generation-one` at `05a9326c`, with the read-only
-`.generation-one` worktree. The unused 35 GB old target was removed without
-stopping deployments. Old untracked drafts remain under ignored `.artifacts`.
+Generation two is a runnable Rust-bootstrap compiler with a memory64 WebAssembly
+backend. Whole-compiler source acceptance, a compiler fixed point, an owned CLI,
+and independence from Rust/Node remain unestablished. Generation one is frozen on
+`generation-one` at `05a9326c` and in the read-only `.generation-one` worktree.
+Running deployments are independent and unchanged.
 
 ## Works
 
-Functions, checked fixed-width integers and f64, structs, enums, matches, loops,
-generic instantiation, associated types and prerequisite bounds run on Node.
-Ownership includes partial moves/reinitialization, affine Vec elements, recursive
-Box types, borrowed matches, disjoint mutable fields, one-source aggregate views,
-array/slice projections, explicit borrow endings and custom Drop on normal and
-early exits. Calls can reborrow mutable references; `v.push(v.len())` works.
-Trait coherence, signatures, structural Send/Sync/Data bounds and expanding
-parameter-flow cycles are checked. Ambient I/O and direct Drop calls are rejected.
+Functions, checked fixed-width integers and f64, structs/enums, matches, loops,
+concrete generic instances, associated types and prerequisite bounds execute on
+Node. Ownership includes moves, partial initialization, custom Drop, disjoint
+mutable fields, one-source views, array/slice projections and reborrowing.
+Ambient I/O and direct source calls to Drop are rejected.
 
-K has a text form for adversarial tests and records concrete types, places,
-copies, moves, borrows, drops, variant proofs and a projected result's source.
-The K checker independently checks those concrete operations. Generic selection,
-witness selection and finite-instantiation validation currently precede K;
-explicit generic/witness contracts in K remain required work.
+Every initialized reference leaf has provenance or explicit inactive-variant
+absence evidence. Moves, construction, cloning, replacement, field assignment,
+call results and return preserve/check it. Replacement transports both the old
+and installed values. External writes cannot silently change symbolic reference
+leaf origins; explicit mutation contracts remain required for general updates.
+The repair is committed and CI-verified at `35a5d862`.
 
-`check`, `run`, `test`, `build`, `k` and `trusted` work. The memory64 backend
-has reusable allocation, checked indexing, canonical arithmetic NaNs and
-structural/custom drop. The source library implements Option/Result, bytes and
-UTF-8 validation, String, vector ordering and a sorted-vector BTreeMap with
-logarithmic lookup and linear insertion/removal. Library integration tests run
-these implementations under both compilers. The CLI loads only the prelude and
-vector comparison helper automatically; general module loading is still missing.
+Files, modules and declarations have explicit identities. The loader owns file
+discovery; resolution handles lexical/qualified names, aliases, imports, visibility
+and prelude shadowing. The library uses ordinary module scopes. Private String
+bytes cannot be constructed or accessed by outside clients. Type/instance keys
+are structural, with compact diagnostic names.
 
-## Verification and measurements
+`compiler::compile(&SourceBundle)` takes declared source/library bytes and returns
+Wasm bytes or diagnostics without host I/O. The CLI uses the same production
+checking pipeline. Bootstrap byte packing is in `bridge/library.rs`. Supplied
+library bytes affect emitted behavior; missing inputs are errors. This is a
+working compiler-core boundary, not a self-hosting claim.
 
-The backend repair adds five tests for local reuse/spills, loop/alias behavior,
-deep Box/Vec/custom cleanup, destruction order and allocation reuse. Both 30,000
-successive locals (result 29999, 0.253 s) and 20,000-node automatic list destruction
-(result 20000, 0.023 s) now complete parse through emission, Node loading, execution
-and cleanup. These are individual debug CLI observations; peak RSS was not measured.
+The source library implements Option/Result, bytes/UTF-8, String, vector ordering
+and a sorted-vector BTreeMap (logarithmic lookup, linear insertion/removal). Its
+integration tests load actual source bundles under lkjscript and use the same
+components under rustc.
+
+Lowering reuses physical locals and spills excess live values into memory64 frames.
+Address-taken values have stable frame slots. Structural destruction uses a growing
+explicit stack, including custom Drop, partial moves and recursive Box/Vec values.
 Copy helpers and explicit recursive source calls still use the engine stack.
 
-The 2026-11-11 provenance repair passes **113 Cargo tests** and the full gate
-(**64 conformance pass, eight pending, zero fail; 57 rustc comparisons**). The
-clean isolated build/gate took 4.121 s. Nineteen new tests exercise returned and
-installed replacement values, cloning, direct and projected reference assignment,
-empty enum alternatives, exclusive/disjoint valid uses, and external writes.
-Direct K fixtures reach the checker without frontend filtering. External view
-writes with changed symbolic leaf origins are deliberately rejected until K has
-mutation contracts; clearing or retaining their exact origins remains supported.
+## Current verification
 
-Earlier measurements at `aff27e54` on this host (Rust 1.97.0, Node 24.18.1):
-the incremental full check took
-**1.724 s**; rebuilding into a fresh Cargo target takes **3.994 s**. Both include
-formatting, **94 Cargo tests**, Clippy, build and conformance.
-Conformance: **64 pass, 8 explicitly pending, 0 fail**, including **57 rustc
-comparisons**. The Cargo tests include 31 adversarial K checks, seven K-text tests,
-195 arithmetic edge comparisons, source-library integration and a regression
-for bootstrap startup under an external address-space constraint. A formerly
-implemented case becoming unsupported fails the suite.
+The integrated 2026-11-11 gate passes **141 Cargo tests** and reports
+**64 conformance passes, eight pending, zero failures; 57 rustc comparisons**.
+Formatting, Clippy, build and conformance are included. Elapsed: **12.663 s**.
 
-All non-closure ownership/borrow/trait design cases pass, including view structs,
-a two-source view rejection, custom cleanup, trait overlap and expanding recursion.
-The eight pending programs are borrowed closure, escaping borrowed closure,
-moved/shared/aliased task scopes, a Data-bound callback, a capability-owning
-callback and a stored task. Structural Send/Sync checks pass independently of
-task execution. No World-backed I/O or concurrency pass is claimed.
+Coverage includes direct-K provenance attacks/valid transfers; multi-file sibling
+names, aliases, privacy, imports/re-exports, local prelude/intrinsic shadowing,
+trait use and original-file diagnostics; source-bundle mutations; two 30,000-local
+shapes; loop liveness; 20,000-node structures; destructor order; and allocation
+reuse. The eight pending closure/callback/task cases remain pending. Structural
+Send/Sync checks do not establish a task runtime. No World-backed I/O or
+concurrency execution pass is claimed.
 
-Physical production lines and exact `o200k_base` tokens (excluding inline test
-modules, including comments and blank lines):
+## Capacity observations
 
-| Component | Lines | Tokens |
+These 2026-11-11 debug CLI runs include parse, resolve/elaborate, check, emit, Node
+load/compile, execution and cleanup. Each is one end-to-end observation; peak RSS
+was not measured.
+
+| Input | Result | Elapsed |
 | --- | ---: | ---: |
-| Compiler, all nine src modules | 12,125 | 89,127 |
-| Current trusted base | 3,811 | 30,348 |
-| Source standard library | 372 | 2,347 |
-| Rust and Node host bridges | 265 | 2,565 |
+| 30,000 successive local declarations | 29,999 | 0.253 s |
+| 20,000-node Box/enum list | 20,000 | 0.023 s |
+| 20,000-node custom-destructor chain | 20,000 | 0.024 s |
+| 20,000-node Vec/enum chain | 20,000 | 0.027 s |
 
-The trusted-base count covers K definitions/checker, the emitter containing the
-memory/collection implementation, and both host bridges. It overlaps the compiler
-and bridge rows; there is no machine yet. Including inline tests, src totals
-13,969 lines / 101,598 tokens and the trusted-base files total 5,049 / 37,261.
+The repeated custom-destructor probe used 5,963,776 linear-memory bytes after its
+first call and 9,109,504 after its second, then stayed unchanged through calls
+three to five. The allocator still does not split/coalesce blocks; stable reuse
+after initial placement does not establish absence of fragmentation.
 
-Release compiler capacity probes check through K; they do not emit or run their
-large modules. RSS is sampled peak resident memory:
+Nested Box measurements cover parse, resolve/elaborate, check and K serialization,
+not emission/execution. Structural keys and compact names remove the earlier
+approximately quadratic expanded-name output for this input shape:
 
-| Probe | Time | Peak RSS |
-| --- | ---: | ---: |
-| 1,000,000 nested parentheses | 0.144 s | 218 MiB |
-| 1,000,000 locals | 1.178 s | 833 MiB |
-| 1,000,000 functions | 2.322 s | 1,396 MiB |
-| Node Vec<i64>, 2.125 GiB of elements | 5.075 s | 6,327 MiB |
+| Depth | Source bytes | K-text bytes |
+| ---: | ---: | ---: |
+| 128 | 678 | 16,933 |
+| 256 | 1,318 | 20,133 |
+| 512 | 2,598 | 26,533 |
+| 1,024 | 5,158 | 39,433 |
 
-The Vec probe checks length and retained values across growth above 4 GiB
-addresses; its linear memory grew to 8 GiB plus one page. Geometric predecessors
-were also exercised. Large-local attempts initially hit the runner's external
-20-second timeout; sparse active predicates removed the quadratic checker scan.
-A separate bootstrap probe checked 50,000 nested unary operators under an external
-1 GiB address-space constraint in 0.276 s, growing its main stack to 766 MiB.
-The 100-million-frame recursion probe is skipped until heap-frame execution exists.
+On an isolated 2 MiB thread, parsing depth-256 Box types still overflows. With
+syntax independently prepared on a larger test thread, elaboration also overflows;
+resolution and K checking complete independently. The CLI stack shim does not
+repair embedding. Explicit parser/elaborator frames remain required.
 
-`fib(35) = 9227465`: generated WebAssembly on Node takes **25.702 ms**;
-rustc's checked-arithmetic optimized native oracle takes **28.781 ms**.
-These are single execution measurements after startup (and Wasm instantiation),
-not steady-state averages. Our machine and native backend do not exist.
+### Earlier evidence and its original scope
 
-## Missing or broken
+At `aff27e54`, Rust 1.97.0/Node 24.18.1 measurements reported incremental/fresh-target
+gates of 1.724/3.994 s for the then-94-test suite. Release million-parentheses,
+million-local and million-function probes measured checking through K, not emission
+or execution: 0.144 s/218 MiB, 1.178 s/833 MiB and 2.322 s/1,396 MiB sampled peak
+RSS respectively. These were not repeated for the current changes.
 
-Self-check succeeds for **0/9 compiler source modules**; syntax-only parsing
-accepts 6/9. This is not whole-crate coverage. Module/name resolution, library API
-coverage and unsupported source forms (including closures, let-else and range
-patterns) block self-check. No W1, W1=W2, native compiler or N1=N2 exists.
+The earlier 2.125 GiB Vec execution reported 5.075 s/6,327 MiB sampled peak RSS,
+retaining values across addresses above 4 GiB and growing linear memory to 8 GiB
+plus one page. The earlier 50,000-unary-operator check under an external 1 GiB
+address-space limit reported 0.276 s and a 766 MiB main stack. Neither was repeated.
+Earlier `fib(35)=9227465` single observations after startup were 25.702 ms for Wasm
+and 28.781 ms for rustc checked-arithmetic native code. These are not averages,
+complete compiler benchmarks or an owned-engine result.
 
-Vec, Box, allocation, copy and structural drop still live in the emitter.
-Moving their internals into trusted source memory modules remains milestone 2
-work. String constructors validate UTF-8, but privacy/module enforcement must
-land before the type can promise that invariant to all clients. Allocation
-reuses blocks without splitting/coalescing yet. Copy helpers and explicit recursive source calls still use the
-engine stack; structural destruction uses explicit growing frames. Full witness-bearing K, parameterized trait bounds, closures, World,
-capability transcripts and structured task scopes remain missing. Query/signature
-views and the two owned execution engines are later work.
+## Missing and next work
 
-## Bootstrap and bridges
+Generic/witness selection and finite-instantiation checking still precede
+monomorphic K. Uninstantiated generic bodies are not yet fully checked under their
+declared parameters. The immediate semantic task is reused elaboration/K checking
+with rigid parameters and declared trait/associated-type contracts, without a
+second expression checker or an arbitrary instantiation budget.
 
-`cargo build --release` builds the current compiler; `bash tools/check.sh` is the
-routine gate. `lkjscript run file.rs --entry probe` prints the scalar result.
-`lkjscript build file.rs -o file.wasm` emits a module.
-`lkjscript check file.k` checks hand-written K; `lkjscript k file.rs` prints K.
-`lkjscript trusted` lists the current trusted implementation boundaries.
+The normal CLI loads the compiler crate and reaches actual syntax barriers. The
+latest attempt reports an unsupported range pattern in `src/wasm.rs`. No complete
+compiler-core source closure is accepted. Strings/views, formatting, map/set APIs,
+derives, closures, patterns and ownership layouts remain real dependency work.
+No W1/W2, N1/N2 or committed owned bootstrap image exists.
 
-The trusted Linux host shim grows the main stack on demand, preserves the host
-hard stack extent and restores the original extent in children before exec. This
-avoids the eager pthread reservation that prevented startup on GitHub runners.
+Execute an actual production compiler component through the ordinary source-bundle
+path, retaining the same implementation in the bootstrap compiler, then extend
+that verified closure. In parallel, replace demonstrated nested-type parser and
+elaborator recursion with explicit frames without changing source validity.
 
-Cargo is the bootstrap compiler/build bridge. Move bridge/main.rs host operations
-behind World and compile that entry in the language; replace bridge/run.mjs with
-our machine after the Wasm fixed point. The compiler sources are Rust-compatible
-bootstrap sources, not yet wholly accepted lkjscript. The intended fixed-point
-procedure is rustc -> W1; run W1 on Node and our machine -> W2; compare W1/W2
-bytes and run conformance plus behavior-changing source mutations. Then use W2
-to emit N1 and N1 to emit N2. No committed bootstrap image exists yet.
+Vec/Box/allocation internals remain in the emitter. The one-source view model,
+views-in-owned-containers restriction, write contracts, closures, explicit World
+capabilities, tasks, CLI ownership and an owned/native execution route remain
+unfinished. Add useful semantics when compiler needs repeatedly exceed the subset;
+do not flatten every abstraction into a private compiler dialect.
 
-## Next action
+## Bootstrap
 
-Implement source module loading and qualified name resolution, with correct
-prelude shadowing and privacy. Make the CLI consume the source library and check
-the compiler as one crate, then remove unsupported source constructs in measured
-groups. Keep explicit generic/witness K, source memory internals and the eight
-pending closure/capability/task cases visible as unfinished first-vertical work.
+`cargo build --release` builds C0; `bash tools/check.sh` is the routine gate.
+`lkjscript run file.rs --entry probe` executes on Node. `build -o file.wasm` emits,
+`k` serializes checked concrete meaning, and `check file.k` reaches the K checker.
+
+The first compiler-core fixed point must run C0's language pipeline on the exact
+production source/library closure to emit W1, then execute W1 with the same inputs
+to emit equal W2. Conformance and behavior-changing compiler-source mutations are
+also required. Rust directly compiling to Wasm is not this route. Node and a small
+host adapter can remain at that scoped milestone. Native closure and independence
+from Rust/Node require separate evidence, including an isolated rebuild from a
+named owned seed. Shared-host tools and deployments stay intact.

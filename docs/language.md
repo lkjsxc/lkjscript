@@ -16,7 +16,24 @@ Functions, structs, enums, constants, type aliases, generic declarations, trait
 implementations, matches, if, while, loop and for are implemented. For-loop
 continue advances the iterator; an inclusive maximum endpoint does not overflow.
 Assertions, panic and the implemented vec forms are fixed syntax. Named
-diagnostics reject unsupported constructs. Source modules are not loaded yet.
+diagnostics reject unsupported constructs.
+
+Source bundles declare their root, source files and optional source-library root.
+The owned loader handles inline modules, file modules (`child.rs` or
+`child/mod.rs`) and nested directories. Missing, ambiguous and duplicate inputs
+have distinct diagnostics. Source spans and K functions retain file IDs;
+diagnostics identify the original file. The host supplies bytes only.
+
+Resolution uses module/declaration identities, lexical scopes, imports/aliases,
+qualified `crate`/`self`/`super` paths and prelude priority. Private, `pub(self)`,
+`pub(super)`, `pub(crate)` and `pub` visibility is checked for items, construction,
+fields, methods and re-exports. Unsupported visibility forms are rejected. Local
+declarations shadow prelude items and intrinsic spellings. Aliases preserve
+nominal identity; identically spelled sibling declarations remain distinct.
+
+Types and instances use structural keys built from declaration/child-type IDs
+and substitutions. Printable names are diagnostic labels with compact child IDs;
+they are not expanded semantic identity keys.
 
 Struct/enum fields have declaration order. Scalars and shared references are Copy.
 Nominal types opt into Copy with `#[derive(Copy, Clone)]`, whose fields must all be
@@ -86,13 +103,15 @@ The backend emits memory64 WebAssembly. Integer and pointer slots are i64; f64
 uses its bit representation in slots and canonical NaNs after arithmetic.
 Collection indexing checks bounds. Traps report a code and source line. The
 reusable first-fit allocator and structural/custom drop release owned fields,
-arrays, boxes and vector elements. Cleanup uses an explicit growing DFS stack,
-preserving custom-destructor-before-children and declaration/element order. Copy
-helpers and explicit recursive source calls still use the engine stack.
+arrays, boxes and vector elements. Structural cleanup uses an explicit growable
+DFS stack, preserving custom-destructor-before-children and declaration/element
+order. Moved fields are skipped. Copy helpers and explicit recursive source calls
+still use the engine stack.
 
-Lowering reuses physical locals across nonoverlapping lifetimes and spills excess
-live values into memory64 frames. Address-taken values have stable frame slots.
-The physical-local pool is an optimization, not an acceptance limit.
+Lowering reuses physical Wasm locals across nonoverlapping lifetimes. Additional
+live values spill into a growing memory64 frame; address-taken values have stable
+frame slots. The physical register pool is an optimization, not an acceptance
+limit. Source-local count does not determine the permanent Wasm-local count.
 
 Structs use field slots; enums add a tag. Vec and array storage has data, length
 and capacity slots. Whole-storage slice projections borrow that header without a
@@ -109,9 +128,17 @@ No generated engine implements a step counter or per-operation allowance.
 The source library implements Option/Result, byte operations, UTF-8 validation,
 String, vector ordering for integer/bool elements, and part of the BTreeMap API.
 BTreeMap uses sorted Vec entries with logarithmic lookup and linear insertion or
-removal. Constructors validate String bytes; full privacy enforcement is pending.
+removal. String constructors validate bytes and its private representation is
+protected across modules. The library loads through ordinary module scopes.
+Bootstrap byte provisioning lives in `bridge/library.rs`; a compiler source
+bundle supplies its own library files without hidden fallback.
 `std::mem::replace` transfers ownership through an exclusive reference. Vec/Box
 and memory operations remain trusted intrinsics until their source layer lands.
+
+`compiler::compile(&SourceBundle)` is the source-to-Wasm compiler-core entry.
+`compiler::check_bundle` uses the same production checking pipeline. These entries
+perform no host I/O. Their existence and input-mutation tests do not establish
+self-compilation.
 
 `src/check.rs` is the K checker; `src/k.rs` defines its inputs and checked result.
 `src/wasm.rs` contains lowering/emission plus allocation and collection internals.

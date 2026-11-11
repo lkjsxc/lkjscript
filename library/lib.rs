@@ -8,3 +8,7 @@ mod string;
 pub use string::{FromUtf8Error, String};
 mod sequence;
 pub use sequence::__lkj_vec_compare;
+
+pub mod collections {
+    pub use crate::BTreeMap;
+}

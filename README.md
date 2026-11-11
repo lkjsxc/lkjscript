@@ -17,9 +17,11 @@ implementation boundaries. See [language](docs/language.md), [status](docs/statu
 and [representation/engine constraints](docs/limits.md).
 
 The runnable subset includes affine ownership, one-source views, custom Drop,
-generics/traits, arrays, slices, Box and Vec. The source standard library is
-exercised by differential tests. General module loading, explicit generic witnesses
-in K, closures, World, task scopes and self-compilation remain unfinished.
+generics/traits, arrays, slices, Box and Vec. The source standard library loads through real module scopes, with declaration
+identity, imports, visibility and prelude shadowing. `compiler::compile` accepts
+an explicit source/library bundle. Structural cleanup uses growing frames and
+local lowering spills excess live values into memory64 storage. Generic-definition
+contracts, closures, World, task scopes and self-compilation remain unfinished.
 
 Generation one is preserved on the `generation-one` branch. Its compiler, store,
 services and formats are frozen and are not generation-two dependencies.

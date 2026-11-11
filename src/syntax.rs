@@ -27,6 +27,7 @@ fn ident_continue(b: u8) -> bool {
 }
 fn span_at(start: usize, end: usize, line: usize, column: usize) -> Span {
     Span {
+        file: 0,
         start,
         end,
         line,
@@ -368,23 +369,55 @@ impl Lexer<'_> {
 }
 
 pub fn parse(source: &str) -> Result<Program, Diagnostic> {
+    let mut program = Program::default();
+    program.scopes.push(ModuleScope {
+        path: String::new(),
+        parent: None,
+        crate_root: 0,
+    });
+    program.files.push(SourceFile {
+        path: "<source>".to_string(),
+        crate_root: 0,
+    });
+    let items = parse_file(&mut program, source, 0, 0)?;
+    program.items = items;
+    Ok(program)
+}
+
+/// Append one source file to shared arenas. File loading is owned by source.rs.
+pub fn parse_file(
+    program: &mut Program,
+    source: &str,
+    file: FileId,
+    scope: ModuleId,
+) -> Result<Vec<Item>, Diagnostic> {
     let mut lexer = Lexer {
         source,
         at: 0,
         line: 1,
         column: 1,
     };
-    let tokens = lexer.lex()?;
+    let mut tokens = lexer.lex().map_err(|mut error| {
+        error.file = file;
+        error
+    })?;
+    for token in &mut tokens {
+        token.span.file = file;
+    }
     let mut parser = Parser {
         tokens,
         at: 0,
-        program: Program::default(),
-        module: String::new(),
+        module: program.scopes[scope].path.clone(),
+        scope,
+        program: std::mem::take(program),
     };
-    parser.add_type(Type::Infer, Span::default());
-    parser.add_type(Type::Tuple(Vec::new()), Span::default());
-    parser.program.items = parser.items(false)?;
-    Ok(parser.program)
+    if parser.program.types.is_empty() {
+        parser.add_type(Type::Infer, Span::default());
+        parser.add_type(Type::Tuple(Vec::new()), Span::default());
+    }
+    let result = parser.items(false);
+    *program = parser.program;
+    result
 }
 
 struct Parser {
@@ -392,7 +425,9 @@ struct Parser {
     at: usize,
     program: Program,
     module: String,
+    scope: ModuleId,
 }
+
 impl Parser {
     fn token(&self) -> &Token {
         &self.tokens[self.at]
@@ -444,17 +479,29 @@ impl Parser {
     }
     fn add_type(&mut self, kind: Type, span: Span) -> TypeId {
         let id = self.program.types.len();
-        self.program.types.push(TypeNode { kind, span });
+        self.program.types.push(TypeNode {
+            kind,
+            span,
+            scope: self.scope,
+        });
         id
     }
     fn add_expr(&mut self, kind: Expr, span: Span) -> ExprId {
         let id = self.program.exprs.len();
-        self.program.exprs.push(ExprNode { kind, span });
+        self.program.exprs.push(ExprNode {
+            kind,
+            span,
+            scope: self.scope,
+        });
         id
     }
     fn add_pattern(&mut self, kind: Pattern, span: Span) -> PatternId {
         let id = self.program.patterns.len();
-        self.program.patterns.push(PatternNode { kind, span });
+        self.program.patterns.push(PatternNode {
+            kind,
+            span,
+            scope: self.scope,
+        });
         id
     }
     fn attrs(&mut self) -> Result<Vec<Attribute>, Diagnostic> {
@@ -503,20 +550,31 @@ impl Parser {
         }
         Ok(attrs)
     }
-    fn visibility(&mut self) -> Result<bool, Diagnostic> {
+    fn visibility(&mut self) -> Result<Visibility, Diagnostic> {
         if !self.take("pub") {
-            return Ok(false);
+            return Ok(Visibility::Private);
         }
-        if self.take("(") {
-            if self.is("crate") || self.is("self") || self.is("super") {
-                self.at += 1;
+        let visibility = if self.take("(") {
+            let v = if self.take("crate") {
+                Visibility::Crate
+            } else if self.take("self") {
+                Visibility::Private
+            } else if self.take("super") {
+                if self.program.scopes[self.scope].parent.is_none() {
+                    return Err(self.err("pub(super) has no parent module"));
+                }
+                Visibility::Parent
             } else {
                 return Err(self.unsupported("restricted visibility path"));
-            }
+            };
             self.expect(")")?;
-        }
-        Ok(true)
+            v
+        } else {
+            Visibility::Public
+        };
+        Ok(visibility)
     }
+
     fn items(&mut self, nested: bool) -> Result<Vec<Item>, Diagnostic> {
         let mut items = Vec::new();
         while self.token().kind != TokenKind::End && !(nested && self.is("}")) {
@@ -533,7 +591,7 @@ impl Parser {
         }
         Ok(items)
     }
-    fn item(&mut self, attrs: Vec<Attribute>, public: bool) -> Result<Item, Diagnostic> {
+    fn item(&mut self, attrs: Vec<Attribute>, public: Visibility) -> Result<Item, Diagnostic> {
         if self.is("fn") {
             return Ok(Item::Function(self.function(attrs, public)?));
         }
@@ -556,21 +614,32 @@ impl Parser {
             let span = self.tokens[self.at - 1].span;
             let name = self.ident()?;
             let parent = self.module.clone();
+            let parent_scope = self.scope;
+            let scope = self.program.scopes.len();
+            let module_path = if parent.is_empty() {
+                name.clone()
+            } else {
+                format!("{parent}::{name}")
+            };
+            self.program.scopes.push(ModuleScope {
+                path: module_path.clone(),
+                parent: Some(parent_scope),
+                crate_root: self.program.scopes[parent_scope].crate_root,
+            });
             let external = self.take(";");
             let mut items = Vec::new();
             if !external {
                 self.expect("{")?;
-                self.module = if parent.is_empty() {
-                    name.clone()
-                } else {
-                    format!("{parent}::{name}")
-                };
+                self.module = module_path;
+                self.scope = scope;
                 items = self.items(true)?;
                 self.expect("}")?;
                 self.module = parent.clone();
+                self.scope = parent_scope;
             }
             let id = self.program.modules.len();
             self.program.modules.push(Module {
+                scope,
                 name,
                 parent,
                 items,
@@ -647,6 +716,7 @@ impl Parser {
                 self.at += 1;
                 args.push(self.add_type(
                     Type::Path(Path {
+                        declaration: None,
                         name,
                         args: Vec::new(),
                     }),
@@ -671,6 +741,7 @@ impl Parser {
                 self.at += 1;
                 bounds.push(self.add_type(
                     Type::Path(Path {
+                        declaration: None,
                         name,
                         args: Vec::new(),
                     }),
@@ -782,7 +853,11 @@ impl Parser {
             }
         }
         self.capability_path(&name)?;
-        Ok(Path { name, args })
+        Ok(Path {
+            name,
+            args,
+            declaration: None,
+        })
     }
     fn capability_path(&self, name: &str) -> Result<(), Diagnostic> {
         if name == "std::thread::scope" {
@@ -912,7 +987,7 @@ impl Parser {
         }
         Ok(id)
     }
-    fn function(&mut self, attrs: Vec<Attribute>, public: bool) -> Result<usize, Diagnostic> {
+    fn function(&mut self, attrs: Vec<Attribute>, public: Visibility) -> Result<usize, Diagnostic> {
         let span = self.token().span;
         self.expect("fn")?;
         let name = self.ident()?;
@@ -935,6 +1010,7 @@ impl Parser {
             if param_name == "self" && !self.is(":") {
                 ty = self.add_type(
                     Type::Path(Path {
+                        declaration: None,
                         name: "Self".to_string(),
                         args: Vec::new(),
                     }),
@@ -1016,7 +1092,11 @@ impl Parser {
         self.expect(end)?;
         Ok(fields)
     }
-    fn structure(&mut self, attrs: Vec<Attribute>, public: bool) -> Result<usize, Diagnostic> {
+    fn structure(
+        &mut self,
+        attrs: Vec<Attribute>,
+        public: Visibility,
+    ) -> Result<usize, Diagnostic> {
         let span = self.token().span;
         self.expect("struct")?;
         let name = self.ident()?;
@@ -1046,7 +1126,11 @@ impl Parser {
         });
         Ok(id)
     }
-    fn enumeration(&mut self, attrs: Vec<Attribute>, public: bool) -> Result<usize, Diagnostic> {
+    fn enumeration(
+        &mut self,
+        attrs: Vec<Attribute>,
+        public: Visibility,
+    ) -> Result<usize, Diagnostic> {
         let span = self.token().span;
         self.expect("enum")?;
         let name = self.ident()?;
@@ -1117,7 +1201,7 @@ impl Parser {
             span: self.finish_span(span),
         })
     }
-    fn trait_item(&mut self, public: bool) -> Result<usize, Diagnostic> {
+    fn trait_item(&mut self, public: Visibility) -> Result<usize, Diagnostic> {
         let span = self.token().span;
         self.expect("trait")?;
         let name = self.ident()?;
@@ -1134,7 +1218,7 @@ impl Parser {
         while !self.is("}") {
             let attrs = self.attrs()?;
             if self.is("fn") {
-                methods.push(self.function(attrs, false)?);
+                methods.push(self.function(attrs, Visibility::Private)?);
             } else if self.is("type") {
                 associated.push(self.associated_type()?);
             } else {
@@ -1197,14 +1281,19 @@ impl Parser {
         });
         Ok(id)
     }
-    fn use_item(&mut self, public: bool) -> Result<usize, Diagnostic> {
+    fn use_item(&mut self, public: Visibility) -> Result<usize, Diagnostic> {
         let first = self.program.uses.len();
         let span = self.tokens[self.at - 1].span;
         self.use_tree(String::new(), public, span)?;
         self.expect(";")?;
         Ok(first)
     }
-    fn use_tree(&mut self, prefix: String, public: bool, span: Span) -> Result<(), Diagnostic> {
+    fn use_tree(
+        &mut self,
+        prefix: String,
+        public: Visibility,
+        span: Span,
+    ) -> Result<(), Diagnostic> {
         if self.take("{") {
             while !self.is("}") {
                 self.use_tree(prefix.clone(), public, span)?;
@@ -1928,6 +2017,7 @@ impl Parser {
                 } else {
                     self.add_expr(
                         Expr::Path(Path {
+                            declaration: None,
                             name: name.clone(),
                             args: Vec::new(),
                         }),

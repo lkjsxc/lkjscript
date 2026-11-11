@@ -7,6 +7,7 @@ type Result<T> = std::result::Result<T, Diagnostic>;
 fn error(line: usize, message: &str) -> Diagnostic {
     Diagnostic::new(
         Span {
+            file: 0,
             start: 0,
             end: 0,
             line,
@@ -491,12 +492,17 @@ pub fn read(text: &str) -> Result<Program> {
                 }
                 let mut test = false;
                 let mut return_source = None;
+                let mut file = None;
                 let mut at = 4;
                 while at < words.len() {
                     match words[at].as_str() {
                         "test" if !test => {
                             test = true;
                             at += 1;
+                        }
+                        "file" if file.is_none() => {
+                            file = Some(number(&words, at + 1, line)?);
+                            at += 2;
                         }
                         "from" if return_source.is_none() => {
                             return_source = Some(number(&words, at + 1, line)?);
@@ -506,6 +512,7 @@ pub fn read(text: &str) -> Result<Program> {
                     }
                 }
                 current = Some(Function {
+                    file: file.unwrap_or(0),
                     name: words[1].clone(),
                     params: number(&words, 2, line)?,
                     result: number(&words, 3, line)?,
@@ -718,6 +725,9 @@ pub fn write(program: &Program) -> String {
             function.params,
             function.result
         ));
+        if function.file != 0 {
+            text.push_str(&format!(" file {}", function.file));
+        }
         if let Some(source) = function.return_source {
             text.push_str(&format!(" from {source}"));
         }
@@ -890,6 +900,7 @@ mod tests {
             destructors: Vec::new(),
             types: primitives(),
             functions: vec![Function {
+                file: 7,
                 return_source: None,
                 name: "probe".to_string(),
                 params: 0,

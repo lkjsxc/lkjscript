@@ -62,6 +62,7 @@ fn checked_integer_edges_match_rust() {
         ] {
             let name = format!("{prefix}_{label}");
             functions.push(k::Function {
+                file: 0,
                 name: name.clone(),
                 params: 2,
                 result: ty,
@@ -269,6 +270,7 @@ fn narrow_complement_and_float_conversions_match_rust() {
             }
         };
         functions.push(k::Function {
+            file: 0,
             name: name.to_string(),
             params: 0,
             result: to,
@@ -383,6 +385,7 @@ fn function_exports_have_a_separate_namespace() {
     let mut functions = Vec::new();
     for (name, value) in [("memory", 41_i64), ("fn:memory", 42_i64)] {
         functions.push(k::Function {
+            file: 0,
             name: name.to_string(),
             params: 0,
             result: k::I64,

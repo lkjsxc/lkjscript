@@ -97,6 +97,7 @@ fn program(types: Vec<k::Type>, locals: Vec<k::Local>, ops: Vec<k::Op>) -> k::Pr
     k::Program {
         types,
         functions: vec![k::Function {
+            file: 0,
             name: "transfer".to_string(),
             params: 1,
             result: 8,

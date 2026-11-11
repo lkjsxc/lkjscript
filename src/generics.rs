@@ -10,9 +10,6 @@ enum Term {
     Named(String, Vec<usize>),
 }
 
-fn short(name: &str) -> &str {
-    name.rsplit("::").next().unwrap_or(name)
-}
 fn qualified(module: &str, name: &str) -> String {
     if module.is_empty() {
         name.to_string()
@@ -80,12 +77,8 @@ fn type_term(
             Type::Path(p) => Term::Named(
                 if p.name.starts_with('\'') {
                     "lifetime".to_string()
-                } else if p.name.contains("::")
-                    && source.aliases.iter().any(|a| a.name == short(&p.name))
-                {
-                    p.name.clone()
                 } else {
-                    short(&p.name).to_string()
+                    p.name.clone()
                 },
                 values,
             ),
@@ -195,7 +188,7 @@ fn coherence(source: &Program) -> Result<(), Diagnostic> {
             None => continue,
         };
         let trait_name = match &source.types[trait_ty].kind {
-            Type::Path(p) => short(&p.name).to_string(),
+            Type::Path(p) => p.name.as_str().to_string(),
             _ => continue,
         };
         if let Some(previous) = by_trait.get(&trait_name) {
@@ -225,7 +218,7 @@ fn coherence(source: &Program) -> Result<(), Diagnostic> {
         by_trait.entry(trait_name.clone()).or_default().push(i);
         let mut declared = None;
         for t in 0..source.traits.len() {
-            if source.traits[t].name == trait_name {
+            if qualified(&source.traits[t].module, &source.traits[t].name) == trait_name {
                 if declared.is_some() {
                     declared = None;
                     break;
@@ -438,7 +431,7 @@ fn infer(
             }
         }
         let expected = match &source.types[p].kind {
-            Type::Path(path) => short(&path.name).to_string(),
+            Type::Path(path) => path.name.as_str().to_string(),
             Type::Ref { mutable, .. } => if *mutable { "&mut" } else { "&" }.to_string(),
             Type::Tuple(_) => "tuple".to_string(),
             Type::Slice(_) => "[]".to_string(),
@@ -466,6 +459,7 @@ enum Task {
 }
 struct Analysis<'a> {
     source: &'a Program,
+    resolution: Option<crate::resolve::Resolver<'a>>,
     terms: Vec<Term>,
     generics: Vec<BTreeMap<String, usize>>,
     nodes: Vec<Vec<usize>>,
@@ -478,10 +472,25 @@ impl Analysis<'_> {
         push(&mut self.terms, kind)
     }
     fn lookup(&self, module: &str, name: &str) -> Option<usize> {
-        if let Some(n) = self.names.get(name) {
-            return Some(*n);
+        if let Some(resolution) = &self.resolution {
+            let path = resolution
+                .value_path(
+                    resolution.scope(module),
+                    &Path {
+                        declaration: None,
+                        name: name.to_string(),
+                        args: Vec::new(),
+                    },
+                    Span::default(),
+                )
+                .ok()?;
+            self.names.get(&path.name).copied()
+        } else {
+            self.names
+                .get(&qualified(module, name))
+                .copied()
+                .or_else(|| self.names.get(name).copied())
         }
-        self.names.get(&qualified(module, name)).copied()
     }
     fn call(
         &mut self,
@@ -887,7 +896,7 @@ impl Analysis<'_> {
                             for t in &path.args {
                                 ts.push(type_term(self.source, *t, &env, &mut self.terms));
                             }
-                            self.term(Term::Named(short(&path.name).to_string(), ts))
+                            self.term(Term::Named(path.name.as_str().to_string(), ts))
                         }
                         _ => 0,
                     };
@@ -900,6 +909,11 @@ impl Analysis<'_> {
 fn finite(source: &Program) -> Result<(), Diagnostic> {
     let mut analysis = Analysis {
         source,
+        resolution: if source.resolved {
+            Some(crate::resolve::Resolver::new(source)?)
+        } else {
+            None
+        },
         terms: vec![Term::Unknown],
         generics: Vec::new(),
         nodes: Vec::new(),
@@ -1059,7 +1073,7 @@ fn impl_arguments(
         let actual_type = types.get(actual)?;
         match &source.types[pattern].kind {
             Type::Path(path) => {
-                let name = short(&path.name);
+                let name = path.name.as_str();
                 let mut generic = false;
                 for param in &implementation.generics {
                     if !param.lifetime && param.name == path.name && path.args.is_empty() {
@@ -1086,7 +1100,10 @@ fn impl_arguments(
                 }
                 let mut expanded = false;
                 for alias in &source.aliases {
-                    if alias.name == name && alias.generics.is_empty() && args.is_empty() {
+                    if qualified(&alias.module, &alias.name) == name
+                        && alias.generics.is_empty()
+                        && args.is_empty()
+                    {
                         if aliases.insert((pattern, actual), ()).is_some() {
                             return None;
                         }
@@ -1099,7 +1116,7 @@ fn impl_arguments(
                     continue;
                 }
                 if let Some((concrete_name, concrete_args)) = applications.get(&actual) {
-                    if short(concrete_name) != name || args.len() != concrete_args.len() {
+                    if concrete_name.as_str() != name || args.len() != concrete_args.len() {
                         return None;
                     }
                     for i in 0..args.len() {
@@ -1130,7 +1147,7 @@ fn impl_arguments(
                             }
                         }
                         _ => {
-                            if !args.is_empty() || short(&actual_type.name) != name {
+                            if !args.is_empty() || actual_type.name.as_str() != name {
                                 return None;
                             }
                         }
@@ -1219,11 +1236,11 @@ fn derived(
     bound: &str,
 ) -> bool {
     let name = match applications.get(&ty) {
-        Some((name, _)) => short(name),
-        None => short(&types[ty].name),
+        Some((name, _)) => name.as_str(),
+        None => types[ty].name.as_str(),
     };
     for s in &source.structs {
-        if s.name == name {
+        if qualified(&s.module, &s.name) == name {
             for attr in &s.attrs {
                 if attr.name == "derive" {
                     for arg in &attr.args {
@@ -1236,7 +1253,7 @@ fn derived(
         }
     }
     for e in &source.enums {
-        if e.name == name {
+        if qualified(&e.module, &e.name) == name {
             for attr in &e.attrs {
                 if attr.name == "derive" {
                     for arg in &attr.args {
@@ -1260,7 +1277,7 @@ fn add_bound(source: &Program, id: TypeId, ty: usize, children: &mut Vec<Goal>) 
         }
         children.push(Goal {
             ty,
-            bound: short(&path.name).to_string(),
+            bound: path.name.as_str().to_string(),
         });
         true
     } else {
@@ -1389,7 +1406,7 @@ fn trait_requirements(
             None => continue,
         };
         let trait_name = match &source.types[trait_ty].kind {
-            Type::Path(path) if path.args.is_empty() => short(&path.name),
+            Type::Path(path) if path.args.is_empty() => path.name.as_str(),
             _ => continue,
         };
         if trait_name != bound {
@@ -1416,7 +1433,7 @@ fn trait_requirements(
         }
     }
     for declaration in &source.traits {
-        if declaration.name == bound {
+        if qualified(&declaration.module, &declaration.name) == bound {
             for constraint in &declaration.bounds {
                 if !add_bound(source, *constraint, goal.ty, &mut children) {
                     return None;
@@ -1445,7 +1462,7 @@ pub fn satisfies(
     }
     let first = Goal {
         ty,
-        bound: short(bound).to_string(),
+        bound: bound.to_string(),
     };
     let mut state: BTreeMap<(usize, String), u8> = BTreeMap::new();
     let mut structural: BTreeMap<(usize, String), bool> = BTreeMap::new();
@@ -1610,7 +1627,6 @@ mod bound_tests {
 fn alias_cycles(source: &Program) -> Result<(), Diagnostic> {
     let mut names = BTreeMap::new();
     for i in 0..source.aliases.len() {
-        names.insert(source.aliases[i].name.clone(), i);
         names.insert(
             qualified(&source.aliases[i].module, &source.aliases[i].name),
             i,
@@ -1670,7 +1686,7 @@ fn normalize(source: &Program, term: usize, terms: &mut Vec<Term>) -> Result<usi
                     Term::Named(name, kids) => {
                         let mut alias = None;
                         for a in &source.aliases {
-                            if a.name == name || qualified(&a.module, &a.name) == name {
+                            if qualified(&a.module, &a.name) == name {
                                 alias = Some(a);
                                 break;
                             }
@@ -1777,7 +1793,7 @@ fn bound_closure(
             pending.push(push(terms, Term::Named(name.to_string(), args.clone())));
         }
         for declaration in &source.traits {
-            if declaration.name == name {
+            if qualified(&declaration.module, &declaration.name) == name {
                 let mut env = BTreeMap::new();
                 env.insert("Self".to_string(), self_ty);
                 if declaration.generics.len() != args.len() {
@@ -1937,7 +1953,11 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
             Type::Path(p) => p,
             _ => continue,
         };
-        let declaration = match source.traits.iter().find(|t| t.name == short(&path.name)) {
+        let declaration = match source
+            .traits
+            .iter()
+            .find(|t| qualified(&t.module, &t.name) == path.name)
+        {
             Some(t) => t,
             None => continue,
         };
@@ -2379,7 +2399,6 @@ fn finite_data(source: &Program) -> Result<(), Diagnostic> {
     let mut environments = Vec::new();
     let mut target_nodes = Vec::new();
     let mut names = BTreeMap::new();
-    let mut short_names: BTreeMap<String, Option<usize>> = BTreeMap::new();
     for i in 0..declarations.len() {
         let declaration = &declarations[i];
         let env = variables(source, declaration.params, &mut terms, &mut count);
@@ -2395,17 +2414,6 @@ fn finite_data(source: &Program) -> Result<(), Diagnostic> {
         environments.push(env);
         target_nodes.push(nodes);
         names.insert(declaration.name.clone(), i);
-        let short = short(&declaration.name).to_string();
-        if short_names.contains_key(&short) {
-            short_names.insert(short, None);
-        } else {
-            short_names.insert(short, Some(i));
-        }
-    }
-    for (name, index) in short_names {
-        if let Some(index) = index {
-            names.entry(name).or_insert(index);
-        }
     }
     let mut edges = Vec::new();
     for i in 0..declarations.len() {
