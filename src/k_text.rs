@@ -542,7 +542,18 @@ pub fn read(text: &str) -> Result<Program> {
                             return_source = Some(if word(&words, at + 1, line)? == "static" {
                                 ReturnSource::Static
                             } else {
-                                ReturnSource::Parameter(number(&words, at + 1, line)?)
+                                let mut end = at + 2;
+                                while end < words.len()
+                                    && !matches!(words[end].as_str(), "test" | "file" | "from")
+                                {
+                                    end += 1;
+                                }
+                                let source = place(&words[..end], at + 1, line)?;
+                                at = end - 2;
+                                ReturnSource::Parameter {
+                                    index: source.local,
+                                    projections: source.projections,
+                                }
                             });
                             at += 2;
                         }
@@ -603,7 +614,10 @@ fn write_indices(text: &mut String, indices: &[usize]) {
 
 fn write_place(text: &mut String, place: &Place) {
     text.push_str(&format!(" {}", place.local));
-    for projection in &place.projections {
+    write_projections(text, &place.projections);
+}
+fn write_projections(text: &mut String, projections: &[Projection]) {
+    for projection in projections {
         match projection {
             Projection::Deref => text.push_str(" deref"),
             Projection::Field(field) => text.push_str(&format!(" field {field}")),
@@ -773,9 +787,12 @@ pub fn write(program: &Program) -> String {
         if function.file != 0 {
             text.push_str(&format!(" file {}", function.file));
         }
-        if let Some(source) = function.return_source {
+        if let Some(source) = &function.return_source {
             match source {
-                ReturnSource::Parameter(source) => text.push_str(&format!(" from {source}")),
+                ReturnSource::Parameter { index, projections } => {
+                    text.push_str(&format!(" from {index}"));
+                    write_projections(&mut text, projections);
+                }
                 ReturnSource::Static => text.push_str(" from static"),
             }
         }
@@ -803,22 +820,35 @@ pub fn write(program: &Program) -> String {
 mod tests {
     use super::*;
 
+    fn assert_same_program(actual: &Program, expected: &Program) {
+        assert!(
+            actual == expected,
+            "K structures differ:\nactual:\n{}\nexpected:\n{}",
+            write(actual),
+            write(expected)
+        );
+    }
+
     #[test]
     fn text_hexadecimal_payloads_preserve_bytes_and_reject_malformed_input() {
         for (encoded, expected) in [("", vec![]), ("00ffC3a9", vec![0, 255, 195, 169])] {
             let words = ["@1", "text", "0", encoded].map(String::from);
-            assert_eq!(
-                instruction(&words, 1).unwrap().op,
-                Op::Text {
-                    dst: 0,
-                    bytes: expected
-                }
+            assert!(
+                instruction(&words, 1).unwrap().op
+                    == Op::Text {
+                        dst: 0,
+                        bytes: expected
+                    },
+                "decoded text payload differs for {encoded}"
             );
         }
         for encoded in ["0", "000", "gg", "é", "0x", "-1", " 0"] {
             let words = ["@1", "text", "0", encoded].map(String::from);
             assert_eq!(
-                instruction(&words, 1).unwrap_err().code,
+                instruction(&words, 1)
+                    .err()
+                    .expect("malformed text payload must be rejected")
+                    .code,
                 "E_K_TEXT",
                 "{encoded}"
             );
@@ -832,7 +862,7 @@ mod tests {
         let checked = crate::check::check(crate::elaborate::elaborate(&syntax).unwrap()).unwrap();
         let text = write(checked.program());
         let decoded = read(&text).unwrap();
-        assert_eq!(decoded, *checked.program());
+        assert_same_program(&decoded, checked.program());
         assert!(crate::check::check(decoded).is_ok());
     }
 
@@ -883,7 +913,7 @@ mod tests {
             }],
             functions: Vec::new(),
         };
-        assert_eq!(read(&write(&p)).unwrap(), p);
+        assert_same_program(&read(&write(&p)).unwrap(), &p);
         let decoded = read("type \"\\uD83D\\uDE00\" world\n").unwrap();
         assert_eq!(decoded.types[0].name, "😀");
     }
@@ -983,7 +1013,7 @@ mod tests {
                 test: true,
             }],
         };
-        assert_eq!(read(&write(&p)).unwrap(), p);
+        assert_same_program(&read(&write(&p)).unwrap(), &p);
     }
     #[test]
     fn arrays_slices_views_and_destructors_round_trip() {
@@ -1002,7 +1032,7 @@ mod tests {
         assert!(text.contains("slice-borrow"));
         assert!(text.contains("destructor"));
         let decoded = read(&text).unwrap();
-        assert_eq!(decoded, *checked.program());
+        assert_same_program(&decoded, checked.program());
         assert!(crate::check::check(decoded).is_ok());
     }
 }

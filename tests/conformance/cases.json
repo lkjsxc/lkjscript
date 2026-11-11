@@ -783,5 +783,56 @@
     "value": "42",
     "rust": true,
     "pending": false
+  },
+  {
+    "id": "generic_string_traits",
+    "file": "pass/generic_string_traits.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "unused_generic_clone_bound",
+    "file": "fail/unused_generic_clone_bound.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "builtin_trait_bound_identity",
+    "file": "fail/builtin_trait_bound_identity.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "generic_method_selection",
+    "file": "pass/generic_method_selection.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "projected_shared_return",
+    "file": "pass/projected_shared_return.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "projected_return_wrong_field",
+    "file": "fail/projected_return_wrong_field.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
   }
 ]

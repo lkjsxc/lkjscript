@@ -1,7 +1,9 @@
 //! Rust-compatible syntax to explicit K. Inference lives here; K trusts none of it.
+mod borrow_cleanup;
 mod derive_check;
 mod generic_check;
 mod integers;
+mod operators;
 mod patterns;
 mod static_lifetimes;
 mod type_resolve;
@@ -48,6 +50,7 @@ struct Compiler<'a> {
     destructors: Vec<(usize, usize)>,
     uses: BTreeMap<(a::FileId, String), Vec<usize>>,
     contracts: Option<generic_check::Contracts>,
+    method_selections: generic_check::MethodSelections,
 }
 
 pub fn elaborate(source: &a::Program) -> Result<k::Program> {
@@ -56,8 +59,9 @@ pub fn elaborate(source: &a::Program) -> Result<k::Program> {
     static_lifetimes::annotations(source)?;
     crate::generics::validate(source)?;
     static_lifetimes::outputs(source)?;
-    generic_check::validate(source)?;
+    let method_selections = generic_check::validate(source)?;
     let mut c = Compiler::new(source)?;
+    c.method_selections = method_selections;
     let empty = BTreeMap::new();
     for s in &source.structs {
         if s.generics.is_empty() {
@@ -148,6 +152,7 @@ impl<'a> Compiler<'a> {
             destructors: Vec::new(),
             uses: BTreeMap::new(),
             contracts: None,
+            method_selections: BTreeMap::new(),
         };
         for i in 0..c.types.len() {
             c.type_names.insert(c.types[i].name.clone(), i);
@@ -401,7 +406,55 @@ impl Compiler<'_> {
                 "returned view selects more than one source input",
             ));
         }
-        Ok(candidates.first().copied().map(k::ReturnSource::Parameter))
+        let Some(index) = candidates.first().copied() else {
+            return Ok(None);
+        };
+        let mut dereferences = 0;
+        let mut selected = locals[index].ty;
+        if let Some(required) = lifetimes.first() {
+            // An explicitly returned inner lifetime does not borrow the outer
+            // reference carrier. Stop when that outer lifetime is itself named.
+            let mut syntax = source.params[index].ty;
+            while let a::Type::Ref {
+                lifetime, inner, ..
+            } = &self.source.types[syntax].kind
+            {
+                if lifetime == required || !self.lifetimes(*inner).contains(required) {
+                    break;
+                }
+                let k::TypeKind::Ref { inner: value, .. } = self.types[selected].kind else {
+                    break;
+                };
+                selected = value;
+                syntax = *inner;
+                dereferences += 1;
+            }
+        } else if selected != result {
+            // Returning the borrowed value itself (including a specialized T)
+            // transports its reference leaves, rather than the borrow of its slot.
+            while let k::TypeKind::Ref { inner, .. } = self.types[selected].kind {
+                selected = inner;
+                dereferences += 1;
+                if selected == result {
+                    break;
+                }
+            }
+            if selected != result {
+                selected = locals[index].ty;
+                dereferences = 0;
+            }
+        }
+        if dereferences > 0 && !crate::check::shared_view(&self.types, selected) {
+            return Err(err(
+                source.span,
+                "E_UNSUPPORTED",
+                "projected return sources require shared reference leaves; exclusive reborrows retain their outer lifetime",
+            ));
+        }
+        Ok(Some(k::ReturnSource::Parameter {
+            index,
+            projections: vec![k::Projection::Deref; dereferences],
+        }))
     }
     fn instantiate(&mut self, index: usize, mut sub: BTreeMap<String, usize>) -> Result<usize> {
         self.prepare_associated(index, &mut sub)?;
@@ -584,6 +637,7 @@ impl Compiler<'_> {
             sub: instance.substitutions.clone(),
             bindings,
             ref_bindings: Vec::new(),
+            carriers: BTreeMap::new(),
             written: live.clone(),
             live,
             loops: Vec::new(),
@@ -611,6 +665,7 @@ impl Compiler<'_> {
 struct Snapshot {
     live: Vec<bool>,
     written: Vec<bool>,
+    carriers: borrow_cleanup::Dependencies,
 }
 struct LoopScope {
     start: usize,
@@ -626,6 +681,7 @@ struct Builder<'a, 'b> {
     sub: BTreeMap<String, usize>,
     bindings: Vec<(String, usize)>,
     ref_bindings: Vec<(String, usize)>,
+    carriers: borrow_cleanup::Dependencies,
     live: Vec<bool>,
     written: Vec<bool>,
     loops: Vec<LoopScope>,
@@ -765,6 +821,7 @@ impl Builder<'_, '_> {
                 }
             }
         }
+        self.record_carriers(&op);
         match &op {
             k::Op::Int { dst, .. }
             | k::Op::Text { dst, .. }
@@ -856,9 +913,11 @@ impl Builder<'_, '_> {
         Snapshot {
             live: self.live.clone(),
             written: self.written.clone(),
+            carriers: self.carriers.clone(),
         }
     }
     fn restore(&mut self, state: &Snapshot) {
+        self.carriers = state.carriers.clone();
         self.live = state.live.clone();
         self.live.resize(self.function.locals.len(), false);
         self.written = state.written.clone();
@@ -1024,7 +1083,7 @@ impl Builder<'_, '_> {
         }
     }
     fn end_unused_borrows(&mut self, start: usize, position: usize, end: usize, line: usize) {
-        let mut drops = Vec::new();
+        let mut drops = std::collections::BTreeSet::new();
         for (name, local) in &self.ref_bindings {
             if *local >= start && self.live[*local] {
                 let mut used = false;
@@ -1042,18 +1101,11 @@ impl Builder<'_, '_> {
                     used = low < positions.len() && positions[low] < end;
                 }
                 if !used {
-                    drops.push(*local);
+                    drops.insert(*local);
                 }
             }
         }
-        for local in drops {
-            self.emit(
-                k::Op::Drop {
-                    place: k::Place::local(local),
-                },
-                line,
-            );
-        }
+        self.drop_unused_references(drops, line);
     }
     fn bind_name(&mut self, name: String, mutable: bool, value: (usize, usize), line: usize) {
         let dst = self.local(value.1, &name, mutable);
@@ -1506,6 +1558,9 @@ impl Builder<'_, '_> {
                 if op == "&&" || op == "||" {
                     return self.short_circuit(&op, left, right, line);
                 }
+                if op == "==" || op == "!=" {
+                    return self.equality_expr(&op, left, right, node.span);
+                }
                 if ["==", "!=", "<", "<=", ">", ">="].contains(&op.as_str()) {
                     if self.compiler.contracts.is_some() {
                         if let Some(value) = self.generic_comparison(&op, left, right, node.span)? {
@@ -1526,7 +1581,14 @@ impl Builder<'_, '_> {
                 let (left, ty) = self.expr(left, operand)?;
                 let (right, rt) = self.expr(right, Some(ty))?;
                 if ty != rt {
-                    return Err(err(node.span, "E_TYPE", "binary operand types differ"));
+                    return Err(err(
+                        node.span,
+                        "E_TYPE",
+                        &format!(
+                            "binary operand types differ: {} and {}",
+                            self.compiler.types[ty].name, self.compiler.types[rt].name
+                        ),
+                    ));
                 }
                 let result = if comparison { k::BOOL } else { ty };
                 let dst = self.temp(result);
@@ -1595,7 +1657,7 @@ impl Builder<'_, '_> {
                 name,
                 types,
                 args,
-            } => self.method(receiver, &name, &types, &args, expected, node.span),
+            } => self.method(id, receiver, &name, &types, &args, node.span),
             a::Expr::Struct { path, fields, base } => {
                 if base.is_some() {
                     return Err(err(
@@ -1806,6 +1868,20 @@ impl Builder<'_, '_> {
         inner: usize,
         span: a::Span,
     ) -> Result<(usize, usize)> {
+        let lp = self.addressable(left)?;
+        let l = self.borrow(lp, false, span.line)?.0;
+        let rp = self.addressable(right)?;
+        let r = self.borrow(rp, false, span.line)?.0;
+        self.vector_compare_values(op, l, r, inner, span)
+    }
+    fn vector_compare_values(
+        &mut self,
+        op: &str,
+        l: usize,
+        r: usize,
+        inner: usize,
+        span: a::Span,
+    ) -> Result<(usize, usize)> {
         if !matches!(
             self.compiler.types[inner].kind,
             k::TypeKind::Int { .. } | k::TypeKind::Bool
@@ -1816,10 +1892,6 @@ impl Builder<'_, '_> {
                 "vector ordering currently requires integer or bool elements",
             ));
         }
-        let lp = self.addressable(left)?;
-        let l = self.borrow(lp, false, span.line)?.0;
-        let rp = self.addressable(right)?;
-        let r = self.borrow(rp, false, span.line)?.0;
         let helper = self.compiler.names.sequence_function(span)?;
         let index = self
             .compiler
@@ -1892,6 +1964,7 @@ impl Builder<'_, '_> {
             line,
         );
         self.cleanup(state.live.len(), Some(result), line);
+        let first_state = self.snapshot();
         self.emit(k::Op::Else, line);
         self.restore(&state);
         let second = if op == "||" {
@@ -1910,6 +1983,7 @@ impl Builder<'_, '_> {
         );
         self.cleanup(state.live.len(), Some(result), line);
         self.emit(k::Op::End, line);
+        self.merge_carriers(&first_state);
         Ok((result, k::BOOL))
     }
     fn if_expr(
@@ -1975,6 +2049,8 @@ impl Builder<'_, '_> {
         self.emit(k::Op::End, line);
         if !second_reachable && first_reachable {
             self.restore(&first_state);
+        } else if second_reachable && first_reachable {
+            self.merge_carriers(&first_state);
         }
         self.reachable = first_reachable || second_reachable;
         Ok((result, self.ty(result)))
@@ -2075,6 +2151,9 @@ impl Builder<'_, '_> {
         let scope = self.loops.pop().unwrap();
         if let Some(exit) = scope.exits.first() {
             self.restore(exit);
+            for other in &scope.exits[1..] {
+                self.merge_carriers(other);
+            }
         } else {
             self.restore(&entry);
             self.reachable = false;
@@ -2173,6 +2252,9 @@ impl Builder<'_, '_> {
         let scope = self.loops.pop().unwrap();
         if let Some(exit) = scope.exits.first() {
             self.restore(exit);
+            for other in &scope.exits[1..] {
+                self.merge_carriers(other);
+            }
         } else {
             self.restore(&state);
             self.reachable = false;
@@ -2791,22 +2873,63 @@ impl Builder<'_, '_> {
 
     fn method(
         &mut self,
+        expression: a::ExprId,
         receiver: usize,
         name: &str,
         _types: &[usize],
         args: &[usize],
-        _expected: Option<usize>,
         span: a::Span,
     ) -> Result<(usize, usize)> {
         let place = self.addressable(receiver)?;
         let mut base = place_type(&self.compiler.types, self.function, &place)
             .ok_or_else(|| err(span, "E_TYPE", "invalid method receiver"))?;
         let mut target = place.clone();
+        let selection = if self.compiler.contracts.is_none() {
+            self.compiler.method_selections.get(&expression).cloned()
+        } else {
+            None
+        };
+        let mut dereferences = 0;
         while let k::TypeKind::Ref { inner, .. } = self.compiler.types[base].kind {
+            if selection
+                .as_ref()
+                .is_some_and(|selected| dereferences == selected.dereferences)
+            {
+                break;
+            }
             target.projections.push(k::Projection::Deref);
             base = inner;
+            dereferences += 1;
         }
-        if let Some(value) = self.generic_method(&target, base, name, _types, args, span)? {
+        if let Some(selected) = &selection {
+            if dereferences != selected.dereferences {
+                return Err(err(
+                    span,
+                    "E_GENERIC",
+                    "specialized receiver differs from checked dereference path",
+                ));
+            }
+            match &selected.target {
+                generic_check::MethodTarget::Trait(identity) => {
+                    return self
+                        .witnessed_method(&target, base, identity, expression, _types, args);
+                }
+                generic_check::MethodTarget::Source(index) => {
+                    return self.fixed_source_method(&target, base, *index, _types, args, span);
+                }
+                generic_check::MethodTarget::Builtin => {}
+            }
+        }
+        if self.compiler.contracts.is_some() {
+            self.compiler.method_selections.insert(
+                expression,
+                generic_check::MethodSelection {
+                    dereferences,
+                    target: generic_check::MethodTarget::Builtin,
+                },
+            );
+        }
+        if let Some(value) = self.generic_method(expression, &target, base, name, _types, args)? {
             return Ok(value);
         }
         if matches!(self.compiler.types[base].kind, k::TypeKind::Str)
@@ -2928,7 +3051,7 @@ impl Builder<'_, '_> {
                 );
                 Ok((dst, ty))
             }
-            "clone" if !self.has_declared_method(base, name)? => {
+            "clone" if selection.is_some() || !self.has_declared_method(base, name)? => {
                 if !args.is_empty() {
                     return Err(err(span, "E_TYPE", "clone takes no arguments"));
                 }
@@ -3025,56 +3148,25 @@ impl Builder<'_, '_> {
                         "method resolution requires one implementation",
                     ));
                 }
-                let (index, mut sub) = candidates[0].clone();
-                self.compiler.method_access(index, self.scope, span)?;
-                let f = self.compiler.source.functions[index].clone();
-                sub.insert("Self".to_string(), base);
-                let parameters: Vec<_> = f
-                    .generics
-                    .iter()
-                    .filter(|parameter| !parameter.lifetime)
-                    .collect();
-                if !_types.is_empty() {
-                    if _types.len() != parameters.len() {
-                        return Err(err(span, "E_TYPE", "wrong generic method argument count"));
-                    }
-                    for (parameter, argument) in parameters.iter().zip(_types) {
-                        let ty = self.compiler.resolve(*argument, &self.sub)?;
-                        sub.insert(parameter.name.clone(), ty);
-                    }
+                let (index, sub) = candidates[0].clone();
+                if self.compiler.contracts.is_some() {
+                    self.compiler
+                        .method_selections
+                        .get_mut(&expression)
+                        .unwrap()
+                        .target = generic_check::MethodTarget::Source(index);
                 }
-                let mut values = Vec::new();
-                if f.params.is_empty() {
-                    return Err(err(span, "E_TYPE", "method has no receiver"));
-                }
-                let first = self.compiler.resolve(f.params[0].ty, &sub)?;
-                let value = match self.compiler.types[first].kind {
-                    k::TypeKind::Ref { mutable, .. } => self.borrow(target, mutable, span.line)?,
-                    _ => self.read(target, span.line)?,
-                };
-                values.push(value.0);
-                if f.params.len() != args.len() + 1 {
-                    return Err(err(span, "E_TYPE", "method argument count differs"));
-                }
-                for i in 0..args.len() {
-                    let pattern = f.params[i + 1].ty;
-                    let expected = self.compiler.resolve(pattern, &sub).ok();
-                    let value = self.expr(args[i], expected)?;
-                    self.infer_type(pattern, value.1, &mut sub)?;
-                    values.push(value.0);
-                }
-                let function = self.compiler.instantiate(index, sub)?;
-                let t = self.compiler.functions[function].result;
-                let dst = self.temp(t);
-                self.emit(
-                    k::Op::Call {
-                        dst,
-                        function,
-                        args: values,
+                self.source_method(
+                    &target,
+                    base,
+                    Instance {
+                        source: index,
+                        substitutions: sub,
                     },
-                    span.line,
-                );
-                Ok((dst, t))
+                    _types,
+                    args,
+                    span,
+                )
             }
         }
     }
@@ -3495,9 +3587,10 @@ impl Builder<'_, '_> {
                         span.line,
                     );
                 }
-                if exit_state.is_none() {
-                    exit_state = Some(self.snapshot());
+                if let Some(exit) = &exit_state {
+                    self.merge_carriers(exit);
                 }
+                exit_state = Some(self.snapshot());
             }
             self.bindings.truncate(binding_count);
             if condition.is_some() {

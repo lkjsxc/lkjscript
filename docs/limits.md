@@ -29,6 +29,12 @@
   slots. Text projection creates no temporary descriptor; checked UTF-8 conversion
   is linear in the byte length and String::as_str currently repeats that check.
   Static constraints on individual source reference leaves remain unsupported.
+  Projected return contracts detach only stored shared-reference leaves from
+  their temporary carriers. Exclusive reborrow/transfer contracts and exact
+  per-output source-leaf mappings remain semantic work, not resource ceilings.
+  K return projections are explicit vector entries, including cyclic reference
+  paths. Validation follows the explicit entries; a numeric repetition count
+  cannot expand a short contract into a long projection walk.
 - The allocator reuses blocks without splitting or coalescing. Values commonly
   occupy eight-byte slots. Fragmentation and layout efficiency remain bootstrap
   implementation choices to improve from actual workloads.

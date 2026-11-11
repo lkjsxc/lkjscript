@@ -1,6 +1,6 @@
 //! UTF-8 strings own bytes. Validation happens when unchecked bytes become a String.
 use crate::Result;
-use crate::bytes::valid_utf8;
+use crate::bytes::{append_bytes, starts_with, valid_utf8};
 
 pub struct String {
     bytes: Vec<u8>,
@@ -30,16 +30,11 @@ impl String {
     }
 
     pub fn push_str(&mut self, value: &str) {
-        let bytes = value.as_bytes();
-        let mut index: usize = 0;
-        while index < bytes.len() {
-            self.bytes.push(bytes[index]);
-            index = index + 1;
-        }
+        append_bytes(&mut self.bytes, value.as_bytes());
     }
 
     pub fn to_string(&self) -> String {
-        String::from_str(self.as_str())
+        self.clone()
     }
 
     pub fn as_str(&self) -> &str {
@@ -68,6 +63,35 @@ impl String {
         }
     }
 }
+
+// Only valid UTF-8 can enter the private byte storage, so exact copies preserve it.
+impl Clone for String {
+    fn clone(&self) -> Self {
+        let mut bytes: Vec<u8> = Vec::new();
+        append_bytes(&mut bytes, self.bytes.as_slice());
+        String { bytes }
+    }
+
+    fn clone_from(&mut self, source: &Self) {
+        self.clear();
+        append_bytes(&mut self.bytes, source.bytes.as_slice());
+    }
+}
+
+impl PartialEq for String {
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes.len() == other.bytes.len()
+            && starts_with(self.bytes.as_slice(), other.bytes.as_slice())
+    }
+
+    // lkjscript currently requires an executable method for each builtin operation.
+    #[allow(clippy::partialeq_ne_impl)]
+    fn ne(&self, other: &Self) -> bool {
+        !self.eq(other)
+    }
+}
+
+impl Eq for String {}
 
 impl FromUtf8Error {
     pub fn as_bytes(&self) -> &[u8] {

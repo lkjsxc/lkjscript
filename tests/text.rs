@@ -142,7 +142,12 @@ fn direct_k_static_literals_have_a_checked_text_round_trip() {
         let original = literal_program(value.as_bytes().to_vec());
         let encoded = k_text::write(&original);
         let decoded = k_text::read(&encoded).expect("text K must round trip");
-        assert_eq!(original, decoded);
+        assert!(
+            original == decoded,
+            "static text K structures differ:\noriginal:\n{}\ndecoded:\n{}",
+            k_text::write(&original),
+            k_text::write(&decoded)
+        );
         accepted(decoded);
     }
 }
@@ -182,7 +187,10 @@ fn direct_k_static_reference_returns_require_the_declared_contract() {
             "shortened",
             1,
             TEXT,
-            Some(k::ReturnSource::Parameter(0)),
+            Some(k::ReturnSource::Parameter {
+                index: 0,
+                projections: Vec::new(),
+            }),
             &[TEXT, TEXT],
             vec![text(1, "stable"), drop_local(0), k::Op::Return { src: 1 }],
         )],
@@ -299,7 +307,10 @@ fn direct_k_static_and_parameter_leaves_keep_the_dynamic_lifetime() {
             "mixed",
             1,
             view,
-            Some(k::ReturnSource::Parameter(0)),
+            Some(k::ReturnSource::Parameter {
+                index: 0,
+                projections: Vec::new(),
+            }),
             &[pointer, TEXT, pointer, view],
             vec![
                 text(1, "label"),
@@ -324,7 +335,10 @@ fn direct_k_static_and_parameter_leaves_keep_the_dynamic_lifetime() {
                 "mixed_escape",
                 1,
                 view,
-                Some(k::ReturnSource::Parameter(0)),
+                Some(k::ReturnSource::Parameter {
+                    index: 0,
+                    projections: Vec::new(),
+                }),
                 &[pointer, TEXT, k::I64, pointer, view],
                 vec![
                     text(1, "label"),
@@ -549,7 +563,10 @@ fn direct_k_utf8_validation_preserves_borrowed_or_static_provenance() {
             "validate",
             1,
             result,
-            Some(k::ReturnSource::Parameter(0)),
+            Some(k::ReturnSource::Parameter {
+                index: 0,
+                projections: Vec::new(),
+            }),
             &[BYTES, result],
             vec![
                 intrinsic(1, "str_from_utf8", &[0]),

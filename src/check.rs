@@ -327,6 +327,40 @@ fn reference_paths(types: &[Type], ty: usize) -> Vec<(Vec<Projection>, bool)> {
 pub fn is_view(types: &[Type], ty: usize) -> bool {
     !reference_paths(types, ty).is_empty()
 }
+pub(crate) fn shared_view(types: &[Type], ty: usize) -> bool {
+    let paths = reference_paths(types, ty);
+    !paths.is_empty() && paths.iter().all(|(_, mutable)| !mutable)
+}
+
+/// A projected source selects stored shared references, not the temporary
+/// descriptor used to borrow them. Validate every step before allocating it.
+fn parameter_source(
+    types: &[Type],
+    function: &Function,
+    index: usize,
+    projections: &[Projection],
+) -> Option<Place> {
+    if index >= function.params {
+        return None;
+    }
+    let mut ty = function.locals.get(index)?.ty;
+    for projection in projections {
+        if !matches!(projection, Projection::Deref) {
+            return None;
+        }
+        match types.get(ty)?.kind {
+            TypeKind::Ref { inner, .. } => ty = inner,
+            _ => return None,
+        }
+    }
+    if !is_view(types, ty) || (!projections.is_empty() && !shared_view(types, ty)) {
+        return None;
+    }
+    Some(Place {
+        local: index,
+        projections: projections.to_vec(),
+    })
+}
 fn exclusive_variants(a: &Place, b: &Place) -> bool {
     if a.local != b.local {
         return false;
@@ -1301,6 +1335,19 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
             });
         }
     }
+    // Keep the exact permitted source leaves. A common root alone would allow
+    // a borrow of an unrelated scalar field to impersonate a stored reference.
+    let return_origins = match &function.return_source {
+        Some(ReturnSource::Parameter { index, projections }) => {
+            let place = parameter_source(types, function, *index, projections).unwrap();
+            carried_provenance(&state, types, function, &place, &place, 1)?
+                .loans
+                .into_iter()
+                .map(|loan| loan.target)
+                .collect::<Vec<_>>()
+        }
+        _ => Vec::new(),
+    };
     let mut controls: Vec<Control> = Vec::new();
     for instruction in &function.body {
         let line = instruction.line;
@@ -1565,9 +1612,11 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     loans: Vec::new(),
                     absent: Vec::new(),
                 };
-                let source = match callee.return_source {
-                    Some(ReturnSource::Parameter(source)) => {
-                        let source = Place::local(args[source]);
+                let source = match &callee.return_source {
+                    Some(ReturnSource::Parameter { index, projections }) => {
+                        let mut source =
+                            parameter_source(types, callee, *index, projections).unwrap();
+                        source.local = args[*index];
                         let incoming =
                             carried_provenance(&state, types, function, &source, &source, line)?;
                         common_origin(&incoming.loans, line)?
@@ -1789,13 +1838,18 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 let provenance =
                     carried_provenance(&state, types, function, &returned, &returned, line)?;
                 for loan in &provenance.loans {
-                    let allowed = match (function.return_source, &loan.target.root) {
-                        (Some(ReturnSource::Parameter(expected)), Root::Parameter(actual)) => {
-                            expected == *actual
+                    let allowed = match (&function.return_source, &loan.target.root) {
+                        (Some(ReturnSource::Parameter { index, .. }), Root::Parameter(actual)) => {
+                            index == actual
+                                && return_origins.iter().any(|source| {
+                                    source.root == loan.target.root
+                                        && is_prefix(&source.projections, &loan.target.projections)
+                                })
                         }
-                        (Some(ReturnSource::Parameter(_) | ReturnSource::Static), Root::Static) => {
-                            !loan.mutable
-                        }
+                        (
+                            Some(ReturnSource::Parameter { .. } | ReturnSource::Static),
+                            Root::Static,
+                        ) => !loan.mutable,
                         _ => false,
                     };
                     if !allowed {
@@ -2047,12 +2101,11 @@ pub fn check(program: Program) -> Result<CheckedProgram, Diagnostic> {
                 "unsized results need a borrowed type",
             ));
         }
-        if let Some(source) = function.return_source {
+        if let Some(source) = &function.return_source {
             let valid = is_view(&program.types, function.result)
                 && match source {
-                    ReturnSource::Parameter(source) => {
-                        source < function.params
-                            && is_view(&program.types, function.locals[source].ty)
+                    ReturnSource::Parameter { index, projections } => {
+                        parameter_source(&program.types, function, *index, projections).is_some()
                     }
                     ReturnSource::Static => reference_paths(&program.types, function.result)
                         .iter()
@@ -2132,7 +2185,10 @@ mod tests {
         ops: Vec<Op>,
     ) -> Program {
         let return_source = if is_view(&types, result) && params > 0 {
-            Some(ReturnSource::Parameter(0))
+            Some(ReturnSource::Parameter {
+                index: 0,
+                projections: Vec::new(),
+            })
         } else {
             None
         };
@@ -3205,7 +3261,10 @@ mod tests {
                 Op::Return { src: 2 },
             ],
         );
-        p.functions[0].return_source = Some(ReturnSource::Parameter(0));
+        p.functions[0].return_source = Some(ReturnSource::Parameter {
+            index: 0,
+            projections: Vec::new(),
+        });
         rejection(p, "E_BORROW");
     }
 

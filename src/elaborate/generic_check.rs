@@ -16,6 +16,73 @@ struct MethodWitness {
     substitutions: BTreeMap<String, usize>,
 }
 
+/// Builtin operations have typed contracts only in the discarded verification
+/// program. Concrete instantiations still select and compile real methods.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum BuiltinMethod {
+    Clone,
+    CloneFrom,
+    Eq,
+    Ne,
+}
+
+impl BuiltinMethod {
+    fn named(name: &str) -> Option<Self> {
+        match name {
+            "clone" => Some(Self::Clone),
+            "clone_from" => Some(Self::CloneFrom),
+            "eq" => Some(Self::Eq),
+            "ne" => Some(Self::Ne),
+            _ => None,
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Clone => "clone",
+            Self::CloneFrom => "clone_from",
+            Self::Eq => "eq",
+            Self::Ne => "ne",
+        }
+    }
+
+    fn required(self) -> &'static str {
+        match self {
+            Self::Clone | Self::CloneFrom => "Clone",
+            Self::Eq | Self::Ne => "PartialEq",
+        }
+    }
+
+    fn arguments(self) -> usize {
+        if self == Self::Clone { 0 } else { 1 }
+    }
+
+    fn result(self, receiver: usize) -> usize {
+        match self {
+            Self::Clone => receiver,
+            Self::CloneFrom => k::UNIT,
+            Self::Eq | Self::Ne => k::BOOL,
+        }
+    }
+}
+
+/// Source-bound choices survive verification; no verification type/function ID
+/// is retained. Replaying a call specializes this choice, never name lookup.
+#[derive(Clone)]
+pub(super) enum MethodTarget {
+    Builtin,
+    Trait(TraitIdentity),
+    Source(usize),
+}
+
+#[derive(Clone)]
+pub(super) struct MethodSelection {
+    pub(super) dereferences: usize,
+    pub(super) target: MethodTarget,
+}
+
+pub(super) type MethodSelections = BTreeMap<a::ExprId, MethodSelection>;
+
 #[derive(Default)]
 pub(super) struct Contracts {
     pub(super) rigid: BTreeMap<usize, BTreeSet<TraitIdentity>>,
@@ -23,9 +90,10 @@ pub(super) struct Contracts {
     traits: BTreeMap<(usize, usize), BTreeMap<String, usize>>,
     methods: BTreeMap<usize, MethodWitness>,
     comparisons: BTreeMap<(usize, String), usize>,
+    builtin_methods: BTreeMap<(usize, BuiltinMethod), usize>,
 }
 
-pub(super) fn validate(source: &a::Program) -> Result<()> {
+pub(super) fn validate(source: &a::Program) -> Result<MethodSelections> {
     let mut roots = Vec::new();
     for (index, function) in source.functions.iter().enumerate() {
         if function.body.is_none() {
@@ -51,7 +119,7 @@ pub(super) fn validate(source: &a::Program) -> Result<()> {
     compiler.contracts = Some(Contracts::default());
     super::derive_check::validate(&mut compiler)?;
     if roots.is_empty() {
-        return Ok(());
+        return Ok(MethodSelections::new());
     }
     let mut checked_roots = BTreeSet::new();
     for index in roots {
@@ -79,6 +147,7 @@ pub(super) fn validate(source: &a::Program) -> Result<()> {
     // of the callee. Each production definition has its own rigid root above;
     // nongeneric free functions still go through the normal concrete pipeline.
     let declared: BTreeSet<usize> = compiler.instance_names.values().copied().collect();
+    let builtin_methods = compiler.validate_builtin_methods()?;
     let contracts = compiler.contracts.as_ref().unwrap();
     for (index, function) in compiler.functions.iter_mut().enumerate() {
         if checked_roots.contains(&index) {
@@ -106,7 +175,8 @@ pub(super) fn validate(source: &a::Program) -> Result<()> {
                 ));
             }
         }
-        let builtin = contracts.comparisons.values().any(|value| *value == index);
+        let builtin = builtin_methods.contains(&index)
+            || contracts.comparisons.values().any(|value| *value == index);
         if !declared.contains(&index) && !builtin {
             return Err(err(
                 a::Span {
@@ -130,7 +200,7 @@ pub(super) fn validate(source: &a::Program) -> Result<()> {
         destructors: compiler.destructors,
     };
     let _checked_definition_meaning = crate::check::check(program)?;
-    Ok(())
+    Ok(compiler.method_selections)
 }
 
 impl Compiler<'_> {
@@ -609,7 +679,7 @@ impl Compiler<'_> {
         }
     }
 
-    fn depends_on_rigid(&self, ty: usize) -> bool {
+    pub(super) fn depends_on_rigid(&self, ty: usize) -> bool {
         let Some(contracts) = &self.contracts else {
             return false;
         };
@@ -642,7 +712,12 @@ impl Compiler<'_> {
         false
     }
 
-    fn comparison_contract(&mut self, ty: usize, operation: &str, span: a::Span) -> Result<usize> {
+    pub(super) fn comparison_contract(
+        &mut self,
+        ty: usize,
+        operation: &str,
+        span: a::Span,
+    ) -> Result<usize> {
         let required = if operation == "==" || operation == "!=" {
             "PartialEq"
         } else {
@@ -690,6 +765,100 @@ impl Compiler<'_> {
         Ok(index)
     }
 
+    fn builtin_method_contract(
+        &mut self,
+        receiver: usize,
+        method: BuiltinMethod,
+        span: a::Span,
+    ) -> Result<usize> {
+        let contracts = self.contracts.as_ref().unwrap();
+        if !contracts.rigid.contains_key(&receiver)
+            || !self.satisfies_bound(receiver, method.required())
+        {
+            return Err(err(
+                span,
+                "E_TRAIT",
+                &format!(
+                    "generic method {} requires a declared {} contract",
+                    method.name(),
+                    method.required(),
+                ),
+            ));
+        }
+        let key = (receiver, method);
+        if let Some(index) = contracts.builtin_methods.get(&key) {
+            return Ok(*index);
+        }
+        let receiver_type = self.reference(receiver, method == BuiltinMethod::CloneFrom);
+        let mut locals = vec![k::Local {
+            name: "self".to_string(),
+            ty: receiver_type,
+            mutable: false,
+        }];
+        if method.arguments() != 0 {
+            let shared = self.reference(receiver, false);
+            locals.push(k::Local {
+                name: "other".to_string(),
+                ty: shared,
+                mutable: false,
+            });
+        }
+        let index = self.functions.len();
+        self.functions.push(k::Function {
+            file: span.file,
+            name: format!("$contract:{}:{receiver}", method.name()),
+            params: locals.len(),
+            result: method.result(receiver),
+            return_source: None,
+            locals,
+            body: Vec::new(),
+            test: false,
+        });
+        self.contracts
+            .as_mut()
+            .unwrap()
+            .builtin_methods
+            .insert(key, index);
+        Ok(index)
+    }
+
+    fn validate_builtin_methods(&self) -> Result<BTreeSet<usize>> {
+        let contracts = self.contracts.as_ref().unwrap();
+        let mut checked = BTreeSet::new();
+        for ((receiver, method), index) in &contracts.builtin_methods {
+            let function = &self.functions[*index];
+            let signature_matches = function.params == method.arguments() + 1
+                && function.locals.len() == function.params
+                && function.result == method.result(*receiver)
+                && function.return_source.is_none()
+                && function
+                    .locals
+                    .iter()
+                    .enumerate()
+                    .all(|(parameter, local)| {
+                        matches!(self.types[local.ty].kind,
+                        k::TypeKind::Ref { inner, mutable }
+                        if inner == *receiver
+                            && mutable == (parameter == 0 && *method == BuiltinMethod::CloneFrom))
+                    });
+            if !contracts.rigid.contains_key(receiver)
+                || !self.satisfies_bound(*receiver, method.required())
+                || !signature_matches
+            {
+                return Err(err(
+                    a::Span {
+                        file: function.file,
+                        ..a::Span::default()
+                    },
+                    "E_GENERIC",
+                    "call does not match its typed builtin method witness",
+                ));
+            }
+            checked.insert(*index);
+        }
+        Ok(checked)
+    }
+
     fn declared_methods(&mut self, base: usize, name: &str) -> Result<Vec<MethodWitness>> {
         let Some(contracts) = &self.contracts else {
             return Ok(Vec::new());
@@ -724,7 +893,7 @@ impl Compiler<'_> {
 }
 
 impl super::Builder<'_, '_> {
-    fn generic_comparison_place(&mut self, expression: usize) -> Result<k::Place> {
+    pub(super) fn generic_comparison_place(&mut self, expression: usize) -> Result<k::Place> {
         if matches!(&self.compiler.source.exprs[expression].kind,a::Expr::Unary{op,..} if op=="*") {
             self.place(expression)
         } else {
@@ -769,28 +938,339 @@ impl super::Builder<'_, '_> {
         Ok(Some((dst, k::BOOL)))
     }
 
+    fn builtin_method(
+        &mut self,
+        target: &k::Place,
+        base: usize,
+        method: BuiltinMethod,
+        types: &[usize],
+        args: &[usize],
+        span: a::Span,
+    ) -> Result<(usize, usize)> {
+        if !types.is_empty() {
+            return Err(err(
+                span,
+                "E_TYPE",
+                "builtin methods take no generic arguments",
+            ));
+        }
+        if args.len() != method.arguments() {
+            return Err(err(
+                span,
+                "E_TYPE",
+                "method argument count differs from builtin contract",
+            ));
+        }
+        let called = self.compiler.builtin_method_contract(base, method, span)?;
+        let receiver = self.borrow(
+            target.clone(),
+            method == BuiltinMethod::CloneFrom,
+            span.line,
+        )?;
+        let mut values = vec![receiver.0];
+        for argument in args {
+            let expected = self.compiler.reference(base, false);
+            let value = self.expr(*argument, Some(expected))?;
+            if value.1 != expected {
+                return Err(err(
+                    span,
+                    "E_TYPE",
+                    "method argument type differs from builtin contract",
+                ));
+            }
+            values.push(value.0);
+        }
+        let result = method.result(base);
+        let dst = self.temp(result);
+        self.emit(
+            k::Op::Call {
+                dst,
+                function: called,
+                args: values,
+            },
+            span.line,
+        );
+        Ok((dst, result))
+    }
+
+    /// Replay a trait selected by the generic body using the actual receiver's
+    /// implementation evidence. Inherent methods cannot displace this choice.
+    pub(super) fn witnessed_method(
+        &mut self,
+        target: &k::Place,
+        base: usize,
+        identity: &TraitIdentity,
+        expression: a::ExprId,
+        types: &[usize],
+        args: &[usize],
+    ) -> Result<(usize, usize)> {
+        let span = self.compiler.source.exprs[expression].span;
+        let name = match &self.compiler.source.exprs[expression].kind {
+            a::Expr::Method { name, .. } => name.clone(),
+            _ => {
+                return Err(err(
+                    span,
+                    "E_GENERIC",
+                    "method witness is not bound to a method expression",
+                ));
+            }
+        };
+        if !self.compiler.satisfies_identity(base, identity) {
+            return Err(err(
+                span,
+                "E_TRAIT",
+                "specialized receiver lacks its checked trait contract",
+            ));
+        }
+        let rigid = BTreeMap::new();
+        let implementation = crate::generics::implementation_witness(
+            self.compiler.source,
+            &self.compiler.types,
+            &self.compiler.applications,
+            base,
+            identity,
+            &rigid,
+        );
+        if let Some(witness) = implementation {
+            let implementation = &self.compiler.source.impls[witness.implementation];
+            if let Some(index) = implementation
+                .methods
+                .iter()
+                .find(|index| self.compiler.source.functions[**index].name == name)
+                .copied()
+            {
+                return self.source_method(
+                    target,
+                    base,
+                    Instance {
+                        source: index,
+                        substitutions: witness.substitutions,
+                    },
+                    types,
+                    args,
+                    span,
+                );
+            }
+        }
+        if identity == &TraitIdentity::Builtin("Clone".to_string()) && name == "clone" {
+            if !types.is_empty() || !args.is_empty() {
+                return Err(err(
+                    span,
+                    "E_TYPE",
+                    "clone takes no type or value arguments",
+                ));
+            }
+            if super::is_copy(&self.compiler.types, base) {
+                if matches!(self.compiler.types[base].kind, k::TypeKind::Ref { .. }) {
+                    return self.read(target.clone(), span.line);
+                }
+                let reference = self.borrow(target.clone(), false, span.line)?.0;
+                let dst = self.temp(base);
+                self.emit(
+                    k::Op::Intrinsic {
+                        dst,
+                        name: "clone".to_string(),
+                        args: vec![reference],
+                    },
+                    span.line,
+                );
+                return Ok((dst, base));
+            }
+        }
+        Err(err(
+            span,
+            "E_UNSUPPORTED",
+            &format!("selected trait method {name} has no executable implementation"),
+        ))
+    }
+
+    /// A source method selected while validating a known receiver remains the
+    /// same declaration after substitution, even if another method then applies.
+    pub(super) fn fixed_source_method(
+        &mut self,
+        target: &k::Place,
+        base: usize,
+        index: usize,
+        types: &[usize],
+        args: &[usize],
+        span: a::Span,
+    ) -> Result<(usize, usize)> {
+        let implementation = self
+            .compiler
+            .source
+            .impls
+            .iter()
+            .find(|implementation| implementation.methods.contains(&index))
+            .cloned()
+            .ok_or_else(|| {
+                err(
+                    span,
+                    "E_GENERIC",
+                    "checked source method has no implementation",
+                )
+            })?;
+        let mut substitutions = BTreeMap::new();
+        self.infer_type(implementation.target, base, &mut substitutions)?;
+        substitutions.insert("Self".to_string(), base);
+        if self
+            .compiler
+            .resolve(implementation.target, &substitutions)?
+            != base
+        {
+            return Err(err(
+                span,
+                "E_GENERIC",
+                "specialized receiver differs from checked method target",
+            ));
+        }
+        self.compiler
+            .bounds(&implementation.generics, &substitutions)?;
+        self.source_method(
+            target,
+            base,
+            Instance {
+                source: index,
+                substitutions,
+            },
+            types,
+            args,
+            span,
+        )
+    }
+
+    pub(super) fn source_method(
+        &mut self,
+        target: &k::Place,
+        base: usize,
+        instance: Instance,
+        types: &[usize],
+        args: &[usize],
+        span: a::Span,
+    ) -> Result<(usize, usize)> {
+        let index = instance.source;
+        let mut substitutions = instance.substitutions;
+        self.compiler.method_access(index, self.scope, span)?;
+        let definition = self.compiler.source.functions[index].clone();
+        substitutions.insert("Self".to_string(), base);
+        let parameters: Vec<_> = definition
+            .generics
+            .iter()
+            .filter(|parameter| !parameter.lifetime)
+            .collect();
+        if !types.is_empty() {
+            if types.len() != parameters.len() {
+                return Err(err(span, "E_TYPE", "wrong generic method argument count"));
+            }
+            for (parameter, argument) in parameters.iter().zip(types) {
+                let ty = self.compiler.resolve(*argument, &self.sub)?;
+                substitutions.insert(parameter.name.clone(), ty);
+            }
+        }
+        if definition.params.is_empty() {
+            return Err(err(span, "E_TYPE", "method has no receiver"));
+        }
+        if definition.params.len() != args.len() + 1 {
+            return Err(err(span, "E_TYPE", "method argument count differs"));
+        }
+        let first = self
+            .compiler
+            .resolve(definition.params[0].ty, &substitutions)?;
+        let receiver = match self.compiler.types[first].kind {
+            k::TypeKind::Ref { mutable, .. } => self.borrow(target.clone(), mutable, span.line)?,
+            _ => self.read(target.clone(), span.line)?,
+        };
+        let mut values = vec![receiver.0];
+        for (parameter, argument) in definition.params[1..].iter().zip(args) {
+            let expected = self.compiler.resolve(parameter.ty, &substitutions).ok();
+            let value = self.expr(*argument, expected)?;
+            self.infer_type(parameter.ty, value.1, &mut substitutions)?;
+            values.push(value.0);
+        }
+        let called = self.compiler.instantiate(index, substitutions)?;
+        let result = self.compiler.functions[called].result;
+        let dst = self.temp(result);
+        self.emit(
+            k::Op::Call {
+                dst,
+                function: called,
+                args: values,
+            },
+            span.line,
+        );
+        Ok((dst, result))
+    }
+
     pub(super) fn generic_method(
         &mut self,
+        expression: a::ExprId,
         target: &k::Place,
         base: usize,
         name: &str,
         types: &[usize],
         args: &[usize],
-        span: a::Span,
     ) -> Result<Option<(usize, usize)>> {
+        let span = self.compiler.source.exprs[expression].span;
         let candidates = self.compiler.declared_methods(base, name)?;
-        if candidates.is_empty() {
-            return Ok(None);
-        }
-        if candidates.len() != 1 {
+        let builtin = BuiltinMethod::named(name).filter(|_| {
+            self.compiler
+                .contracts
+                .as_ref()
+                .is_some_and(|contracts| contracts.rigid.contains_key(&base))
+        });
+        let proven =
+            builtin.filter(|method| self.compiler.satisfies_bound(base, method.required()));
+        if candidates.len() + usize::from(proven.is_some()) > 1 {
             return Err(err(
                 span,
                 "E_TRAIT",
-                "method is ambiguous between declared trait bounds",
+                "method is ambiguous between builtin and declared trait contracts",
             ));
+        }
+        if let Some(method) = proven {
+            // A blanket source implementation can supply another method even
+            // without an explicit bound. Do not silently choose the builtin.
+            if self.has_declared_method(base, name)? {
+                return Err(err(
+                    span,
+                    "E_TRAIT",
+                    "method is ambiguous between trait contracts",
+                ));
+            }
+            self.compiler
+                .method_selections
+                .get_mut(&expression)
+                .unwrap()
+                .target =
+                MethodTarget::Trait(TraitIdentity::Builtin(method.required().to_string()));
+            return self
+                .builtin_method(target, base, method, types, args, span)
+                .map(Some);
+        }
+        if candidates.is_empty() {
+            if let Some(method) = builtin {
+                // Preserve ordinary source implementation lookup, including
+                // blanket implementations of a distinct same-spelled method.
+                if !self.has_declared_method(base, name)? {
+                    return Err(err(
+                        span,
+                        "E_TRAIT",
+                        &format!(
+                            "generic method {} requires a declared {} contract",
+                            method.name(),
+                            method.required(),
+                        ),
+                    ));
+                }
+            }
+            return Ok(None);
         }
         let witness = candidates[0].clone();
         let trait_index = witness.declaration;
+        self.compiler
+            .method_selections
+            .get_mut(&expression)
+            .unwrap()
+            .target = MethodTarget::Trait(TraitIdentity::Declared(trait_index));
         let index = witness.method;
         let mut substitutions = witness.substitutions;
         let function = self.compiler.source.functions[index].clone();

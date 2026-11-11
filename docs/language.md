@@ -112,8 +112,10 @@ destruction can reach literal storage.
 returns the source Result with `Ok(&str)` or `Err(Utf8Error)`. The error is an
 opaque marker; byte-position/error-length reporting is not implemented. Successful
 conversion borrows the original storage. No unchecked source conversion exists.
-String keeps its private Vec bytes and implements copying, `push_str`,
-`to_string` and `as_str` using source functions and checked views. `as_str`
+String keeps its private Vec bytes and implements Clone, clone_from, PartialEq,
+Eq, `push_str`, `to_string` and `as_str` in source. Cloning copies already-valid
+bytes directly; clone_from reuses the target buffer when capacity suffices.
+Equality compares byte length and contents. `as_str`
 currently validates on conversion; retained UTF-8 evidence for avoiding that scan
 remains future work.
 
@@ -140,8 +142,27 @@ ownership/type checking under rigid parameter identities and declared trait
 contracts. It does not sample concrete parameter types. Bounds, associated-type
 relationships, method signatures and explicit method type arguments are checked;
 unreachable expressions must still type-check. User traits named Copy, Clone or
-Drop do not acquire builtin semantics by spelling. Derived Copy on a generic
-layout is conditional on its fields.
+Drop do not acquire builtin semantics by spelling. Symbolic signature and
+supertrait checks retain resolved trait identities, including imports and aliases.
+Derived Copy on a generic layout is conditional on its fields.
+
+Generic Clone::clone/clone_from and PartialEq::eq/ne calls have typed contracts
+with checked receiver modes, arguments and results. Copy supplies Clone evidence;
+Eq supplies PartialEq evidence. Ambiguous builtin and declared methods reject.
+After successful definition checking, source expression identities retain their
+selected trait or source method and exact receiver dereference count. Concrete
+specialization verifies that selection against the actual receiver and compiles
+the selected source implementation. A newly applicable inherent method cannot
+replace a checked generic trait call. Rigid verification types/functions never
+enter the executable program.
+
+Equality operators evaluate operands once, left to right. Scalar values are read
+before right-side effects; nominal owners are borrowed for the comparison.
+Nominal == and != select the builtin PartialEq implementation, independently of
+inherent methods or same-spelled user traits. An explicit ne executes when present;
+otherwise the operator negates the selected eq. Reference operands of the same
+type compare their referents. Comparison loans end with the Boolean result;
+owned temporaries retain their ordinary statement cleanup.
 
 Copy, Clone, PartialEq, Eq, PartialOrd and Ord derive declarations have their
 structural field requirements checked even when unused. Generic derive checks use
@@ -161,10 +182,12 @@ Copy derives and the existing structural automatic predicates retain their rules
 
 These declaration checks are not complete executable derive support. Clone calls
 for affine derived values and derived aggregate comparison operators remain
-unimplemented. Copy cloning and explicit source method bodies execute through the
-existing checked path. The complete generated Clone/comparison operations, their
-library dependencies and general builtin witness contracts remain compiler-closure
-work.
+unimplemented. Copy cloning, shared-reference copying and explicit source method
+bodies execute through checked K. Builtin method calls still require an executable
+implementation: implicit clone_from/ne method bodies, scalar eq/ne methods and
+source trait-default execution remain named unsupported. The != operator fallback
+is implemented independently. Generated derives, vector cloning and the remaining
+builtin operations are compiler-closure work.
 
 The emitted program remains monomorphic. The generic validation context names
 declared evidence, but a complete independently replayable generic/witness K
@@ -181,6 +204,21 @@ borrows and drops. A function declares a parameter or immutable static source fo
 returned views. Literal instructions carry bytes that the K checker validates as
 UTF-8, independently of source parsing. Text K serializes those bytes as hexadecimal
 and static result contracts as `from static`.
+A parameter result source carries an explicit reference projection path before
+selecting its stored reference leaves (text K: `from 0 deref deref`). An empty
+path selects the parameter itself. The path contains actual projection entries;
+there is no encoded repetition count or numeric depth allowance. Projected
+contracts currently require shared leaves;
+exclusive reborrows retain their outer lifetime. The checker verifies returned
+origins against the exact selected input leaves, then callers transport their
+underlying provenance and parent dependencies. A local reference carrier can die
+without invalidating a copied shared reference; its actual referent must remain
+live. Output leaves conservatively share the selected common origin; a positional
+input/output leaf mapping is not assumed.
+Early source cleanup tracks immediate carrier dependencies through reference
+creation, value transport, calls and control flow. A textually dead descriptor
+remains live while another live value needs its storage. Dead reference chains
+are dropped in dependency order; K independently verifies every emitted drop.
 Concrete trait method selection is represented by an explicit function call.
 K has a readable/writable text form accepted by `check` for direct tests.
 

@@ -182,9 +182,15 @@ pub struct Instruction {
     pub op: Op,
     pub line: usize,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ReturnSource {
-    Parameter(usize),
+    /// Reference leaves in a parameter value, after the declared dereferences.
+    /// Projected sources currently require shared leaves; exclusive reborrows
+    /// retain the lifetime of their outer reference.
+    Parameter {
+        index: usize,
+        projections: Vec<Projection>,
+    },
     Static,
 }
 #[derive(Clone, Debug, PartialEq)]
