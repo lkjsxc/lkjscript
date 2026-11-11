@@ -410,6 +410,12 @@ impl Compiler<'_> {
             ));
         }
         let Some(index) = candidates.first().copied() else {
+            // A named output lifetime not connected to any input is universal.
+            // Every live shared leaf therefore needs static backing; inactive
+            // enum leaves also satisfy this explicit K contract.
+            if !lifetimes.is_empty() && crate::check::shared_view(&self.types, result) {
+                return Ok(Some(k::ReturnSource::Static));
+            }
             return Ok(None);
         };
         let mut dereferences = 0;

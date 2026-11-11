@@ -884,5 +884,22 @@
     "value": "42",
     "rust": true,
     "pending": false
+  },
+  {
+    "id": "call_reborrow_alias",
+    "file": "fail/call_reborrow_alias.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
+  },
+  {
+    "id": "source_bounds_static",
+    "file": "pass/source_bounds_static.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
   }
 ]
