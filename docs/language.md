@@ -18,6 +18,17 @@ continue advances the iterator; an inclusive maximum endpoint does not overflow.
 Assertions, panic and the implemented vec forms are fixed syntax. Named
 diagnostics reject unsupported constructs.
 
+Integer and byte literal patterns support inclusive, half-open and open ranges:
+`a..=b`, `a..b`, `a..`, `..b` and `..=b`. Endpoints share ordinary integer literal
+type, suffix, radix, sign and overflow checks. Empty/reversed ranges reject.
+Exhaustiveness unions closed intervals over the concrete integer domain, including
+signed minima and u64::MAX; it does not enumerate the domain. Source arm order
+controls execution. Every arm is checked, including bodies after a wildcard or
+binding default and bodies in unused generic definitions. Scalar matches through
+references read the referent and preserve mutable-reference reborrowing.
+Named/runtime endpoints, guards, or-patterns and nested refutable patterns remain
+explicitly unsupported.
+
 Source bundles declare their root, source files and optional source-library root.
 The owned loader handles inline modules, file modules (`child.rs` or
 `child/mod.rs`) and nested directories. Missing, ambiguous and duplicate inputs
@@ -190,6 +201,13 @@ generic validation and elaboration, and executes with the source String library.
 Its tests compare complete output bytes and require valid/invalid source mutations
 to change behavior or produce an attributed diagnostic. These are executing
 compiler components; the full dependency closure and fixed point remain unfinished.
+
+`src/json.rs::write_string` is the production emitter's JSON string encoder. It
+executes through ordinary source compilation using byte loops, vector operations
+and integer range patterns. Tests compare every output byte, independently decode
+JSON, inspect actual emitted trap metadata and mutate a range boundary. The old
+emitter-local quoting loop has been removed; K text keeps its distinct quoting
+semantics.
 
 `src/check.rs` is the K checker; `src/k.rs` defines its inputs and checked result.
 `src/wasm.rs` contains lowering/emission plus allocation and collection internals.

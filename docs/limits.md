@@ -37,6 +37,10 @@
   Structural interning avoids expanded-name growth and reference containment is
   solved once over the type graph. These do not establish linear whole-compiler
   complexity or eliminate every recursive traversal.
+- Integer-pattern coverage sorts and merges intervals in the supported integer
+  domain. It uses neither value enumeration nor a value beyond u64::MAX. This
+  bounds the coverage algorithm's work by the number of pattern intervals; it is
+  not a whole-match lowering or engine-capacity measurement.
 
 Test-runner time, RSS and output envelopes stop test processes only. They do not
 define accepted programs. No language quotas, step counters or depth thresholds

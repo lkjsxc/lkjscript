@@ -2190,16 +2190,7 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
             if i > 0 {
                 metadata.push(b',');
             }
-            metadata.push(b'"');
-            for byte in messages[i].as_bytes() {
-                match *byte {
-                    b'"' => metadata.extend_from_slice(b"\\\""),
-                    b'\\' => metadata.extend_from_slice(b"\\\\"),
-                    0..=31 => metadata.extend_from_slice(format!("\\u{:04x}", byte).as_bytes()),
-                    _ => metadata.push(*byte),
-                }
-            }
-            metadata.push(b'"');
+            crate::json::write_string(&mut metadata, messages[i].as_str());
             i += 1;
         }
         metadata.push(b']');

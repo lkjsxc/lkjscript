@@ -21,6 +21,11 @@ associated identities and explicit method type arguments are enforced; inherent
 methods and user traits do not become builtin Clone/Drop/Copy by spelling.
 Concrete associated-result selection executes successfully.
 
+Integer range patterns support typed inclusive/half-open/open bounds and exact
+interval-based exhaustiveness. Borrowed scalar matches read through references.
+All arms are checked, even after an unconditional default; affine default bindings
+retain first-arm execution and exactly-once cleanup.
+
 Every initialized reference leaf has provenance or explicit inactive-variant
 absence evidence. Moves, construction, cloning, replacement, field assignment,
 call results and return preserve/check it. Replacement transports both the old
@@ -72,11 +77,17 @@ change generated behavior or reject with names.rs diagnostics. These executing
 components still use emitter-provided memory primitives and Node; they do not
 establish a compiler-core fixed point.
 
+The actual trap-metadata encoder now calls shared src/json.rs::write_string. That
+exact source executes under lkjscript with range patterns and byte loops. Five
+tests cover every emitted byte, independent JSON decoding, the actual Wasm custom
+section, a behavior-changing boundary mutation and an invalid range with its
+original filename. The former emitter-local quoting loop is removed.
+
 ## Current verification
 
-The integrated 2026-11-11 text milestone gate passes **212 Cargo tests** and reports
-**74 conformance passes, eight pending, zero failures; 67 rustc comparisons**.
-Formatting, Clippy, build and conformance are included. Elapsed: **15.804 s**.
+The integrated 2026-11-11 range/JSON milestone gate passes **228 Cargo tests** and
+reports **78 conformance passes, eight pending, zero failures; 71 rustc comparisons**.
+Formatting, Clippy, build and conformance are included. Elapsed: **14.339 s**.
 
 The suite includes 19 provenance tests, 28 generic-definition tests, 20 module
 tests, source-bundle and executing-component mutations, parser/embedding capacity
@@ -92,6 +103,12 @@ Node instantiation and execution. Static-region bytes remain unchanged across
 These are regression observations without peak RSS measurement. A numeric lexer
 regression also prevents usize/isize suffixes or hexadecimal e digits from being
 mistaken for decimal exponents or absorbing adjacent signs.
+
+Eleven range-test groups compare 2,351 observations from identical source compiled
+with rustc and lkjscript. They cover every u8/i8 value, selected i64/u64 extrema,
+borrows, mutable-reference reuse, inference, overlap/order and affine cleanup.
+Invalid bounds, coverage gaps and invalid unreachable generic arms reject for the
+intended reason. Wide-domain boundary samples are not exhaustive 64-bit testing.
 
 The eight closure/callback/task conformance cases remain explicitly pending.
 Structural Send/Sync checks do not establish a task runtime. No World-backed
@@ -180,20 +197,19 @@ reject. External view writes need explicit mutation contracts before their
 symbolic source relationships can change.
 
 The normal CLI starts from `src/lib.rs` and follows its real modules. The current
-whole-crate check stops at `src/wasm.rs:2198` with `E_PARSE` on a range pattern
-(`..=`). No complete compiler-core closure is accepted, and no W1/W2,
+whole-crate check stops at `src/source.rs:38:32` with `E_PARSE` on the tuple closure
+parameter in `map(|(p, _)| p)`. Range patterns no longer cause the earlier stop. No complete compiler-core closure is accepted, and no W1/W2,
 N1/N2 or owned bootstrap seed exists. Text/collection operations beyond the implemented subset, formatting, map/set
 APIs, derives, closures, patterns and ownership layouts remain dependency work.
 
-The next concrete ownership vertical is integer range patterns and the production
-JSON string encoder used by Wasm trap metadata. Implement typed literal endpoints,
-open/inclusive/exclusive bounds, first-arm execution and interval-based exhaustive
-coverage over the full integer domain. Reject malformed, empty, overflowing or
-unsupported bounds with their intended diagnostics, including unused/dead arms.
-Extract the existing encoder into a shared source component using byte loops and
-Vec::push; run it through SourceBundle, compare every output byte and JSON decode,
-and mutate its control-byte range. This removes an actual emitter dependency and
-exercises the new semantics rather than reporting a higher parse-only file count.
+The next concrete dependency is named-field enum construction and matching, used
+throughout the production K representation. The ordinary check of src/k.rs now
+reaches TypeKind::Int construction and reports E_TYPE unknown struct. Implement
+that general enum operation with declaration identity, typed fields, ownership,
+borrowed projections and tag-checked matching. Use the exact production module
+for representation/constructor execution when its full declared dependencies are
+supported. Inspect derive obligations explicitly; do not discard unsupported
+semantics or report constructor execution as ownership of the K checker.
 
 Other observations include missing borrowed collection iteration, `while let`,
 and repeated Vec initialization. Add these when they close the next actual

@@ -4,6 +4,7 @@ pub mod compiler;
 pub mod elaborate;
 pub mod encoding;
 pub mod generics;
+pub mod json;
 pub mod k;
 pub mod k_text;
 pub mod names;
