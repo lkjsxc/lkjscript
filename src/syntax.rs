@@ -63,7 +63,7 @@ impl Lexer<'_> {
     fn error(&self, message: &str) -> Diagnostic {
         Diagnostic::new(self.here(), "E_LEX", message)
     }
-    fn quoted(&mut self, quote: u8) -> Result<String, Diagnostic> {
+    fn quoted(&mut self, quote: u8, bytes: bool) -> Result<String, Diagnostic> {
         self.advance();
         let mut result = String::new();
         while self.at < self.source.len() && self.byte(0) != quote {
@@ -98,7 +98,7 @@ impl Lexer<'_> {
                             self.advance();
                             i += 1;
                         }
-                        if value > 127 && quote == b'"' {
+                        if value > 127 && !bytes {
                             return Err(Diagnostic::new(
                                 span_at(start, self.at, self.line, self.column),
                                 "E_LEX",
@@ -111,6 +111,11 @@ impl Lexer<'_> {
                         }
                     }
                     b'u' => {
+                        if bytes {
+                            return Err(
+                                self.error("Unicode escapes are not valid in byte literals")
+                            );
+                        }
                         if self.byte(0) != b'{' {
                             return Err(self.error("expected { after \\u"));
                         }
@@ -148,6 +153,9 @@ impl Lexer<'_> {
                     Some(ch) => ch,
                     None => return Err(self.error("unterminated literal")),
                 };
+                if bytes && !ch.is_ascii() {
+                    return Err(self.error("non-ASCII byte literals require hexadecimal escapes"));
+                }
                 let n = ch.len_utf8();
                 let mut i = 0;
                 while i < n {
@@ -210,16 +218,9 @@ impl Lexer<'_> {
             if b == b'b' && (self.byte(1) == b'"' || self.byte(1) == b'\'') {
                 self.advance();
                 let quote = self.byte(0);
-                let s = self.quoted(quote)?;
-                if !s.is_ascii() {
-                    return Err(Diagnostic::new(
-                        span,
-                        "E_LEX",
-                        "byte literals contain ASCII bytes",
-                    ));
-                }
+                let s = self.quoted(quote, true)?;
                 if quote == b'\'' {
-                    if s.len() != 1 {
+                    if s.chars().count() != 1 {
                         return Err(Diagnostic::new(
                             span,
                             "E_LEX",
@@ -227,7 +228,7 @@ impl Lexer<'_> {
                         ));
                     }
                     kind = TokenKind::Number;
-                    text = format!("{}u8", s.as_bytes()[0]);
+                    text = format!("{}u8", s.chars().next().unwrap() as u32);
                 } else {
                     kind = TokenKind::Bytes;
                     text = s;
@@ -269,7 +270,7 @@ impl Lexer<'_> {
                 kind = TokenKind::String;
             } else if b == b'"' {
                 kind = TokenKind::String;
-                text = self.quoted(b'"')?;
+                text = self.quoted(b'"', false)?;
             } else if b == b'\'' {
                 let mut end = self.at + 1;
                 while end < self.source.len() && ident_continue(self.source.as_bytes()[end]) {
@@ -285,7 +286,7 @@ impl Lexer<'_> {
                     text = self.source[span.start..end].to_string();
                 } else {
                     kind = TokenKind::Char;
-                    text = self.quoted(b'\'')?;
+                    text = self.quoted(b'\'', false)?;
                     if text.chars().count() != 1 {
                         return Err(Diagnostic::new(
                             span,
@@ -1357,7 +1358,8 @@ impl Parser {
                 unary.push(("&".to_string(), mutable, span));
             } else if self.take("&&") {
                 unary.push(("&".to_string(), false, span));
-                unary.push(("&".to_string(), false, span));
+                let mutable = self.take("mut");
+                unary.push(("&".to_string(), mutable, span));
             } else if self.is("-") || self.is("!") || self.is("*") {
                 let op = self.token().text.clone();
                 self.at += 1;
@@ -1529,12 +1531,14 @@ impl Parser {
                 }
             }
             TokenKind::String => Expr::String(token.text),
-            TokenKind::Bytes => Expr::Bytes(token.text.into_bytes()),
+            TokenKind::Bytes => Expr::Bytes(token.text.chars().map(|ch| ch as u8).collect()),
             TokenKind::Char => match token.text.chars().next() {
                 Some(ch) => Expr::Char(ch),
                 None => return Err(self.err("empty character literal")),
             },
-            TokenKind::Ident => Expr::Bool(token.text == "true"),
+            TokenKind::Ident if token.text == "true" || token.text == "false" => {
+                Expr::Bool(token.text == "true")
+            }
             _ => return Err(self.err("expected a literal")),
         };
         Ok(self.add_expr(kind, token.span))
@@ -2133,6 +2137,17 @@ mod tests {
     }
     #[test]
     fn diagnostics_name_rejected_constructs() {
+        let bytes = parse("fn f() { let b = b\"\\xFF\\0\"; let c = b'\\x80'; }").unwrap();
+        assert!(
+            bytes
+                .exprs
+                .iter()
+                .any(|e| matches!(&e.kind, Expr::Bytes(v) if *v == vec![255, 0]))
+        );
+        assert_eq!(
+            parse("fn f() { let b = b\"é\"; }").unwrap_err().code,
+            "E_LEX"
+        );
         parse("fn f() { let strings = [\"&&\", \"||\", \"}\", \"!\", \"if\"]; }").unwrap();
         assert_eq!(
             parse("fn f() { println!(\"ambient\"); }").unwrap_err().code,
@@ -2150,6 +2165,7 @@ mod tests {
     }
     #[test]
     fn views_and_closure_syntax() {
+        parse("fn f() { let mut x = 1; let r = &&mut x; }").unwrap();
         let p = parse("struct View<'a> { bytes: &'a [u8] } fn f(v: &mut Vec<i64>) { v.push(v.len() as i64); let cb = move |x: i64| -> i64 { x + 1 }; let y = cb(2); }").unwrap();
         assert_eq!(p.structs.len(), 1);
         assert_eq!(p.functions.len(), 1);

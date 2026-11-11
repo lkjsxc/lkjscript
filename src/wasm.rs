@@ -150,7 +150,9 @@ impl<'a> Body<'a> {
                 }
                 Projection::Index(index) => {
                     ty = match self.program.types[ty].kind {
-                        TypeKind::Vec { inner } | TypeKind::Slice { inner, .. } => inner,
+                        TypeKind::Vec { inner }
+                        | TypeKind::Slice { inner, .. }
+                        | TypeKind::Array { inner, .. } => inner,
                         TypeKind::String => crate::k::U8,
                         _ => unreachable!("K index type"),
                     };
@@ -478,6 +480,34 @@ impl<'a> Body<'a> {
                     self.clear_place(place, ty, line);
                 }
             }
+            Op::SliceBorrow { dst, place, .. } => {
+                self.address(place, line);
+                self.write(*dst);
+            }
+            Op::Array { dst, elements } => {
+                constant(&mut self.bytes, 24);
+                call(&mut self.bytes, ALLOC);
+                self.write(*dst);
+                self.read(*dst);
+                constant(&mut self.bytes, elements.len() as i64 * 8);
+                call(&mut self.bytes, ALLOC);
+                store(&mut self.bytes, 0);
+                self.read(*dst);
+                constant(&mut self.bytes, elements.len() as i64);
+                store(&mut self.bytes, 8);
+                self.read(*dst);
+                constant(&mut self.bytes, elements.len() as i64);
+                store(&mut self.bytes, 16);
+                let mut i = 0;
+                while i < elements.len() {
+                    self.read(*dst);
+                    load(&mut self.bytes, 0);
+                    self.read(elements[i]);
+                    store(&mut self.bytes, i as u64 * 8);
+                    i += 1;
+                }
+            }
+
             Op::Borrow { dst, place, .. } => {
                 self.address(place, line);
                 self.write(*dst);
@@ -961,6 +991,7 @@ fn heap_type(kind: &TypeKind) -> bool {
             | TypeKind::Vec { .. }
             | TypeKind::String
             | TypeKind::Slice { .. }
+            | TypeKind::Array { .. }
     )
 }
 fn allocator() -> Vec<u8> {
@@ -1095,7 +1126,32 @@ fn deallocator() -> Vec<u8> {
     b.push(0x0b);
     b
 }
-fn type_helper(program: &Program, ty: usize, copying: bool) -> Vec<u8> {
+fn field_operations(
+    bytes: &mut Vec<u8>,
+    program: &Program,
+    fields: &[crate::k::Field],
+    first: u64,
+    copying: bool,
+) {
+    let mut i = 0;
+    while i < fields.len() {
+        let offset = (first + i as u64) * 8;
+        if copying {
+            get(bytes, 1);
+        }
+        get(bytes, 0);
+        load(bytes, offset);
+        call(bytes, helper_index(program, fields[i].ty, copying));
+        if copying {
+            store(bytes, offset);
+        } else {
+            bytes.push(0x1a);
+        }
+        i += 1;
+    }
+}
+
+fn type_helper(program: &Program, ty: usize, copying: bool, destructor: Option<usize>) -> Vec<u8> {
     let mut b = vec![1, 5, 0x7e];
     let kind = &program.types[ty].kind;
     if !heap_type(kind) {
@@ -1113,6 +1169,26 @@ fn type_helper(program: &Program, ty: usize, copying: bool) -> Vec<u8> {
     constant(&mut b, 0);
     b.push(0x0f);
     b.push(0x0b);
+    if !copying {
+        if let Some(function) = destructor {
+            constant(&mut b, 8);
+            call(&mut b, ALLOC);
+            set(&mut b, 5);
+            get(&mut b, 5);
+            get(&mut b, 0);
+            store(&mut b, 0);
+            get(&mut b, 5);
+            call(&mut b, FIRST_USER + function);
+            b.push(0x1a);
+            get(&mut b, 5);
+            load(&mut b, 0);
+            set(&mut b, 0);
+            get(&mut b, 5);
+            call(&mut b, FREE);
+            b.push(0x1a);
+        }
+    }
+
     match kind {
         TypeKind::Struct { fields, .. } => {
             if copying {
@@ -1120,21 +1196,7 @@ fn type_helper(program: &Program, ty: usize, copying: bool) -> Vec<u8> {
                 call(&mut b, ALLOC);
                 set(&mut b, 1);
             }
-            let mut i = 0;
-            while i < fields.len() {
-                if copying {
-                    get(&mut b, 1);
-                }
-                get(&mut b, 0);
-                load(&mut b, i as u64 * 8);
-                call(&mut b, helper_index(program, fields[i].ty, copying));
-                if copying {
-                    store(&mut b, i as u64 * 8);
-                } else {
-                    b.push(0x1a);
-                }
-                i += 1;
-            }
+            field_operations(&mut b, program, fields, 0, copying);
         }
         TypeKind::Enum { variants, .. } => {
             get(&mut b, 0);
@@ -1155,21 +1217,7 @@ fn type_helper(program: &Program, ty: usize, copying: bool) -> Vec<u8> {
                     get(&mut b, 2);
                     store(&mut b, 0);
                 }
-                let mut i = 0;
-                while i < fields.len() {
-                    if copying {
-                        get(&mut b, 1);
-                    }
-                    get(&mut b, 0);
-                    load(&mut b, (i as u64 + 1) * 8);
-                    call(&mut b, helper_index(program, fields[i].ty, copying));
-                    if copying {
-                        store(&mut b, (i as u64 + 1) * 8);
-                    } else {
-                        b.push(0x1a);
-                    }
-                    i += 1;
-                }
+                field_operations(&mut b, program, fields, 1, copying);
                 b.push(0x0b);
                 variant += 1;
             }
@@ -1189,9 +1237,9 @@ fn type_helper(program: &Program, ty: usize, copying: bool) -> Vec<u8> {
                 b.push(0x1a);
             }
         }
-        TypeKind::Vec { .. } | TypeKind::String => {
+        TypeKind::Vec { .. } | TypeKind::Array { .. } | TypeKind::String => {
             let inner = match kind {
-                TypeKind::Vec { inner } => *inner,
+                TypeKind::Vec { inner } | TypeKind::Array { inner, .. } => *inner,
                 _ => crate::k::U8,
             };
             get(&mut b, 0);
@@ -1293,7 +1341,7 @@ fn function_body(
     let mut cells = vec![None; n];
     let mut extra = 8;
     for instruction in &function.body {
-        if let Op::Borrow { place, .. } = &instruction.op {
+        if let Op::Borrow { place, .. } | Op::SliceBorrow { place, .. } = &instruction.op {
             if place.projections.is_empty() && cells[place.local].is_none() {
                 cells[place.local] = Some(n + extra);
                 extra += 1;
@@ -1336,6 +1384,10 @@ fn function_body(
 }
 pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     let program = checked.program();
+    let mut destructors = vec![None; program.types.len()];
+    for (owner, function) in &program.destructors {
+        destructors[*owner] = Some(*function);
+    }
     let mut messages = Vec::new();
     for function in &program.functions {
         for instruction in &function.body {
@@ -1407,7 +1459,7 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     exports.extend_from_slice(&[2, 0]);
     let mut i = 0;
     while i < program.functions.len() {
-        text(&mut exports, &program.functions[i].name);
+        text(&mut exports, &format!("fn:{}", program.functions[i].name));
         exports.push(0);
         uleb(&mut exports, (FIRST_USER + i) as u64);
         i += 1;
@@ -1431,7 +1483,7 @@ pub fn emit(checked: &CheckedProgram) -> Result<Vec<u8>, String> {
     }
     for ty in 0..program.types.len() {
         for copying in [false, true] {
-            let body = type_helper(program, ty, copying);
+            let body = type_helper(program, ty, copying, destructors[ty]);
             uleb(&mut code, body.len() as u64);
             code.extend_from_slice(&body);
         }

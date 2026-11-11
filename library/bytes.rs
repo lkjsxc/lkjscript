@@ -1,5 +1,7 @@
 //! Byte operations used by readers. Every extent is a usize; there is no recursion.
-pub fn starts_with(bytes: &Vec<u8>, prefix: &Vec<u8>) -> bool {
+use crate::Option;
+
+pub fn starts_with(bytes: &[u8], prefix: &[u8]) -> bool {
     if prefix.len() > bytes.len() {
         return false;
     }
@@ -13,7 +15,7 @@ pub fn starts_with(bytes: &Vec<u8>, prefix: &Vec<u8>) -> bool {
     true
 }
 
-pub fn find_byte(bytes: &Vec<u8>, needle: u8) -> Option<usize> {
+pub fn find_byte(bytes: &[u8], needle: u8) -> Option<usize> {
     let mut i: usize = 0;
     while i < bytes.len() {
         if bytes[i] == needle {
@@ -24,7 +26,7 @@ pub fn find_byte(bytes: &Vec<u8>, needle: u8) -> Option<usize> {
     Option::None
 }
 
-pub fn append_bytes(target: &mut Vec<u8>, source: &Vec<u8>) {
+pub fn append_bytes(target: &mut Vec<u8>, source: &[u8]) {
     let mut i: usize = 0;
     while i < source.len() {
         target.push(source[i]);
@@ -36,7 +38,7 @@ fn continuation(byte: u8) -> bool {
     byte >= 128 && byte < 192
 }
 
-pub fn valid_utf8(bytes: &Vec<u8>) -> bool {
+pub fn valid_utf8(bytes: &[u8]) -> bool {
     let mut i: usize = 0;
     while i < bytes.len() {
         let first = bytes[i];

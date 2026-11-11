@@ -66,6 +66,7 @@ fn checked_integer_edges_match_rust() {
                 params: 2,
                 result: ty,
                 test: false,
+                return_source: None,
                 locals: vec![
                     k::Local {
                         name: "a".to_string(),
@@ -136,6 +137,7 @@ fn checked_integer_edges_match_rust() {
     let program = check::check(k::Program {
         types: k::primitives(),
         functions,
+        destructors: Vec::new(),
     })
     .unwrap();
     let bytes = wasm::emit(&program).unwrap();
@@ -143,7 +145,7 @@ fn checked_integer_edges_match_rust() {
         &bytes,
         &format!(
             "for(const [name,a,b,expected] of [{}]){{\
-         let actual;try{{actual=instance.exports[name](BigInt(a),BigInt(b)).toString()}}\
+         let actual;try{{actual=instance.exports['fn:'+name](BigInt(a),BigInt(b)).toString()}}\
          catch{{actual='trap'}}\
          if(actual!==expected)throw Error([name,a,b,expected,actual].join(' '));\
          }}",
@@ -181,11 +183,11 @@ fn aggregate_copy_and_released_storage_remain_independent() {
     run_node(
         &bytes,
         "
-        if(instance.exports.copy_probe()!==7n)throw Error('Copy aliases nested fields');
-        if(instance.exports.vec_probe()!==1999n)throw Error('Vec growth result');
+        if(instance.exports['fn:copy_probe']()!==7n)throw Error('Copy aliases nested fields');
+        if(instance.exports['fn:vec_probe']()!==1999n)throw Error('Vec growth result');
         const before=instance.exports.memory.buffer.byteLength;
         for(let i=0;i<1000;i++){
-            if(instance.exports.copy_probe()!==7n||instance.exports.vec_probe()!==1999n)
+            if(instance.exports['fn:copy_probe']()!==7n||instance.exports['fn:vec_probe']()!==1999n)
                 throw Error('released storage was reused incorrectly');
         }
         if(instance.exports.memory.buffer.byteLength!==before)
@@ -271,6 +273,7 @@ fn narrow_complement_and_float_conversions_match_rust() {
             params: 0,
             result: to,
             test: false,
+            return_source: None,
             locals: vec![
                 k::Local {
                     name: "input".to_string(),
@@ -290,14 +293,124 @@ fn narrow_complement_and_float_conversions_match_rust() {
             ],
         });
         checks.push(format!(
-            "if(instance.exports.{name}()!=={}n)throw Error('{name}');",
+            "if(instance.exports['fn:{name}']()!=={}n)throw Error('{name}');",
             expected[index]
         ));
     }
     let checked = check::check(k::Program {
         types: k::primitives(),
         functions,
+        destructors: Vec::new(),
     })
     .unwrap();
     run_node(&wasm::emit(&checked).unwrap(), &checks.join(""));
+}
+
+#[test]
+fn arrays_coerce_to_slices_and_keep_value_semantics() {
+    let source = r#"
+        fn sum(values: &[i64]) -> i64 {
+            let mut i: usize = 0;
+            let mut total: i64 = 0;
+            while i < values.len() {
+                total = total + values[i];
+                i = i + 1;
+            }
+            total
+        }
+        fn array_probe() -> i64 {
+            let mut original: [i64; 3] = [1, 2, 3];
+            let copied = original;
+            {
+                let view: &mut [i64] = &mut original;
+                view[1] = 99;
+            }
+            assert_eq!(copied[1], 2);
+            sum(&original) + sum(&copied)
+        }
+    "#;
+    let ast = syntax::parse(source).unwrap();
+    let program = check::check(elaborate::elaborate(&ast).unwrap()).unwrap();
+    run_node(
+        &wasm::emit(&program).unwrap(),
+        "
+        if(instance.exports['fn:array_probe']()!==109n)throw Error('array/slice result');
+        const size=instance.exports.memory.buffer.byteLength;
+        for(let i=0;i<1000;i++)if(instance.exports['fn:array_probe']()!==109n)throw Error('array reuse');
+        if(instance.exports.memory.buffer.byteLength!==size)throw Error('array storage leak');
+    ",
+    );
+}
+
+#[test]
+fn registered_drop_runs_on_return_break_and_nested_release() {
+    let source = r#"
+        struct Counter<'a> { count: &'a mut i64 }
+        impl<'a> Drop for Counter<'a> {
+            fn drop(&mut self) { *self.count = *self.count + 1; }
+        }
+        struct Parent<'a> { child: Counter<'a> }
+        fn returning(count: &mut i64) -> i64 {
+            let counter = Counter { count };
+            return 7;
+        }
+        fn breaking(count: &mut i64) {
+            loop {
+                let counter = Counter { count };
+                break;
+            }
+        }
+        fn drop_probe() -> i64 {
+            let mut count: i64 = 0;
+            let value = returning(&mut count);
+            breaking(&mut count);
+            { let parent = Parent { child: Counter { count: &mut count } }; }
+            count + value
+        }
+    "#;
+    let ast = syntax::parse(source).unwrap();
+    let program = check::check(elaborate::elaborate(&ast).unwrap()).unwrap();
+    run_node(&wasm::emit(&program).unwrap(), "
+        if(instance.exports['fn:drop_probe']()!==10n)throw Error('destructor count');
+        const size=instance.exports.memory.buffer.byteLength;
+        for(let i=0;i<1000;i++)if(instance.exports['fn:drop_probe']()!==10n)throw Error('destructor reuse');
+        if(instance.exports.memory.buffer.byteLength!==size)throw Error('destructor receiver cell leak');
+    ");
+}
+
+#[test]
+fn function_exports_have_a_separate_namespace() {
+    let mut functions = Vec::new();
+    for (name, value) in [("memory", 41_i64), ("fn:memory", 42_i64)] {
+        functions.push(k::Function {
+            name: name.to_string(),
+            params: 0,
+            result: k::I64,
+            test: false,
+            return_source: None,
+            locals: vec![k::Local {
+                name: "value".to_string(),
+                ty: k::I64,
+                mutable: false,
+            }],
+            body: vec![
+                instruction(k::Op::Int { dst: 0, value }),
+                instruction(k::Op::Return { src: 0 }),
+            ],
+        });
+    }
+    let checked = check::check(k::Program {
+        types: k::primitives(),
+        functions,
+        destructors: Vec::new(),
+    })
+    .unwrap();
+    run_node(
+        &wasm::emit(&checked).unwrap(),
+        "
+        if(!(instance.exports.memory instanceof WebAssembly.Memory))throw Error('memory export');
+        if(instance.exports['fn:memory']()!==41n)throw Error('source memory function');
+        if(instance.exports['fn:fn:memory']()!==42n)throw Error('explicit K function name');
+    ",
+    );
 }

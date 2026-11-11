@@ -80,6 +80,10 @@ fn type_term(
             Type::Path(p) => Term::Named(
                 if p.name.starts_with('\'') {
                     "lifetime".to_string()
+                } else if p.name.contains("::")
+                    && source.aliases.iter().any(|a| a.name == short(&p.name))
+                {
+                    p.name.clone()
                 } else {
                     short(&p.name).to_string()
                 },
@@ -205,6 +209,10 @@ fn coherence(source: &Program) -> Result<(), Diagnostic> {
                 let b = type_term(source, other.target, &right, &mut terms);
                 let at = type_term(source, trait_ty, &left, &mut terms);
                 let bt = type_term(source, other.trait_ty.unwrap(), &right, &mut terms);
+                let a = normalize(source, a, &mut terms)?;
+                let b = normalize(source, b, &mut terms)?;
+                let at = normalize(source, at, &mut terms)?;
+                let bt = normalize(source, bt, &mut terms)?;
                 if unify(&terms, vec![(a, b), (at, bt)]) {
                     return Err(Diagnostic::new(
                         implementation.span,
@@ -522,9 +530,14 @@ impl Analysis<'_> {
                 },
                 None => continue,
             };
-            match substitutions.get(&g.name) {
-                Some(t) if !unknown(&self.terms, *t) => {
-                    flow(&self.terms, *t, target, span, &mut self.edges)
+            let concrete = match substitutions.get(&g.name).copied() {
+                Some(t) => normalize(self.source, t, &mut self.terms).ok(),
+                None => None,
+            };
+            match concrete {
+                Some(t) if !unknown(&self.terms, t) => {
+                    substitutions.insert(g.name.clone(), t);
+                    flow(&self.terms, t, target, span, &mut self.edges)
                 }
                 _ => {
                     for from in &self.nodes[caller] {
@@ -946,7 +959,12 @@ fn finite(source: &Program) -> Result<(), Diagnostic> {
     Ok(())
 }
 pub fn validate(source: &Program) -> Result<(), Diagnostic> {
+    declarations(source)?;
+    alias_cycles(source)?;
+    constant_cycles(source)?;
+    finite_data(source)?;
     coherence(source)?;
+    signatures(source)?;
     finite(source)
 }
 
@@ -975,6 +993,7 @@ mod tests {
     }
     #[test]
     fn nonexpanding_recursion() {
+        validate_text("type Identity<T> = T; fn f<T>(x:T){f::<Identity<T>>(x);}").unwrap();
         validate_text("fn f<T>(x:T){g::<T>(x);}fn g<U>(x:U){f::<U>(x);}").unwrap();
     }
     #[test]
@@ -1145,6 +1164,25 @@ fn impl_arguments(
                     return None;
                 }
             }
+            Type::Array { inner, len } => {
+                let extent = len
+                    .replace('_', "")
+                    .trim_end_matches("usize")
+                    .parse::<usize>()
+                    .ok()?;
+                if let TypeKind::Array {
+                    inner: actual_inner,
+                    len: actual_len,
+                } = actual_type.kind
+                {
+                    if extent != actual_len {
+                        return None;
+                    }
+                    work.push((*inner, actual_inner));
+                } else {
+                    return None;
+                }
+            }
             Type::Tuple(parts) => match &actual_type.kind {
                 TypeKind::Unit if parts.is_empty() => {}
                 TypeKind::Struct { fields, .. } if parts.len() == fields.len() => {
@@ -1281,10 +1319,12 @@ fn trait_requirements(
             TypeKind::World => {
                 return None;
             }
-            TypeKind::Vec { inner } | TypeKind::Box { inner } => children.push(Goal {
-                ty: *inner,
-                bound: bound.to_string(),
-            }),
+            TypeKind::Vec { inner } | TypeKind::Box { inner } | TypeKind::Array { inner, .. } => {
+                children.push(Goal {
+                    ty: *inner,
+                    bound: bound.to_string(),
+                })
+            }
             TypeKind::Ref { inner, mutable } | TypeKind::Slice { inner, mutable } => {
                 if clone {
                     if *mutable {
@@ -1303,12 +1343,12 @@ fn trait_requirements(
                 }
             }
             TypeKind::Struct { fields, .. } => {
-                let tuple = ty.name.starts_with('(')
-                    && ty.name.ends_with(')')
-                    && fields
-                        .iter()
-                        .enumerate()
-                        .all(|(i, f)| f.name == i.to_string());
+                let mut tuple = ty.name.starts_with('(') && ty.name.ends_with(')');
+                for i in 0..fields.len() {
+                    if fields[i].name != i.to_string() {
+                        tuple = false;
+                    }
+                }
                 if automatic || tuple || derived(source, types, applications, goal.ty, bound) {
                     for field in fields {
                         children.push(Goal {
@@ -1564,5 +1604,924 @@ mod bound_tests {
         assert!(satisfies(&source, &types, &BTreeMap::new(), vi, "Ord"));
         assert!(!satisfies(&source, &types, &BTreeMap::new(), vf, "Ord"));
         assert!(satisfies(&source, &types, &BTreeMap::new(), vf, "Clone"));
+    }
+}
+
+fn alias_cycles(source: &Program) -> Result<(), Diagnostic> {
+    let mut names = BTreeMap::new();
+    for i in 0..source.aliases.len() {
+        names.insert(source.aliases[i].name.clone(), i);
+        names.insert(
+            qualified(&source.aliases[i].module, &source.aliases[i].name),
+            i,
+        );
+    }
+    let mut edges = Vec::new();
+    for i in 0..source.aliases.len() {
+        let alias = &source.aliases[i];
+        let mut stack = vec![alias.ty];
+        while let Some(ty) = stack.pop() {
+            if let Type::Path(path) = &source.types[ty].kind {
+                let mut parameter = false;
+                for g in &alias.generics {
+                    if g.name == path.name {
+                        parameter = true;
+                    }
+                }
+                if !parameter {
+                    if let Some(to) = names.get(&path.name) {
+                        edges.push(Edge {
+                            from: i,
+                            to: *to,
+                            expanding: false,
+                            unknown: false,
+                            span: alias.span,
+                        });
+                    }
+                }
+            }
+            stack.extend(type_children(source, ty));
+        }
+    }
+    let groups = components(source.aliases.len(), &edges);
+    for edge in edges {
+        if groups[edge.from] == groups[edge.to] {
+            return Err(Diagnostic::new(edge.span, "E_TYPE", "recursive type alias"));
+        }
+    }
+    Ok(())
+}
+#[derive(Clone)]
+enum Normalize {
+    Enter(usize),
+    Alias(usize, usize),
+    Node(usize, String, Vec<usize>),
+}
+fn normalize(source: &Program, term: usize, terms: &mut Vec<Term>) -> Result<usize, Diagnostic> {
+    let mut done = BTreeMap::new();
+    let mut tasks = vec![Normalize::Enter(term)];
+    while let Some(task) = tasks.pop() {
+        match task {
+            Normalize::Enter(id) => {
+                if done.contains_key(&id) {
+                    continue;
+                }
+                match terms[id].clone() {
+                    Term::Named(name, kids) => {
+                        let mut alias = None;
+                        for a in &source.aliases {
+                            if a.name == name || qualified(&a.module, &a.name) == name {
+                                alias = Some(a);
+                                break;
+                            }
+                        }
+                        if let Some(a) = alias {
+                            if a.generics.len() != kids.len() {
+                                return Err(Diagnostic::new(
+                                    a.span,
+                                    "E_TYPE",
+                                    "type alias argument count differs",
+                                ));
+                            }
+                            let mut env = BTreeMap::new();
+                            for i in 0..kids.len() {
+                                env.insert(a.generics[i].name.clone(), kids[i]);
+                            }
+                            let expanded = type_term(source, a.ty, &env, terms);
+                            tasks.push(Normalize::Alias(id, expanded));
+                            tasks.push(Normalize::Enter(expanded));
+                        } else {
+                            tasks.push(Normalize::Node(id, name, kids.clone()));
+                            for k in kids {
+                                tasks.push(Normalize::Enter(k));
+                            }
+                        }
+                    }
+                    _ => {
+                        done.insert(id, id);
+                    }
+                }
+            }
+            Normalize::Alias(id, expanded) => {
+                done.insert(id, done[&expanded]);
+            }
+            Normalize::Node(id, name, kids) => {
+                let mut normalized = Vec::new();
+                for k in kids {
+                    normalized.push(done[&k]);
+                }
+                let new = push(terms, Term::Named(name, normalized));
+                done.insert(id, new);
+            }
+        }
+    }
+    Ok(done[&term])
+}
+fn equivalent(terms: &[Term], a: usize, b: usize) -> bool {
+    let mut stack = vec![(a, b)];
+    while let Some((a, b)) = stack.pop() {
+        match (&terms[a], &terms[b]) {
+            (Term::Variable(x), Term::Variable(y)) if x == y => {}
+            (Term::Named(an, ak), Term::Named(bn, bk)) if an == bn && ak.len() == bk.len() => {
+                for i in 0..ak.len() {
+                    stack.push((ak[i], bk[i]));
+                }
+            }
+            _ => return false,
+        }
+    }
+    true
+}
+fn signature_type(
+    source: &Program,
+    id: TypeId,
+    env: &BTreeMap<String, usize>,
+    terms: &mut Vec<Term>,
+) -> Result<usize, Diagnostic> {
+    let raw = type_term(source, id, env, terms);
+    normalize(source, raw, terms)
+}
+fn bound_closure(
+    source: &Program,
+    first: usize,
+    self_ty: usize,
+    terms: &mut Vec<Term>,
+) -> Result<Vec<usize>, Diagnostic> {
+    let mut result = Vec::new();
+    let mut pending = vec![first];
+    while let Some(bound) = pending.pop() {
+        let mut seen = false;
+        for previous in &result {
+            if equivalent(terms, bound, *previous) {
+                seen = true;
+                break;
+            }
+        }
+        if seen {
+            continue;
+        }
+        result.push(bound);
+        let (name, args) = match terms[bound].clone() {
+            Term::Named(n, a) => (n, a),
+            _ => continue,
+        };
+        let builtin = match name.as_str() {
+            "Copy" => vec!["Clone"],
+            "Ord" => vec!["Eq", "PartialOrd"],
+            "Eq" | "PartialOrd" => vec!["PartialEq"],
+            "Fn" => vec!["FnMut"],
+            "FnMut" => vec!["FnOnce"],
+            _ => Vec::new(),
+        };
+        for name in builtin {
+            pending.push(push(terms, Term::Named(name.to_string(), args.clone())));
+        }
+        for declaration in &source.traits {
+            if declaration.name == name {
+                let mut env = BTreeMap::new();
+                env.insert("Self".to_string(), self_ty);
+                if declaration.generics.len() != args.len() {
+                    continue;
+                }
+                for i in 0..args.len() {
+                    env.insert(declaration.generics[i].name.clone(), args[i]);
+                }
+                for parent in &declaration.bounds {
+                    pending.push(signature_type(source, *parent, &env, terms)?);
+                }
+            }
+        }
+    }
+    Ok(result)
+}
+fn known_bounds(
+    source: &Program,
+    parameters: &[GenericParam],
+    env: &BTreeMap<String, usize>,
+    terms: &mut Vec<Term>,
+) -> Result<Vec<(usize, usize)>, Diagnostic> {
+    let mut known = Vec::new();
+    for p in parameters {
+        if p.lifetime {
+            continue;
+        }
+        let ty = match env.get(&p.name) {
+            Some(t) => *t,
+            None => continue,
+        };
+        for b in &p.bounds {
+            let bound = signature_type(source, *b, env, terms)?;
+            for parent in bound_closure(source, bound, ty, terms)? {
+                known.push((ty, parent));
+            }
+        }
+    }
+    Ok(known)
+}
+fn symbolic_bound(
+    terms: &mut Vec<Term>,
+    ty: usize,
+    bound: usize,
+    known: &[(usize, usize)],
+) -> bool {
+    let mut pending = vec![(ty, bound)];
+    while let Some((ty, bound)) = pending.pop() {
+        let mut found = false;
+        for (known_ty, known_bound) in known {
+            if equivalent(terms, ty, *known_ty) && equivalent(terms, bound, *known_bound) {
+                found = true;
+                break;
+            }
+        }
+        if found {
+            continue;
+        }
+        let (name, args) = match terms[bound].clone() {
+            Term::Named(n, a) => (n, a),
+            _ => return false,
+        };
+        if !args.is_empty() {
+            return false;
+        }
+        let (type_name, children) = match terms[ty].clone() {
+            Term::Named(n, a) => (n, a),
+            _ => return false,
+        };
+        let marker = name == "Copy"
+            || name == "Clone"
+            || name == "Data"
+            || name == "Send"
+            || name == "Sync"
+            || name == "Eq"
+            || name == "Ord"
+            || name == "PartialEq"
+            || name == "PartialOrd";
+        if !marker {
+            return false;
+        }
+        match type_name.as_str() {
+            "bool" | "u8" | "u16" | "u32" | "u64" | "u128" | "usize" | "i8" | "i16" | "i32"
+            | "i64" | "i128" | "isize" | "char" => {}
+            "f64" | "f32" => {
+                if name == "Eq" || name == "Ord" {
+                    return false;
+                }
+            }
+            "String" => {
+                if name == "Copy" {
+                    return false;
+                }
+            }
+            "Vec" | "Box" => {
+                if name == "Copy" {
+                    return false;
+                }
+                for child in children {
+                    pending.push((child, bound));
+                }
+            }
+            "tuple" => {
+                for child in children {
+                    pending.push((child, bound));
+                }
+            }
+            "&" => {
+                if name != "Copy" && name != "Clone" {
+                    let required = if name == "Send" {
+                        push(terms, Term::Named("Sync".to_string(), Vec::new()))
+                    } else {
+                        bound
+                    };
+                    for child in children {
+                        pending.push((child, required));
+                    }
+                }
+            }
+            "&mut" => {
+                if name == "Copy" || name == "Clone" {
+                    return false;
+                }
+                for child in children {
+                    pending.push((child, bound));
+                }
+            }
+            _ if type_name.starts_with("[;") => {
+                for child in children {
+                    pending.push((child, bound));
+                }
+            }
+            _ => return false,
+        }
+    }
+    true
+}
+fn associated_dependencies(source: &Program, ty: TypeId, env: &BTreeMap<String, usize>) -> bool {
+    let mut work = vec![ty];
+    while let Some(t) = work.pop() {
+        if let Type::Path(path) = &source.types[t].kind {
+            if path.name.starts_with("Self::") && !env.contains_key(&path.name) {
+                return false;
+            }
+        }
+        work.extend(type_children(source, t));
+    }
+    true
+}
+fn signatures(source: &Program) -> Result<(), Diagnostic> {
+    for implementation in &source.impls {
+        let trait_id = match implementation.trait_ty {
+            Some(id) => id,
+            None => continue,
+        };
+        let path = match &source.types[trait_id].kind {
+            Type::Path(p) => p,
+            _ => continue,
+        };
+        let declaration = match source.traits.iter().find(|t| t.name == short(&path.name)) {
+            Some(t) => t,
+            None => continue,
+        };
+        let mut terms = Vec::new();
+        let mut next = 0;
+        let mut actual_env = variables(source, &implementation.generics, &mut terms, &mut next);
+        let target = signature_type(source, implementation.target, &actual_env, &mut terms)?;
+        actual_env.insert("Self".to_string(), target);
+        let mut expected_env = BTreeMap::new();
+        expected_env.insert("Self".to_string(), target);
+        if path.args.len() != declaration.generics.len() {
+            return Err(Diagnostic::new(
+                implementation.span,
+                "E_TRAIT",
+                "trait type argument count differs",
+            ));
+        }
+        for i in 0..path.args.len() {
+            let t = signature_type(source, path.args[i], &actual_env, &mut terms)?;
+            expected_env.insert(declaration.generics[i].name.clone(), t);
+        }
+        let known = known_bounds(source, &implementation.generics, &actual_env, &mut terms)?;
+        for generic in &declaration.generics {
+            if generic.lifetime {
+                continue;
+            }
+            let concrete = expected_env[&generic.name];
+            for bound in &generic.bounds {
+                let b = signature_type(source, *bound, &expected_env, &mut terms)?;
+                if !symbolic_bound(&mut terms, concrete, b, &known) {
+                    return Err(Diagnostic::new(
+                        implementation.span,
+                        "E_TRAIT",
+                        "implementation does not establish a trait type-argument bound",
+                    ));
+                }
+            }
+        }
+        let mut associated = Vec::new();
+        for expected in &declaration.associated {
+            let value = implementation
+                .associated
+                .iter()
+                .find(|a| a.name == expected.name)
+                .and_then(|a| a.value);
+            if let Some(value) = value {
+                associated.push((expected.name.clone(), value, false));
+            } else if let Some(value) = expected.value {
+                associated.push((expected.name.clone(), value, true));
+            }
+        }
+        let mut remaining = associated.len();
+        let mut done = vec![false; remaining];
+        while remaining > 0 {
+            let before = remaining;
+            for i in 0..associated.len() {
+                if done[i] {
+                    continue;
+                }
+                let (name, ty, default) = &associated[i];
+                let env = if *default { &expected_env } else { &actual_env };
+                if !associated_dependencies(source, *ty, env) {
+                    continue;
+                }
+                let value = signature_type(source, *ty, env, &mut terms)?;
+                let key = format!("Self::{name}");
+                actual_env.insert(key.clone(), value);
+                expected_env.insert(key, value);
+                done[i] = true;
+                remaining -= 1;
+            }
+            if remaining == before {
+                return Err(Diagnostic::new(
+                    implementation.span,
+                    "E_TRAIT",
+                    "associated type definitions are cyclic or unresolved",
+                ));
+            }
+        }
+        for associated in &declaration.associated {
+            if let Some(concrete) = expected_env.get(&format!("Self::{}", associated.name)) {
+                for constraint in &associated.bounds {
+                    let b = signature_type(source, *constraint, &expected_env, &mut terms)?;
+                    if !symbolic_bound(&mut terms, *concrete, b, &known) {
+                        return Err(Diagnostic::new(
+                            implementation.span,
+                            "E_TRAIT",
+                            "associated type does not establish its declared bound",
+                        ));
+                    }
+                }
+            }
+        }
+        for method in &implementation.methods {
+            let actual = &source.functions[*method];
+            let expected = match declaration
+                .methods
+                .iter()
+                .map(|m| &source.functions[*m])
+                .find(|m| m.name == actual.name)
+            {
+                Some(f) => f,
+                None => continue,
+            };
+            let mut aenv = actual_env.clone();
+            let mut eenv = expected_env.clone();
+            for i in 0..actual.generics.len() {
+                let a = &actual.generics[i];
+                let e = &expected.generics[i];
+                if a.lifetime != e.lifetime {
+                    return Err(Diagnostic::new(
+                        actual.span,
+                        "E_TRAIT",
+                        "method generic parameter kinds differ",
+                    ));
+                }
+                if a.lifetime {
+                    continue;
+                }
+                if aenv.contains_key(&a.name) || eenv.contains_key(&e.name) {
+                    return Err(Diagnostic::new(
+                        actual.span,
+                        "E_TRAIT",
+                        "method type parameter shadows an enclosing type parameter",
+                    ));
+                }
+                let value = push(&mut terms, Term::Variable(next));
+                next += 1;
+                aenv.insert(a.name.clone(), value);
+                eenv.insert(e.name.clone(), value);
+            }
+            let mut pairs = vec![(actual.result, expected.result)];
+            for i in 0..actual.params.len() {
+                pairs.push((actual.params[i].ty, expected.params[i].ty));
+            }
+            for (a, e) in pairs {
+                let a = signature_type(source, a, &aenv, &mut terms)?;
+                let e = signature_type(source, e, &eenv, &mut terms)?;
+                if !equivalent(&terms, a, e) {
+                    return Err(Diagnostic::new(
+                        actual.span,
+                        "E_TRAIT",
+                        "implementation method type differs from trait signature",
+                    ));
+                }
+            }
+            let mut available = known.clone();
+            available.extend(known_bounds(source, &expected.generics, &eenv, &mut terms)?);
+            for g in &actual.generics {
+                if g.lifetime {
+                    continue;
+                }
+                let ty = aenv[&g.name];
+                for b in &g.bounds {
+                    let bound = signature_type(source, *b, &aenv, &mut terms)?;
+                    if !symbolic_bound(&mut terms, ty, bound, &available) {
+                        return Err(Diagnostic::new(
+                            actual.span,
+                            "E_TRAIT",
+                            "implementation method requires a stronger generic bound",
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod signature_tests {
+    use super::*;
+    fn check(text: &str) -> Result<(), Diagnostic> {
+        validate(&crate::syntax::parse(text).unwrap())
+    }
+    #[test]
+    fn mismatched_unused_result() {
+        assert_eq!(check("trait A {fn f(&self)->i64;}impl A for bool{fn f(&self)->bool{true}}fn probe()->i64{42}").unwrap_err().code,"E_TRAIT");
+    }
+    #[test]
+    fn receiver_convention_matters() {
+        assert_eq!(
+            check("trait A {fn f(&self);}impl A for i64{fn f(&mut self){}}")
+                .unwrap_err()
+                .code,
+            "E_TRAIT"
+        );
+    }
+    #[test]
+    fn associated_substitution_and_alias() {
+        check("type Alias<T> = Vec<T>;trait A {type Out;fn f(&self)->Self::Out;}impl A for i64{type Out=Alias<i64>;fn f(&self)->Vec<i64>{vec![1]}}").unwrap();
+    }
+    #[test]
+    fn renamed_method_generics() {
+        check("trait A {fn f<T>(&self,x:T)->T;}impl A for i64{fn f<U>(&self,x:U)->U{x}}").unwrap();
+    }
+    #[test]
+    fn stronger_method_bound_rejected() {
+        assert_eq!(
+            check("trait A {fn f<T>(&self,x:T);}impl A for i64{fn f<U:Copy>(&self,x:U){}}")
+                .unwrap_err()
+                .code,
+            "E_TRAIT"
+        );
+    }
+    #[test]
+    fn omitted_inherited_bound_accepted() {
+        check("trait A {fn f<T:Copy>(&self,x:T);}impl A for i64{fn f<U>(&self,x:U){}}").unwrap();
+    }
+    #[test]
+    fn implied_method_bound() {
+        check("trait A {fn f<T:Ord>(&self,x:T);}impl A for i64{fn f<U:Eq>(&self,x:U){}}").unwrap();
+    }
+    #[test]
+    fn trait_argument_substitution() {
+        check("trait A<T>{fn f(&self,x:T)->T;}impl<U> A<U> for Vec<U>{fn f(&self,x:U)->U{x}}")
+            .unwrap();
+    }
+    #[test]
+    fn missing_trait_argument_bound() {
+        assert_eq!(
+            check("trait A<T:Copy>{}impl<U> A<U> for Vec<U>{}")
+                .unwrap_err()
+                .code,
+            "E_TRAIT"
+        );
+    }
+    #[test]
+    fn associated_bound_checked() {
+        assert_eq!(
+            check("trait A {type Out:Copy;}impl A for i64{type Out=Vec<i64>;}")
+                .unwrap_err()
+                .code,
+            "E_TRAIT"
+        );
+        check("trait A{type Out:Copy;}impl<T:Copy> A for Vec<T>{type Out=T;}").unwrap();
+    }
+    #[test]
+    fn alias_cycle_rejected() {
+        check("type Result<T> = std::result::Result<T, i64>; trait A {fn f(&self)->Result<bool>;} impl A for i64 {fn f(&self)->std::result::Result<bool,i64>{Ok(true)}}").unwrap();
+        assert_eq!(check("type A=B;type B=Vec<A>;").unwrap_err().code, "E_TYPE");
+    }
+}
+
+fn add_name(
+    names: &mut BTreeMap<String, Span>,
+    module: &str,
+    name: &str,
+    span: Span,
+) -> Result<(), Diagnostic> {
+    let path = qualified(module, name);
+    if names.insert(path.clone(), span).is_some() {
+        return Err(Diagnostic::new(
+            span,
+            "E_NAME",
+            &format!("duplicate declaration: {path}"),
+        ));
+    }
+    Ok(())
+}
+fn generic_names(params: &[GenericParam]) -> Result<(), Diagnostic> {
+    let mut names = BTreeMap::new();
+    for p in params {
+        add_name(&mut names, "", &p.name, p.span)?;
+    }
+    Ok(())
+}
+fn declarations(source: &Program) -> Result<(), Diagnostic> {
+    let mut type_names = BTreeMap::new();
+    let mut value_names = BTreeMap::new();
+    let mut methods = vec![false; source.functions.len()];
+    for t in &source.traits {
+        for m in &t.methods {
+            methods[*m] = true;
+        }
+    }
+    for im in &source.impls {
+        for m in &im.methods {
+            methods[*m] = true;
+        }
+        generic_names(&im.generics)?;
+    }
+    for module in &source.modules {
+        if module.external {
+            return Err(Diagnostic::new(
+                module.span,
+                "E_UNSUPPORTED",
+                "external module loading is not implemented",
+            ));
+        }
+        add_name(&mut type_names, &module.parent, &module.name, module.span)?;
+    }
+    for i in 0..source.functions.len() {
+        let f = &source.functions[i];
+        generic_names(&f.generics)?;
+        let mut parameters = BTreeMap::new();
+        for p in &f.params {
+            if p.name != "_" {
+                add_name(&mut parameters, "", &p.name, p.span)?;
+            }
+        }
+        if !methods[i] {
+            add_name(&mut value_names, &f.module, &f.name, f.span)?;
+        }
+    }
+    for s in &source.structs {
+        add_name(&mut type_names, &s.module, &s.name, s.span)?;
+        generic_names(&s.generics)?;
+        if s.tuple || s.fields.is_empty() {
+            add_name(&mut value_names, &s.module, &s.name, s.span)?;
+        }
+        let mut fields = BTreeMap::new();
+        for f in &s.fields {
+            add_name(&mut fields, "", &f.name, f.span)?;
+        }
+    }
+    for e in &source.enums {
+        add_name(&mut type_names, &e.module, &e.name, e.span)?;
+        generic_names(&e.generics)?;
+        let mut variants = BTreeMap::new();
+        for v in &e.variants {
+            add_name(&mut variants, "", &v.name, v.span)?;
+            let mut fields = BTreeMap::new();
+            for f in &v.fields {
+                add_name(&mut fields, "", &f.name, f.span)?;
+            }
+        }
+    }
+    for t in &source.traits {
+        add_name(&mut type_names, &t.module, &t.name, t.span)?;
+        generic_names(&t.generics)?;
+        let mut functions = BTreeMap::new();
+        for f in &t.methods {
+            let f = &source.functions[*f];
+            add_name(&mut functions, "", &f.name, f.span)?;
+        }
+        let mut associated = BTreeMap::new();
+        for a in &t.associated {
+            add_name(&mut associated, "", &a.name, a.span)?;
+        }
+    }
+    for alias in &source.aliases {
+        add_name(&mut type_names, &alias.module, &alias.name, alias.span)?;
+        generic_names(&alias.generics)?;
+    }
+    for constant in &source.constants {
+        add_name(
+            &mut value_names,
+            &constant.module,
+            &constant.name,
+            constant.span,
+        )?;
+    }
+    Ok(())
+}
+fn constant_cycles(source: &Program) -> Result<(), Diagnostic> {
+    let mut names = BTreeMap::new();
+    let mut starts = BTreeMap::new();
+    for i in 0..source.constants.len() {
+        let c = &source.constants[i];
+        names.insert(qualified(&c.module, &c.name), i);
+        starts.insert(source.exprs[c.value].span.start, i);
+    }
+    let mut edges = Vec::new();
+    for expression in &source.exprs {
+        let path = match &expression.kind {
+            Expr::Path(p) => p,
+            _ => continue,
+        };
+        let from = match starts.range(..=expression.span.start).next_back() {
+            Some((_, i)) => *i,
+            None => continue,
+        };
+        let constant = &source.constants[from];
+        if expression.span.end > source.exprs[constant.value].span.end {
+            continue;
+        }
+        let mut name = qualified(&constant.module, &path.name);
+        if let Some(rest) = path.name.strip_prefix("crate::") {
+            name = rest.to_string();
+        } else if let Some(rest) = path.name.strip_prefix("self::") {
+            name = qualified(&constant.module, rest);
+        }
+        let to = names.get(&name).or_else(|| names.get(&path.name));
+        if let Some(to) = to {
+            edges.push(Edge {
+                from,
+                to: *to,
+                expanding: false,
+                unknown: false,
+                span: expression.span,
+            });
+        }
+    }
+    let groups = components(source.constants.len(), &edges);
+    for edge in edges {
+        if groups[edge.from] == groups[edge.to] {
+            return Err(Diagnostic::new(
+                edge.span,
+                "E_TYPE",
+                "recursive constant definition",
+            ));
+        }
+    }
+    Ok(())
+}
+struct DataDeclaration<'a> {
+    name: String,
+    params: &'a [GenericParam],
+    fields: Vec<TypeId>,
+    span: Span,
+}
+fn finite_data(source: &Program) -> Result<(), Diagnostic> {
+    let mut declarations = Vec::new();
+    for s in &source.structs {
+        declarations.push(DataDeclaration {
+            name: qualified(&s.module, &s.name),
+            params: &s.generics,
+            fields: s.fields.iter().map(|f| f.ty).collect(),
+            span: s.span,
+        });
+    }
+    for e in &source.enums {
+        let mut fields = Vec::new();
+        for v in &e.variants {
+            for f in &v.fields {
+                fields.push(f.ty);
+            }
+        }
+        declarations.push(DataDeclaration {
+            name: qualified(&e.module, &e.name),
+            params: &e.generics,
+            fields,
+            span: e.span,
+        });
+    }
+    let mut terms = Vec::new();
+    let mut count = 0;
+    let mut environments = Vec::new();
+    let mut target_nodes = Vec::new();
+    let mut names = BTreeMap::new();
+    let mut short_names: BTreeMap<String, Option<usize>> = BTreeMap::new();
+    for i in 0..declarations.len() {
+        let declaration = &declarations[i];
+        let env = variables(source, declaration.params, &mut terms, &mut count);
+        let mut nodes = Vec::new();
+        for p in declaration.params {
+            if p.lifetime {
+                continue;
+            }
+            if let Term::Variable(v) = terms[env[&p.name]] {
+                nodes.push(v);
+            }
+        }
+        environments.push(env);
+        target_nodes.push(nodes);
+        names.insert(declaration.name.clone(), i);
+        let short = short(&declaration.name).to_string();
+        if short_names.contains_key(&short) {
+            short_names.insert(short, None);
+        } else {
+            short_names.insert(short, Some(i));
+        }
+    }
+    for (name, index) in short_names {
+        if let Some(index) = index {
+            names.entry(name).or_insert(index);
+        }
+    }
+    let mut edges = Vec::new();
+    for i in 0..declarations.len() {
+        let declaration = &declarations[i];
+        if target_nodes[i].is_empty() {
+            continue;
+        }
+        for field in &declaration.fields {
+            let first = signature_type(source, *field, &environments[i], &mut terms)?;
+            let mut pending = vec![first];
+            while let Some(term) = pending.pop() {
+                if let Term::Named(name, args) = terms[term].clone() {
+                    if let Some(target) = names.get(&name) {
+                        let mut concrete = Vec::new();
+                        for arg in &args {
+                            if !matches!(&terms[*arg],Term::Named(name,_) if name=="lifetime") {
+                                concrete.push(*arg);
+                            }
+                        }
+                        if concrete.len() == target_nodes[*target].len() {
+                            for j in 0..concrete.len() {
+                                flow(
+                                    &terms,
+                                    concrete[j],
+                                    target_nodes[*target][j],
+                                    declaration.span,
+                                    &mut edges,
+                                );
+                            }
+                        }
+                    }
+                    pending.extend(args);
+                }
+            }
+        }
+    }
+    let groups = components(count, &edges);
+    for edge in edges {
+        if edge.expanding && groups[edge.from] == groups[edge.to] {
+            return Err(Diagnostic::new(
+                edge.span,
+                "E_RECURSION",
+                "data type parameter flow expands inside a recursive component",
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod declaration_tests {
+    use super::*;
+    fn check(text: &str) -> Result<(), Diagnostic> {
+        validate(&crate::syntax::parse(text).unwrap())
+    }
+    #[test]
+    fn duplicate_functions() {
+        assert_eq!(check("fn f(){} fn f(){}").unwrap_err().code, "E_NAME");
+    }
+    #[test]
+    fn type_and_value_namespaces() {
+        check("struct S{x:i64} fn S()->i64{42}").unwrap();
+        assert_eq!(
+            check("struct S(i64);fn S()->i64{42}").unwrap_err().code,
+            "E_NAME"
+        );
+    }
+    #[test]
+    fn duplicate_fields_and_parameters() {
+        assert_eq!(check("struct S{x:i64,x:bool}").unwrap_err().code, "E_NAME");
+        assert_eq!(check("fn f(x:i64,x:i64){}").unwrap_err().code, "E_NAME");
+    }
+    #[test]
+    fn direct_and_mutual_constant_cycles() {
+        assert_eq!(check("const A:i64=A;").unwrap_err().code, "E_TYPE");
+        assert_eq!(
+            check("const A:i64=B;const B:i64=A;").unwrap_err().code,
+            "E_TYPE"
+        );
+        check("const A:i64=1;const B:i64=A+1;").unwrap();
+    }
+    #[test]
+    fn external_module_loading_is_explicit() {
+        assert_eq!(check("mod missing;").unwrap_err().code, "E_UNSUPPORTED");
+        check("mod a { fn f(){} } mod b {fn f(){}}").unwrap();
+    }
+    #[test]
+    fn expanding_data_recursion() {
+        assert_eq!(
+            check("struct Node<T>{value:T,next:Box<Node<Vec<T>>>}")
+                .unwrap_err()
+                .code,
+            "E_RECURSION"
+        );
+    }
+    #[test]
+    fn mutual_data_expansion() {
+        assert_eq!(
+            check("struct A<T>{x:Box<B<Vec<T>>>}struct B<U>{x:Box<A<U>>}")
+                .unwrap_err()
+                .code,
+            "E_RECURSION"
+        );
+    }
+    #[test]
+    fn alias_data_expansion() {
+        assert_eq!(
+            check("type Nest<T>=Node<Vec<T>>;struct Node<T>{next:Box<Nest<T>>}")
+                .unwrap_err()
+                .code,
+            "E_RECURSION"
+        );
+    }
+    #[test]
+    fn regular_data_recursion() {
+        check("struct Node<T>{value:T,next:Box<Node<T>>}").unwrap();
+        check("enum List<T>{Nil,Cons(T,Box<List<T>>)}").unwrap();
     }
 }

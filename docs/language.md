@@ -1,52 +1,104 @@
 # Language
 
-Generation two uses Rust-compatible source. Integer literal fallback is i32;
-annotated and suffixed integer values retain their type. Arithmetic is checked;
-explicit wrapping methods will be added by name. Booleans are distinct from
-integers. Evaluation proceeds left to right, and logical operators short circuit.
+This file describes the implemented generation-two subset. Status names the
+unimplemented parts of the intended language.
 
-K is a monomorphic program of explicit types, local slots, places, instructions
-and structured control. It distinguishes copies, moves, borrows and drops. Its
-checker validates type references, signatures, operations and ownership before a
-backend can receive a CheckedProgram. Enum payload access requires a tag test.
-Each control edge must preserve the declared live owners and loans. The checker
-performs no source inference or trait search.
+## Source and values
 
-Struct and enum fields occupy ordered slots. Scalar types and shared references
-are Copy. Nominal structs/enums opt into Copy with `#[derive(Copy, Clone)]`, and
-all their fields must be Copy. Other values move. Boxes and vectors own their
-contents; mutable references are exclusive. References may project from a single
-borrowed input. View aggregates need explicit source tracking before acceptance.
+The surface is Rust-compatible. Integer literal fallback is i32; annotations and
+suffixes retain distinct types, including usize/u64 and isize/i64. Arithmetic is
+checked. Signed minimum literals are accepted; out-of-range integer and non-finite
+floating literals are rejected. Explicit casts follow Rust conversion behavior.
+Named wrapping operations remain source-library work. Booleans are distinct from integers. Expressions evaluate
+left to right; logical operators short circuit. There is no unwinding.
 
-The first backend emits memory64 WebAssembly. Integer and pointer slots are i64;
-f64 values use their bit representation in slots and canonicalize NaNs after
-arithmetic. Collection indexing checks bounds. Traps stop execution with a code
-and source line. There is no unwinding. An allocator reuses freed blocks, and
-explicit drop recursively releases owned fields and collection elements.
+Functions, structs, enums, constants, type aliases, generic declarations, trait
+implementations, matches, if, while, loop and for are implemented. For-loop
+continue advances the iterator; an inclusive maximum endpoint does not overflow.
+Assertions, panic and the implemented vec forms are fixed syntax. Named
+diagnostics reject unsupported constructs. Source modules are not loaded yet.
 
-The implementation recognizes assertions and explicit panics as syntax. Ambient
-I/O is rejected. World and derived values are the planned capability interface;
-closures, structural concurrency predicates and task scopes remain implementation
-work until status records passing design cases.
+Struct/enum fields have declaration order. Scalars and shared references are Copy.
+Nominal types opt into Copy with `#[derive(Copy, Clone)]`, whose fields must all be
+Copy; other values move even if their fields are scalar. Box and Vec own their
+contents. Arrays contain their declared fixed number of elements. Partial moves
+can be reinitialized. A type with custom Drop cannot be Copy or partially moved.
+Custom Drop runs before owned fields, including on early return/break; temporary
+receivers are cleaned at the end of their statement. Source cannot call Drop
+directly. Traps terminate the program without cleanup or recovery.
 
-## Trusted modules and host imports
+References are local/parameter conventions and projected results. Mutable
+references are exclusive; fields can be borrowed disjointly. A view aggregate
+contains references from exactly one source root. A projected result names one
+borrowed parameter as its source, using explicit lifetime annotation or Rust
+elision (including receiver elision). A result cannot select between unrelated
+input sources. Borrow endings and cleanup are explicit in K. Whole-array/Vec slice
+projections, view structs and implicit mutable reborrowing are implemented.
 
-`src/check.rs` is the K checker. `src/wasm.rs` implements memory allocation,
-collection layout, instruction lowering and emission. `bridge/main.rs` supplies
-bootstrap files, processes and the command line. `bridge/run.mjs` instantiates
-modules on Node. `lkjscript trusted` lists these boundaries.
+## Generic declarations and traits
 
-Generated modules currently import `lkjscript.trap(code: i64, line: i64)`.
-Ordinary source cannot declare host imports or construct a capability from scalars.
-Library and host boundaries will shrink as ordinary source can own those parts.
+Traits describe methods and associated types. Implementations must be unique;
+overlap is rejected. Full implementation signatures, prerequisite/supertrait
+bounds, associated types and instantiated arguments are validated. Send, Sync and
+Data predicates are derived structurally; Data excludes capabilities. Generic
+parameter-flow strongly connected components reject expanding instantiation.
+Aliases participate in these checks. Bounds with extra type arguments remain
+unsupported. Method calls resolve to concrete function applications.
 
-The source library provides `Option<T>`, `Result<T,E>`, checked UTF-8/byte helpers,
-lexicographic vector order for integer/bool elements, and the implemented subset
-of `BTreeMap<K,V>` over sorted entries. `std::mem::replace` transfers ownership
-through an exclusive reference. Collection operations remain trusted intrinsics
-until their memory layer can be expressed by accepted source.
+The current first vertical instantiates generics and resolves witnesses before K.
+K therefore checks concrete programs, not yet the generic/witness contracts.
+Moving those explicit contracts into K and instantiating after the gate remains
+necessary to complete the intended single-checker architecture.
 
-Generic parameter-flow SCCs reject expanding recursion. Trait implementations
-must be unique, and instantiated arguments satisfy declared structural or explicit
-trait bounds. Generic methods lower to explicit concrete calls. Full witness
-values and all unused-implementation signature checks remain implementation work.
+## K and checking
+
+K is a monomorphic program of explicit types, function signatures, local slots,
+places, instructions and structured control. It distinguishes copies, moves,
+borrows and drops. A function declares the input source of a returned view.
+Concrete trait method selection is represented by an explicit function call.
+K has a readable/writable text form accepted by `check` for direct tests.
+
+The checker validates all type references, signatures and operation shapes,
+including dead code, then checks ownership through each function. Variant payload
+access needs a proven tag. A loop back edge must reproduce entry ownership state.
+Return and break edges must carry correct live owners and loans; no fixed-point
+iteration is used. Local storage or a local reference carrier cannot become the
+source of an escaping view. The checker performs no source inference or trait
+search. Only CheckedProgram reaches the backend; later stages rely on that gate.
+
+## Memory and execution
+
+The backend emits memory64 WebAssembly. Integer and pointer slots are i64; f64
+uses its bit representation in slots and canonical NaNs after arithmetic.
+Collection indexing checks bounds. Traps report a code and source line. The
+reusable first-fit allocator and structural/custom drop release owned fields,
+arrays, boxes and vector elements. Recursive helpers use the engine stack.
+
+Structs use field slots; enums add a tag. Vec and array storage has data, length
+and capacity slots. Whole-storage slice projections borrow that header without a
+separate allocation. Moved heap slots are cleared so partial cleanup skips them.
+These layouts are implementation details, not an exposed source API.
+
+Generated functions export as `fn:<K-name>`, avoiding a collision with the
+`memory` export. Node is currently the only execution path for generated code.
+The host prints scalar entry results; floating display formatting is Node's.
+No generated engine implements a step counter or per-operation allowance.
+
+## Source library, trusted modules and imports
+
+The source library implements Option/Result, byte operations, UTF-8 validation,
+String, vector ordering for integer/bool elements, and part of the BTreeMap API.
+BTreeMap uses sorted Vec entries with logarithmic lookup and linear insertion or
+removal. Constructors validate String bytes; full privacy enforcement is pending.
+`std::mem::replace` transfers ownership through an exclusive reference. Vec/Box
+and memory operations remain trusted intrinsics until their source layer lands.
+
+`src/check.rs` is the K checker; `src/k.rs` defines its inputs and checked result.
+`src/wasm.rs` contains lowering/emission plus allocation and collection internals.
+`bridge/main.rs` supplies bootstrap file/process/command-line access;
+`bridge/run.mjs` instantiates on Node. `lkjscript trusted` lists these boundaries.
+
+Generated modules import only `lkjscript.trap(code: i64, line: i64)`.
+Ordinary source cannot declare host imports or construct capabilities from scalars.
+Ambient filesystem, environment and print operations are rejected. World and its
+derived capabilities, closures and structured task scopes remain unimplemented.

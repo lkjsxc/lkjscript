@@ -5,13 +5,15 @@ use std::process::{Command, Stdio};
 
 #[path = "../library/bytes.rs"]
 #[allow(dead_code)]
-mod rust_bytes;
+mod bytes;
+use bytes as rust_bytes;
 #[path = "../library/ordered_map.rs"]
 #[allow(dead_code)]
 mod rust_map;
 #[path = "../library/prelude.rs"]
 #[allow(dead_code)]
 mod rust_prelude;
+pub use rust_prelude::{Option, Result};
 
 fn compile(source: &str, library: &str) -> Vec<u8> {
     let all = format!(
@@ -28,7 +30,7 @@ fn run_node(bytes: &[u8], entry: &str, expected: i64) {
          process.stdin.on('end',async()=>{{try{{\
          const {{instance}}=await WebAssembly.instantiate(Buffer.concat(chunks),\
          {{lkjscript:{{trap(c,l){{throw Error('trap '+c+':'+l)}}}}}});\
-         const value=instance.exports['{entry}']();\
+         const value=instance.exports['fn:{entry}']();\
          if(value!=={expected}n)throw Error('expected {expected}, got '+value);\
          }}catch(e){{console.error(e);process.exitCode=1}}}});"
     );
@@ -90,10 +92,10 @@ fn byte_readers_match_rust() {
         }
     "#;
     let mut bytes = vec![65_u8, 66];
-    rust_bytes::append_bytes(&mut bytes, &vec![67, 240, 159, 152, 128]);
-    assert!(rust_bytes::starts_with(&bytes, &vec![65, 66, 67]));
+    rust_bytes::append_bytes(&mut bytes, &[67, 240, 159, 152, 128]);
+    assert!(rust_bytes::starts_with(&bytes, &[65, 66, 67]));
     assert!(rust_bytes::valid_utf8(&bytes));
-    assert!(!rust_bytes::valid_utf8(&vec![237, 160, 128]));
+    assert!(!rust_bytes::valid_utf8(&[237, 160, 128]));
     let expected = rust_bytes::find_byte(&bytes, 67).unwrap() as i64 + bytes.len() as i64;
     run_node(
         &compile(source, include_str!("../library/bytes.rs")),
@@ -113,8 +115,11 @@ fn ordered_map_inserts_replaces_and_removes_affine_values() {
             let previous = map.insert(3, Box::new(33)).unwrap();
             assert!(map.contains_key(&1));
             assert!(!map.contains_key(&2));
+            let observed = { let found = map.get(&3).unwrap(); **found };
+            { let found = map.get_mut(&4).unwrap(); **found = 44; }
+            let changed = { let found = map.get(&4).unwrap(); **found };
             let removed = map.remove(&1).unwrap();
-            *previous + *removed + map.len() as i64
+            *previous + *removed + map.len() as i64 + observed + changed
         }
     "#;
     let mut map = rust_map::BTreeMap::new();
@@ -124,11 +129,130 @@ fn ordered_map_inserts_replaces_and_removes_affine_values() {
     let previous = map.insert(3, Box::new(33)).unwrap();
     assert!(map.contains_key(&1));
     assert!(!map.contains_key(&2));
+    let observed = {
+        let found = map.get(&3).unwrap();
+        **found
+    };
+    {
+        let found = map.get_mut(&4).unwrap();
+        **found = 44;
+    }
+    let changed = {
+        let found = map.get(&4).unwrap();
+        **found
+    };
     let removed = map.remove(&1).unwrap();
-    let expected = *previous + *removed + map.len() as i64;
+    let expected = *previous + *removed + map.len() as i64 + observed + changed;
     run_node(
         &compile(source, include_str!("../library/ordered_map.rs")),
         "map_probe",
         expected,
     );
+}
+
+#[path = "../library/string.rs"]
+#[allow(dead_code)]
+mod rust_string;
+
+#[test]
+fn strings_validate_and_project_borrowed_bytes() {
+    let source = r#"
+        fn string_probe() -> i64 {
+            let input: Vec<u8> = vec![65, 240, 159, 152, 128];
+            let mut text = String::from_utf8(input).unwrap();
+            assert_eq!(text.len(), 5);
+            let first = {
+                let view: &[u8] = text.as_bytes();
+                view[0] as i64
+            };
+            text.clear();
+            assert!(text.is_empty());
+            let invalid: Vec<u8> = vec![255];
+            let failure = String::from_utf8(invalid).unwrap_err();
+            let recovered = failure.into_bytes();
+            first + recovered[0] as i64
+        }
+    "#;
+    let mut text = rust_string::String::from_utf8(vec![65, 240, 159, 152, 128]).unwrap();
+    assert_eq!(text.len(), 5);
+    let first = {
+        let view = text.as_bytes();
+        i64::from(view[0])
+    };
+    text.clear();
+    assert!(text.is_empty());
+    let recovered = rust_string::String::from_utf8(vec![255])
+        .unwrap_err()
+        .into_bytes();
+    let expected = first + i64::from(recovered[0]);
+    let library = format!(
+        "{}\n{}",
+        include_str!("../library/bytes.rs"),
+        include_str!("../library/string.rs")
+    );
+    run_node(&compile(source, &library), "string_probe", expected);
+}
+
+#[test]
+fn complete_source_library_builds_with_rustc() {
+    let directory = std::path::Path::new(".artifacts");
+    std::fs::create_dir_all(directory).unwrap();
+    let output = directory.join(format!("source-library-{}.rlib", std::process::id()));
+    let result = Command::new("rustc")
+        .args([
+            "--crate-type",
+            "lib",
+            "--edition",
+            "2024",
+            "-C",
+            "overflow-checks=yes",
+        ])
+        .arg("library/lib.rs")
+        .arg("-o")
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        std::string::String::from_utf8_lossy(&result.stderr)
+    );
+    std::fs::remove_file(output).unwrap();
+}
+
+#[test]
+fn byte_vector_keys_use_source_lexicographic_order() {
+    let source = r#"
+        fn byte_keys_probe() -> i64 {
+            let mut map: BTreeMap<Vec<u8>, usize> = BTreeMap::new();
+            map.insert(vec![3, 2], 32);
+            map.insert(vec![1], 10);
+            map.insert(vec![3, 1], 31);
+            map.insert(vec![3, 2, 0], 320);
+            let key: Vec<u8> = vec![3, 2];
+            let value = { let found = map.get(&key).unwrap(); *found };
+            assert_eq!(key.len(), 2);
+            let before: Vec<u8> = vec![3, 1];
+            let removed = map.remove(&before).unwrap();
+            value as i64 + removed as i64 + map.len() as i64
+        }
+    "#;
+    let mut map = rust_map::BTreeMap::new();
+    map.insert(vec![3_u8, 2], 32_usize);
+    map.insert(vec![1], 10);
+    map.insert(vec![3, 1], 31);
+    map.insert(vec![3, 2, 0], 320);
+    let key = vec![3_u8, 2];
+    let value = {
+        let found = map.get(&key).unwrap();
+        *found
+    };
+    let removed = map.remove(&vec![3_u8, 1]).unwrap();
+    let expected = value as i64 + removed as i64 + map.len() as i64;
+    let library = format!(
+        "{}\n{}",
+        include_str!("../library/ordered_map.rs"),
+        include_str!("../library/sequence.rs")
+    );
+    run_node(&compile(source, &library), "byte_keys_probe", expected);
 }

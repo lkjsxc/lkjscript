@@ -1,4 +1,6 @@
 //! An ordered map API over a sorted vector. Lookup is logarithmic; insertion is linear.
+use crate::Option;
+
 pub struct BTreeMap<K, V> {
     entries: Vec<Entry<K, V>>,
 }

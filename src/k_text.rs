@@ -235,6 +235,15 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
             moving: flag(words, 3, "move", "copy", line)?,
             place: place(words, 4, line)?,
         },
+        "array" => Op::Array {
+            dst: number(words, 2, line)?,
+            elements: indices(words, 3, line)?,
+        },
+        "slice-borrow" => Op::SliceBorrow {
+            dst: number(words, 2, line)?,
+            mutable: flag(words, 3, "mut", "shared", line)?,
+            place: place(words, 4, line)?,
+        },
         "borrow" => Op::Borrow {
             dst: number(words, 2, line)?,
             mutable: flag(words, 3, "mut", "shared", line)?,
@@ -337,6 +346,7 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
 /// Parse text into unchecked K. Only check::check may grant backend access.
 pub fn read(text: &str) -> Result<Program> {
     let mut program = Program {
+        destructors: Vec::new(),
         types: Vec::new(),
         functions: Vec::new(),
     };
@@ -431,6 +441,13 @@ pub fn read(text: &str) -> Result<Program> {
                             TypeKind::Slice { inner, mutable }
                         }
                     }
+                    "array" => {
+                        exact(&words, 5, line)?;
+                        TypeKind::Array {
+                            inner: number(&words, 3, line)?,
+                            len: number(&words, 4, line)?,
+                        }
+                    }
                     "vec" | "box" => {
                         exact(&words, 4, line)?;
                         let inner = number(&words, 3, line)?;
@@ -459,25 +476,40 @@ pub fn read(text: &str) -> Result<Program> {
                     program.types.push(Type { name, kind });
                 }
             }
+            "destructor" => {
+                exact(&words, 3, line)?;
+                program
+                    .destructors
+                    .push((number(&words, 1, line)?, number(&words, 2, line)?));
+            }
             "fn" => {
-                if words.len() != 4 && words.len() != 5 {
+                if words.len() < 4 {
                     return Err(error(
                         line,
                         "function needs name, parameter count, and result type",
                     ));
                 }
-                let test = if words.len() == 5 {
-                    if words[4] != "test" {
-                        return Err(error(line, "unknown function flag"));
+                let mut test = false;
+                let mut return_source = None;
+                let mut at = 4;
+                while at < words.len() {
+                    match words[at].as_str() {
+                        "test" if !test => {
+                            test = true;
+                            at += 1;
+                        }
+                        "from" if return_source.is_none() => {
+                            return_source = Some(number(&words, at + 1, line)?);
+                            at += 2;
+                        }
+                        _ => return Err(error(line, "unknown or repeated function flag")),
                     }
-                    true
-                } else {
-                    false
-                };
+                }
                 current = Some(Function {
                     name: words[1].clone(),
                     params: number(&words, 2, line)?,
                     result: number(&words, 3, line)?,
+                    return_source,
                     locals: Vec::new(),
                     body: Vec::new(),
                     test,
@@ -562,6 +594,21 @@ fn write_instruction(text: &mut String, instruction: &Instruction) {
             ));
             write_place(text, place);
         }
+        Op::Array { dst, elements } => {
+            text.push_str(&format!("array {dst}"));
+            write_indices(text, elements);
+        }
+        Op::SliceBorrow {
+            dst,
+            place,
+            mutable,
+        } => {
+            text.push_str(&format!(
+                "slice-borrow {dst} {}",
+                if *mutable { "mut" } else { "shared" }
+            ));
+            write_place(text, place);
+        }
         Op::Assign { place, src } => {
             text.push_str(&format!("assign {src}"));
             write_place(text, place);
@@ -642,6 +689,7 @@ pub fn write(program: &Program) -> String {
                     if *mutable { "mut" } else { "shared" }
                 ));
             }
+            TypeKind::Array { inner, len } => text.push_str(&format!("array {inner} {len}")),
             TypeKind::Vec { inner } => text.push_str(&format!("vec {inner}")),
             TypeKind::Box { inner } => text.push_str(&format!("box {inner}")),
             TypeKind::Struct { fields, copy } => {
@@ -660,14 +708,23 @@ pub fn write(program: &Program) -> String {
         }
         text.push('\n');
     }
+    for (ty, function) in &program.destructors {
+        text.push_str(&format!("destructor {ty} {function}\n"));
+    }
     for function in &program.functions {
         text.push_str(&format!(
-            "fn {} {} {}{}\n",
+            "fn {} {} {}",
             quoted(&function.name),
             function.params,
-            function.result,
-            if function.test { " test" } else { "" }
+            function.result
         ));
+        if let Some(source) = function.return_source {
+            text.push_str(&format!(" from {source}"));
+        }
+        if function.test {
+            text.push_str(" test");
+        }
+        text.push('\n');
         for local in &function.locals {
             text.push_str(&format!(
                 "local {} {} {}\n",
@@ -702,6 +759,7 @@ mod tests {
     #[test]
     fn text_can_supply_k_the_elaborator_never_emits() {
         let mut text = write(&Program {
+            destructors: Vec::new(),
             types: primitives(),
             functions: Vec::new(),
         });
@@ -738,6 +796,7 @@ mod tests {
     fn names_and_messages_use_json_string_escapes() {
         let name = "quote\" slash\\ newline\n and 雪";
         let p = Program {
+            destructors: Vec::new(),
             types: vec![Type {
                 name: name.to_string(),
                 kind: TypeKind::World,
@@ -828,8 +887,10 @@ mod tests {
             },
         ];
         let p = Program {
+            destructors: Vec::new(),
             types: primitives(),
             functions: vec![Function {
+                return_source: None,
                 name: "probe".to_string(),
                 params: 0,
                 result: I64,
@@ -842,5 +903,25 @@ mod tests {
             }],
         };
         assert_eq!(read(&write(&p)).unwrap(), p);
+    }
+    #[test]
+    fn arrays_slices_views_and_destructors_round_trip() {
+        let source = "struct Guard<'a>{ count:&'a mut i64 } impl<'a> Drop for Guard<'a>{ fn drop(&mut self){*self.count=*self.count+1;} } fn first(values:&[u8])->&u8 { &values[0] } pub fn probe()->i64 { let mut count:i64=0; {let _guard=Guard{count:&mut count};} let bytes:[u8;2]=[20,22]; count+*first(&bytes) as i64 }";
+        let syntax = crate::syntax::parse(source).unwrap();
+        let checked = crate::check::check(crate::elaborate::elaborate(&syntax).unwrap()).unwrap();
+        assert!(!checked.program().destructors.is_empty());
+        assert!(
+            checked
+                .program()
+                .functions
+                .iter()
+                .any(|function| function.return_source.is_some())
+        );
+        let text = write(checked.program());
+        assert!(text.contains("slice-borrow"));
+        assert!(text.contains("destructor"));
+        let decoded = read(&text).unwrap();
+        assert_eq!(decoded, *checked.program());
+        assert!(crate::check::check(decoded).is_ok());
     }
 }

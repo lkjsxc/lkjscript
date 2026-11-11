@@ -1,6 +1,7 @@
 //! The single gate for explicit K. Each structured edge has an ownership state.
 use crate::ast::{Diagnostic, Span};
 use crate::k::*;
+use std::collections::{BTreeMap, BTreeSet};
 
 fn error(line: usize, code: &str, message: &str) -> Diagnostic {
     Diagnostic::new(
@@ -33,6 +34,7 @@ pub fn is_copy(types: &[Type], ty: usize) -> bool {
                     return false;
                 }
             }
+            TypeKind::Array { inner, .. } => pending.push(*inner),
             TypeKind::Struct { fields, copy } => {
                 if !copy {
                     return false;
@@ -73,7 +75,8 @@ pub fn is_data(types: &[Type], ty: usize) -> bool {
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
             | TypeKind::Vec { inner }
-            | TypeKind::Box { inner } => pending.push(*inner),
+            | TypeKind::Box { inner }
+            | TypeKind::Array { inner, .. } => pending.push(*inner),
             TypeKind::Struct { fields, .. } => {
                 for field in fields {
                     pending.push(field.ty);
@@ -101,7 +104,12 @@ pub fn place_type(types: &[Type], function: &Function, place: &Place) -> Option<
             (Projection::VariantField(tag, index), TypeKind::Enum { variants, .. }) => {
                 variants.get(*tag)?.fields.get(*index)?.ty
             }
-            (Projection::Index(index), TypeKind::Vec { inner } | TypeKind::Slice { inner, .. }) => {
+            (
+                Projection::Index(index),
+                TypeKind::Vec { inner }
+                | TypeKind::Slice { inner, .. }
+                | TypeKind::Array { inner, .. },
+            ) => {
                 if function.locals.get(*index)?.ty != U64 {
                     return None;
                 }
@@ -119,6 +127,7 @@ fn heap_type(kind: &TypeKind) -> bool {
         TypeKind::Struct { .. }
             | TypeKind::Enum { .. }
             | TypeKind::Vec { .. }
+            | TypeKind::Array { .. }
             | TypeKind::Box { .. }
             | TypeKind::String
     )
@@ -165,28 +174,26 @@ fn overlaps(a: &Origin, b: &Origin) -> bool {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Loan {
-    local: usize,
+    holder: Place,
     target: Origin,
     mutable: bool,
-    parents: Vec<usize>,
+    parents: Vec<Place>,
 }
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Tag {
     target: Origin,
+    witness: Place,
     variant: usize,
 }
-
 #[derive(Clone, Debug, PartialEq)]
 struct State {
     live: Vec<bool>,
     moved: Vec<Place>,
     loans: Vec<Loan>,
     tags: Vec<Tag>,
-    predicates: Vec<Option<Tag>>,
+    predicates: BTreeMap<usize, Tag>,
     reachable: bool,
 }
-
 #[derive(Clone)]
 struct Control {
     entry: State,
@@ -195,96 +202,261 @@ struct Control {
     breaks: Vec<State>,
 }
 
-fn origin(state: &State, place: &Place) -> (Origin, Vec<usize>) {
-    let mut result = Origin {
+fn within(place: &Place, base: &Place) -> bool {
+    place.local == base.local && is_prefix(&base.projections, &place.projections)
+}
+fn rebase(place: &Place, from: &Place, to: &Place) -> Place {
+    if !within(place, from) {
+        return place.clone();
+    }
+    let mut next = to.clone();
+    next.projections
+        .extend_from_slice(&place.projections[from.projections.len()..]);
+    next
+}
+fn holder_origin(place: &Place) -> Origin {
+    Origin {
         root: Root::Local(place.local),
         projections: place.projections.clone(),
-    };
+    }
+}
+fn origin(state: &State, place: &Place) -> (Origin, Vec<Place>) {
+    let mut result = holder_origin(place);
     let mut parents = Vec::new();
     loop {
-        if !matches!(result.projections.first(), Some(Projection::Deref)) {
-            return (result, parents);
-        }
         let local = match result.root {
             Root::Local(local) => local,
             Root::Parameter(_) => return (result, parents),
         };
-        if parents.contains(&local) {
-            return (result, parents);
+        let mut found = None;
+        for i in 0..result.projections.len() {
+            if !matches!(result.projections[i], Projection::Deref) {
+                continue;
+            }
+            let holder = Place {
+                local,
+                projections: result.projections[..i].to_vec(),
+            };
+            if parents.contains(&holder) {
+                continue;
+            }
+            if let Some(loan) = state.loans.iter().find(|loan| loan.holder == holder) {
+                found = Some((i, loan.clone()));
+                break;
+            }
         }
-        match state.loans.iter().find(|loan| loan.local == local) {
-            Some(loan) => {
-                parents.push(local);
-                for parent in &loan.parents {
-                    if !parents.contains(parent) {
-                        parents.push(*parent);
+        match found {
+            Some((at, loan)) => {
+                parents.push(loan.holder);
+                for parent in loan.parents {
+                    if !parents.contains(&parent) {
+                        parents.push(parent);
                     }
                 }
-                let mut next = loan.target.clone();
-                next.projections.extend_from_slice(&result.projections[1..]);
+                let mut next = loan.target;
+                next.projections
+                    .extend_from_slice(&result.projections[at + 1..]);
                 result = next;
             }
             None => return (result, parents),
         }
     }
 }
-
 fn affects_tag(target: &Origin, tag: &Tag) -> bool {
-    target.projections.len() <= tag.target.projections.len() && overlaps(target, &tag.target)
+    (target.projections.len() <= tag.target.projections.len() && overlaps(target, &tag.target))
+        || overlaps(target, &holder_origin(&tag.witness))
 }
-
 fn invalidate(state: &mut State, target: &Origin) {
     state.tags.retain(|tag| !affects_tag(target, tag));
-    for predicate in &mut state.predicates {
-        if predicate
-            .as_ref()
-            .is_some_and(|tag| affects_tag(target, tag))
-        {
-            *predicate = None;
-        }
-    }
+    state.predicates.retain(|_, tag| !affects_tag(target, tag));
 }
-
-fn tag_at(state: &State, target: &Origin) -> Option<usize> {
+fn tag_at(state: &State, target: &Origin, witness: &Place) -> Option<usize> {
     state
         .tags
         .iter()
-        .find(|tag| tag.target == *target)
+        .find(|tag| tag.target == *target && tag.witness == *witness)
         .map(|tag| tag.variant)
 }
-
-fn set_tag(state: &mut State, target: Origin, variant: usize) {
-    state.tags.retain(|tag| tag.target != target);
-    state.tags.push(Tag { target, variant });
+fn set_tag(state: &mut State, tag: Tag) {
+    state.tags.retain(|old| old.witness != tag.witness);
+    state.tags.push(tag);
 }
 
+/// Reference leaves of a view. Owned heap containers cannot contain views.
+fn reference_paths(types: &[Type], ty: usize) -> Vec<(Vec<Projection>, bool)> {
+    let mut result = Vec::new();
+    let mut pending = vec![(ty, Vec::new())];
+    while let Some((ty, path)) = pending.pop() {
+        match &types[ty].kind {
+            TypeKind::Ref { mutable, .. } => result.push((path, *mutable)),
+            TypeKind::Struct { fields, .. } => {
+                for (i, field) in fields.iter().enumerate() {
+                    let mut child = path.clone();
+                    child.push(Projection::Field(i));
+                    pending.push((field.ty, child));
+                }
+            }
+            TypeKind::Enum { variants, .. } => {
+                for (v, variant) in variants.iter().enumerate() {
+                    for (i, field) in variant.fields.iter().enumerate() {
+                        let mut child = path.clone();
+                        child.push(Projection::VariantField(v, i));
+                        pending.push((field.ty, child));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    result
+}
+pub fn is_view(types: &[Type], ty: usize) -> bool {
+    !reference_paths(types, ty).is_empty()
+}
+fn exclusive_variants(a: &Place, b: &Place) -> bool {
+    if a.local != b.local {
+        return false;
+    }
+    for i in 0..a.projections.len().min(b.projections.len()) {
+        if a.projections[i] == b.projections[i] {
+            continue;
+        }
+        return matches!((&a.projections[i], &b.projections[i]),
+            (Projection::VariantField(a, _), Projection::VariantField(b, _)) if a != b);
+    }
+    false
+}
+fn common_origin(loans: &[Loan], line: usize) -> Result<Option<(Origin, Vec<Place>)>, Diagnostic> {
+    let Some(first) = loans.first() else {
+        return Ok(None);
+    };
+    let mut common = first.target.clone();
+    let mut parents = first.parents.clone();
+    for loan in &loans[1..] {
+        if loan.target.root != common.root {
+            return Err(error(
+                line,
+                "E_BORROW",
+                "view must have one source lifetime",
+            ));
+        }
+        let mut count = 0;
+        while count < common.projections.len()
+            && count < loan.target.projections.len()
+            && common.projections[count] == loan.target.projections[count]
+        {
+            count += 1;
+        }
+        common.projections.truncate(count);
+        for parent in &loan.parents {
+            if !parents.contains(parent) {
+                parents.push(parent.clone());
+            }
+        }
+    }
+    Ok(Some((common, parents)))
+}
+fn validate_view(loans: &[Loan], line: usize) -> Result<(), Diagnostic> {
+    let _ = common_origin(loans, line)?;
+    for (i, a) in loans.iter().enumerate() {
+        for b in &loans[i + 1..] {
+            if !exclusive_variants(&a.holder, &b.holder)
+                && overlaps(&a.target, &b.target)
+                && (a.mutable || b.mutable)
+            {
+                return Err(error(
+                    line,
+                    "E_BORROW",
+                    "view contains aliasing mutable references",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+fn carried_loans(
+    state: &State,
+    types: &[Type],
+    function: &Function,
+    from: &Place,
+    to: &Place,
+    line: usize,
+) -> Result<Vec<Loan>, Diagnostic> {
+    let value_ty = place_type(types, function, from).unwrap();
+    let paths = reference_paths(types, value_ty);
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    let target = origin(state, from).0;
+    let mut loans = Vec::new();
+    if let Root::Local(local) = target.root {
+        let base = Place {
+            local,
+            projections: target.projections.clone(),
+        };
+        for loan in &state.loans {
+            if within(&loan.holder, &base) {
+                let mut next = loan.clone();
+                next.holder = rebase(&loan.holder, &base, to);
+                loans.push(next);
+            }
+        }
+    } else {
+        for (path, mutable) in paths {
+            let mut source = from.clone();
+            source.projections.extend_from_slice(&path);
+            source.projections.push(Projection::Deref);
+            let (target, parents) = origin(state, &source);
+            let mut holder = to.clone();
+            holder.projections.extend_from_slice(&path);
+            loans.push(Loan {
+                holder,
+                target,
+                mutable,
+                parents,
+            });
+        }
+    }
+    if matches!(types[value_ty].kind, TypeKind::Ref { .. }) && loans.is_empty() {
+        return Err(error(
+            line,
+            "E_BORROW",
+            "reference value has no source lifetime",
+        ));
+    }
+    Ok(loans)
+}
+fn remap_parents(state: &mut State, from: &Place, to: &Place) {
+    for loan in &mut state.loans {
+        for parent in &mut loan.parents {
+            *parent = rebase(parent, from, to);
+        }
+    }
+}
+fn remap_carried(loans: &mut [Loan], from: &Place, to: &Place) {
+    for loan in loans {
+        for parent in &mut loan.parents {
+            *parent = rebase(parent, from, to);
+        }
+    }
+}
 fn place_writable(types: &[Type], function: &Function, place: &Place) -> bool {
     let mut writable = function.locals[place.local].mutable;
     let mut blocked = false;
     let mut ty = function.locals[place.local].ty;
     let mut prefix = Place::local(place.local);
     for projection in &place.projections {
-        match (projection, &types[ty].kind) {
-            (Projection::Deref, TypeKind::Ref { mutable, .. }) => {
-                if !mutable {
-                    blocked = true;
-                }
-                writable = *mutable && !blocked;
+        if let (Projection::Deref, TypeKind::Ref { mutable, .. }) = (projection, &types[ty].kind) {
+            if !mutable {
+                blocked = true;
             }
-            (Projection::Index(_), TypeKind::Slice { mutable, .. }) => {
-                if !mutable {
-                    blocked = true;
-                }
-                writable = *mutable && !blocked;
-            }
-            _ => {}
+            writable = *mutable && !blocked;
         }
         prefix.projections.push(projection.clone());
         ty = place_type(types, function, &prefix).unwrap();
     }
     writable && !blocked
 }
-
 fn borrowed_projection(types: &[Type], function: &Function, place: &Place) -> bool {
     let mut ty = function.locals[place.local].ty;
     let mut prefix = Place::local(place.local);
@@ -300,8 +472,26 @@ fn borrowed_projection(types: &[Type], function: &Function, place: &Place) -> bo
     }
     false
 }
+fn loan_use(state: &State, loan: &Loan, mutable: bool, line: usize) -> Result<(), Diagnostic> {
+    for other in &state.loans {
+        if other.holder == loan.holder
+            || loan.parents.contains(&other.holder)
+            || exclusive_variants(&loan.holder, &other.holder)
+        {
+            continue;
+        }
+        if overlaps(&loan.target, &other.target) && (mutable || other.mutable) {
+            return Err(error(
+                line,
+                "E_BORROW",
+                "reference conflicts with a live borrow",
+            ));
+        }
+    }
+    Ok(())
+}
 
-// mode 0 reads the whole place; mode 1 replaces/drops its remaining fields.
+// mode 0 reads a whole value; mode 1 replaces/drops its remaining fields.
 fn access(
     state: &State,
     types: &[Type],
@@ -322,8 +512,7 @@ fn access(
             }
         }
         if let Projection::VariantField(variant, _) = projection {
-            let target = origin(state, &prefix).0;
-            if tag_at(state, &target) != Some(*variant) {
+            if tag_at(state, &origin(state, &prefix).0, &prefix) != Some(*variant) {
                 return Err(error(
                     line,
                     "E_TYPE",
@@ -348,8 +537,11 @@ fn access(
             }
         }
     }
+    let value_ty = place_type(types, function, place).unwrap();
+    let view_owner =
+        is_view(types, value_ty) && !matches!(types[value_ty].kind, TypeKind::Ref { .. });
     for loan in &state.loans {
-        if loan.local == place.local || parents.contains(&loan.local) {
+        if loan.holder == *place || parents.contains(&loan.holder) {
             continue;
         }
         if overlaps(&loan.target, &target) && (write || loan.mutable) {
@@ -359,11 +551,31 @@ fn access(
                 "place conflicts with a live borrow",
             ));
         }
+        // Using a reference field also uses the storage containing that field.
+        for parent in &parents {
+            if overlaps(&loan.target, &holder_origin(parent)) && (write || loan.mutable) {
+                return Err(error(
+                    line,
+                    "E_BORROW",
+                    "reference field is inside borrowed storage",
+                ));
+            }
+        }
+        // A child reborrow freezes a view that can use or drop its parent field.
+        if write && view_owner && !within(&loan.holder, place) {
+            for parent in &loan.parents {
+                if overlaps(&holder_origin(parent), &target) {
+                    return Err(error(
+                        line,
+                        "E_BORROW",
+                        "view is still borrowed through one of its fields",
+                    ));
+                }
+            }
+        }
     }
-    let _ = (types, function);
     Ok(())
 }
-
 fn consume(
     state: &mut State,
     types: &[Type],
@@ -373,27 +585,24 @@ fn consume(
 ) -> Result<(), Diagnostic> {
     access(state, types, function, &Place::local(local), true, 0, line)?;
     state.live[local] = false;
-    state.loans.retain(|loan| loan.local != local);
+    state.loans.retain(|loan| loan.holder.local != local);
     state.moved.retain(|place| place.local != local);
     invalidate(state, &Origin::local(local));
-    state.predicates[local] = None;
+    state.predicates.remove(&local);
     Ok(())
 }
-
 fn put(state: &mut State, local: usize, line: usize) -> Result<(), Diagnostic> {
     if state.live[local] {
         return Err(error(line, "E_K", "destination still owns a value"));
     }
     state.live[local] = true;
-    state.predicates[local] = None;
+    state.predicates.remove(&local);
     invalidate(state, &Origin::local(local));
     Ok(())
 }
-
 fn same_set<T: PartialEq>(a: &[T], b: &[T]) -> bool {
     a.len() == b.len() && a.iter().all(|item| b.contains(item))
 }
-
 fn merge(mut a: State, b: State, line: usize) -> Result<State, Diagnostic> {
     if !a.reachable {
         return Ok(b);
@@ -409,14 +618,10 @@ fn merge(mut a: State, b: State, line: usize) -> Result<State, Diagnostic> {
         ));
     }
     a.tags.retain(|tag| b.tags.contains(tag));
-    for i in 0..a.predicates.len() {
-        if a.predicates[i] != b.predicates[i] {
-            a.predicates[i] = None;
-        }
-    }
+    a.predicates
+        .retain(|local, tag| b.predicates.get(local) == Some(tag));
     Ok(a)
 }
-
 fn local_type(function: &Function, local: usize, line: usize) -> Result<usize, Diagnostic> {
     function
         .locals
@@ -424,13 +629,28 @@ fn local_type(function: &Function, local: usize, line: usize) -> Result<usize, D
         .map(|l| l.ty)
         .ok_or_else(|| error(line, "E_K", "local index is not declared"))
 }
-
 fn enum_place(types: &[Type], function: &Function, local: usize) -> Place {
     let mut place = Place::local(local);
     if matches!(types[function.locals[local].ty].kind, TypeKind::Ref { .. }) {
         place.projections.push(Projection::Deref);
     }
     place
+}
+fn has_destructor(program: &Program, ty: usize) -> bool {
+    program.destructors.iter().any(|entry| entry.0 == ty)
+}
+fn crosses_destructor(program: &Program, function: &Function, place: &Place) -> bool {
+    let mut prefix = Place::local(place.local);
+    for projection in &place.projections {
+        if has_destructor(
+            program,
+            place_type(&program.types, function, &prefix).unwrap(),
+        ) {
+            return true;
+        }
+        prefix.projections.push(projection.clone());
+    }
+    false
 }
 
 fn check_intrinsic(
@@ -461,7 +681,10 @@ fn check_intrinsic(
                 && matches!(types[ts[0]].kind, TypeKind::Ref { .. })
                 && matches!(
                     types[inner(ts[0])].kind,
-                    TypeKind::Vec { .. } | TypeKind::Slice { .. } | TypeKind::String
+                    TypeKind::Array { .. }
+                        | TypeKind::Vec { .. }
+                        | TypeKind::Slice { .. }
+                        | TypeKind::String
                 )
         }
         "vec_push" => {
@@ -593,6 +816,13 @@ fn check_shape(
         }
         Op::Read { dst, place, moving } => {
             let source = place_ty(place)?;
+            if *moving && crosses_destructor(program, function, place) {
+                return Err(error(
+                    line,
+                    "E_MOVE",
+                    "cannot partially move a type with custom Drop",
+                ));
+            }
             if ty(*dst)? != source {
                 return Err(error(line, "E_TYPE", "read destination type differs"));
             }
@@ -624,6 +854,55 @@ fn check_shape(
                     "E_BORROW",
                     "mutable borrow through an immutable place",
                 ));
+            }
+        }
+        Op::Array { dst, elements } => {
+            let (inner, len) = match types[ty(*dst)?].kind {
+                TypeKind::Array { inner, len } => (inner, len),
+                _ => return Err(error(line, "E_TYPE", "array constructor has wrong type")),
+            };
+            if elements.len() != len {
+                return Err(error(line, "E_TYPE", "array element count differs"));
+            }
+            for element in elements {
+                if ty(*element)? != inner {
+                    return Err(error(line, "E_TYPE", "array element type differs"));
+                }
+            }
+        }
+        Op::SliceBorrow {
+            dst,
+            place,
+            mutable,
+        } => {
+            let inner = match types[place_ty(place)?].kind {
+                TypeKind::Array { inner, .. } | TypeKind::Vec { inner } => inner,
+                _ => {
+                    return Err(error(
+                        line,
+                        "E_TYPE",
+                        "slice borrow requires an array or Vec",
+                    ));
+                }
+            };
+            let slice = match types[ty(*dst)?].kind {
+                TypeKind::Ref {
+                    inner,
+                    mutable: kind_mut,
+                } if kind_mut == *mutable => inner,
+                _ => {
+                    return Err(error(
+                        line,
+                        "E_TYPE",
+                        "slice borrow needs a matching reference type",
+                    ));
+                }
+            };
+            if !matches!(types[slice].kind, TypeKind::Slice { inner: item, .. } if item == inner) {
+                return Err(error(line, "E_TYPE", "slice element type differs"));
+            }
+            if *mutable && !place_writable(types, function, place) {
+                return Err(error(line, "E_BORROW", "mutable slice of immutable place"));
             }
         }
         Op::Assign { place, src } => {
@@ -710,6 +989,13 @@ fn check_shape(
             function: called,
             args,
         } => {
+            if program.destructors.iter().any(|entry| entry.1 == *called) {
+                return Err(error(
+                    line,
+                    "E_TYPE",
+                    "destructor functions are invoked only by drop",
+                ));
+            }
             let target = program
                 .functions
                 .get(*called)
@@ -801,30 +1087,47 @@ fn call_borrows(
     args: &[usize],
     line: usize,
 ) -> Result<(), Diagnostic> {
+    let mut used = Vec::new();
+    let mut changed = Vec::new();
     for arg in args {
-        if let TypeKind::Ref { mutable, .. } = types[function.locals[*arg].ty].kind {
+        let ty = function.locals[*arg].ty;
+        if let TypeKind::Ref { mutable, .. } = types[ty].kind {
             let place = Place {
                 local: *arg,
                 projections: vec![Projection::Deref],
             };
             access(state, types, function, &place, mutable, 0, line)?;
+            let target = origin(state, &place).0;
+            if mutable {
+                changed.push(target.clone());
+            }
+            if let Root::Local(local) = target.root {
+                let base = Place {
+                    local,
+                    projections: target.projections.clone(),
+                };
+                for loan in &state.loans {
+                    if within(&loan.holder, &base) {
+                        used.push((loan.clone(), mutable && loan.mutable));
+                    }
+                }
+            }
+        } else {
+            for loan in &state.loans {
+                if loan.holder.local == *arg {
+                    used.push((loan.clone(), loan.mutable));
+                }
+            }
         }
     }
-    for arg in args {
-        if matches!(
-            types[function.locals[*arg].ty].kind,
-            TypeKind::Ref { mutable: true, .. }
-        ) {
-            let target = origin(
-                state,
-                &Place {
-                    local: *arg,
-                    projections: vec![Projection::Deref],
-                },
-            )
-            .0;
-            invalidate(state, &target);
+    for (loan, mutable) in &used {
+        loan_use(state, loan, *mutable, line)?;
+        if *mutable {
+            changed.push(loan.target.clone());
         }
+    }
+    for target in changed {
+        invalidate(state, &target);
     }
     Ok(())
 }
@@ -836,17 +1139,24 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
         moved: Vec::new(),
         loans: Vec::new(),
         tags: Vec::new(),
-        predicates: vec![None; function.locals.len()],
+        predicates: BTreeMap::new(),
         reachable: true,
     };
     for i in 0..function.params {
         state.live[i] = true;
-        if let TypeKind::Ref { mutable, .. } = types[function.locals[i].ty].kind {
+        for (path, mutable) in reference_paths(types, function.locals[i].ty) {
+            let mut projections = path.clone();
+            if !path.is_empty() {
+                projections.push(Projection::Deref);
+            }
             state.loans.push(Loan {
-                local: i,
+                holder: Place {
+                    local: i,
+                    projections: path,
+                },
                 target: Origin {
                     root: Root::Parameter(i),
-                    projections: Vec::new(),
+                    projections,
                 },
                 mutable,
                 parents: Vec::new(),
@@ -887,7 +1197,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 continue;
             }
             Op::If { condition } => {
-                let predicate = state.predicates[*condition].clone();
+                let predicate = state.predicates.get(condition).cloned();
                 if state.reachable {
                     consume(&mut state, types, function, *condition, line)?;
                 }
@@ -898,7 +1208,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     breaks: Vec::new(),
                 });
                 if let Some(tag) = predicate {
-                    set_tag(&mut state, tag.target, tag.variant);
+                    set_tag(&mut state, tag);
                 }
                 continue;
             }
@@ -928,46 +1238,48 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
             Op::Read { dst, place, moving } => {
                 access(&state, types, function, place, *moving, 0, line)?;
                 let target = origin(&state, place).0;
-                let known_tag = tag_at(&state, &target);
+                let known_tag = tag_at(&state, &target, place);
                 let predicate = if place.projections.is_empty() {
-                    state.predicates[place.local].clone()
+                    state.predicates.get(&place.local).cloned()
                 } else {
                     None
                 };
-                let loan = if matches!(types[function.locals[*dst].ty].kind, TypeKind::Ref { .. }) {
-                    let mut deref = place.clone();
-                    deref.projections.push(Projection::Deref);
-                    let (target, parents) = origin(&state, &deref);
-                    Some(Loan {
-                        local: *dst,
-                        target,
-                        parents,
-                        mutable: matches!(
-                            types[function.locals[*dst].ty].kind,
-                            TypeKind::Ref { mutable: true, .. }
-                        ),
-                    })
-                } else {
-                    None
-                };
+                let destination = Place::local(*dst);
+                let mut carried =
+                    carried_loans(&state, types, function, place, &destination, line)?;
                 if *moving {
+                    remap_parents(&mut state, place, &destination);
+                    remap_carried(&mut carried, place, &destination);
                     if place.projections.is_empty() {
                         consume(&mut state, types, function, place.local, line)?;
                     } else {
+                        state.loans.retain(|loan| !within(&loan.holder, place));
                         invalidate(&mut state, &target);
                         state.moved.push(place.clone());
                     }
                 }
                 put(&mut state, *dst, line)?;
-                state.predicates[*dst] = predicate;
-                if let Some(loan) = loan {
-                    state.loans.push(loan);
+                if let Some(tag) = predicate {
+                    state.predicates.insert(*dst, tag);
                 }
+                state.loans.extend(carried);
                 if let Some(variant) = known_tag {
-                    set_tag(&mut state, Origin::local(*dst), variant);
+                    set_tag(
+                        &mut state,
+                        Tag {
+                            target: Origin::local(*dst),
+                            witness: Place::local(*dst),
+                            variant,
+                        },
+                    );
                 }
             }
             Op::Borrow {
+                dst,
+                place,
+                mutable,
+            }
+            | Op::SliceBorrow {
                 dst,
                 place,
                 mutable,
@@ -976,7 +1288,7 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 let (target, parents) = origin(&state, place);
                 put(&mut state, *dst, line)?;
                 state.loans.push(Loan {
-                    local: *dst,
+                    holder: Place::local(*dst),
                     target,
                     mutable: *mutable,
                     parents,
@@ -1006,9 +1318,12 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                         "replacement of an owned value needs an explicit drop",
                     ));
                 }
-                let inherited = state.loans.iter().find(|loan| loan.local == *src).cloned();
-                let known_tag = tag_at(&state, &Origin::local(*src));
-                let predicate = state.predicates[*src].clone();
+                let source = Place::local(*src);
+                let mut carried = carried_loans(&state, types, function, &source, place, line)?;
+                let known_tag = tag_at(&state, &Origin::local(*src), &Place::local(*src));
+                let predicate = state.predicates.get(src).cloned();
+                remap_parents(&mut state, &source, place);
+                remap_carried(&mut carried, &source, place);
                 consume(&mut state, types, function, *src, line)?;
                 invalidate(&mut state, &target);
                 state.live[place.local] = true;
@@ -1016,16 +1331,23 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     !(moved.local == place.local
                         && is_prefix(&place.projections, &moved.projections))
                 });
+                state.loans.retain(|old| !within(&old.holder, place));
+                state.loans.extend(carried);
                 if place.projections.is_empty() {
-                    state.loans.retain(|old| old.local != place.local);
-                    if let Some(mut loan) = inherited {
-                        loan.local = place.local;
-                        state.loans.push(loan);
+                    state.predicates.remove(&place.local);
+                    if let Some(tag) = predicate {
+                        state.predicates.insert(place.local, tag);
                     }
-                    state.predicates[place.local] = predicate;
                 }
                 if let Some(variant) = known_tag {
-                    set_tag(&mut state, target, variant);
+                    set_tag(
+                        &mut state,
+                        Tag {
+                            target,
+                            witness: place.clone(),
+                            variant,
+                        },
+                    );
                 }
             }
             Op::Drop { place } => {
@@ -1037,8 +1359,23 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     ));
                 }
                 access(&state, types, function, place, true, 1, line)?;
+                let pt = place_type(types, function, place).unwrap();
+                if has_destructor(program, pt) {
+                    if state.moved.iter().any(|moved| within(moved, place)) {
+                        return Err(error(
+                            line,
+                            "E_MOVE",
+                            "custom drop requires every field to be initialized",
+                        ));
+                    }
+                    for loan in &state.loans {
+                        if within(&loan.holder, place) {
+                            loan_use(&state, loan, loan.mutable, line)?;
+                        }
+                    }
+                }
+                state.loans.retain(|loan| !within(&loan.holder, place));
                 if place.projections.is_empty() {
-                    // Dropping an aggregate destroys only fields that remain after partial moves.
                     state.moved.retain(|moved| moved.local != place.local);
                     consume(&mut state, types, function, place.local, line)?;
                 } else {
@@ -1068,25 +1405,24 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 args,
             } => {
                 let target = &program.functions[*called];
-                let mut returned = None;
-                if matches!(types[target.result].kind, TypeKind::Ref { .. }) {
-                    let mut count = 0;
-                    for i in 0..target.params {
-                        if matches!(types[target.locals[i].ty].kind, TypeKind::Ref { .. }) {
-                            count += 1;
-                            returned = state
-                                .loans
-                                .iter()
-                                .find(|loan| loan.local == args[i])
-                                .cloned();
+                let mut returned = Vec::new();
+                if let Some(source) = target.return_source {
+                    let source = Place::local(args[source]);
+                    let incoming = carried_loans(&state, types, function, &source, &source, line)?;
+                    if let Some((target, parents)) = common_origin(&incoming, line)? {
+                        for (projections, mutable) in
+                            reference_paths(types, target_type(program, *called))
+                        {
+                            returned.push(Loan {
+                                holder: Place {
+                                    local: *dst,
+                                    projections,
+                                },
+                                target: target.clone(),
+                                mutable,
+                                parents: parents.clone(),
+                            });
                         }
-                    }
-                    if count != 1 || returned.is_none() {
-                        return Err(error(
-                            line,
-                            "E_BORROW",
-                            "returned view needs one source parameter",
-                        ));
                     }
                 }
                 call_borrows(&mut state, types, function, args, line)?;
@@ -1094,19 +1430,50 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                     consume(&mut state, types, function, *arg, line)?;
                 }
                 put(&mut state, *dst, line)?;
-                if let Some(mut loan) = returned {
-                    loan.local = *dst;
-                    state.loans.push(loan);
-                }
+                state.loans.extend(returned);
             }
             Op::Struct { dst, fields } | Op::Variant { dst, fields, .. } => {
+                let mut carried = Vec::new();
+                let mut transfers = Vec::new();
+                for (i, field) in fields.iter().enumerate() {
+                    let projection = match instruction.op {
+                        Op::Variant { variant, .. } => Projection::VariantField(variant, i),
+                        _ => Projection::Field(i),
+                    };
+                    let to = Place {
+                        local: *dst,
+                        projections: vec![projection],
+                    };
+                    let from = Place::local(*field);
+                    carried.extend(carried_loans(&state, types, function, &from, &to, line)?);
+                    transfers.push((from, to));
+                }
+                validate_view(&carried, line)?;
+                for (from, to) in &transfers {
+                    remap_parents(&mut state, from, to);
+                    remap_carried(&mut carried, from, to);
+                }
                 for field in fields {
                     consume(&mut state, types, function, *field, line)?;
                 }
                 put(&mut state, *dst, line)?;
+                state.loans.extend(carried);
                 if let Op::Variant { variant, .. } = instruction.op {
-                    set_tag(&mut state, Origin::local(*dst), variant);
+                    set_tag(
+                        &mut state,
+                        Tag {
+                            target: Origin::local(*dst),
+                            witness: Place::local(*dst),
+                            variant,
+                        },
+                    );
                 }
+            }
+            Op::Array { dst, elements } => {
+                for value in elements {
+                    consume(&mut state, types, function, *value, line)?;
+                }
+                put(&mut state, *dst, line)?;
             }
             Op::Discriminant { dst, src } | Op::TagTest { dst, src, .. } => {
                 let place = enum_place(types, function, *src);
@@ -1114,7 +1481,14 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 let target = origin(&state, &place).0;
                 put(&mut state, *dst, line)?;
                 if let Op::TagTest { variant, .. } = instruction.op {
-                    state.predicates[*dst] = Some(Tag { target, variant });
+                    state.predicates.insert(
+                        *dst,
+                        Tag {
+                            target,
+                            witness: place,
+                            variant,
+                        },
+                    );
                 }
             }
             Op::Intrinsic { dst, args, .. } => {
@@ -1125,21 +1499,23 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
                 put(&mut state, *dst, line)?;
             }
             Op::Return { src } => {
-                if matches!(types[function.result].kind, TypeKind::Ref { .. }) {
-                    let loan = state
-                        .loans
-                        .iter()
-                        .find(|loan| loan.local == *src)
-                        .ok_or_else(|| {
-                            error(line, "E_BORROW", "returned reference has no source")
-                        })?;
-                    if !matches!(loan.target.root, Root::Parameter(_)) {
+                for loan in state.loans.iter().filter(|loan| loan.holder.local == *src) {
+                    if !matches!(loan.target.root, Root::Parameter(source) if Some(source) == function.return_source)
+                    {
                         return Err(error(
                             line,
                             "E_BORROW",
-                            "returned view does not project from a borrowed parameter",
+                            "returned view differs from its declared source parameter",
                         ));
                     }
+                }
+                if matches!(types[function.result].kind, TypeKind::Ref { .. })
+                    && !state
+                        .loans
+                        .iter()
+                        .any(|loan| loan.holder == Place::local(*src))
+                {
+                    return Err(error(line, "E_BORROW", "returned reference has no source"));
                 }
                 consume(&mut state, types, function, *src, line)?;
                 if state.live.iter().any(|live| *live) {
@@ -1176,10 +1552,14 @@ fn check_function(program: &Program, function: &Function) -> Result<(), Diagnost
     }
     Ok(())
 }
+fn target_type(program: &Program, function: usize) -> usize {
+    program.functions[function].result
+}
 
 fn direct_children(kind: &TypeKind) -> Vec<usize> {
     let mut children = Vec::new();
     match kind {
+        TypeKind::Array { inner, .. } => children.push(*inner),
         TypeKind::Struct { fields, .. } => {
             for field in fields {
                 children.push(field.ty);
@@ -1207,7 +1587,9 @@ fn contains_view(types: &[Type], initial: usize) -> bool {
         seen[ty] = true;
         match &types[ty].kind {
             TypeKind::Ref { .. } | TypeKind::Slice { .. } => return true,
-            TypeKind::Box { inner } | TypeKind::Vec { inner } => pending.push(*inner),
+            TypeKind::Box { inner } | TypeKind::Vec { inner } | TypeKind::Array { inner, .. } => {
+                pending.push(*inner)
+            }
             kind => pending.extend(direct_children(kind)),
         }
     }
@@ -1273,11 +1655,15 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
         }
     }
     for i in 0..types.len() {
-        if heap_type(&types[i].kind) && contains_view(types, i) {
+        if matches!(
+            types[i].kind,
+            TypeKind::Box { .. } | TypeKind::Vec { .. } | TypeKind::Array { .. }
+        ) && contains_view(types, i)
+        {
             return Err(error(
                 1,
-                "E_UNSUPPORTED",
-                "references inside owning aggregates need view provenance support",
+                "E_BORROW",
+                "views cannot be stored in Box, Vec, or owned arrays",
             ));
         }
         if matches!(
@@ -1293,8 +1679,11 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
 
 pub fn check(program: Program) -> Result<CheckedProgram, Diagnostic> {
     check_types(&program.types)?;
-    // Check all signatures before any call instruction can index a callee.
+    let mut function_names = BTreeSet::new();
     for function in &program.functions {
+        if !function_names.insert(function.name.as_str()) {
+            return Err(error(1, "E_K", "duplicate function name"));
+        }
         if function.params > function.locals.len() || function.result >= program.types.len() {
             return Err(error(1, "E_K", "invalid function signature"));
         }
@@ -1306,7 +1695,7 @@ pub fn check(program: Program) -> Result<CheckedProgram, Diagnostic> {
                 return Err(error(
                     1,
                     "E_UNSUPPORTED",
-                    "bare slice values need view provenance support",
+                    "bare slice values need a borrowed slice type",
                 ));
             }
         }
@@ -1317,18 +1706,51 @@ pub fn check(program: Program) -> Result<CheckedProgram, Diagnostic> {
                 "test function must take no arguments and return unit",
             ));
         }
-        if matches!(program.types[function.result].kind, TypeKind::Ref { .. }) {
-            let borrowed = function.locals[..function.params]
-                .iter()
-                .filter(|local| matches!(program.types[local.ty].kind, TypeKind::Ref { .. }))
-                .count();
-            if borrowed != 1 {
+        if let Some(source) = function.return_source {
+            if source >= function.params
+                || !is_view(&program.types, function.locals[source].ty)
+                || !is_view(&program.types, function.result)
+            {
                 return Err(error(
                     1,
                     "E_BORROW",
-                    "returned view needs one source parameter",
+                    "invalid returned-view source parameter",
                 ));
             }
+        }
+    }
+    let mut declared = Vec::new();
+    for (ty, called) in &program.destructors {
+        if *ty >= program.types.len() || *called >= program.functions.len() || declared.contains(ty)
+        {
+            return Err(error(
+                1,
+                "E_K",
+                "invalid or duplicate destructor declaration",
+            ));
+        }
+        declared.push(*ty);
+        if !matches!(
+            program.types[*ty].kind,
+            TypeKind::Struct { .. } | TypeKind::Enum { .. }
+        ) || is_copy(&program.types, *ty)
+        {
+            return Err(error(
+                1,
+                "E_TYPE",
+                "custom Drop requires a non-Copy nominal type",
+            ));
+        }
+        let function = &program.functions[*called];
+        if function.params != 1
+            || function.result != UNIT
+            || !matches!(program.types[function.locals[0].ty].kind, TypeKind::Ref { inner, mutable: true } if inner == *ty)
+        {
+            return Err(error(
+                1,
+                "E_TYPE",
+                "destructor must have signature fn(&mut T) -> ()",
+            ));
         }
     }
     for function in &program.functions {
@@ -1358,9 +1780,16 @@ mod tests {
         result: usize,
         ops: Vec<Op>,
     ) -> Program {
+        let return_source = if is_view(&types, result) && params > 0 {
+            Some(0)
+        } else {
+            None
+        };
         Program {
+            destructors: Vec::new(),
             types,
             functions: vec![Function {
+                return_source,
                 name: "probe".to_string(),
                 params,
                 result,
@@ -1459,6 +1888,7 @@ mod tests {
             ],
         );
         p.functions.push(Function {
+            return_source: None,
             name: "bad".to_string(),
             params: 1,
             result: I64,
@@ -1493,6 +1923,7 @@ mod tests {
             ],
         );
         p.functions.push(Function {
+            return_source: None,
             name: "take".to_string(),
             params: 1,
             result: I64,
@@ -1592,17 +2023,11 @@ mod tests {
     }
 
     #[test]
-    fn reference_aggregate_requires_provenance_support() {
+    fn heap_storage_rejects_views() {
         let mut types = with_ref(false);
         types.push(Type {
-            name: "View".to_string(),
-            kind: TypeKind::Struct {
-                fields: vec![Field {
-                    name: "value".to_string(),
-                    ty: 7,
-                }],
-                copy: false,
-            },
+            name: "BoxView".to_string(),
+            kind: TypeKind::Box { inner: 7 },
         });
         rejection(
             program(
@@ -1612,7 +2037,7 @@ mod tests {
                 I64,
                 vec![Op::Int { dst: 0, value: 7 }, Op::Return { src: 0 }],
             ),
-            "E_UNSUPPORTED",
+            "E_BORROW",
         );
     }
 
@@ -2048,6 +2473,7 @@ mod tests {
             ],
         );
         p.functions.push(Function {
+            return_source: None,
             name: "mutate".to_string(),
             params: 1,
             result: UNIT,
@@ -2085,6 +2511,489 @@ mod tests {
                 ],
             ),
             "E_MOVE",
+        );
+    }
+    fn view_types(mutable: bool) -> Vec<Type> {
+        let mut types = with_ref(mutable);
+        types.push(Type {
+            name: "View".to_string(),
+            kind: TypeKind::Struct {
+                copy: false,
+                fields: vec![
+                    Field {
+                        name: "reference".to_string(),
+                        ty: 7,
+                    },
+                    Field {
+                        name: "cache".to_string(),
+                        ty: I64,
+                    },
+                ],
+            },
+        });
+        types
+    }
+
+    #[test]
+    fn view_field_keeps_its_owner_borrowed() {
+        rejection(
+            program(
+                view_types(false),
+                vec![
+                    local(I64, false),
+                    local(7, false),
+                    local(I64, false),
+                    local(8, false),
+                    local(I64, false),
+                ],
+                0,
+                I64,
+                vec![
+                    Op::Int { dst: 0, value: 42 },
+                    Op::Borrow {
+                        dst: 1,
+                        place: Place::local(0),
+                        mutable: false,
+                    },
+                    Op::Int { dst: 2, value: 0 },
+                    Op::Struct {
+                        dst: 3,
+                        fields: vec![1, 2],
+                    },
+                    Op::Drop {
+                        place: Place::local(0),
+                    },
+                    Op::Int { dst: 4, value: 0 },
+                    Op::Return { src: 4 },
+                ],
+            ),
+            "E_BORROW",
+        );
+    }
+
+    #[test]
+    fn by_value_view_can_return_its_stored_reference() {
+        assert!(
+            check(program(
+                view_types(false),
+                vec![local(8, false), local(7, false)],
+                1,
+                7,
+                vec![
+                    Op::Read {
+                        dst: 1,
+                        place: Place {
+                            local: 0,
+                            projections: vec![Projection::Field(0)]
+                        },
+                        moving: false
+                    },
+                    Op::Drop {
+                        place: Place::local(0)
+                    },
+                    Op::Return { src: 1 },
+                ]
+            ))
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn by_value_view_cannot_return_its_owned_cache() {
+        rejection(
+            program(
+                view_types(false),
+                vec![local(8, false), local(7, false)],
+                1,
+                7,
+                vec![
+                    Op::Borrow {
+                        dst: 1,
+                        place: Place {
+                            local: 0,
+                            projections: vec![Projection::Field(1)],
+                        },
+                        mutable: false,
+                    },
+                    Op::Return { src: 1 },
+                ],
+            ),
+            "E_BORROW",
+        );
+    }
+
+    #[test]
+    fn by_value_view_cannot_return_address_of_its_reference_slot() {
+        let mut types = view_types(false);
+        types.push(Type {
+            name: "&&i64".to_string(),
+            kind: TypeKind::Ref {
+                inner: 7,
+                mutable: false,
+            },
+        });
+        rejection(
+            program(
+                types,
+                vec![local(8, false), local(9, false)],
+                1,
+                9,
+                vec![
+                    Op::Borrow {
+                        dst: 1,
+                        place: Place {
+                            local: 0,
+                            projections: vec![Projection::Field(0)],
+                        },
+                        mutable: false,
+                    },
+                    Op::Return { src: 1 },
+                ],
+            ),
+            "E_BORROW",
+        );
+    }
+
+    #[test]
+    fn reborrow_freezes_the_view_that_holds_its_mutable_parent() {
+        let mut types = view_types(true);
+        types.push(Type {
+            name: "&i64".to_string(),
+            kind: TypeKind::Ref {
+                inner: I64,
+                mutable: false,
+            },
+        });
+        types.push(Type {
+            name: "&mut View".to_string(),
+            kind: TypeKind::Ref {
+                inner: 8,
+                mutable: true,
+            },
+        });
+        rejection(
+            program(
+                types,
+                vec![
+                    local(I64, true),
+                    local(7, false),
+                    local(I64, false),
+                    local(8, true),
+                    local(9, false),
+                    local(10, false),
+                    local(I64, false),
+                ],
+                0,
+                I64,
+                vec![
+                    Op::Int { dst: 0, value: 42 },
+                    Op::Borrow {
+                        dst: 1,
+                        place: Place::local(0),
+                        mutable: true,
+                    },
+                    Op::Int { dst: 2, value: 0 },
+                    Op::Struct {
+                        dst: 3,
+                        fields: vec![1, 2],
+                    },
+                    Op::Borrow {
+                        dst: 4,
+                        place: Place {
+                            local: 3,
+                            projections: vec![Projection::Field(0), Projection::Deref],
+                        },
+                        mutable: false,
+                    },
+                    Op::Borrow {
+                        dst: 5,
+                        place: Place::local(3),
+                        mutable: true,
+                    },
+                    Op::Int { dst: 6, value: 0 },
+                    Op::Return { src: 6 },
+                ],
+            ),
+            "E_BORROW",
+        );
+    }
+
+    #[test]
+    fn exclusive_view_borrow_also_blocks_direct_use_of_reference_fields() {
+        let mut types = view_types(true);
+        types.push(Type {
+            name: "&mut View".to_string(),
+            kind: TypeKind::Ref {
+                inner: 8,
+                mutable: true,
+            },
+        });
+        types.push(Type {
+            name: "&i64".to_string(),
+            kind: TypeKind::Ref {
+                inner: I64,
+                mutable: false,
+            },
+        });
+        rejection(
+            program(
+                types,
+                vec![
+                    local(I64, true),
+                    local(7, false),
+                    local(I64, false),
+                    local(8, true),
+                    local(9, false),
+                    local(10, false),
+                    local(I64, false),
+                ],
+                0,
+                I64,
+                vec![
+                    Op::Int { dst: 0, value: 42 },
+                    Op::Borrow {
+                        dst: 1,
+                        place: Place::local(0),
+                        mutable: true,
+                    },
+                    Op::Int { dst: 2, value: 0 },
+                    Op::Struct {
+                        dst: 3,
+                        fields: vec![1, 2],
+                    },
+                    Op::Borrow {
+                        dst: 4,
+                        place: Place::local(3),
+                        mutable: true,
+                    },
+                    Op::Borrow {
+                        dst: 5,
+                        place: Place {
+                            local: 3,
+                            projections: vec![Projection::Field(0), Projection::Deref],
+                        },
+                        mutable: false,
+                    },
+                    Op::Int { dst: 6, value: 0 },
+                    Op::Return { src: 6 },
+                ],
+            ),
+            "E_BORROW",
+        );
+    }
+
+    #[test]
+    fn declared_return_source_is_verified_against_the_body() {
+        let mut p = program(
+            with_ref(false),
+            vec![local(7, false), local(7, false), local(7, false)],
+            2,
+            7,
+            vec![
+                Op::Read {
+                    dst: 2,
+                    place: Place::local(1),
+                    moving: false,
+                },
+                Op::Drop {
+                    place: Place::local(0),
+                },
+                Op::Drop {
+                    place: Place::local(1),
+                },
+                Op::Return { src: 2 },
+            ],
+        );
+        p.functions[0].return_source = Some(0);
+        rejection(p, "E_BORROW");
+    }
+
+    #[test]
+    fn one_view_cannot_combine_two_source_roots() {
+        let mut types = with_ref(false);
+        types.push(Type {
+            name: "PairView".to_string(),
+            kind: TypeKind::Struct {
+                copy: true,
+                fields: vec![
+                    Field {
+                        name: "left".to_string(),
+                        ty: 7,
+                    },
+                    Field {
+                        name: "right".to_string(),
+                        ty: 7,
+                    },
+                ],
+            },
+        });
+        rejection(
+            program(
+                types,
+                vec![local(7, false), local(7, false), local(8, false)],
+                2,
+                8,
+                vec![
+                    Op::Struct {
+                        dst: 2,
+                        fields: vec![0, 1],
+                    },
+                    Op::Return { src: 2 },
+                ],
+            ),
+            "E_BORROW",
+        );
+    }
+
+    #[test]
+    fn custom_drop_forbids_partial_moves() {
+        let mut types = primitives();
+        types.push(Type {
+            name: "Box<i64>".to_string(),
+            kind: TypeKind::Box { inner: I64 },
+        });
+        types.push(Type {
+            name: "Guard".to_string(),
+            kind: TypeKind::Struct {
+                copy: false,
+                fields: vec![Field {
+                    name: "value".to_string(),
+                    ty: 7,
+                }],
+            },
+        });
+        types.push(Type {
+            name: "&mut Guard".to_string(),
+            kind: TypeKind::Ref {
+                inner: 8,
+                mutable: true,
+            },
+        });
+        let mut p = program(
+            types,
+            vec![local(8, false), local(7, false)],
+            1,
+            7,
+            vec![
+                Op::Read {
+                    dst: 1,
+                    place: Place {
+                        local: 0,
+                        projections: vec![Projection::Field(0)],
+                    },
+                    moving: true,
+                },
+                Op::Return { src: 1 },
+            ],
+        );
+        p.destructors.push((8, 1));
+        p.functions.push(Function {
+            name: "drop".to_string(),
+            params: 1,
+            result: UNIT,
+            return_source: None,
+            test: false,
+            locals: vec![local(9, false), local(UNIT, false)],
+            body: vec![
+                op(Op::Drop {
+                    place: Place::local(0),
+                }),
+                op(Op::Unit { dst: 1 }),
+                op(Op::Return { src: 1 }),
+            ],
+        });
+        rejection(p, "E_MOVE");
+    }
+
+    #[test]
+    fn tag_proof_cannot_follow_a_reused_index_into_another_reference() {
+        let mut types = primitives();
+        types.push(Type {
+            name: "Either".to_string(),
+            kind: TypeKind::Enum {
+                copy: false,
+                variants: vec![
+                    Variant {
+                        name: "Integer".to_string(),
+                        fields: vec![Field {
+                            name: "0".to_string(),
+                            ty: I64,
+                        }],
+                    },
+                    Variant {
+                        name: "Empty".to_string(),
+                        fields: Vec::new(),
+                    },
+                ],
+            },
+        });
+        types.push(Type {
+            name: "Vec<Either>".to_string(),
+            kind: TypeKind::Vec { inner: 7 },
+        });
+        types.push(Type {
+            name: "&Either".to_string(),
+            kind: TypeKind::Ref {
+                inner: 7,
+                mutable: false,
+            },
+        });
+        rejection(
+            program(
+                types,
+                vec![
+                    local(8, false),
+                    local(U64, true),
+                    local(9, false),
+                    local(BOOL, false),
+                    local(U64, false),
+                    local(9, false),
+                    local(I64, false),
+                ],
+                1,
+                I64,
+                vec![
+                    Op::Int { dst: 1, value: 0 },
+                    Op::Borrow {
+                        dst: 2,
+                        place: Place {
+                            local: 0,
+                            projections: vec![Projection::Index(1)],
+                        },
+                        mutable: false,
+                    },
+                    Op::TagTest {
+                        dst: 3,
+                        src: 2,
+                        variant: 0,
+                    },
+                    Op::Int { dst: 4, value: 1 },
+                    Op::Assign {
+                        place: Place::local(1),
+                        src: 4,
+                    },
+                    Op::Borrow {
+                        dst: 5,
+                        place: Place {
+                            local: 0,
+                            projections: vec![Projection::Index(1)],
+                        },
+                        mutable: false,
+                    },
+                    Op::If { condition: 3 },
+                    Op::Read {
+                        dst: 6,
+                        place: Place {
+                            local: 5,
+                            projections: vec![Projection::Deref, Projection::VariantField(0, 0)],
+                        },
+                        moving: false,
+                    },
+                    Op::Return { src: 6 },
+                    Op::End,
+                ],
+            ),
+            "E_TYPE",
         );
     }
 }

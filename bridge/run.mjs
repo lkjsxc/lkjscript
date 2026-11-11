@@ -21,7 +21,7 @@ try {
       },
     },
   });
-  const fn = instance.exports[entry];
+  const fn = instance.exports['fn:' + entry];
   if (typeof fn !== 'function') throw new Error('entry function not found: ' + entry);
   const result = fn(...args.map(BigInt));
   if (resultKind === 'f64') {

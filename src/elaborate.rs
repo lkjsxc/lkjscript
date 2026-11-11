@@ -31,6 +31,8 @@ struct Compiler<'a> {
     instances: Vec<Instance>,
     instance_names: BTreeMap<String, usize>,
     applications: BTreeMap<usize, (String, Vec<usize>)>,
+    destructors: Vec<(usize, usize)>,
+    uses: BTreeMap<String, Vec<usize>>,
 }
 
 pub fn elaborate(source: &a::Program) -> Result<k::Program> {
@@ -43,13 +45,15 @@ pub fn elaborate(source: &a::Program) -> Result<k::Program> {
         instances: Vec::new(),
         instance_names: BTreeMap::new(),
         applications: BTreeMap::new(),
+        destructors: Vec::new(),
+        uses: BTreeMap::new(),
     };
     for i in 0..c.types.len() {
         c.type_names.insert(c.types[i].name.clone(), i);
     }
-    c.type_names.insert("u64".to_string(), k::U64);
-    c.type_names.insert("isize".to_string(), k::I64);
     for (name, bits, signed) in [
+        ("u64", 64, false),
+        ("isize", 64, true),
         ("u16", 16, false),
         ("u32", 32, false),
         ("i8", 8, true),
@@ -63,16 +67,16 @@ pub fn elaborate(source: &a::Program) -> Result<k::Program> {
         c.type_names.insert(name.to_string(), id);
     }
     let empty = BTreeMap::new();
-    for im in &source.impls {
-        if let Some(t) = im.trait_ty {
-            if short(&c.type_text(t)) == "Drop" {
-                return Err(err(
-                    im.span,
-                    "E_UNSUPPORTED",
-                    "user-defined Drop requires view and destructor support",
-                ));
-            }
+    for node in &source.exprs {
+        if let a::Expr::Path(path) = &node.kind {
+            c.uses
+                .entry(path.name.clone())
+                .or_default()
+                .push(node.span.start);
         }
+    }
+    for positions in c.uses.values_mut() {
+        positions.sort_unstable();
     }
     for s in &source.structs {
         if s.generics.is_empty() {
@@ -113,15 +117,24 @@ pub fn elaborate(source: &a::Program) -> Result<k::Program> {
         }
     }
     let mut next = 0;
-    while next < c.instances.len() {
-        let instance = c.instances[next].clone();
-        let function = c.compile_function(next, &instance)?;
-        c.functions[next] = function;
-        next += 1;
+    let mut next_type = 0;
+    while next < c.instances.len() || next_type < c.types.len() {
+        while next_type < c.types.len() {
+            c.register_drop(next_type)?;
+            next_type += 1;
+        }
+        if next < c.instances.len() {
+            let instance = c.instances[next].clone();
+            let function = c.compile_function(next, &instance)?;
+            c.functions[next] = function;
+            next += 1;
+        }
     }
+
     Ok(k::Program {
         types: c.types,
         functions: c.functions,
+        destructors: c.destructors,
     })
 }
 
@@ -191,6 +204,20 @@ impl Compiler<'_> {
                         inner: t,
                         mutable: false,
                     },
+                ))
+            }
+            a::Type::Array { inner, len } => {
+                let inner = self.resolve(inner, sub)?;
+                let len = len.replace('_', "").parse::<usize>().map_err(|_| {
+                    err(
+                        node.span,
+                        "E_TYPE",
+                        "array length must be an integer literal",
+                    )
+                })?;
+                Ok(self.intern(
+                    format!("[{};{}]", self.types[inner].name, len),
+                    k::TypeKind::Array { inner, len },
                 ))
             }
             a::Type::Never => Ok(k::UNIT),
@@ -270,9 +297,6 @@ impl Compiler<'_> {
                     k::TypeKind::Box { inner: args[0] }
                 },
             ));
-        }
-        if name == "String" {
-            return Ok(self.intern(key, k::TypeKind::String));
         }
         if name == "World" {
             return Ok(self.intern(key, k::TypeKind::World));
@@ -370,6 +394,104 @@ impl Compiler<'_> {
         }
         Err(err(span, "E_TYPE", &format!("unknown type {}", path.name)))
     }
+    fn has_view(&self, ty: usize) -> bool {
+        let mut todo = vec![ty];
+        let mut seen = vec![false; self.types.len()];
+        while let Some(t) = todo.pop() {
+            if seen[t] {
+                continue;
+            }
+            seen[t] = true;
+            match &self.types[t].kind {
+                k::TypeKind::Ref { .. } | k::TypeKind::Slice { .. } => return true,
+                k::TypeKind::Struct { fields, .. } => {
+                    for f in fields {
+                        todo.push(f.ty);
+                    }
+                }
+                k::TypeKind::Enum { variants, .. } => {
+                    for v in variants {
+                        for f in &v.fields {
+                            todo.push(f.ty);
+                        }
+                    }
+                }
+                k::TypeKind::Array { inner, .. } => todo.push(*inner),
+                _ => {}
+            }
+        }
+        false
+    }
+    fn lifetimes(&self, id: usize) -> Vec<String> {
+        let mut found = Vec::new();
+        let mut todo = vec![id];
+        while let Some(t) = todo.pop() {
+            match &self.source.types[t].kind {
+                a::Type::Ref {
+                    lifetime, inner, ..
+                } => {
+                    if !lifetime.is_empty() && lifetime != "'_" && !found.contains(lifetime) {
+                        found.push(lifetime.clone());
+                    }
+                    todo.push(*inner);
+                }
+                a::Type::Path(p) => {
+                    if p.name.starts_with("'") && p.name != "'_" && !found.contains(&p.name) {
+                        found.push(p.name.clone());
+                    }
+                    todo.extend_from_slice(&p.args);
+                }
+                a::Type::Tuple(ts) => todo.extend_from_slice(ts),
+                a::Type::Slice(t) | a::Type::Array { inner: t, .. } => todo.push(*t),
+                _ => {}
+            }
+        }
+        found
+    }
+    fn return_source(
+        &self,
+        source: &a::Function,
+        locals: &[k::Local],
+        result: usize,
+    ) -> Result<Option<usize>> {
+        if !self.has_view(result) {
+            return Ok(None);
+        }
+        let lifetimes = self.lifetimes(source.result);
+        if lifetimes.len() > 1 {
+            return Err(err(
+                source.span,
+                "E_BORROW",
+                "a returned view has one source lifetime",
+            ));
+        }
+        let mut candidates = Vec::new();
+        if let Some(lifetime) = lifetimes.first() {
+            for i in 0..source.params.len() {
+                if self.lifetimes(source.params[i].ty).contains(lifetime) {
+                    candidates.push(i);
+                }
+            }
+        } else if source.params.first().is_some_and(|p| p.name == "self")
+            && self.has_view(locals[0].ty)
+        {
+            candidates.push(0);
+        } else {
+            for i in 0..source.params.len() {
+                if self.has_view(locals[i].ty) {
+                    candidates.push(i);
+                }
+            }
+        }
+        if candidates.len() > 1 {
+            return Err(err(
+                source.span,
+                "E_BORROW",
+                "returned view selects more than one source input",
+            ));
+        }
+        Ok(candidates.first().copied())
+    }
     fn instantiate(&mut self, index: usize, sub: BTreeMap<String, usize>) -> Result<usize> {
         let source = self.source.functions[index].clone();
         let mut name = qualified(&source.module, &source.name);
@@ -397,6 +519,7 @@ impl Compiler<'_> {
             });
         }
         let result = self.resolve(source.result, &sub)?;
+        let return_source = self.return_source(&source, &locals, result)?;
         let id = self.functions.len();
         self.instance_names.insert(key, id);
         self.instances.push(Instance {
@@ -407,6 +530,7 @@ impl Compiler<'_> {
             name,
             params: locals.len(),
             result,
+            return_source,
             locals,
             body: Vec::new(),
             test: source.attrs.iter().any(|a| a.name == "test"),
@@ -449,6 +573,66 @@ impl Compiler<'_> {
         }
         Ok(())
     }
+    fn register_drop(&mut self, ty: usize) -> Result<()> {
+        if !matches!(
+            self.types[ty].kind,
+            k::TypeKind::Struct { .. } | k::TypeKind::Enum { .. }
+        ) {
+            return Ok(());
+        }
+        let impls = self.source.impls.clone();
+        for im in impls {
+            if let Some(trait_ty) = im.trait_ty {
+                if self.type_text(trait_ty) == "Drop" {
+                    let mut sub = BTreeMap::new();
+                    let pattern = match self.source.types[im.target].kind.clone() {
+                        a::Type::Path(p) => p,
+                        _ => return Err(err(im.span, "E_TRAIT", "Drop requires a nominal type")),
+                    };
+                    let (name, actual) = self
+                        .applications
+                        .get(&ty)
+                        .cloned()
+                        .unwrap_or((self.types[ty].name.clone(), Vec::new()));
+                    if short(&pattern.name) != short(&name) {
+                        continue;
+                    }
+                    let parameters=pattern.args.iter().filter(|p|!matches!(&self.source.types[**p].kind,a::Type::Path(path) if path.name.starts_with("'"))).copied().collect::<Vec<_>>();
+                    if parameters.len() != actual.len() {
+                        continue;
+                    }
+                    for i in 0..parameters.len() {
+                        match &self.source.types[parameters[i]].kind {
+                            a::Type::Path(p) if p.args.is_empty() => {
+                                sub.insert(p.name.clone(), actual[i]);
+                            }
+                            _ => {
+                                return Err(err(
+                                    im.span,
+                                    "E_TRAIT",
+                                    "Drop implementations cannot specialize type arguments",
+                                ));
+                            }
+                        }
+                    }
+                    sub.insert("Self".to_string(), ty);
+                    self.bounds(&im.generics, &sub)?;
+                    let methods = im
+                        .methods
+                        .iter()
+                        .filter(|i| self.source.functions[**i].name == "drop")
+                        .copied()
+                        .collect::<Vec<_>>();
+                    if methods.len() != 1 {
+                        return Err(err(im.span, "E_TRAIT", "Drop requires one drop method"));
+                    }
+                    let function = self.instantiate(methods[0], sub)?;
+                    self.destructors.push((ty, function));
+                }
+            }
+        }
+        Ok(())
+    }
     fn compile_function(&mut self, index: usize, instance: &Instance) -> Result<k::Function> {
         let source = self.source.functions[instance.source].clone();
         let mut function = self.functions[index].clone();
@@ -464,6 +648,8 @@ impl Compiler<'_> {
             function: &mut function,
             sub: instance.substitutions.clone(),
             bindings,
+            ref_bindings: Vec::new(),
+            written: live.clone(),
             live,
             loops: Vec::new(),
             reachable: true,
@@ -486,13 +672,25 @@ impl Compiler<'_> {
     }
 }
 
+#[derive(Clone)]
+struct Snapshot {
+    live: Vec<bool>,
+    written: Vec<bool>,
+}
+struct LoopScope {
+    start: usize,
+    range: Option<(usize, usize, bool)>,
+    exits: Vec<Snapshot>,
+}
 struct Builder<'a, 'b> {
     compiler: &'a mut Compiler<'b>,
     function: &'a mut k::Function,
     sub: BTreeMap<String, usize>,
     bindings: Vec<(String, usize)>,
+    ref_bindings: Vec<(String, usize)>,
     live: Vec<bool>,
-    loops: Vec<usize>,
+    written: Vec<bool>,
+    loops: Vec<LoopScope>,
     reachable: bool,
 }
 impl Builder<'_, '_> {
@@ -504,6 +702,7 @@ impl Builder<'_, '_> {
             mutable,
         });
         self.live.push(false);
+        self.written.push(false);
         id
     }
     fn temp(&mut self, ty: usize) -> usize {
@@ -545,6 +744,7 @@ impl Builder<'_, '_> {
             | k::Op::Float { dst, .. }
             | k::Op::Unit { dst }
             | k::Op::Borrow { dst, .. }
+            | k::Op::SliceBorrow { dst, .. }
             | k::Op::Discriminant { dst, .. }
             | k::Op::TagTest { dst, .. } => self.live[*dst] = true,
             k::Op::Read { dst, place, moving } => {
@@ -556,6 +756,7 @@ impl Builder<'_, '_> {
             k::Op::Assign { place, src } => {
                 self.live[*src] = false;
                 self.live[place.local] = true;
+                self.written[place.local] = true;
             }
             k::Op::Drop { place } => {
                 if place.projections.is_empty() {
@@ -579,7 +780,12 @@ impl Builder<'_, '_> {
                 }
                 self.live[*dst] = true;
             }
-            k::Op::Struct { dst, fields } | k::Op::Variant { dst, fields, .. } => {
+            k::Op::Struct { dst, fields }
+            | k::Op::Variant { dst, fields, .. }
+            | k::Op::Array {
+                dst,
+                elements: fields,
+            } => {
                 for field in fields {
                     self.live[*field] = false;
                 }
@@ -590,7 +796,14 @@ impl Builder<'_, '_> {
                 self.live[*src] = false;
                 self.reachable = false;
             }
-            k::Op::Break | k::Op::Continue | k::Op::Trap { .. } => self.reachable = false,
+            k::Op::Break => {
+                let state = self.snapshot();
+                if let Some(scope) = self.loops.last_mut() {
+                    scope.exits.push(state);
+                }
+                self.reachable = false;
+            }
+            k::Op::Continue | k::Op::Trap { .. } => self.reachable = false,
             _ => {}
         }
         self.function.body.push(k::Instruction { op, line });
@@ -612,9 +825,17 @@ impl Builder<'_, '_> {
         self.emit(k::Op::Unit { dst: d }, line);
         (d, k::UNIT)
     }
-    fn restore(&mut self, live: &[bool]) {
-        self.live = live.to_vec();
+    fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            live: self.live.clone(),
+            written: self.written.clone(),
+        }
+    }
+    fn restore(&mut self, state: &Snapshot) {
+        self.live = state.live.clone();
         self.live.resize(self.function.locals.len(), false);
+        self.written = state.written.clone();
+        self.written.resize(self.function.locals.len(), false);
         self.reachable = true;
     }
     fn read(&mut self, place: k::Place, line: usize) -> Result<(usize, usize)> {
@@ -696,7 +917,9 @@ impl Builder<'_, '_> {
                     t = inner;
                 }
                 match self.compiler.types[t].kind {
-                    k::TypeKind::Vec { inner } | k::TypeKind::Slice { inner, .. } => Some(inner),
+                    k::TypeKind::Vec { inner }
+                    | k::TypeKind::Slice { inner, .. }
+                    | k::TypeKind::Array { inner, .. } => Some(inner),
                     _ => None,
                 }
             }
@@ -766,19 +989,22 @@ impl Builder<'_, '_> {
     }
     fn end_unused_borrows(&mut self, start: usize, position: usize, end: usize, line: usize) {
         let mut drops = Vec::new();
-        for (name, local) in &self.bindings {
-            if *local >= start
-                && self.live[*local]
-                && matches!(
-                    self.compiler.types[self.ty(*local)].kind,
-                    k::TypeKind::Ref { .. }
-                )
-            {
-                let used = self.compiler.source.exprs.iter().any(|expr| {
-                    expr.span.start >= position
-                        && expr.span.start < end
-                        && matches!(&expr.kind,a::Expr::Path(p) if p.name==*name)
-                });
+        for (name, local) in &self.ref_bindings {
+            if *local >= start && self.live[*local] {
+                let mut used = false;
+                if let Some(positions) = self.compiler.uses.get(name) {
+                    let mut low = 0;
+                    let mut high = positions.len();
+                    while low < high {
+                        let mid = low + (high - low) / 2;
+                        if positions[mid] < position {
+                            low = mid + 1;
+                        } else {
+                            high = mid;
+                        }
+                    }
+                    used = low < positions.len() && positions[low] < end;
+                }
                 if !used {
                     drops.push(*local);
                 }
@@ -815,6 +1041,9 @@ impl Builder<'_, '_> {
                     },
                     line,
                 );
+                if matches!(self.compiler.types[val.1].kind, k::TypeKind::Ref { .. }) {
+                    self.ref_bindings.push((name.clone(), dst));
+                }
                 self.bindings.push((name, dst));
                 Ok(())
             }
@@ -847,6 +1076,40 @@ impl Builder<'_, '_> {
             )),
         }
     }
+    fn extends_temporary(&self, value: usize, pattern: usize) -> bool {
+        if matches!(
+            self.compiler.source.patterns[pattern].kind,
+            a::Pattern::Bind { by_ref: true, .. }
+        ) {
+            return true;
+        }
+        let mut todo = vec![value];
+        while let Some(id) = todo.pop() {
+            match &self.compiler.source.exprs[id].kind {
+                a::Expr::Borrow { .. } => return true,
+                a::Expr::Tuple(items) | a::Expr::Array(items) => todo.extend_from_slice(items),
+                a::Expr::Struct { fields, .. } => {
+                    for (_, value) in fields {
+                        todo.push(*value);
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+    fn cleanup_temporaries(&mut self, start: usize, line: usize) {
+        for local in (start..self.live.len()).rev() {
+            if self.live[local] && self.function.locals[local].name.starts_with('$') {
+                self.emit(
+                    k::Op::Drop {
+                        place: k::Place::local(local),
+                    },
+                    line,
+                );
+            }
+        }
+    }
     fn block(&mut self, id: usize, expected: Option<usize>) -> Result<(usize, usize)> {
         let block = self.compiler.source.blocks[id].clone();
         let start = self.live.len();
@@ -872,6 +1135,8 @@ impl Builder<'_, '_> {
                         None => None,
                     };
                     if let Some(value) = value {
+                        let before = self.live.len();
+                        let extends = self.extends_temporary(value, pattern);
                         let v = self.expr(value, expected)?;
                         if let Some(t) = expected {
                             if t != v.1 {
@@ -879,6 +1144,9 @@ impl Builder<'_, '_> {
                             }
                         }
                         self.bind(pattern, v, span.line)?;
+                        if !extends {
+                            self.cleanup_temporaries(before, span.line);
+                        }
                     } else {
                         let p = self.compiler.source.patterns[pattern].clone();
                         if let a::Pattern::Bind { name, mutable, .. } = p.kind {
@@ -923,6 +1191,29 @@ impl Builder<'_, '_> {
         Ok(result)
     }
     fn expr(&mut self, id: usize, expected: Option<usize>) -> Result<(usize, usize)> {
+        if let Some(target) = expected {
+            if let k::TypeKind::Ref {
+                inner,
+                mutable: true,
+            } = self.compiler.types[target].kind
+            {
+                if let a::Expr::Path(path) = &self.compiler.source.exprs[id].kind {
+                    if let Some(local) = self.binding(&path.name) {
+                        if self.ty(local) == target {
+                            return self.borrow(
+                                k::Place {
+                                    local,
+                                    projections: vec![k::Projection::Deref],
+                                },
+                                true,
+                                self.compiler.source.exprs[id].span.line,
+                            );
+                        }
+                        let _ = inner;
+                    }
+                }
+            }
+        }
         let value = self.expr_inner(id, expected)?;
         if let Some(target) = expected {
             if target != value.1 {
@@ -945,6 +1236,29 @@ impl Builder<'_, '_> {
                             local: value.0,
                             projections: vec![k::Projection::Deref],
                         };
+                        if let k::TypeKind::Slice { inner: element, .. } =
+                            self.compiler.types[want].kind
+                        {
+                            if matches!(self.compiler.types[inner].kind,k::TypeKind::Vec{inner:t}|k::TypeKind::Array{inner:t,..} if t==element)
+                            {
+                                let dst = self.temp(target);
+                                self.emit(
+                                    k::Op::SliceBorrow {
+                                        dst,
+                                        place,
+                                        mutable: want_mut,
+                                    },
+                                    self.compiler.source.exprs[id].span.line,
+                                );
+                                self.emit(
+                                    k::Op::Drop {
+                                        place: k::Place::local(value.0),
+                                    },
+                                    self.compiler.source.exprs[id].span.line,
+                                );
+                                return Ok((dst, target));
+                            }
+                        }
                         while inner != want {
                             if let k::TypeKind::Box { inner: next } =
                                 self.compiler.types[inner].kind
@@ -961,6 +1275,12 @@ impl Builder<'_, '_> {
                                 want_mut,
                                 self.compiler.source.exprs[id].span.line,
                             )?;
+                            self.emit(
+                                k::Op::Drop {
+                                    place: k::Place::local(value.0),
+                                },
+                                self.compiler.source.exprs[id].span.line,
+                            );
                             return Ok(result);
                         }
                     }
@@ -969,43 +1289,82 @@ impl Builder<'_, '_> {
         }
         Ok(value)
     }
+    fn integer(
+        &mut self,
+        text: &str,
+        expected: Option<usize>,
+        negative: bool,
+        span: a::Span,
+    ) -> Result<(usize, usize)> {
+        let mut digits = text.replace('_', "");
+        let mut ty = expected.unwrap_or(k::I32);
+        let suffixes = [
+            "usize", "isize", "u64", "i64", "u32", "i32", "u16", "i16", "u8", "i8",
+        ];
+        for suffix in suffixes {
+            if digits.ends_with(suffix) {
+                ty = *self
+                    .compiler
+                    .type_names
+                    .get(suffix)
+                    .ok_or_else(|| err(span, "E_TYPE", "unknown integer suffix"))?;
+                digits.truncate(digits.len() - suffix.len());
+                break;
+            }
+        }
+        let radix = if digits.starts_with("0x") {
+            16
+        } else if digits.starts_with("0b") {
+            2
+        } else if digits.starts_with("0o") {
+            8
+        } else {
+            10
+        };
+        let magnitude =
+            u64::from_str_radix(if radix == 10 { &digits } else { &digits[2..] }, radix)
+                .map_err(|_| err(span, "E_TYPE", "integer literal exceeds its representation"))?;
+        let (bits, signed) = match self.compiler.types[ty].kind {
+            k::TypeKind::Int { bits, signed } => (bits, signed),
+            _ => {
+                return Err(err(
+                    span,
+                    "E_TYPE",
+                    "integer literal requires an integer type",
+                ));
+            }
+        };
+        if negative && !signed {
+            return Err(err(span, "E_TYPE", "unsigned integers cannot be negated"));
+        }
+        let maximum = if signed {
+            if negative {
+                1_u64 << (bits - 1)
+            } else {
+                (1_u64 << (bits - 1)) - 1
+            }
+        } else if bits == 64 {
+            u64::MAX
+        } else {
+            (1_u64 << bits) - 1
+        };
+        if magnitude > maximum {
+            return Err(err(span, "E_TYPE", "integer literal does not fit its type"));
+        }
+        let value = if negative {
+            0_u64.wrapping_sub(magnitude) as i64
+        } else {
+            magnitude as i64
+        };
+        let dst = self.temp(ty);
+        self.emit(k::Op::Int { dst, value }, span.line);
+        Ok((dst, ty))
+    }
     fn expr_inner(&mut self, id: usize, expected: Option<usize>) -> Result<(usize, usize)> {
         let node = self.compiler.source.exprs[id].clone();
         let line = node.span.line;
         match node.kind {
-            a::Expr::Int(text) => {
-                let mut value_text = text.replace('_', "");
-                let mut ty = expected.unwrap_or(k::I32);
-                let mut names = self.compiler.type_names.keys().cloned().collect::<Vec<_>>();
-                names.sort_by_key(|n| std::cmp::Reverse(n.len()));
-                for name in names {
-                    if value_text.ends_with(&name) && value_text.len() > name.len() {
-                        ty = self.compiler.type_names[&name];
-                        value_text.truncate(value_text.len() - name.len());
-                        break;
-                    }
-                }
-                let radix = if value_text.starts_with("0x") {
-                    16
-                } else if value_text.starts_with("0b") {
-                    2
-                } else if value_text.starts_with("0o") {
-                    8
-                } else {
-                    10
-                };
-                let digits = if radix == 10 {
-                    value_text.as_str()
-                } else {
-                    &value_text[2..]
-                };
-                let value = u64::from_str_radix(digits, radix)
-                    .map_err(|_| err(node.span, "E_TYPE", "invalid integer literal"))?
-                    as i64;
-                let dst = self.temp(ty);
-                self.emit(k::Op::Int { dst, value }, line);
-                Ok((dst, ty))
-            }
+            a::Expr::Int(text) => self.integer(&text, expected, false, node.span),
             a::Expr::Bool(value) => {
                 let d = self.temp(k::BOOL);
                 self.emit(
@@ -1023,6 +1382,13 @@ impl Builder<'_, '_> {
                     .replace('_', "")
                     .parse::<f64>()
                     .map_err(|_| err(node.span, "E_TYPE", "invalid float literal"))?;
+                if !value.is_finite() {
+                    return Err(err(
+                        node.span,
+                        "E_TYPE",
+                        "floating-point literal exceeds f64",
+                    ));
+                }
                 let dst = self.temp(k::F64);
                 self.emit(
                     k::Op::Float {
@@ -1098,6 +1464,11 @@ impl Builder<'_, '_> {
                 self.borrow(place, mutable, line)
             }
             a::Expr::Unary { op, value } => {
+                if op == "-" {
+                    if let a::Expr::Int(text) = self.compiler.source.exprs[value].kind.clone() {
+                        return self.integer(&text, expected, true, node.span);
+                    }
+                }
                 if op == "*" {
                     let place = self.place(id)?;
                     return self.read(place, line);
@@ -1143,6 +1514,16 @@ impl Builder<'_, '_> {
             }
             a::Expr::Assign { op, place, value } => {
                 let place = self.place(place)?;
+                if place.projections.is_empty()
+                    && !self.function.locals[place.local].mutable
+                    && self.written[place.local]
+                {
+                    return Err(err(
+                        node.span,
+                        "E_TYPE",
+                        "assignment to an immutable binding",
+                    ));
+                }
                 let t = place_type(&self.compiler.types, self.function, &place)
                     .ok_or_else(|| err(node.span, "E_TYPE", "invalid assignment place"))?;
                 let v = if op == "=" {
@@ -1195,6 +1576,59 @@ impl Builder<'_, '_> {
                     ));
                 }
                 self.construct_struct(&path, &fields, expected, node.span)
+            }
+            a::Expr::Array(elements) => self.array_expr(&elements, expected, node.span),
+            a::Expr::Repeat { value, count } => {
+                let length = match &self.compiler.source.exprs[count].kind {
+                    a::Expr::Int(text) => text.replace('_', "").parse::<usize>().map_err(|_| {
+                        err(
+                            node.span,
+                            "E_TYPE",
+                            "array repeat length must be an integer literal",
+                        )
+                    })?,
+                    _ => {
+                        return Err(err(
+                            node.span,
+                            "E_UNSUPPORTED",
+                            "array repeat length must be constant",
+                        ));
+                    }
+                };
+                let inner = expected.and_then(|t| match self.compiler.types[t].kind {
+                    k::TypeKind::Array { inner, .. } => Some(inner),
+                    _ => None,
+                });
+                let v = self.expr(value, inner)?;
+                if length > 1 && !is_copy(&self.compiler.types, v.1) {
+                    return Err(err(
+                        node.span,
+                        "E_TYPE",
+                        "repeated array element must be Copy",
+                    ));
+                }
+                let mut elements = Vec::new();
+                for _ in 0..length {
+                    elements.push(self.read(k::Place::local(v.0), line)?.0);
+                }
+                let ty = self.compiler.intern(
+                    format!("[{};{}]", self.compiler.types[v.1].name, length),
+                    k::TypeKind::Array {
+                        inner: v.1,
+                        len: length,
+                    },
+                );
+                let dst = self.temp(ty);
+                self.emit(k::Op::Array { dst, elements }, line);
+                if self.live[v.0] {
+                    self.emit(
+                        k::Op::Drop {
+                            place: k::Place::local(v.0),
+                        },
+                        line,
+                    );
+                }
+                Ok((dst, ty))
             }
             a::Expr::Tuple(items) => {
                 if items.is_empty() {
@@ -1261,19 +1695,22 @@ impl Builder<'_, '_> {
                         "break values are not implemented yet",
                     ));
                 }
-                let start = *self
+                let start = self
                     .loops
                     .last()
-                    .ok_or_else(|| err(node.span, "E_TYPE", "break outside loop"))?;
+                    .ok_or_else(|| err(node.span, "E_TYPE", "break outside loop"))?
+                    .start;
                 self.cleanup(start, None, line);
                 self.emit(k::Op::Break, line);
                 Ok(self.unit(line))
             }
             a::Expr::Continue => {
-                let start = *self
+                let start = self
                     .loops
                     .last()
-                    .ok_or_else(|| err(node.span, "E_TYPE", "continue outside loop"))?;
+                    .ok_or_else(|| err(node.span, "E_TYPE", "continue outside loop"))?
+                    .start;
+                self.advance_range(line)?;
                 self.cleanup(start, None, line);
                 self.emit(k::Op::Continue, line);
                 Ok(self.unit(line))
@@ -1294,6 +1731,43 @@ impl Builder<'_, '_> {
                 "this expression form is not implemented yet",
             )),
         }
+    }
+    fn array_expr(
+        &mut self,
+        elements: &[usize],
+        expected: Option<usize>,
+        span: a::Span,
+    ) -> Result<(usize, usize)> {
+        let mut inner = expected.and_then(|t| match self.compiler.types[t].kind {
+            k::TypeKind::Array { inner, .. } => Some(inner),
+            _ => None,
+        });
+        let mut values = Vec::new();
+        for element in elements {
+            let value = self.expr(*element, inner)?;
+            if inner.is_none() {
+                inner = Some(value.1);
+            }
+            values.push(value.0);
+        }
+        let inner =
+            inner.ok_or_else(|| err(span, "E_TYPE", "empty array needs an element type"))?;
+        let ty = self.compiler.intern(
+            format!("[{};{}]", self.compiler.types[inner].name, elements.len()),
+            k::TypeKind::Array {
+                inner,
+                len: elements.len(),
+            },
+        );
+        let dst = self.temp(ty);
+        self.emit(
+            k::Op::Array {
+                dst,
+                elements: values,
+            },
+            span.line,
+        );
+        Ok((dst, ty))
     }
     fn vector_compare(
         &mut self,
@@ -1372,7 +1846,7 @@ impl Builder<'_, '_> {
         let (condition, _) = self.expr(left, Some(k::BOOL))?;
         let result = self.local(k::BOOL, "$if", true);
         self.emit(k::Op::If { condition }, line);
-        let state = self.live.clone();
+        let state = self.snapshot();
         let first = if op == "&&" {
             self.expr(right, Some(k::BOOL))?
         } else {
@@ -1387,7 +1861,7 @@ impl Builder<'_, '_> {
             },
             line,
         );
-        self.cleanup(state.len(), Some(result), line);
+        self.cleanup(state.live.len(), Some(result), line);
         self.emit(k::Op::Else, line);
         self.restore(&state);
         let second = if op == "||" {
@@ -1404,7 +1878,7 @@ impl Builder<'_, '_> {
             },
             line,
         );
-        self.cleanup(state.len(), Some(result), line);
+        self.cleanup(state.live.len(), Some(result), line);
         self.emit(k::Op::End, line);
         Ok((result, k::BOOL))
     }
@@ -1418,7 +1892,7 @@ impl Builder<'_, '_> {
     ) -> Result<(usize, usize)> {
         let (condition, _) = self.expr(condition, Some(k::BOOL))?;
         self.emit(k::Op::If { condition }, line);
-        let state = self.live.clone();
+        let state = self.snapshot();
         let before = self.live.len();
         let bindings = self.bindings.len();
         let first = self.block(then_block, expected)?;
@@ -1438,7 +1912,7 @@ impl Builder<'_, '_> {
             );
             self.cleanup(before, Some(result), line);
         }
-        let first_state = self.live.clone();
+        let first_state = self.snapshot();
         self.emit(k::Op::Else, line);
         self.restore(&state);
         self.bindings.truncate(bindings);
@@ -1475,114 +1949,33 @@ impl Builder<'_, '_> {
         self.reachable = first_reachable || second_reachable;
         Ok((result, self.ty(result)))
     }
-    fn while_expr(
-        &mut self,
-        condition: Option<usize>,
-        body: usize,
-        line: usize,
-    ) -> Result<(usize, usize)> {
-        let start = self.live.len();
-        let entry = self.live.clone();
-        self.loops.push(start);
-        self.emit(k::Op::Loop, line);
-        if let Some(condition) = condition {
-            let (c, _) = self.expr(condition, Some(k::BOOL))?;
-            let not = self.temp(k::BOOL);
-            self.emit(
-                k::Op::Unary {
-                    dst: not,
-                    op: "!".to_string(),
-                    src: c,
-                },
-                line,
-            );
-            self.emit(k::Op::If { condition: not }, line);
-            self.cleanup(start, None, line);
-            self.emit(k::Op::Break, line);
-            self.emit(k::Op::End, line);
-            self.restore(&entry);
-        }
-        let _ = self.block(body, None)?;
-        if self.reachable {
-            self.cleanup(start, None, line);
-            self.emit(k::Op::Continue, line);
-        }
-        self.emit(k::Op::End, line);
-        self.loops.pop();
-        self.restore(&entry);
-        Ok(self.unit(line))
-    }
-    fn for_expr(
-        &mut self,
-        pattern: usize,
-        iterator: usize,
-        body: usize,
-        line: usize,
-    ) -> Result<(usize, usize)> {
-        let range = self.compiler.source.exprs[iterator].clone();
-        let (start, end, inclusive) = match range.kind {
-            a::Expr::Range {
-                start: Some(s),
-                end: Some(e),
-                inclusive,
-            } => (s, e, inclusive),
-            _ => {
-                return Err(err(
-                    range.span,
-                    "E_UNSUPPORTED",
-                    "for currently requires an integer range",
-                ));
+    fn advance_range(&mut self, line: usize) -> Result<()> {
+        let (start, range) = match self.loops.last() {
+            Some(scope) => (scope.start, scope.range),
+            None => return Ok(()),
+        };
+        if let Some((counter, finish, inclusive)) = range {
+            if inclusive {
+                let before = self.snapshot();
+                let left = self.read(k::Place::local(counter), line)?.0;
+                let right = self.read(k::Place::local(finish), line)?.0;
+                let done = self.temp(k::BOOL);
+                self.emit(
+                    k::Op::Binary {
+                        dst: done,
+                        op: "==".to_string(),
+                        left,
+                        right,
+                    },
+                    line,
+                );
+                self.emit(k::Op::If { condition: done }, line);
+                self.cleanup(start, None, line);
+                self.emit(k::Op::Break, line);
+                self.emit(k::Op::End, line);
+                self.restore(&before);
             }
-        };
-        let p = self.compiler.source.patterns[pattern].clone();
-        let name = match p.kind {
-            a::Pattern::Bind { name, .. } => name,
-            _ => return Err(err(p.span, "E_UNSUPPORTED", "for requires a name binding")),
-        };
-        let expected = self.hint(end).or_else(|| self.hint(start));
-        let (s, t) = self.expr(start, expected)?;
-        let (e, _) = self.expr(end, Some(t))?;
-        let counter = self.local(t, &name, true);
-        self.emit(
-            k::Op::Assign {
-                place: k::Place::local(counter),
-                src: s,
-            },
-            line,
-        );
-        let finish = self.local(t, "$end", false);
-        self.emit(
-            k::Op::Assign {
-                place: k::Place::local(finish),
-                src: e,
-            },
-            line,
-        );
-        let bindings = self.bindings.len();
-        self.bindings.push((name, counter));
-        let first = self.live.len();
-        let state = self.live.clone();
-        self.loops.push(first);
-        self.emit(k::Op::Loop, line);
-        let left = self.read(k::Place::local(counter), line)?.0;
-        let right = self.read(k::Place::local(finish), line)?.0;
-        let done = self.temp(k::BOOL);
-        self.emit(
-            k::Op::Binary {
-                dst: done,
-                op: if inclusive { ">" } else { ">=" }.to_string(),
-                left,
-                right,
-            },
-            line,
-        );
-        self.emit(k::Op::If { condition: done }, line);
-        self.cleanup(first, None, line);
-        self.emit(k::Op::Break, line);
-        self.emit(k::Op::End, line);
-        self.restore(&state);
-        let _ = self.block(body, None)?;
-        if self.reachable {
+            let t = self.ty(counter);
             let left = self.read(k::Place::local(counter), line)?.0;
             let right = self.temp(t);
             self.emit(
@@ -1609,12 +2002,151 @@ impl Builder<'_, '_> {
                 },
                 line,
             );
+        }
+        Ok(())
+    }
+    fn while_expr(
+        &mut self,
+        condition: Option<usize>,
+        body: usize,
+        line: usize,
+    ) -> Result<(usize, usize)> {
+        let start = self.live.len();
+        let entry = self.snapshot();
+        self.loops.push(LoopScope {
+            start,
+            range: None,
+            exits: Vec::new(),
+        });
+        self.emit(k::Op::Loop, line);
+        if let Some(condition) = condition {
+            let (c, _) = self.expr(condition, Some(k::BOOL))?;
+            let not = self.temp(k::BOOL);
+            self.emit(
+                k::Op::Unary {
+                    dst: not,
+                    op: "!".to_string(),
+                    src: c,
+                },
+                line,
+            );
+            self.emit(k::Op::If { condition: not }, line);
+            self.cleanup(start, None, line);
+            self.emit(k::Op::Break, line);
+            self.emit(k::Op::End, line);
+            self.restore(&entry);
+        }
+        let _ = self.block(body, None)?;
+        if self.reachable {
+            self.cleanup(start, None, line);
+            self.emit(k::Op::Continue, line);
+        }
+        self.emit(k::Op::End, line);
+        let scope = self.loops.pop().unwrap();
+        if let Some(exit) = scope.exits.first() {
+            self.restore(exit);
+        } else {
+            self.restore(&entry);
+            self.reachable = false;
+        }
+        Ok(self.unit(line))
+    }
+    fn for_expr(
+        &mut self,
+        pattern: usize,
+        iterator: usize,
+        body: usize,
+        line: usize,
+    ) -> Result<(usize, usize)> {
+        let range = self.compiler.source.exprs[iterator].clone();
+        let (start, end, inclusive) = match range.kind {
+            a::Expr::Range {
+                start: Some(s),
+                end: Some(e),
+                inclusive,
+            } => (s, e, inclusive),
+            _ => {
+                return Err(err(
+                    range.span,
+                    "E_UNSUPPORTED",
+                    "for currently requires an integer range",
+                ));
+            }
+        };
+        let p = self.compiler.source.patterns[pattern].clone();
+        let (name, mutable) = match p.kind {
+            a::Pattern::Bind { name, mutable, .. } => (name, mutable),
+            _ => return Err(err(p.span, "E_UNSUPPORTED", "for requires a name binding")),
+        };
+        let expected = self.hint(end).or_else(|| self.hint(start));
+        let (s, t) = self.expr(start, expected)?;
+        let (e, _) = self.expr(end, Some(t))?;
+        let counter = self.local(t, "$counter", true);
+        self.emit(
+            k::Op::Assign {
+                place: k::Place::local(counter),
+                src: s,
+            },
+            line,
+        );
+        let finish = self.local(t, "$end", false);
+        self.emit(
+            k::Op::Assign {
+                place: k::Place::local(finish),
+                src: e,
+            },
+            line,
+        );
+        let bindings = self.bindings.len();
+        let first = self.live.len();
+        let binding = self.local(t, &name, mutable);
+        self.bindings.push((name, binding));
+        let state = self.snapshot();
+        self.loops.push(LoopScope {
+            start: first,
+            range: Some((counter, finish, inclusive)),
+            exits: Vec::new(),
+        });
+        self.emit(k::Op::Loop, line);
+        let left = self.read(k::Place::local(counter), line)?.0;
+        let right = self.read(k::Place::local(finish), line)?.0;
+        let done = self.temp(k::BOOL);
+        self.emit(
+            k::Op::Binary {
+                dst: done,
+                op: if inclusive { ">" } else { ">=" }.to_string(),
+                left,
+                right,
+            },
+            line,
+        );
+        self.emit(k::Op::If { condition: done }, line);
+        self.cleanup(first, None, line);
+        self.emit(k::Op::Break, line);
+        self.emit(k::Op::End, line);
+        self.restore(&state);
+        let current = self.read(k::Place::local(counter), line)?.0;
+        self.emit(
+            k::Op::Assign {
+                place: k::Place::local(binding),
+                src: current,
+            },
+            line,
+        );
+        let _ = self.block(body, None)?;
+        if self.reachable {
+            self.advance_range(line)?;
             self.cleanup(first, None, line);
             self.emit(k::Op::Continue, line);
         }
         self.emit(k::Op::End, line);
-        self.loops.pop();
-        self.restore(&state);
+        let scope = self.loops.pop().unwrap();
+        if let Some(exit) = scope.exits.first() {
+            self.restore(exit);
+        } else {
+            self.restore(&state);
+            self.reachable = false;
+        }
         self.bindings.truncate(bindings);
         self.emit(
             k::Op::Drop {
@@ -2012,10 +2544,46 @@ impl Builder<'_, '_> {
             base = inner;
         }
         match name {
+            "as_slice" | "as_mut_slice"
+                if matches!(
+                    self.compiler.types[base].kind,
+                    k::TypeKind::Vec { .. } | k::TypeKind::Array { .. }
+                ) =>
+            {
+                if !args.is_empty() {
+                    return Err(err(span, "E_TYPE", "slice projection takes no arguments"));
+                }
+                let inner = match self.compiler.types[base].kind {
+                    k::TypeKind::Vec { inner } | k::TypeKind::Array { inner, .. } => inner,
+                    _ => return Err(err(span, "E_TYPE", "slice projection needs a collection")),
+                };
+                let slice = self.compiler.intern(
+                    format!("[{}]", self.compiler.types[inner].name),
+                    k::TypeKind::Slice {
+                        inner,
+                        mutable: false,
+                    },
+                );
+                let mutable = name == "as_mut_slice";
+                let ty = self.compiler.reference(slice, mutable);
+                let dst = self.temp(ty);
+                self.emit(
+                    k::Op::SliceBorrow {
+                        dst,
+                        place: target,
+                        mutable,
+                    },
+                    span.line,
+                );
+                Ok((dst, ty))
+            }
             "len"
                 if matches!(
                     self.compiler.types[base].kind,
-                    k::TypeKind::Vec { .. } | k::TypeKind::Slice { .. } | k::TypeKind::String
+                    k::TypeKind::Vec { .. }
+                        | k::TypeKind::Slice { .. }
+                        | k::TypeKind::Array { .. }
+                        | k::TypeKind::String
                 ) =>
             {
                 if !args.is_empty() {
@@ -2367,10 +2935,10 @@ impl Builder<'_, '_> {
             _ => (original_ty, false, false),
         };
         let start = self.live.len();
-        let base = self.live.clone();
+        let base = self.snapshot();
         let binding_count = self.bindings.len();
         let mut result: Option<usize> = None;
-        let mut exit_state: Option<Vec<bool>> = None;
+        let mut exit_state: Option<Snapshot> = None;
         let mut open = 0;
         let mut exhaustive = false;
         let mut default_seen = false;
@@ -2508,7 +3076,7 @@ impl Builder<'_, '_> {
                     );
                 }
                 if exit_state.is_none() {
-                    exit_state = Some(self.live.clone());
+                    exit_state = Some(self.snapshot());
                 }
             }
             self.bindings.truncate(binding_count);

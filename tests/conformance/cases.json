@@ -188,7 +188,7 @@
     "file": "pass/view_struct.rs",
     "kind": "run",
     "value": "42",
-    "pending": true,
+    "pending": false,
     "rust": true
   },
   {
@@ -204,7 +204,7 @@
     "file": "pass/return_cleanup.rs",
     "kind": "run",
     "value": "8",
-    "pending": true,
+    "pending": false,
     "rust": true
   },
   {
@@ -212,7 +212,7 @@
     "file": "pass/break_cleanup.rs",
     "kind": "run",
     "value": "1",
-    "pending": true,
+    "pending": false,
     "rust": true
   },
   {
@@ -422,5 +422,185 @@
     "code": "E_BORROW",
     "pending": false,
     "rust": false
+  },
+  {
+    "id": "mismatched_trait_result",
+    "file": "fail/mismatched_trait_result.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "missing_generic_bound",
+    "file": "fail/missing_generic_bound.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "view_parameter_cache_escape",
+    "file": "fail/view_parameter_cache_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "view_parameter_slot_escape",
+    "file": "fail/view_parameter_slot_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "view_mutable_alias",
+    "file": "fail/view_mutable_alias.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "partial_move_drop",
+    "file": "fail/partial_move_drop.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "explicit_drop_method",
+    "file": "fail/explicit_drop_method.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "for_continue",
+    "file": "pass/for_continue.rs",
+    "kind": "run",
+    "value": "25",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "for_inclusive_u8_max",
+    "file": "pass/for_inclusive_u8_max.rs",
+    "kind": "run",
+    "value": "762",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "for_inclusive_final_continue",
+    "file": "pass/for_inclusive_final_continue.rs",
+    "kind": "run",
+    "value": "507",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "for_mut_binding",
+    "file": "pass/for_mut_binding.rs",
+    "kind": "run",
+    "value": "123",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "immutable_box_reassignment",
+    "file": "fail/immutable_box_reassignment.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "immutable_box_reassignment_after_drop",
+    "file": "fail/immutable_box_reassignment_after_drop.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "temporary_receiver_drop",
+    "file": "pass/temporary_receiver_drop.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "index_evaluated_once",
+    "file": "pass/index_evaluated_once.rs",
+    "kind": "run",
+    "value": "1201",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "minimum_i64_literal",
+    "file": "pass/minimum_i64_literal.rs",
+    "kind": "run",
+    "value": "-9223372036854775808",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "minimum_i32_literal",
+    "file": "pass/minimum_i32_literal.rs",
+    "kind": "run",
+    "value": "-2147483648",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "positive_i64_literal_out_of_range",
+    "file": "fail/positive_i64_literal_out_of_range.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "negative_i64_literal_out_of_range",
+    "file": "fail/negative_i64_literal_out_of_range.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "usize_u64_mismatch",
+    "file": "fail/usize_u64_mismatch.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "float_literal_overflow",
+    "file": "fail/float_literal_overflow.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "pending": false
   }
 ]

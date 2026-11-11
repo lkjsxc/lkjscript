@@ -9,6 +9,7 @@ pub enum TypeKind {
     Enum { variants: Vec<Variant>, copy: bool },
     Ref { inner: usize, mutable: bool },
     Slice { inner: usize, mutable: bool },
+    Array { inner: usize, len: usize },
     Vec { inner: usize },
     Box { inner: usize },
     String,
@@ -77,6 +78,15 @@ pub enum Op {
         dst: usize,
         place: Place,
         mutable: bool,
+    },
+    SliceBorrow {
+        dst: usize,
+        place: Place,
+        mutable: bool,
+    },
+    Array {
+        dst: usize,
+        elements: Vec<usize>,
     },
     Assign {
         place: Place,
@@ -149,6 +159,7 @@ pub struct Function {
     pub name: String,
     pub params: usize,
     pub result: usize,
+    pub return_source: Option<usize>,
     pub locals: Vec<Local>,
     pub body: Vec<Instruction>,
     pub test: bool,
@@ -157,6 +168,7 @@ pub struct Function {
 pub struct Program {
     pub types: Vec<Type>,
     pub functions: Vec<Function>,
+    pub destructors: Vec<(usize, usize)>,
 }
 pub struct CheckedProgram {
     pub(crate) program: Program,
