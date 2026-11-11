@@ -1,4 +1,5 @@
 //! Rust-compatible syntax to explicit K. Inference lives here; K trusts none of it.
+mod assignment;
 mod borrow_cleanup;
 mod constructors;
 mod derive_check;
@@ -13,7 +14,7 @@ mod type_resolve;
 mod variants;
 
 use crate::ast as a;
-use crate::check::{is_copy, place_type};
+use crate::check::{borrowed_projection, is_copy, place_type};
 use crate::k;
 use crate::names::qualified;
 use std::collections::BTreeMap;
@@ -647,6 +648,7 @@ impl Compiler<'_> {
             bindings,
             ref_bindings: Vec::new(),
             carriers: BTreeMap::new(),
+            assignment_types: BTreeMap::new(),
             written: live.clone(),
             live,
             loops: Vec::new(),
@@ -691,6 +693,7 @@ struct Builder<'a, 'b> {
     bindings: Vec<(String, usize)>,
     ref_bindings: Vec<(String, usize)>,
     carriers: borrow_cleanup::Dependencies,
+    assignment_types: BTreeMap<usize, usize>,
     live: Vec<bool>,
     written: Vec<bool>,
     loops: Vec<LoopScope>,
@@ -820,6 +823,39 @@ impl Builder<'_, '_> {
                             | k::TypeKind::Int { .. }
                             | k::TypeKind::F64
                     ) {
+                        if borrowed_projection(&self.compiler.types, self.function, place) {
+                            // Borrowed and indexed storage stays initialized. Move
+                            // its old value out through checked replacement, then
+                            // destroy that separate owner instead of dropping a
+                            // payload through its container's borrowed address.
+                            let reference = self.compiler.reference(t, true);
+                            let receiver = self.temp(reference);
+                            self.emit(
+                                k::Op::Borrow {
+                                    dst: receiver,
+                                    place: place.clone(),
+                                    mutable: true,
+                                },
+                                line,
+                            );
+                            let old = self.temp(t);
+                            self.emit(
+                                k::Op::Intrinsic {
+                                    dst: old,
+                                    name: "replace".to_string(),
+                                    args: vec![receiver, *src],
+                                },
+                                line,
+                            );
+                            self.emit(
+                                k::Op::Drop {
+                                    place: k::Place::local(old),
+                                },
+                                line,
+                            );
+                            self.written[place.local] = true;
+                            return;
+                        }
                         self.emit(
                             k::Op::Drop {
                                 place: place.clone(),
@@ -1617,38 +1653,7 @@ impl Builder<'_, '_> {
                 Ok((dst, result))
             }
             a::Expr::Assign { op, place, value } => {
-                let place = self.place(place)?;
-                if place.projections.is_empty()
-                    && !self.function.locals[place.local].mutable
-                    && self.written[place.local]
-                {
-                    return Err(err(
-                        node.span,
-                        "E_TYPE",
-                        "assignment to an immutable binding",
-                    ));
-                }
-                let t = place_type(&self.compiler.types, self.function, &place)
-                    .ok_or_else(|| err(node.span, "E_TYPE", "invalid assignment place"))?;
-                let v = if op == "=" {
-                    self.expr(value, Some(t))?
-                } else {
-                    let (left, _) = self.read(place.clone(), line)?;
-                    let (right, _) = self.expr(value, Some(t))?;
-                    let dst = self.temp(t);
-                    self.emit(
-                        k::Op::Binary {
-                            dst,
-                            op: op.trim_end_matches('=').to_string(),
-                            left,
-                            right,
-                        },
-                        line,
-                    );
-                    (dst, t)
-                };
-                self.emit(k::Op::Assign { place, src: v.0 }, line);
-                Ok(self.unit(line))
+                self.assignment_expr(&op, place, value, node.span)
             }
             a::Expr::Cast { value, ty } => {
                 let t = self.compiler.resolve(ty, &self.sub)?;
@@ -2130,6 +2135,10 @@ impl Builder<'_, '_> {
         self.emit(k::Op::Loop, line);
         if let Some(condition) = condition {
             let (c, _) = self.expr(condition, Some(k::BOOL))?;
+            // Condition temporaries finish on both edges, before the body or
+            // exit. In particular, index locals and owned method receivers
+            // cannot remain live only in K across the next loop iteration.
+            self.cleanup(start, Some(c), line);
             let not = self.temp(k::BOOL);
             self.emit(
                 k::Op::Unary {
@@ -2140,10 +2149,11 @@ impl Builder<'_, '_> {
                 line,
             );
             self.emit(k::Op::If { condition: not }, line);
+            let condition_state = self.snapshot();
             self.cleanup(start, None, line);
             self.emit(k::Op::Break, line);
             self.emit(k::Op::End, line);
-            self.restore(&entry);
+            self.restore(&condition_state);
         }
         let _ = self.block(body, None)?;
         if self.reachable {

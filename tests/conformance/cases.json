@@ -901,5 +901,21 @@
     "value": "42",
     "rust": true,
     "pending": false
+  },
+  {
+    "id": "projected_assignment",
+    "file": "pass/projected_assignment.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "loop_condition_cleanup",
+    "file": "pass/loop_condition_cleanup.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
   }
 ]
