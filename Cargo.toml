@@ -25,6 +25,8 @@ collapsible_match = "allow"
 manual_flatten = "allow"
 manual_is_multiple_of = "allow"
 manual_range_contains = "allow"
+# Source slice/Vec fill is not implemented; retain explicit initialization loops.
+manual_slice_fill = "allow"
 match_like_matches_macro = "allow"
 needless_lifetimes = "allow"
 needless_late_init = "allow"

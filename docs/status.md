@@ -62,7 +62,7 @@ memory primitives and Node; it is not a compiler-core fixed point.
 
 The final integrated 2026-11-11 gate passes **178 Cargo tests** and reports
 **71 conformance passes, eight pending, zero failures; 64 rustc comparisons**.
-Formatting, Clippy, build and conformance are included. Elapsed: **13.961 s**.
+Formatting, Clippy, build and conformance are included. Elapsed: **15.483 s**.
 
 The suite includes 19 provenance tests, 28 generic-definition tests, 20 module
 tests, source-bundle and executing-component mutations, parser/embedding capacity
