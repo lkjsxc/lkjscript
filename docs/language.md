@@ -10,7 +10,10 @@ suffixes retain distinct types, including usize/u64 and isize/i64. Arithmetic is
 checked. Signed minimum literals are accepted; out-of-range integer and non-finite
 floating literals are rejected. Explicit casts follow Rust conversion behavior.
 Named wrapping operations remain source-library work. Booleans are distinct from integers. Expressions evaluate
-left to right; logical operators short circuit. There is no unwinding.
+left to right; logical operators short circuit. Assignment and the supported
+primitive compound assignments evaluate the RHS before the destination and its
+index expressions; compound assignment then reads the destination value. Each
+operand executes once. There is no unwinding.
 
 Functions, structs, enums, constants, type aliases, generic declarations, trait
 implementations, matches, if, while, loop and for are implemented. For-loop
@@ -111,13 +114,19 @@ cloning and replacement preserve this inventory; return checks its completeness.
 Replacement transfers the old value's provenance to its result and installs the
 new value's provenance in the destination, including through local borrows.
 Reference-field writes recheck the enclosing view's source and exclusivity.
+Assignment to initialized borrowed/indexed owned storage uses checked replacement
+and destroys the separate old owner; it does not move a hole into the container.
 
 K does not yet express cross-parameter mutation contracts. Writes through an
 external parameter may retain the exact symbolic origin of each reference leaf
 or clear it, but changing that origin is rejected with `E_BORROW`. The comparison
 includes projections, not just the parameter root. This conservative restriction
 prevents a callee from silently invalidating the caller's lifetime assumptions;
-explicit write contracts remain required for more general view mutation.
+explicit write contracts remain required for more general view mutation. A
+reference-bearing write through an opaque call result additionally needs an exact
+destination contract. Its conservative alias footprint is not a storage identity;
+using it to clear reference leaves would erase sibling evidence. Reference-free
+writes remain supported and preserve the other leaves and their tag witnesses.
 
 ## Immutable text
 
@@ -145,6 +154,10 @@ reference leaf. Static constraints on inputs, local annotations, fields, aliases
 bounds, or mixed static/dynamic result leaves are named unsupported until per-leaf
 lifetime contracts exist. Validation includes unused definitions and dead source.
 Ordinary dynamic outputs may contain static literals with their lifetime shortened.
+A named shared output lifetime with no source input is universal: elaboration
+records an explicit static K contract and the body must satisfy it. Inactive enum
+reference leaves satisfy that contract too. A call with no active input reference
+leaves may still return static data; it does not prove the output leaves absent.
 
 ## Generic declarations and traits
 
@@ -200,14 +213,25 @@ traits with the same names remain different declarations. Explicit builtin Copy,
 Ord, PartialOrd, Data, Send and Sync implementations remain named unsupported;
 Copy derives and the existing structural automatic predicates retain their rules.
 
-These declaration checks are not complete executable derive support. Clone calls
-for affine derived values and derived aggregate comparison operators remain
-unimplemented. Copy cloning, shared-reference copying and explicit source method
-bodies execute through checked K. Builtin method calls still require an executable
-implementation: implicit clone_from/ne method bodies, scalar eq/ne methods and
-source trait-default execution remain named unsupported. The != operator fallback
-is implemented independently. Generated derives and the remaining builtin
-operations are compiler-closure work.
+Derived Clone and PartialEq execute as memoized monomorphic K functions. Source
+and generated bodies share a pending-function queue and all bodies reach the
+normal K checker, including those generated for definition checking. Headers are
+registered before bodies, so recursive layouts reuse their function identities.
+Field operations select the exact builtin trait implementation, with explicit
+implementations taking precedence over derives and inherent methods excluded.
+Structs, enums, tuples, arrays, nested vectors and boxed recursive layouts execute.
+Clone visits fields in declaration order; equality checks both enum tags and
+short-circuits over active fields. Eq has no executable method.
+
+A nominal Clone derive with Copy and no type parameters copies the whole value,
+including lifetime-only declarations. Type-generic derives invoke field Clone
+even when a concrete application is Copy, matching the checked Rust subset.
+Explicit Clone overrides still execute. Default nominal/tuple/scalar clone_from
+uses clone, replacement and old-value cleanup; default ne negates eq, and scalar
+eq/ne methods execute. Direct Box/array/Vec clone_from remains named unsupported
+until element clone_from forwarding, vector reuse/truncation/append and their order
+contracts are implemented. Default view-bearing clone_from requires a mutation
+provenance contract. Source trait-default execution remains unfinished.
 
 Vec<T> cloning uses the source helper constrained by T: Clone; each element
 executes its selected Clone implementation. Vec equality requires T: PartialEq,
@@ -244,8 +268,14 @@ exclusive reborrows retain their outer lifetime. The checker verifies returned
 origins against the exact selected input leaves, then callers transport their
 underlying provenance and parent dependencies. A local reference carrier can die
 without invalidating a copied shared reference; its actual referent must remain
-live. Output leaves conservatively share the selected common origin; a positional
-input/output leaf mapping is not assumed.
+live. Each live reference leaf retains a nonempty set of possible source bounds
+and a conservative footprint for access and lifetime checks. Direct origins are
+exact; an opaque call may select descendants of its declared input sources.
+Projecting through such a bound does not narrow it. A later return verifies every
+candidate against the permitted source leaves, preserving generic forwarding of
+multi-leaf views without accepting an unrelated owned field. Parent dependencies
+survive calls and reborrows. Exact storage identity remains separate from the
+footprint, and no positional input/output leaf correspondence is assumed.
 Early source cleanup tracks immediate carrier dependencies through reference
 creation, value transport, calls and control flow. A textually dead descriptor
 remains live while another live value needs its storage. Dead reference chains
@@ -272,8 +302,9 @@ Collection indexing checks bounds. Traps report a code and source line. The
 reusable first-fit allocator and structural/custom drop release owned fields,
 arrays, boxes and vector elements. Structural cleanup uses an explicit growable
 DFS stack, preserving custom-destructor-before-children and declaration/element
-order. Moved fields are skipped. Copy helpers and explicit recursive source calls
-still use the engine stack.
+order. Moved fields are skipped. Copy helpers, recursive generated Clone/equality calls
+and explicit recursive source calls still use the engine stack. Loop-condition
+temporaries end before either loop edge, including index locals and owned receivers.
 
 Lowering reuses physical Wasm locals across nonoverlapping lifetimes. Additional
 live values spill into a growing memory64 frame; address-taken values have stable
@@ -292,7 +323,8 @@ No generated engine implements a step counter or per-operation allowance.
 
 ## Source library, trusted modules and imports
 
-The source library implements Option/Result, byte operations, UTF-8 validation,
+The source library implements Option/Result with conditional Clone, Copy,
+PartialEq and Eq derives, byte operations, UTF-8 validation,
 String, vector cloning and equality, ordering for integer/bool elements, and part
 of the BTreeMap API. Vector cloning and equality execute ordinary source loops
 using the element Clone or PartialEq contract; allocation/storage still use the
@@ -325,6 +357,15 @@ and integer range patterns. Tests compare every output byte, independently decod
 JSON, inspect actual emitted trap metadata and mutate a range boundary. The old
 emitter-local quoting loop has been removed; K text keeps its distinct quoting
 semantics.
+
+The complete unchanged `src/k.rs` production representation module also executes
+through ordinary source loading, with its real Clone/equality operations and
+source library. Probes cover all Op and TypeKind variants, nested Program/Function
+data, Option<ReturnSource>, projections and access after original owners are
+dropped. Rust executes the same module/probe bytes. Changes to primitives and
+Place::local alter artifacts and results; an invalid body reports src/k.rs. These
+are representation operations on K data, not execution of that data as a checked
+program or a compiler-core fixed point.
 
 `src/check.rs` is the K checker; `src/k.rs` defines its inputs and checked result.
 `src/wasm.rs` contains lowering/emission plus allocation and collection internals.

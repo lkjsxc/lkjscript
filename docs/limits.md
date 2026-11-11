@@ -18,8 +18,9 @@
   does not reject a source program. Address-taken slots also use the frame.
   Parameter counts and remaining Wasm structural limits are separate constraints.
 - Structural/custom cleanup walks an explicit growable stack. Its automatic walk
-  no longer consumes one engine call frame per owned child. Copy/clone helpers and
-  explicit recursive source calls still use the Node/Wasm call stack. A custom
+  no longer consumes one engine call frame per owned child. Copy helpers, recursive
+  generated Clone/equality and explicit recursive source calls still use the
+  Node/Wasm call stack. A custom
   destructor that itself makes recursive source calls retains that limitation.
 - Node/V8 has its own memory, module, function, parameter and call-stack limits.
   Node is the only generated-code engine currently implemented; an owned machine
@@ -33,9 +34,15 @@
   Projected return contracts detach only stored shared-reference leaves from
   their temporary carriers. Exclusive reborrow/transfer contracts and exact
   per-output source-leaf mappings remain semantic work, not resource ceilings.
+  Exact reference origins and opaque source bounds remain distinct. Projecting a
+  call result cannot narrow a bound; return checks retain every candidate. An
+  opaque reference-bearing destination still needs an exact mutation contract.
   K return projections are explicit vector entries, including cyclic reference
   paths. Validation follows the explicit entries; a numeric repetition count
   cannot expand a short contract into a long projection walk.
+- Generated trait helpers are interned by concrete type and operation. Headers
+  enter a shared queue before their bodies; recursive discovery does not expand
+  bodies on the host stack. This is not a runtime recursion or scale claim.
 - Source Vec cloning and equality use linear element loops; their total work
   also includes each selected element operation. This does not bound the stack
   or cost of recursive element implementations. No new scale claim is made.

@@ -22,9 +22,11 @@ identity, imports, visibility and prelude shadowing. `compiler::compile` accepts
 an explicit source/library bundle. Structural cleanup uses growing frames and
 local lowering spills excess live values into memory64 storage. Generic bodies are
 checked under declared constraints, with method selections retained through
-specialization. Immutable UTF-8 text and source-owned String cloning, equality and
-appending execute, as do the production binary encoders, canonical-name helper and
-JSON encoder. Complete generic witness/lifetime contracts, closures,
+specialization. Derived Clone/equality and source Option/Result, String and Vec
+traits execute. The production binary encoders, canonical-name helper, JSON
+encoder and complete K representation module run through the ordinary language
+pipeline, with Rust comparisons and source mutations. Complete generic
+witness/lifetime contracts, closures,
 World, task scopes and compiler self-compilation remain unfinished.
 
 Generation one is preserved on the `generation-one` branch. Its compiler, store,

@@ -28,7 +28,11 @@ now check all structural field and supertrait obligations, including unused
 generic layouts. Explicit builtin Clone/PartialEq signatures and Eq evidence are
 validated; unsupported derives/overrides are named. Explicit source PartialEq
 implementations execute through ==/!=, with exact trait selection and operand
-order. Executable affine derives and derived aggregate comparison remain unfinished.
+order. Derived Clone/equality execute as ordinary checked K functions, with exact
+field trait evidence, recursive header interning and a shared source/generated
+body queue. Struct/enum/tuple/array/Box shapes and nested source Vecs execute.
+Default nominal/tuple/scalar clone_from, default ne and scalar comparison methods
+execute; container and view mutation boundaries remain explicit.
 
 Integer range patterns support typed inclusive/half-open/open bounds and exact
 interval-based exhaustiveness. Borrowed scalar matches read through references.
@@ -59,6 +63,12 @@ false dependency on a temporary descriptor. Early cleanup retains immediate
 carrier dependencies and drops dead chains in dependency order. Explicit source
 projection paths avoid numeric repetition expansion, including cyclic K types.
 Exclusive projected return sources still need explicit reborrow/transfer contracts.
+Each leaf now retains exact origins or conservative source bounds. Reborrowing an
+opaque call result preserves its full footprint; return checks validate every
+candidate rather than granting its common ancestor. An opaque reference-bearing
+write requires an exact destination contract. Scalar writes preserve sibling
+reference evidence and use their actual access-place tag witness. These changes
+repair two reproduced source/direct-K alias/provenance errors.
 
 Files, modules and declarations have explicit identities. The loader owns file
 discovery; resolution handles lexical/qualified names, aliases, imports, visibility
@@ -87,7 +97,9 @@ and whole-vector inequality negates that result. Equality no longer requires Ord
 Direct operations and retained generic calls resolve the same source functions;
 missing library inputs, altered signatures or missing element bounds reject. String
 Clone, clone_from, PartialEq/Eq, appending and text projection use source functions.
-Clone copies known-valid bytes and clone_from reuses available target capacity.
+Source Option and Result derive conditional Clone/Copy/PartialEq/Eq through the
+same general implementation. Clone copies known-valid bytes and clone_from reuses
+available target capacity.
 Immutable &str values
 support literals, byte length/projection and checked UTF-8 conversion; no second
 owned String representation was introduced. Integration tests load actual source
@@ -103,7 +115,10 @@ opaque Utf8Error marker on invalid bytes; String::as_str currently revalidates.
 Lowering reuses physical locals and spills excess live values into memory64 frames.
 Address-taken values have stable frame slots. Structural destruction uses a growing
 explicit stack, including custom Drop, partial moves and recursive Box/Vec values.
-Copy helpers and explicit recursive source calls still use the engine stack.
+Copy helpers, recursive generated Clone/equality and explicit recursive source
+calls still use the engine stack. Assignment through borrowed/indexed storage
+uses checked replacement, with RHS-before-place evaluation and exactly-once
+cleanup. Loop-condition index and owner temporaries end before either loop edge.
 
 The exact production unsigned/signed LEB128 encoders in `src/encoding.rs` now
 compile and execute through the ordinary source-bundle pipeline. Tests compare
@@ -124,11 +139,20 @@ tests cover every emitted byte, independent JSON decoding, the actual Wasm custo
 section, a behavior-changing boundary mutation and an invalid range with its
 original filename. The former emitter-local quoting loop is removed.
 
+The complete unchanged src/k.rs representation module now compiles and executes
+with its actual Clone/equality consumers and source-library inputs. Three component
+test groups cover 172 same-source Rust/Node observations over all Op/TypeKind
+variants, nested Program/Function records, Option<ReturnSource>, tuple/vector
+fields, projections and surviving original-owner cleanup. Mutating primitives
+and Place::local changes artifacts and behavior; an ill-typed body reports src/k.rs.
+This closes the representation component, not the parser/checker/emitter closure;
+the probe treats Op records as data and does not interpret them as K instructions.
+
 ## Current verification
 
-The integrated 2026-11-11 block/alias/vector milestone gate passes **329 Cargo tests**
-and reports **97 conformance passes, eight pending, zero failures; 90 rustc comparisons**.
-Formatting, Clippy, build and conformance are included. Elapsed: **18.976 s**.
+The integrated 2026-11-11 production-K/source-bound milestone gate passes **361 Cargo tests**
+and reports **103 conformance passes, eight pending, zero failures; 96 rustc comparisons**.
+Formatting, Clippy, build and conformance are included. Elapsed: **18.670 s**.
 
 The suite includes 19 provenance tests, 28 generic-definition tests, 20 module
 tests, source-bundle and executing-component mutations, parser/embedding capacity
@@ -183,6 +207,17 @@ Lawful element implementations use Rust Vec as an oracle; deliberately inconsist
 eq/ne implementations compare the exact source helper and the specified lkjscript
 rule. Two direct K groups distinguish payload operations from invalidating whole
 enum mutations, including mutation before and after a tag branch.
+
+Five derived-operation groups cover field trait selection, conditional Copy
+behavior, recursive containers, defaults and loop-condition cleanup. Seven exact
+source-prelude groups include 11 Rust/Node probes plus payload/prelude mutations.
+Five projected-assignment groups include 15 Rust/Node observations for ownership,
+RHS/place order, contextual typing and drop behavior. Five derived-provenance and
+six source-bound groups cover multi-leaf forwarding, all-candidate return checks,
+opaque reborrows, exact storage identity, source/direct-K escape rejection, static
+fallback and destructor inputs. The formerly unsupported derived vector-holder
+case is now executing coverage. Conditional present/absent view joins remain an
+explicit Rust-valid E_MOVE boundary, independent of Clone.
 
 The eight closure/callback/task conformance cases remain explicitly pending.
 Structural Send/Sync checks do not establish a task runtime. No World-backed
@@ -266,9 +301,11 @@ complete compiler benchmarks or an owned-engine result.
 
 Executable K is still monomorphic. Generic validation retains checked method
 selection through specialization, but complete witness-bearing generic K and
-serialized contract closure are unfinished. Builtin method default bodies and
-source trait-default execution remain named unsupported; explicit source bodies
-and the equality operator fallback execute. Reference content hidden inside arbitrary type
+serialized contract closure are unfinished. Source trait-default execution remains
+named unsupported. Direct container clone_from needs element-update forwarding
+and source Vec reuse/truncation/append semantics; default view clone_from needs
+provenance-preserving mutation contracts. Explicit source bodies and the
+implemented builtin defaults execute. Reference content hidden inside arbitrary type
 parameters still requires concrete K provenance validation. Deeply dependent
 associated-witness chains are not comprehensively normalized; unresolved cases
 reject. External view writes need explicit mutation contracts before their
@@ -280,18 +317,14 @@ parameter in `map(|(p, _)| p)`. Range patterns no longer cause the earlier stop.
 N1/N2 or owned bootstrap seed exists. Text/collection operations beyond the implemented subset, formatting, map/set
 APIs, derives, closures, patterns and ownership layouts remain dependency work.
 
-Named-field enum construction and matching, alias constructors, source String
-traits and source Vec cloning/equality are implemented. The next production K
-dependencies are source Option contracts and executable derived Clone/equality. K and private checker-state Debug
-derives had no production formatting consumers; they have been removed, with all
-affected structural test comparisons retained and failures rendered through text K.
-This removes an unnecessary formatter dependency without discarding compiler
-behavior. Clone/equality remain actual checker/emitter dependencies, so
-constructor-only execution would not establish representation-module closure.
-The fresh ordinary whole-file check now stops at src/k.rs:202:5 with E_TRAIT:
-derive Clone requires the return_source field (Option<ReturnSource>) to implement
-Clone. The next executable probe must use the actual K representations, cloning
-and equality consumers, without omitting their source dependencies.
+The ordinary whole-file check of src/k.rs now succeeds, and the unchanged module
+executes with its required cloning/equality consumers. K and private checker-state
+Debug derives had no production formatting consumers; their earlier removal
+preserved structural comparisons and text-K failure output. The next whole-core
+work is the actual src/source.rs loading dependency graph: iterator/closure uses,
+source map/set operations and their parser/AST dependencies. Keep the production
+K component in that closure; do not substitute a constructor-only copy or bypass
+semantic passes to increase acceptance counts.
 
 A concrete ownership follow-through is place-based tag witnesses and branch
 partial-move/cleanup contracts for mixed affine and explicit-reference matches.
