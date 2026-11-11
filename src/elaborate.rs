@@ -2279,20 +2279,10 @@ impl Builder<'_, '_> {
         match self.compiler.source.types[pattern].kind.clone() {
             a::Type::Path(p) => {
                 if p.args.is_empty()
-                    && p.declaration.is_none()
-                    && !self.compiler.type_names.contains_key(&p.name)
-                    && !self
+                    && self
                         .compiler
-                        .source
-                        .structs
-                        .iter()
-                        .any(|s| qualified(&s.module, &s.name) == p.name)
-                    && !self
-                        .compiler
-                        .source
-                        .enums
-                        .iter()
-                        .any(|e| qualified(&e.module, &e.name) == p.name)
+                        .names
+                        .is_type_parameter(&p, self.compiler.source.types[pattern].span)
                 {
                     if let Some(existing) = sub.get(&p.name) {
                         if *existing != actual {

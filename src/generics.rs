@@ -44,7 +44,7 @@ fn type_term(
         }
         if !ready {
             if let Type::Path(p) = &source.types[ty].kind {
-                if p.args.is_empty() {
+                if p.declaration.is_none() && p.args.is_empty() {
                     if let Some(value) = env.get(&p.name) {
                         done.insert(ty, *value);
                         continue;
@@ -410,7 +410,7 @@ fn infer(
     let mut stack = vec![(pattern, actual)];
     while let Some((p, a)) = stack.pop() {
         if let Type::Path(path) = &source.types[p].kind {
-            if path.args.is_empty() {
+            if path.declaration.is_none() && path.args.is_empty() {
                 let mut parameter = false;
                 for g in parameters {
                     if !g.lifetime && g.name == path.name {
@@ -1070,7 +1070,11 @@ fn impl_arguments(
                 let name = path.name.as_str();
                 let mut generic = false;
                 for param in &implementation.generics {
-                    if !param.lifetime && param.name == path.name && path.args.is_empty() {
+                    if path.declaration.is_none()
+                        && !param.lifetime
+                        && param.name == path.name
+                        && path.args.is_empty()
+                    {
                         generic = true;
                     }
                 }
@@ -1787,7 +1791,7 @@ fn alias_cycles(source: &Program) -> Result<(), Diagnostic> {
             if let Type::Path(path) = &source.types[ty].kind {
                 let mut parameter = false;
                 for g in &alias.generics {
-                    if g.name == path.name {
+                    if path.declaration.is_none() && g.name == path.name {
                         parameter = true;
                     }
                 }

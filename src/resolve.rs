@@ -628,6 +628,17 @@ pub fn resolve(source: &Program) -> Result<Program> {
 }
 
 impl Resolver<'_> {
+    /// A parameter path keeps its lexical binding even when another module has
+    /// a declaration with the same spelling. Resolved items are never parameters.
+    pub(crate) fn generic_path(&self, path: &Path, span: Span) -> bool {
+        let root = path.name.split("::").next().unwrap_or("");
+        path.declaration.is_none() && !root.starts_with('\'') && self.generic(span, root)
+    }
+
+    pub(crate) fn is_type_parameter(&self, path: &Path, span: Span) -> bool {
+        !path.name.contains("::") && self.generic_path(path, span)
+    }
+
     pub fn value_path(&self, scope: ModuleId, path: &Path, span: Span) -> Result<Path> {
         let mut path = path.clone();
         self.resolve_path(scope, &mut path, Namespace::Value, span)?;

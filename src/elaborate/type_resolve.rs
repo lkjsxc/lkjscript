@@ -186,13 +186,29 @@ impl Compiler<'_> {
                     span,
                 } => {
                     let bindings = &work.environments[environment];
-                    if let Some(id) = bindings.get(&path.name) {
-                        work.values.push(*id);
-                        continue;
-                    }
-                    if let Some(id) = self.associated_contract(&path, bindings, span)? {
-                        work.values.push(id);
-                        continue;
+                    if self.names.generic_path(&path, span) {
+                        if !path.args.is_empty() {
+                            return Err(err(
+                                span,
+                                "E_TYPE",
+                                "generic parameter or projection cannot take type arguments",
+                            ));
+                        }
+                        if let Some(id) = bindings.get(&path.name) {
+                            work.values.push(*id);
+                            continue;
+                        }
+                        if self.names.is_type_parameter(&path, span) {
+                            return Err(err(
+                                span,
+                                "E_TYPE",
+                                &format!("generic parameter {} needs a type argument", path.name),
+                            ));
+                        }
+                        if let Some(id) = self.associated_contract(&path, bindings, span)? {
+                            work.values.push(id);
+                            continue;
+                        }
                     }
                     if path.args.is_empty() && path.declaration.is_none() {
                         if let Some(id) = self.type_names.get(&path.name) {

@@ -723,5 +723,22 @@
     "rust": true,
     "rustAccept": false,
     "pending": false
+  },
+  {
+    "id": "generic_parameter_scope",
+    "file": "pass/generic_parameter_scope.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "text_type_identity",
+    "file": "fail/text_type_identity.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
   }
 ]
