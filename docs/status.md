@@ -74,9 +74,9 @@ establish a compiler-core fixed point.
 
 ## Current verification
 
-The integrated 2026-11-11 text milestone gate passes **211 Cargo tests** and reports
+The integrated 2026-11-11 text milestone gate passes **212 Cargo tests** and reports
 **74 conformance passes, eight pending, zero failures; 67 rustc comparisons**.
-Formatting, Clippy, build and conformance are included. Elapsed: **13.198 s**.
+Formatting, Clippy, build and conformance are included. Elapsed: **15.804 s**.
 
 The suite includes 19 provenance tests, 28 generic-definition tests, 20 module
 tests, source-bundle and executing-component mutations, parser/embedding capacity

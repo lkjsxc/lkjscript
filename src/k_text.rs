@@ -217,13 +217,24 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
                 ));
             }
             let mut bytes = Vec::new();
-            for pair in encoded.chunks_exact(2) {
-                let pair = std::str::from_utf8(pair)
-                    .map_err(|_| error(line, "invalid text byte encoding"))?;
-                bytes.push(
-                    u8::from_str_radix(pair, 16)
-                        .map_err(|_| error(line, "invalid text byte encoding"))?,
-                );
+            let mut at = 0;
+            while at < encoded.len() {
+                let mut value: u8 = 0;
+                for _ in 0..2 {
+                    let digit = encoded[at];
+                    let nibble = if digit >= b'0' && digit <= b'9' {
+                        digit - b'0'
+                    } else if digit >= b'a' && digit <= b'f' {
+                        digit - b'a' + 10
+                    } else if digit >= b'A' && digit <= b'F' {
+                        digit - b'A' + 10
+                    } else {
+                        return Err(error(line, "invalid text byte encoding"));
+                    };
+                    value = value * 16 + nibble;
+                    at += 1;
+                }
+                bytes.push(value);
             }
             Op::Text {
                 dst: number(words, 2, line)?,
@@ -791,6 +802,28 @@ pub fn write(program: &Program) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_hexadecimal_payloads_preserve_bytes_and_reject_malformed_input() {
+        for (encoded, expected) in [("", vec![]), ("00ffC3a9", vec![0, 255, 195, 169])] {
+            let words = ["@1", "text", "0", encoded].map(String::from);
+            assert_eq!(
+                instruction(&words, 1).unwrap().op,
+                Op::Text {
+                    dst: 0,
+                    bytes: expected
+                }
+            );
+        }
+        for encoded in ["0", "000", "gg", "é", "0x", "-1", " 0"] {
+            let words = ["@1", "text", "0", encoded].map(String::from);
+            assert_eq!(
+                instruction(&words, 1).unwrap_err().code,
+                "E_K_TEXT",
+                "{encoded}"
+            );
+        }
+    }
 
     #[test]
     fn source_round_trip_preserves_meaning_and_locations() {
