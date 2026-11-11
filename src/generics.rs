@@ -9,6 +9,7 @@ enum Term {
     Unknown,
     Variable(usize),
     Named(String, Vec<usize>),
+    DeclaredTrait(usize, Vec<usize>),
 }
 
 fn push(terms: &mut Vec<Term>, term: Term) -> usize {
@@ -68,14 +69,15 @@ fn type_term(
         let term = match &source.types[ty].kind {
             Type::Infer => Term::Unknown,
             Type::Never => Term::Named("!".to_string(), values),
-            Type::Path(p) => Term::Named(
+            Type::Path(p) => {
                 if p.name.starts_with('\'') {
-                    "lifetime".to_string()
+                    Term::Named("lifetime".to_string(), values)
+                } else if let TraitIdentity::Declared(declaration) = bound_identity(source, p) {
+                    Term::DeclaredTrait(declaration, values)
                 } else {
-                    p.name.clone()
-                },
-                values,
-            ),
+                    Term::Named(p.name.clone(), values)
+                }
+            }
             Type::Ref { mutable, .. } => {
                 Term::Named(if *mutable { "&mut" } else { "&" }.to_string(), values)
             }
@@ -127,7 +129,7 @@ fn occurs(terms: &[Term], bindings: &BTreeMap<usize, usize>, variable: usize, te
                     return true;
                 }
             }
-            Term::Named(_, kids) => {
+            Term::Named(_, kids) | Term::DeclaredTrait(_, kids) => {
                 for child in kids {
                     stack.push(*child);
                 }
@@ -168,24 +170,32 @@ fn unify(terms: &[Term], pairs: Vec<(usize, usize)>) -> bool {
                     stack.push((ak[i], bk[i]));
                 }
             }
+            (Term::DeclaredTrait(a, ak), Term::DeclaredTrait(b, bk))
+                if a == b && ak.len() == bk.len() =>
+            {
+                for (a, b) in ak.iter().zip(bk) {
+                    stack.push((*a, *b));
+                }
+            }
             (Term::Unknown, _) | (_, Term::Unknown) => {}
+            _ => return false,
         }
     }
     true
 }
 fn coherence(source: &Program) -> Result<(), Diagnostic> {
-    let mut by_trait: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+    let mut by_trait: BTreeMap<TraitIdentity, Vec<usize>> = BTreeMap::new();
     for i in 0..source.impls.len() {
         let implementation = &source.impls[i];
         let trait_ty = match implementation.trait_ty {
             Some(ty) => ty,
             None => continue,
         };
-        let trait_name = match &source.types[trait_ty].kind {
-            Type::Path(p) => p.name.as_str().to_string(),
+        let identity = match &source.types[trait_ty].kind {
+            Type::Path(path) => bound_identity(source, path),
             _ => continue,
         };
-        if let Some(previous) = by_trait.get(&trait_name) {
+        if let Some(previous) = by_trait.get(&identity) {
             for j in previous {
                 let other = &source.impls[*j];
                 let mut terms = Vec::new();
@@ -209,18 +219,8 @@ fn coherence(source: &Program) -> Result<(), Diagnostic> {
                 }
             }
         }
-        by_trait.entry(trait_name.clone()).or_default().push(i);
-        let mut declared = None;
-        for t in 0..source.traits.len() {
-            if qualified(&source.traits[t].module, &source.traits[t].name) == trait_name {
-                if declared.is_some() {
-                    declared = None;
-                    break;
-                }
-                declared = Some(t);
-            }
-        }
-        if let Some(t) = declared {
+        by_trait.entry(identity.clone()).or_default().push(i);
+        if let TraitIdentity::Declared(t) = identity {
             let trait_def = &source.traits[t];
             let mut names = BTreeMap::new();
             for method in &implementation.methods {
@@ -375,7 +375,7 @@ fn flow(terms: &[Term], term: usize, to: usize, span: Span, edges: &mut Vec<Edge
                 unknown: false,
                 span,
             }),
-            Term::Named(_, kids) => {
+            Term::Named(_, kids) | Term::DeclaredTrait(_, kids) => {
                 for child in kids {
                     stack.push((*child, true));
                 }
@@ -389,7 +389,7 @@ fn unknown(terms: &[Term], term: usize) -> bool {
     while let Some(t) = stack.pop() {
         match &terms[t] {
             Term::Unknown => return true,
-            Term::Named(_, kids) => {
+            Term::Named(_, kids) | Term::DeclaredTrait(_, kids) => {
                 for k in kids {
                     stack.push(*k);
                 }
@@ -1304,6 +1304,7 @@ pub(crate) fn derived_coherence(
         let overlaps = match &terms[target] {
             Term::Named(name, _) => *name == owner.name,
             Term::Variable(_) | Term::Unknown => true,
+            Term::DeclaredTrait(_, _) => false,
         };
         if overlaps {
             return Err(Diagnostic::new(
@@ -1867,6 +1868,7 @@ enum Normalize {
     Enter(usize),
     Alias(usize, usize),
     Node(usize, String, Vec<usize>),
+    DeclaredTrait(usize, usize, Vec<usize>),
 }
 fn normalize(source: &Program, term: usize, terms: &mut Vec<Term>) -> Result<usize, Diagnostic> {
     let mut done = BTreeMap::new();
@@ -1878,6 +1880,12 @@ fn normalize(source: &Program, term: usize, terms: &mut Vec<Term>) -> Result<usi
                     continue;
                 }
                 match terms[id].clone() {
+                    Term::DeclaredTrait(declaration, kids) => {
+                        tasks.push(Normalize::DeclaredTrait(id, declaration, kids.clone()));
+                        for child in kids {
+                            tasks.push(Normalize::Enter(child));
+                        }
+                    }
                     Term::Named(name, kids) => {
                         let mut alias = None;
                         for a in &source.aliases {
@@ -1916,6 +1924,11 @@ fn normalize(source: &Program, term: usize, terms: &mut Vec<Term>) -> Result<usi
             Normalize::Alias(id, expanded) => {
                 done.insert(id, done[&expanded]);
             }
+            Normalize::DeclaredTrait(id, declaration, kids) => {
+                let normalized = kids.into_iter().map(|child| done[&child]).collect();
+                let new = push(terms, Term::DeclaredTrait(declaration, normalized));
+                done.insert(id, new);
+            }
             Normalize::Node(id, name, kids) => {
                 let mut normalized = Vec::new();
                 for k in kids {
@@ -1933,6 +1946,13 @@ fn equivalent(terms: &[Term], a: usize, b: usize) -> bool {
     while let Some((a, b)) = stack.pop() {
         match (&terms[a], &terms[b]) {
             (Term::Variable(x), Term::Variable(y)) if x == y => {}
+            (Term::DeclaredTrait(a, ak), Term::DeclaredTrait(b, bk))
+                if a == b && ak.len() == bk.len() =>
+            {
+                for (a, b) in ak.iter().zip(bk) {
+                    stack.push((*a, *b));
+                }
+            }
             (Term::Named(an, ak), Term::Named(bn, bk)) if an == bn && ak.len() == bk.len() => {
                 for i in 0..ak.len() {
                     stack.push((ak[i], bk[i]));
@@ -1961,50 +1981,47 @@ fn bound_closure(
     let mut result = Vec::new();
     let mut pending = vec![first];
     while let Some(bound) = pending.pop() {
-        let mut seen = false;
-        for previous in &result {
-            if equivalent(terms, bound, *previous) {
-                seen = true;
-                break;
-            }
-        }
-        if seen {
+        if result
+            .iter()
+            .any(|previous| equivalent(terms, bound, *previous))
+        {
             continue;
         }
         result.push(bound);
-        let (name, args) = match terms[bound].clone() {
-            Term::Named(n, a) => (n, a),
-            _ => continue,
-        };
-        let builtin = match name.as_str() {
-            "Copy" => vec!["Clone"],
-            "Ord" => vec!["Eq", "PartialOrd"],
-            "Eq" | "PartialOrd" => vec!["PartialEq"],
-            "Fn" => vec!["FnMut"],
-            "FnMut" => vec!["FnOnce"],
-            _ => Vec::new(),
-        };
-        for name in builtin {
-            pending.push(push(terms, Term::Named(name.to_string(), args.clone())));
-        }
-        for declaration in &source.traits {
-            if qualified(&declaration.module, &declaration.name) == name {
-                let mut env = BTreeMap::new();
-                env.insert("Self".to_string(), self_ty);
+        match terms[bound].clone() {
+            Term::Named(name, args) => {
+                let parents: &[&str] = match name.as_str() {
+                    "Fn" => &["FnMut"],
+                    "FnMut" => &["FnOnce"],
+                    _ => builtin_parents(&name),
+                };
+                for parent in parents {
+                    pending.push(push(
+                        terms,
+                        Term::Named((*parent).to_string(), args.clone()),
+                    ));
+                }
+            }
+            Term::DeclaredTrait(index, args) => {
+                let declaration = &source.traits[index];
                 if declaration.generics.len() != args.len() {
                     continue;
                 }
-                for i in 0..args.len() {
-                    env.insert(declaration.generics[i].name.clone(), args[i]);
+                let mut env = BTreeMap::new();
+                env.insert("Self".to_string(), self_ty);
+                for (parameter, argument) in declaration.generics.iter().zip(args) {
+                    env.insert(parameter.name.clone(), argument);
                 }
                 for parent in &declaration.bounds {
                     pending.push(signature_type(source, *parent, &env, terms)?);
                 }
             }
+            _ => {}
         }
     }
     Ok(result)
 }
+
 fn known_bounds(
     source: &Program,
     parameters: &[GenericParam],
@@ -2148,13 +2165,9 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
             Type::Path(p) => p,
             _ => continue,
         };
-        let declaration = match source
-            .traits
-            .iter()
-            .find(|t| qualified(&t.module, &t.name) == path.name)
-        {
-            Some(t) => t,
-            None => continue,
+        let declaration = match bound_identity(source, path) {
+            TraitIdentity::Declared(index) => &source.traits[index],
+            _ => continue,
         };
         let mut terms = Vec::new();
         let mut next = 0;
