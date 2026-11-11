@@ -2,27 +2,8 @@
 use crate::k::{CheckedProgram, Function, Op, Place, Program, Projection, TypeKind};
 use std::collections::BTreeSet;
 
-fn uleb(out: &mut Vec<u8>, mut value: u64) {
-    loop {
-        let byte = (value & 127) as u8;
-        value >>= 7;
-        out.push(if value == 0 { byte } else { byte | 128 });
-        if value == 0 {
-            break;
-        }
-    }
-}
-fn sleb(out: &mut Vec<u8>, mut value: i64) {
-    loop {
-        let byte = (value & 127) as u8;
-        value >>= 7;
-        let done = (value == 0 && byte & 64 == 0) || (value == -1 && byte & 64 != 0);
-        out.push(if done { byte } else { byte | 128 });
-        if done {
-            break;
-        }
-    }
-}
+use crate::encoding::{sleb, uleb};
+
 fn text(out: &mut Vec<u8>, name: &str) {
     uleb(out, name.len() as u64);
     out.extend_from_slice(name.as_bytes());

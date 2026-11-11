@@ -2,6 +2,7 @@ pub mod ast;
 pub mod check;
 pub mod compiler;
 pub mod elaborate;
+pub mod encoding;
 pub mod generics;
 pub mod k;
 pub mod k_text;
