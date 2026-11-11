@@ -1,0 +1,15 @@
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "&i64" ref shared 3
+type "&&i64" ref shared 7
+fn "bad" 1 8
+local "parameter" 7 let
+local "slot" 8 let
+@1 borrow 1 shared 0
+@2 return 1
+endfn

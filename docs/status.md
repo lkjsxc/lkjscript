@@ -1,65 +1,53 @@
 # Status
 
-Updated 2026-11-10. Maintained compiler graph:
-`rev_7eca6279f28d37e95c986dae91dbe58139a1e4e25948c6cb8a76c201effc4edc`.
+Generation two runs. Generation one is preserved on `generation-one` at
+`05a9326c`, with a read-only `.generation-one` worktree. Old untracked drafts are
+preserved under `.artifacts`; the unused 35 GB generation-one target was removed.
 
 ## Works
 
-Ordinary commands execute once on the VM. `bash tools/check.sh` builds and runs
-one routine suite; focused and slow selections require test-name filters. Compiler
-probes share one immutable preparation. Historical publication gates are retired.
+Rust-compatible parsing; functions, checked integers/f64, structs, enums, matches,
+loops, generic instantiation, trait methods/associated types/prerequisite bounds,
+Box and Vec, partial moves/reinitialization, projected references, disjoint mutable
+field borrows, and last-use borrow endings. Explicit K checks types, ownership,
+loans and enum variants once. Text K can be read, written and checked directly.
+The backend emits memory64 WebAssembly with reusable allocation and explicit drop.
 
-`tools/selfhost/typed-input.lkjc` decodes all 35 structural type constructors;
-`typed-dag.lkjc` resolves child identities, builds reverse adjacency and orders
-dependencies using records, variants, matching and persistent maps/lists. Structured
-errors retain entry and byte locations. The Rust evaluator is this path's bootstrap.
-All 98 maintained types and edges agree with independent Rust and cursor checks:
-43 ms for the typed DAG pass versus 2,398 ms for the cursor pass. Chain and wide
-probes reach 4,096 types in under a second. The selfhost README holds API and
-notation measurements.
+`check`, `run`, `test`, `build`, `k` and `trusted` work. Node runs the generated
+modules. Source libraries own Option/Result, byte operations, vector ordering and
+an ordered map over sorted entries (logarithmic lookup, linear insertion).
 
-Host semantic work reserves stacks from physical memory; native programs raise
-their soft stack allowance within the inherited hard limit. Depth guards and
-ordinary VM call/operand ceilings are removed. Maps, owned sequences, read-view
-storage and typed-data codecs have no million-item admission guard; JSON has no
-item-count policy. Their enforcing counters and batching item accounting are gone.
-Lifecycle probes pass at 262,144, 1,048,576 and 2,097,152 items (1.52 GiB high-water
-RSS), and type admission passes through 2,097,151 visits with cancellation/retry.
+The complete check takes **3 seconds** on this host: formatting, 56 Cargo tests,
+Clippy, and conformance. Conformance: **40 pass, 11 explicitly pending, 0 fail**,
+with **33 rustc comparisons**. Hand-written invalid K tests reject forged
+capabilities, unproved variants, dangling references, bad dead code and missing
+cleanup. Backend tests include 195 arithmetic edge comparisons and allocation
+reuse. Implemented conformance cases cannot silently become pending again.
 
-## Bootstrap
+## Missing or broken
 
-A clean checkout builds the Rust seed from source and locked dependencies:
+Reference-containing aggregate views, arrays/slices, custom Drop, closures,
+capability callbacks and structured concurrency remain unsupported. The 11 pending
+cases name these boundaries. Vec/Box/allocator operations still live in the
+emitter, so the standard-library milestone is incomplete. String is not runnable.
+Module loading/name resolution and the compiler's own source subset are incomplete.
+No self-check, W1=W2, own machine, native backend or N1=N2 has been established.
+Only Node execution exists; its capacity limits remain relevant.
 
-```sh
-cargo build --release --locked --bin lkjscript
-bash tools/selfhost/verify.sh
-```
+## Bootstrap and bridges
 
-`tools/selfhost/project` is the maintained source seed. The Rust native emitter
-produces Linux x86-64 C1; C1 builds C2 and C2 builds C3. The controls check C2 = C3,
-Ahost = A1 = A2 = A3, independent behavior and source mutations. The native path
-covers the maintained closure. Run the new evaluator path with
-`bash tools/check.sh focused typed_compiler_input` and its explicit slow controls.
+`cargo build --release` builds the initial compiler. `bash tools/check.sh` is the
+routine gate. `lkjscript run file.rs --entry probe` prints a scalar result;
+`lkjscript build file.rs -o file.wasm` emits a module. `lkjscript check file.k`
+checks hand-written K; `lkjscript k file.rs` writes explicit K text.
 
-## Verification and remaining work
-
-Focused checks passed 13 tests; four selected scale/maintained controls passed in
-75.09 s. The broad routine ran 3,575 cases in 1,039.15 s: 3,572 passed and three
-stale generated-guide/item-policy assertions failed. After refreshing the guides
-and replacing quota expectations, all three focused checks passed in 77.91 s.
-The routine left 63 slow controls ignored. The production-change test rebuild took
-187 s (142 s for the later small correction); the final release product build took 95.1 s.
-
-Byte controls, encoded widths, modeled allocation accounting, selected invocation
-quotas and kernel/associated-work ceilings remain. The ten-minute routine target
-remains open; complete custody fixtures still dominate its tail.
+Cargo, bridge/main.rs and bridge/run.mjs are bootstrap bridges. Move native host
+operations behind World when source support permits; replace the Node dependency
+with our machine after the WebAssembly fixed point. The Rust-compatible sources
+are not yet all accepted by the new compiler; no self-hosting claim is made.
 
 ## Next action
 
-Project current meaning directly from `RepositoryView::require_current_validation`
-and its validated snapshot, with exact dependencies from the admitted package
-closure. Introduce compiler input without retirements or revision cores; attach
-publication identity in the caller/packager after compilation. Reuse the typed
-structural pass. Check equal meaning under different histories, changed executable
-meaning, missing live references and two exact dependency revisions, then run the
-maintained native/bootstrap controls when adopting the new input.
+Track one-source view origins through structs/enums and calls, add arrays/slices,
+and make cleanup on early return/break observable with custom Drop. Then complete
+the source memory/collections boundary and measure whole-compiler self-check.

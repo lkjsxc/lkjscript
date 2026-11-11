@@ -1,0 +1,426 @@
+[
+  {
+    "id": "arithmetic",
+    "file": "pass/arithmetic.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "fibonacci",
+    "file": "pass/fibonacci.rs",
+    "kind": "run",
+    "value": "55",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "short_circuit",
+    "file": "pass/short_circuit.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "loop_control",
+    "file": "pass/loop_control.rs",
+    "kind": "run",
+    "value": "25",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "scalar_copy",
+    "file": "pass/scalar_copy.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "tuple",
+    "file": "pass/tuple.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "struct_copy",
+    "file": "pass/struct_copy.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "struct_move",
+    "file": "pass/struct_move.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "enum_match",
+    "file": "pass/enum_match.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "borrowed_match",
+    "file": "pass/borrowed_match.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "generic_identity",
+    "file": "pass/generic_identity.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "trait_method",
+    "file": "pass/trait_method.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "trait_associated_type",
+    "file": "pass/trait_associated_type.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "trait_prerequisite",
+    "file": "pass/trait_prerequisite.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "vec_ordering",
+    "file": "pass/vec_ordering.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "box_move",
+    "file": "pass/box_move.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "recursive_box",
+    "file": "pass/recursive_box.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "partial_move_reinitialize",
+    "file": "pass/partial_move_reinitialize.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "vec_affine",
+    "file": "pass/vec_affine.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "vec_growth",
+    "file": "pass/vec_growth.rs",
+    "kind": "run",
+    "value": "499500",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "vec_two_phase",
+    "file": "pass/vec_two_phase.rs",
+    "kind": "run",
+    "value": "11",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "projected_view",
+    "file": "pass/projected_view.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "disjoint_mutable_fields",
+    "file": "pass/disjoint_mutable_fields.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "view_struct",
+    "file": "pass/view_struct.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": true,
+    "rust": true
+  },
+  {
+    "id": "borrowed_closure",
+    "file": "pass/borrowed_closure.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": true,
+    "rust": true
+  },
+  {
+    "id": "return_cleanup",
+    "file": "pass/return_cleanup.rs",
+    "kind": "run",
+    "value": "8",
+    "pending": true,
+    "rust": true
+  },
+  {
+    "id": "break_cleanup",
+    "file": "pass/break_cleanup.rs",
+    "kind": "run",
+    "value": "1",
+    "pending": true,
+    "rust": true
+  },
+  {
+    "id": "concurrency_moved",
+    "file": "pass/concurrency_moved.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": true,
+    "rust": true
+  },
+  {
+    "id": "concurrency_shared",
+    "file": "pass/concurrency_shared.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": true,
+    "rust": true
+  },
+  {
+    "id": "send_sync_structural",
+    "file": "pass/send_sync_structural.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": false,
+    "rust": true
+  },
+  {
+    "id": "type_mismatch",
+    "file": "fail/type_mismatch.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "use_after_move",
+    "file": "fail/use_after_move.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "vec_use_after_move",
+    "file": "fail/vec_use_after_move.rs",
+    "kind": "reject",
+    "code": "E_MOVE",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "mutable_alias",
+    "file": "fail/mutable_alias.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "shared_then_mutation",
+    "file": "fail/shared_then_mutation.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "view_escape",
+    "file": "fail/view_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "view_two_origins",
+    "file": "fail/view_two_origins.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": true,
+    "rustAccept": true
+  },
+  {
+    "id": "trait_overlap",
+    "file": "fail/trait_overlap.rs",
+    "kind": "reject",
+    "code": "E_TRAIT",
+    "pending": false,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "expanding_instantiation",
+    "file": "fail/expanding_instantiation.rs",
+    "kind": "reject",
+    "code": "E_RECURSION",
+    "pending": false,
+    "rust": false,
+    "rustAccept": false
+  },
+  {
+    "id": "ambient_io",
+    "file": "fail/ambient_io.rs",
+    "kind": "reject",
+    "code": "E_CAPABILITY",
+    "pending": false,
+    "rust": true,
+    "rustAccept": true
+  },
+  {
+    "id": "concurrency_alias",
+    "file": "fail/concurrency_alias.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": true,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "borrowed_closure_escape",
+    "file": "fail/borrowed_closure_escape.rs",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": true,
+    "rust": true,
+    "rustAccept": false
+  },
+  {
+    "id": "data_bound",
+    "file": "pending/data_bound.rs",
+    "kind": "reject",
+    "code": "E_CAPABILITY",
+    "pending": true,
+    "rust": false,
+    "rustAccept": false,
+    "entry": "main"
+  },
+  {
+    "id": "capability_callback",
+    "file": "pending/capability_callback.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": true,
+    "rust": false,
+    "entry": "main"
+  },
+  {
+    "id": "stored_task",
+    "file": "pending/stored_task.rs",
+    "kind": "run",
+    "value": "42",
+    "pending": true,
+    "rust": false,
+    "entry": "main"
+  },
+  {
+    "id": "k_forged_world",
+    "file": "k/forged_world.k",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": false
+  },
+  {
+    "id": "k_borrowed_owner",
+    "file": "k/borrowed_owner.k",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": false
+  },
+  {
+    "id": "k_inactive_variant",
+    "file": "k/inactive_variant.k",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": false
+  },
+  {
+    "id": "k_dead_bad_operand",
+    "file": "k/dead_bad_operand.k",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "pending": false,
+    "rust": false
+  },
+  {
+    "id": "k_missing_cleanup",
+    "file": "k/missing_cleanup.k",
+    "kind": "reject",
+    "code": "E_K",
+    "pending": false,
+    "rust": false
+  },
+  {
+    "id": "k_parameter_slot_escape",
+    "file": "k/parameter_slot_escape.k",
+    "kind": "reject",
+    "code": "E_BORROW",
+    "pending": false,
+    "rust": false
+  }
+]

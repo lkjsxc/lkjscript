@@ -1,55 +1,25 @@
-# lkjscript
+# lkjscript, generation two
 
-Build a coherent language with composable types, generics, traits, ownership,
-lifetimes, effects and concurrency. The project should own its compiler, runtime,
-tools and persistence, eventually without Rust. Language design comes first;
-reliable development by agents comes next. Applications are useful probes.
+Read `docs/status.md`, inspect Git and live jobs, then implement the next action.
+The language design comes first, reliable agent development second. Own the
+compiler, runtime, tools and persistence, eventually without a Rust toolchain.
 
-## Continue
+The compiler uses a Rust-compatible subset of lkjscript. Parse, elaborate to
+explicit K, check once, lower and emit WebAssembly. Only checked K reaches a
+backend. Keep the trusted modules small. Rust and Node are bootstrap bridges
+and independent test oracles. Unsupported syntax must produce a diagnostic.
 
-Read `docs/status.md`, inspect Git and live jobs, then work on the recorded next
-action. Search before reading; read relevant ranges. `docs/direction.md` states
-outcomes and hypotheses; specs describe implemented behavior. Git is the history.
-Keep status short: what works, what is broken, bootstrap, next action.
+No arbitrary resource ceilings, work accounting or policy plumbing. Use growing
+collections, explicit stacks and 64-bit extents. Record representation and engine
+constraints in `docs/limits.md`. Keep checked arithmetic and ownership sound.
 
-Use English. The owner delegates architectural and implementation decisions,
-including breaking changes and deletions. Keep only current formats. Work inside
-this checkout; preserve unrelated work and running deployments. Never force-push,
-rewrite history, change credentials/protection settings, buy services or publish
-releases. Integrate verified changes directly into main, or merge a PR if required.
+Work in this checkout only. Preserve the read-only `.generation-one` worktree
+for specific ports. Do not modify running deployments or neighboring checkouts.
+Use English, no Python, ordinary compiler words, and short command output.
+Run `bash tools/check.sh` after coherent changes; keep it under a minute.
+Commit small and push main directly. No force pushes, history rewrites, releases,
+credential changes or protection changes. All routine decisions are delegated.
 
-## Engineering
-
-Remove arbitrary admission and execution ceilings and their unused policy,
-accounting and saturation machinery. Fix the whole lifecycle, including equality,
-encoding, cloning, destruction, failure and cancellation. Keep semantic checks,
-checked encoded arithmetic, cycle detection and useful caller cancellation.
-Chunk sizes, caches and worker counts tune speed; they do not define validity.
-Use physical memory and measured work to choose representations and stacks.
-Report observed allocation/I/O failures and process termination honestly.
-
-Keep one production implementation per responsibility. Differential oracles belong
-in explicit tests. Ordinary execution runs once. Keep a working source-to-executable
-bootstrap path while replacing its parts. Validate new compiler components on the
-Rust evaluator before extending native support. Fixed points need independent
-semantic comparisons and source mutations that change emitted behavior.
-
-Preserve type, visibility, identity, evaluation-order, ownership and effect rules.
-Admit external bytes before effects. An admitted revision-bound handle carries its
-proof; internal consumers should not re-admit unchanged meaning. Publication keeps
-stale-base detection, atomic visibility, crash safety and inspectable HEAD after a
-lost response. Cancellation and rejection cannot partly publish.
-
-## Feedback and delivery
-
-Use `bash tools/check.sh` for the routine suite; use its focused and slow modes
-as documented in `docs/spec/verification.md`. Run one broad routine suite per
-completed change. Run relevant bootstrap/scale controls explicitly when their
-owners change. Say what ran, failed and was skipped; do not create evidence files,
-seals, receipts or session diaries. Keep `.artifacts/` untracked and disposable;
-check for live jobs and unique inputs before cleaning it. Share the Cargo target.
-
-Keep a lint when it earns its place. Safe Rust and no-Python remain current house
-choices. Stage intended files, review the diff, commit small and push often.
-Rewrite stale guidance when it conflicts with these outcomes. Every simplification
-must make a working capability easier to build or maintain.
+`docs/language.md` is the single specification. Status records working behavior,
+broken or missing pieces, bootstrap, measurements and the next action. Git is
+history; do not add decision records, session diaries or duplicate implementations.

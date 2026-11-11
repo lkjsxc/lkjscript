@@ -1,22 +1,4 @@
-# Build and local files
 /target/
-/tmp/
+/.generation-one/
 /.artifacts/
-.env
-*.swp
-*.py[cod]
-__pycache__/
-.DS_Store
-
-# Agent-local state
-/.pi/
-/.pi-subagents/
-
-# Meaning-repository derived and local operational state
-**/.lkjscript/meaning/LOCK
-**/.lkjscript/meaning/indexes/
-**/.lkjscript/meaning/drafts/
-**/LOCK
-**/catalog/
-**/derived/
-**/staging/
+*.wasm

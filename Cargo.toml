@@ -1,79 +1,35 @@
 [package]
 name = "lkjscript"
-# Opaque product identifier: no component is a compatibility or stability signal.
-version = "0.1.96"
+version = "0.2.0"
 edition = "2024"
-license = "Apache-2.0"
-publish = false
-autotests = false
 
-[[test]]
-name = "public_cli"
-path = "tests/public_cli.rs"
+[lib]
+path = "src/lib.rs"
 
-[workspace]
-members = [".", "tools/lkjscript-dev", "tools/lkjscript-site"]
-resolver = "3"
-
-[dependencies]
-axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "ws"] }
-argon2 = { version = "0.5.3", default-features = false, features = ["alloc", "password-hash"] }
-base64 = { version = "0.23.1", default-features = false, features = ["std"] }
-bincode = { version = "2.0.1", default-features = false, features = ["derive", "std"] }
-blake3 = "1.8.2"
-bytes = "1.12.1"
-fs2 = "0.4.3"
-flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
-futures-util = { version = "0.3.34", default-features = false, features = ["sink"] }
-getrandom = "0.3.4"
-httparse = "1.10.1"
-object_store = { version = "0.14.1", default-features = false, features = ["aws", "fs"] }
-rustls = { version = "0.23.43", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
-rustls-pemfile = "2.2.0"
-ryu = "1.0.23"
-rustix = { version = "1.1.4", default-features = false, features = ["fs", "process", "std"] }
-serde = { version = "1.0.228", default-features = false, features = ["derive", "std"] }
-serde_json = { version = "1.0.149", default-features = false, features = ["std", "unbounded_depth"] }
-sha2 = "0.11.0"
-tokio = { version = "1.53.1", default-features = false, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
-tokio-rustls = { version = "0.26.4", default-features = false, features = ["aws_lc_rs", "tls12"] }
-tower = { version = "0.5.3", default-features = false, features = ["util"] }
-triomphe = { version = "=0.1.17", default-features = false, features = ["std"] }
-webpki-roots = "1.0.9"
-
-[dev-dependencies]
-tempfile = "3.23.0"
-
-[build-dependencies]
-blake3 = "1.8.2"
-flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
-quote = "=1.0.47"
-syn = { version = "=2.0.119", features = ["full", "visit-mut"] }
-
-[lints.clippy]
-expect_used = "deny"
-panic = "deny"
-todo = "deny"
-unimplemented = "deny"
-unwrap_used = "deny"
-
-[lints.rust]
-unsafe_code = "forbid"
-
-# One incremental profile for focused and routine feedback. Dependencies remain
-# optimized; large compiler/scale controls belong to the explicit slow tier.
-[profile.test]
-opt-level = 1
-debug = "line-tables-only"
-debug-assertions = true
-overflow-checks = true
-incremental = true
-codegen-units = 256
-
-[profile.test.package."*"]
-opt-level = 2
+[[bin]]
+name = "lkjscript"
+path = "bridge/main.rs"
 
 [profile.release]
-codegen-units = 256
-lto = false
-strip = "symbols"
+overflow-checks = true
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+exit = "deny"
+mem_forget = "deny"
+# Keep explicit loops, branches and matches inside the bootstrap subset.
+collapsible_if = "allow"
+collapsible_match = "allow"
+manual_flatten = "allow"
+manual_is_multiple_of = "allow"
+manual_range_contains = "allow"
+match_like_matches_macro = "allow"
+needless_lifetimes = "allow"
+needless_range_loop = "allow"
+same_item_push = "allow"
+assign_op_pattern = "allow"
+len_zero = "allow"
+needless_return = "allow"
+ptr_arg = "allow"
