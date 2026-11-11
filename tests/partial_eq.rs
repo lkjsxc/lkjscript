@@ -366,10 +366,11 @@ fn lhs_borrow_is_live_while_rhs_is_evaluated() {
 }
 
 #[test]
-fn derived_comparisons_remain_explicitly_pending() {
-    rejects(
-        "#[derive(PartialEq)] struct Value{number:i64} fn bad(left:Value,right:Value)->bool{left==right}",
-        "E_UNSUPPORTED",
-        "executable implementation",
+fn derived_comparisons_execute_and_keep_owners_usable() {
+    let source = "#[derive(PartialEq)] struct Value{number:i64} pub fn probe()->i64{let left=Value{number:21};let right=Value{number:21};if !(left==right)||left!=right{return 0;}left.number+right.number}";
+    let artifact = compiler::compile(&bundle(source)).unwrap_or_else(|error| panic!("{error:?}"));
+    run_node(
+        &artifact,
+        "if(instance.exports['fn:probe']()!==42n)throw Error('derived equality differs');",
     );
 }

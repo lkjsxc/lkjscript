@@ -179,43 +179,31 @@ pub fn direct()->i64{Wrapper{value:0i64}.score()}
 }
 
 #[test]
-fn concrete_specialization_still_requires_an_executable_clone() {
-    let source = "#[derive(Clone)] struct Item{value:Vec<i64>} fn copied<T:Clone>(value:&T)->T{value.clone()} fn probe(){let value=Item{value:Vec::new()};let copy=copied(&value);}";
-    let error = check(source)
-        .err()
-        .expect("abstract Clone cannot supply an executable derived body");
-    assert_eq!(error.code, "E_UNSUPPORTED", "{error:?}");
-    assert!(
-        error.message.contains("executable implementation"),
-        "{error:?}"
-    );
+fn concrete_specialization_executes_a_derived_clone() {
+    let source = "#[derive(Clone)] struct Item{value:Box<i64>} fn copied<T:Clone>(value:&T)->T{value.clone()} pub fn probe()->i64{let value=Item{value:Box::new(42)};let copy=copied(&value);drop(value);*copy.value}";
+    let checked = check(source).unwrap();
+    run(&wasm::emit(&checked).unwrap(), &[("probe", 42)]);
+    rust_oracle(source, &[("probe", 42)]);
 }
 
 #[test]
-fn absent_builtin_default_bodies_remain_named_execution_boundaries() {
-    for (source, method) in [
-        (
-            "struct Item(i64); impl Clone for Item{fn clone(&self)->Self{Item(self.0)}} fn update<T:Clone>(left:&mut T,right:&T){left.clone_from(right);} fn probe(){let mut left=Item(1);let right=Item(2);update(&mut left,&right);}",
-            "clone_from",
-        ),
-        (
-            "struct Item(i64); impl PartialEq for Item{fn eq(&self,other:&Self)->bool{self.0==other.0}} fn different<T:PartialEq>(left:&T,right:&T)->bool{left.ne(right)} fn probe()->bool{different(&Item(1),&Item(2))}",
-            "ne",
-        ),
-        (
-            "fn same<T:PartialEq>(left:&T,right:&T)->bool{left.eq(right)} fn probe()->bool{same(&1i64,&2i64)}",
-            "eq",
-        ),
-    ] {
-        let error = check(source)
-            .err()
-            .expect("an abstract contract cannot stand in for a missing body");
-        assert_eq!(error.code, "E_UNSUPPORTED", "{error:?}");
-        assert!(
-            error.message.contains(method) && error.message.contains("executable implementation"),
-            "{error:?}"
-        );
-    }
+fn builtin_default_operations_have_checked_executable_bodies() {
+    let source = r#"
+struct Item(i64);
+impl Clone for Item{fn clone(&self)->Self{Item(self.0)}}
+impl PartialEq for Item{fn eq(&self,other:&Self)->bool{self.0==other.0}}
+fn update<T:Clone>(left:&mut T,right:&T){left.clone_from(right);}
+fn different<T:PartialEq>(left:&T,right:&T)->bool{left.ne(right)}
+fn same<T:PartialEq>(left:&T,right:&T)->bool{left.eq(right)}
+pub fn updated()->i64{let mut left=Item(1);let right=Item(42);update(&mut left,&right);left.0}
+pub fn defaults()->i64{if different(&Item(1),&Item(2)) && same(&42i64,&42i64){42}else{0}}
+"#;
+    let checked = check(source).unwrap();
+    run(
+        &wasm::emit(&checked).unwrap(),
+        &[("updated", 42), ("defaults", 42)],
+    );
+    rust_oracle(source, &[("updated", 42), ("defaults", 42)]);
 }
 
 #[test]

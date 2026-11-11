@@ -1,4 +1,5 @@
 //! The source prelude. These enums own their payloads and work with affine values.
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Option<T> {
     None,
     Some(T),
@@ -35,6 +36,7 @@ impl<T> Option<T> {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Result<T, E> {
     Ok(T),
     Err(E),

@@ -148,11 +148,9 @@ fn duplicate_and_unsupported_derives_are_not_ignored() {
 }
 
 #[test]
-fn structural_derive_contracts_do_not_claim_affine_clone_lowering() {
-    rejected(
-        "#[derive(Clone)] struct Item {value:Vec<i64>} fn probe()->i64{let item=Item{value:Vec::new()};let cloned=item.clone();cloned.value.len() as i64}",
-        "E_UNSUPPORTED",
-        "Clone for affine values",
+fn structural_derive_contracts_lower_affine_clone_bodies() {
+    accepted(
+        "#[derive(Clone)] struct Item {value:Box<i64>} fn probe()->i64{let item=Item{value:Box::new(42)};let cloned=item.clone();drop(item);*cloned.value}",
     );
 }
 

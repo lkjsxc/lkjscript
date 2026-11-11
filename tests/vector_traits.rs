@@ -390,11 +390,6 @@ fn element_constraints_and_existing_view_storage_rules_are_enforced() {
             "E_BORROW",
             "views cannot be stored",
         ),
-        (
-            "#[derive(Clone)] struct Holder{values:Vec<i64>} fn probe(){let value=Holder{values:Vec::new()};value.clone();}",
-            "E_UNSUPPORTED",
-            "affine",
-        ),
     ] {
         let error = compiler::check_bundle(&bundle(source, SEQUENCE))
             .err()
@@ -634,4 +629,29 @@ fn weakened_library_helpers_cannot_grant_missing_element_contracts() {
     .expect("helper result must match the operation");
     assert_eq!(error.code, "E_TYPE", "{error:?}");
     assert!(error.message.contains("helper signature"), "{error:?}");
+}
+
+#[test]
+fn derived_holders_clone_their_vector_storage() {
+    let source = r#"
+#[derive(Clone)] struct Holder {values:Vec<i64>}
+pub fn derived_holder()->i64 {
+    let empty=Holder{values:Vec::new()};
+    let copied_empty=empty.clone();
+    drop(empty);
+    if copied_empty.values.len()!=0 {return 1;}
+    let mut original=Holder{values:vec![4,2]};
+    let copied=original.clone();
+    original.values[0]=9;
+    drop(original);
+    if copied.values.len()!=2 || copied.values[0]!=4 || copied.values[1]!=2 {return 2;}
+    0
+}
+"#;
+    let expected = rust_observations(source, &["derived_holder"]);
+    assert_eq!(expected[0].1, 0);
+    run(
+        &compiler::compile(&bundle(source, SEQUENCE)).unwrap(),
+        &expected,
+    );
 }

@@ -19,7 +19,7 @@ struct MethodWitness {
 /// Builtin operations have typed contracts only in the discarded verification
 /// program. Concrete instantiations still select and compile real methods.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum BuiltinMethod {
+pub(super) enum BuiltinMethod {
     Clone,
     CloneFrom,
     Eq,
@@ -27,7 +27,7 @@ enum BuiltinMethod {
 }
 
 impl BuiltinMethod {
-    fn named(name: &str) -> Option<Self> {
+    pub(super) fn named(name: &str) -> Option<Self> {
         match name {
             "clone" => Some(Self::Clone),
             "clone_from" => Some(Self::CloneFrom),
@@ -37,7 +37,7 @@ impl BuiltinMethod {
         }
     }
 
-    fn name(self) -> &'static str {
+    pub(super) fn name(self) -> &'static str {
         match self {
             Self::Clone => "clone",
             Self::CloneFrom => "clone_from",
@@ -46,18 +46,18 @@ impl BuiltinMethod {
         }
     }
 
-    fn required(self) -> &'static str {
+    pub(super) fn required(self) -> &'static str {
         match self {
             Self::Clone | Self::CloneFrom => "Clone",
             Self::Eq | Self::Ne => "PartialEq",
         }
     }
 
-    fn arguments(self) -> usize {
+    pub(super) fn arguments(self) -> usize {
         if self == Self::Clone { 0 } else { 1 }
     }
 
-    fn result(self, receiver: usize) -> usize {
+    pub(super) fn result(self, receiver: usize) -> usize {
         match self {
             Self::Clone => receiver,
             Self::CloneFrom => k::UNIT,
@@ -136,10 +136,20 @@ pub(super) fn validate(source: &a::Program) -> Result<MethodSelections> {
     // User destructors retain their ordinary K obligations. Their definitions
     // were checked above; this declaration pass attaches concrete signatures to
     // the abstract nominal layouts created while checking those definitions.
-    let mut next = 0;
-    while next < compiler.types.len() {
-        compiler.register_drop(next)?;
-        next += 1;
+    let mut next_type = 0;
+    let mut next_function = 0;
+    while next_type < compiler.types.len() || next_function < compiler.pending_functions.len() {
+        while next_type < compiler.types.len() {
+            compiler.register_drop(next_type)?;
+            next_type += 1;
+        }
+        if let Some((index, pending)) = compiler.pending_functions.get(next_function).cloned() {
+            if let super::PendingFunction::Derived(instance) = pending {
+                compiler.functions[index] = compiler.compile_derived(index, &instance)?;
+                checked_roots.insert(index);
+            }
+            next_function += 1;
+        }
     }
 
     // A call uses a checked declaration's signature, or an identified declared
@@ -765,7 +775,7 @@ impl Compiler<'_> {
         Ok(index)
     }
 
-    fn builtin_method_contract(
+    pub(super) fn builtin_method_contract(
         &mut self,
         receiver: usize,
         method: BuiltinMethod,
@@ -1052,36 +1062,9 @@ impl super::Builder<'_, '_> {
                 );
             }
         }
-        if matches!(self.compiler.types[base].kind, k::TypeKind::Vec { .. })
-            && ((identity == &TraitIdentity::Builtin("Clone".to_string()) && name == "clone")
-                || (identity == &TraitIdentity::Builtin("PartialEq".to_string())
-                    && matches!(name.as_str(), "eq" | "ne")))
-        {
-            return self.vector_trait_method(target, base, &name, types, args, span);
-        }
-        if identity == &TraitIdentity::Builtin("Clone".to_string()) && name == "clone" {
-            if !types.is_empty() || !args.is_empty() {
-                return Err(err(
-                    span,
-                    "E_TYPE",
-                    "clone takes no type or value arguments",
-                ));
-            }
-            if super::is_copy(&self.compiler.types, base) {
-                if matches!(self.compiler.types[base].kind, k::TypeKind::Ref { .. }) {
-                    return self.read(target.clone(), span.line);
-                }
-                let reference = self.borrow(target.clone(), false, span.line)?.0;
-                let dst = self.temp(base);
-                self.emit(
-                    k::Op::Intrinsic {
-                        dst,
-                        name: "clone".to_string(),
-                        args: vec![reference],
-                    },
-                    span.line,
-                );
-                return Ok((dst, base));
+        if let Some(method) = BuiltinMethod::named(&name) {
+            if identity == &TraitIdentity::Builtin(method.required().to_string()) {
+                return self.builtin_trait_method(target, base, &name, types, args, span);
             }
         }
         Err(err(

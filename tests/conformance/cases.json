@@ -895,8 +895,16 @@
     "pending": false
   },
   {
-    "id": "source_bounds_static",
-    "file": "pass/source_bounds_static.rs",
+    "id": "derived_source_option",
+    "file": "pass/derived_source_option.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "projected_multi_leaf_clone",
+    "file": "pass/projected_multi_leaf_clone.rs",
     "kind": "run",
     "value": "42",
     "rust": true,
@@ -913,6 +921,14 @@
   {
     "id": "loop_condition_cleanup",
     "file": "pass/loop_condition_cleanup.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "source_bounds_static",
+    "file": "pass/source_bounds_static.rs",
     "kind": "run",
     "value": "42",
     "rust": true,

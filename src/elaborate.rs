@@ -3,6 +3,7 @@ mod assignment;
 mod borrow_cleanup;
 mod constructors;
 mod derive_check;
+mod derive_methods;
 mod generic_check;
 mod inference;
 mod integers;
@@ -40,6 +41,11 @@ struct Instance {
     source: usize,
     substitutions: BTreeMap<String, usize>,
 }
+#[derive(Clone)]
+enum PendingFunction {
+    Source(Instance),
+    Derived(derive_methods::DerivedInstance),
+}
 struct Compiler<'a> {
     source: &'a a::Program,
     names: crate::resolve::Resolver<'a>,
@@ -48,7 +54,8 @@ struct Compiler<'a> {
     type_keys: BTreeMap<TypeKey, usize>,
     declaration_names: BTreeMap<String, a::DeclarationId>,
     functions: Vec<k::Function>,
-    instances: Vec<Instance>,
+    pending_functions: Vec<(usize, PendingFunction)>,
+    derived_functions: BTreeMap<(usize, generic_check::BuiltinMethod), usize>,
     instance_names: BTreeMap<(usize, Vec<(String, usize)>), usize>,
     applications: BTreeMap<usize, (String, Vec<usize>)>,
     destructors: Vec<(usize, usize)>,
@@ -115,15 +122,17 @@ pub fn elaborate(source: &a::Program) -> Result<k::Program> {
     }
     let mut next = 0;
     let mut next_type = 0;
-    while next < c.instances.len() || next_type < c.types.len() {
+    while next < c.pending_functions.len() || next_type < c.types.len() {
         while next_type < c.types.len() {
             c.register_drop(next_type)?;
             next_type += 1;
         }
-        if next < c.instances.len() {
-            let instance = c.instances[next].clone();
-            let function = c.compile_function(next, &instance)?;
-            c.functions[next] = function;
+        if next < c.pending_functions.len() {
+            let (index, pending) = c.pending_functions[next].clone();
+            c.functions[index] = match pending {
+                PendingFunction::Source(instance) => c.compile_function(index, &instance)?,
+                PendingFunction::Derived(instance) => c.compile_derived(index, &instance)?,
+            };
             next += 1;
         }
     }
@@ -150,7 +159,8 @@ impl<'a> Compiler<'a> {
                 .map(|(id, d)| (d.name.clone(), id))
                 .collect(),
             functions: Vec::new(),
-            instances: Vec::new(),
+            pending_functions: Vec::new(),
+            derived_functions: BTreeMap::new(),
             instance_names: BTreeMap::new(),
             applications: BTreeMap::new(),
             destructors: Vec::new(),
@@ -513,10 +523,13 @@ impl Compiler<'_> {
         let return_source = self.return_source(&source, &locals, result)?;
         let id = self.functions.len();
         self.instance_names.insert(key, id);
-        self.instances.push(Instance {
-            source: index,
-            substitutions: sub,
-        });
+        self.pending_functions.push((
+            id,
+            PendingFunction::Source(Instance {
+                source: index,
+                substitutions: sub,
+            }),
+        ));
         self.functions.push(k::Function {
             file: source.span.file,
             name,
@@ -2874,11 +2887,23 @@ impl Builder<'_, '_> {
             }
             return self.text_method(target, name, args, span);
         }
-        if matches!(self.compiler.types[base].kind, k::TypeKind::Vec { .. })
-            && matches!(name, "clone" | "eq" | "ne")
-            && (selection.is_some() || self.vector_builtin_available(base, name, span)?)
-        {
-            return self.vector_trait_method(&target, base, name, _types, args, span);
+        if let Some(method) = generic_check::BuiltinMethod::named(name) {
+            if selection.is_some() || self.builtin_method_available(base, name, span)? {
+                if self.compiler.contracts.is_some() {
+                    self.compiler.method_selections.insert(
+                        expression,
+                        generic_check::MethodSelection {
+                            dereferences,
+                            target: generic_check::MethodTarget::Trait(
+                                crate::generics::TraitIdentity::Builtin(
+                                    method.required().to_string(),
+                                ),
+                            ),
+                        },
+                    );
+                }
+                return self.builtin_trait_method(&target, base, name, _types, args, span);
+            }
         }
         match name {
             "as_slice" | "as_mut_slice"
@@ -2986,29 +3011,6 @@ impl Builder<'_, '_> {
                     span.line,
                 );
                 Ok((dst, ty))
-            }
-            "clone" if selection.is_some() || !self.has_declared_method(base, name)? => {
-                if !args.is_empty() {
-                    return Err(err(span, "E_TYPE", "clone takes no arguments"));
-                }
-                if !is_copy(&self.compiler.types, base) {
-                    return Err(err(
-                        span,
-                        "E_UNSUPPORTED",
-                        "Clone for affine values is not implemented yet",
-                    ));
-                }
-                let r = self.borrow(target, false, span.line)?.0;
-                let dst = self.temp(base);
-                self.emit(
-                    k::Op::Intrinsic {
-                        dst,
-                        name: "clone".to_string(),
-                        args: vec![r],
-                    },
-                    span.line,
-                );
-                Ok((dst, base))
             }
             _ => {
                 let mut candidates = Vec::new();

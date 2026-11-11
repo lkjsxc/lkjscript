@@ -1,9 +1,8 @@
 //! Equality lowers through the selected builtin trait implementation, never a
 //! method-name search. Operand materialization is shared by scalar and nominal
 //! paths so a failed hint cannot cause a source expression to run twice.
+use super::generic_check::BuiltinMethod;
 use super::{Builder, Result, a, err, k, place_type};
-use crate::generics::{TraitIdentity, implementation_witness};
-use std::collections::BTreeMap;
 
 impl Builder<'_, '_> {
     fn equality_hint(&mut self, expression: usize) -> Option<usize> {
@@ -50,112 +49,21 @@ impl Builder<'_, '_> {
         (place, ty)
     }
 
-    fn equality_method(
-        &mut self,
-        method: usize,
-        target: usize,
-        substitutions: &BTreeMap<String, usize>,
-        span: a::Span,
-    ) -> Result<usize> {
-        let source = self.compiler.source.functions[method].clone();
-        let reference = self.compiler.reference(target, false);
-        if source.params.len() != 2
-            || source.params[0].name != "self"
-            || source.generics.iter().any(|parameter| !parameter.lifetime)
-        {
-            return Err(err(
-                span,
-                "E_TRAIT",
-                "PartialEq method requires (&self, &Self) -> bool without type parameters",
-            ));
-        }
-        for parameter in &source.params {
-            if self.compiler.resolve(parameter.ty, substitutions)? != reference {
-                return Err(err(
-                    span,
-                    "E_TRAIT",
-                    "PartialEq method parameters must be shared references to the exact Self type",
-                ));
-            }
-        }
-        if self.compiler.resolve(source.result, substitutions)? != k::BOOL {
-            return Err(err(span, "E_TRAIT", "PartialEq method result must be bool"));
-        }
-        if source.body.is_none() {
-            return Err(err(
-                span,
-                "E_UNSUPPORTED",
-                "PartialEq method has no executable body",
-            ));
-        }
-        self.compiler.instantiate(method, substitutions.clone())
-    }
-
     fn equality_implementation(
         &mut self,
         target: usize,
         operation: &str,
         span: a::Span,
     ) -> Result<(usize, bool)> {
-        let identity = TraitIdentity::Builtin("PartialEq".to_string());
-        let empty = BTreeMap::new();
-        let assumptions = self
-            .compiler
-            .contracts
-            .as_ref()
-            .map_or(&empty, |c| &c.rigid);
-        let selected = implementation_witness(
-            self.compiler.source,
-            &self.compiler.types,
-            &self.compiler.applications,
-            target,
-            &identity,
-            assumptions,
-        );
-        let Some(selected) = selected else {
-            return Err(if self.compiler.satisfies_identity(target, &identity) {
-                err(
-                    span,
-                    "E_UNSUPPORTED",
-                    "PartialEq has no executable implementation; derived comparisons are not implemented yet",
-                )
-            } else {
-                err(
-                    span,
-                    "E_TRAIT",
-                    "equality requires the builtin PartialEq trait",
-                )
-            });
-        };
-        let implementation = self.compiler.source.impls[selected.implementation].clone();
-        let mut substitutions = selected.substitutions;
-        substitutions.insert("Self".to_string(), target);
-        self.compiler
-            .bounds(&implementation.generics, &substitutions)?;
-        let mut equal = None;
-        let mut unequal = None;
-        for method in implementation.methods {
-            let slot = match self.compiler.source.functions[method].name.as_str() {
-                "eq" => &mut equal,
-                "ne" => &mut unequal,
-                _ => continue,
-            };
-            if slot.replace(method).is_some() {
-                return Err(err(span, "E_TRAIT", "duplicate PartialEq method"));
-            }
-        }
-        let equal =
-            equal.ok_or_else(|| err(span, "E_TRAIT", "PartialEq implementation requires eq"))?;
-        let equal = self.equality_method(equal, target, &substitutions, span)?;
-        let unequal = match unequal {
-            Some(method) => Some(self.equality_method(method, target, &substitutions, span)?),
-            None => None,
-        };
-        Ok(if operation == "!=" {
-            unequal.map_or((equal, true), |method| (method, false))
+        let method = if operation == "==" {
+            BuiltinMethod::Eq
         } else {
-            (equal, false)
-        })
+            BuiltinMethod::Ne
+        };
+        Ok((
+            self.compiler.builtin_operation(target, method, span)?,
+            false,
+        ))
     }
 
     fn equality_call(
@@ -243,7 +151,11 @@ impl Builder<'_, '_> {
                     );
                     (dst, k::BOOL)
                 }
-                k::TypeKind::Struct { .. } | k::TypeKind::Enum { .. } => {
+                k::TypeKind::Unit
+                | k::TypeKind::Struct { .. }
+                | k::TypeKind::Enum { .. }
+                | k::TypeKind::Box { .. }
+                | k::TypeKind::Array { .. } => {
                     let (function, negate) =
                         self.equality_implementation(target, operation, span)?;
                     let left = self.borrow(left_place, false, span.line)?.0;
