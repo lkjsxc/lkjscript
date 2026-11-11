@@ -610,7 +610,7 @@ impl Analysis<'_> {
                                     tasks.push(Task::Expr(*value));
                                 }
                             }
-                            Stmt::Expr(e) => tasks.push(Task::Expr(*e)),
+                            Stmt::Expr { value, .. } => tasks.push(Task::Expr(*value)),
                             Stmt::Item(_) => {}
                         }
                     }

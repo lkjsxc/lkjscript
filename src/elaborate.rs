@@ -1209,9 +1209,6 @@ impl Builder<'_, '_> {
         let mut checking_dead = false;
         for stmt in block.statements {
             if !self.reachable {
-                if self.compiler.contracts.is_none() {
-                    break;
-                }
                 checking_dead = true;
                 self.reachable = true;
                 for live in &mut self.live {
@@ -1220,7 +1217,7 @@ impl Builder<'_, '_> {
             }
             let end = match &stmt {
                 a::Stmt::Let { span, .. } => span.end,
-                a::Stmt::Expr(id) => self.compiler.source.exprs[*id].span.end,
+                a::Stmt::Expr { value, .. } => self.compiler.source.exprs[*value].span.end,
                 _ => 0,
             };
             match stmt {
@@ -1260,9 +1257,16 @@ impl Builder<'_, '_> {
                         }
                     }
                 }
-                a::Stmt::Expr(expr) => {
+                a::Stmt::Expr { value, semicolon } => {
                     let before = self.live.len();
-                    let _ = self.expr(expr, None)?;
+                    let result = self.expr(value, None)?;
+                    if !semicolon && self.reachable && result.1 != k::UNIT {
+                        return Err(err(
+                            self.compiler.source.exprs[value].span,
+                            "E_TYPE",
+                            "a block statement without `;` must have unit type",
+                        ));
+                    }
                     self.cleanup(before, None, block.span.line);
                 }
                 a::Stmt::Item(_) => {
@@ -1280,7 +1284,7 @@ impl Builder<'_, '_> {
                 self.end_unused_borrows(start, end, block.span.end, block.span.line);
             }
         }
-        if !self.reachable && self.compiler.contracts.is_some() {
+        if !self.reachable {
             if let Some(tail) = block.tail {
                 self.reachable = true;
                 for live in &mut self.live {

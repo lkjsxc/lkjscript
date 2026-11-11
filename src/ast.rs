@@ -422,7 +422,10 @@ pub enum Stmt {
         value: Option<ExprId>,
         span: Span,
     },
-    Expr(ExprId),
+    Expr {
+        value: ExprId,
+        semicolon: bool,
+    },
     Item(Item),
 }
 

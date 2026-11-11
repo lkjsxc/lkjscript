@@ -842,5 +842,22 @@
     "value": "42",
     "rust": true,
     "pending": false
+  },
+  {
+    "id": "block_statement_prefix",
+    "file": "pass/block_statement_prefix.rs",
+    "kind": "run",
+    "value": "42",
+    "rust": true,
+    "pending": false
+  },
+  {
+    "id": "implicit_block_unit",
+    "file": "fail/implicit_block_unit.rs",
+    "kind": "reject",
+    "code": "E_TYPE",
+    "rust": true,
+    "rustAccept": false,
+    "pending": false
   }
 ]

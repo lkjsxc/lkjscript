@@ -1652,28 +1652,23 @@ impl Parser {
                 statements.push(Stmt::Item(item));
                 continue;
             }
-            let expression = self.expr(true)?;
+            let (expression, standalone) = self.statement_expr()?;
             if self.take(";") {
-                statements.push(Stmt::Expr(expression));
+                statements.push(Stmt::Expr {
+                    value: expression,
+                    semicolon: true,
+                });
             } else if self.is("}") {
                 tail = Some(expression);
                 break;
             } else {
-                let standalone = match &self.program.exprs[expression].kind {
-                    Expr::If { .. }
-                    | Expr::IfLet { .. }
-                    | Expr::While { .. }
-                    | Expr::WhileLet { .. }
-                    | Expr::Loop { .. }
-                    | Expr::For { .. }
-                    | Expr::Match { .. }
-                    | Expr::Block(_) => true,
-                    _ => false,
-                };
                 if !standalone {
                     return Err(self.err("expected `;` after expression"));
                 }
-                statements.push(Stmt::Expr(expression));
+                statements.push(Stmt::Expr {
+                    value: expression,
+                    semicolon: false,
+                });
             }
         }
         self.expect("}")?;
@@ -1684,6 +1679,31 @@ impl Parser {
             span: self.finish_span(span),
         });
         Ok(id)
+    }
+    /// Block expressions in statement or match-arm position end before an
+    /// ambiguous following expression. A dot or question mark continues the
+    /// expression; grouping starts an ordinary value expression instead. Keep
+    /// the written-form distinction here because parentheses have no AST node.
+    fn statement_expr(&mut self) -> Result<(ExprId, bool), Diagnostic> {
+        let block = self.is("{")
+            || self.is("if")
+            || self.is("while")
+            || self.is("loop")
+            || self.is("for")
+            || self.is("match");
+        if block {
+            let expression = self.atom(true)?;
+            if self.is("as") {
+                return Err(self.err("parenthesize a block value before a cast"));
+            }
+            if self.is(".") || self.is("?") {
+                Ok((self.expr_tail(expression, 1, true)?, false))
+            } else {
+                Ok((expression, true))
+            }
+        } else {
+            Ok((self.expr(true)?, false))
+        }
     }
     fn expr(&mut self, allow_struct: bool) -> Result<ExprId, Diagnostic> {
         self.expr_bp(1, allow_struct)
@@ -2057,11 +2077,7 @@ impl Parser {
                     None
                 };
                 self.expect("=>")?;
-                let arm_value = if self.is("{") {
-                    self.atom(true)?
-                } else {
-                    self.expr(true)?
-                };
+                let (arm_value, block_like) = self.statement_expr()?;
                 arms.push(Arm {
                     pattern,
                     guard,
@@ -2069,10 +2085,6 @@ impl Parser {
                     span: self.finish_span(start),
                 });
                 if !self.take(",") && !self.is("}") {
-                    let block_like = match self.program.exprs[arm_value].kind {
-                        Expr::Block(_) | Expr::If { .. } | Expr::Match { .. } => true,
-                        _ => false,
-                    };
                     if !block_like {
                         return Err(self.err("expected `,` between match arms"));
                     }
