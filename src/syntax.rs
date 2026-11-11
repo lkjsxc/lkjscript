@@ -313,6 +313,9 @@ impl Lexer<'_> {
                             && self.at > span.start
                             && (self.source.as_bytes()[self.at - 1] == b'e'
                                 || self.source.as_bytes()[self.at - 1] == b'E')
+                            && self.source.as_bytes()[span.start..self.at - 1]
+                                .iter()
+                                .all(|b| b.is_ascii_digit() || *b == b'_' || *b == b'.')
                     {
                         self.advance();
                     } else {
@@ -1857,7 +1860,13 @@ impl Parser {
                 let radix = token.text.starts_with("0x")
                     || token.text.starts_with("0b")
                     || token.text.starts_with("0o");
+                let integer_suffix = [
+                    "usize", "isize", "u64", "i64", "u32", "i32", "u16", "i16", "u8", "i8",
+                ]
+                .iter()
+                .any(|suffix| token.text.ends_with(suffix));
                 if !radix
+                    && !integer_suffix
                     && (token.text.contains('.')
                         || token.text.contains('e')
                         || token.text.contains('E')
@@ -2434,6 +2443,30 @@ mod tests {
                 }
             }
             _ => panic!("addition missing"),
+        }
+    }
+    #[test]
+    fn numeric_suffixes_preserve_operators_and_decimal_exponents() {
+        for literal in ["6usize", "6isize", "0x1e", "0x1eu8", "1_000u64"] {
+            let source = format!("fn f(){{{literal}}}");
+            let program = parse(&source).unwrap();
+            assert!(matches!(program.exprs[0].kind, Expr::Int(_)), "{literal}");
+        }
+        for expression in ["6usize+2usize", "6isize-2isize", "0x1e+2", "0x1E-2"] {
+            let source = format!("fn f(){{{expression}}}");
+            let program = parse(&source).unwrap();
+            let tail = program.blocks[program.functions[0].body.unwrap()]
+                .tail
+                .unwrap();
+            assert!(
+                matches!(program.exprs[tail].kind, Expr::Binary { .. }),
+                "{expression}"
+            );
+        }
+        for literal in ["1e+2", "1E-2", "1.25e+2f64", "1_0e-2"] {
+            let source = format!("fn f(){{{literal}}}");
+            let program = parse(&source).unwrap();
+            assert!(matches!(program.exprs[0].kind, Expr::Float(_)), "{literal}");
         }
     }
     #[test]
