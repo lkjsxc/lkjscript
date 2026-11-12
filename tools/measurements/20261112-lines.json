@@ -1,0 +1,150 @@
+{
+  "tool": "count-lines",
+  "revision": "d32a611d62caa574da48c8c37e6fe94eb70afa67",
+  "working_tree": true,
+  "dirty": true,
+  "code_manifest_sha256": "7c22109099797dbaad3b85833271452f0646d4ca2ebdd6aa9eae1850fc9644df",
+  "tool_sha256": "8f8797361286a2dcdaedac3dee04f86ba397f4991742c80b9c88aca36528b270",
+  "method": "Physical lines include blanks/comments and an unterminated final line. Rust items with a direct #[cfg(test)] or #[test] outer attribute are separated using balanced token-aware spans; preceding attributes and intervening comments stay with the item. Adjacent comments outside the item and other cfg forms remain in the containing category. Strings containing source code remain harness/tool lines. Documents, configuration, generated artifacts and ignored files are excluded. Split-file counts can overlap; line categories do not.",
+  "categories": {
+    "compiler": {
+      "label": "Compiler Rust, excluding embedded tests",
+      "files": 36,
+      "lines": 25973,
+      "nonblank": 25587
+    },
+    "library": {
+      "label": "Source library",
+      "files": 7,
+      "lines": 455,
+      "nonblank": 403
+    },
+    "compiler_tests": {
+      "label": "Embedded compiler Rust tests",
+      "files": 6,
+      "lines": 2294,
+      "nonblank": 2248
+    },
+    "library_tests": {
+      "label": "Embedded library Rust tests",
+      "files": 0,
+      "lines": 0,
+      "nonblank": 0
+    },
+    "rust_tests": {
+      "label": "Rust test harnesses",
+      "files": 40,
+      "lines": 13554,
+      "nonblank": 13038
+    },
+    "node_tests": {
+      "label": "Node unit tests",
+      "files": 2,
+      "lines": 96,
+      "nonblank": 88
+    },
+    "conformance": {
+      "label": "Conformance source programs",
+      "files": 123,
+      "lines": 1051,
+      "nonblank": 1039
+    },
+    "k_fixtures": {
+      "label": "K fixtures and model counterexamples",
+      "files": 13,
+      "lines": 293,
+      "nonblank": 293
+    },
+    "corpus": {
+      "label": "Independent corpus source programs",
+      "files": 76,
+      "lines": 234,
+      "nonblank": 234
+    },
+    "reduced": {
+      "label": "Retained reduced source programs",
+      "files": 1,
+      "lines": 30,
+      "nonblank": 9
+    },
+    "examples": {
+      "label": "Example source programs",
+      "files": 1,
+      "lines": 6,
+      "nonblank": 6
+    },
+    "bridge_rust": {
+      "label": "Rust bootstrap bridges, excluding tests",
+      "files": 7,
+      "lines": 932,
+      "nonblank": 909
+    },
+    "bridge_tests": {
+      "label": "Embedded Rust bridge tests",
+      "files": 1,
+      "lines": 44,
+      "nonblank": 43
+    },
+    "bridge_node": {
+      "label": "Node bootstrap bridges",
+      "files": 3,
+      "lines": 220,
+      "nonblank": 213
+    },
+    "tools": {
+      "label": "Verification and measurement tools",
+      "files": 12,
+      "lines": 1443,
+      "nonblank": 1419
+    }
+  },
+  "embedded_files": [
+    {
+      "file": "bridge/compiler_stack.rs",
+      "items": 2,
+      "lines": 44,
+      "nonblank": 43
+    },
+    {
+      "file": "src/check.rs",
+      "items": 35,
+      "lines": 1482,
+      "nonblank": 1447
+    },
+    {
+      "file": "src/facts.rs",
+      "items": 3,
+      "lines": 66,
+      "nonblank": 64
+    },
+    {
+      "file": "src/generics.rs",
+      "items": 40,
+      "lines": 326,
+      "nonblank": 326
+    },
+    {
+      "file": "src/k_text.rs",
+      "items": 9,
+      "lines": 223,
+      "nonblank": 215
+    },
+    {
+      "file": "src/machine.rs",
+      "items": 2,
+      "lines": 77,
+      "nonblank": 76
+    },
+    {
+      "file": "src/syntax.rs",
+      "items": 9,
+      "lines": 120,
+      "nonblank": 120
+    }
+  ],
+  "total": {
+    "files": 321,
+    "lines": 46625,
+    "nonblank": 45529
+  }
+}

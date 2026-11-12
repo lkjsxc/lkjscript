@@ -1,0 +1,63 @@
+{
+  "compiler": "9d3d1172885681ed622b28168684d7504e1dc9da",
+  "binarySha256": "a16387c74c36aba08b6f48d8af34d28fa089044bf92ca19d7389ff03dc2856a0",
+  "cwd": "a checkout of the recorded commit",
+  "build": [
+    "cargo",
+    "build",
+    "--release"
+  ],
+  "depth": {
+    "sourceFile": "target/capacity/current/deep-10000000.rs",
+    "source": "fn depth(n: i64) -> i64 { if n == 0 { 0 } else { 1 + depth(n - 1) } } fn probe() -> i64 { depth(10000000) }",
+    "sourceSha256": "cedca9806df3cf3ca998534367b7c25cb9e6f0e1927842fa77c7e4198fb3cb72",
+    "command": [
+      "target/release/lkjscript",
+      "run",
+      "target/capacity/current/deep-10000000.rs",
+      "--entry",
+      "probe",
+      "--engine",
+      "node"
+    ]
+  },
+  "million": {
+    "sourceFile": "target/capacity/current/million/funcs-1000000.rs",
+    "sourceSha256": "de2dca3bde027c0a7b0923351e7f636ff26eb1f50e528443b42d1dfcecd6dbf8",
+    "buildCommand": [
+      "node",
+      "tools/scale/run.mjs",
+      "target/release/lkjscript",
+      "--families",
+      "funcs",
+      "--sizes",
+      "1000000",
+      "--repeat",
+      "1",
+      "--verb",
+      "build",
+      "--out",
+      "target/capacity/current/million"
+    ],
+    "nodeCommand": [
+      "node",
+      "bridge/run.mjs",
+      "target/capacity/current/million/funcs-1000000.wasm",
+      "probe",
+      "i64"
+    ],
+    "kCommand": [
+      "target/release/lkjscript",
+      "run",
+      "target/capacity/current/million/funcs-1000000.rs",
+      "--entry",
+      "probe",
+      "--engine",
+      "k"
+    ]
+  },
+  "environment": {
+    "LKJSCRIPT_TIMINGS": "1"
+  },
+  "observationMethod": "Execution commands were run through tools/process.mjs run with sampleMemory:true. It samples process-tree RSS every 10ms; native/Node stage records also report their own peak counters. Operational process timeouts are outside language acceptance. Materialize the depth source exactly, including whether it has a final newline. The scale runner generates the million-function source; use the recorded commit for its generator and bridge."
+}

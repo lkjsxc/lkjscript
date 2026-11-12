@@ -1,0 +1,3 @@
+{"suite":"idioms","total":30,"tally":{"valid-but-rejected:E_UNSUPPORTED":18,"equal-output-and-exit":8,"valid-but-rejected:E_TYPE":1,"valid-but-rejected:E_BORROW":2,"valid-but-rejected:E_UNSUPPORTED_MACRO":1}}
+{"suite":"ownership","total":30,"tally":{"valid-but-rejected:E_MOVE":6,"valid-but-rejected:E_BORROW":3,"equal-output-and-exit":19,"valid-but-rejected:E_UNSUPPORTED":2}}
+{"suite":"rejected","total":16,"tally":{"both-rejected":16}}

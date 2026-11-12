@@ -1,0 +1,145 @@
+{
+  "command": "bash tools/check.sh",
+  "compilerBase": "940b1dce2ec2892d2def628dbfe5c6bb757ad415",
+  "testedCodeCommittedAs": "c60c3cbaffb5303e8e6e141a56465bd48e2b7364",
+  "elapsedSeconds": 38.044,
+  "cargoTests": 408,
+  "conformance": [
+    {
+      "engine": "node",
+      "passed": 121,
+      "pending": 8,
+      "failed": 0,
+      "rustcComparisons": 113,
+      "seconds": 5.95
+    },
+    {
+      "engine": "k",
+      "passed": 121,
+      "pending": 8,
+      "failed": 0,
+      "rustcComparisons": 113,
+      "seconds": 3.17
+    }
+  ],
+  "generators": [
+    {
+      "generator": "value",
+      "engine": "node",
+      "sha256": "706db4c7909c91e968e892f02fed5dee19514ff3746c3c3d8e79038d3fa662ae",
+      "binarySha256": "fdfacbf076f2ca96cb33973427d2d905b58c5e87a083eaeaa1e808a3fd9e2734",
+      "compilerDirty": true,
+      "compiler": "940b1dce2ec2892d2def628dbfe5c6bb757ad415",
+      "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+      "node": "v24.18.1",
+      "rustFlags": "--edition=2024 -C overflow-checks=yes -C opt-level=0 -A warnings -A arithmetic_overflow -A unconditional_panic -A overflowing_literals",
+      "seed": "601",
+      "programs": 100,
+      "value-equal": 92,
+      "trap-equal": 8
+    },
+    {
+      "generator": "verdict",
+      "engine": "node",
+      "sha256": "58081744ff8ee9523b540eab516f520e7efa9bc1a32788b03474cfca86cebc81",
+      "binarySha256": "fdfacbf076f2ca96cb33973427d2d905b58c5e87a083eaeaa1e808a3fd9e2734",
+      "compilerDirty": true,
+      "compiler": "940b1dce2ec2892d2def628dbfe5c6bb757ad415",
+      "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+      "node": "v24.18.1",
+      "rustFlags": {
+        "verdict": "--edition=2024 --error-format=short -A warnings --emit=metadata",
+        "execution": "--edition=2024 -C overflow-checks=yes -A warnings"
+      },
+      "seed": "601",
+      "programs": 100,
+      "both-reject-ownership": 73,
+      "both-run-value-equal": 26,
+      "rejects-valid:E_BORROW": 1,
+      "rejectCodePairs": {
+        "E0382/E_MOVE": 46,
+        "E0502/E_BORROW": 10,
+        "E0499/E_BORROW": 7,
+        "E0506/E_BORROW": 3,
+        "E0505/E_BORROW": 4,
+        "E0382/E_BORROW": 1,
+        "E0499/E_MOVE": 1,
+        "E0502/E_MOVE": 1
+      }
+    },
+    {
+      "generator": "value",
+      "engine": "k",
+      "sha256": "706db4c7909c91e968e892f02fed5dee19514ff3746c3c3d8e79038d3fa662ae",
+      "binarySha256": "fdfacbf076f2ca96cb33973427d2d905b58c5e87a083eaeaa1e808a3fd9e2734",
+      "compilerDirty": true,
+      "compiler": "940b1dce2ec2892d2def628dbfe5c6bb757ad415",
+      "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+      "node": "v24.18.1",
+      "rustFlags": "--edition=2024 -C overflow-checks=yes -C opt-level=0 -A warnings -A arithmetic_overflow -A unconditional_panic -A overflowing_literals",
+      "seed": "601",
+      "programs": 100,
+      "value-equal": 92,
+      "trap-equal": 8
+    },
+    {
+      "generator": "verdict",
+      "engine": "k",
+      "sha256": "58081744ff8ee9523b540eab516f520e7efa9bc1a32788b03474cfca86cebc81",
+      "binarySha256": "fdfacbf076f2ca96cb33973427d2d905b58c5e87a083eaeaa1e808a3fd9e2734",
+      "compilerDirty": true,
+      "compiler": "940b1dce2ec2892d2def628dbfe5c6bb757ad415",
+      "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+      "node": "v24.18.1",
+      "rustFlags": {
+        "verdict": "--edition=2024 --error-format=short -A warnings --emit=metadata",
+        "execution": "--edition=2024 -C overflow-checks=yes -A warnings"
+      },
+      "seed": "601",
+      "programs": 100,
+      "both-reject-ownership": 73,
+      "both-run-value-equal": 26,
+      "rejects-valid:E_BORROW": 1,
+      "rejectCodePairs": {
+        "E0382/E_MOVE": 46,
+        "E0502/E_BORROW": 10,
+        "E0499/E_BORROW": 7,
+        "E0506/E_BORROW": 3,
+        "E0505/E_BORROW": 4,
+        "E0382/E_BORROW": 1,
+        "E0499/E_MOVE": 1,
+        "E0502/E_MOVE": 1
+      }
+    },
+    {
+      "generator": "output",
+      "sha256": "5d8e3c21166f8e570047890e5b0b5e6a4b77c4105a57292632183f85a3f6a3be",
+      "compiler": "940b1dce2ec2892d2def628dbfe5c6bb757ad415",
+      "compilerDirty": true,
+      "binarySha256": "fdfacbf076f2ca96cb33973427d2d905b58c5e87a083eaeaa1e808a3fd9e2734",
+      "rustc": "rustc 1.97.0 (2d8144b78 2026-07-07)",
+      "node": "v24.18.1",
+      "rustFlags": [
+        "--edition=2024",
+        "-C",
+        "overflow-checks=yes",
+        "-A",
+        "warnings"
+      ],
+      "seed": "601",
+      "programs": 50,
+      "tally": {
+        "node": {
+          "equal-output-trap": 14,
+          "equal-output-exit": 36
+        },
+        "k": {
+          "equal-output-trap": 14,
+          "equal-output-exit": 36
+        }
+      }
+    }
+  ],
+  "logSha256": "64828817ecb6e017f25c590af93cb2516002e5a7dc174813dffe1e2013171597",
+  "note": "Source changes were frozen for this gate, then committed as 99095849 and c60c3cba; measurement-only files were still untracked. Initial fmt check failed, cargo fmt corrected formatting, and the complete gate above passed."
+}

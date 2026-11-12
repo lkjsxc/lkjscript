@@ -1,0 +1,356 @@
+{
+  "commit": "9d3d1172885681ed622b28168684d7504e1dc9da",
+  "binary": "a16387c74c36aba08b6f48d8af34d28fa089044bf92ca19d7389ff03dc2856a0",
+  "records": 9,
+  "tally": {
+    "value": {
+      "value-equal": 1749,
+      "trap-equal": 251
+    },
+    "verdict": {
+      "both-run-value-equal": 539,
+      "both-run-trap-equal": 4,
+      "both-reject-ownership": 1423,
+      "rejects-valid:E_MOVE": 20,
+      "rejects-valid:E_BORROW": 14
+    }
+  },
+  "output": {
+    "node": {
+      "equal-output-trap": 17,
+      "equal-output-exit": 83
+    },
+    "k": {
+      "equal-output-trap": 17,
+      "equal-output-exit": 83
+    }
+  },
+  "preservedValidRejected": 34,
+  "commands": [
+    "From detached clean worktree at 9d3d1172885681ed622b28168684d7504e1dc9da:",
+    "cargo build --quiet --release",
+    "for seed in 601 602 603 604; do",
+    "  LKJ_ENGINE=k node tools/generators/value.mjs target/release/lkjscript \"$seed\" 500 target/long-k",
+    "  LKJ_ENGINE=k node tools/generators/verdict.mjs target/release/lkjscript \"$seed\" 500 target/long-k",
+    "done",
+    "LKJ_ENGINES=node,k node tools/generators/output.mjs target/release/lkjscript 602 100 target/long-k"
+  ],
+  "rejectionReasons": {
+    "exact_join": "Current checker requires equal initialization and loan state at every reachable join; the program is rejected at that equality check.",
+    "live_loan": "Current liveness retains a reference or reference-bearing holder at the conflicting access. Per-path holder liveness is not implemented. This is the diagnostic mechanism, not a reduced proof of the smallest cause."
+  },
+  "validRejected": [
+    {
+      "seed": 601,
+      "case": 42,
+      "code": "E_MOVE",
+      "rust": "value:7",
+      "diagnostic": "49:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "7a85cc11dc1bb214a65212fdf6ba20b1970dfb479f809c14af496cc4c0687dd9"
+    },
+    {
+      "seed": 601,
+      "case": 164,
+      "code": "E_MOVE",
+      "rust": "value:5",
+      "diagnostic": "75:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "0af37f2718c1512546a43d2cec807950e92d402ac754eb994895e511049038c2"
+    },
+    {
+      "seed": 601,
+      "case": 199,
+      "code": "E_MOVE",
+      "rust": "value:2",
+      "diagnostic": "33:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "4d164928190c826c9cfbf23e307f90d0d014a33c8e2de086176af60618754ea8"
+    },
+    {
+      "seed": 601,
+      "case": 335,
+      "code": "E_MOVE",
+      "rust": "value:0",
+      "diagnostic": "59:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "bfed8141084cd45cc67977ec6b1476039f6224ddb116ecc0f26d199bc92bc0a9"
+    },
+    {
+      "seed": 601,
+      "case": 389,
+      "code": "E_MOVE",
+      "rust": "value:6",
+      "diagnostic": "94:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "430178aa6e0af28bfe95cfe0d2974c866e68f1d174e97483c5d12d9ac86f8ee4"
+    },
+    {
+      "seed": 601,
+      "case": 395,
+      "code": "E_MOVE",
+      "rust": "value:5",
+      "diagnostic": "19:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "47c4619ac20fbacd66c0e1cfa10e2abf1ff6afbc2dd75159825fba93bc1c3c4f"
+    },
+    {
+      "seed": 602,
+      "case": 38,
+      "code": "E_BORROW",
+      "rust": "value:2",
+      "diagnostic": "76:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "3f260715a6ace2c3058238881fc1391ec772680eda06a9a1f4c30c10b8004f5a"
+    },
+    {
+      "seed": 602,
+      "case": 54,
+      "code": "E_MOVE",
+      "rust": "value:1",
+      "diagnostic": "82:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "f4cd7ba03ce5a4110c68d3d7e2d7b3373bfa3d4d1aa04c37ab5a8a13ffff9794"
+    },
+    {
+      "seed": 602,
+      "case": 174,
+      "code": "E_BORROW",
+      "rust": "value:0",
+      "diagnostic": "48:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "e1aedc7edba1a958ed2d83c30043203bdf7d360b8c1da680b6997e2c05cdd0a0"
+    },
+    {
+      "seed": 602,
+      "case": 185,
+      "code": "E_MOVE",
+      "rust": "value:6",
+      "diagnostic": "47:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "f1ebf5b817da52c4db54647bce3b4445fbaf666cf4a171ec41cfea21a5b9c27a"
+    },
+    {
+      "seed": 602,
+      "case": 207,
+      "code": "E_MOVE",
+      "rust": "value:6",
+      "diagnostic": "48:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "10579498035587c1a02fa69c8ea30153d90b6712bcd2c76aba2587c2cfca5ff5"
+    },
+    {
+      "seed": 602,
+      "case": 301,
+      "code": "E_BORROW",
+      "rust": "value:15",
+      "diagnostic": "51:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "534827a79cef4892600033d739d00fc4d511d111ff136070914a48219e1f651e"
+    },
+    {
+      "seed": 602,
+      "case": 337,
+      "code": "E_BORROW",
+      "rust": "value:0",
+      "diagnostic": "29:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "93419af106e6d033be5828b56a3f8156ed19fb60f2f72366f9301272ac21a738"
+    },
+    {
+      "seed": 602,
+      "case": 353,
+      "code": "E_MOVE",
+      "rust": "value:3",
+      "diagnostic": "63:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "edfbdaf0c906cbc1ab33dcaee3a4d8c2821f679545e541a6aede0cf2fbc6ff96"
+    },
+    {
+      "seed": 602,
+      "case": 409,
+      "code": "E_MOVE",
+      "rust": "value:0",
+      "diagnostic": "40:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "f2ed4d8af4ec3e486e71089497e70782791f98b08a7a24b9b5a42155e220318f"
+    },
+    {
+      "seed": 603,
+      "case": 20,
+      "code": "E_MOVE",
+      "rust": "value:0",
+      "diagnostic": "65:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "05a17800bae73b22af51787024445f93d00972aac7e5205db5001123b558cd68"
+    },
+    {
+      "seed": 603,
+      "case": 21,
+      "code": "E_BORROW",
+      "rust": "value:4",
+      "diagnostic": "32:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "e459401ad13688f649649e062d21c915c998d8f5094a8c965a5152d239ac40eb"
+    },
+    {
+      "seed": 603,
+      "case": 34,
+      "code": "E_MOVE",
+      "rust": "value:23",
+      "diagnostic": "54:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "28fda5a534348ce030e724a5863e4853c10be4c8145fdfb865f35fecd358eb3c"
+    },
+    {
+      "seed": 603,
+      "case": 60,
+      "code": "E_BORROW",
+      "rust": "value:6",
+      "diagnostic": "82:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "18247b091423af071184978b06b2f64943e72af19b904d5a9e12aa15df4d3d34"
+    },
+    {
+      "seed": 603,
+      "case": 79,
+      "code": "E_MOVE",
+      "rust": "value:1",
+      "diagnostic": "110:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "372568128fdd0763f9c2bdfbd83e1224ce8f442be4285295f576d5cf6c9d1bda"
+    },
+    {
+      "seed": 603,
+      "case": 125,
+      "code": "E_BORROW",
+      "rust": "value:9",
+      "diagnostic": "47:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "08169a75130181d1931bf2d32452663d15792a90629b162a84ba491c7538de1a"
+    },
+    {
+      "seed": 603,
+      "case": 184,
+      "code": "E_BORROW",
+      "rust": "value:6",
+      "diagnostic": "66:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "8d58c4ab319b72ce97b6809dc16db5f7b2ab77d65e2cb2e5cf0c91d0c14ab227"
+    },
+    {
+      "seed": 603,
+      "case": 257,
+      "code": "E_BORROW",
+      "rust": "value:17",
+      "diagnostic": "27:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "fd4e5e3314ae904e831bb11d8081a0a5565e988f397621a80cc877601b5c48b7"
+    },
+    {
+      "seed": 603,
+      "case": 262,
+      "code": "E_MOVE",
+      "rust": "value:0",
+      "diagnostic": "38:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "7a6c056ae1a70ac5821e6e383af77b5a7ad196b921398a79fc3cdd4ba9e1f840"
+    },
+    {
+      "seed": 603,
+      "case": 400,
+      "code": "E_BORROW",
+      "rust": "trap:R0003",
+      "diagnostic": "53:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "e60af94d7750eb6efc12674a3536bcc0d47207df20208cb298fd5cb02e72012a"
+    },
+    {
+      "seed": 603,
+      "case": 407,
+      "code": "E_BORROW",
+      "rust": "value:0",
+      "diagnostic": "55:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "35049bba669963803254698bd93164a54d42505d8d7ab7bbbc4c872544c0f57e"
+    },
+    {
+      "seed": 603,
+      "case": 492,
+      "code": "E_BORROW",
+      "rust": "value:0",
+      "diagnostic": "35:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "6ad832077167a5db2f9fe874d3e8f1f320576b39224997d2303345cb8f610ac0"
+    },
+    {
+      "seed": 604,
+      "case": 28,
+      "code": "E_BORROW",
+      "rust": "value:8",
+      "diagnostic": "20:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "6d292bafd5ef3c9cbd7a4e8ada735c44c3bdcb8bafd7a3d0866c62a66c96951b"
+    },
+    {
+      "seed": 604,
+      "case": 54,
+      "code": "E_MOVE",
+      "rust": "value:20",
+      "diagnostic": "18:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "f5583f33b8f8cd4a4c5aec8dd3e16b407566a37e1be62711d2695e0e6e1ee8c8"
+    },
+    {
+      "seed": 604,
+      "case": 113,
+      "code": "E_BORROW",
+      "rust": "value:8",
+      "diagnostic": "31:1: E_BORROW place conflicts with a live borrow",
+      "reason": "live_loan",
+      "sourceSha256": "54f9b5cb908f29c6054e424487c458acc3ced01801bbb5aebf6c4b42d3c88c1b"
+    },
+    {
+      "seed": 604,
+      "case": 245,
+      "code": "E_MOVE",
+      "rust": "value:20",
+      "diagnostic": "19:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "4f1885a3577467eed3f55ce0b55e991057dd06d95d99f20d23fb62932c53c817"
+    },
+    {
+      "seed": 604,
+      "case": 328,
+      "code": "E_MOVE",
+      "rust": "value:15",
+      "diagnostic": "36:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "b21e7af8dc3503d7ffabab66088735f6960da42edfba6b6274fda8fef0cd0598"
+    },
+    {
+      "seed": 604,
+      "case": 397,
+      "code": "E_MOVE",
+      "rust": "value:3",
+      "diagnostic": "34:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "fe98dc3cab4fd826a33bc84bee7f1959f827535ecb4befaedcbeebafc687fe6f"
+    },
+    {
+      "seed": 604,
+      "case": 474,
+      "code": "E_MOVE",
+      "rust": "value:0",
+      "diagnostic": "115:1: E_MOVE branches must leave the same owners and borrows",
+      "reason": "exact_join",
+      "sourceSha256": "30fa3ee94543f876005dd54845ad2b867ded74fc26acf86b59ba2e4eb2f17674"
+    }
+  ],
+  "notes": [
+    "All nine records were captured from a clean detached worktree at the recorded commit.",
+    "The 34 unreduced sources remain under target/generators/model/milestone-9d3d1172 and can be regenerated from the seeds and generator hash; only their index is committed.",
+    "No wrong result, wrong trap, unexpected machine error, accepted-rustc-rejected result, crash or timeout occurred.",
+    "This run uses updated generators and must not be presented as a same-corpus numerical comparison with the original kit run."
+  ]
+}

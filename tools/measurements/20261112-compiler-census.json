@@ -1,0 +1,13 @@
+{
+  "command": [
+    "target/release/lkjscript",
+    "check",
+    "--census",
+    "src/lib.rs"
+  ],
+  "compiler": "d32a611d62caa574da48c8c37e6fe94eb70afa67",
+  "binarySha256": "305250aadaeae85573bc0c5e80d83ff935fb199e8a18013df0e5eb2f57abb26e",
+  "censusSha256": "aa861a23761889f2046ece6fcd0d957fa0068869a3cc216d757a544bce65fc8d",
+  "status": 1,
+  "scope": "Recognized unsupported sites and explicitly blocked regions in the supplied compiler source graph; no artifact is produced. Compiler source is the committed DropIf checkpoint; pending documentation/measurement files do not affect execution."
+}

@@ -1,88 +1,105 @@
 # Status
 
-The Rust bootstrap compiler now offers memory64 WebAssembly and an independent K
-machine. Compiler closure, the fixed point, an owned command line and independence
-from Rust/Node remain unfinished. Work follows dependencies and corpus evidence.
-Generation one remains frozen at `05a9326c`.
+The Rust bootstrap has a checked monomorphic K route to Node/WebAssembly and an
+independent K machine. Compiler closure, the fixed point, an owned command line
+and independence from Rust/Node remain unfinished. Dependencies and the census
+set the order of work.
 
 ## Works
 
-The existing types, generics, traits, ownership, partial moves, provenance bounds,
-source library and custom Drop subset still passes its independent K gate.
-World-derived Stdout writes arbitrary bytes. Output and normal/trap termination,
-including destructor order, agree with a same-source rustc shim in conformance.
-Pure Wasm modules have no imports; output modules import only the checked writer.
-The K machine uses its own heap, live identity tokens and explicit frame/drop
-stacks, and distinguishes dynamic machine errors from program traps.
+World-derived Stdout writes bytes under both routes and the same-source rustc
+shim; conformance compares output and normal/trap termination, including Drop
+order. The K machine has its own heap, live identity tokens and explicit
+frame/control/copy/drop stacks. Strict Drop now rejects the repeated projected
+drop found by that machine; explicit DropIf performs conditional cleanup at the
+original destruction points, with named-place errors and no early cleanup.
+The canonical forged fixture is `tests/conformance/k/double_projected_drop.k`.
 
-Definition-local unification propagates expected types before integer defaulting.
-The three named inference examples run; generic instances consume recorded plans.
-Actual coercion contexts stay distinct from inferred reference types, repairing a
-pre-existing mutable-reference move bug in constructors and generic calls.
-Parser recovery, independent definition/K-body diagnostics, blocked-region census,
-and stage timings are exposed through check. Errors never produce an artifact.
+Definition-local unification propagates expected types before integer defaulting;
+the three named inference examples run. Generic instances consume recorded plans.
+Resolved uses, indexed lexical bindings and a function-owner relation remove the
+measured lookup scans. Actual coercion contexts remain distinct from inferred
+reference types. Signature-directed intrinsic reborrowing repairs the earlier
+`mem::replace(head, None)` move; the supplied `*head = n.next` case now runs.
+The source graph contains no Debug derives or Debug formatting; Rust assertion
+formatting lives in the bootstrap bridge.
 
-Resolved calls and indexed lexical bindings remove the measured lookup scans.
-Persistent live/written facts share unchanged state across branches. Host resource
-bridges reserve stacks from memory and retry only failed thread/worker creation.
+Parser recovery, independent definition/K-body diagnostics, blocked-region
+census and stage timings are exposed through check. Errors never produce an
+artifact. Shared facts remove historical-local branch-copy costs. Stack bridges
+reserve from host resources and retry only failed thread/worker creation.
+Geometric Wasm memory growth, with exact-required fallback, removes the measured
+list-construction GC cliff without changing other emitted function bodies.
 
 ## Measurements
 
-Exact commands, identities and records: `tools/measurements/`. These observations
-cover their recorded programs and sizes; they are not a general soundness claim.
+`B` denotes the compiler binary named in the record. Exact commands, source and
+binary identities are in `tools/measurements/` and `tools/scale/records/`.
+Long runs below are the completed `9d3d1172` corpus; later generator extensions
+emit a different corpus. Value/verdict commands select a route with
+`LKJ_ENGINE=node` or `LKJ_ENGINE=k`; the output generator runs both. These observations are not a general soundness claim.
 
 | Observation | Command | Result |
 | --- | --- | --- |
-| Integrated gate | `bash tools/check.sh` | 35.679 s; 401 Cargo tests; 117 conformance passes, 8 pending per route; 109 rustc comparisons per route |
-| Seeded values, each route | `tools/generators/value.mjs B 601 100` | 92 equal values, 8 equal traps |
-| Seeded verdicts, each route | `tools/generators/verdict.mjs B 601 100` | 73 both reject ownership, 26 equal values, 1 valid rejected E_MOVE; no other outcomes |
-| Seeded output, both routes | `tools/generators/output.mjs B 601 50` | 36 equal normal exits, 14 equal traps per route |
-| Independent examples | `node tools/corpus.mjs B` | idioms 8/30; ownership 18/30; all 16 unsound examples rejected |
-| Function check medians | `tools/scale/run.mjs B --families funcs` | 105.650 / 217.466 / 442.390 ms; doubling 2.058 / 2.034 |
-| If check medians | `tools/scale/run.mjs B --families ifs` | 205.124 / 435.652 / 910.677 ms; doubling 2.124 / 2.090 |
-| Match check medians | `tools/scale/run.mjs B --families match` | 38.043 / 74.067 / 148.738 ms; doubling 1.947 / 2.008 |
-| Borrowed-box check medians | `tools/scale/run.mjs B --families boxes` | 235.456 / 479.694 / 1004.055 ms; doubling 2.037 / 2.093 |
-| Vec check medians | `tools/scale/run.mjs B --families vecs` | 190.692 / 405.396 / 852.505 ms; doubling 2.126 / 2.103 |
+| Integrated gate | `bash tools/check.sh` | 34.181 s; 409 Cargo tests; 128 conformance passes, 8 pending and 114 rustc comparisons per route |
+| Long values, each route | `node tools/generators/value.mjs B SEED 500`, seeds 601–604 | 2,000: 1,749 equal values, 251 equal traps |
+| Long verdicts, each route | `node tools/generators/verdict.mjs B SEED 500`, seeds 601–604 | 2,000: 1,423 both reject ownership, 539 equal values, 4 equal traps, 20 valid E_MOVE and 14 valid E_BORROW rejections; all other classes zero |
+| Long output, each route | `node tools/generators/output.mjs B 602 100` | 83 equal normal exits, 17 equal traps |
+| Current routine output, each route | `node tools/generators/output.mjs B 601 50` | 39 equal normal exits, 11 equal traps; generator includes partial moves and replacement Drop order |
+| Independent examples | `node tools/corpus.mjs B` | idioms 8/30; ownership 19/30; all 16 unsound source examples rejected |
+| Compiler census | `B check --census src/lib.rs` | d32a611d: 3,412 unsupported sites, 109 blocked regions |
+| Function check | `node tools/scale/run.mjs B --families funcs` | 106.367 / 224.256 / 442.555 ms; doubling 2.108 / 1.973 |
+| If check | `node tools/scale/run.mjs B --families ifs` | 225.109 / 452.159 / 931.412 ms; doubling 2.009 / 2.060 |
+| Match check | `node tools/scale/run.mjs B --families match` | 40.351 / 76.781 / 154.848 ms; doubling 1.903 / 2.017 |
+| Borrowed-box check | `node tools/scale/run.mjs B --families boxes` | 237.331 / 494.667 / 1057.462 ms; doubling 2.084 / 2.138 |
+| Vec check | `node tools/scale/run.mjs B --families vecs` | 189.922 / 408.475 / 856.424 ms; doubling 2.151 / 2.097 |
+| Method owners, 2k/4k/8k | `node tools/scale/run.mjs B --families methods --sizes 2000,4000,8000` | 32.209 / 59.284 / 115.578 ms; doubling 1.841 / 1.950 |
+| Lists, Node, 20m/35m | `node tools/scale/list_phases.mjs B --sizes 20000000,35000000` | 2.421 / 4.459 s; 1.842× time for 1.75× nodes; peak RSS 9.11 / 16.41 GB |
+| Large routes | recorded capacity commands | 1m-function chain runs on K (1.037 s execution, 6.71 GB process-tree peak); Node stops at engine load; Node non-tail recursion depth 10m runs |
+| Code footprint | `node tools/count-lines.mjs` | 25,973 compiler; 455 library; 2,294 embedded compiler tests; 13,554 Rust harness; 1,051 conformance source + 293 K fixtures; bridges counted separately |
 
-Scale rows are isolated release medians of three at 8k / 16k / 32k. Records separate
-load/parse, resolve, type, build K and check. Emission, engine loading and execution
-are timed on the relevant commands. Peak RSS and source/K/body/emitted denominators
-are reported where applicable. The verdict generator now emits additional generic
-reference moves; its new tallies are not a comparison with the older generator.
+Code counts use physical lines including blanks/comments; direct `#[test]` and
+`#[cfg(test)]` items are separated by balanced token spans. The same command
+counts baseline git objects; records are `tools/measurements/20261112-lines*.json`.
+The five original scale families use d32a611d release medians of three at 8k/16k/32k;
+method and list rows state their sizes. Stage records distinguish compilation,
+engine load and execution. List phase/profile records locate the old cliff in
+V8 external-memory GC during construction. The 50m list constructs and sums,
+then traps R0006 during drop at Node's 16 GiB linear-memory extent.
 
-## Missing and old paths
+## Broken and old responsibilities
 
-- The retained definition plan covers inference and rigid generic method evidence.
-  Explicit borrows/copies/coercions, control flow, cleanup, unresolved method
-  obligations and some instance construction still use the existing elaborator.
-  K is monomorphic and checked for each concrete instance.
-- Ownership joins remain equality joins. Loop invariants, conditional drops,
-  multiple-source view contracts, reference-bearing writes through parameters and
-  containers still need decision 4. Active provenance/carrier/tag maps still clone
-  live contents; persistent facts remove historical-local costs only.
-- Recovery stops at shared signature failures, each erroneous semantic body and
-  dependent K construction. Census names blocked regions; it does not claim those
-  regions were checked. Full diagnostic location/loan explanations remain work.
-- Patterns, question-mark, closures, borrowed iteration, text breadth, balanced
-  source collections and natural-width storage remain incomplete. The source
-  BTreeMap is still a sorted vector. Debug derives have not yet been removed.
-- Rust's Rc supplies shared internal nodes/tokens. Cargo, source-library packing,
-  host file/process/resource adapters, the rustc output shim and Node loader/tools
-  are bootstrap bridges. The K machine retains a rustc build as an independent
-  executable model; source-owned host inputs and an owned backend remove the bridges.
+- Recorded definition plans cover inference and rigid method evidence. Explicit
+  borrows/copies/coercions, control flow, cleanup, unresolved symbolic method
+  obligations and part of instance construction still use the existing
+  elaborator. Nominal/alias term identities and repeated field/variant choices
+  remain to migrate. K remains monomorphic and checked per concrete instance.
+- Ownership joins still require equality. Initialization joins, loop invariants,
+  holder liveness, origin-variable call contracts and reference-bearing containers
+  remain. Active origin/carrier/tag maps still clone their live contents. Model
+  loan scanning and transitive-parent costs are unmeasured.
+- Recovery blocks shared-signature failures, failed semantic bodies and dependent
+  K construction. Blocked regions are not analyzed; detailed place/loan locations
+  remain work. Patterns, question-mark, closures, borrowed iteration, text breadth,
+  balanced source collections and natural-width storage remain incomplete. The
+  source BTreeMap is still a sorted vector.
+- Rust Rc, Cargo, library packing, host/resource adapters, Rust test formatting,
+  the rustc output shim and Node loader/tools remain bootstrap bridges. Keep the
+  rustc-built K machine as an independent judge while source-owned host inputs,
+  tools and execution replace those bridges.
 
 ## Bootstrap and next action
 
 `cargo build --release`; `bash tools/check.sh` is the routine gate.
 `lkjscript run file.rs --engine node|k --entry probe` selects execution;
-`build -o file.wasm` emits; `k` prints checked K. `check file.k` reaches the safety
-gate directly; `run file.k --engine k --unchecked-k` exposes malformed K to the
-model for counterexamples. `check --census src/lib.rs` inventories compiler closure.
-`LKJSCRIPT_TIMINGS=1` prints stage records to stderr. `examples/hello.rs` is the
-complete World/stdout example. `tools/generators/reduce.mjs` preserves a failure's
-category and Rust-validity assumption while deleting statements.
+`build -o file.wasm` emits, `k` prints checked K, and `check file.k` reaches
+the independent safety gate. `run file.k --engine k --unchecked-k` exposes
+forged K directly to the model. `LKJSCRIPT_TIMINGS=1` emits stage records;
+`examples/hello.rs` is the complete World example. The statement reducer keeps
+the failure category and Rust-validity assumption.
 
-Next: finish the committed long generator measurements and remaining identity /
-Debug cleanup, then implement initialization joins and conditional destruction
-with forged K fixtures and the independent machine. Continue ownership in the
-specified order, with breadth chosen by the census. Do not resume file-order work.
+Next: persistent must/may initialization for reference-free roots, with
+conditional cleanup at original lexical points. Require present parent shells before partial-place
+joins; keep loan and loop-backedge equality until their own contracts land.
+Continue decision 4 with holder sets, loop invariants, call origins and containers;
+choose breadth by dependency and census.

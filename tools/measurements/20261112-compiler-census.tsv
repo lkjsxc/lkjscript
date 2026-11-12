@@ -1,0 +1,24 @@
+kind	count	category
+?	1289	unsupported
+break value	2	unsupported
+char literal	85	unsupported
+closure	374	unsupported
+closure parameter patterns	26	unsupported
+collection iteration	474	unsupported
+for binding pattern	128	unsupported
+format!	160	unsupported
+full range pattern; use _	1	unsupported
+if let	313	unsupported
+let else	79	unsupported
+match guard	116	unsupported
+or-pattern	228	unsupported
+range slicing	24	unsupported
+reference pattern	1	unsupported
+repeated Vec literal	27	unsupported
+struct update	5	unsupported
+while let	80	unsupported
+item	2	blocked
+semantic phase	1	blocked
+statement	106	blocked
+TOTAL	3412	unsupported
+TOTAL	109	blocked

@@ -1,0 +1,39 @@
+{
+  "compiler": "9d3d1172885681ed622b28168684d7504e1dc9da",
+  "binary_sha256": "a16387c74c36aba08b6f48d8af34d28fa089044bf92ca19d7389ff03dc2856a0",
+  "shape": "non-tail-recursion",
+  "depth": 10000000,
+  "engine": "node",
+  "status": 0,
+  "output": "10000000",
+  "sampled_peak_tree_rss_bytes": 1844920320,
+  "stages": [
+    {
+      "route": "node",
+      "module_read_ms": 0.3002660000000006,
+      "engine_load_ms": 0.25447900000000345,
+      "run_ms": 553.2973029999999,
+      "stopped_stage": "done",
+      "worker_startup_ms": 19.55414,
+      "stack_reservation_bytes": 168023928832,
+      "requested_stack_bytes": 168023928832,
+      "peak_rss_bytes": 1837273088
+    },
+    {
+      "route": "compiler",
+      "stopped_stage": "done",
+      "total_ms": 644.9684060000001,
+      "build_k_ms": 0.272473,
+      "check_ms": 0.118564,
+      "emit_ms": 0.093846,
+      "load_parse_ms": 0.5796319999999999,
+      "resolve_ms": 0.149672,
+      "type_ms": 2.415759,
+      "emitted_bytes": 7579,
+      "instantiated_bodies": 7,
+      "k_instructions": 568,
+      "source_bytes": 11675,
+      "peak_rss_bytes": 5668864
+    }
+  ]
+}
