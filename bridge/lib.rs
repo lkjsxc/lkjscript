@@ -1,5 +1,6 @@
 //! Rust bootstrap library host. The source compiler remains rooted at src/lib.rs.
 mod compiler_stack;
+mod debug;
 #[path = "../src/lib.rs"]
 mod language;
 

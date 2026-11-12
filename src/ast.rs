@@ -8,7 +8,7 @@ pub type ExprId = usize;
 pub type BlockId = usize;
 pub type PatternId = usize;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub struct Span {
     pub file: FileId,
     pub start: usize,
@@ -17,7 +17,7 @@ pub struct Span {
     pub column: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Diagnostic {
     pub path: String,
     pub file: FileId,
@@ -40,14 +40,14 @@ impl Diagnostic {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Path {
     pub declaration: Option<DeclarationId>,
     pub name: String,
     pub args: Vec<TypeId>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Type {
     Infer,
     Path(Path),
@@ -69,14 +69,14 @@ pub enum Type {
     Never,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct TypeNode {
     pub scope: ModuleId,
     pub kind: Type,
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct GenericParam {
     pub name: String,
     pub bounds: Vec<TypeId>,
@@ -84,14 +84,14 @@ pub struct GenericParam {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Attribute {
     pub name: String,
     pub args: Vec<String>,
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Param {
     pub name: String,
     pub ty: TypeId,
@@ -99,7 +99,7 @@ pub struct Param {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Function {
     pub name: String,
     pub module: String,
@@ -112,7 +112,7 @@ pub struct Function {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Field {
     pub name: String,
     pub ty: TypeId,
@@ -120,7 +120,7 @@ pub struct Field {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Struct {
     pub name: String,
     pub module: String,
@@ -132,14 +132,14 @@ pub struct Struct {
     pub span: Span,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum VariantStyle {
     Unit,
     Tuple,
     Named,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Variant {
     pub name: String,
     pub fields: Vec<Field>,
@@ -148,7 +148,7 @@ pub struct Variant {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Enum {
     pub name: String,
     pub module: String,
@@ -159,7 +159,7 @@ pub struct Enum {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct AssociatedType {
     pub name: String,
     pub bounds: Vec<TypeId>,
@@ -167,7 +167,7 @@ pub struct AssociatedType {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Trait {
     pub name: String,
     pub module: String,
@@ -179,7 +179,7 @@ pub struct Trait {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Impl {
     pub module: String,
     pub generics: Vec<GenericParam>,
@@ -190,7 +190,7 @@ pub struct Impl {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Use {
     pub module: String,
     pub path: String,
@@ -200,7 +200,7 @@ pub struct Use {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Module {
     pub scope: ModuleId,
     pub name: String,
@@ -211,7 +211,7 @@ pub struct Module {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Alias {
     pub name: String,
     pub module: String,
@@ -221,7 +221,7 @@ pub struct Alias {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Constant {
     pub name: String,
     pub module: String,
@@ -231,7 +231,7 @@ pub struct Constant {
     pub span: Span,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Item {
     Function(usize),
     Struct(usize),
@@ -244,7 +244,7 @@ pub enum Item {
     Constant(usize),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Expr {
     Int(String),
     Float(String),
@@ -359,14 +359,14 @@ pub enum Expr {
     },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ExprNode {
     pub scope: ModuleId,
     pub kind: Expr,
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Arm {
     pub pattern: PatternId,
     pub guard: Option<ExprId>,
@@ -374,7 +374,7 @@ pub struct Arm {
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Pattern {
     Wild,
     Bind {
@@ -407,14 +407,14 @@ pub enum Pattern {
     Or(Vec<PatternId>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct PatternNode {
     pub scope: ModuleId,
     pub kind: Pattern,
     pub span: Span,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Stmt {
     Let {
         pattern: PatternId,
@@ -429,14 +429,14 @@ pub enum Stmt {
     Item(Item),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Block {
     pub statements: Vec<Stmt>,
     pub tail: Option<ExprId>,
     pub span: Span,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Visibility {
     Private,
     Parent,
@@ -444,18 +444,18 @@ pub enum Visibility {
     Public,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct SourceFile {
     pub path: String,
     pub crate_root: ModuleId,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ModuleScope {
     pub path: String,
     pub parent: Option<ModuleId>,
     pub crate_root: ModuleId,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Declaration {
     pub name: String,
     pub scope: ModuleId,
@@ -464,7 +464,7 @@ pub struct Declaration {
     pub span: Span,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct Program {
     pub files: Vec<SourceFile>,
     pub scopes: Vec<ModuleScope>,

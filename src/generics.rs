@@ -4,7 +4,7 @@ use crate::ast::*;
 use crate::names::qualified;
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 enum Term {
     Unknown,
     Variable(usize),
@@ -1218,7 +1218,7 @@ fn impl_arguments(
 
 /// Builtin predicates and source trait declarations have distinct identities,
 /// even when a declaration uses a builtin's short spelling.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum TraitIdentity {
     Builtin(String),
     Declared(usize),

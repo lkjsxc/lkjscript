@@ -159,7 +159,7 @@ fn is_prefix(a: &[Projection], b: &[Projection]) -> bool {
     a.len() <= b.len() && a == &b[..a.len()]
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum Root {
     /// Immutable storage that lives for the entire module instance.
     Static,
@@ -282,7 +282,7 @@ fn source_target(sources: &[SourceBound]) -> Origin {
         if source.origin.root == Root::Static {
             continue;
         }
-        debug_assert_eq!(source.origin.root, target.root);
+        debug_assert!(source.origin.root == target.root);
         let mut shared = 0;
         while shared < target.projections.len()
             && shared < source.origin.projections.len()
@@ -3774,7 +3774,11 @@ mod tests {
             assert_eq!(failure.code, "E_TYPE");
             assert!(
                 failure.message.contains("matching checked tag"),
-                "{failure:?}"
+                "{} at {}:{}: {}",
+                failure.code,
+                failure.line,
+                failure.column,
+                failure.message
             );
         }
     }

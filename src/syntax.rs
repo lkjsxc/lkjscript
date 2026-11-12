@@ -3,7 +3,7 @@ use crate::ast::*;
 use crate::diagnostics::BlockedRegion;
 use std::collections::BTreeSet;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum TokenKind {
     Ident,
     Number,
@@ -14,7 +14,7 @@ enum TokenKind {
     Symbol,
     End,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct Token {
     kind: TokenKind,
     text: String,
