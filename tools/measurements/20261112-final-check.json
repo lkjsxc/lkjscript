@@ -3,7 +3,7 @@
   "compiler": "d32a611d62caa574da48c8c37e6fe94eb70afa67",
   "elapsedSeconds": 34.181,
   "cargoTests": 409,
-  "nodeUnitTests": 0,
+  "nodeUnitTests": 8,
   "conformance": [
     {
       "engine": "node",
@@ -141,5 +141,12 @@
     }
   ],
   "logSha256": "4b2cd3932c5610c046de2cc4586527f11151bd7a6690fb05d23d124d15917a16",
-  "scope": "Final complete gate with compiler source frozen at d32a611d. Documentation, line counter and measurement records were pending; compiler, library, bridge and conformance sources were unchanged from that commit."
+  "scope": "Final complete gate with compiler source frozen at d32a611d. Documentation, line counter and measurement records were pending; compiler, library, bridge and conformance sources were unchanged from that commit.",
+  "nodeUnitCountVerification": {
+    "command": "node --test --test-reporter=tap tests/worker_host.mjs tools/generators/reduce.test.mjs",
+    "tests": 8,
+    "failures": 0,
+    "sha256": "9a847996c6c20c7ec6fad879b820fe09bc9098b1d542e47661d10aab2067fef7",
+    "note": "The default reporter header did not match the final-record extraction expression. A TAP rerun of the same two file sets confirms the eight passing Node unit tests; compiler source and the full-gate duration are unchanged."
+  }
 }
